@@ -169,6 +169,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               travelTimesForDay={d.travelTimesForDay} zoom={zoom}
               jobCardProps={jobCardProps}
               dragOverConflicts={dnd.dragOverConflicts}
+              clusterMatchedResourceIds={d.clusterMatchedResourceIds}
             />
           )}
           {d.viewMode === "week" && (
@@ -183,6 +184,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               onResourceClick={d.handleResourceClick} onSendSchedule={d.handleSendSchedule}
               jobCardProps={jobCardProps}
               dragOverConflicts={dnd.dragOverConflicts}
+              clusterMatchedResourceIds={d.clusterMatchedResourceIds}
             />
           )}
           {d.viewMode === "month" && (

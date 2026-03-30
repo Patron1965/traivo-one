@@ -144,6 +144,20 @@ export function usePlannerData() {
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const { data: clusters = [] } = useQuery<Cluster[]>({ queryKey: ["/api/clusters"] });
   const clusterMap = useMemo(() => new Map(clusters.map(c => [c.id, c])), [clusters]);
+  const clusterMatchedResourceIds = useMemo(() => {
+    const matched = new Set<string>();
+    if (!activeDragJob?.clusterId) return matched;
+    const cluster = clusters.find(c => c.id === activeDragJob.clusterId);
+    if (!cluster?.postalCodes?.length) return matched;
+    const clusterPostals = cluster.postalCodes;
+    for (const r of resources) {
+      if (!r.serviceArea?.length) continue;
+      if (r.serviceArea.some(p => clusterPostals.includes(p))) {
+        matched.add(r.id);
+      }
+    }
+    return matched;
+  }, [activeDragJob?.clusterId, clusters, resources]);
   const { data: clusterSettings } = useQuery<{ hardClusterBlocking: boolean }>({ queryKey: ["/api/cluster-settings"], staleTime: 60000 });
   const hardClusterBlocking = clusterSettings?.hardClusterBlocking !== false;
   const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c])), [customers]);
@@ -510,7 +524,7 @@ export function usePlannerData() {
     filterExecutionCode, setFilterExecutionCode,
     hiddenResourceIds, setHiddenResourceIds,
     orderstockSearch, setOrderstockSearch, sidebarFiltersOpen, setSidebarFiltersOpen,
-    zoomLevel, setZoomLevel, expandedSubSteps, activeDragJob, setActiveDragJob,
+    zoomLevel, setZoomLevel, expandedSubSteps, activeDragJob, setActiveDragJob, clusterMatchedResourceIds,
     activeResourceId, setActiveResourceId, activeResource, activeResourceJobs, activeResourceJobsByDay,
     undoStack, redoStack,
     routeViewResourceId, setRouteViewResourceId, routeJobOrder, setRouteJobOrder, isOptimizing,

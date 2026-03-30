@@ -11,9 +11,10 @@ interface ResourceColumnProps {
   summary?: { totalHours: number; weeklyCapacity: number; pct: number };
   onResourceClick: (resourceId: string) => void;
   onSendSchedule: (resource: Resource) => void;
+  isClusterMatch?: boolean;
 }
 
-export const ResourceColumn = memo(function ResourceColumn({ resource, summary, onResourceClick, onSendSchedule }: ResourceColumnProps) {
+export const ResourceColumn = memo(function ResourceColumn({ resource, summary, onResourceClick, onSendSchedule, isClusterMatch }: ResourceColumnProps) {
   const { data: profiles = [] } = useQuery<ResourceProfile[]>({ queryKey: ["/api/resource-profiles"] });
   const { data: assignments = [] } = useQuery<ResourceProfileAssignment[]>({
     queryKey: ["/api/resource-profiles", "all-assignments"],
@@ -32,7 +33,7 @@ export const ResourceColumn = memo(function ResourceColumn({ resource, summary, 
 
   return (
     <div
-      className="p-2 border-r bg-muted/30 cursor-pointer hover:bg-muted/60 transition-colors group flex flex-col justify-between"
+      className={`p-2 border-r cursor-pointer hover:bg-muted/60 transition-colors group flex flex-col justify-between ${isClusterMatch ? "bg-emerald-50 dark:bg-emerald-950/30 ring-1 ring-emerald-400/50 dark:ring-emerald-500/40" : "bg-muted/30"}`}
       onClick={() => onResourceClick(resource.id)}
       data-testid={`resource-cell-${resource.id}`}
     >

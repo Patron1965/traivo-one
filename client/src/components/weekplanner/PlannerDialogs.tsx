@@ -1,14 +1,16 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertTriangle, Loader2, User, Sparkles, Wand2, Mail, Copy, Check, Link2, ArrowRight, Trash2, Send, MapPin } from "lucide-react";
 import { format, startOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { Resource, WorkOrderWithObject } from "@shared/schema";
+import { useQuery } from "@tanstack/react-query";
+import type { Resource, WorkOrderWithObject, Cluster } from "@shared/schema";
 import type { ViewMode, PendingSchedule, AutoFillAssignment, AutoFillDiag } from "./types";
 
 interface AssignDialogProps {
@@ -26,6 +28,39 @@ interface AssignDialogProps {
 
 export const AssignDialog = memo(function AssignDialog(props: AssignDialogProps) {
   const { open, onOpenChange, jobToAssign, assignDate, setAssignDate, assignResourceId, setAssignResourceId, resources, onConfirm, isPending } = props;
+
+  const { data: clusters = [] } = useQuery<Cluster[]>({ queryKey: ["/api/clusters"] });
+
+  const { clusterMatchMap, noClusterMatch, clusterName } = useMemo(() => {
+    const matchMap = new Map<string, boolean>();
+    if (!jobToAssign?.clusterId) return { clusterMatchMap: matchMap, noClusterMatch: false, clusterName: null };
+    const cluster = clusters.find(c => c.id === jobToAssign.clusterId);
+    if (!cluster?.postalCodes?.length) return { clusterMatchMap: matchMap, noClusterMatch: false, clusterName: cluster?.name || null };
+    const clusterPostals = cluster.postalCodes;
+    let hasAnyMatch = false;
+    let hasResourceWithArea = false;
+    for (const r of resources) {
+      if (r.serviceArea?.length) {
+        hasResourceWithArea = true;
+        const match = r.serviceArea.some(p => clusterPostals.includes(p));
+        matchMap.set(r.id, match);
+        if (match) hasAnyMatch = true;
+      } else {
+        matchMap.set(r.id, false);
+      }
+    }
+    return { clusterMatchMap: matchMap, noClusterMatch: hasResourceWithArea && !hasAnyMatch, clusterName: cluster.name };
+  }, [jobToAssign?.clusterId, clusters, resources]);
+
+  const sortedResources = useMemo(() => {
+    return [...resources].sort((a, b) => {
+      const aMatch = clusterMatchMap.get(a.id) ? 1 : 0;
+      const bMatch = clusterMatchMap.get(b.id) ? 1 : 0;
+      if (bMatch !== aMatch) return bMatch - aMatch;
+      return a.name.localeCompare(b.name);
+    });
+  }, [resources, clusterMatchMap]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -40,23 +75,42 @@ export const AssignDialog = memo(function AssignDialog(props: AssignDialogProps)
             <Label>Datum</Label>
             <Input type="date" value={assignDate} onChange={(e) => setAssignDate(e.target.value)} data-testid="input-assign-date" />
           </div>
+          {noClusterMatch && clusterName && (
+            <div className="flex items-center gap-2 p-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800" data-testid="no-cluster-match-warning">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span className="text-xs text-amber-700 dark:text-amber-300">Ingen resurs matchar klustret <strong>{clusterName}</strong>. Kontrollera resursernas serviceområden.</span>
+            </div>
+          )}
           <div className="space-y-2">
             <Label>Resurs</Label>
             <div className="space-y-2 max-h-64 overflow-y-auto">
-              {resources.map((resource) => (
-                <div
-                  key={resource.id}
-                  className={`p-3 rounded-md border cursor-pointer hover-elevate ${assignResourceId === resource.id ? "ring-2 ring-primary" : ""}`}
-                  onClick={() => setAssignResourceId(resource.id)}
-                  data-testid={`assign-resource-${resource.id}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">{resource.name}</span>
-                    <Badge variant="secondary" className="text-xs ml-auto">{resource.resourceType}</Badge>
+              {sortedResources.map((resource) => {
+                const isMatch = clusterMatchMap.get(resource.id);
+                return (
+                  <div
+                    key={resource.id}
+                    className={`p-3 rounded-md border cursor-pointer hover-elevate transition-colors ${assignResourceId === resource.id ? "ring-2 ring-primary" : ""} ${isMatch ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/20" : ""}`}
+                    onClick={() => setAssignResourceId(resource.id)}
+                    data-testid={`assign-resource-${resource.id}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">{resource.name}</span>
+                      {isMatch && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700 gap-0.5" data-testid={`badge-recommended-${resource.id}`}>
+                              <Sparkles className="h-3 w-3" />Rekommenderad
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent>Resursen verkar i samma kluster ({clusterName})</TooltipContent>
+                        </Tooltip>
+                      )}
+                      <Badge variant="secondary" className="text-xs ml-auto">{resource.resourceType}</Badge>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

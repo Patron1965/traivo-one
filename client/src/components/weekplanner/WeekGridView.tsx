@@ -28,6 +28,7 @@ interface WeekGridViewProps {
   onSendSchedule: (resource: Resource) => void;
   jobCardProps: Omit<React.ComponentProps<typeof JobCard>, 'job' | 'compact'>;
   dragOverConflicts?: Record<string, string[]>;
+  clusterMatchedResourceIds?: Set<string>;
 }
 
 function getWeatherIcon(code: number) {
@@ -49,7 +50,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
     visibleDates, visibleResources, getJobsForResourceAndDay, getResourceDayHours,
     getCapacityPercentage, getCapacityColor, getCapacityBgColor, getDropFitClass,
     activeDragJob, restrictionsByObject, resourceWeekSummary, zoom, weatherByDate,
-    onResourceClick, onSendSchedule, jobCardProps, dragOverConflicts,
+    onResourceClick, onSendSchedule, jobCardProps, dragOverConflicts, clusterMatchedResourceIds,
   } = props;
 
   const zoomPadClass = zoom.scale <= 0.5 ? "p-0.5" : zoom.scale >= 2 ? "p-4" : "p-2";
@@ -106,7 +107,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
           return (
             <div key={resource.id} className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] border-b">
               <div className="sticky left-0 bg-background z-10">
-                <ResourceColumn resource={resource} summary={summary} onResourceClick={onResourceClick} onSendSchedule={onSendSchedule} />
+                <ResourceColumn resource={resource} summary={summary} onResourceClick={onResourceClick} onSendSchedule={onSendSchedule} isClusterMatch={!!activeDragJob && clusterMatchedResourceIds?.has(resource.id)} />
               </div>
               {visibleDates.map((day, dayIndex) => {
                 const jobs = getJobsForResourceAndDay(resource.id, day);

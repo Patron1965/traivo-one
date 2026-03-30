@@ -108,6 +108,89 @@ app.get("/api/clusters/zones", asyncHandler(async (req, res) => {
     res.json({ clusterZones, resourceZones });
 }));
 
+app.get("/api/clusters/resource-match", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const clusterId = req.query.clusterId as string | undefined;
+    const objectId = req.query.objectId as string | undefined;
+
+    if (!clusterId && !objectId) {
+      return res.status(400).json({ error: "clusterId eller objectId krävs" });
+    }
+
+    let targetClusterId = clusterId;
+    let targetObject: { postalCode?: string | null; latitude?: number | null; longitude?: number | null } | null = null;
+
+    if (objectId && !targetClusterId) {
+      const obj = await storage.getObject(objectId);
+      if (obj && obj.tenantId === tenantId) {
+        targetClusterId = obj.clusterId || undefined;
+        targetObject = obj;
+      }
+    }
+
+    const allClusters = await storage.getClusters(tenantId);
+    const allResources = await storage.getResources(tenantId);
+    const activeResources = allResources.filter(r => r.status === "active" && r.resourceType === "person");
+
+    const scheduledOrders = (await storage.getWorkOrders(tenantId)).filter(o => o.scheduledDate && o.resourceId);
+    const resourceLoad: Record<string, number> = {};
+    const today = new Date().toISOString().split("T")[0];
+    const weekEnd = new Date(Date.now() + 5 * 86400000).toISOString().split("T")[0];
+    scheduledOrders.forEach(o => {
+      if (!o.resourceId || !o.scheduledDate) return;
+      const d = o.scheduledDate instanceof Date ? o.scheduledDate.toISOString().split("T")[0] : String(o.scheduledDate).split("T")[0];
+      if (d >= today && d <= weekEnd) {
+        resourceLoad[o.resourceId] = (resourceLoad[o.resourceId] || 0) + (o.estimatedDuration || 60);
+      }
+    });
+
+    const targetCluster = targetClusterId ? allClusters.find(c => c.id === targetClusterId) : null;
+    const clusterPostals = targetCluster?.postalCodes || [];
+
+    type Match = { resourceId: string; resourceName: string; score: number; reasons: string[]; clusterMatch: boolean };
+    const matches: Match[] = [];
+
+    for (const resource of activeResources) {
+      let score = 50;
+      const reasons: string[] = [];
+      let clusterMatch = false;
+
+      if (targetCluster && resource.serviceArea && resource.serviceArea.length > 0) {
+        const overlap = resource.serviceArea.filter(p => clusterPostals.includes(p));
+        if (overlap.length > 0) {
+          const overlapPct = clusterPostals.length > 0 ? Math.round((overlap.length / clusterPostals.length) * 100) : 100;
+          score += 40;
+          clusterMatch = true;
+          reasons.push(`Klustermatchning ${overlapPct}% (${overlap.length} postnr)`);
+        } else {
+          score -= 10;
+          reasons.push("Ej i klustrets område");
+        }
+      } else if (targetCluster && (!resource.serviceArea || resource.serviceArea.length === 0)) {
+        score += 5;
+        reasons.push("Inget begränsat område");
+      }
+
+      const loadMin = resourceLoad[resource.id] || 0;
+      const weekCapacityMin = (resource.weeklyHours || 40) * 60;
+      const loadPct = weekCapacityMin > 0 ? Math.round((loadMin / weekCapacityMin) * 100) : 0;
+      if (loadPct < 50) { score += 10; reasons.push(`Låg beläggning (${loadPct}%)`); }
+      else if (loadPct < 80) { score += 5; reasons.push(`Normal beläggning (${loadPct}%)`); }
+      else { score -= 5; reasons.push(`Hög beläggning (${loadPct}%)`); }
+
+      if (resource.executionCodes && resource.executionCodes.length > 0) {
+        reasons.push(`Kompetens: ${resource.executionCodes.join(", ")}`);
+      }
+
+      matches.push({ resourceId: resource.id, resourceName: resource.name, score, reasons, clusterMatch });
+    }
+
+    matches.sort((a, b) => b.score - a.score);
+    const noMatch = targetCluster ? !matches.some(m => m.clusterMatch) : false;
+
+    res.json({ matches, noMatch, clusterId: targetClusterId || null, clusterName: targetCluster?.name || null });
+}));
+
 app.get("/api/clusters/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const cluster = await storage.getClusterWithStats(req.params.id);
