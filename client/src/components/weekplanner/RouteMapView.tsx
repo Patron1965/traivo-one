@@ -336,7 +336,7 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
           </SortableContext>
         </ScrollArea>
       </div>
-      <div className="flex-1 relative">
+      <div className="flex-1 relative min-h-0">
         {isLoadingGeometry && (
           <div className="absolute top-2 right-2 z-[1000] flex items-center gap-1.5 bg-background/90 border rounded-md px-2 py-1 shadow-sm" data-testid="route-geometry-loading">
             <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
@@ -346,8 +346,7 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
         <MapContainer
           center={[59.33, 18.07]}
           zoom={10}
-          className="h-full w-full"
-          style={{ zIndex: 1 }}
+          style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }}
         >
           <MapInvalidateSize />
           <TileLayer
