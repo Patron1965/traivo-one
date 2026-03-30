@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,11 +17,35 @@ import { useMapConfig } from "@/hooks/use-map-config";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
+function MapInvalidateSize() {
+  const map = useMap();
+  useEffect(() => {
+    map.invalidateSize();
+    const t1 = setTimeout(() => map.invalidateSize(), 100);
+    const t2 = setTimeout(() => map.invalidateSize(), 400);
+    const container = map.getContainer();
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => map.invalidateSize());
+      observer.observe(container);
+    }
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      observer?.disconnect();
+    };
+  }, [map]);
+  return null;
+}
+
 function MapFitBounds({ bounds }: { bounds: L.LatLngBoundsExpression | null }) {
   const map = useMap();
   useEffect(() => {
     if (bounds) {
-      map.fitBounds(bounds, { padding: [50, 50] });
+      setTimeout(() => {
+        map.invalidateSize();
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }, 50);
     }
   }, [bounds, map]);
   return null;
@@ -51,6 +75,8 @@ interface RouteMapViewProps {
   vrpBreaks?: VRPBreakStop[];
 }
 
+const geometryCache = new Map<string, [number, number][]>();
+
 export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps) {
   const {
     currentDate, resources, routeViewResourceId, setRouteViewResourceId,
@@ -60,6 +86,7 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
   } = props;
 
   const mapConfig = useMapConfig();
+  const fetchAbortRef = useRef<AbortController | null>(null);
 
   const orderedJobs = useMemo(() => {
     if (routeJobOrder.length === 0) return routeJobs;
@@ -87,7 +114,24 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
   const [roadGeometry, setRoadGeometry] = useState<[number, number][] | null>(null);
   const [isLoadingGeometry, setIsLoadingGeometry] = useState(false);
 
-  const fetchRoadGeometry = useCallback(async () => {
+  const cacheKey = useMemo(() => {
+    const dateStr = format(currentDate, "yyyy-MM-dd");
+    const jobIds = orderedJobs
+      .filter(j => j.taskLatitude && j.taskLongitude)
+      .map(j => j.id)
+      .sort()
+      .join(",");
+    return `${routeViewResourceId || "none"}|${dateStr}|${jobIds}`;
+  }, [routeViewResourceId, currentDate, orderedJobs]);
+
+  useEffect(() => {
+    fetchAbortRef.current?.abort();
+    const cached = geometryCache.get(cacheKey);
+    if (cached) {
+      setRoadGeometry(cached);
+      return;
+    }
+
     const positions = orderedJobs
       .filter(j => j.taskLatitude && j.taskLongitude)
       .map(j => ({ lat: j.taskLatitude!, lng: j.taskLongitude! }));
@@ -95,33 +139,47 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
       setRoadGeometry(null);
       return;
     }
+
+    const abortCtrl = new AbortController();
+    fetchAbortRef.current = abortCtrl;
     setIsLoadingGeometry(true);
-    try {
-      const response = await fetch("/api/route-geometry", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ waypoints: positions.slice(0, 25) }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data.coordinates && data.coordinates.length > 0) {
-          setRoadGeometry(data.coordinates);
+
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch("/api/route-geometry", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ waypoints: positions.slice(0, 25) }),
+          signal: abortCtrl.signal,
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.coordinates && data.coordinates.length > 0) {
+            geometryCache.set(cacheKey, data.coordinates);
+            if (geometryCache.size > 50) {
+              const first = geometryCache.keys().next().value;
+              if (first) geometryCache.delete(first);
+            }
+            setRoadGeometry(data.coordinates);
+          } else {
+            setRoadGeometry(null);
+          }
         } else {
           setRoadGeometry(null);
         }
-      } else {
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
         setRoadGeometry(null);
+      } finally {
+        setIsLoadingGeometry(false);
       }
-    } catch {
-      setRoadGeometry(null);
-    } finally {
-      setIsLoadingGeometry(false);
-    }
-  }, [orderedJobs]);
+    }, 300);
 
-  useEffect(() => {
-    fetchRoadGeometry();
-  }, [fetchRoadGeometry]);
+    return () => {
+      clearTimeout(timer);
+      abortCtrl.abort();
+    };
+  }, [cacheKey, orderedJobs]);
 
   const routePolyline = roadGeometry || fallbackPolyline;
 
@@ -279,12 +337,19 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
         </ScrollArea>
       </div>
       <div className="flex-1 relative">
+        {isLoadingGeometry && (
+          <div className="absolute top-2 right-2 z-[1000] flex items-center gap-1.5 bg-background/90 border rounded-md px-2 py-1 shadow-sm" data-testid="route-geometry-loading">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Laddar väggeometri...</span>
+          </div>
+        )}
         <MapContainer
           center={[59.33, 18.07]}
           zoom={10}
           className="h-full w-full"
           style={{ zIndex: 1 }}
         >
+          <MapInvalidateSize />
           <TileLayer
             attribution={mapConfig.attribution}
             url={mapConfig.tileUrl}
