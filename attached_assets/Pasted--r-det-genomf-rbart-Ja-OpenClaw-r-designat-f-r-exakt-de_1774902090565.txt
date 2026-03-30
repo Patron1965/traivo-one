@@ -1,0 +1,62 @@
+Är det genomförbart? Ja.
+OpenClaw är designat för exakt det här scenariot. En Mac Mini hos kunden kan köra:
+
+OpenClaw Gateway som launchd-tjänst (alltid igång, övervakar sig själv)
+Traivo One (React/Express/Postgres) som huvudsystem
+Traivo Go (mobilappen) pratar med samma backend
+Krav är minimala: Node 24, npm-install, done. Mac Mini M-serien har mer än tillräckligt med kraft.
+
+Fördelar med lokal OpenClaw hos kund
+🔧 Operationella:
+
+AI-agenten kan övervaka Traivo-instansen direkt — hälsocheckar, loggar, restart vid behov
+Cron/heartbeat för proaktiv drift: "databasbackup klar", "disk 80% full", "3 misslyckade jobb senaste timmen"
+Lokal exec-åtkomst till servern utan att exponera SSH utåt
+📱 Node-arkitektur:
+
+Fältarbetarnas mobiler (Traivo Go) kan kopplas som nodes till kundens gateway
+Kamera, GPS, notifikationer — allt via WebSocket direkt till kundens lokala gateway
+Funkar på LAN utan internet (viktig för depåer/anläggningar med dålig täckning)
+🤖 AI-kraft per kund:
+
+Varje kund får sin egen AI-assistent som förstår deras data
+"Visa alla missade hämtningar i Malmö denna vecka" — direkt mot lokal Postgres
+Ruttoptimering, prediktivt underhåll, anomalidetektering — allt lokalt
+🔒 Data/GDPR:
+
+Kunddata stanar på kundens hårdvara
+Inget behov av att skicka driftsdata till centrala servrar
+Starkt argument mot kommunala kunder ("er data lämnar aldrig ert nätverk")
+Arkitekturskiss
+┌─────────── Kundens Mac Mini ───────────┐
+│                                         │
+│  OpenClaw Gateway (launchd)             │
+│    ├── AI-agent (drift + support)       │
+│    ├── Cron: backup, hälsocheckar       │
+│    └── WebSocket → mobila nodes         │
+│                                         │
+│  Traivo One (Express + React + PG)      │
+│    └── Lokal Postgres                   │
+│                                         │
+│  Traivo Go backend (API)                │
+│                                         │
+└──────────── LAN / Tailscale ────────────┘
+         │                    │
+    📱 Fältarbetare      🖥️ Kontor
+    (Traivo Go app)      (Webbgränssnitt)
+Saker att tänka på
+Remote access: Tailscale är naturlig partner — du kommer åt kundens OpenClaw utan öppen port. Perfekt för support.
+
+Multi-tenant vs multi-instance: Istället för ett centralt multi-tenant-system får varje kund sin egen instans. Enklare isolation, men kräver deployment-automation (Ansible? Docker?).
+
+Uppdateringar: Behöver en strategi. OpenClaw har inbyggd openclaw gateway install + auto-update. Traivo One/Go behöver liknande — kanske git pull + restart via OpenClaw-cron?
+
+Kostnad per kund: Mac Mini ~10k SEK + strömkostnad. Sälj det som "dedikerad AI-server" — kunder betalar gärna för det.
+
+Min rekommendation
+Ja, det är klokt tänkt. Det ger dig:
+
+Differentiering — "AI som bor hos er, inte i molnet"
+Enklare GDPR — data on-prem
+Bättre marginal — hårdvara engångskostnad vs löpande molnkostnad
+Lock-in — kunden har fysisk infrastruktur som är svår att byta ut

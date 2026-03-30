@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTerminology } from "@/hooks/use-terminology";
 import { canAccessRoute, isTechnicianRole } from "@/lib/role-config";
@@ -33,6 +33,7 @@ interface QuickAction {
 
 export function FloatingActionButton() {
   const [open, setOpen] = useState(false);
+  const [location] = useLocation();
   const { user } = useAuth();
   const { t } = useTerminology();
   const userRole = user?.role;
@@ -52,7 +53,7 @@ export function FloatingActionButton() {
     return allActions.filter((action) => canAccessRoute(userRole, action.url) && isNavItemEnabled(action.url));
   }, [userRole, t, isNavItemEnabled]);
 
-  if (isTechnicianRole(userRole) || quickActions.length === 0) {
+  if (isTechnicianRole(userRole) || quickActions.length === 0 || location.startsWith("/mobile")) {
     return null;
   }
 
