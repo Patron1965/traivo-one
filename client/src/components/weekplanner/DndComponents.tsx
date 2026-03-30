@@ -16,7 +16,8 @@ export function SubStepsExpander({ jobId, isExpanded, onToggle }: { jobId: strin
     queryFn: async () => {
       const res = await fetch(`/api/work-orders/${jobId}/sub-steps`, { credentials: "include" });
       if (!res.ok) return [];
-      return res.json();
+      const data = await res.json();
+      return Array.isArray(data) ? data : (Array.isArray(data?.subSteps) ? data.subSteps : []);
     },
     staleTime: 120000,
   });
