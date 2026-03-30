@@ -239,38 +239,18 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
           </Popover>
 
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && onViewModeChange(v as ViewMode)} className="h-8" data-testid="toggle-view-mode">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <ToggleGroupItem value="day" aria-label="Dagvy (1)" className="h-7 w-7 p-0" data-testid="toggle-day">
-                  <CalendarDays className="h-3.5 w-3.5" />
-                </ToggleGroupItem>
-              </TooltipTrigger>
-              <TooltipContent>Dagvy (1)</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <ToggleGroupItem value="week" aria-label="Veckovy (2)" className="h-7 w-7 p-0" data-testid="toggle-week">
-                  <CalendarRange className="h-3.5 w-3.5" />
-                </ToggleGroupItem>
-              </TooltipTrigger>
-              <TooltipContent>Veckovy (2)</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <ToggleGroupItem value="month" aria-label="Månadsvy (3)" className="h-7 w-7 p-0" data-testid="toggle-month">
-                  <Calendar className="h-3.5 w-3.5" />
-                </ToggleGroupItem>
-              </TooltipTrigger>
-              <TooltipContent>Månadsvy (3)</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <ToggleGroupItem value="route" aria-label="Ruttvy" className="h-7 w-7 p-0" data-testid="toggle-route">
-                  <MapPin className="h-3.5 w-3.5" />
-                </ToggleGroupItem>
-              </TooltipTrigger>
-              <TooltipContent>Ruttvy</TooltipContent>
-            </Tooltip>
+            <ToggleGroupItem value="day" aria-label="Dagvy (1)" title="Dagvy (1)" className="h-7 w-7 p-0" data-testid="toggle-day">
+              <CalendarDays className="h-3.5 w-3.5" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="week" aria-label="Veckovy (2)" title="Veckovy (2)" className="h-7 w-7 p-0" data-testid="toggle-week">
+              <CalendarRange className="h-3.5 w-3.5" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="month" aria-label="Månadsvy (3)" title="Månadsvy (3)" className="h-7 w-7 p-0" data-testid="toggle-month">
+              <Calendar className="h-3.5 w-3.5" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="route" aria-label="Ruttvy" title="Ruttvy" className="h-7 w-7 p-0" data-testid="toggle-route">
+              <MapPin className="h-3.5 w-3.5" />
+            </ToggleGroupItem>
           </ToggleGroup>
 
           <Separator orientation="vertical" className="h-6 mx-0.5" />
