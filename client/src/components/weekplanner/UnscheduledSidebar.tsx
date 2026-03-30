@@ -3,7 +3,6 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -323,7 +322,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
             </div>
           )}
         </div>
-        <ScrollArea className="flex-1 p-2">
+        <div className="flex-1 overflow-y-auto p-2">
           <div className="space-y-2">
             {unscheduledJobs.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground text-sm">
@@ -474,7 +473,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
               </>
             )}
           </div>
-        </ScrollArea>
+        </div>
       </CollapsibleContent>
       <Tooltip>
         <TooltipTrigger asChild>

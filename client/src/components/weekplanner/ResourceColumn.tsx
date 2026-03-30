@@ -41,7 +41,12 @@ export const ResourceColumn = memo(function ResourceColumn({ resource, summary, 
           <AvatarFallback className="text-[10px]">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
         </Avatar>
         <div className="min-w-0">
-          <span className="text-xs font-medium truncate block">{resource.name}</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-xs font-medium truncate block">{resource.name}</span>
+            </TooltipTrigger>
+            <TooltipContent side="right">{resource.name}</TooltipContent>
+          </Tooltip>
           {resourceProfiles.length > 0 && (
             <div className="flex gap-0.5 mt-0.5">
               {resourceProfiles.map(p => (
