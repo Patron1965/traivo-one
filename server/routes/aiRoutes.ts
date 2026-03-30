@@ -1722,11 +1722,13 @@ app.post("/api/clusters/auto-generate", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { strategy, config } = req.body;
     
-    if (!strategy || !["geographic", "frequency", "team", "customer", "manual"].includes(strategy)) {
-      throw new ValidationError("Ogiltig strategi. Välj: geographic, frequency, team, customer, manual");
+    if (!strategy || !["geographic", "postalcode", "kmeans", "frequency", "team", "customer", "manual"].includes(strategy)) {
+      throw new ValidationError("Ogiltig strategi. Välj: geographic, postalcode, kmeans, frequency, team, customer, manual");
     }
     
-    const allObjects = await storage.getObjects(tenantId);
+    const rawObjects = await storage.getObjects(tenantId);
+    const excludeAlreadyClustered = config?.excludeAlreadyClustered === true;
+    const allObjects = excludeAlreadyClustered ? rawObjects.filter(o => !o.clusterId) : rawObjects;
     const allWorkOrders = await storage.getWorkOrders(tenantId);
     const allCustomers = await storage.getCustomers(tenantId);
     const allResources = await storage.getResources(tenantId);
@@ -1823,6 +1825,116 @@ app.post("/api/clusters/auto-generate", asyncHandler(async (req, res) => {
       }
       for (const obj of unknownCityObjects) {
         unclusteredObjectIds.push(obj.id);
+      }
+      
+    } else if (strategy === "postalcode") {
+      const prefixGroups = new Map<string, { objects: typeof allObjects }>();
+      for (const obj of allObjects) {
+        const pc = (obj.postalCode || "").replace(/\s/g, "");
+        const digitMatch = pc.match(/^(\d{3})/);
+        if (!digitMatch) {
+          unclusteredObjectIds.push(obj.id);
+          continue;
+        }
+        const prefix = digitMatch[1];
+        if (!prefixGroups.has(prefix)) prefixGroups.set(prefix, { objects: [] });
+        prefixGroups.get(prefix)!.objects.push(obj);
+      }
+      
+      for (const [prefix, { objects: prefixObjects }] of prefixGroups) {
+        const stats = computeGroupStats(prefixObjects);
+        const cityNames = [...new Set(prefixObjects.map(o => (o.city || "").trim()).filter(Boolean))];
+        const displayCity = cityNames.length > 0 ? cityNames.slice(0, 2).join("/") : `Område ${prefix}`;
+        suggestions.push({
+          id: `pc-${prefix}`,
+          name: `${prefix}xx — ${displayCity}`,
+          description: `${prefixObjects.length} objekt med postnummer ${prefix}xx, ${stats.postalCodes.length} unika postnummer`,
+          objectIds: prefixObjects.map(o => o.id),
+          objectCount: prefixObjects.length,
+          workOrderCount: stats.woCount,
+          centerLatitude: stats.centerLat,
+          centerLongitude: stats.centerLng,
+          radiusKm: stats.radiusKm,
+          color: nextColor(),
+          postalCodes: stats.postalCodes
+        });
+      }
+      
+    } else if (strategy === "kmeans") {
+      const numClusters = Math.min(Math.max(config?.numClusters || 5, 2), 30);
+      const objectsWithCoords = allObjects.filter(o => o.latitude && o.longitude);
+      const objectsWithout = allObjects.filter(o => !o.latitude || !o.longitude);
+      for (const obj of objectsWithout) unclusteredObjectIds.push(obj.id);
+      
+      const effectiveNumClusters = Math.min(numClusters, objectsWithCoords.length);
+      if (effectiveNumClusters >= 2) {
+        const points = objectsWithCoords.map(o => ({ lat: o.latitude!, lng: o.longitude!, id: o.id }));
+        
+        const centroids: { lat: number; lng: number }[] = [];
+        const step = Math.floor(points.length / effectiveNumClusters);
+        const sorted = [...points].sort((a, b) => a.lat - b.lat);
+        for (let i = 0; i < effectiveNumClusters; i++) {
+          centroids.push({ lat: sorted[i * step].lat, lng: sorted[i * step].lng });
+        }
+        
+        const toRad = (d: number) => d * Math.PI / 180;
+        const haversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+          const dLat = toRad(lat2 - lat1);
+          const dLon = toRad(lon2 - lon1);
+          const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+          return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        };
+        
+        let assignments = new Array<number>(points.length).fill(0);
+        for (let iter = 0; iter < 50; iter++) {
+          let changed = false;
+          for (let p = 0; p < points.length; p++) {
+            let minDist = Infinity;
+            let bestC = 0;
+            for (let c = 0; c < centroids.length; c++) {
+              const d = haversine(points[p].lat, points[p].lng, centroids[c].lat, centroids[c].lng);
+              if (d < minDist) { minDist = d; bestC = c; }
+            }
+            if (assignments[p] !== bestC) { assignments[p] = bestC; changed = true; }
+          }
+          if (!changed) break;
+          
+          for (let c = 0; c < centroids.length; c++) {
+            const members = points.filter((_, i) => assignments[i] === c);
+            if (members.length > 0) {
+              centroids[c] = {
+                lat: members.reduce((s, m) => s + m.lat, 0) / members.length,
+                lng: members.reduce((s, m) => s + m.lng, 0) / members.length,
+              };
+            }
+          }
+        }
+        
+        for (let c = 0; c < centroids.length; c++) {
+          const memberIndices = assignments.map((a, i) => a === c ? i : -1).filter(i => i >= 0);
+          if (memberIndices.length === 0) continue;
+          const memberObjects = memberIndices.map(i => objectsWithCoords[i]);
+          const memberObjFull = memberObjects.map(mo => allObjects.find(o => o.id === mo.id)!);
+          const stats = computeGroupStats(memberObjFull);
+          const cityNames = [...new Set(memberObjFull.map(o => (o.city || "").trim()).filter(Boolean))];
+          const displayName = cityNames.length > 0 ? cityNames.slice(0, 3).join(", ") : `Kluster ${c + 1}`;
+          
+          suggestions.push({
+            id: `km-${c}`,
+            name: `K${c + 1}: ${displayName}`,
+            description: `${memberObjFull.length} objekt, ${stats.postalCodes.length} postnummer. Centroid: ${centroids[c].lat.toFixed(3)}, ${centroids[c].lng.toFixed(3)}`,
+            objectIds: memberObjFull.map(o => o.id),
+            objectCount: memberObjFull.length,
+            workOrderCount: stats.woCount,
+            centerLatitude: centroids[c].lat,
+            centerLongitude: centroids[c].lng,
+            radiusKm: stats.radiusKm,
+            color: nextColor(),
+            postalCodes: stats.postalCodes
+          });
+        }
+      } else {
+        for (const obj of objectsWithCoords) unclusteredObjectIds.push(obj.id);
       }
       
     } else if (strategy === "frequency") {
@@ -1990,8 +2102,9 @@ app.post("/api/clusters/auto-generate", asyncHandler(async (req, res) => {
           objectsWithoutCoordinates: allObjects.filter(o => !o.latitude || !o.longitude).length,
           citiesBreakdown: [...cityStats.entries()].map(([city, count]) => ({ city, count })).sort((a, b) => b.count - a.count),
           frequencyBreakdown: freqStats,
-          unclustered: allObjects.filter(o => !o.clusterId).length,
-          alreadyClustered: allObjects.filter(o => o.clusterId).length
+          unclustered: rawObjects.filter(o => !o.clusterId).length,
+          alreadyClustered: rawObjects.filter(o => o.clusterId).length,
+          excludedFromAnalysis: excludeAlreadyClustered ? rawObjects.length - allObjects.length : 0
         }
       });
     }
@@ -2210,16 +2323,18 @@ app.post("/api/clusters/auto-generate/recalculate", asyncHandler(async (req, res
     };
     
     const objectIds: string[] = [];
+    const postalCodesSet = new Set<string>();
     for (const obj of allObjects) {
       if (obj.latitude && obj.longitude) {
         const dist = haversine(centerLatitude, centerLongitude, obj.latitude, obj.longitude);
         if (dist <= radiusKm) {
           objectIds.push(obj.id);
+          if (obj.postalCode) postalCodesSet.add(obj.postalCode);
         }
       }
     }
     
-    res.json({ objectIds, objectCount: objectIds.length });
+    res.json({ objectIds, objectCount: objectIds.length, postalCodes: [...postalCodesSet] });
 }));
 
 // Applicera kluster från multi-strategi förslag

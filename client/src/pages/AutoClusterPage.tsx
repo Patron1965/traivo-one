@@ -7,17 +7,17 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
-import { Loader2, Check, AlertTriangle, Target, Globe, Clock, Users, Building2, Hand, BarChart3, Map as MapIcon, List, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Info, Download, Upload } from "lucide-react";
+import { Loader2, Check, AlertTriangle, Target, Globe, Clock, Users, Building2, Hand, BarChart3, Map as MapIcon, List, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Info, Download, Upload, Mail, Crosshair, Filter } from "lucide-react";
 import Papa from "papaparse";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { MapContainer, TileLayer, Circle, CircleMarker, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Circle, CircleMarker, Marker, Popup, Polygon, useMap, useMapEvents } from "react-leaflet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useMapConfig } from "@/hooks/use-map-config";
 
-type Strategy = "geographic" | "frequency" | "team" | "customer" | "manual";
+type Strategy = "geographic" | "postalcode" | "kmeans" | "frequency" | "team" | "customer" | "manual";
 
 interface ClusterSuggestion {
   id: string;
@@ -89,12 +89,34 @@ interface ApplyResult {
 }
 
 const STRATEGY_INFO: Record<Strategy, { label: string; icon: typeof Globe; description: string }> = {
-  geographic: { label: "Geografiskt", icon: Globe, description: "Gruppera objekt per stad och postnummer" },
+  geographic: { label: "Per stad", icon: Globe, description: "Gruppera objekt per stad och postnummer" },
+  postalcode: { label: "Postnummer", icon: Mail, description: "Gruppera efter postnummerprefix (3-siffrig)" },
+  kmeans: { label: "Avstånd (K-Means)", icon: Crosshair, description: "Koordinatbaserad gruppering med K-Means algoritm" },
   frequency: { label: "Besöksfrekvens", icon: Clock, description: "Gruppera efter antal arbetsordrar per objekt" },
   team: { label: "Team", icon: Users, description: "Gruppera efter vilken resurs som utför arbetsordrar" },
   customer: { label: "Kund", icon: Building2, description: "Gruppera per kund" },
-  manual: { label: "Manuellt", icon: Hand, description: "Visa statistik utan förslag" },
+  manual: { label: "Statistik", icon: Hand, description: "Visa statistik utan förslag" },
 };
+
+function computeConvexHull(points: [number, number][]): [number, number][] {
+  if (points.length < 3) return points;
+  const sorted = [...points].sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+  const cross = (o: [number, number], a: [number, number], b: [number, number]) =>
+    (a[1] - o[1]) * (b[0] - o[0]) - (a[0] - o[0]) * (b[1] - o[1]);
+  const lower: [number, number][] = [];
+  for (const p of sorted) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper: [number, number][] = [];
+  for (const p of sorted.reverse()) {
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  upper.pop();
+  lower.pop();
+  return lower.concat(upper);
+}
 
 function createClusterIcon(color: string, isSelected: boolean, isHovered: boolean) {
   const size = isSelected ? 16 : 12;
@@ -241,6 +263,8 @@ export default function AutoClusterPage() {
   const [autoAssignResult, setAutoAssignResult] = useState<AutoAssignResult | null>(null);
   const [autoAssignApplied, setAutoAssignApplied] = useState(false);
   const [recentAssignments, setRecentAssignments] = useState<{ clusterId: string; clusterName: string; objectIds: string[]; method: string }[]>([]);
+  const [numClusters, setNumClusters] = useState(5);
+  const [excludeAlreadyClustered, setExcludeAlreadyClustered] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -256,8 +280,9 @@ export default function AutoClusterPage() {
 
   const generateMutation = useMutation({
     mutationFn: async () => {
-      const config: Record<string, unknown> = {};
+      const config: Record<string, unknown> = { excludeAlreadyClustered };
       if (strategy === "geographic") config.targetSize = targetSize;
+      if (strategy === "kmeans") config.numClusters = numClusters;
       if (strategy === "frequency") {
         config.highThreshold = highThreshold;
         config.mediumThreshold = mediumThreshold;
@@ -323,7 +348,7 @@ export default function AutoClusterPage() {
   const recalculateMutation = useMutation({
     mutationFn: async (params: { id: string; centerLatitude: number; centerLongitude: number; radiusKm: number }) => {
       const response = await apiRequest("POST", "/api/clusters/auto-generate/recalculate", params);
-      return response.json() as Promise<{ objectIds: string[]; objectCount: number }>;
+      return response.json() as Promise<{ objectIds: string[]; objectCount: number; postalCodes?: string[] }>;
     },
   });
 
@@ -422,7 +447,7 @@ export default function AutoClusterPage() {
               return {
                 ...prev,
                 suggestions: prev.suggestions.map(s =>
-                  s.id === id ? { ...s, objectIds: data.objectIds, objectCount: data.objectCount } : s
+                  s.id === id ? { ...s, objectIds: data.objectIds, objectCount: data.objectCount, postalCodes: data.postalCodes || s.postalCodes } : s
                 )
               };
             });
@@ -453,7 +478,7 @@ export default function AutoClusterPage() {
               return {
                 ...prev,
                 suggestions: prev.suggestions.map(s =>
-                  s.id === id ? { ...s, objectIds: data.objectIds, objectCount: data.objectCount } : s
+                  s.id === id ? { ...s, objectIds: data.objectIds, objectCount: data.objectCount, postalCodes: data.postalCodes || s.postalCodes } : s
                 )
               };
             });
@@ -509,7 +534,7 @@ export default function AutoClusterPage() {
     return ids;
   }, [overlappingPairs]);
 
-  const objectCoordsQuery = useQuery<{ lat: number; lng: number; color: string }[]>({
+  const objectCoordsQuery = useQuery<{ lat: number; lng: number; color: string; suggestionId: string }[]>({
     queryKey: ["/api/objects/coordinates", Array.from(selectedSuggestions).sort().join(",")],
     queryFn: async () => {
       if (!generatedResult?.suggestions || selectedSuggestions.size === 0) return [];
@@ -519,12 +544,16 @@ export default function AutoClusterPage() {
       const res = await apiRequest("POST", "/api/objects/coordinates", { objectIds: allIds.slice(0, 3000) });
       const data = await res.json() as { id: string; latitude: number; longitude: number }[];
       const idToColor = new Map<string, string>();
+      const idToSuggestion = new Map<string, string>();
       for (const s of selected) {
-        for (const id of s.objectIds) idToColor.set(id, s.color);
+        for (const id of s.objectIds) {
+          idToColor.set(id, s.color);
+          idToSuggestion.set(id, s.id);
+        }
       }
       return data
         .filter(o => o.latitude && o.longitude)
-        .map(o => ({ lat: o.latitude, lng: o.longitude, color: idToColor.get(o.id) || "#888" }));
+        .map(o => ({ lat: o.latitude, lng: o.longitude, color: idToColor.get(o.id) || "#888", suggestionId: idToSuggestion.get(o.id) || "" }));
     },
     enabled: showObjectMarkers && selectedSuggestions.size > 0 && !!generatedResult,
     staleTime: 30000,
@@ -772,7 +801,7 @@ export default function AutoClusterPage() {
       </div>
 
       <Tabs value={strategy} onValueChange={(v) => { setStrategy(v as Strategy); setGeneratedResult(null); setSelectedSuggestions(new Set()); setFocusedCluster(null); }}>
-        <TabsList className="w-full grid grid-cols-5">
+        <TabsList className="w-full grid grid-cols-7">
           {(Object.entries(STRATEGY_INFO) as [Strategy, typeof STRATEGY_INFO[Strategy]][]).map(([key, info]) => {
             const Icon = info.icon;
             return (
@@ -795,6 +824,18 @@ export default function AutoClusterPage() {
                 {key === "geographic" && (
                   <p className="text-sm text-muted-foreground">Grupperar objekt per stad. Varje stad blir ett kluster med alla postnummerserier.</p>
                 )}
+                {key === "postalcode" && (
+                  <p className="text-sm text-muted-foreground">Grupperar objekt efter de tre första siffrorna i postnumret. Ger finare geografisk uppdelning än stadsstrategi.</p>
+                )}
+                {key === "kmeans" && (
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">Använder K-Means-algoritm på GPS-koordinater för att hitta optimala geografiska grupperingar. Objekt utan koordinater placeras som oklustrade.</p>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Antal kluster: {numClusters}</label>
+                      <Slider value={[numClusters]} onValueChange={(v) => setNumClusters(v[0])} min={2} max={30} step={1} data-testid="slider-num-clusters" />
+                    </div>
+                  </div>
+                )}
                 {key === "frequency" && (
                   <div className="space-y-4">
                     <div className="space-y-2">
@@ -810,6 +851,19 @@ export default function AutoClusterPage() {
                 {key === "team" && <p className="text-sm text-muted-foreground">Varje resurs som utfört arbetsordrar blir ett eget kluster.</p>}
                 {key === "customer" && <p className="text-sm text-muted-foreground">Varje kund med minst ett objekt blir ett eget kluster.</p>}
                 {key === "manual" && <p className="text-sm text-muted-foreground">Visa statistik om objekten utan att generera klusterförslag.</p>}
+                <div className="flex items-center gap-4 flex-wrap">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox
+                      checked={excludeAlreadyClustered}
+                      onCheckedChange={(c) => setExcludeAlreadyClustered(!!c)}
+                      data-testid="checkbox-exclude-clustered"
+                    />
+                    <span className="text-sm">
+                      <Filter className="h-3.5 w-3.5 inline mr-1" />
+                      Exkludera redan klustrade objekt
+                    </span>
+                  </label>
+                </div>
                 <Button onClick={handleGenerate} disabled={generateMutation.isPending} data-testid="button-generate">
                   {generateMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <BarChart3 className="h-4 w-4 mr-2" />}
                   {key === "manual" ? "Visa statistik" : "Generera förslag"}
@@ -909,6 +963,19 @@ export default function AutoClusterPage() {
                           pathOptions={{ color: o.color, fillColor: o.color, fillOpacity: 0.6, weight: 1, opacity: 0.7 }}
                         />
                       ))}
+                      {suggestionsWithCoords.filter(s => selectedSuggestions.has(s.id)).map(s => {
+                        const objCoords = objectCoordsQuery.data?.filter(o => o.suggestionId === s.id);
+                        if (!objCoords || objCoords.length < 3) return null;
+                        const hull = computeConvexHull(objCoords.map(o => [o.lat, o.lng] as [number, number]));
+                        if (hull.length < 3) return null;
+                        return (
+                          <Polygon
+                            key={`hull-${s.id}`}
+                            positions={hull}
+                            pathOptions={{ color: s.color, fillColor: s.color, fillOpacity: 0.1, weight: 2, dashArray: "5,5" }}
+                          />
+                        );
+                      })}
                       {suggestionsWithCoords.filter(s => selectedSuggestions.has(s.id)).map(s => (
                         <DraggableCluster
                           key={s.id}
@@ -977,6 +1044,7 @@ export default function AutoClusterPage() {
                         </span>
                       </th>
                       <th className="text-right p-3 hidden lg:table-cell">Radie</th>
+                      <th className="text-left p-3 hidden xl:table-cell">Postnummer</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1043,6 +1111,9 @@ export default function AutoClusterPage() {
                         </td>
                         <td className="p-3 text-right text-muted-foreground hidden lg:table-cell">
                           {s.radiusKm.toFixed(1)} km
+                        </td>
+                        <td className="p-3 hidden xl:table-cell text-xs text-muted-foreground max-w-[200px] truncate" title={s.postalCodes?.join(", ") || "—"}>
+                          {s.postalCodes && s.postalCodes.length > 0 ? s.postalCodes.slice(0, 5).join(", ") + (s.postalCodes.length > 5 ? ` +${s.postalCodes.length - 5}` : "") : "—"}
                         </td>
                       </tr>
                     ))}
