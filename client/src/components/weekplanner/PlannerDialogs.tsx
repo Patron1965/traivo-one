@@ -143,15 +143,20 @@ interface ConflictDialogProps {
 
 export const ConflictDialog = memo(function ConflictDialog(props: ConflictDialogProps) {
   const { open, onOpenChange, pendingSchedule, workOrders, onAccept, onCancel } = props;
+  const hasHardBlock = pendingSchedule?.conflicts.some(c => c.startsWith("[BLOCK]")) ?? false;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
             <AlertTriangle className="h-5 w-5" />
-            Konflikt upptäckt
+            {hasHardBlock ? "Tilldelning blockerad" : "Konflikt upptäckt"}
           </DialogTitle>
-          <DialogDescription>Följande konflikter identifierades vid schemaläggning. Du kan välja att schemalägga ändå.</DialogDescription>
+          <DialogDescription>
+            {hasHardBlock
+              ? "Denna order kan inte tilldelas — verksamhetsområdesregeln förhindrar tilldelningen."
+              : "Följande konflikter identifierades vid schemaläggning. Du kan välja att schemalägga ändå."}
+          </DialogDescription>
         </DialogHeader>
         {pendingSchedule && (
           <div className="space-y-3 py-2">
@@ -164,11 +169,13 @@ export const ConflictDialog = memo(function ConflictDialog(props: ConflictDialog
             </div>
             <div className="space-y-2">
               {pendingSchedule.conflicts.map((conflict, i) => {
-                const isClusterWarning = conflict.includes("Kluster");
+                const isHardBlock = conflict.startsWith("[BLOCK]");
+                const isClusterWarning = !isHardBlock && conflict.includes("Kluster");
+                const displayText = isHardBlock ? conflict.replace("[BLOCK] ", "") : conflict;
                 return (
-                <div key={i} className={`flex items-start gap-2 p-2 rounded border ${isClusterWarning ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800" : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"}`}>
-                  <AlertTriangle className={`h-4 w-4 shrink-0 mt-0.5 ${isClusterWarning ? "text-amber-500" : "text-red-500"}`} />
-                  <span className="text-sm">{conflict}</span>
+                <div key={i} className={`flex items-start gap-2 p-2 rounded border ${isHardBlock ? "bg-red-100 dark:bg-red-950/50 border-red-300 dark:border-red-700" : isClusterWarning ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800" : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"}`}>
+                  <AlertTriangle className={`h-4 w-4 shrink-0 mt-0.5 ${isHardBlock ? "text-red-700 dark:text-red-300" : isClusterWarning ? "text-amber-500" : "text-red-500"}`} />
+                  <span className="text-sm">{displayText}</span>
                 </div>
                 );
               })}
@@ -176,11 +183,15 @@ export const ConflictDialog = memo(function ConflictDialog(props: ConflictDialog
           </div>
         )}
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onCancel} data-testid="button-cancel-conflict">Avbryt</Button>
-          <Button variant="destructive" onClick={onAccept} data-testid="button-accept-conflict">
-            <AlertTriangle className="h-4 w-4 mr-2" />
-            Schemalägg ändå
+          <Button variant="outline" onClick={onCancel} data-testid="button-cancel-conflict">
+            {hasHardBlock ? "Stäng" : "Avbryt"}
           </Button>
+          {!hasHardBlock && (
+            <Button variant="destructive" onClick={onAccept} data-testid="button-accept-conflict">
+              <AlertTriangle className="h-4 w-4 mr-2" />
+              Schemalägg ändå
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

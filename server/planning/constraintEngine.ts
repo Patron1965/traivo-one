@@ -27,6 +27,7 @@ export interface ConstraintContext {
   workOrderLines?: WorkOrderLine[];
   teamMembers?: TeamMember[];
   clusters?: Cluster[];
+  hardClusterBlocking?: boolean;
 }
 
 export function validateSchedule(
@@ -393,13 +394,16 @@ function checkClusterGeographic(order: WorkOrder, move: ScheduleMove, ctx: Const
   const resourceSet = new Set(resourceServiceArea);
   const overlap = clusterPostalCodes.some(pc => resourceSet.has(pc));
   if (!overlap) {
+    const isHard = ctx.hardClusterBlocking !== false;
     return [{
-      type: "soft",
+      type: isHard ? "hard" : "soft",
       category: "cluster_geographic",
-      severity: "warning",
+      severity: isHard ? "critical" : "warning",
       workOrderId: move.workOrderId,
       resourceId: move.resourceId,
-      description: `${resource.name || "Resurs"} arbetar normalt inte i kluster "${cluster.name}" — inget postnummeröverlappar`
+      description: isHard
+        ? `🚫 ${resource.name || "Resurs"} arbetar inte i kluster "${cluster.name}" — tilldelning blockerad`
+        : `${resource.name || "Resurs"} arbetar normalt inte i kluster "${cluster.name}" — inget postnummeröverlappar`
     }];
   }
 

@@ -211,6 +211,11 @@ export function usePlannerDnd({
           bulkAcc += (j.estimatedDuration || 60);
         }
         if (allBulkConflicts.length === 0) allBulkConflicts.push("Bulk-flytt: en eller flera order har konflikter med denna cell");
+        const hasHardBlock = allBulkConflicts.some(c => c.startsWith("[BLOCK]"));
+        if (hasHardBlock) {
+          toast({ title: "Blockerad", description: allBulkConflicts.find(c => c.startsWith("[BLOCK]"))?.replace("[BLOCK] ", "") || "Tilldelning blockerad av verksamhetsområdesregel" });
+          return;
+        }
         setPendingSchedule({ jobId, resourceId, scheduledDate: dateStr, scheduledStartTime: baseStartTime, conflicts: allBulkConflicts, bulkJobs: bulkEntries });
         setConflictDialogOpen(true);
         return;
@@ -230,7 +235,14 @@ export function usePlannerDnd({
 
     const scheduledStartTime = computeStartTime(resourceId, dateStr, hour);
     const conflicts = detectConflictsForJob(job, resourceId, dateStr, scheduledStartTime || null);
-    if (conflicts.length > 0) { setPendingSchedule({ jobId, resourceId, scheduledDate: dateStr, scheduledStartTime, conflicts }); setConflictDialogOpen(true); return; }
+    if (conflicts.length > 0) {
+      const hasHardBlock = conflicts.some(c => c.startsWith("[BLOCK]"));
+      if (hasHardBlock) {
+        toast({ title: "Blockerad", description: conflicts.find(c => c.startsWith("[BLOCK]"))?.replace("[BLOCK] ", "") || "Tilldelning blockerad av verksamhetsområdesregel" });
+        return;
+      }
+      setPendingSchedule({ jobId, resourceId, scheduledDate: dateStr, scheduledStartTime, conflicts }); setConflictDialogOpen(true); return;
+    }
     executeSchedule(jobId, resourceId, dateStr, scheduledStartTime);
     if (scheduledStartTime) toast({ title: "Schemalagt", description: `Starttid ${scheduledStartTime} tilldelad automatiskt` });
   }, [workOrders, viewMode, currentDate, routeJobsForView, resourceDayJobMap, setActiveDragJob, setRouteJobOrder, updateWorkOrderMutation, detectConflictsForJob, setPendingSchedule, setConflictDialogOpen, executeSchedule, toast, selectedJobIds, clearSelection, computeStartTime, resolveDropTarget]);

@@ -1689,5 +1689,30 @@ app.patch("/api/break-config", asyncHandler(async (req, res) => {
     res.json(updatedBreak);
 }));
 
+app.get("/api/cluster-settings", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const tenant = await storage.getTenant(tenantId);
+    const settings = (tenant?.settings as Record<string, any>) || {};
+    res.json({
+      hardClusterBlocking: settings.hardClusterBlocking !== false,
+    });
+}));
+
+app.patch("/api/cluster-settings", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const schema = z.object({
+      hardClusterBlocking: z.boolean().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Ogiltig klusterkonfiguration" });
+    }
+    const tenant = await storage.getTenant(tenantId);
+    const currentSettings = (tenant?.settings as Record<string, any>) || {};
+    const updated = { ...currentSettings, ...parsed.data };
+    await storage.updateTenantSettings(tenantId, updated);
+    res.json({ hardClusterBlocking: updated.hardClusterBlocking !== false });
+}));
+
 
 }

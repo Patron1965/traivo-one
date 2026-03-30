@@ -229,12 +229,23 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
           const rsaSet = new Set(rsa);
           const overlap = cpc.some(pc => rsaSet.has(pc));
           if (!overlap) {
-            console.warn(`[cluster-override] Work order ${req.params.id} assigned to resource ${assignedResourceId} outside cluster "${cluster.name}". Override: ${clusterOverride ? 'explicit' : 'no override flag'}`);
+            const tenant = await storage.getTenant(tenantId);
+            const tenantSettings = (tenant?.settings as Record<string, any>) || {};
+            const hardBlocking = tenantSettings.hardClusterBlocking !== false;
+            if (hardBlocking) {
+              return res.status(422).json({
+                error: "Klusterblockering",
+                message: `Resursen "${resource.name}" arbetar inte i kluster "${cluster.name}". Tilldelning blockerad av verksamhetsområdesregel.`,
+                clusterName: cluster.name,
+                resourceName: resource.name,
+              });
+            }
+            console.warn(`[cluster-override] Work order ${req.params.id} assigned to resource ${assignedResourceId} outside cluster "${cluster.name}". Override: ${clusterOverride ? 'explicit' : 'no override flag'}, hardBlocking: ${hardBlocking}`);
           }
         }
       }
     } catch (e) {
-      // Non-blocking — cluster validation is soft
+      console.error("[cluster-validation] Error during cluster check:", e);
     }
   }
 

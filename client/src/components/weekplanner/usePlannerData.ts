@@ -144,6 +144,8 @@ export function usePlannerData() {
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const { data: clusters = [] } = useQuery<Cluster[]>({ queryKey: ["/api/clusters"] });
   const clusterMap = useMemo(() => new Map(clusters.map(c => [c.id, c])), [clusters]);
+  const { data: clusterSettings } = useQuery<{ hardClusterBlocking: boolean }>({ queryKey: ["/api/cluster-settings"], staleTime: 60000 });
+  const hardClusterBlocking = clusterSettings?.hardClusterBlocking !== false;
   const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c])), [customers]);
 
   const workOrderIds = useMemo(() => workOrders.map(wo => wo.id), [workOrders]);
@@ -338,13 +340,17 @@ export function usePlannerData() {
           const resourceSet = new Set(resourceServiceArea);
           const overlap = clusterPostalCodes.some(pc => resourceSet.has(pc));
           if (!overlap) {
-            reasons.push(`⚠ Kluster "${cluster.name}" — resursen arbetar normalt inte i detta område`);
+            if (hardClusterBlocking) {
+              reasons.push(`[BLOCK] Kluster "${cluster.name}" — resursen arbetar inte i detta verksamhetsområde`);
+            } else {
+              reasons.push(`⚠ Kluster "${cluster.name}" — resursen arbetar normalt inte i detta område`);
+            }
           }
         }
       }
     }
     return reasons;
-  }, [scheduledJobs, timewindowMap, restrictionsByObject, dependenciesData, workOrders, clusterMap, resources]);
+  }, [scheduledJobs, timewindowMap, restrictionsByObject, dependenciesData, workOrders, clusterMap, resources, hardClusterBlocking]);
 
   const jobConflicts = useMemo(() => { const c: Record<string, string[]> = {}; for (const j of scheduledJobs) { if (!j.scheduledDate || !j.resourceId) continue; const r = detectConflictsForJob(j, j.resourceId, format(new Date(j.scheduledDate), "yyyy-MM-dd"), j.scheduledStartTime || null); if (r.length > 0) c[j.id] = r; } return c; }, [scheduledJobs, detectConflictsForJob]);
 
@@ -373,6 +379,11 @@ export function usePlannerData() {
     if (!jobToAssign || !assignResourceId || !assignDate) return;
     const conflicts = detectConflictsForJob(jobToAssign, assignResourceId, assignDate, null);
     if (conflicts.length > 0) {
+      const hasHardBlock = conflicts.some(c => c.startsWith("[BLOCK]"));
+      if (hasHardBlock) {
+        toast({ title: "Blockerad", description: conflicts.find(c => c.startsWith("[BLOCK]"))?.replace("[BLOCK] ", "") || "Tilldelning blockerad av verksamhetsområdesregel" });
+        return;
+      }
       setPendingSchedule({ jobId: jobToAssign.id, resourceId: assignResourceId, scheduledDate: assignDate, conflicts });
       setConflictDialogOpen(true);
       setAssignDialogOpen(false);
@@ -382,10 +393,15 @@ export function usePlannerData() {
     }
     executeSchedule(jobToAssign.id, assignResourceId, assignDate);
     setAssignDialogOpen(false); setJobToAssign(null); setAssignResourceId(null);
-  }, [jobToAssign, assignResourceId, assignDate, detectConflictsForJob, executeSchedule]);
+  }, [jobToAssign, assignResourceId, assignDate, detectConflictsForJob, executeSchedule, toast]);
 
   const handleAcceptConflict = useCallback(() => {
     if (!pendingSchedule) return;
+    if (pendingSchedule.conflicts.some(c => c.startsWith("[BLOCK]"))) {
+      setConflictDialogOpen(false);
+      setPendingSchedule(null);
+      return;
+    }
     const hasClusterConflict = pendingSchedule.conflicts.some(c => c.includes("Kluster"));
     if (pendingSchedule.bulkJobs && pendingSchedule.bulkJobs.length > 0) {
       for (const bj of pendingSchedule.bulkJobs) {
