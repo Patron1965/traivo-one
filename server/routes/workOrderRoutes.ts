@@ -5,7 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
-import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema } from "@shared/schema";
+import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources } from "@shared/schema";
 import { handleWorkOrderStatusChange } from "../ai-communication";
 import { notificationService } from "../notifications";
 import { asyncHandler } from "../asyncHandler";
@@ -214,8 +214,27 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
     throw new NotFoundError("Arbetsorder");
   }
 
-  if (clusterOverride && updateData.resourceId) {
-    console.warn(`[cluster-override] Work order ${req.params.id} assigned to resource ${updateData.resourceId} outside cluster. Reason: ${typeof clusterOverride === 'string' ? clusterOverride : 'planner override'}`);
+  const assignedResourceId = updateData.resourceId || existingOrder.resourceId;
+  const clusterId = existingOrder.clusterId;
+  if (assignedResourceId && clusterId) {
+    try {
+      const normalize = (pc: string) => pc.replace(/\s/g, "").trim();
+      const cluster = await db.query.clusters.findFirst({ where: eq(clusters.id, clusterId) });
+      const resource = await db.query.resources.findFirst({ where: eq(resources.id, assignedResourceId) });
+      if (cluster && resource) {
+        const cpc = (cluster.postalCodes || []).map(normalize).filter(Boolean);
+        const rsa = (resource.serviceArea || []).map(normalize).filter(Boolean);
+        if (cpc.length > 0 && rsa.length > 0) {
+          const rsaSet = new Set(rsa);
+          const overlap = cpc.some(pc => rsaSet.has(pc));
+          if (!overlap) {
+            console.warn(`[cluster-override] Work order ${req.params.id} assigned to resource ${assignedResourceId} outside cluster "${cluster.name}". Override: ${clusterOverride ? 'explicit' : 'no override flag'}`);
+          }
+        }
+      }
+    } catch (e) {
+      // Non-blocking — cluster validation is soft
+    }
   }
 
   if (updateData.scheduledDate && typeof updateData.scheduledDate === 'string') {

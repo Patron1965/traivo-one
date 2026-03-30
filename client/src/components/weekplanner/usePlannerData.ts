@@ -340,19 +340,11 @@ export function usePlannerData() {
           if (!overlap) {
             reasons.push(`⚠ Kluster "${cluster.name}" — resursen arbetar normalt inte i detta område`);
           }
-        } else if (clusterPostalCodes.length > 0 && resourceServiceArea.length === 0) {
-          const teamForCluster = teamsData.find(t => t.clusterId === job.clusterId);
-          if (teamForCluster) {
-            const isMember = teamMembersData.some(tm => tm.teamId === teamForCluster.id && tm.resourceId === resourceId);
-            if (!isMember) {
-              reasons.push(`⚠ Kluster "${cluster.name}" — resursen tillhör inte ansvarigt team`);
-            }
-          }
         }
       }
     }
     return reasons;
-  }, [scheduledJobs, timewindowMap, restrictionsByObject, dependenciesData, workOrders, clusterMap, resources, teamsData, teamMembersData]);
+  }, [scheduledJobs, timewindowMap, restrictionsByObject, dependenciesData, workOrders, clusterMap, resources]);
 
   const jobConflicts = useMemo(() => { const c: Record<string, string[]> = {}; for (const j of scheduledJobs) { if (!j.scheduledDate || !j.resourceId) continue; const r = detectConflictsForJob(j, j.resourceId, format(new Date(j.scheduledDate), "yyyy-MM-dd"), j.scheduledStartTime || null); if (r.length > 0) c[j.id] = r; } return c; }, [scheduledJobs, detectConflictsForJob]);
 

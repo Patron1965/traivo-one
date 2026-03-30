@@ -198,14 +198,20 @@ export function usePlannerDnd({
 
       if (hasConflicts) {
         const bulkEntries: Array<{ jobId: string; startTime: string }> = [];
+        const allBulkConflicts: string[] = [];
         let bulkAcc = 0;
         for (const j of jobsToMove) {
           const slotMinutes = baseMinutes + bulkAcc;
           const slotTime = `${Math.floor(slotMinutes / 60).toString().padStart(2, "0")}:${(slotMinutes % 60).toString().padStart(2, "0")}`;
           bulkEntries.push({ jobId: j.id, startTime: slotTime });
+          const jobConflicts = detectConflictsForJob(j, resourceId, dateStr, slotTime);
+          for (const c of jobConflicts) {
+            if (!allBulkConflicts.includes(c)) allBulkConflicts.push(c);
+          }
           bulkAcc += (j.estimatedDuration || 60);
         }
-        setPendingSchedule({ jobId, resourceId, scheduledDate: dateStr, scheduledStartTime: baseStartTime, conflicts: ["Bulk-flytt: en eller flera order har konflikter med denna cell"], bulkJobs: bulkEntries });
+        if (allBulkConflicts.length === 0) allBulkConflicts.push("Bulk-flytt: en eller flera order har konflikter med denna cell");
+        setPendingSchedule({ jobId, resourceId, scheduledDate: dateStr, scheduledStartTime: baseStartTime, conflicts: allBulkConflicts, bulkJobs: bulkEntries });
         setConflictDialogOpen(true);
         return;
       }
