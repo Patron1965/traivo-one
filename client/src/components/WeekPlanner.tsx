@@ -135,6 +135,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           selectedJob={d.selectedJob} onJobClick={handleJobClickWithCallback} onOpenAssignDialog={d.handleOpenAssignDialog}
           timewindowMap={d.timewindowMap}
           currentWeekStart={d.currentWeekStart}
+          activeDragJob={d.activeDragJob}
+          clusterMatchedResourceIds={d.clusterMatchedResourceIds}
+          visibleResources={d.visibleResources}
         />
 
         <div className="flex-1 flex flex-col overflow-hidden">

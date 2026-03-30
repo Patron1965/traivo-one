@@ -53,6 +53,9 @@ interface UnscheduledSidebarProps {
   onOpenAssignDialog: (job: WorkOrderWithObject, e: React.MouseEvent) => void;
   timewindowMap: Map<string, Array<{ workOrderId: string; dayOfWeek: string | null; startTime: string | null; endTime: string | null; weekNumber: number | null }>>;
   currentWeekStart?: Date;
+  activeDragJob?: WorkOrderWithObject | null;
+  clusterMatchedResourceIds?: Set<string>;
+  visibleResources?: Array<{ serviceArea?: string[] | null }>;
 }
 
 function SuggestPlacementButton({ job, currentWeekStart }: { job: WorkOrderWithObject; currentWeekStart?: Date }) {
@@ -140,7 +143,12 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
     filterExecutionCode, setFilterExecutionCode,
     customers, clusters, teamsData, customerMap, clusterMap,
     selectedJob, onJobClick, onOpenAssignDialog, timewindowMap, currentWeekStart,
+    activeDragJob, clusterMatchedResourceIds, visibleResources,
   } = props;
+
+  const showDragNoMatch = !!(activeDragJob && activeDragJob.clusterId &&
+    clusterMatchedResourceIds && clusterMatchedResourceIds.size === 0 &&
+    visibleResources?.some(r => r.serviceArea && r.serviceArea.length > 0));
 
   return (
     <Collapsible open={showUnscheduled} onOpenChange={setShowUnscheduled} className="flex">
@@ -153,6 +161,12 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
               <Badge variant="secondary" className="text-xs">{unscheduledJobs.length}{unscheduledTotal > accumulatedCount ? ` / ${unscheduledTotal}` : ""}</Badge>
             </div>
           </div>
+          {showDragNoMatch && (
+            <div className="flex items-center gap-1.5 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800" data-testid="sidebar-no-cluster-match-warning">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span className="text-[10px] text-amber-700 dark:text-amber-300">Ingen resurs matchar klustret</span>
+            </div>
+          )}
           <div className="flex items-center gap-1.5 flex-wrap" data-testid="sidebar-quick-stats">
             {sidebarQuickStats.urgentCount > 0 && (
               <Badge variant="destructive" className="text-[10px] h-5 gap-1">

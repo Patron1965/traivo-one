@@ -118,13 +118,11 @@ app.get("/api/clusters/resource-match", asyncHandler(async (req, res) => {
     }
 
     let targetClusterId = clusterId;
-    let targetObject: { postalCode?: string | null; latitude?: number | null; longitude?: number | null } | null = null;
 
     if (objectId && !targetClusterId) {
       const obj = await storage.getObject(objectId);
       if (obj && obj.tenantId === tenantId) {
         targetClusterId = obj.clusterId || undefined;
-        targetObject = obj;
       }
     }
 

@@ -26,40 +26,43 @@ interface AssignDialogProps {
   isPending: boolean;
 }
 
+type ResourceMatch = { resourceId: string; resourceName: string; score: number; reasons: string[]; clusterMatch: boolean };
+
 export const AssignDialog = memo(function AssignDialog(props: AssignDialogProps) {
   const { open, onOpenChange, jobToAssign, assignDate, setAssignDate, assignResourceId, setAssignResourceId, resources, onConfirm, isPending } = props;
 
-  const { data: clusters = [] } = useQuery<Cluster[]>({ queryKey: ["/api/clusters"] });
+  const objectId = jobToAssign?.objectId;
+  const clusterId = jobToAssign?.clusterId;
+  const matchQueryParam = clusterId ? `clusterId=${clusterId}` : objectId ? `objectId=${objectId}` : null;
 
-  const { clusterMatchMap, noClusterMatch, clusterName } = useMemo(() => {
-    const matchMap = new Map<string, boolean>();
-    if (!jobToAssign?.clusterId) return { clusterMatchMap: matchMap, noClusterMatch: false, clusterName: null };
-    const cluster = clusters.find(c => c.id === jobToAssign.clusterId);
-    if (!cluster?.postalCodes?.length) return { clusterMatchMap: matchMap, noClusterMatch: false, clusterName: cluster?.name || null };
-    const clusterPostals = cluster.postalCodes;
-    let hasAnyMatch = false;
-    let hasResourceWithArea = false;
-    for (const r of resources) {
-      if (r.serviceArea?.length) {
-        hasResourceWithArea = true;
-        const match = r.serviceArea.some(p => clusterPostals.includes(p));
-        matchMap.set(r.id, match);
-        if (match) hasAnyMatch = true;
-      } else {
-        matchMap.set(r.id, false);
-      }
+  const { data: matchData } = useQuery<{ matches: ResourceMatch[]; noMatch: boolean; clusterName: string | null }>({
+    queryKey: ["/api/clusters/resource-match", matchQueryParam],
+    queryFn: async () => {
+      if (!matchQueryParam) return { matches: [], noMatch: false, clusterName: null };
+      const res = await fetch(`/api/clusters/resource-match?${matchQueryParam}`, { credentials: "include" });
+      if (!res.ok) return { matches: [], noMatch: false, clusterName: null };
+      return res.json();
+    },
+    enabled: open && !!matchQueryParam,
+    staleTime: 30000,
+  });
+
+  const matchScoreMap = useMemo(() => {
+    const map = new Map<string, ResourceMatch>();
+    if (matchData?.matches) {
+      for (const m of matchData.matches) map.set(m.resourceId, m);
     }
-    return { clusterMatchMap: matchMap, noClusterMatch: hasResourceWithArea && !hasAnyMatch, clusterName: cluster.name };
-  }, [jobToAssign?.clusterId, clusters, resources]);
+    return map;
+  }, [matchData]);
 
   const sortedResources = useMemo(() => {
     return [...resources].sort((a, b) => {
-      const aMatch = clusterMatchMap.get(a.id) ? 1 : 0;
-      const bMatch = clusterMatchMap.get(b.id) ? 1 : 0;
-      if (bMatch !== aMatch) return bMatch - aMatch;
+      const aScore = matchScoreMap.get(a.id)?.score ?? 50;
+      const bScore = matchScoreMap.get(b.id)?.score ?? 50;
+      if (bScore !== aScore) return bScore - aScore;
       return a.name.localeCompare(b.name);
     });
-  }, [resources, clusterMatchMap]);
+  }, [resources, matchScoreMap]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -75,17 +78,18 @@ export const AssignDialog = memo(function AssignDialog(props: AssignDialogProps)
             <Label>Datum</Label>
             <Input type="date" value={assignDate} onChange={(e) => setAssignDate(e.target.value)} data-testid="input-assign-date" />
           </div>
-          {noClusterMatch && clusterName && (
+          {matchData?.noMatch && matchData?.clusterName && (
             <div className="flex items-center gap-2 p-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800" data-testid="no-cluster-match-warning">
               <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              <span className="text-xs text-amber-700 dark:text-amber-300">Ingen resurs matchar klustret <strong>{clusterName}</strong>. Kontrollera resursernas serviceområden.</span>
+              <span className="text-xs text-amber-700 dark:text-amber-300">Ingen resurs matchar klustret <strong>{matchData.clusterName}</strong>. Kontrollera resursernas serviceområden.</span>
             </div>
           )}
           <div className="space-y-2">
             <Label>Resurs</Label>
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {sortedResources.map((resource) => {
-                const isMatch = clusterMatchMap.get(resource.id);
+                const matchInfo = matchScoreMap.get(resource.id);
+                const isMatch = matchInfo?.clusterMatch;
                 return (
                   <div
                     key={resource.id}
@@ -103,7 +107,9 @@ export const AssignDialog = memo(function AssignDialog(props: AssignDialogProps)
                               <Sparkles className="h-3 w-3" />Rekommenderad
                             </Badge>
                           </TooltipTrigger>
-                          <TooltipContent>Resursen verkar i samma kluster ({clusterName})</TooltipContent>
+                          <TooltipContent>
+                            {matchInfo?.reasons?.join(" · ") || `Resursen verkar i samma kluster (${matchData?.clusterName})`}
+                          </TooltipContent>
                         </Tooltip>
                       )}
                       <Badge variant="secondary" className="text-xs ml-auto">{resource.resourceType}</Badge>
