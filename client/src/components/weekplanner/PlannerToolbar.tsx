@@ -177,19 +177,19 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
           )}
 
           <Popover>
-            <PopoverTrigger asChild>
-              <Tooltip>
-                <TooltipTrigger asChild>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PopoverTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8 relative" data-testid="button-resource-filter">
                     <UsersRound className="h-4 w-4" />
                     {hiddenResourceIds.size > 0 && (
                       <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 rounded-full bg-primary text-[9px] text-primary-foreground flex items-center justify-center px-0.5">{visibleResources.length}/{resources.length}</span>
                     )}
                   </Button>
-                </TooltipTrigger>
-                <TooltipContent>Filtrera resurser</TooltipContent>
-              </Tooltip>
-            </PopoverTrigger>
+                </PopoverTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Filtrera resurser</TooltipContent>
+            </Tooltip>
             <PopoverContent className="w-64 p-3" align="end" data-testid="popover-resource-filter">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">Filtrera resurser</span>
