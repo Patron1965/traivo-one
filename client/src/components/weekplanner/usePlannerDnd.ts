@@ -39,7 +39,12 @@ export function usePlannerDnd({
   const lastOverIdRef = useRef<string | null>(null);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
-    setActiveDragJob(workOrders.find(j => j.id === event.active.id) || null);
+    const activeId = String(event.active.id);
+    const found = workOrders.find(j => String(j.id) === activeId);
+    if (!found) {
+      console.warn("[dnd] handleDragStart: job not found in workOrders", { activeId, workOrderCount: workOrders.length });
+    }
+    setActiveDragJob(found || null);
     setDragOverConflicts({});
     lastOverIdRef.current = null;
   }, [workOrders, setActiveDragJob]);
@@ -57,6 +62,20 @@ export function usePlannerDnd({
   }, [viewMode, resourceDayJobMap]);
 
 
+  const resolveDropTarget = useCallback((dropId: string): { resourceId: string; dateStr: string; hour?: number } | null => {
+    const parts = dropId.split("|");
+    if (parts.length >= 2) {
+      return { resourceId: parts[0], dateStr: parts[1], hour: parts[2] ? parseInt(parts[2], 10) : undefined };
+    }
+    const targetJob = workOrders.find(j => String(j.id) === dropId);
+    if (targetJob && targetJob.resourceId && targetJob.scheduledDate) {
+      const ds = typeof targetJob.scheduledDate === "string" ? targetJob.scheduledDate : (targetJob.scheduledDate as Date).toISOString();
+      const dateStr = ds.includes("T") ? ds.split("T")[0] : ds.split(" ")[0];
+      return { resourceId: targetJob.resourceId, dateStr };
+    }
+    return null;
+  }, [workOrders]);
+
   const handleDragOver = useCallback((event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) {
@@ -70,13 +89,11 @@ export function usePlannerDnd({
     if (dropId === lastOverIdRef.current) return;
     lastOverIdRef.current = dropId;
 
-    const job = workOrders.find(j => j.id === (active.id as string));
+    const job = workOrders.find(j => String(j.id) === String(active.id));
     if (!job) return;
-    const parts = dropId.split("|");
-    if (parts.length < 2) { setDragOverConflicts({}); return; }
-    const resourceId = parts[0];
-    const dateStr = parts[1];
-    const hour = parts[2] ? parseInt(parts[2], 10) : undefined;
+    const target = resolveDropTarget(dropId);
+    if (!target) { setDragOverConflicts({}); return; }
+    const { resourceId, dateStr, hour } = target;
     const provisionalStartTime = hour !== undefined
       ? `${hour.toString().padStart(2, "0")}:00`
       : computeStartTime(resourceId, dateStr) || null;
@@ -104,16 +121,19 @@ export function usePlannerDnd({
     } else {
       setDragOverConflicts({});
     }
-  }, [workOrders, detectConflictsForJob, computeStartTime, selectedJobIds]);
+  }, [workOrders, detectConflictsForJob, computeStartTime, selectedJobIds, resolveDropTarget]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     setActiveDragJob(null);
     setDragOverConflicts({});
     lastOverIdRef.current = null;
     const { active, over } = event;
-    if (!over) return;
-    const jobId = active.id as string;
-    const dropId = over.id as string;
+    if (!over) {
+      console.warn("[dnd] handleDragEnd: no drop target (over is null)");
+      return;
+    }
+    const jobId = String(active.id);
+    const dropId = String(over.id);
 
     if (viewMode === "route" && routeJobsForView.length > 0) {
       const isRouteJob = routeJobsForView.some(j => j.id === jobId);
@@ -136,15 +156,22 @@ export function usePlannerDnd({
       }
     }
 
-    const job = workOrders.find(j => j.id === jobId);
-    if (!job) return;
-    const parts = dropId.split("|");
-    if (parts.length < 2) return;
-    const resourceId = parts[0];
-    const dateStr = parts[1];
-    const hour = parts[2] ? parseInt(parts[2], 10) : undefined;
+    const job = workOrders.find(j => String(j.id) === jobId);
+    if (!job) {
+      console.warn("[dnd] handleDragEnd: dragged job not found in workOrders", { jobId, workOrderCount: workOrders.length });
+      return;
+    }
+    const target = resolveDropTarget(dropId);
+    if (!target) {
+      console.warn("[dnd] handleDragEnd: could not resolve drop target", { dropId });
+      return;
+    }
+    const { resourceId, dateStr, hour } = target;
     const day = new Date(dateStr + "T12:00:00Z");
-    if (job.resourceId === resourceId && job.scheduledDate && isSameDay(new Date(job.scheduledDate), day) && hour === undefined) return;
+    if (job.resourceId === resourceId && job.scheduledDate && isSameDay(new Date(job.scheduledDate), day) && hour === undefined) {
+      console.info("[dnd] handleDragEnd: same-slot drop ignored (same resource + same day, no hour change)");
+      return;
+    }
 
     const isBulk = selectedJobIds && selectedJobIds.size > 1 && selectedJobIds.has(jobId);
 
@@ -194,7 +221,7 @@ export function usePlannerDnd({
     if (conflicts.length > 0) { setPendingSchedule({ jobId, resourceId, scheduledDate: dateStr, scheduledStartTime, conflicts }); setConflictDialogOpen(true); return; }
     executeSchedule(jobId, resourceId, dateStr, scheduledStartTime);
     if (scheduledStartTime) toast({ title: "Schemalagt", description: `Starttid ${scheduledStartTime} tilldelad automatiskt` });
-  }, [workOrders, viewMode, currentDate, routeJobsForView, resourceDayJobMap, setActiveDragJob, setRouteJobOrder, updateWorkOrderMutation, detectConflictsForJob, setPendingSchedule, setConflictDialogOpen, executeSchedule, toast, selectedJobIds, clearSelection, computeStartTime]);
+  }, [workOrders, viewMode, currentDate, routeJobsForView, resourceDayJobMap, setActiveDragJob, setRouteJobOrder, updateWorkOrderMutation, detectConflictsForJob, setPendingSchedule, setConflictDialogOpen, executeSchedule, toast, selectedJobIds, clearSelection, computeStartTime, resolveDropTarget]);
 
   return {
     sensors,

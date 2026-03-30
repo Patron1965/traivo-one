@@ -55,7 +55,7 @@ export function DraggableJobCard({ id, children, disabled = false }: { id: strin
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, opacity: isDragging ? 0.3 : 1 }
     : undefined;
   return (
-    <div ref={setNodeRef} {...listeners} {...attributes} style={style}>
+    <div ref={setNodeRef} {...listeners} {...attributes} style={style} className="touch-none select-none">
       {children}
     </div>
   );
