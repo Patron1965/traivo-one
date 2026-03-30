@@ -206,9 +206,16 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
 
+  const clusterOverride = updateData.clusterOverride;
+  delete updateData.clusterOverride;
+
   const existingOrder = await storage.getWorkOrder(req.params.id);
   if (!existingOrder || !verifyTenantOwnership(existingOrder, tenantId)) {
     throw new NotFoundError("Arbetsorder");
+  }
+
+  if (clusterOverride && updateData.resourceId) {
+    console.warn(`[cluster-override] Work order ${req.params.id} assigned to resource ${updateData.resourceId} outside cluster. Reason: ${typeof clusterOverride === 'string' ? clusterOverride : 'planner override'}`);
   }
 
   if (updateData.scheduledDate && typeof updateData.scheduledDate === 'string') {

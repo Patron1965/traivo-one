@@ -64,17 +64,18 @@ export function DraggableJobCard({ id, children, disabled = false }: { id: strin
 export function DroppableCell({ id, children, className = "", dropFitInfo, style, dragOverConflicts }: { id: string; children: JSX.Element; className?: string; dropFitInfo?: { bg: string; label: string; color: string } | null; style?: React.CSSProperties; dragOverConflicts?: string[] }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const hasConflict = isOver && dragOverConflicts && dragOverConflicts.length > 0;
+  const isClusterOnly = hasConflict && dragOverConflicts!.every(c => c.includes("Kluster"));
   return (
     <div
       ref={setNodeRef}
-      className={`${className} ${hasConflict ? "bg-red-50 dark:bg-red-950/30 ring-2 ring-red-500" : isOver ? dropFitInfo ? `${dropFitInfo.bg} ring-2 ${dropFitInfo.bg.includes("ring-") ? "" : "ring-primary"}` : "bg-primary/10 ring-2 ring-primary/30" : ""}`}
+      className={`${className} ${hasConflict ? (isClusterOnly ? "bg-amber-50 dark:bg-amber-950/30 ring-2 ring-amber-500" : "bg-red-50 dark:bg-red-950/30 ring-2 ring-red-500") : isOver ? dropFitInfo ? `${dropFitInfo.bg} ring-2 ${dropFitInfo.bg.includes("ring-") ? "" : "ring-primary"}` : "bg-primary/10 ring-2 ring-primary/30" : ""}`}
       style={style}
       data-testid={`droppable-cell-${id}`}
     >
       {hasConflict && (
-        <div className="text-[10px] font-medium text-red-600 dark:text-red-400 mb-1 flex items-center gap-1" data-testid={`drag-conflict-${id}`}>
+        <div className={`text-[10px] font-medium mb-1 flex items-center gap-1 ${isClusterOnly ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`} data-testid={`drag-conflict-${id}`}>
           <AlertTriangle className="h-3 w-3 shrink-0" />
-          <span className="truncate">{dragOverConflicts[0]}</span>
+          <span className="truncate">{dragOverConflicts![0]}</span>
         </div>
       )}
       {isOver && !hasConflict && dropFitInfo && (
