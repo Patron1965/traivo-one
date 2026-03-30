@@ -154,7 +154,8 @@ app.get("/api/clusters/resource-match", asyncHandler(async (req, res) => {
       let clusterMatch = false;
 
       if (targetCluster && resource.serviceArea && resource.serviceArea.length > 0) {
-        const overlap = resource.serviceArea.filter(p => clusterPostals.includes(p));
+        const normalizedServiceArea = resource.serviceArea.map(p => p.replace(/\s/g, ""));
+        const overlap = normalizedServiceArea.filter(p => clusterPostals.map(cp => cp.replace(/\s/g, "")).some(cp => cp === p || cp.startsWith(p) || p.startsWith(cp)));
         if (overlap.length > 0) {
           const overlapPct = clusterPostals.length > 0 ? Math.round((overlap.length / clusterPostals.length) * 100) : 100;
           score += 40;
