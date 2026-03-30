@@ -369,7 +369,20 @@ export function usePlannerData() {
 
   const handleJobClick = useCallback((jobId: string) => { setSelectedJob(jobId); }, []);
   const handleOpenAssignDialog = useCallback((job: WorkOrderWithObject, e: React.MouseEvent) => { e.stopPropagation(); setJobToAssign(job); setAssignDate(format(currentDate, "yyyy-MM-dd")); setAssignResourceId(null); setAssignDialogOpen(true); }, [currentDate]);
-  const handleQuickAssign = useCallback(() => { if (!jobToAssign || !assignResourceId || !assignDate) return; updateWorkOrderMutation.mutate({ id: jobToAssign.id, resourceId: assignResourceId, scheduledDate: assignDate }); setAssignDialogOpen(false); setJobToAssign(null); setAssignResourceId(null); }, [jobToAssign, assignResourceId, assignDate, updateWorkOrderMutation]);
+  const handleQuickAssign = useCallback(() => {
+    if (!jobToAssign || !assignResourceId || !assignDate) return;
+    const conflicts = detectConflictsForJob(jobToAssign, assignResourceId, assignDate, null);
+    if (conflicts.length > 0) {
+      setPendingSchedule({ jobId: jobToAssign.id, resourceId: assignResourceId, scheduledDate: assignDate, conflicts });
+      setConflictDialogOpen(true);
+      setAssignDialogOpen(false);
+      setJobToAssign(null);
+      setAssignResourceId(null);
+      return;
+    }
+    executeSchedule(jobToAssign.id, assignResourceId, assignDate);
+    setAssignDialogOpen(false); setJobToAssign(null); setAssignResourceId(null);
+  }, [jobToAssign, assignResourceId, assignDate, detectConflictsForJob, executeSchedule]);
 
   const handleAcceptConflict = useCallback(() => {
     if (!pendingSchedule) return;

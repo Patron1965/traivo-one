@@ -214,9 +214,10 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
     throw new NotFoundError("Arbetsorder");
   }
 
+  const isResourceChange = updateData.resourceId && updateData.resourceId !== existingOrder.resourceId;
   const assignedResourceId = updateData.resourceId || existingOrder.resourceId;
   const clusterId = existingOrder.clusterId;
-  if (assignedResourceId && clusterId) {
+  if (assignedResourceId && clusterId && (isResourceChange || clusterOverride)) {
     try {
       const normalize = (pc: string) => pc.replace(/\s/g, "").trim();
       const cluster = await db.query.clusters.findFirst({ where: eq(clusters.id, clusterId) });
