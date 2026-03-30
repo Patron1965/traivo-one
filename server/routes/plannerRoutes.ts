@@ -475,6 +475,8 @@ body{font-family:Inter,system-ui,sans-serif;background:#1a1a2e}
 <button class="btn-inactive" id="btn-week" onclick="setRange('week')">Vecka</button>
 <button class="btn-inactive" id="btn-hide" onclick="toggleJobs()">D&ouml;lj jobb</button>
 <button class="btn-route" id="btn-routes" onclick="toggleRoutes()">Rutter &#x2713;</button>
+<button class="btn-inactive" id="btn-czones" onclick="toggleClusterZones()">Klusterzoner</button>
+<button class="btn-inactive" id="btn-rzones" onclick="toggleResourceZones()">Verksamhet</button>
 </div>
 <div class="loading-routes" id="loading-routes"><div class="spinner"></div>H&auml;mtar v&auml;ggeometri...</div>
 <div class="toast-container" id="toast-container"></div>
@@ -494,9 +496,20 @@ var driverLayer = L.layerGroup().addTo(map);
 var jobCluster;
 try { jobCluster = L.markerClusterGroup({maxClusterRadius:40}).addTo(map); } catch(e) { jobCluster = L.layerGroup().addTo(map); }
 var routeLayer = L.layerGroup().addTo(map);
+var clusterZoneLayer = L.layerGroup().addTo(map);
+var resourceZoneLayer = L.layerGroup().addTo(map);
 let currentRange = 'today';
 let jobsVisible = true;
 let routesVisible = true;
+let clusterZonesVisible = (function(){try{return localStorage.getItem('traivo-show-cluster-zones')!=='false'}catch(e){return true}})();
+let resourceZonesVisible = (function(){try{return localStorage.getItem('traivo-show-resource-zones')!=='false'}catch(e){return true}})();
+(function(){
+  var cBtn=document.getElementById('btn-czones');
+  var rBtn=document.getElementById('btn-rzones');
+  if(cBtn){cBtn.className=clusterZonesVisible?'btn-active':'btn-inactive';cBtn.innerHTML='Klusterzoner'+(clusterZonesVisible?' \\u2713':'');}
+  if(rBtn){rBtn.className=resourceZonesVisible?'btn-active':'btn-inactive';rBtn.innerHTML='Verksamhet'+(resourceZonesVisible?' \\u2713':'');}
+})();
+function escHtml(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 let driversData = [];
 let jobsData = [];
 let routesData = [];
@@ -986,9 +999,62 @@ bar.innerHTML = '<span class="info-stat">'+driversData.length+' f\\u00f6rare</sp
   +'<span class="info-stat">'+currentRange.replace('today','Idag').replace('week','Vecka')+'</span>';
 }
 
+function toggleClusterZones(){
+  clusterZonesVisible=!clusterZonesVisible;
+  try{localStorage.setItem('traivo-show-cluster-zones',String(clusterZonesVisible))}catch(e){}
+  var btn=document.getElementById('btn-czones');
+  btn.className=clusterZonesVisible?'btn-active':'btn-inactive';
+  btn.innerHTML='Klusterzoner'+(clusterZonesVisible?' \\u2713':'');
+  if(clusterZonesVisible){clusterZoneLayer.addTo(map)}else{map.removeLayer(clusterZoneLayer)}
+}
+function toggleResourceZones(){
+  resourceZonesVisible=!resourceZonesVisible;
+  try{localStorage.setItem('traivo-show-resource-zones',String(resourceZonesVisible))}catch(e){}
+  var btn=document.getElementById('btn-rzones');
+  btn.className=resourceZonesVisible?'btn-active':'btn-inactive';
+  btn.innerHTML='Verksamhet'+(resourceZonesVisible?' \\u2713':'');
+  if(resourceZonesVisible){resourceZoneLayer.addTo(map)}else{map.removeLayer(resourceZoneLayer)}
+}
+async function loadZones(){
+  try{
+    var res=await fetch('/api/clusters/zones',{credentials:'include'});
+    if(!res.ok)return;
+    var data=await res.json();
+    clusterZoneLayer.clearLayers();
+    resourceZoneLayer.clearLayers();
+    if(data.clusterZones){
+      data.clusterZones.forEach(function(z){
+        var popupHtml='<div style="min-width:160px"><b style="color:'+z.color+'">\\u2B22 '+escHtml(z.name)+'</b><br>'+z.objectCount+' objekt'+(z.postalCodes&&z.postalCodes.length>0?'<br><small>Postnr: '+z.postalCodes.slice(0,5).map(escHtml).join(', ')+(z.postalCodes.length>5?' +'+String(z.postalCodes.length-5):'')+'</small>':'')+'</div>';
+        if(z.polygon&&z.polygon.length>=3){
+          var poly=L.polygon(z.polygon,{color:z.color,fillColor:z.color,fillOpacity:0.12,weight:2,opacity:0.7});
+          poly.bindPopup(popupHtml);clusterZoneLayer.addLayer(poly);
+        }else if(z.center){
+          var circ=L.circle(z.center,{radius:500,color:z.color,fillColor:z.color,fillOpacity:0.15,weight:2});
+          circ.bindPopup(popupHtml);clusterZoneLayer.addLayer(circ);
+        }
+      });
+    }
+    if(data.resourceZones){
+      data.resourceZones.forEach(function(z){
+        var popupHtml='<div style="min-width:160px"><b style="color:'+z.color+'">\\ud83d\\udc64 '+escHtml(z.name)+'</b><br>'+z.objectCount+' objekt i omr\\u00e5det'+(z.serviceArea&&z.serviceArea.length>0?'<br><small>Postnr: '+z.serviceArea.slice(0,5).map(escHtml).join(', ')+(z.serviceArea.length>5?' +'+String(z.serviceArea.length-5):'')+'</small>':'')+'</div>';
+        if(z.polygon&&z.polygon.length>=3){
+          var poly=L.polygon(z.polygon,{color:z.color,fillColor:z.color,fillOpacity:0.08,weight:2,opacity:0.5,dashArray:'6,4'});
+          poly.bindPopup(popupHtml);resourceZoneLayer.addLayer(poly);
+        }else if(z.center){
+          var circ=L.circle(z.center,{radius:500,color:z.color,fillColor:z.color,fillOpacity:0.1,weight:2,dashArray:'6,4'});
+          circ.bindPopup(popupHtml);resourceZoneLayer.addLayer(circ);
+        }
+      });
+    }
+    if(!clusterZonesVisible)map.removeLayer(clusterZoneLayer);
+    if(!resourceZonesVisible)map.removeLayer(resourceZoneLayer);
+  }catch(e){console.error('Zone load error:',e)}
+}
+
 async function refresh() {
 var results = await Promise.all([loadDrivers(), loadJobs()]);
 await loadRoutes();
+await loadZones();
 updateInfoBar();
 }
 
@@ -997,6 +1063,7 @@ refresh().catch(function(err){ console.error('Planner refresh error:', err); doc
 setInterval(loadDrivers, 15000);
 setInterval(function(){ loadJobs(); updateInfoBar(); }, 30000);
 setInterval(loadRoutes, 60000);
+setInterval(loadZones, 120000);
 <\/script>
 </body>
 </html>`;

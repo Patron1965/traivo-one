@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Polyline, Polygon, Circle, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useQuery } from "@tanstack/react-query";
@@ -22,6 +22,8 @@ import {
   EyeOff,
   X,
   AlertTriangle,
+  Layers,
+  Hexagon,
 } from "lucide-react";
 import { UrgentJobDialog } from "@/components/UrgentJobDialog";
 
@@ -128,6 +130,12 @@ export default function MonitorPopoutPage() {
   const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(new Set(["on_job", "traveling", "idle", "break"]));
   const [routeGeometries, setRouteGeometries] = useState<RouteGeometry[]>([]);
   const [urgentDialogOpen, setUrgentDialogOpen] = useState(false);
+  const [showClusterZones, setShowClusterZones] = useState(() => {
+    try { return localStorage.getItem("traivo-show-cluster-zones") !== "false"; } catch { return true; }
+  });
+  const [showResourceZones, setShowResourceZones] = useState(() => {
+    try { return localStorage.getItem("traivo-show-resource-zones") !== "false"; } catch { return true; }
+  });
 
   const { data: resources, refetch: refetchResources } = useQuery<ActiveResource[]>({
     queryKey: ["/api/resources/active-positions"],
@@ -141,6 +149,33 @@ export default function MonitorPopoutPage() {
   const { data: workOrders = [] } = useQuery<WorkOrderWithObject[]>({
     queryKey: ["/api/work-orders"],
   });
+
+  interface ZoneData {
+    id: string; name: string; color: string; objectCount: number;
+    postalCodes?: string[]; polygon: [number, number][] | null;
+    center: [number, number] | null; radiusKm?: number | null;
+    serviceArea?: string[];
+  }
+  const { data: zonesData } = useQuery<{ clusterZones: ZoneData[]; resourceZones: ZoneData[] }>({
+    queryKey: ["/api/clusters/zones"],
+    staleTime: 60000,
+  });
+
+  const toggleClusterZones = useCallback(() => {
+    setShowClusterZones(prev => {
+      const next = !prev;
+      try { localStorage.setItem("traivo-show-cluster-zones", String(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  const toggleResourceZones = useCallback(() => {
+    setShowResourceZones(prev => {
+      const next = !prev;
+      try { localStorage.setItem("traivo-show-resource-zones", String(next)); } catch {}
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (resources) {
@@ -363,6 +398,74 @@ export default function MonitorPopoutPage() {
           />
         ))}
 
+        {showClusterZones && zonesData?.clusterZones.map(zone => {
+          const popupContent = (
+            <Popup>
+              <div className="text-xs min-w-[180px]">
+                <p className="font-semibold text-sm flex items-center gap-1">
+                  <Hexagon className="h-3 w-3" style={{ color: zone.color }} />
+                  {zone.name}
+                </p>
+                <p className="text-muted-foreground">{zone.objectCount} objekt</p>
+                {zone.postalCodes && zone.postalCodes.length > 0 && (
+                  <p className="text-muted-foreground mt-1">
+                    Postnr: {zone.postalCodes.slice(0, 5).join(", ")}{zone.postalCodes.length > 5 ? ` +${zone.postalCodes.length - 5}` : ""}
+                  </p>
+                )}
+              </div>
+            </Popup>
+          );
+          if (zone.polygon && zone.polygon.length >= 3) {
+            return (
+              <Polygon key={`cz-${zone.id}`} positions={zone.polygon} pathOptions={{ color: zone.color, fillColor: zone.color, fillOpacity: 0.12, weight: 2, opacity: 0.7 }}>
+                {popupContent}
+              </Polygon>
+            );
+          }
+          if (zone.center) {
+            return (
+              <Circle key={`cz-${zone.id}`} center={zone.center as [number, number]} radius={500} pathOptions={{ color: zone.color, fillColor: zone.color, fillOpacity: 0.15, weight: 2 }}>
+                {popupContent}
+              </Circle>
+            );
+          }
+          return null;
+        })}
+
+        {showResourceZones && zonesData?.resourceZones.map(zone => {
+          const popupContent = (
+            <Popup>
+              <div className="text-xs min-w-[180px]">
+                <p className="font-semibold text-sm flex items-center gap-1">
+                  <Users className="h-3 w-3" style={{ color: zone.color }} />
+                  {zone.name}
+                </p>
+                <p className="text-muted-foreground">{zone.objectCount} objekt i området</p>
+                {zone.serviceArea && zone.serviceArea.length > 0 && (
+                  <p className="text-muted-foreground mt-1">
+                    Postnr: {zone.serviceArea.slice(0, 5).join(", ")}{zone.serviceArea.length > 5 ? ` +${zone.serviceArea.length - 5}` : ""}
+                  </p>
+                )}
+              </div>
+            </Popup>
+          );
+          if (zone.polygon && zone.polygon.length >= 3) {
+            return (
+              <Polygon key={`rz-${zone.id}`} positions={zone.polygon} pathOptions={{ color: zone.color, fillColor: zone.color, fillOpacity: 0.08, weight: 2, opacity: 0.5, dashArray: "6,4" }}>
+                {popupContent}
+              </Polygon>
+            );
+          }
+          if (zone.center) {
+            return (
+              <Circle key={`rz-${zone.id}`} center={zone.center as [number, number]} radius={500} pathOptions={{ color: zone.color, fillColor: zone.color, fillOpacity: 0.1, weight: 2, dashArray: "6,4" }}>
+                {popupContent}
+              </Circle>
+            );
+          }
+          return null;
+        })}
+
         {showJobs && Object.entries(ordersByResource).map(([resourceId, orders]) => {
           const color = resourceColorMap.get(resourceId) || "#3b82f6";
           return orders.map((order, idx) => {
@@ -468,6 +571,8 @@ export default function MonitorPopoutPage() {
                   { key: "drivers", label: "Förare", icon: Users, active: showDrivers, toggle: () => setShowDrivers(!showDrivers) },
                   { key: "routes", label: "Rutter", icon: Route, active: showRoutes, toggle: () => setShowRoutes(!showRoutes) },
                   { key: "jobs", label: "Jobb", icon: MapPin, active: showJobs, toggle: () => setShowJobs(!showJobs) },
+                  { key: "cluster-zones", label: "Klusterzoner", icon: Hexagon, active: showClusterZones, toggle: toggleClusterZones },
+                  { key: "resource-zones", label: "Verksamhetsområden", icon: Layers, active: showResourceZones, toggle: toggleResourceZones },
                 ].map(item => (
                   <button
                     key={item.key}
@@ -534,6 +639,28 @@ export default function MonitorPopoutPage() {
           </div>
         )}
       </div>
+
+      {(showClusterZones || showResourceZones) && zonesData && (
+        <div className="absolute bottom-3 right-3 z-[1000] bg-background/90 backdrop-blur-sm rounded-lg shadow-lg p-3 max-w-[220px] max-h-[200px] overflow-y-auto" data-testid="zone-legend">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Zonöversikt</span>
+          <div className="mt-1.5 space-y-1">
+            {showClusterZones && zonesData.clusterZones.map(z => (
+              <div key={`lc-${z.id}`} className="flex items-center gap-2 text-[11px]">
+                <span className="w-3 h-2 rounded-sm shrink-0 border" style={{ backgroundColor: z.color + "30", borderColor: z.color }} />
+                <span className="truncate flex-1">{z.name}</span>
+                <span className="text-muted-foreground shrink-0">{z.objectCount}</span>
+              </div>
+            ))}
+            {showResourceZones && zonesData.resourceZones.map(z => (
+              <div key={`lr-${z.id}`} className="flex items-center gap-2 text-[11px]">
+                <span className="w-3 h-2 rounded-sm shrink-0" style={{ backgroundColor: z.color + "20", borderBottom: `2px dashed ${z.color}` }} />
+                <span className="truncate flex-1">{z.name}</span>
+                <span className="text-muted-foreground shrink-0">{z.objectCount}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <UrgentJobDialog
         open={urgentDialogOpen}

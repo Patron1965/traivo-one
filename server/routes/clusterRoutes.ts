@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
-import { insertClusterSchema, objects, workOrders } from "@shared/schema";
+import { insertClusterSchema, objects, workOrders, resources } from "@shared/schema";
 
 export async function registerClusterRoutes(app: Express) {
 // ============== CLUSTERS - NAVET I VERKSAMHETEN ==============
@@ -15,6 +15,97 @@ app.get("/api/clusters", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const clusters = await storage.getClusters(tenantId);
     res.json(clusters || []);
+}));
+
+app.get("/api/clusters/zones", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const allClusters = await storage.getClusters(tenantId);
+    const activeClusters = (allClusters || []).filter(c => c.status === "active");
+    
+    const allObjects = await db.select({
+      id: objects.id,
+      clusterId: objects.clusterId,
+      latitude: objects.latitude,
+      longitude: objects.longitude,
+      postalCode: objects.postalCode,
+    }).from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
+    
+    const computeConvexHull = (points: [number, number][]): [number, number][] => {
+      if (points.length < 3) return points;
+      const sorted = [...points].sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+      const cross = (o: [number, number], a: [number, number], b: [number, number]) =>
+        (a[1] - o[1]) * (b[0] - o[0]) - (a[0] - o[0]) * (b[1] - o[1]);
+      const lower: [number, number][] = [];
+      for (const p of sorted) {
+        while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+        lower.push(p);
+      }
+      const upper: [number, number][] = [];
+      for (const p of [...sorted].reverse()) {
+        while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+        upper.push(p);
+      }
+      upper.pop();
+      lower.pop();
+      return lower.concat(upper);
+    };
+    
+    const clusterZones = activeClusters.map(cluster => {
+      const clusterObjects = allObjects.filter(o => o.clusterId === cluster.id && o.latitude && o.longitude);
+      const coords = clusterObjects.map(o => [o.latitude!, o.longitude!] as [number, number]);
+      const hull = computeConvexHull(coords);
+      const postalCodes = [...new Set(clusterObjects.map(o => o.postalCode).filter(Boolean))] as string[];
+      return {
+        id: cluster.id,
+        name: cluster.name,
+        color: cluster.color || "#3B82F6",
+        objectCount: clusterObjects.length,
+        postalCodes,
+        polygon: hull.length >= 3 ? hull : null,
+        center: cluster.centerLatitude && cluster.centerLongitude
+          ? [cluster.centerLatitude, cluster.centerLongitude]
+          : coords.length > 0
+            ? [coords.reduce((s, c) => s + c[0], 0) / coords.length, coords.reduce((s, c) => s + c[1], 0) / coords.length]
+            : null,
+        radiusKm: cluster.radiusKm || null,
+      };
+    }).filter(z => z.polygon || z.center);
+    
+    const allResources = await db.select({
+      id: resources.id,
+      name: resources.name,
+      serviceArea: resources.serviceArea,
+      status: resources.status,
+    }).from(resources).where(and(eq(resources.tenantId, tenantId), isNull(resources.deletedAt)));
+    
+    const RESOURCE_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#6366f1", "#84cc16"];
+    
+    const resourceZones = allResources
+      .filter(r => r.status === "active" && r.serviceArea && r.serviceArea.length > 0)
+      .map((resource, idx) => {
+        const normalizedAreas = resource.serviceArea!.map(pc => pc.replace(/\s/g, ""));
+        const areaObjects = allObjects.filter(obj => {
+          if (!obj.latitude || !obj.longitude || !obj.postalCode) return false;
+          const objPC = obj.postalCode.replace(/\s/g, "");
+          return normalizedAreas.some(area => objPC === area || objPC.startsWith(area));
+        });
+        const coords = areaObjects.map(o => [o.latitude!, o.longitude!] as [number, number]);
+        const hull = computeConvexHull(coords);
+        return {
+          id: resource.id,
+          name: resource.name,
+          color: RESOURCE_COLORS[idx % RESOURCE_COLORS.length],
+          serviceArea: resource.serviceArea,
+          objectCount: areaObjects.length,
+          polygon: hull.length >= 3 ? hull : null,
+          center: coords.length > 0
+            ? [coords.reduce((s, c) => s + c[0], 0) / coords.length, coords.reduce((s, c) => s + c[1], 0) / coords.length]
+            : null,
+        };
+      })
+      .filter(z => z.polygon || z.center);
+    
+    res.json({ clusterZones, resourceZones });
 }));
 
 app.get("/api/clusters/:id", asyncHandler(async (req, res) => {
