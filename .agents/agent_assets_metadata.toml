@@ -30,3 +30,9 @@ id = "7XHbuFyWmQc5SZy4CUk3Y"
 uri = "file://TRAIVO_GO_AKUT_JOBB_INTEGRATION.md"
 type = "text"
 title = "Traivo Go — Integrationsrapport Akut Jobbhantering"
+
+[[outputs]]
+id = "YH_sVDiJDeBphuTlq-3tp"
+uri = "file://.local/traivo-almi-pitch.md"
+type = "text"
+title = "Traivo — Almi Pitch-dokument"
