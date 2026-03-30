@@ -179,7 +179,11 @@ app.get("/api/clusters/resource-match", asyncHandler(async (req, res) => {
       else { score -= 5; reasons.push(`Hög beläggning (${loadPct}%)`); }
 
       if (resource.executionCodes && resource.executionCodes.length > 0) {
+        score += 5;
         reasons.push(`Kompetens: ${resource.executionCodes.join(", ")}`);
+      } else {
+        score -= 3;
+        reasons.push("Inga registrerade kompetenser");
       }
 
       matches.push({ resourceId: resource.id, resourceName: resource.name, score, reasons, clusterMatch });

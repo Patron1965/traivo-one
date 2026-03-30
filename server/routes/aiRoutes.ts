@@ -3395,8 +3395,11 @@ app.post("/api/ai/auto-distribute-today", isAuthenticated, asyncHandler(async (r
           if (cluster) {
             const clusterPostals = cluster.postalCodes || [];
             if (resource.serviceArea.some(p => clusterPostals.includes(p))) {
-              score += 15;
-              reasons.push("Rätt område");
+              score += 30;
+              reasons.push(`Klustermatchning (${cluster.name})`);
+            } else {
+              score -= 10;
+              reasons.push("Utanför klustrets serviceområde");
             }
           }
         }

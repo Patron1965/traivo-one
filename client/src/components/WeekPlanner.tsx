@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, User } from "lucide-react";
+import { AlertTriangle, Loader2, User } from "lucide-react";
 import { format, isSameDay } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { WeekPlannerProps } from "./weekplanner/types";
@@ -158,6 +158,15 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           />
 
           <DisruptionPanel />
+
+          {d.activeDragJob && d.activeDragJob.clusterId && d.clusterMatchedResourceIds.size === 0 && d.visibleResources.some(r => r.serviceArea && r.serviceArea.length > 0) && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 animate-in fade-in slide-in-from-top-1 duration-200" data-testid="drag-no-cluster-match-warning">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span className="text-xs text-amber-700 dark:text-amber-300">
+                Ingen synlig resurs matchar klustret för detta jobb. Kontrollera resursernas serviceområden.
+              </span>
+            </div>
+          )}
 
           {d.viewMode === "day" && (
             <DayTimelineView
