@@ -166,11 +166,25 @@ export function usePlannerData() {
   const { data: timewindowsData = [] } = useQuery<Array<{ workOrderId: string; dayOfWeek: string | null; startTime: string | null; endTime: string | null; weekNumber: number | null }>>({ queryKey: ["/api/task-timewindows"], staleTime: 120000 });
   const timewindowMap = useMemo(() => { const map = new Map<string, typeof timewindowsData>(); timewindowsData.forEach(tw => { const e = map.get(tw.workOrderId) || []; e.push(tw); map.set(tw.workOrderId, e); }); return map; }, [timewindowsData]);
 
-  const workOrdersQueryKey = ["/api/work-orders", dateRange.startDate, dateRange.endDate];
+  const workOrdersQueryKey = ["/api/work-orders", "scheduled", dateRange.startDate, dateRange.endDate];
 
   const updateWorkOrderMutation = useMutation({
     mutationFn: async ({ id, resourceId, scheduledDate, scheduledStartTime }: { id: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string }) => { const payload: Record<string, unknown> = { resourceId, scheduledDate, orderStatus: "planerad_resurs" }; if (scheduledStartTime) payload.scheduledStartTime = scheduledStartTime; return (await apiRequest("PATCH", `/api/work-orders/${id}`, payload)).json() as Promise<WorkOrderWithObject>; },
-    onMutate: async ({ id, resourceId, scheduledDate }) => { await queryClient.cancelQueries({ queryKey: workOrdersQueryKey }); const prev = queryClient.getQueryData<WorkOrderWithObject[]>(workOrdersQueryKey); queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === id ? { ...j, resourceId, scheduledDate: new Date(scheduledDate + "T12:00:00Z"), orderStatus: "planerad_resurs" as const } : j)); return { previousData: prev }; },
+    onMutate: async ({ id, resourceId, scheduledDate, scheduledStartTime }) => {
+      await queryClient.cancelQueries({ queryKey: workOrdersQueryKey });
+      const prev = queryClient.getQueryData<WorkOrderWithObject[]>(workOrdersQueryKey);
+      const jobInScheduled = prev?.find(j => j.id === id);
+      if (jobInScheduled) {
+        queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === id ? { ...j, resourceId, scheduledDate: new Date(scheduledDate + "T12:00:00Z"), scheduledStartTime: scheduledStartTime || j.scheduledStartTime, orderStatus: "planerad_resurs" as const } : j));
+      } else {
+        const unscheduledJob = accumulatedUnscheduled.find(j => j.id === id);
+        if (unscheduledJob) {
+          queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => [...(old || []), { ...unscheduledJob, resourceId, scheduledDate: new Date(scheduledDate + "T12:00:00Z"), scheduledStartTime: scheduledStartTime || null, orderStatus: "planerad_resurs" as const }]);
+          setAccumulatedUnscheduled(prev => prev.filter(j => j.id !== id));
+        }
+      }
+      return { previousData: prev };
+    },
     onSuccess: (updated, vars) => { queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === vars.id ? { ...j, ...updated } : j)); queryClient.invalidateQueries({ queryKey: ["/api/work-orders", "unscheduled-paginated"] }); setUnscheduledPage(0); },
     onError: (_err, _vars, ctx) => { if (ctx?.previousData) queryClient.setQueryData(workOrdersQueryKey, ctx.previousData); toast({ title: "Fel", description: "Kunde inte uppdatera jobbet.", variant: "destructive" }); },
   });
