@@ -52,7 +52,7 @@ export function VoiceCommandOverlay({
     <>
       <Animated.View style={[
         styles.voiceFab,
-        { bottom: tabBarHeight + 20 },
+        { bottom: tabBarHeight + 8 },
         { transform: [{ scale: voiceRecording ? pulseAnim : 1 }] },
       ]}>
         <Pressable
@@ -64,7 +64,7 @@ export function VoiceCommandOverlay({
           {voiceProcessing ? (
             <ActivityIndicator size="small" color={Colors.textInverse} />
           ) : (
-            <Feather name={voiceRecording ? 'square' : 'mic'} size={28} color={Colors.textInverse} />
+            <Feather name={voiceRecording ? 'square' : 'mic'} size={22} color={Colors.textInverse} />
           )}
         </Pressable>
       </Animated.View>

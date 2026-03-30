@@ -480,17 +480,18 @@ export default StyleSheet.create({
   },
   voiceFab: {
     position: 'absolute',
-    right: Spacing.lg,
+    right: Spacing.md,
     zIndex: 100,
   },
   voiceFabButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    ...Shadows.lg,
+    opacity: 0.85,
+    ...Shadows.md,
   },
   voiceFabButtonActive: {
     backgroundColor: Colors.danger,
