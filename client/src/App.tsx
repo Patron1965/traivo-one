@@ -454,7 +454,7 @@ function TechnicianRedirect() {
 function AuthenticatedApp() {
   const { theme, toggleTheme } = useTheme();
   const [location] = useLocation();
-  const hideFloatingButton = location.startsWith("/order-concepts/new") || location.includes("/edit");
+  const hideFloatingButton = location.startsWith("/order-concepts/new") || location.includes("/edit") || location.startsWith("/mobile") || location.startsWith("/field") || location.startsWith("/simple");
   
   return (
     <TourProvider>
