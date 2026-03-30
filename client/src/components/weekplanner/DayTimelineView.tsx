@@ -5,7 +5,7 @@ import { AlertTriangle, Navigation } from "lucide-react";
 import { format } from "date-fns";
 import type { Resource, WorkOrderWithObject, ObjectTimeRestriction } from "@shared/schema";
 import { DAY_START_HOUR, DAY_END_HOUR, HOURS_IN_DAY, getJobCategory } from "./types";
-import { DroppableCell, DraggableJobCard } from "./DndComponents";
+import { DroppableCell } from "./DndComponents";
 import { JobCard } from "./JobCard";
 
 interface DayTimelineViewProps {
@@ -116,9 +116,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
                       const travelAfter = resourceTravels.find(t => t.fromJobId === job.id);
                       return (
                         <div key={job.id}>
-                          <DraggableJobCard id={job.id}>
-                            <JobCard job={job} {...jobCardProps} />
-                          </DraggableJobCard>
+                          <JobCard job={job} {...jobCardProps} />
                           {travelAfter && (
                             <Tooltip>
                               <TooltipTrigger asChild>
