@@ -9,7 +9,7 @@ import { format, isSameDay } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { WeekPlannerProps } from "./weekplanner/types";
 import { zoomLevels } from "./weekplanner/types";
-import { DroppableCell } from "./weekplanner/DndComponents";
+import { DroppableCell, DraggableJobCard } from "./weekplanner/DndComponents";
 import { JobCard, DragOverlayContent } from "./weekplanner/JobCard";
 import { UnscheduledSidebar } from "./weekplanner/UnscheduledSidebar";
 import { AssignDialog, SendScheduleDialog, ConflictDialog, ClearDialog, AutoFillDialog, DepChainDialog } from "./weekplanner/PlannerDialogs";
@@ -250,7 +250,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                               {dayJobs.length === 0 ? (
                                 <div className="text-xs text-muted-foreground text-center py-4">Dra jobb hit för att schemalägga</div>
                               ) : (
-                                <div className="space-y-2">{dayJobs.map(job => <JobCard key={job.id} job={job} {...jobCardProps} />)}</div>
+                                <div className="space-y-2">{dayJobs.map(job => (
+                                  <DraggableJobCard key={job.id} id={job.id}>
+                                    <JobCard job={job} {...jobCardProps} />
+                                  </DraggableJobCard>
+                                ))}</div>
                               )}
                             </div>
                           </DroppableCell>

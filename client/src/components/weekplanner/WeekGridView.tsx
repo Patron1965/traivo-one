@@ -6,7 +6,7 @@ import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject, ObjectTimeRestriction } from "@shared/schema";
 import { HOURS_IN_DAY, getJobCategory, haversineDistance } from "./types";
 import type { WeatherImpactDay, WeatherForecastData } from "./types";
-import { DroppableCell } from "./DndComponents";
+import { DroppableCell, DraggableJobCard } from "./DndComponents";
 import { JobCard } from "./JobCard";
 import { ResourceColumn } from "./ResourceColumn";
 
@@ -193,7 +193,11 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                             <Plus className="h-4 w-4" />
                           </div>
                         )}
-                        {jobs.map((job) => <JobCard key={job.id} job={job} compact {...jobCardProps} />)}
+                        {jobs.map((job) => (
+                          <DraggableJobCard key={job.id} id={job.id}>
+                            <JobCard job={job} compact {...jobCardProps} />
+                          </DraggableJobCard>
+                        ))}
                       </div>
                       {totalTravelMin > 0 && (
                         <Tooltip>
