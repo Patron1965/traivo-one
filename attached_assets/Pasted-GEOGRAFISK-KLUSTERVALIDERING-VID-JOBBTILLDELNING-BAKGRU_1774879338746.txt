@@ -1,0 +1,341 @@
+GEOGRAFISK KLUSTERVALIDERING VID JOBBTILLDELNING
+BAKGRUND
+Nuvarande situation:
+
+Systemet ger poängbonus till resurser i matchande kluster
+Det finns ingen hård begränsning - tilldelning utanför kluster är tillåten
+Planerare kan oavsiktligt tilldela jobb till fel geografiskt område
+Mål:
+Lägg till klustervalidering i WeekPlanner så att planeraren får tydlig feedback vid tilldelning utanför kluster, men med flexibilitet för legitima undantag.
+
+📋 FAS 1: MVP IMPLEMENTATION
+1. Mjuk varning vid fel kluster
+När: Efter att planeraren släpper ett jobb på en resurs
+
+Validering:
+
+javascript
+Copy
+function validateClusterMatch(job, resource) {
+  const jobCluster = job.cluster || job.location?.cluster;
+  const resourceCluster = resource.cluster;
+  
+  if (!jobCluster || !resourceCluster) {
+    return { valid: true, warning: null };
+  }
+  
+  if (jobCluster !== resourceCluster) {
+    return {
+      valid: false,
+      warning: {
+        type: 'CLUSTER_MISMATCH',
+        jobCluster,
+        resourceCluster,
+        message: `Detta jobb tillhör kluster "${jobCluster}" men resursen "${resource.name}" är tilldelad kluster "${resourceCluster}"`
+      }
+    };
+  }
+  
+  return { valid: true, warning: null };
+}
+Modal/Dialog:
+
+jsx
+Copy
+<Dialog open={showClusterWarning}>
+  <DialogTitle>
+    🟡 Varning: Fel geografiskt kluster
+  </DialogTitle>
+  <DialogContent>
+    <p>
+      Detta jobb tillhör kluster <strong>{jobCluster}</strong><br/>
+      Resursen <strong>{resource.name}</strong> är tilldelad kluster <strong>{resourceCluster}</strong>
+    </p>
+    <TextField
+      label="Motivering (valfritt)"
+      multiline
+      rows={3}
+      fullWidth
+      value={overrideReason}
+      onChange={(e) => setOverrideReason(e.target.value)}
+      placeholder="T.ex. akut situation, specialkompetens, kundönskemål..."
+    />
+  </DialogContent>
+  <DialogActions>
+    <Button onClick={handleCancel}>Avbryt</Button>
+    <Button onClick={handleShowMap} variant="outlined">Visa karta</Button>
+    <Button onClick={handleOverride} variant="contained" color="warning">
+      Tilldela ändå
+    </Button>
+  </DialogActions>
+</Dialog>
+Logga override:
+
+javascript
+Copy
+async function logClusterOverride(job, resource, reason) {
+  await fetch('/api/cluster-overrides', {
+    method: 'POST',
+    body: JSON.stringify({
+      jobId: job.id,
+      resourceId: resource.id,
+      jobCluster: job.cluster,
+      resourceCluster: resource.cluster,
+      reason: reason || 'Ingen motivering angiven',
+      plannerId: currentUser.id,
+      timestamp: new Date().toISOString()
+    })
+  });
+}
+2. Visuell feedback under drag
+Realtidsvalidering:
+
+javascript
+Copy
+function onDragOver(event, targetCell) {
+  const draggedJob = getDraggedJob();
+  const targetResource = targetCell.resource;
+  
+  const validation = validateClusterMatch(draggedJob, targetResource);
+  
+  if (validation.valid) {
+    targetCell.classList.add('drop-valid'); // Grön ram
+    targetCell.classList.remove('drop-invalid');
+  } else {
+    targetCell.classList.add('drop-invalid'); // Röd ram
+    targetCell.classList.remove('drop-valid');
+  }
+}
+CSS:
+
+css
+Copy
+.drop-valid {
+  border: 3px solid #4caf50;
+  background-color: rgba(76, 175, 80, 0.1);
+}
+
+.drop-invalid {
+  border: 3px solid #f44336;
+  background-color: rgba(244, 67, 54, 0.1);
+  position: relative;
+}
+
+.drop-invalid::after {
+  content: '⚠️';
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  font-size: 20px;
+}
+3. Integration i handleDragEnd
+Uppdatera befintlig kod:
+
+javascript
+Copy
+async function handleDragEnd(event) {
+  const { active, over } = event;
+  
+  if (!over) return;
+  
+  const job = findJobById(active.id);
+  const targetCell = resolveDropTarget(over.id);
+  const targetResource = targetCell.resource;
+  
+  // LÄGG TILL KLUSTERVALIDERING HÄR
+  const validation = validateClusterMatch(job, targetResource);
+  
+  if (!validation.valid) {
+    // Visa varningsdialog
+    setClusterWarning({
+      job,
+      resource: targetResource,
+      warning: validation.warning
+    });
+    setShowClusterWarning(true);
+    return; // Stoppa tilldelning tills användaren bekräftar
+  }
+  
+  // Om validering OK, fortsätt med normal tilldelning
+  await assignJobToResource(job, targetResource, targetCell.date);
+}
+Override-hantering:
+
+javascript
+Copy
+async function handleOverride() {
+  const { job, resource } = clusterWarning;
+  
+  // Logga override
+  await logClusterOverride(job, resource, overrideReason);
+  
+  // Genomför tilldelning
+  await assignJobToResource(job, resource, targetCell.date);
+  
+  // Stäng dialog
+  setShowClusterWarning(false);
+  setOverrideReason('');
+}
+🎯 FAS 2: FÖRBÄTTRINGAR (Framtida)
+4. "Föreslå alternativ"-funktion
+javascript
+Copy
+function findAlternativeResources(job, targetDate) {
+  const jobCluster = job.cluster;
+  
+  return resources
+    .filter(r => r.cluster === jobCluster)
+    .filter(r => isAvailable(r, targetDate))
+    .map(r => ({
+      resource: r,
+      distance: calculateDistance(job.location, r.currentLocation),
+      availability: getAvailabilityStatus(r, targetDate)
+    }))
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, 3);
+}
+Visa i dialog:
+
+jsx
+Copy
+<DialogContent>
+  <p>🟡 Varning: Fel kluster</p>
+  
+  <Divider sx={{ my: 2 }} />
+  
+  <Typography variant="subtitle2">
+    Föreslagna resurser i rätt kluster:
+  </Typography>
+  
+  {alternatives.map((alt, i) => (
+    <Button
+      key={alt.resource.id}
+      fullWidth
+      variant="outlined"
+      onClick={() => handleAssignAlternative(alt.resource)}
+      sx={{ mt: 1, justifyContent: 'flex-start' }}
+    >
+      {i + 1}. {alt.resource.name} ({alt.distance.toFixed(1)} km) - {alt.availability}
+    </Button>
+  ))}
+</DialogContent>
+5. Klustervisualisering på karta
+javascript
+Copy
+// Lägg till klusterlager på kartan
+function addClusterOverlays(map, clusters) {
+  clusters.forEach(cluster => {
+    const polygon = L.polygon(cluster.boundaries, {
+      color: cluster.color,
+      fillColor: cluster.color,
+      fillOpacity: 0.2,
+      weight: 2
+    }).addTo(map);
+    
+    polygon.bindPopup(`<strong>${cluster.name}</strong>`);
+  });
+}
+
+// Toggle för att visa/dölja
+<FormControlLabel
+  control={<Switch checked={showClusters} onChange={toggleClusters} />}
+  label="Visa klustergränser"
+/>
+6. Graderad validering
+javascript
+Copy
+function validateClusterMatchGraded(job, resource) {
+  const jobCluster = job.cluster;
+  const resourceCluster = resource.cluster;
+  
+  if (jobCluster === resourceCluster) {
+    return { level: 'OK', color: 'green', message: null };
+  }
+  
+  const distance = calculateClusterDistance(jobCluster, resourceCluster);
+  
+  if (distance < 10) {
+    return {
+      level: 'WARNING',
+      color: 'yellow',
+      message: `Närliggande kluster (${distance.toFixed(1)} km). Är du säker?`
+    };
+  }
+  
+  if (distance < 50) {
+    return {
+      level: 'ERROR',
+      color: 'red',
+      message: `Avlägset kluster (${distance.toFixed(1)} km). Kräver motivering.`
+    };
+  }
+  
+  return {
+    level: 'BLOCKED',
+    color: 'red',
+    message: `Extremt avstånd (${distance.toFixed(1)} km). Kräver admin-godkännande.`
+  };
+}
+🎯 FAS 3: ANALYS & OPTIMERING (Framtida)
+7. Rapportering
+javascript
+Copy
+// API endpoint för månadsrapport
+GET /api/reports/cluster-overrides?month=2025-03
+
+Response:
+{
+  totalOverrides: 15,
+  extraDistance: 230,
+  extraCost: 3450,
+  byPlanner: [
+    { plannerId: 1, name: "Anna", overrides: 8 },
+    { plannerId: 2, name: "Erik", overrides: 7 }
+  ],
+  byReason: [
+    { reason: "Akut situation", count: 6 },
+    { reason: "Specialkompetens", count: 4 },
+    { reason: "Ingen motivering", count: 5 }
+  ]
+}
+✅ TESTNING
+Testscenario 1: Korrekt kluster
+
+Dra ett jobb från kluster "Stockholm Nord"
+Släpp på resurs med kluster "Stockholm Nord"
+✅ Ingen varning, jobbet tilldelas direkt
+Testscenario 2: Fel kluster med override
+
+Dra ett jobb från kluster "Stockholm Nord"
+Släpp på resurs med kluster "Stockholm Syd"
+✅ Varningsdialog visas
+Skriv motivering: "Akut situation"
+Klicka "Tilldela ändå"
+✅ Jobbet tilldelas och override loggas
+Testscenario 3: Visuell feedback
+
+Börja dra ett jobb från kluster "Stockholm Nord"
+Hovra över resurs med kluster "Stockholm Nord"
+✅ Grön ram visas
+Hovra över resurs med kluster "Stockholm Syd"
+✅ Röd ram och varningsikon visas
+📦 IMPLEMENTATION CHECKLIST
+Fas 1 (MVP):
+
+ Skapa validateClusterMatch() funktion
+ Lägg till validering i handleDragEnd()
+ Skapa varningsdialog-komponent
+ Implementera visuell feedback (CSS för grön/röd ram)
+ Skapa API endpoint för loggning: POST /api/cluster-overrides
+ Lägg till onDragOver event för realtidsfeedback
+ Testa alla tre scenarion ovan
+Fas 2 (Framtida):
+
+ Implementera "Föreslå alternativ"-funktion
+ Lägg till klustervisualisering på karta
+ Implementera graderad validering
+Fas 3 (Framtida):
+
+ Skapa rapporteringsendpoint
+ Bygg dashboard för klusteröverträdelser
+ Implementera admin-godkännande för extrema avstånd
