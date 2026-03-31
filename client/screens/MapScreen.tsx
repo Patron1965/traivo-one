@@ -518,7 +518,7 @@ export function MapScreen({ navigation }: any) {
         </Pressable>
       ) : null}
 
-      <View style={[styles.legend, { bottom: tabBarHeight + Spacing.xs }]} pointerEvents="box-none">
+      <View style={[styles.legend, { bottom: tabBarHeight + 12 }]} pointerEvents="box-none">
         {routeLoading ? (
           <View style={styles.legendRow}>
             <ActivityIndicator size="small" color={Colors.primary} />
