@@ -410,6 +410,7 @@ export function MapScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
+      <View style={styles.mapWrapper}>
       <MapView
         ref={mapRef}
         style={styles.map}
@@ -622,6 +623,7 @@ export function MapScreen({ navigation }: any) {
           </ThemedText>
         )}
       </View>
+      </View>
     </View>
   );
 }
@@ -631,8 +633,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  map: {
+  mapWrapper: {
     flex: 1,
+    position: 'relative',
+  },
+  map: {
+    ...StyleSheet.absoluteFillObject,
   },
   customMarkerContainer: {
     alignItems: 'center',
