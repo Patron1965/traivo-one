@@ -125,24 +125,24 @@ export function NotificationsScreen({ navigation }: any) {
         onPress={() => handleTap(item)}
         testID={`notification-${item.id}`}
       >
-        <View style={[styles.notifIcon, { backgroundColor: config.color + '18' }]}>
+        <View style={[styles.notifIcon, { backgroundColor: config.color + '25' }]}>
           <Feather name={config.icon as any} size={20} color={config.color} />
         </View>
         <View style={styles.notifContent}>
           <View style={styles.notifHeader}>
-            <ThemedText variant="label" numberOfLines={1} style={{ flex: 1 }}>
+            <ThemedText variant="label" numberOfLines={1} style={{ flex: 1, color: '#1a2a3a' }}>
               {item.title}
             </ThemedText>
-            <ThemedText variant="caption" color={Colors.textMuted} style={styles.notifTime}>
+            <ThemedText variant="caption" color={Colors.textSecondary} style={styles.notifTime}>
               {timeAgo(item.createdAt)}
             </ThemedText>
           </View>
-          <ThemedText variant="body" color={Colors.textSecondary} numberOfLines={2} style={styles.notifBody}>
+          <ThemedText variant="body" color="#3d4f5f" numberOfLines={2} style={styles.notifBody}>
             {item.body}
           </ThemedText>
           <View style={styles.notifMeta}>
-            <View style={[styles.typeBadge, { backgroundColor: config.color + '15' }]}>
-              <ThemedText variant="caption" color={config.color} style={{ fontSize: 10 }}>
+            <View style={[styles.typeBadge, { backgroundColor: config.color + '28' }]}>
+              <ThemedText variant="caption" color={config.color} style={{ fontSize: 10, fontWeight: '600' }}>
                 {config.label}
               </ThemedText>
             </View>
@@ -271,6 +271,8 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    color: '#2C3E50',
+    fontWeight: '700',
   },
   notifItem: {
     flexDirection: 'row',
@@ -280,9 +282,14 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     marginBottom: Spacing.sm,
     gap: Spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   notifUnread: {
-    backgroundColor: Colors.primary + '08',
+    backgroundColor: '#EBF2F8',
     borderLeftWidth: 3,
     borderLeftColor: Colors.primary,
   },
