@@ -16,7 +16,6 @@ import { useOfflinePendingCount } from '../hooks/useOfflineSync';
 import { useDisruptionMonitor } from '../hooks/useDisruptionMonitor';
 import { useVoiceCommands } from '../hooks/useVoiceCommands';
 import { VoiceCommandOverlay } from '../components/home/VoiceCommandOverlay';
-import { WeatherWidget } from '../components/home/WeatherWidget';
 import { WorkTimeCard } from '../components/home/WorkTimeCard';
 import { NextOrderCard } from '../components/home/NextOrderCard';
 import { OrderPreviewList } from '../components/home/OrderPreviewList';
@@ -208,7 +207,15 @@ export function HomeScreen({ navigation }: { navigation: HomeNavigation }) {
       >
         <View style={styles.greeting}>
           <View>
-            <ThemedText variant="caption" style={styles.dateText}>{dateStr}</ThemedText>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <ThemedText variant="caption" style={styles.dateText}>{dateStr}</ThemedText>
+              {weather?.warnings && weather.warnings.length > 0 ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#FEF3CD', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                  <Feather name="alert-triangle" size={12} color={Colors.warning} />
+                  <ThemedText variant="caption" color={Colors.warning}>Vädervarning</ThemedText>
+                </View>
+              ) : null}
+            </View>
             <View style={styles.greetingRow}>
               <ThemedText variant="heading">
                 Hej, {user?.name?.split(' ')[0] || 'Chaufför'}
@@ -233,7 +240,6 @@ export function HomeScreen({ navigation }: { navigation: HomeNavigation }) {
           ) : null}
         </View>
 
-        <WeatherWidget weather={weather} />
         <SyncStatusRow pendingCount={pendingCount} syncBadgeOpacity={syncBadgeOpacity} />
         <ProgressCard completedCount={completedCount} totalCount={totalCount} progress={progress} summary={summary} lockedCount={lockedCount} />
         <CarryOverBanner carryOverOrders={carryOverOrders} carryOverDismissed={carryOverDismissed} setCarryOverDismissed={setCarryOverDismissed} carryOverMutation={carryOverMutation} carryOverError={carryOverError} />
