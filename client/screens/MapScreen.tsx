@@ -518,7 +518,7 @@ export function MapScreen({ navigation }: any) {
         </Pressable>
       ) : null}
 
-      <View style={[styles.legend, { bottom: tabBarHeight + Spacing.lg }]} pointerEvents="box-none">
+      <View style={[styles.legend, { bottom: tabBarHeight + Spacing.xs }]} pointerEvents="box-none">
         {routeLoading ? (
           <View style={styles.legendRow}>
             <ActivityIndicator size="small" color={Colors.primary} />
@@ -824,19 +824,18 @@ const styles = StyleSheet.create({
   },
   legend: {
     position: 'absolute',
-    left: Spacing.lg,
-    right: Spacing.lg,
-    backgroundColor: Colors.surface,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.lg,
+    left: Spacing.sm,
+    right: Spacing.sm,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    maxHeight: 300,
+    maxHeight: 280,
   },
   legendContent: {
     alignItems: 'center',
-    gap: 4,
+    gap: 2,
     width: '100%',
   },
   legendRow: {
