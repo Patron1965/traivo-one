@@ -141,12 +141,12 @@ export function OrderPreviewList({ orders, ordersLoading, navigation, currentPos
                   {order.priority === 'urgent' ? (
                     <View style={styles.urgentBadge}>
                       <Feather name="alert-circle" size={12} color={Colors.danger} />
-                      <ThemedText variant="caption" color={Colors.danger}>Br\u00e5dskande</ThemedText>
+                      <ThemedText variant="caption" color={Colors.danger}>Brådskande</ThemedText>
                     </View>
                   ) : order.priority === 'high' ? (
                     <View style={styles.highBadge}>
                       <Feather name="arrow-up" size={12} color={Colors.warning} />
-                      <ThemedText variant="caption" color={Colors.warning}>H\u00f6g prioritet</ThemedText>
+                      <ThemedText variant="caption" color={Colors.warning}>Hög prioritet</ThemedText>
                     </View>
                   ) : null}
 
@@ -163,7 +163,7 @@ export function OrderPreviewList({ orders, ordersLoading, navigation, currentPos
                     <View style={styles.restrictionBadge}>
                       <Feather name="clock" size={12} color={Colors.danger} />
                       <ThemedText variant="caption" color={Colors.danger}>
-                        Tidsbegr\u00e4nsning
+                        Tidsbegränsning
                       </ThemedText>
                     </View>
                   ) : null}

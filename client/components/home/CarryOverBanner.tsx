@@ -27,7 +27,7 @@ export function CarryOverBanner({ carryOverOrders, carryOverDismissed, setCarryO
           </View>
           <View style={{ flex: 1 }}>
             <ThemedText variant="label" color={Colors.danger}>
-              {carryOverOrders.length} ej slutf{'\u00f6'}rda fr{'\u00e5'}n ig{'\u00e5'}r
+              {carryOverOrders.length} ej slutförda från igår
             </ThemedText>
             <ThemedText variant="caption" color={Colors.textSecondary}>
               Flytta till dagens lista?

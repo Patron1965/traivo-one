@@ -73,9 +73,9 @@ export function computeBreakSuggestion(orders: Order[] | undefined): BreakSugges
 
   let message = `Du har jobbat i ${workedStr}`;
   if (nextJobTime && gapMinutes !== null && gapMinutes > 10) {
-    message += ` \u2014 dags f\u00f6r rast? N\u00e4sta jobb kl ${nextJobTime}, ${gapMinutes} min lucka`;
+    message += ` — dags för rast? Nästa jobb kl ${nextJobTime}, ${gapMinutes} min lucka`;
   } else {
-    message += ` \u2014 dags f\u00f6r en paus?`;
+    message += ` — dags för en paus?`;
   }
 
   return { hoursWorked, nextJobTime, gapMinutes, message };

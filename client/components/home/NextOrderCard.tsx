@@ -32,7 +32,7 @@ export function NextOrderCard({ nextOrder, nextOrderDistance, navigation, orders
           </View>
           <View style={{ flex: 1 }}>
             <ThemedText variant="subheading" color={Colors.textInverse}>
-              N\u00e4sta uppdrag
+              Nästa uppdrag
             </ThemedText>
             <ThemedText variant="caption" color="rgba(255,255,255,0.8)">
               {nextOrder.customerName}

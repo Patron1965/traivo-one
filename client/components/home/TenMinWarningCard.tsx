@@ -30,7 +30,7 @@ export function TenMinWarningCard({ tenMinWarning, tenMinWarningDismissed, setTe
           </View>
           <View>
             <ThemedText variant="label" color={Colors.warning}>
-              {tenMinWarning.minutesLeft} min till n{'\u00e4'}sta jobb
+              {tenMinWarning.minutesLeft} min till nästa jobb
             </ThemedText>
             <ThemedText variant="caption" color={Colors.textSecondary}>
               {tenMinWarning.order.customerName}

@@ -26,7 +26,7 @@ export function BreakSuggestionCard({ breakSuggestion, breakDismissed, setBreakD
           <Feather name="coffee" size={20} color={Colors.secondary} />
         </View>
         <View style={styles.breakTextContainer}>
-          <ThemedText variant="label" color={Colors.secondary}>Rastf{'\u00f6'}rslag</ThemedText>
+          <ThemedText variant="label" color={Colors.secondary}>Rastförslag</ThemedText>
           <ThemedText variant="body" color={Colors.textSecondary} style={styles.breakMessage}>
             {breakSuggestion.message}
           </ThemedText>

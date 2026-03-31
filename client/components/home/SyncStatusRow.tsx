@@ -19,7 +19,7 @@ export function SyncStatusRow({ pendingCount, syncBadgeOpacity }: SyncStatusRowP
         <Animated.View style={[styles.syncBadge, { opacity: syncBadgeOpacity }]}>
           <Feather name="upload-cloud" size={14} color={Colors.warning} />
           <ThemedText variant="caption" color={Colors.warning} style={styles.syncBadgeText}>
-            {pendingCount} v{'\u00e4'}ntande {pendingCount === 1 ? '\u00e5tg\u00e4rd' : '\u00e5tg\u00e4rder'}
+            {pendingCount} väntande {pendingCount === 1 ? 'åtgärd' : 'åtgärder'}
           </ThemedText>
         </Animated.View>
       ) : null}

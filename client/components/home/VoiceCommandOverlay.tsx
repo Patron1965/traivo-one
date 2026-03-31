@@ -94,11 +94,11 @@ export function VoiceCommandOverlay({
                 <View style={styles.offlineGrid}>
                   {[
                     { label: 'Klar', action: 'complete_order', msg: 'Order markerad som klar' },
-                    { label: 'N\u00e4sta', action: 'start_next', msg: 'Visar n\u00e4sta order' },
-                    { label: 'P\u00e5 plats', action: 'on_site', msg: 'Ankomst registrerad' },
+                    { label: 'Nästa', action: 'start_next', msg: 'Visar nästa order' },
+                    { label: 'På plats', action: 'on_site', msg: 'Ankomst registrerad' },
                     { label: 'Avvikelse', action: 'report_deviation', msg: 'Rapportera avvikelse' },
                     { label: 'Rast', action: 'start_break', msg: 'Rast startad' },
-                    { label: 'Hj\u00e4lp', action: 'help', msg: HELP_TEXT },
+                    { label: 'Hjälp', action: 'help', msg: HELP_TEXT },
                   ].map((item) => (
                     <Pressable
                       key={item.action}
@@ -121,7 +121,7 @@ export function VoiceCommandOverlay({
                   }}
                   testID="button-offline-close"
                 >
-                  <ThemedText variant="label" color="rgba(255,255,255,0.7)">St\u00e4ng</ThemedText>
+                  <ThemedText variant="label" color="rgba(255,255,255,0.7)">Stäng</ThemedText>
                 </Pressable>
               </>
             ) : voiceError ? (
@@ -130,18 +130,18 @@ export function VoiceCommandOverlay({
                   <Feather name="alert-circle" size={48} color={Colors.danger} />
                 </View>
                 <ThemedText variant="subheading" color={Colors.textInverse} style={styles.voiceOverlayTitle}>
-                  {voiceTranscript && voiceTranscript.length > 30 ? voiceTranscript : 'Kommandot k\u00e4ndes inte igen'}
+                  {voiceTranscript && voiceTranscript.length > 30 ? voiceTranscript : 'Kommandot kändes inte igen'}
                 </ThemedText>
                 <ThemedText variant="body" color="rgba(255,255,255,0.7)" style={styles.voiceOverlaySubtitle}>
                   {voiceTranscript && voiceTranscript.length > 30
-                    ? 'Kontrollera anslutningen och f\u00f6rs\u00f6k igen'
-                    : 'F\u00f6rs\u00f6k igen eller s\u00e4g "hj\u00e4lp" f\u00f6r att h\u00f6ra tillg\u00e4ngliga kommandon'
+                    ? 'Kontrollera anslutningen och försök igen'
+                    : 'Försök igen eller säg "hjälp" för att höra tillgängliga kommandon'
                   }
                 </ThemedText>
                 <View style={styles.voiceOverlayActions}>
                   <Pressable style={styles.voiceOverlayRetryBtn} onPress={retryVoiceCommand} testID="button-voice-retry">
                     <Feather name="mic" size={20} color={Colors.textInverse} />
-                    <ThemedText variant="label" color={Colors.textInverse}>F\u00f6rs\u00f6k igen</ThemedText>
+                    <ThemedText variant="label" color={Colors.textInverse}>Försök igen</ThemedText>
                   </Pressable>
                   <Pressable
                     style={styles.voiceOverlayCloseBtn}
@@ -151,7 +151,7 @@ export function VoiceCommandOverlay({
                     }}
                     testID="button-voice-close"
                   >
-                    <ThemedText variant="label" color="rgba(255,255,255,0.7)">St\u00e4ng</ThemedText>
+                    <ThemedText variant="label" color="rgba(255,255,255,0.7)">Stäng</ThemedText>
                   </Pressable>
                 </View>
               </>
@@ -161,7 +161,7 @@ export function VoiceCommandOverlay({
                   <Feather name="mic" size={48} color={Colors.textInverse} />
                 </Animated.View>
                 <ThemedText variant="subheading" color={Colors.textInverse} style={styles.voiceOverlayTitle}>
-                  {voiceRecording ? 'Lyssnar...' : voiceProcessing ? 'Bearbetar...' : 'R\u00f6stkommando'}
+                  {voiceRecording ? 'Lyssnar...' : voiceProcessing ? 'Bearbetar...' : 'Röstkommando'}
                 </ThemedText>
                 {voiceTranscript ? (
                   <ThemedText variant="body" color="rgba(255,255,255,0.8)" style={styles.voiceOverlayTranscript}>

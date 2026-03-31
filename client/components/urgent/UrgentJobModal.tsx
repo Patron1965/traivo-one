@@ -103,7 +103,7 @@ export function UrgentJobModal() {
             <View style={[styles.countdownBar, countdown <= 15 ? styles.countdownBarCritical : null]}>
               <Feather name="clock" size={14} color={countdown <= 15 ? '#FFFFFF' : '#92400E'} />
               <Text style={[styles.countdownText, countdown <= 15 ? styles.countdownTextCritical : null]}>
-                {countdown > 0 ? `Svara inom ${countdown}s` : 'Tiden har g\u00E5tt ut \u2014 kan omtilldelas'}
+                {countdown > 0 ? `Svara inom ${countdown}s` : 'Tiden har gått ut — kan omtilldelas'}
               </Text>
               <View style={styles.countdownTrack}>
                 <View style={[styles.countdownFill, { width: `${(countdown / RESPONSE_TIMEOUT_SECONDS) * 100}%` }, countdown <= 15 ? styles.countdownFillCritical : null]} />

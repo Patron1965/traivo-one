@@ -35,14 +35,14 @@ export function WorkTimeCard({ timeSummary, formatWorkTime }: WorkTimeCardProps)
         {timeSummary.travelSeconds > 0 ? (
           <View style={styles.workTimeItem}>
             <View style={[styles.workTimeDot, { backgroundColor: Colors.info }]} />
-            <ThemedText variant="caption" color={Colors.textSecondary}>K\u00f6rning</ThemedText>
+            <ThemedText variant="caption" color={Colors.textSecondary}>Körning</ThemedText>
             <ThemedText variant="body" color={Colors.info}>{formatWorkTime(timeSummary.travelSeconds)}</ThemedText>
           </View>
         ) : null}
         {timeSummary.onSiteSeconds > 0 ? (
           <View style={styles.workTimeItem}>
             <View style={[styles.workTimeDot, { backgroundColor: Colors.primaryLight }]} />
-            <ThemedText variant="caption" color={Colors.textSecondary}>P\u00e5 plats</ThemedText>
+            <ThemedText variant="caption" color={Colors.textSecondary}>På plats</ThemedText>
             <ThemedText variant="body" color={Colors.primaryLight}>{formatWorkTime(timeSummary.onSiteSeconds)}</ThemedText>
           </View>
         ) : null}

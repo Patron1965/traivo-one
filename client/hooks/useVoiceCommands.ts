@@ -19,23 +19,23 @@ interface UseVoiceCommandsArgs {
 const SILENCE_THRESHOLD = 0.01;
 const SILENCE_DURATION_MS = 1500;
 
-export const HELP_TEXT = 'Tillg\u00e4ngliga kommandon: Visa jobb, Starta n\u00e4sta, P\u00e5 plats, Markera klar, Navigera dit, Ring kunden, Ta rast, Visa statistik, Rapportera avvikelse, Hj\u00e4lp.';
+export const HELP_TEXT = 'Tillgängliga kommandon: Visa jobb, Starta nästa, På plats, Markera klar, Navigera dit, Ring kunden, Ta rast, Visa statistik, Rapportera avvikelse, Hjälp.';
 
 const OFFLINE_KEYWORDS: Record<string, { action: string; displayMessage: string }> = {
   'klar': { action: 'complete_order', displayMessage: 'Markerar uppdraget som klart.' },
-  'f\u00e4rdig': { action: 'complete_order', displayMessage: 'Markerar uppdraget som klart.' },
-  'n\u00e4sta': { action: 'start_next', displayMessage: '\u00d6ppnar n\u00e4sta uppdrag.' },
-  'p\u00e5 plats': { action: 'on_site', displayMessage: 'Markerar som p\u00e5 plats.' },
-  'framme': { action: 'on_site', displayMessage: 'Markerar som p\u00e5 plats.' },
-  'avvikelse': { action: 'report_deviation', displayMessage: '\u00d6ppnar avvikelserapportering.' },
+  'färdig': { action: 'complete_order', displayMessage: 'Markerar uppdraget som klart.' },
+  'nästa': { action: 'start_next', displayMessage: 'Öppnar nästa uppdrag.' },
+  'på plats': { action: 'on_site', displayMessage: 'Markerar som på plats.' },
+  'framme': { action: 'on_site', displayMessage: 'Markerar som på plats.' },
+  'avvikelse': { action: 'report_deviation', displayMessage: 'Öppnar avvikelserapportering.' },
   'rast': { action: 'start_break', displayMessage: 'Tar rast.' },
   'paus': { action: 'start_break', displayMessage: 'Tar rast.' },
-  'hj\u00e4lp': { action: 'help', displayMessage: HELP_TEXT },
-  'statistik': { action: 'navigate_statistics', displayMessage: '\u00d6ppnar statistik.' },
+  'hjälp': { action: 'help', displayMessage: HELP_TEXT },
+  'statistik': { action: 'navigate_statistics', displayMessage: 'Öppnar statistik.' },
   'jobb': { action: 'navigate_orders', displayMessage: 'Visar dina uppdrag.' },
   'ordrar': { action: 'navigate_orders', displayMessage: 'Visar dina uppdrag.' },
   'ring': { action: 'call_customer', displayMessage: 'Ringer kunden.' },
-  'navigera': { action: 'navigate_to', displayMessage: '\u00d6ppnar navigation.' },
+  'navigera': { action: 'navigate_to', displayMessage: 'Öppnar navigation.' },
 };
 
 function matchOfflineKeyword(text: string): { action: string; displayMessage: string } | null {
@@ -131,7 +131,7 @@ export function useVoiceCommands({ navigation, activeOrders, isOnline, queryClie
         if (current) {
           navigation.navigate('ReportDeviation', { orderId: current.id });
         } else {
-          const msg = 'Inget aktivt uppdrag f\u00f6r avvikelse.';
+          const msg = 'Inget aktivt uppdrag för avvikelse.';
           showVoiceFeedback(msg);
           speakConfirmation(msg);
         }
@@ -143,7 +143,7 @@ export function useVoiceCommands({ navigation, activeOrders, isOnline, queryClie
           apiRequest('POST', `/api/mobile/orders/${onSiteOrder.id}/status`, { status: 'on_site' })
             .then(() => {
               queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
-              const msg = `P\u00e5 plats markerat f\u00f6r ${onSiteOrder.customerName}`;
+              const msg = `På plats markerat för ${onSiteOrder.customerName}`;
               showVoiceFeedback(msg);
               speakConfirmation(msg);
             })
@@ -153,7 +153,7 @@ export function useVoiceCommands({ navigation, activeOrders, isOnline, queryClie
               speakConfirmation(msg);
             });
         } else {
-          const msg = 'Inget uppdrag att markera som p\u00e5 plats.';
+          const msg = 'Inget uppdrag att markera som på plats.';
           showVoiceFeedback(msg);
           speakConfirmation(msg);
         }
@@ -206,7 +206,7 @@ export function useVoiceCommands({ navigation, activeOrders, isOnline, queryClie
             showVoiceFeedback(msg);
             speakConfirmation(msg);
           } else {
-            const msg = 'Inget telefonnummer tillg\u00e4ngligt.';
+            const msg = 'Inget telefonnummer tillgängligt.';
             showVoiceFeedback(msg);
             speakConfirmation(msg);
           }
@@ -404,7 +404,7 @@ export function useVoiceCommands({ navigation, activeOrders, isOnline, queryClie
         const permission = await Audio.requestPermissionsAsync();
         if (!permission.granted) {
           stopPulseAnimation();
-          showVoiceFeedback('Mikrofontillst\u00e5nd kr\u00e4vs.');
+          showVoiceFeedback('Mikrofontillstånd krävs.');
           setVoiceOverlayVisible(false);
           return;
         }
@@ -504,7 +504,7 @@ export function useVoiceCommands({ navigation, activeOrders, isOnline, queryClie
     setVoiceOverlayVisible(true);
     setVoiceError(true);
     triggerHaptic('error');
-    const msg = 'Kommandot k\u00e4ndes inte igen. Tryck f\u00f6r att f\u00f6rs\u00f6ka igen.';
+    const msg = 'Kommandot kändes inte igen. Tryck för att försöka igen.';
     showVoiceFeedback(msg);
     speakConfirmation(msg);
   }
@@ -544,9 +544,9 @@ export function useVoiceCommands({ navigation, activeOrders, isOnline, queryClie
     if (!networkAvailable) {
       setOfflineQuickActions(true);
       setVoiceOverlayVisible(true);
-      setVoiceTranscript('Offline \u2013 v\u00e4lj kommando:');
+      setVoiceTranscript('Offline – välj kommando:');
       triggerHaptic('error');
-      speakConfirmation('Ingen n\u00e4tanslutning. V\u00e4lj ett snabbkommando.');
+      speakConfirmation('Ingen nätanslutning. Välj ett snabbkommando.');
       setVoiceProcessing(false);
       return;
     }
@@ -580,7 +580,7 @@ export function useVoiceCommands({ navigation, activeOrders, isOnline, queryClie
         setVoiceOverlayVisible(true);
         setVoiceError(true);
         triggerHaptic('error');
-        const msg = 'R\u00f6stkommando \u00e4r inte tillg\u00e4ngligt just nu. F\u00f6rs\u00f6k igen senare.';
+        const msg = 'Röstkommando är inte tillgängligt just nu. Försök igen senare.';
         setVoiceTranscript(msg);
         showVoiceFeedback(msg);
         speakConfirmation(msg);

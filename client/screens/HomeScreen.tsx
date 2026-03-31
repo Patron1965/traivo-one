@@ -157,7 +157,7 @@ export function HomeScreen({ navigation }: { navigation: HomeNavigation }) {
     },
     onError: () => {
       triggerNotification(NotificationFeedbackType.Error);
-      setCarryOverError('Kunde inte flytta ordrar. F\u00f6rs\u00f6k igen.');
+      setCarryOverError('Kunde inte flytta ordrar. Försök igen.');
     },
   });
 
@@ -211,7 +211,7 @@ export function HomeScreen({ navigation }: { navigation: HomeNavigation }) {
             <ThemedText variant="caption" style={styles.dateText}>{dateStr}</ThemedText>
             <View style={styles.greetingRow}>
               <ThemedText variant="heading">
-                Hej, {user?.name?.split(' ')[0] || 'Chauff\u00f6r'}
+                Hej, {user?.name?.split(' ')[0] || 'Chaufför'}
               </ThemedText>
               <Pressable
                 style={[styles.onlineToggle, { backgroundColor: isOnline ? '#E8F5E9' : '#FEF2F2', borderColor: isOnline ? '#16A34A' : '#DC2626' }]}
