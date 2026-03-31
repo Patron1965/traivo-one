@@ -502,7 +502,7 @@ export function MapScreen({ navigation }: any) {
       {!isOptimizing && activeOrders.length >= 2 ? (
         <Pressable
           testID="button-optimize-route"
-          style={[styles.optimizeButton, { top: headerHeight + 48 + (usingCachedData ? 36 : 0) }]}
+          style={[styles.optimizeButton, { top: headerHeight + 8 + (usingCachedData ? 36 : 0) }]}
           onPress={() => {
             const orderIds = activeOrders.map(o => String(o.id));
             submitOptimization({
@@ -519,7 +519,7 @@ export function MapScreen({ navigation }: any) {
         </Pressable>
       ) : null}
 
-      <View style={[styles.legend, { bottom: 8 }]} pointerEvents="box-none">
+      <View style={[styles.legend, { bottom: 40 }]} pointerEvents="box-none">
         {routeLoading ? (
           <View style={styles.legendRow}>
             <ActivityIndicator size="small" color={Colors.primary} />
