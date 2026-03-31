@@ -263,7 +263,7 @@ const ActionButtons = React.memo(function ActionButtons({
           disabled={etaSending}
           testID="button-send-eta"
         >
-          <View style={[styles.actionIconBox, { backgroundColor: '#E8F5E9' }]}>
+          <View style={[styles.actionIconBox, { backgroundColor: Colors.successLight }]}>
             {etaSending ? (
               <ActivityIndicator size="small" color={Colors.success} />
             ) : (

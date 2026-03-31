@@ -12,13 +12,13 @@ export const Colors = {
   accentLight: '#B0D9D2',
 
   success: '#4A9B9B',
-  successLight: '#E0F5F5',
+  successLight: '#B3E8E8',
   warning: '#E6A817',
-  warningLight: '#FEF3CD',
+  warningLight: '#FADE8B',
   danger: '#C0392B',
-  dangerLight: '#FDECEA',
+  dangerLight: '#F8C9C4',
   info: '#2A6496',
-  infoLight: '#D6E8F5',
+  infoLight: '#A8CDE8',
 
   background: '#E8F4F8',
   surface: '#FFFFFF',
