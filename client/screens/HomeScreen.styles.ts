@@ -29,17 +29,17 @@ export default StyleSheet.create({
   },
   content: {
     paddingHorizontal: Spacing.lg,
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
   greeting: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: Spacing.sm,
+    marginBottom: 0,
   },
   dateText: {
     textTransform: 'capitalize',
-    marginBottom: Spacing.xs,
+    marginBottom: 2,
   },
   greetingRow: {
     flexDirection: 'row',

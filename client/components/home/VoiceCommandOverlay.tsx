@@ -50,25 +50,6 @@ export function VoiceCommandOverlay({
 }: VoiceCommandOverlayProps) {
   return (
     <>
-      <Animated.View style={[
-        styles.voiceFab,
-        { bottom: tabBarHeight + 8 },
-        { transform: [{ scale: voiceRecording ? pulseAnim : 1 }] },
-      ]}>
-        <Pressable
-          style={[styles.voiceFabButton, voiceRecording ? styles.voiceFabButtonActive : null]}
-          onPress={handleVoiceCommand}
-          disabled={voiceProcessing}
-          testID="button-voice-command"
-        >
-          {voiceProcessing ? (
-            <ActivityIndicator size="small" color={Colors.textInverse} />
-          ) : (
-            <Feather name={voiceRecording ? 'square' : 'mic'} size={22} color={Colors.textInverse} />
-          )}
-        </Pressable>
-      </Animated.View>
-
       <Modal
         visible={voiceOverlayVisible}
         transparent
