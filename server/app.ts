@@ -342,13 +342,19 @@ app.get('/', (req, res) => {
   }
 });
 
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught exception:', err.message);
-  console.error(err.stack);
-  setTimeout(() => process.exit(1), 500);
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error('[EXPRESS-ERROR]', err.message || err);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
-process.on('unhandledRejection', (err) => {
-  console.error('Unhandled rejection:', err);
+
+process.on('uncaughtException', (err) => {
+  console.error('[CRASH-GUARD] Uncaught exception (server continues):', err.message);
+  console.error(err.stack);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[CRASH-GUARD] Unhandled rejection (server continues):', reason);
 });
 process.on('SIGTERM', () => {
   console.log('Received SIGTERM, shutting down gracefully');
