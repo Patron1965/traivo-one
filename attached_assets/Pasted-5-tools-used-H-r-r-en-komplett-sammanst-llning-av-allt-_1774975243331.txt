@@ -1,0 +1,116 @@
+5 tools used
+
+Här är en komplett sammanställning av allt innehåll per sida:
+
+TRAIVO ONE (Webb · Planerare & arbetsledare)
+Beskrivning: Kontrollcentret för hela fältoperationen. Schemaläggning, ruttoptimering, GPS-karta, fakturering och AI — i en vy.
+
+01 – Planering
+Drag-and-drop veckoplanerare – Fördela jobb till rätt tekniker visuellt.
+AI-autoschemaläggning – Kompetens, geografi, arbetstid, fordonskapacitet.
+Årsplanering – Mål per kund med AI-driven fördelning.
+Väderplanering – Schemat anpassas efter prognosen.
+02 – Ruttoptimering
+Automatisk optimering – Riktiga vägavstånd, inte fågelvägen.
+Klusterbaserad planering – Grupperar jobb geografiskt.
+Fyll veckan – Dagsklustring som fyller tomma luckor.
+Flera motorer – Geoapify, OR-Tools och fler.
+03 – Realtid
+Live GPS-karta – Förarpositioner uppdateras i realtid.
+Pop-out kartfönster – Separat skärm för kontrollrummet.
+Akutjobb – Närmaste tekniker på sekunder.
+Störningshantering – Automatisk omplanering vid sjukdom.
+04 – Kunder & Objekt
+Objektregister med karta – Alla serviceobjekt visualiserade.
+Rita serviceområden – Polygon/polyline direkt på kartan.
+Kundportal – Boka, chatta, se besökshistorik.
+Automatiskt SMS – 'Vi är på väg' — utan manuell insats.
+05 – AI & Analys
+AI-assistent – Fråga i naturligt språk om data & planering.
+Prediktivt underhåll – IoT-sensorer triggar schemalagda jobb.
+Avvikelsedetektering – Systemet flaggar anomalier.
+ROI-rapportering – Beräknat vs faktiskt med feedback-loop.
+06 – Ekonomi & Admin
+Fakturering – Generera med förhandsgranskning.
+Fortnox-export – Sömlös integration.
+White-label – Logga, färger, domän per kund.
+Rollbaserad åtkomst – Admin, planerare, tekniker, kund.
+TRAIVO GO (Mobil · Tekniker i fält)
+Beskrivning: Teknikerns arbetsverktyg. Jobb, navigation, protokoll, foton och signatur — fungerar även utan uppkoppling.
+
+01 – Jobbhantering
+Dagens uppdrag – Tydlig lista med adresser, kundinfo och instruktioner.
+Ett-tryck navigation – GPS-navigation till nästa stopp direkt.
+Restid per jobb – Avstånd och beräknad restid synligt.
+Akutjobb – Accept/avböj brådskande uppdrag i realtid.
+02 – Rapportering
+Digitala protokoll – Checklistor anpassade per jobbtyp.
+Fotodokumentation – Bilder bifogas jobbet direkt.
+Digital signatur – Kunden signerar på skärmen.
+Materiallogg – Registrera förbrukat material.
+03 – Tidsrapportering
+In-/utcheckning – Automatisk tidsstämpling.
+Arbetspass (Snöret) – Komplett tidslogg per dag.
+Löneexport – CSV-export för lönehantering.
+AI-kontrollmallar – AI föreslår steg per jobbtyp.
+04 – Offline & Kommunikation
+Offline-first – Sparar allt lokalt, synkar vid uppkoppling.
+Push-notiser – Nya jobb och ändringar direkt.
+Meddelanden – Kommunicera utan att ringa.
+Ruttfeedback – Betygsätt och förbättra planeringen.
+Extra highlight: Fungerar i skogen, i källaren och utan mobiltäckning. Allt sparas lokalt och synkas automatiskt.
+
+PRICING (Priser)
+Rubrik: Modulbaserade paket
+Beskrivning: Välj det som passar er storlek och behov. Alla planer inkluderar Traivo One och Go.
+
+Basic – "Kom igång"
+För mindre team som vill digitalisera.
+
+✅ Traivo One (basplanering)
+✅ Traivo Go (mobilapp)
+✅ Upp till 10 tekniker
+✅ GPS-spårning
+✅ Digitala protokoll
+✅ E-post-support
+❌ AI-schemaläggning
+❌ Ruttoptimering
+Standard – "Populärast"
+AI-optimering och integrationer.
+
+✅ Allt i Basic
+✅ AI-schemaläggning
+✅ Ruttoptimering
+✅ Fortnox-integration
+✅ Kundportal
+✅ Väderplanering
+✅ Upp till 50 tekniker
+✅ Prioriterad support
+Premium – "Enterprise"
+Stora organisationer, avancerade behov.
+
+✅ Allt i Standard
+✅ Obegränsat tekniker
+✅ Multi-tenant
+✅ White-label
+✅ IoT-integration
+✅ Prediktivt underhåll
+✅ AI-assistent
+✅ Dedikerad kundansvarig
+Priser anpassas efter antal användare och moduler.
+
+ABOUT (Om Traivo)
+Rubrik: Mänsklig erfarenhet förstärkt med AI
+Beskrivning: Traivo kombinerar branscherfarenhet med modern AI — för en plattform som fungerar i fält, på kontoret och däremellan.
+
+Vision
+Framtidens fältservice handlar inte om att ersätta erfarna tekniker med maskiner — utan om att ge dem verktygen att bli ännu bättre.
+
+Värderingar
+Erfarenhet från fältet – Vi har arbetat i fältservicebranschen. Vi förstår verkligheten.
+AI som förstärker – Vi ersätter inte människor. Vi förstärker dem med data och mönster.
+Byggt med kunderna – Utvecklat i samarbete med riktiga fältserviceföretag.
+Nordisk design – Byggt för skandinaviska villkor, regelverk och arbetskultur.
+Varför Norden?
+Extremt väder, långa avstånd, höga lönekostnader och strikta dokumentationskrav. Traivo är byggt från grunden för dessa utmaningar. Lokalt språk, lokala integrationer, lokal logik. Inte anpassat i efterhand.
+
