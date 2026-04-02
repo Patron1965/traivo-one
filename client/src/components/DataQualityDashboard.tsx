@@ -61,23 +61,6 @@ export function DataQualityDashboard() {
     enabled: !!selectedIssue,
   });
 
-  const hierarchyMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/import/repair/hierarchy");
-      return res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/import/data-quality"] });
-      toast({
-        title: "Hierarki-reparation klar",
-        description: data.message || `${data.linked} objekt länkade till sina föräldrar`,
-      });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Fel", description: err.message, variant: "destructive" });
-    },
-  });
-
   const hierarchyCsvMutation = useMutation({
     mutationFn: async (file: File) => {
       const formData = new FormData();

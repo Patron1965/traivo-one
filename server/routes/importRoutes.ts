@@ -2342,79 +2342,21 @@ app.get("/api/import/data-quality", asyncHandler(async (req, res) => {
 app.post("/api/import/repair/hierarchy", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
 
-    const allObjects = await db.select({
-      id: objects.id,
-      objectNumber: objects.objectNumber,
-      parentId: objects.parentId,
-      objectLevel: objects.objectLevel,
-    }).from(objects).where(eq(objects.tenantId, tenantId));
+    const orphanCount = await db.select({ count: sql<number>`count(*)` }).from(objects)
+      .where(and(eq(objects.tenantId, tenantId), isNull(objects.parentId), sql`${objects.objectLevel} > 1`));
 
-    const modusIdToDbId = new Map<string, string>();
-    for (const obj of allObjects) {
-      if (obj.objectNumber?.startsWith("MODUS-")) {
-        const modusId = obj.objectNumber.replace("MODUS-", "");
-        modusIdToDbId.set(modusId, obj.id);
-      }
-    }
+    const totalCount = await db.select({ count: sql<number>`count(*)` }).from(objects)
+      .where(eq(objects.tenantId, tenantId));
 
-    const { importBatches } = await import("@shared/schema");
-    const batches = await db.select().from(importBatches)
-      .where(eq(importBatches.tenantId, tenantId))
-      .orderBy(desc(importBatches.createdAt))
-      .limit(1);
+    const alreadyLinkedCount = await db.select({ count: sql<number>`count(*)` }).from(objects)
+      .where(and(eq(objects.tenantId, tenantId), isNotNull(objects.parentId)));
 
-    const batchMeta = batches[0]?.metadata as any;
-    if (!batchMeta) {
-      return res.json({ linked: 0, message: "Ingen importbatch hittades" });
-    }
-
-    const batchId = batches[0]?.batchId;
-    if (!batchId) {
-      return res.json({ linked: 0, message: "Ingen batch-ID hittades" });
-    }
-
-    const batchObjects = await db.select({
-      id: objects.id,
-      objectNumber: objects.objectNumber,
-      parentId: objects.parentId,
-    }).from(objects).where(and(
-      eq(objects.tenantId, tenantId),
-      eq(objects.importBatchId, batchId),
-    ));
-
-    let linked = 0;
-    let alreadyLinked = 0;
-    let parentNotFound = 0;
-
-    for (const obj of batchObjects) {
-      if (obj.parentId) { alreadyLinked++; continue; }
-      if (!obj.objectNumber?.startsWith("MODUS-")) continue;
-    }
-
-    const csvParentMap = new Map<string, string>();
-
-    const importBatchRow = batches[0];
-    const csvData = (importBatchRow as any)?.csvParentMap;
-
-    if (!csvData) {
-      const objectsWithoutParent = allObjects.filter(o => !o.parentId && o.objectLevel && o.objectLevel > 1);
-
-      for (const obj of objectsWithoutParent) {
-        const candidates = allObjects.filter(c =>
-          c.objectLevel !== null && obj.objectLevel !== null &&
-          c.objectLevel < obj.objectLevel && c.id !== obj.id
-        );
-      }
-
-      return res.json({
-        linked: 0,
-        alreadyLinked,
-        parentNotFound: objectsWithoutParent.length,
-        message: "Parent-mappning saknas i importbatchen. Ladda upp objektfilen igen via Modus 2.0-import för att bygga hierarkin, eller använd det separata hierarki-reparationsverktyget nedan.",
-      });
-    }
-
-    res.json({ linked, alreadyLinked, parentNotFound });
+    res.json({
+      orphans: Number(orphanCount[0].count),
+      alreadyLinked: Number(alreadyLinkedCount[0].count),
+      total: Number(totalCount[0].count),
+      message: "Ladda upp objektfilen (CSV) med Parent-kolumnen för att bygga hierarkin.",
+    });
 }));
 
 app.post("/api/import/repair/hierarchy-csv", requireAdmin, upload.single("file"), asyncHandler(async (req, res) => {
@@ -2433,29 +2375,47 @@ app.post("/api/import/repair/hierarchy-csv", requireAdmin, upload.single("file")
     const allObjects = await db.select({
       id: objects.id,
       objectNumber: objects.objectNumber,
+      parentId: objects.parentId,
     }).from(objects).where(eq(objects.tenantId, tenantId));
 
     const modusIdToDbId = new Map<string, string>();
     for (const obj of allObjects) {
       if (obj.objectNumber?.startsWith("MODUS-")) {
-        modusIdToDbId.set(obj.objectNumber.replace("MODUS-", ""), obj.id);
+        const rawId = obj.objectNumber.replace("MODUS-", "");
+        modusIdToDbId.set(rawId, obj.id);
+        modusIdToDbId.set("MODUS-" + rawId, obj.id);
       }
+    }
+
+    const firstRow = (result.data as Record<string, string>[])[0];
+    if (!firstRow || !("Id" in firstRow) || !("Parent" in firstRow)) {
+      return res.status(400).json({
+        error: "CSV måste ha kolumnerna 'Id' och 'Parent'",
+        columns: firstRow ? Object.keys(firstRow) : [],
+      });
     }
 
     let linked = 0;
     let parentNotFound = 0;
     let noParentColumn = 0;
+    let alreadyLinked = 0;
+    const rows = result.data as Record<string, string>[];
 
-    for (const row of result.data as Record<string, string>[]) {
-      const modusId = (row["Id"] || "").replace(/\s/g, "");
-      const parentModusId = (row["Parent"] || "").replace(/\s/g, "");
+    for (const row of rows) {
+      const rawId = (row["Id"] || "").replace(/\s/g, "");
+      const rawParent = (row["Parent"] || "").replace(/\s/g, "");
 
-      if (!modusId || !parentModusId) { noParentColumn++; continue; }
+      if (!rawId || !rawParent) { noParentColumn++; continue; }
 
-      const objectId = modusIdToDbId.get(modusId);
-      const parentId = modusIdToDbId.get(parentModusId);
+      const objectId = modusIdToDbId.get(rawId);
+      const parentId = modusIdToDbId.get(rawParent);
 
-      if (objectId && parentId) {
+      if (!objectId) { parentNotFound++; continue; }
+
+      const existingObj = allObjects.find(o => o.id === objectId);
+      if (existingObj?.parentId) { alreadyLinked++; continue; }
+
+      if (parentId) {
         await db.update(objects).set({ parentId }).where(eq(objects.id, objectId));
         linked++;
       } else {
@@ -2463,7 +2423,7 @@ app.post("/api/import/repair/hierarchy-csv", requireAdmin, upload.single("file")
       }
     }
 
-    res.json({ linked, parentNotFound, noParentColumn, total: (result.data as unknown[]).length });
+    res.json({ linked, parentNotFound, noParentColumn, alreadyLinked, total: rows.length });
 }));
 
 app.post("/api/import/repair/geocode", requireAdmin, asyncHandler(async (req, res) => {
