@@ -62,21 +62,16 @@ export function NextOrderCard({ nextOrder, nextOrderDistance, navigation, orders
             <Feather name="navigation" size={14} color={Colors.primary} />
             <ThemedText variant="caption" color={Colors.primary}>Navigera</ThemedText>
           </Pressable>
-          {nextOrderDistance?.durationMin ? (
-            <View style={styles.nextOrderEta}>
-              <Feather name="clock" size={12} color={Colors.textMuted} />
-              <ThemedText variant="caption" color={Colors.textMuted}>
-                ca {nextOrderDistance.durationMin} min ({nextOrderDistance.distanceKm} km)
-              </ThemedText>
-            </View>
-          ) : nextOrder.estimatedMinutes ? (
-            <View style={styles.nextOrderEta}>
-              <Feather name="clock" size={12} color={Colors.textMuted} />
-              <ThemedText variant="caption" color={Colors.textMuted}>
-                ca {nextOrder.estimatedMinutes} min
-              </ThemedText>
-            </View>
-          ) : null}
+          <View style={styles.nextOrderEta}>
+            <Feather name="clock" size={12} color={Colors.textMuted} />
+            <ThemedText variant="caption" color={Colors.textMuted}>
+              {nextOrderDistance?.durationMin && nextOrderDistance.durationMin > 0
+                ? `ca ${nextOrderDistance.durationMin} min (${nextOrderDistance.distanceKm} km)`
+                : nextOrder.estimatedMinutes && nextOrder.estimatedMinutes > 0
+                  ? `ca ${nextOrder.estimatedMinutes} min`
+                  : 'Tid: Ej angiven'}
+            </ThemedText>
+          </View>
         </View>
       ) : null}
     </View>

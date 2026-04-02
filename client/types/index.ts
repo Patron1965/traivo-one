@@ -199,6 +199,8 @@ export interface Order {
   contacts: Contact[];
   estimatedDuration: number;
   estimatedMinutes?: number;
+  cachedValue?: number;
+  cachedCost?: number;
   actualStartTime?: string;
   actualEndTime?: string;
   completedAt?: string;

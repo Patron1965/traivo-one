@@ -581,17 +581,27 @@ export function OrdersScreen({ navigation }: any) {
     setRefreshing(false);
   }, [refetch]);
 
+  const FINISHED_STATUSES = ['utford', 'completed', 'avslutad', 'fakturerad'];
+
   const filteredOrders = useMemo(() => {
     const filtered = orders?.filter(o => {
       if (filter === 'all') return true;
       return o.status === filter;
     }) || [];
-    if (escalatedOrderId == null) return filtered;
-    return [...filtered].sort((a, b) => {
-      const aEsc = String(a.id) === String(escalatedOrderId) ? 1 : 0;
-      const bEsc = String(b.id) === String(escalatedOrderId) ? 1 : 0;
-      return bEsc - aEsc;
+    const sorted = [...filtered].sort((a, b) => {
+      const aFinished = FINISHED_STATUSES.includes(a.status);
+      const bFinished = FINISHED_STATUSES.includes(b.status);
+      if (aFinished && bFinished && a.completedAt && b.completedAt) {
+        return new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime();
+      }
+      if (escalatedOrderId != null) {
+        const aEsc = String(a.id) === String(escalatedOrderId) ? 1 : 0;
+        const bEsc = String(b.id) === String(escalatedOrderId) ? 1 : 0;
+        if (aEsc !== bEsc) return bEsc - aEsc;
+      }
+      return 0;
     });
+    return sorted;
   }, [orders, filter, escalatedOrderId]);
 
   const handleAdvance = useCallback((orderId: number | string, nextStatus: OrderStatus) => {

@@ -15,6 +15,7 @@ import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
 import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
 import { openMapNavigation } from '../lib/navigation-links';
+import { formatPrice } from '../lib/format';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import type { Order, OrderStatus, TimeRestriction, SubStep, OrderNote, ImpossibleReason } from '../types';
 import { TIME_RESTRICTION_LABELS, ORDER_STATUS_SEQUENCE, IMPOSSIBLE_REASONS } from '../types';
@@ -788,6 +789,12 @@ export function OrderDetailScreen({ route, navigation }: any) {
                 </ThemedText>
               </View>
             ))}
+            {order.cachedValue != null && order.cachedValue > 0 ? (
+              <View style={styles.orderValueRow}>
+                <ThemedText variant="label" color={Colors.textSecondary}>Ordervärde</ThemedText>
+                <ThemedText variant="label" color={Colors.primary}>{formatPrice(order.cachedValue)}</ThemedText>
+              </View>
+            ) : null}
           </Card>
         ) : null}
 
@@ -1353,6 +1360,15 @@ const styles = StyleSheet.create({
   },
   articleName: {
     flex: 1,
+  },
+  orderValueRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    paddingTop: Spacing.sm,
+    marginTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.divider,
   },
   contactRow: {
     flexDirection: 'row',
