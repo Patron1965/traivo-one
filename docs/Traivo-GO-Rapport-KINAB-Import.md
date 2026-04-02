@@ -1,6 +1,6 @@
 # Traivo GO — Teknisk rapport efter KINAB-dataimport
 
-**Datum:** 2026-04-02
+**Datum:** 2026-04-02 (uppdaterad)
 **Gäller:** Traivo GO mobilapp (Driver Core)
 **Kontext:** KINAB:s produktionsdata har importerats från Modus 2.0
 
@@ -22,71 +22,106 @@ Historiska ordrar (35 320 st) har markerats som **utförda** (`utford`). **311 o
 
 ---
 
-## 2. Viktiga förändringar som påverkar Traivo GO
+## 2. API-ändringar gjorda efter GO-teamets synkrapport
 
-### 2.1 Orderstatus — "utford" är ny standard för historik
+### 2.1 Nya fält i API-svar — `articles`-array med `resolvedPrice`
 
-Alla importerade historiska arbetsordrar har fått status `utford` och ett `completedAt`-datum (satt till deras ursprungliga schemalagt datum).
+GO-teamet efterfrågade `resolvedPrice` per artikelrad. Traivo One har nu uppdaterat följande endpoints:
 
-**Påverkan för GO:**
-- `GET /api/mobile/my-orders` filtrerar redan på `resourceId`, så fältarbetaren ser bara sina egna ordrar — **ingen åtgärd krävs**.
-- Men om appen listar ordrar och grupperar per status bör den hantera `utford` korrekt och visa dessa som avslutade/historik.
-- Statistik-endpointen `GET /api/mobile/statistics/summary` räknar `orderStatus === "utford"` — detta fungerar korrekt med den nya datan.
+**`GET /api/mobile/orders/:id`** — Nytt fält `articles`:
+```json
+{
+  "articles": [
+    {
+      "id": "uuid",
+      "articleId": "uuid",
+      "articleNumber": "KT-001",
+      "articleName": "Kärltvätt Standard",
+      "quantity": 13,
+      "resolvedPrice": 15656,
+      "resolvedCost": 0
+    }
+  ],
+  "cachedValue": 99000,
+  "cachedCost": 15000,
+  "cachedProductionMinutes": 0,
+  "completedAt": "2025-06-15T00:00:00.000Z"
+}
+```
 
-### 2.2 Priser lagras i öre (ej kronor)
+**`enrichOrderForMobile` (används av sync och andra endpoints)**:
+- Samma `articles`-array med `resolvedPrice` och `resolvedCost`
+- Explicit `cachedValue`, `cachedCost`, `cachedProductionMinutes` och `completedAt`
 
-Alla prisrelaterade fält i databasen lagras i **öre** (hundradels kronor):
+### 2.2 Bekräftade fält i `GET /api/mobile/my-orders`
 
-| Fält | Enhet | Exempel |
-|------|-------|---------|
-| `cachedValue` | öre | 15656 = 156,56 kr |
-| `cachedCost` | öre | 10500 = 105,00 kr |
-| `resolvedPrice` (work_order_lines) | öre | 85000 = 850,00 kr |
-| `listPrice` (articles) | öre | 15656 = 156,56 kr |
-
-**Påverkan för GO:**
-- Om mobilappen visar priser eller värden måste den **dividera med 100** innan visning.
-- Webbplattformens `formatCurrency()` har uppdaterats för detta — GO behöver göra samma sak.
-- Alla beräkningar (summor, moms, etc.) bör göras i öre-format och konverteras till kronor först vid presentation.
-
-### 2.3 `completedAt` finns nu på historiska ordrar
-
-Fältet `completedAt` (timestamp) är satt på alla utförda ordrar:
-- Ordrar med schemalagt datum → `completedAt = scheduledDate`
-- Ordrar utan datum → `completedAt = importtidpunkt`
-
-**Påverkan för GO:**
-- Om appen visar "slutförd den ..." kan den använda `completedAt` direkt.
-- Historiklistor kan sorteras på `completedAt` för kronologisk ordning.
-
-### 2.4 `cachedProductionMinutes` = 0 för all importerad data
-
-Modus-exporten innehöll ingen tidsdata. Alla importerade ordrar har `cachedProductionMinutes: 0`.
-
-**Påverkan för GO:**
-- Visa inte "Beräknad tid: 0 min" — kontrollera om värdet > 0 innan visning.
-- Framtida ordrar skapade i Traivo kommer ha korrekta tidsvärden.
+Endpoint returnerar `...order` (spread) vilket inkluderar:
+- `cachedValue` (öre) ✅
+- `cachedCost` (öre) ✅
+- `cachedProductionMinutes` ✅
+- `completedAt` ✅
+- `orderStatus` ✅
 
 ---
 
-## 3. API-endpoints — bekräftat kompatibla
+## 3. Synkverifiering mot GO-rapporten
+
+### 3.1 Prisformatering (öre → kronor) — BEKRÄFTAT
+
+| Fält | Enhet | Exempel | Finns i API |
+|------|-------|---------|-------------|
+| `cachedValue` | öre | 15656 = 156,56 kr | ✅ my-orders, orders/:id |
+| `cachedCost` | öre | 10500 = 105,00 kr | ✅ my-orders, orders/:id |
+| `resolvedPrice` | öre | 85000 = 850,00 kr | ✅ orders/:id → articles[] |
+| `resolvedCost` | öre | 0 | ✅ orders/:id → articles[] |
+
+GO:s `formatPrice()` som dividerar med 100 är korrekt.
+
+### 3.2 Tidsvisning — cachedProductionMinutes: 0 — BEKRÄFTAT
+
+- Alla importerade KINAB-ordrar har `cachedProductionMinutes: 0`
+- GO:s hantering (visa "Ej angiven" istället för "0 min") är korrekt
+- Fältet returneras i API-svaren ✅
+
+### 3.3 Status "utford" — BEKRÄFTAT
+
+GO:s filter "Klar" inkluderar `utford`, `completed`, `avslutad`, `fakturerad` — detta stämmer med Traivo One:
+
+| GO-status | Traivo One-status | Kommentar |
+|-----------|-------------------|-----------|
+| `completed` | `utford` | GO skickar "completed", backend mappar till "utford" |
+| `utford` | `utford` | Direktmappning fungerar |
+| `fakturerad` | `fakturerad` | Steg efter utförd |
+| `avslutad` | - | Finns ej i Traivo One, men är ofarlig som klient-filter |
+
+De 35 320 historiska ordrarna med `utford` + `completedAt` syns korrekt i "Klar"-filtret ✅
+
+### 3.4 Artikeldata i API-svar — ÅTGÄRDAT
+
+**Tidigare:** `resolvedPrice` returnerades **inte** i mobil-API:erna.
+**Nu:** Nytt `articles`-fält med komplett data (se 2.1 ovan).
+
+GO-teamet kan nu använda `articles[]` för att visa artikelinformation med pris.
+
+---
+
+## 4. Fullständig API-kompatibilitetsmatris
 
 | Endpoint | Status | Kommentar |
 |----------|--------|-----------|
-| `GET /api/mobile/my-orders` | ✅ OK | Filtrerar på `resourceId` + datum, opåverkad |
-| `POST /api/mobile/orders/:id/status` | ✅ OK | Hanterar `utford`, `completed`, `avbruten`, `ej_utford` |
-| `POST /api/mobile/sync` | ✅ OK | Batch-sync fungerar, statusändringar mappas korrekt |
-| `GET /api/mobile/statistics/summary` | ✅ OK | Räknar `utford`-ordrar korrekt |
-| `GET /api/mobile/orders/:id/dependencies` | ✅ OK | Läser `orderStatus` från beroende ordrar |
+| `GET /api/mobile/my-orders` | ✅ OK | Inkluderar cachedValue, cachedCost, cachedProductionMinutes |
+| `GET /api/mobile/orders/:id` | ✅ UPPDATERAD | Nytt `articles[]`-fält med resolvedPrice/resolvedCost |
+| `PATCH /api/mobile/orders/:id/status` | ✅ OK | Hanterar utford, completed, avbruten, ej_utford |
+| `POST /api/mobile/sync` | ✅ OK | enrichOrderForMobile inkluderar nu articles + cachedValue |
+| `GET /api/mobile/statistics/summary` | ✅ OK | Räknar utford-ordrar korrekt |
+| `GET /api/mobile/orders/:id/dependencies` | ✅ OK | Läser orderStatus från beroende ordrar |
 | `GET /api/mobile/preferences` | ✅ OK | Opåverkad |
 | `GET /api/mobile/app-config` | ✅ OK | Opåverkad |
 | `GET /api/mobile/version-check` | ✅ OK | Opåverkad |
 
 ---
 
-## 4. Statusövergångar — referens
-
-Traivo GO stödjer redan dual-format (svenska + engelska):
+## 5. Statusövergångar — referens
 
 ```
 skapad → planerad_pre → planerad_resurs → planerad_las → utford → fakturerad
@@ -100,21 +135,21 @@ GO-mappning:
 
 ---
 
-## 5. Rekommenderade åtgärder för GO-teamet
+## 6. Kvarvarande rekommendationer
 
 ### Hög prioritet
-1. **Verifiera prisvisning** — Säkerställ att alla prisvisningar i appen dividerar med 100 (öre → kronor).
-2. **Hantera `cachedProductionMinutes: 0`** — Visa "Ej angiven" istället för "0 min" för importerade ordrar.
+1. **Verifiera prisvisning** — GO:s `formatPrice()` dividerar med 100, bekräftat korrekt.
+2. **Testa `articles`-arrayen** — Ny data i `/api/mobile/orders/:id`, verifiera att OrderDetail renderar korrekt.
 
 ### Normal prioritet
-3. **Historikvy** — Med 35 320 utförda ordrar finns det nu riktig historik. Överväg paginering om `GET /api/mobile/my-orders` returnerar alla ordrar (utan datumfilter).
-4. **Offlinesynk-volym** — Med 45 349 objekt och 35 631 ordrar i systemet, säkerställ att fullsynk (IndexedDB) hanterar denna datamängd utan prestandaproblem.
+3. **Historikvy-paginering** — Med 35 320 utförda ordrar, överväg paginering i orderlistan vid "Klar"-filter.
+4. **Offlinesynk-volym** — Med 45 349 objekt, säkerställ att IndexedDB klarar datamängden.
 
 ### Låg prioritet
-5. **Metadata-visning** — 82 024 metadata-värden är tillgängliga per objekt (exekveringskoder, artikelkoder, m.m.). GO kan visa dessa som extra information vid behov.
+5. **Metadata-visning** — 82 024 metadata-värden tillgängliga. GO kan visa dessa som extra info.
 
 ---
 
-## 6. Kontaktinformation
+## 7. Kontaktinformation
 
 Frågor om API-ändringar eller dataformat — kontakta Traivo-plattformsteamet.

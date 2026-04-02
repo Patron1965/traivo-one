@@ -175,6 +175,22 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
       completed: completedSubSteps.includes(sa.id),
     }));
 
+    const orderLines = await storage.getWorkOrderLines(orderId).catch(() => []);
+    const articles = await Promise.all(
+      orderLines.map(async (line: Record<string, unknown>) => {
+        const article = await storage.getArticle(line.articleId as string).catch(() => null);
+        return {
+          id: line.id,
+          articleId: line.articleId,
+          articleNumber: article?.articleNumber || "",
+          articleName: article?.name || "",
+          quantity: line.quantity,
+          resolvedPrice: line.resolvedPrice || 0,
+          resolvedCost: line.resolvedCost || 0,
+        };
+      })
+    );
+
     res.json({
       ...order,
       objectName: object?.name,
@@ -201,6 +217,7 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
       plannedNotes: order.plannedNotes || null,
       executionStatus: order.executionStatus || "not_started",
       subSteps,
+      articles,
       dependencies: depDetails,
       inspections: orderMetadata.inspections || [],
       executionCodes,

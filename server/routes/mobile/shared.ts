@@ -64,6 +64,8 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
         articleNumber: article?.articleNumber || "",
         articleName: article?.name || "",
         quantity: line.quantity,
+        resolvedPrice: line.resolvedPrice || 0,
+        resolvedCost: line.resolvedCost || 0,
         completed: false,
       };
     })
@@ -144,6 +146,11 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
       label: l.articleName || `Artikel ${l.articleNumber}`,
       completed: completedSubSteps.includes(l.id),
     })),
+    articles: enrichedLines,
+    cachedValue: order.cachedValue || 0,
+    cachedCost: order.cachedCost || 0,
+    cachedProductionMinutes: order.cachedProductionMinutes || 0,
+    completedAt: order.completedAt,
     orderNotes: noteParts,
     objectId: order.objectId,
     customerId: order.customerId,

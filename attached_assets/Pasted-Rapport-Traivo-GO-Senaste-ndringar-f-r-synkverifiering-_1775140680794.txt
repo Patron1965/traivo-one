@@ -1,0 +1,65 @@
+Rapport: Traivo GO — Senaste ändringar för synkverifiering med Traivo One
+
+Datum: 2026-04-02
+
+1. Prisformatering (öre → kronor)
+Vad: Ny hjälpfunktion formatPrice() som konverterar alla prisvärden från öre-format (som lagras i databasen) till kronor vid visning.
+
+Berörda fält:
+
+cachedValue — ordervärde, visas nu i OrderDetail under artikelsektionen
+cachedCost — orderkostnad, visas under artikelsektionen
+resolvedPrice — artikelpris per rad, visas bredvid varje artikel
+Verifiering mot Traivo One:
+
+Kontrollera att API-svaren från /api/mobile/my-orders och /api/mobile/orders/:id returnerar cachedValue, cachedCost och resolvedPrice i öre-format
+Verifiera att beloppen stämmer: t.ex. 15656 i databasen ska visas som 156,56 kr i appen
+2. Tidsvisning — hantering av 0 minuter
+Vad: Alla skärmar som visar tidsuppskattningar hanterar nu 0 och undefined korrekt.
+
+Berörda skärmar:
+
+Orderdetaljer — visar "Ej angiven" istället för "0 min"
+Orderlistan — samma fix i varje orderkort
+Kartan — samma fix i popup-rutor
+Nästa uppdrag-kortet — visar "Ej angiven" som fallback
+Dagens framsteg — visar "–" istället för "0"
+Verifiering mot Traivo One:
+
+Kontrollera att importerade KINAB-ordrar med cachedProductionMinutes: 0 inte visar "0 min" utan "Ej angiven"
+Framtida ordrar skapade i Traivo med korrekt tid ska fortfarande visa t.ex. "45 min"
+3. Status "utford" — komplett hantering
+Vad: Filtret "Klar" i orderlistan inkluderar nu alla avslutade statusar, inte bara completed.
+
+Inkluderade statusar i "Klar"-filtret:
+
+utford
+completed
+avslutad
+fakturerad
+Sortering: Avslutade ordrar sorteras nu på completedAt (nyast först).
+
+Verifiering mot Traivo One:
+
+Kontrollera att de 35 320 historiska ordrar med status utford syns under "Klar"-filtret i orderlistan
+Verifiera att completedAt-fältet finns på dessa ordrar och att sorteringen fungerar kronologiskt
+4. Typändringar i datamodellen
+Nya fält tillagda i Order-typen:
+
+cachedValue?: number (öre)
+cachedCost?: number (öre)
+Nytt fält i Article-typen:
+
+resolvedPrice?: number (öre)
+Verifiering: Dessa fält måste returneras i API-svaren från Traivo One-backenden för att visas i appen.
+
+5. Övriga UI-ändringar (ej API-beroende)
+Röstkommando-knappen (blå FAB) borttagen från tab-baren
+Hemskärmens mellanrum reducerade (tätare layout)
+Aviseringsskärmen har fått starkare kontraster och mer svärta
+Kontaktpunkt: Alla API-endpoints som bekräftats kompatibla i den tekniska rapporten (GET /api/mobile/my-orders, POST /api/mobile/orders/:id/status, etc.) är oförändrade. Det enda nya kravet är att cachedValue, cachedCost och resolvedPrice inkluderas i API-svaren om de inte redan gör det.
+
+
+Scroll to latest
+
+Make, test, iterate…
