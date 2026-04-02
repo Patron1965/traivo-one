@@ -725,6 +725,19 @@ export default function ImportPage() {
     }));
   }, [skippedSteps, completedSteps, activeModusStep, modusResults]);
 
+  useEffect(() => {
+    let changed = false;
+    const next = new Set(completedSteps);
+    if (objects.length > 0 && !next.has(2)) { next.add(2); changed = true; }
+    if (workOrders.length > 0 && !next.has(3)) { next.add(3); changed = true; }
+    if (changed) {
+      setCompletedSteps(next);
+      if (objects.length > 0 && !completedSteps.has(2) && activeModusStep === 2) {
+        setActiveModusStep(3);
+      }
+    }
+  }, [objects.length, workOrders.length]);
+
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
