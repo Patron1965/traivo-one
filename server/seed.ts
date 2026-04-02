@@ -9,8 +9,7 @@ export async function seedDatabase() {
 
   const existingTenant = await db.select().from(tenants).where(sql`id = ${DEFAULT_TENANT_ID}`);
   if (existingTenant.length > 0) {
-    console.log("Database already seeded, refreshing demo work order dates...");
-    await refreshDemoWorkOrderDates();
+    console.log("Database already seeded, skipping demo data creation.");
     await seedSystemMetadataLabels();
     return;
   }
