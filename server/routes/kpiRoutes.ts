@@ -1997,7 +1997,7 @@ Svara ENBART med valid JSON, ingen annan text.`;
     );
 
     const { trackOpenAIResponse } = await import("../api-usage-tracker");
-    trackOpenAIResponse(completion, "sales-intelligence");
+    trackOpenAIResponse(completion, tenantId, "sales-intelligence");
 
     const aiResponseText = completion.choices[0]?.message?.content || "{}";
 
