@@ -28,6 +28,7 @@ import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Customer, Resource, ServiceObject } from "@shared/schema";
 import { ImportPreviewPanel, ResourcePreviewPanel, type NameOverrides } from "@/components/ImportPreviewPanel";
+import { DataQualityDashboard } from "@/components/DataQualityDashboard";
 
 type ImportType = "customers" | "resources" | "objects";
 type ModusImportType = "objects" | "tasks" | "events" | "invoice-lines";
@@ -633,7 +634,7 @@ export default function ImportPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [activeTab, setActiveTab] = useState<"modus" | "manual" | "mapped" | "history">("modus");
+  const [activeTab, setActiveTab] = useState<"modus" | "manual" | "mapped" | "history" | "quality">("modus");
   const [showObjectColumns, setShowObjectColumns] = useState(false);
   const [showTaskColumns, setShowTaskColumns] = useState(false);
   const [showEventColumns, setShowEventColumns] = useState(false);
@@ -1341,8 +1342,8 @@ export default function ImportPage() {
         <p className="text-muted-foreground">Importera kunddata, objekt och arbetsordrar från Modus 2.0 eller CSV-filer</p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "modus" | "manual" | "mapped" | "history")}>
-        <TabsList className="grid w-full grid-cols-4">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "modus" | "manual" | "mapped" | "history" | "quality")}>
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="modus" className="flex items-center gap-2" data-testid="tab-modus-import">
             <FileSpreadsheet className="h-4 w-4" />
             Modus 2.0
@@ -1358,6 +1359,10 @@ export default function ImportPage() {
           <TabsTrigger value="history" className="flex items-center gap-2" data-testid="tab-import-history">
             <History className="h-4 w-4" />
             Historik
+          </TabsTrigger>
+          <TabsTrigger value="quality" className="flex items-center gap-2" data-testid="tab-data-quality">
+            <BarChart3 className="h-4 w-4" />
+            Datakvalitet
           </TabsTrigger>
         </TabsList>
 
@@ -2951,6 +2956,10 @@ export default function ImportPage() {
 
         <TabsContent value="history" className="space-y-6">
           <ImportHistorySection />
+        </TabsContent>
+
+        <TabsContent value="quality" className="space-y-6">
+          <DataQualityDashboard />
         </TabsContent>
       </Tabs>
 

@@ -2301,4 +2301,264 @@ app.get("/api/import/history", asyncHandler(async (req, res) => {
     res.json(batches);
 }));
 
+app.get("/api/import/data-quality", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+
+    const [noCoords] = await db.select({ count: sql<number>`count(*)` }).from(objects)
+      .where(and(eq(objects.tenantId, tenantId), sql`(${objects.latitude} IS NULL OR ${objects.longitude} IS NULL)`));
+    const [noAddress] = await db.select({ count: sql<number>`count(*)` }).from(objects)
+      .where(and(eq(objects.tenantId, tenantId), sql`(${objects.address} IS NULL OR ${objects.address} = '')`));
+    const [noParent] = await db.select({ count: sql<number>`count(*)` }).from(objects)
+      .where(and(eq(objects.tenantId, tenantId), isNull(objects.parentId), sql`${objects.objectLevel} > 1`));
+    const [totalObjects] = await db.select({ count: sql<number>`count(*)` }).from(objects)
+      .where(eq(objects.tenantId, tenantId));
+    const [custNoAddr] = await db.select({ count: sql<number>`count(*)` }).from(customers)
+      .where(and(eq(customers.tenantId, tenantId), sql`(${customers.address} IS NULL OR ${customers.address} = '')`));
+    const [totalCustomers] = await db.select({ count: sql<number>`count(*)` }).from(customers)
+      .where(eq(customers.tenantId, tenantId));
+    const [woNoResource] = await db.select({ count: sql<number>`count(*)` }).from(workOrders)
+      .where(and(eq(workOrders.tenantId, tenantId), isNull(workOrders.resourceId)));
+    const [totalWo] = await db.select({ count: sql<number>`count(*)` }).from(workOrders)
+      .where(eq(workOrders.tenantId, tenantId));
+
+    res.json({
+      objects: {
+        total: Number(totalObjects.count),
+        missingCoordinates: Number(noCoords.count),
+        missingAddress: Number(noAddress.count),
+        missingParent: Number(noParent.count),
+      },
+      customers: {
+        total: Number(totalCustomers.count),
+        missingAddress: Number(custNoAddr.count),
+      },
+      workOrders: {
+        total: Number(totalWo.count),
+        missingResource: Number(woNoResource.count),
+      },
+    });
+}));
+
+app.post("/api/import/repair/hierarchy", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+
+    const allObjects = await db.select({
+      id: objects.id,
+      objectNumber: objects.objectNumber,
+      parentId: objects.parentId,
+      objectLevel: objects.objectLevel,
+    }).from(objects).where(eq(objects.tenantId, tenantId));
+
+    const modusIdToDbId = new Map<string, string>();
+    for (const obj of allObjects) {
+      if (obj.objectNumber?.startsWith("MODUS-")) {
+        const modusId = obj.objectNumber.replace("MODUS-", "");
+        modusIdToDbId.set(modusId, obj.id);
+      }
+    }
+
+    const { importBatches } = await import("@shared/schema");
+    const batches = await db.select().from(importBatches)
+      .where(eq(importBatches.tenantId, tenantId))
+      .orderBy(desc(importBatches.createdAt))
+      .limit(1);
+
+    const batchMeta = batches[0]?.metadata as any;
+    if (!batchMeta) {
+      return res.json({ linked: 0, message: "Ingen importbatch hittades" });
+    }
+
+    const batchId = batches[0]?.batchId;
+    if (!batchId) {
+      return res.json({ linked: 0, message: "Ingen batch-ID hittades" });
+    }
+
+    const batchObjects = await db.select({
+      id: objects.id,
+      objectNumber: objects.objectNumber,
+      parentId: objects.parentId,
+    }).from(objects).where(and(
+      eq(objects.tenantId, tenantId),
+      eq(objects.importBatchId, batchId),
+    ));
+
+    let linked = 0;
+    let alreadyLinked = 0;
+    let parentNotFound = 0;
+
+    for (const obj of batchObjects) {
+      if (obj.parentId) { alreadyLinked++; continue; }
+      if (!obj.objectNumber?.startsWith("MODUS-")) continue;
+    }
+
+    const csvParentMap = new Map<string, string>();
+
+    const importBatchRow = batches[0];
+    const csvData = (importBatchRow as any)?.csvParentMap;
+
+    if (!csvData) {
+      const objectsWithoutParent = allObjects.filter(o => !o.parentId && o.objectLevel && o.objectLevel > 1);
+
+      for (const obj of objectsWithoutParent) {
+        const candidates = allObjects.filter(c =>
+          c.objectLevel !== null && obj.objectLevel !== null &&
+          c.objectLevel < obj.objectLevel && c.id !== obj.id
+        );
+      }
+
+      return res.json({
+        linked: 0,
+        alreadyLinked,
+        parentNotFound: objectsWithoutParent.length,
+        message: "Parent-mappning saknas i importbatchen. Ladda upp objektfilen igen via Modus 2.0-import för att bygga hierarkin, eller använd det separata hierarki-reparationsverktyget nedan.",
+      });
+    }
+
+    res.json({ linked, alreadyLinked, parentNotFound });
+}));
+
+app.post("/api/import/repair/hierarchy-csv", requireAdmin, upload.single("file"), asyncHandler(async (req, res) => {
+    if (!req.file) {
+      throw new ValidationError("Ingen fil uppladdad");
+    }
+
+    const tenantId = getTenantIdWithFallback(req);
+    const csvText = req.file.buffer.toString("utf-8");
+    const result = Papa.parse(csvText, { header: true, skipEmptyLines: true, delimiter: ";" });
+
+    if (result.errors.length > 0) {
+      return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+    }
+
+    const allObjects = await db.select({
+      id: objects.id,
+      objectNumber: objects.objectNumber,
+    }).from(objects).where(eq(objects.tenantId, tenantId));
+
+    const modusIdToDbId = new Map<string, string>();
+    for (const obj of allObjects) {
+      if (obj.objectNumber?.startsWith("MODUS-")) {
+        modusIdToDbId.set(obj.objectNumber.replace("MODUS-", ""), obj.id);
+      }
+    }
+
+    let linked = 0;
+    let parentNotFound = 0;
+    let noParentColumn = 0;
+
+    for (const row of result.data as Record<string, string>[]) {
+      const modusId = (row["Id"] || "").replace(/\s/g, "");
+      const parentModusId = (row["Parent"] || "").replace(/\s/g, "");
+
+      if (!modusId || !parentModusId) { noParentColumn++; continue; }
+
+      const objectId = modusIdToDbId.get(modusId);
+      const parentId = modusIdToDbId.get(parentModusId);
+
+      if (objectId && parentId) {
+        await db.update(objects).set({ parentId }).where(eq(objects.id, objectId));
+        linked++;
+      } else {
+        parentNotFound++;
+      }
+    }
+
+    res.json({ linked, parentNotFound, noParentColumn, total: (result.data as unknown[]).length });
+}));
+
+app.post("/api/import/repair/geocode", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const parsedLimit = parseInt(req.body?.limit || "200");
+    const limit = Math.min(Number.isNaN(parsedLimit) ? 200 : parsedLimit, 500);
+
+    const objectsToGeocode = await db.select({
+      id: objects.id,
+      address: objects.address,
+      city: objects.city,
+      name: objects.name,
+    }).from(objects).where(and(
+      eq(objects.tenantId, tenantId),
+      sql`(${objects.latitude} IS NULL OR ${objects.longitude} IS NULL)`,
+      sql`${objects.address} IS NOT NULL AND ${objects.address} != ''`,
+    )).limit(limit);
+
+    let geocoded = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    for (const obj of objectsToGeocode) {
+      try {
+        const fullAddress = obj.city
+          ? `${obj.address}, ${obj.city}, Sverige`
+          : `${obj.address}, Sverige`;
+
+        const geoResult = await geocodeAddress(fullAddress, tenantId);
+        if (geoResult && geoResult.latitude && geoResult.longitude) {
+          await db.update(objects).set({
+            latitude: geoResult.latitude,
+            longitude: geoResult.longitude,
+          }).where(eq(objects.id, obj.id));
+          geocoded++;
+        } else {
+          failed++;
+        }
+
+        await new Promise(r => setTimeout(r, 200));
+      } catch (err: any) {
+        failed++;
+        errors.push(`${obj.name}: ${err.message}`);
+      }
+    }
+
+    res.json({ geocoded, failed, total: objectsToGeocode.length, errors: errors.slice(0, 20) });
+}));
+
+app.get("/api/import/data-quality/details", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const issueType = req.query.type as string;
+    const page = parseInt(req.query.page as string || "1");
+    const pageSize = Math.min(parseInt(req.query.pageSize as string || "50"), 100);
+    const offset = (page - 1) * pageSize;
+
+    if (issueType === "missing-coordinates") {
+      const rows = await db.select({
+        id: objects.id, name: objects.name, objectNumber: objects.objectNumber,
+        address: objects.address, city: objects.city, objectType: objects.objectType,
+      }).from(objects).where(and(
+        eq(objects.tenantId, tenantId),
+        sql`(${objects.latitude} IS NULL OR ${objects.longitude} IS NULL)`,
+      )).limit(pageSize).offset(offset);
+      res.json({ rows, page, pageSize });
+    } else if (issueType === "missing-address") {
+      const rows = await db.select({
+        id: objects.id, name: objects.name, objectNumber: objects.objectNumber,
+        latitude: objects.latitude, longitude: objects.longitude, objectType: objects.objectType,
+      }).from(objects).where(and(
+        eq(objects.tenantId, tenantId),
+        sql`(${objects.address} IS NULL OR ${objects.address} = '')`,
+      )).limit(pageSize).offset(offset);
+      res.json({ rows, page, pageSize });
+    } else if (issueType === "missing-parent") {
+      const rows = await db.select({
+        id: objects.id, name: objects.name, objectNumber: objects.objectNumber,
+        objectLevel: objects.objectLevel, objectType: objects.objectType,
+      }).from(objects).where(and(
+        eq(objects.tenantId, tenantId),
+        isNull(objects.parentId),
+        sql`${objects.objectLevel} > 1`,
+      )).limit(pageSize).offset(offset);
+      res.json({ rows, page, pageSize });
+    } else if (issueType === "customer-missing-address") {
+      const rows = await db.select({
+        id: customers.id, name: customers.name,
+      }).from(customers).where(and(
+        eq(customers.tenantId, tenantId),
+        sql`(${customers.address} IS NULL OR ${customers.address} = '')`,
+      )).limit(pageSize).offset(offset);
+      res.json({ rows, page, pageSize });
+    } else {
+      res.json({ rows: [], page, pageSize });
+    }
+}));
+
 }
