@@ -36,3 +36,9 @@ id = "YH_sVDiJDeBphuTlq-3tp"
 uri = "file://.local/traivo-almi-pitch.md"
 type = "text"
 title = "Traivo — Almi Pitch (uppdaterad — tillväxtbidrag)"
+
+[[outputs]]
+id = "1GvZoQINbrCIz3dpV3PzM"
+uri = "file://docs/Traivo-GO-Rapport-KINAB-Import.md"
+type = "text"
+title = "Traivo GO — Teknisk rapport efter KINAB-import"
