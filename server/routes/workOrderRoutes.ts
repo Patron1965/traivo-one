@@ -369,6 +369,7 @@ app.get("/api/order-stock", asyncHandler(async (req, res) => {
   const includeSimulated = req.query.includeSimulated === "true";
   const scenarioId = req.query.scenarioId as string | undefined;
   const orderStatus = req.query.orderStatus as OrderStatus | undefined;
+  const activeOnly = req.query.activeOnly !== "false";
   const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
   const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
   const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
@@ -385,7 +386,7 @@ app.get("/api/order-stock", asyncHandler(async (req, res) => {
   }
 
   const { orders, total, byStatus, aggregates } = await storage.getOrderStock(tenantId, {
-    includeSimulated, scenarioId, orderStatus, startDate, endDate, page, pageSize, search, metadataFilters,
+    includeSimulated, scenarioId, orderStatus, activeOnly, startDate, endDate, page, pageSize, search, metadataFilters,
   });
 
   const summary = {

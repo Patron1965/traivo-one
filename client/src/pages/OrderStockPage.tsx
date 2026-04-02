@@ -179,12 +179,15 @@ export default function OrderStockPage() {
   }, [metadataFilters]);
   
   const { data: orderStockData, isLoading: ordersLoading } = useQuery<OrderStockResponse>({
-    queryKey: ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, page: currentPage, search: debouncedSearch, metadataFilter: metadataFilterString }],
+    queryKey: ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, activeOnly: statusFilter === "all", page: currentPage, search: debouncedSearch, metadataFilter: metadataFilterString }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (includeSimulated) params.set("includeSimulated", "true");
       if (selectedScenario) params.set("scenarioId", selectedScenario);
-      if (statusFilter !== "all") params.set("orderStatus", statusFilter);
+      if (statusFilter !== "all") {
+        params.set("orderStatus", statusFilter);
+        params.set("activeOnly", "false");
+      }
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (metadataFilterString) params.set("metadataFilter", metadataFilterString);
       params.set("page", currentPage.toString());
@@ -240,7 +243,7 @@ export default function OrderStockPage() {
     enabled: !!selectedOrderForLines?.id
   });
 
-  const currentQueryKey = ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, page: currentPage, search: debouncedSearch, metadataFilter: metadataFilterString }];
+  const currentQueryKey = ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, activeOnly: statusFilter === "all", page: currentPage, search: debouncedSearch, metadataFilter: metadataFilterString }];
   
   const OPERATOR_LABELS: Record<string, string> = {
     eq: "=", neq: "≠", gt: ">", gte: "≥", lt: "<", lte: "≤", contains: "innehaller",
@@ -452,7 +455,10 @@ export default function OrderStockPage() {
     const params = new URLSearchParams();
     if (includeSimulated) params.set("includeSimulated", "true");
     if (selectedScenario) params.set("scenarioId", selectedScenario);
-    if (statusFilter !== "all") params.set("orderStatus", statusFilter);
+    if (statusFilter !== "all") {
+      params.set("orderStatus", statusFilter);
+      params.set("activeOnly", "false");
+    }
     if (debouncedSearch) params.set("search", debouncedSearch);
     params.set("page", "1");
     params.set("pageSize", "10000");

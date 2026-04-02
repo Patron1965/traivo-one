@@ -274,6 +274,7 @@ export interface IStorage {
     includeSimulated?: boolean;
     scenarioId?: string;
     orderStatus?: OrderStatus;
+    activeOnly?: boolean;
     startDate?: Date;
     endDate?: Date;
     page?: number;
@@ -2082,6 +2083,7 @@ export class DatabaseStorage implements IStorage {
     includeSimulated?: boolean;
     scenarioId?: string;
     orderStatus?: OrderStatus;
+    activeOnly?: boolean;
     startDate?: Date;
     endDate?: Date;
     page?: number;
@@ -2089,23 +2091,31 @@ export class DatabaseStorage implements IStorage {
     search?: string;
     metadataFilters?: { metadataName: string; operator: string; value: string }[];
   }): Promise<{ orders: WorkOrder[]; total: number; byStatus: Record<string, number>; aggregates: { totalValue: number; totalCost: number; totalProductionMinutes: number } }> {
-    // Base conditions (tenant, not deleted, simulated filter)
-    let baseConditions = and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt));
+    const completedStatuses: OrderStatus[] = ['utford', 'fakturerad', 'avbruten', 'omojlig'];
+    let allStatusBase = and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt));
     
     if (!options?.includeSimulated) {
-      baseConditions = and(baseConditions, eq(workOrders.isSimulated, false));
+      allStatusBase = and(allStatusBase, eq(workOrders.isSimulated, false));
     }
     
     if (options?.scenarioId) {
-      baseConditions = and(baseConditions, eq(workOrders.simulationScenarioId, options.scenarioId));
+      allStatusBase = and(allStatusBase, eq(workOrders.simulationScenarioId, options.scenarioId));
+    }
+    
+    let baseConditions = allStatusBase;
+    if (options?.activeOnly !== false && !options?.orderStatus) {
+      baseConditions = and(baseConditions, notInArray(workOrders.orderStatus, completedStatuses));
     }
     
     // Date filters apply to everything (status counts, aggregates, and paginated results)
+    let allStatusDateFiltered = allStatusBase;
     let dateFilteredConditions = baseConditions;
     if (options?.startDate) {
+      allStatusDateFiltered = and(allStatusDateFiltered, gte(workOrders.scheduledDate, options.startDate));
       dateFilteredConditions = and(dateFilteredConditions, gte(workOrders.scheduledDate, options.startDate));
     }
     if (options?.endDate) {
+      allStatusDateFiltered = and(allStatusDateFiltered, lte(workOrders.scheduledDate, options.endDate));
       dateFilteredConditions = and(dateFilteredConditions, lte(workOrders.scheduledDate, options.endDate));
     }
     
@@ -2183,13 +2193,13 @@ export class DatabaseStorage implements IStorage {
       .where(searchConditions);
     const total = countResult[0]?.count || 0;
     
-    // Get status counts (with date filters but without orderStatus filter for tab badges)
+    // Get status counts for ALL statuses (tab badges always show full picture)
     const statusCountsResult = await db.select({ 
       status: workOrders.orderStatus,
       count: sql<number>`count(*)::int`
     })
       .from(workOrders)
-      .where(dateFilteredConditions)
+      .where(allStatusDateFiltered)
       .groupBy(workOrders.orderStatus);
     
     const byStatus: Record<string, number> = {};
