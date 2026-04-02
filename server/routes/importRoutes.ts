@@ -2380,10 +2380,13 @@ app.post("/api/import/repair/hierarchy-csv", requireAdmin, upload.single("file")
 
     const modusIdToDbId = new Map<string, string>();
     for (const obj of allObjects) {
-      if (obj.objectNumber?.startsWith("MODUS-")) {
-        const rawId = obj.objectNumber.replace("MODUS-", "");
-        modusIdToDbId.set(rawId, obj.id);
-        modusIdToDbId.set("MODUS-" + rawId, obj.id);
+      if (obj.objectNumber) {
+        modusIdToDbId.set(obj.objectNumber, obj.id);
+        if (obj.objectNumber.startsWith("MODUS-")) {
+          modusIdToDbId.set(obj.objectNumber.replace("MODUS-", ""), obj.id);
+        } else {
+          modusIdToDbId.set("MODUS-" + obj.objectNumber, obj.id);
+        }
       }
     }
 
@@ -2539,8 +2542,20 @@ app.patch("/api/import/data-quality/object/:id", requireAdmin, asyncHandler(asyn
     const updates: Record<string, string | number | null> = {};
     if (address !== undefined) updates.address = address;
     if (city !== undefined) updates.city = city;
-    if (latitude !== undefined) updates.latitude = latitude !== null ? Number(latitude) : null;
-    if (longitude !== undefined) updates.longitude = longitude !== null ? Number(longitude) : null;
+    if (latitude !== undefined) {
+      const lat = latitude !== null ? Number(latitude) : null;
+      if (lat !== null && (Number.isNaN(lat) || lat < -90 || lat > 90)) {
+        return res.status(400).json({ error: "Ogiltig latitud (måste vara -90 till 90)" });
+      }
+      updates.latitude = lat;
+    }
+    if (longitude !== undefined) {
+      const lng = longitude !== null ? Number(longitude) : null;
+      if (lng !== null && (Number.isNaN(lng) || lng < -180 || lng > 180)) {
+        return res.status(400).json({ error: "Ogiltig longitud (måste vara -180 till 180)" });
+      }
+      updates.longitude = lng;
+    }
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: "Inga fält att uppdatera" });
