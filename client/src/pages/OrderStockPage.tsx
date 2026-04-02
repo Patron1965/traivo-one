@@ -56,7 +56,10 @@ import {
   User,
   Database,
   X,
-  Search
+  Search,
+  Sparkles,
+  Send,
+  Mail
 } from "lucide-react";
 import { AICard } from "@/components/AICard";
 import { ExecutionStatusTracker } from "@/components/ExecutionStatusTracker";
@@ -219,6 +222,23 @@ export default function OrderStockPage() {
 
   const { data: resources = [] } = useQuery<Resource[]>({
     queryKey: ["/api/resources"]
+  });
+
+  const [showSalesIntelDialog, setShowSalesIntelDialog] = useState(false);
+  const [salesEmail, setSalesEmail] = useState("");
+
+  const salesIntelMutation = useMutation({
+    mutationFn: async (email: string) => {
+      const res = await apiRequest("POST", "/api/reports/sales-intelligence", { recipientEmail: email });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: `Försäljningsanalys skickad till ${data.recipientEmail}` });
+      setShowSalesIntelDialog(false);
+    },
+    onError: (err: any) => {
+      toast({ title: err?.message || "Kunde inte skicka analys", variant: "destructive" });
+    }
   });
 
   const [showPlanningDialog, setShowPlanningDialog] = useState(false);
@@ -581,6 +601,15 @@ export default function OrderStockPage() {
           <Button variant="outline" onClick={handleExportCSV} className="gap-2" data-testid="button-export-csv">
             <Download className="h-4 w-4" />
             Exportera CSV
+          </Button>
+          
+          <Button 
+            onClick={() => { setSalesEmail(""); setShowSalesIntelDialog(true); }} 
+            className="gap-2 bg-gradient-to-r from-[#1B4B6B] to-[#4A9B9B] hover:from-[#2C3E50] hover:to-[#3d8585] text-white"
+            data-testid="button-sales-intelligence"
+          >
+            <Sparkles className="h-4 w-4" />
+            AI Försäljningsanalys
           </Button>
         </div>
       </div>
@@ -1323,6 +1352,72 @@ export default function OrderStockPage() {
           <DialogFooter>
             <Button variant="outline" onClick={handleCloseLinesDialog}>
               Stäng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showSalesIntelDialog} onOpenChange={setShowSalesIntelDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-[#4A9B9B]" />
+              AI Försäljningsanalys
+            </DialogTitle>
+            <DialogDescription>
+              AI analyserar kunddata och identifierar försäljningsmöjligheter. Rapporten skickas som e-post.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="sales-email" className="flex items-center gap-1.5">
+                <Mail className="h-3.5 w-3.5" />
+                Mottagarens e-post
+              </Label>
+              <Input
+                id="sales-email"
+                type="email"
+                placeholder="namn@foretag.se"
+                value={salesEmail}
+                onChange={e => setSalesEmail(e.target.value)}
+                data-testid="input-sales-email"
+              />
+            </div>
+
+            <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground">Analysen inkluderar:</p>
+              <ul className="list-disc list-inside space-y-0.5 text-xs">
+                <li>Kunder utan aktiva ordrar</li>
+                <li>Inaktiva kunder (&gt;6 månader)</li>
+                <li>Korsförsäljningsmöjligheter</li>
+                <li>Kunder med hög volym men lågt snittvärde</li>
+                <li>Top 10 konkreta försäljningsförslag</li>
+              </ul>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSalesIntelDialog(false)}>
+              Avbryt
+            </Button>
+            <Button 
+              onClick={() => salesIntelMutation.mutate(salesEmail)}
+              disabled={!salesEmail || salesIntelMutation.isPending}
+              className="gap-2 bg-gradient-to-r from-[#1B4B6B] to-[#4A9B9B] hover:from-[#2C3E50] hover:to-[#3d8585] text-white"
+              data-testid="button-send-sales-analysis"
+            >
+              {salesIntelMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Analyserar & skickar...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Skicka analys
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1725,4 +1725,305 @@ app.delete("/api/invitations/:id", requireAdmin, asyncHandler(async (req, res) =
     res.json({ success: true });
 }));
 
+// ============================================
+// AI SALES INTELLIGENCE REPORT
+// ============================================
+app.post("/api/reports/sales-intelligence", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { recipientEmail } = req.body;
+
+    const emailSchema = z.string().trim().email("Ogiltig e-postadress");
+    const parsedEmail = emailSchema.safeParse(recipientEmail);
+    if (!parsedEmail.success) {
+      throw new ValidationError(parsedEmail.error.issues[0]?.message || "Ogiltig e-postadress");
+    }
+    const validEmail = parsedEmail.data;
+
+    const customers = await storage.getCustomers(tenantId);
+    const allOrders = await storage.getWorkOrders(tenantId, undefined, undefined, true, 50000);
+    const articles = await storage.getArticles(tenantId);
+    const tenant = await storage.getTenant(tenantId);
+    const companyName = tenant?.name || "Företaget";
+
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    const activeStatuses = ["skapad", "planerad_pre", "planerad_resurs", "planerad_las"];
+    const completedStatuses = ["utford", "fakturerad"];
+
+    const customerOrderMap = new Map<string, typeof allOrders>();
+    for (const order of allOrders) {
+      if (!customerOrderMap.has(order.customerId)) {
+        customerOrderMap.set(order.customerId, []);
+      }
+      customerOrderMap.get(order.customerId)!.push(order);
+    }
+
+    const customersWithoutActiveOrders: { name: string; customerNumber: string | null; lastOrderDate: string | null; totalHistoricOrders: number }[] = [];
+    const inactiveCustomers: { name: string; customerNumber: string | null; lastOrderDate: string; daysSinceLastOrder: number }[] = [];
+    const singleServiceCustomers: { name: string; customerNumber: string | null; serviceType: string; orderCount: number }[] = [];
+    const highVolumeCustomers: { name: string; customerNumber: string | null; orderCount: number; avgValue: number; totalValue: number }[] = [];
+
+    for (const customer of customers) {
+      const orders = customerOrderMap.get(customer.id) || [];
+      const activeOrders = orders.filter(o => activeStatuses.includes(o.orderStatus || ""));
+      const completedOrders = orders.filter(o => completedStatuses.includes(o.orderStatus || ""));
+      const allCompleted = orders.filter(o => o.completedAt);
+
+      if (activeOrders.length === 0) {
+        const lastDate = allCompleted.length > 0
+          ? allCompleted.sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime())[0].completedAt
+          : null;
+        customersWithoutActiveOrders.push({
+          name: customer.name,
+          customerNumber: customer.customerNumber,
+          lastOrderDate: lastDate ? new Date(lastDate).toLocaleDateString("sv-SE") : null,
+          totalHistoricOrders: orders.length,
+        });
+      }
+
+      if (allCompleted.length > 0) {
+        const latestDate = allCompleted.sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime())[0].completedAt!;
+        if (new Date(latestDate) < sixMonthsAgo) {
+          const daysSince = Math.floor((Date.now() - new Date(latestDate).getTime()) / (1000 * 60 * 60 * 24));
+          inactiveCustomers.push({
+            name: customer.name,
+            customerNumber: customer.customerNumber,
+            lastOrderDate: new Date(latestDate).toLocaleDateString("sv-SE"),
+            daysSinceLastOrder: daysSince,
+          });
+        }
+      }
+
+      const orderTypes = new Set(orders.map(o => o.orderType).filter(Boolean));
+      if (orderTypes.size === 1 && orders.length >= 3) {
+        singleServiceCustomers.push({
+          name: customer.name,
+          customerNumber: customer.customerNumber,
+          serviceType: [...orderTypes][0]!,
+          orderCount: orders.length,
+        });
+      }
+
+      if (completedOrders.length >= 10) {
+        const totalVal = completedOrders.reduce((sum, o) => sum + (o.cachedValue || 0), 0);
+        const avgVal = Math.round(totalVal / completedOrders.length);
+        highVolumeCustomers.push({
+          name: customer.name,
+          customerNumber: customer.customerNumber,
+          orderCount: completedOrders.length,
+          avgValue: avgVal,
+          totalValue: totalVal,
+        });
+      }
+    }
+
+    highVolumeCustomers.sort((a, b) => a.avgValue - b.avgValue);
+    inactiveCustomers.sort((a, b) => b.daysSinceLastOrder - a.daysSinceLastOrder);
+
+    const articleTypes = articles.map(a => `${a.articleNumber} ${a.name}`).slice(0, 30).join(", ");
+
+    const dataForAI = {
+      companyName,
+      totalCustomers: customers.length,
+      totalOrders: allOrders.length,
+      activeOrders: allOrders.filter(o => activeStatuses.includes(o.orderStatus || "")).length,
+      completedOrders: allOrders.filter(o => completedStatuses.includes(o.orderStatus || "")).length,
+      customersWithoutActiveOrders: customersWithoutActiveOrders.slice(0, 20),
+      inactiveCustomers: inactiveCustomers.slice(0, 20),
+      singleServiceCustomers: singleServiceCustomers.slice(0, 20),
+      highVolumeCustomers: highVolumeCustomers.slice(0, 15),
+      availableServices: articleTypes,
+    };
+
+    const OpenAI = (await import("openai")).default;
+    const openai = new OpenAI({
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
+
+    const prompt = `Du är en försäljningsanalytiker för ${companyName}, ett nordiskt fältserviceföretag.
+Analysera följande kunddata och generera en strukturerad försäljningsrapport på svenska.
+
+DATA:
+${JSON.stringify(dataForAI, null, 2)}
+
+Generera en JSON-rapport med exakt denna struktur:
+{
+  "summary": "Kort sammanfattning av analysresultatet (2-3 meningar)",
+  "totalPotentialRevenue": "Uppskattat potentiellt intäktsvärde i SEK",
+  "opportunities": [
+    {
+      "rank": 1,
+      "customerName": "Kundnamn",
+      "type": "upsell|cross-sell|reactivation|volume-increase",
+      "description": "Konkret förslag på åtgärd",
+      "estimatedValue": "Uppskattat värde i SEK",
+      "priority": "high|medium|low"
+    }
+  ],
+  "insights": [
+    "Övergripande insikt 1",
+    "Övergripande insikt 2"
+  ],
+  "recommendations": [
+    "Rekommendation för att öka försäljning 1",
+    "Rekommendation 2"
+  ]
+}
+
+Fokusera på:
+1. Top 10 konkreta försäljningsmöjligheter med kundnamn
+2. Kunder som kan korsförsäljas fler tjänster
+3. Inaktiva kunder som bör återaktiveras
+4. Kunder med hög volym men lågt genomsnittsvärde (potential för premium-tjänster)
+5. Uppskatta potentiellt intäktvärde i SEK
+
+Svara ENBART med valid JSON, ingen annan text.`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.4,
+      max_tokens: 3000,
+    });
+
+    const { trackOpenAIResponse } = await import("../api-usage-tracker");
+    trackOpenAIResponse(completion, "sales-intelligence");
+
+    const aiResponseText = completion.choices[0]?.message?.content || "{}";
+
+    const escHtml = (s: any): string => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+    let aiReport: any;
+    try {
+      const cleaned = aiResponseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const parsed = JSON.parse(cleaned);
+      aiReport = {
+        summary: typeof parsed.summary === "string" ? parsed.summary : "AI-analysen genererades utan sammanfattning.",
+        totalPotentialRevenue: typeof parsed.totalPotentialRevenue === "string" ? parsed.totalPotentialRevenue : "0 SEK",
+        opportunities: Array.isArray(parsed.opportunities) ? parsed.opportunities : [],
+        insights: Array.isArray(parsed.insights) ? parsed.insights.filter((i: any) => typeof i === "string") : [],
+        recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations.filter((r: any) => typeof r === "string") : [],
+      };
+    } catch {
+      aiReport = {
+        summary: "AI-analysen kunde inte tolkas korrekt.",
+        totalPotentialRevenue: "0 SEK",
+        opportunities: [],
+        insights: [aiResponseText.slice(0, 500)],
+        recommendations: [],
+      };
+    }
+
+    const opportunitiesHtml = aiReport.opportunities.map((opp: any) => {
+      const priorityColor = opp.priority === "high" ? "#dc2626" : opp.priority === "medium" ? "#f59e0b" : "#22c55e";
+      const typeLabels: Record<string, string> = { upsell: "Uppförsäljning", "cross-sell": "Korsförsäljning", reactivation: "Återaktivering", "volume-increase": "Volymökning" };
+      return `
+        <tr style="border-bottom: 1px solid #e5e7eb;">
+          <td style="padding: 12px 8px; font-weight: 600; color: #1B4B6B;">#${escHtml(opp.rank)}</td>
+          <td style="padding: 12px 8px;">
+            <div style="font-weight: 600;">${escHtml(opp.customerName)}</div>
+            <div style="font-size: 13px; color: #6B7C8C;">${escHtml(opp.description)}</div>
+          </td>
+          <td style="padding: 12px 8px;">
+            <span style="background: ${priorityColor}15; color: ${priorityColor}; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;">
+              ${escHtml(typeLabels[opp.type] || opp.type)}
+            </span>
+          </td>
+          <td style="padding: 12px 8px; text-align: right; font-weight: 600; color: #4A9B9B;">${escHtml(opp.estimatedValue)}</td>
+        </tr>
+      `;
+    }).join("");
+
+    const insightsHtml = aiReport.insights.map((insight: string) =>
+      `<li style="padding: 6px 0; color: #374151;">${escHtml(insight)}</li>`
+    ).join("");
+
+    const recommendationsHtml = aiReport.recommendations.map((rec: string) =>
+      `<li style="padding: 6px 0; color: #374151;">${escHtml(rec)}</li>`
+    ).join("");
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+      <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; background: #f3f4f6;">
+        <div style="background: linear-gradient(135deg, #1B4B6B 0%, #2C3E50 100%); border-radius: 12px 12px 0 0; padding: 32px 24px; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 24px;">📊 AI Försäljningsanalys</h1>
+          <p style="color: #E8F4F8; margin: 8px 0 0 0; font-size: 14px;">${companyName} — ${new Date().toLocaleDateString("sv-SE")}</p>
+        </div>
+
+        <div style="background: white; padding: 24px; border-radius: 0 0 12px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+          <div style="background: #E8F4F8; border-left: 4px solid #4A9B9B; padding: 16px; margin-bottom: 24px; border-radius: 0 8px 8px 0;">
+            <p style="margin: 0; color: #1B4B6B; font-size: 15px;">${escHtml(aiReport.summary)}</p>
+            <p style="margin: 12px 0 0 0; font-size: 20px; font-weight: 700; color: #4A9B9B;">
+              Uppskattat potentiellt värde: ${escHtml(aiReport.totalPotentialRevenue)}
+            </p>
+          </div>
+
+          <div style="margin-bottom: 24px; background: #f9fafb; padding: 16px; border-radius: 8px;">
+            <h3 style="color: #1B4B6B; margin: 0 0 4px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Dataunderlag</h3>
+            <p style="margin: 0; color: #6B7C8C; font-size: 13px;">
+              ${customers.length} kunder · ${allOrders.length} ordrar · ${customersWithoutActiveOrders.length} kunder utan aktiva ordrar · ${inactiveCustomers.length} inaktiva (>6 mån)
+            </p>
+          </div>
+
+          ${opportunitiesHtml ? `
+          <h2 style="color: #1B4B6B; font-size: 18px; margin: 24px 0 12px 0; border-bottom: 2px solid #E8F4F8; padding-bottom: 8px;">
+            🎯 Top försäljningsmöjligheter
+          </h2>
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="border-bottom: 2px solid #e5e7eb;">
+                <th style="padding: 8px; text-align: left; font-size: 12px; color: #6B7C8C; text-transform: uppercase;">#</th>
+                <th style="padding: 8px; text-align: left; font-size: 12px; color: #6B7C8C; text-transform: uppercase;">Kund & åtgärd</th>
+                <th style="padding: 8px; text-align: left; font-size: 12px; color: #6B7C8C; text-transform: uppercase;">Typ</th>
+                <th style="padding: 8px; text-align: right; font-size: 12px; color: #6B7C8C; text-transform: uppercase;">Värde</th>
+              </tr>
+            </thead>
+            <tbody>${opportunitiesHtml}</tbody>
+          </table>
+          ` : ""}
+
+          ${insightsHtml ? `
+          <h2 style="color: #1B4B6B; font-size: 18px; margin: 24px 0 12px 0; border-bottom: 2px solid #E8F4F8; padding-bottom: 8px;">
+            💡 Övergripande insikter
+          </h2>
+          <ul style="padding-left: 20px; margin: 0;">${insightsHtml}</ul>
+          ` : ""}
+
+          ${recommendationsHtml ? `
+          <h2 style="color: #1B4B6B; font-size: 18px; margin: 24px 0 12px 0; border-bottom: 2px solid #E8F4F8; padding-bottom: 8px;">
+            ✅ Rekommendationer
+          </h2>
+          <ul style="padding-left: 20px; margin: 0;">${recommendationsHtml}</ul>
+          ` : ""}
+        </div>
+
+        <p style="text-align: center; color: #9ca3af; font-size: 11px; margin-top: 16px;">
+          Genererad av Traivo AI · ${new Date().toLocaleString("sv-SE")}
+        </p>
+      </body>
+      </html>
+    `;
+
+    const emailResult = await sendEmail({
+      to: validEmail,
+      subject: `📊 AI Försäljningsanalys — ${companyName} — ${new Date().toLocaleDateString("sv-SE")}`,
+      html: emailHtml,
+    });
+
+    if (emailResult.error) {
+      throw new ValidationError(`Kunde inte skicka e-post: ${emailResult.error.message}`);
+    }
+
+    res.json({
+      success: true,
+      messageId: emailResult.data?.id,
+      recipientEmail: validEmail,
+      report: aiReport,
+    });
+}));
+
 }
