@@ -2747,8 +2747,11 @@ export default function ImportPage() {
               <ol className="list-decimal list-inside space-y-2 text-sm">
                 <li><strong>Kunder först</strong> — Objekt måste kopplas till befintliga kunder</li>
                 <li><strong>Resurser</strong> — Kan importeras när som helst</li>
-                <li><strong>Objekt sist</strong> — Kräver att kunder redan finns i systemet</li>
+                <li><strong>Objekt</strong> — Kräver att kunder redan finns i systemet</li>
               </ol>
+              <p className="text-xs text-muted-foreground mt-3">
+                Tips: Via Modus 2.0-fliken skapas kunder automatiskt vid objektimport — då behövs ingen separat kundfil.
+              </p>
             </CardContent>
           </Card>
 
