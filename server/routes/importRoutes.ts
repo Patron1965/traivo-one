@@ -2317,9 +2317,21 @@ app.get("/api/import/data-quality", asyncHandler(async (req, res) => {
     const [totalCustomers] = await db.select({ count: sql<number>`count(*)` }).from(customers)
       .where(eq(customers.tenantId, tenantId));
     const [woNoResource] = await db.select({ count: sql<number>`count(*)` }).from(workOrders)
-      .where(and(eq(workOrders.tenantId, tenantId), isNull(workOrders.resourceId)));
+      .where(and(eq(workOrders.tenantId, tenantId), isNull(workOrders.resourceId), isNull(workOrders.deletedAt)));
     const [totalWo] = await db.select({ count: sql<number>`count(*)` }).from(workOrders)
-      .where(eq(workOrders.tenantId, tenantId));
+      .where(and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt)));
+    const [woPastStillCreated] = await db.select({ count: sql<number>`count(*)` }).from(workOrders)
+      .where(and(
+        eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt),
+        eq(workOrders.orderStatus, "skapad"),
+        sql`${workOrders.scheduledDate} < NOW()`,
+      ));
+    const [woNoDateCreated] = await db.select({ count: sql<number>`count(*)` }).from(workOrders)
+      .where(and(
+        eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt),
+        eq(workOrders.orderStatus, "skapad"),
+        isNull(workOrders.scheduledDate),
+      ));
 
     res.json({
       objects: {
@@ -2335,6 +2347,8 @@ app.get("/api/import/data-quality", asyncHandler(async (req, res) => {
       workOrders: {
         total: Number(totalWo.count),
         missingResource: Number(woNoResource.count),
+        pastStillCreated: Number(woPastStillCreated.count),
+        noDateStillCreated: Number(woNoDateCreated.count),
       },
     });
 }));
@@ -2563,6 +2577,55 @@ app.patch("/api/import/data-quality/object/:id", requireAdmin, asyncHandler(asyn
 
     await db.update(objects).set(updates).where(eq(objects.id, objectId));
     res.json({ updated: true });
+}));
+
+app.post("/api/import/repair/work-order-status", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+
+    const [pastWithDate] = await db.select({ count: sql<number>`count(*)` }).from(workOrders)
+      .where(and(
+        eq(workOrders.tenantId, tenantId),
+        isNull(workOrders.deletedAt),
+        eq(workOrders.orderStatus, "skapad"),
+        sql`${workOrders.scheduledDate} < NOW()`,
+      ));
+
+    const [noDate] = await db.select({ count: sql<number>`count(*)` }).from(workOrders)
+      .where(and(
+        eq(workOrders.tenantId, tenantId),
+        isNull(workOrders.deletedAt),
+        eq(workOrders.orderStatus, "skapad"),
+        isNull(workOrders.scheduledDate),
+      ));
+
+    const pastCount = Number(pastWithDate.count);
+    const noDateCount = Number(noDate.count);
+
+    const result1 = await db.update(workOrders).set({
+      orderStatus: "utford",
+      completedAt: sql`COALESCE(${workOrders.scheduledDate}, NOW())`,
+    }).where(and(
+      eq(workOrders.tenantId, tenantId),
+      isNull(workOrders.deletedAt),
+      eq(workOrders.orderStatus, "skapad"),
+      sql`${workOrders.scheduledDate} < NOW()`,
+    ));
+
+    const result2 = await db.update(workOrders).set({
+      orderStatus: "utford",
+      completedAt: sql`NOW()`,
+    }).where(and(
+      eq(workOrders.tenantId, tenantId),
+      isNull(workOrders.deletedAt),
+      eq(workOrders.orderStatus, "skapad"),
+      isNull(workOrders.scheduledDate),
+    ));
+
+    res.json({
+      pastOrdersUpdated: pastCount,
+      noDateOrdersUpdated: noDateCount,
+      totalUpdated: pastCount + noDateCount,
+    });
 }));
 
 }

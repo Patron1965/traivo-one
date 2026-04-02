@@ -27,6 +27,8 @@ interface DataQualityStats {
   workOrders: {
     total: number;
     missingResource: number;
+    pastStillCreated: number;
+    noDateStillCreated: number;
   };
 }
 
@@ -99,6 +101,23 @@ export function DataQualityDashboard() {
       toast({
         title: "Geokodning klar",
         description: `${data.geocoded} objekt geokodade, ${data.failed} misslyckades`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Fel", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const workOrderStatusMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/import/repair/work-order-status");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/import/data-quality"] });
+      toast({
+        title: "Orderstatus uppdaterad",
+        description: `${data.totalUpdated} ordrar markerades som utförda (${data.pastOrdersUpdated} med datum, ${data.noDateOrdersUpdated} utan datum)`,
       });
     },
     onError: (err: Error) => {
@@ -358,7 +377,32 @@ export function DataQualityDashboard() {
             </div>
           </div>
 
-          {(hierarchyCsvMutation.data || geocodeMutation.data) && (
+          {(stats.workOrders.pastStillCreated > 0 || stats.workOrders.noDateStillCreated > 0) && (
+            <div className="p-4 rounded-lg border bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+              <h4 className="font-medium flex items-center gap-2 mb-2">
+                <Truck className="h-4 w-4 text-amber-600" />
+                Markera importerade ordrar som utförda
+              </h4>
+              <p className="text-sm text-muted-foreground mb-3">
+                {stats.workOrders.pastStillCreated.toLocaleString("sv-SE")} ordrar med datum i det förflutna och {stats.workOrders.noDateStillCreated.toLocaleString("sv-SE")} ordrar utan datum har fortfarande status "skapad". Dessa markeras som "utförd" med completedAt satt till deras schemalagda datum.
+              </p>
+              <Button
+                onClick={() => workOrderStatusMutation.mutate()}
+                disabled={workOrderStatusMutation.isPending}
+                variant="outline"
+                data-testid="button-repair-wo-status"
+              >
+                {workOrderStatusMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                )}
+                Markera {(stats.workOrders.pastStillCreated + stats.workOrders.noDateStillCreated).toLocaleString("sv-SE")} ordrar som utförda
+              </Button>
+            </div>
+          )}
+
+          {(hierarchyCsvMutation.data || geocodeMutation.data || workOrderStatusMutation.data) && (
             <div className="p-3 rounded-lg border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
               <p className="text-sm font-medium text-green-700 dark:text-green-400 flex items-center gap-2">
                 <CheckCircle className="h-4 w-4" />
@@ -372,6 +416,11 @@ export function DataQualityDashboard() {
               {geocodeMutation.data && (
                 <p className="text-sm text-green-600 dark:text-green-300 mt-1">
                   Geokodning: {geocodeMutation.data.geocoded} lyckade, {geocodeMutation.data.failed} misslyckade
+                </p>
+              )}
+              {workOrderStatusMutation.data && (
+                <p className="text-sm text-green-600 dark:text-green-300 mt-1">
+                  Orderstatus: {workOrderStatusMutation.data.totalUpdated} ordrar markerade som utförda
                 </p>
               )}
             </div>
