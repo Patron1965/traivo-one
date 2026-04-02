@@ -1,0 +1,83 @@
+Traivo GO — Teknisk rapport efter KINAB-dataimport
+Datum: 2026-04-02 Gäller: Traivo GO mobilapp (Driver Core) Kontext: KINAB:s produktionsdata har importerats från Modus 2.0
+
+1. Sammanfattning
+KINAB:s fullständiga produktionsdata har importerats till Traivo-plattformen:
+
+Data	Antal
+Kunder	964
+Objekt	45 349
+Arbetsordrar	35 631
+Metadata-värden	82 024
+Resurser	12
+Historiska ordrar (35 320 st) har markerats som utförda (utford). 311 ordrar är kvar som aktiva med status skapad.
+
+2. Viktiga förändringar som påverkar Traivo GO
+2.1 Orderstatus — "utford" är ny standard för historik
+Alla importerade historiska arbetsordrar har fått status utford och ett completedAt-datum (satt till deras ursprungliga schemalagt datum).
+
+Påverkan för GO:
+
+GET /api/mobile/my-orders filtrerar redan på resourceId, så fältarbetaren ser bara sina egna ordrar — ingen åtgärd krävs.
+Men om appen listar ordrar och grupperar per status bör den hantera utford korrekt och visa dessa som avslutade/historik.
+Statistik-endpointen GET /api/mobile/statistics/summary räknar orderStatus === "utford" — detta fungerar korrekt med den nya datan.
+2.2 Priser lagras i öre (ej kronor)
+Alla prisrelaterade fält i databasen lagras i öre (hundradels kronor):
+
+Fält	Enhet	Exempel
+cachedValue	öre	15656 = 156,56 kr
+cachedCost	öre	10500 = 105,00 kr
+resolvedPrice (work_order_lines)	öre	85000 = 850,00 kr
+listPrice (articles)	öre	15656 = 156,56 kr
+Påverkan för GO:
+
+Om mobilappen visar priser eller värden måste den dividera med 100 innan visning.
+Webbplattformens formatCurrency() har uppdaterats för detta — GO behöver göra samma sak.
+Alla beräkningar (summor, moms, etc.) bör göras i öre-format och konverteras till kronor först vid presentation.
+2.3 completedAt finns nu på historiska ordrar
+Fältet completedAt (timestamp) är satt på alla utförda ordrar:
+
+Ordrar med schemalagt datum → completedAt = scheduledDate
+Ordrar utan datum → completedAt = importtidpunkt
+Påverkan för GO:
+
+Om appen visar "slutförd den ..." kan den använda completedAt direkt.
+Historiklistor kan sorteras på completedAt för kronologisk ordning.
+2.4 cachedProductionMinutes = 0 för all importerad data
+Modus-exporten innehöll ingen tidsdata. Alla importerade ordrar har cachedProductionMinutes: 0.
+
+Påverkan för GO:
+
+Visa inte "Beräknad tid: 0 min" — kontrollera om värdet > 0 innan visning.
+Framtida ordrar skapade i Traivo kommer ha korrekta tidsvärden.
+3. API-endpoints — bekräftat kompatibla
+Endpoint	Status	Kommentar
+GET /api/mobile/my-orders	✅ OK	Filtrerar på resourceId + datum, opåverkad
+POST /api/mobile/orders/:id/status	✅ OK	Hanterar utford, completed, avbruten, ej_utford
+POST /api/mobile/sync	✅ OK	Batch-sync fungerar, statusändringar mappas korrekt
+GET /api/mobile/statistics/summary	✅ OK	Räknar utford-ordrar korrekt
+GET /api/mobile/orders/:id/dependencies	✅ OK	Läser orderStatus från beroende ordrar
+GET /api/mobile/preferences	✅ OK	Opåverkad
+GET /api/mobile/app-config	✅ OK	Opåverkad
+GET /api/mobile/version-check	✅ OK	Opåverkad
+4. Statusövergångar — referens
+Traivo GO stödjer redan dual-format (svenska + engelska):
+
+skapad → planerad_pre → planerad_resurs → planerad_las → utford → fakturerad
+GO-mappning:
+
+"started" / "en_route" → planerad_resurs
+"completed" / "utford" → utford (sätter completedAt)
+"deferred" / "ej_utford" → skapad (återställer)
+"cancelled" / "avbruten" → avbruten
+5. Rekommenderade åtgärder för GO-teamet
+Hög prioritet
+Verifiera prisvisning — Säkerställ att alla prisvisningar i appen dividerar med 100 (öre → kronor).
+Hantera cachedProductionMinutes: 0 — Visa "Ej angiven" istället för "0 min" för importerade ordrar.
+Normal prioritet
+Historikvy — Med 35 320 utförda ordrar finns det nu riktig historik. Överväg paginering om GET /api/mobile/my-orders returnerar alla ordrar (utan datumfilter).
+Offlinesynk-volym — Med 45 349 objekt och 35 631 ordrar i systemet, säkerställ att fullsynk (IndexedDB) hanterar denna datamängd utan prestandaproblem.
+Låg prioritet
+Metadata-visning — 82 024 metadata-värden är tillgängliga per objekt (exekveringskoder, artikelkoder, m.m.). GO kan visa dessa som extra information vid behov.
+6. Kontaktinformation
+Frågor om API-ändringar eller dataformat — kontakta Traivo-plattformsteamet.
