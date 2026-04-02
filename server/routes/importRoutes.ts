@@ -2395,6 +2395,8 @@ app.post("/api/import/repair/hierarchy-csv", requireAdmin, upload.single("file")
       });
     }
 
+    const objectIdToObj = new Map(allObjects.map(o => [o.id, o]));
+
     let linked = 0;
     let parentNotFound = 0;
     let noParentColumn = 0;
@@ -2412,7 +2414,7 @@ app.post("/api/import/repair/hierarchy-csv", requireAdmin, upload.single("file")
 
       if (!objectId) { parentNotFound++; continue; }
 
-      const existingObj = allObjects.find(o => o.id === objectId);
+      const existingObj = objectIdToObj.get(objectId);
       if (existingObj?.parentId) { alreadyLinked++; continue; }
 
       if (parentId) {
@@ -2492,6 +2494,7 @@ app.get("/api/import/data-quality/details", asyncHandler(async (req, res) => {
     } else if (issueType === "missing-address") {
       const rows = await db.select({
         id: objects.id, name: objects.name, objectNumber: objects.objectNumber,
+        address: objects.address, city: objects.city,
         latitude: objects.latitude, longitude: objects.longitude, objectType: objects.objectType,
       }).from(objects).where(and(
         eq(objects.tenantId, tenantId),
@@ -2519,6 +2522,32 @@ app.get("/api/import/data-quality/details", asyncHandler(async (req, res) => {
     } else {
       res.json({ rows: [], page, pageSize });
     }
+}));
+
+app.patch("/api/import/data-quality/object/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const objectId = req.params.id;
+    const { address, city, latitude, longitude } = req.body;
+
+    const [existing] = await db.select({ id: objects.id }).from(objects)
+      .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));
+
+    if (!existing) {
+      throw new NotFoundError("Objektet hittades inte");
+    }
+
+    const updates: Record<string, string | number | null> = {};
+    if (address !== undefined) updates.address = address;
+    if (city !== undefined) updates.city = city;
+    if (latitude !== undefined) updates.latitude = latitude !== null ? Number(latitude) : null;
+    if (longitude !== undefined) updates.longitude = longitude !== null ? Number(longitude) : null;
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "Inga fält att uppdatera" });
+    }
+
+    await db.update(objects).set(updates).where(eq(objects.id, objectId));
+    res.json({ updated: true });
 }));
 
 }

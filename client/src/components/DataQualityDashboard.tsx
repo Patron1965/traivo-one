@@ -3,11 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import {
-  MapPin, AlertTriangle, CheckCircle, Loader2, Upload, RefreshCw,
-  Building2, Truck, GitBranch, Navigation, FileUp
+  MapPin, AlertTriangle, CheckCircle, Loader2, RefreshCw,
+  Building2, Truck, GitBranch, Navigation, FileUp, Save, Pencil, X
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -44,6 +45,8 @@ interface DetailRow {
 export function DataQualityDashboard() {
   const { toast } = useToast();
   const [selectedIssue, setSelectedIssue] = useState<string | null>(null);
+  const [editingRow, setEditingRow] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<Record<string, string>>({});
   const hierarchyFileRef = useRef<HTMLInputElement>(null);
 
   const { data: stats, isLoading } = useQuery<DataQualityStats>({
@@ -102,6 +105,46 @@ export function DataQualityDashboard() {
       toast({ title: "Fel", description: err.message, variant: "destructive" });
     },
   });
+
+  const saveObjectMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, string | number | null> }) => {
+      const res = await apiRequest("PATCH", `/api/import/data-quality/object/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/import/data-quality/details"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/import/data-quality"] });
+      setEditingRow(null);
+      setEditValues({});
+      toast({ title: "Sparat", description: "Objektet uppdaterades" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Fel", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const startEditing = (row: DetailRow) => {
+    setEditingRow(row.id);
+    setEditValues({
+      address: row.address || "",
+      city: row.city || "",
+      latitude: row.latitude?.toString() || "",
+      longitude: row.longitude?.toString() || "",
+    });
+  };
+
+  const saveEdit = (id: string) => {
+    const data: Record<string, string | number | null> = {};
+    if (selectedIssue === "missing-address" || selectedIssue === "missing-coordinates") {
+      if (editValues.address) data.address = editValues.address;
+      if (editValues.city) data.city = editValues.city;
+    }
+    if (selectedIssue === "missing-coordinates" || selectedIssue === "missing-address") {
+      if (editValues.latitude) data.latitude = parseFloat(editValues.latitude);
+      if (editValues.longitude) data.longitude = parseFloat(editValues.longitude);
+    }
+    saveObjectMutation.mutate({ id, data });
+  };
 
   if (isLoading) {
     return (
@@ -366,8 +409,12 @@ export function DataQualityDashboard() {
                   <TableHead>Namn</TableHead>
                   <TableHead>Objektnr</TableHead>
                   <TableHead>Typ</TableHead>
-                  {selectedIssue === "missing-coordinates" && <TableHead>Adress</TableHead>}
+                  {(selectedIssue === "missing-coordinates" || selectedIssue === "missing-address") && <TableHead>Adress</TableHead>}
+                  {(selectedIssue === "missing-coordinates" || selectedIssue === "missing-address") && <TableHead>Ort</TableHead>}
+                  {selectedIssue === "missing-coordinates" && <TableHead>Lat</TableHead>}
+                  {selectedIssue === "missing-coordinates" && <TableHead>Lng</TableHead>}
                   {selectedIssue === "missing-parent" && <TableHead>Nivå</TableHead>}
+                  {selectedIssue !== "customer-missing-address" && selectedIssue !== "missing-parent" && <TableHead className="w-24">Åtgärd</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -378,11 +425,105 @@ export function DataQualityDashboard() {
                     <TableCell>
                       <Badge variant="outline">{row.objectType || "—"}</Badge>
                     </TableCell>
+                    {(selectedIssue === "missing-coordinates" || selectedIssue === "missing-address") && (
+                      <TableCell>
+                        {editingRow === row.id ? (
+                          <Input
+                            value={editValues.address}
+                            onChange={(e) => setEditValues(v => ({ ...v, address: e.target.value }))}
+                            className="h-8 w-40"
+                            placeholder="Gatuadress"
+                            data-testid={`input-address-${row.id}`}
+                          />
+                        ) : (
+                          row.address || "—"
+                        )}
+                      </TableCell>
+                    )}
+                    {(selectedIssue === "missing-coordinates" || selectedIssue === "missing-address") && (
+                      <TableCell>
+                        {editingRow === row.id ? (
+                          <Input
+                            value={editValues.city}
+                            onChange={(e) => setEditValues(v => ({ ...v, city: e.target.value }))}
+                            className="h-8 w-28"
+                            placeholder="Ort"
+                            data-testid={`input-city-${row.id}`}
+                          />
+                        ) : (
+                          row.city || "—"
+                        )}
+                      </TableCell>
+                    )}
                     {selectedIssue === "missing-coordinates" && (
-                      <TableCell>{row.address ? `${row.address}${row.city ? `, ${row.city}` : ""}` : "—"}</TableCell>
+                      <TableCell>
+                        {editingRow === row.id ? (
+                          <Input
+                            value={editValues.latitude}
+                            onChange={(e) => setEditValues(v => ({ ...v, latitude: e.target.value }))}
+                            className="h-8 w-24"
+                            placeholder="Lat"
+                            data-testid={`input-lat-${row.id}`}
+                          />
+                        ) : (
+                          row.latitude || "—"
+                        )}
+                      </TableCell>
+                    )}
+                    {selectedIssue === "missing-coordinates" && (
+                      <TableCell>
+                        {editingRow === row.id ? (
+                          <Input
+                            value={editValues.longitude}
+                            onChange={(e) => setEditValues(v => ({ ...v, longitude: e.target.value }))}
+                            className="h-8 w-24"
+                            placeholder="Lng"
+                            data-testid={`input-lng-${row.id}`}
+                          />
+                        ) : (
+                          row.longitude || "—"
+                        )}
+                      </TableCell>
                     )}
                     {selectedIssue === "missing-parent" && (
                       <TableCell>{row.objectLevel || "—"}</TableCell>
+                    )}
+                    {selectedIssue !== "customer-missing-address" && selectedIssue !== "missing-parent" && (
+                      <TableCell>
+                        {editingRow === row.id ? (
+                          <div className="flex gap-1">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7"
+                              onClick={() => saveEdit(row.id)}
+                              disabled={saveObjectMutation.isPending}
+                              data-testid={`button-save-${row.id}`}
+                            >
+                              {saveObjectMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 text-green-600" />}
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7"
+                              onClick={() => { setEditingRow(null); setEditValues({}); }}
+                              data-testid={`button-cancel-edit-${row.id}`}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            onClick={() => startEditing(row)}
+                            data-testid={`button-edit-${row.id}`}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </TableCell>
                     )}
                   </TableRow>
                 ))}
