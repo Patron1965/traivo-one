@@ -503,7 +503,7 @@ export default function OrderStockPage() {
 
   const formatCurrency = (amount: number | null | undefined) => {
     if (amount == null) return "-";
-    return new Intl.NumberFormat("sv-SE", { style: "currency", currency: "SEK" }).format(amount);
+    return new Intl.NumberFormat("sv-SE", { style: "currency", currency: "SEK" }).format(amount / 100);
   };
 
   const formatMinutes = (minutes: number | null | undefined) => {
