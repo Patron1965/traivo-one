@@ -61,6 +61,7 @@ import {
   Send,
   Mail
 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 import { AICard } from "@/components/AICard";
 import { ExecutionStatusTracker } from "@/components/ExecutionStatusTracker";
 import { TaskTimewindowsEditor } from "@/components/TaskTimewindowsEditor";
@@ -224,19 +225,21 @@ export default function OrderStockPage() {
     queryKey: ["/api/resources"]
   });
 
+  const { user } = useAuth();
   const [showSalesIntelDialog, setShowSalesIntelDialog] = useState(false);
   const [salesEmail, setSalesEmail] = useState("");
+  const [salesScope, setSalesScope] = useState<"all" | "active_customers">("all");
 
   const salesIntelMutation = useMutation({
-    mutationFn: async (email: string) => {
-      const res = await apiRequest("POST", "/api/reports/sales-intelligence", { recipientEmail: email });
+    mutationFn: async ({ email, scope }: { email: string; scope: string }) => {
+      const res = await apiRequest("POST", "/api/reports/sales-intelligence", { recipientEmail: email, scope });
       return res.json();
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: { recipientEmail: string }) => {
       toast({ title: `Försäljningsanalys skickad till ${data.recipientEmail}` });
       setShowSalesIntelDialog(false);
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast({ title: err?.message || "Kunde inte skicka analys", variant: "destructive" });
     }
   });
@@ -604,7 +607,7 @@ export default function OrderStockPage() {
           </Button>
           
           <Button 
-            onClick={() => { setSalesEmail(""); setShowSalesIntelDialog(true); }} 
+            onClick={() => { setSalesEmail(user?.email || ""); setSalesScope("all"); setShowSalesIntelDialog(true); }} 
             className="gap-2 bg-gradient-to-r from-[#1B4B6B] to-[#4A9B9B] hover:from-[#2C3E50] hover:to-[#3d8585] text-white"
             data-testid="button-sales-intelligence"
           >
@@ -1385,6 +1388,19 @@ export default function OrderStockPage() {
               />
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="sales-scope">Analysomfång</Label>
+              <Select value={salesScope} onValueChange={(v) => setSalesScope(v as "all" | "active_customers")}>
+                <SelectTrigger id="sales-scope" data-testid="select-sales-scope">
+                  <SelectValue placeholder="Välj omfång" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla kunder</SelectItem>
+                  <SelectItem value="active_customers">Enbart kunder med aktiva ordrar</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground space-y-1">
               <p className="font-medium text-foreground">Analysen inkluderar:</p>
               <ul className="list-disc list-inside space-y-0.5 text-xs">
@@ -1392,6 +1408,7 @@ export default function OrderStockPage() {
                 <li>Inaktiva kunder (&gt;6 månader)</li>
                 <li>Korsförsäljningsmöjligheter</li>
                 <li>Kunder med hög volym men lågt snittvärde</li>
+                <li>Objekt med metadata men inga beställningar</li>
                 <li>Top 10 konkreta försäljningsförslag</li>
               </ul>
             </div>
@@ -1402,7 +1419,7 @@ export default function OrderStockPage() {
               Avbryt
             </Button>
             <Button 
-              onClick={() => salesIntelMutation.mutate(salesEmail)}
+              onClick={() => salesIntelMutation.mutate({ email: salesEmail, scope: salesScope })}
               disabled={!salesEmail || salesIntelMutation.isPending}
               className="gap-2 bg-gradient-to-r from-[#1B4B6B] to-[#4A9B9B] hover:from-[#2C3E50] hover:to-[#3d8585] text-white"
               data-testid="button-send-sales-analysis"

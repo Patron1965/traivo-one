@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
 import { requireAdmin } from "../tenant-middleware";
-import { objects, workOrders, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema } from "@shared/schema";
+import { objects, workOrders, objectMetadata, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { sendEmail } from "../replit_integrations/resend";
 
@@ -1728,16 +1728,82 @@ app.delete("/api/invitations/:id", requireAdmin, asyncHandler(async (req, res) =
 // ============================================
 // AI SALES INTELLIGENCE REPORT
 // ============================================
+interface SalesOpportunity {
+  rank: number;
+  customerName: string;
+  type: string;
+  description: string;
+  estimatedValue: string;
+  priority: string;
+}
+
+interface SalesIntelReport {
+  summary: string;
+  totalPotentialRevenue: string;
+  opportunities: SalesOpportunity[];
+  insights: string[];
+  recommendations: string[];
+}
+
+interface CustomerSummary {
+  name: string;
+  customerNumber: string | null;
+  lastOrderDate: string | null;
+  totalHistoricOrders: number;
+}
+
+interface InactiveCustomer {
+  name: string;
+  customerNumber: string | null;
+  lastOrderDate: string;
+  daysSinceLastOrder: number;
+}
+
+interface SingleServiceCustomer {
+  name: string;
+  customerNumber: string | null;
+  serviceType: string;
+  orderCount: number;
+}
+
+interface HighVolumeCustomer {
+  name: string;
+  customerNumber: string | null;
+  orderCount: number;
+  avgValue: number;
+  totalValue: number;
+}
+
+interface ObjectMetadataGap {
+  objectName: string;
+  objectNumber: string | null;
+  customerName: string;
+  metadataCount: number;
+  hasOrders: boolean;
+}
+
+const salesIntelRequestSchema = z.object({
+  recipientEmail: z.string().trim().email("Ogiltig e-postadress"),
+  scope: z.enum(["all", "active_customers"]).default("all"),
+});
+
 app.post("/api/reports/sales-intelligence", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const { recipientEmail } = req.body;
 
-    const emailSchema = z.string().trim().email("Ogiltig e-postadress");
-    const parsedEmail = emailSchema.safeParse(recipientEmail);
-    if (!parsedEmail.success) {
-      throw new ValidationError(parsedEmail.error.issues[0]?.message || "Ogiltig e-postadress");
+    const parsed = salesIntelRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.issues[0]?.message || "Ogiltig förfrågan");
     }
-    const validEmail = parsedEmail.data;
+    const { recipientEmail: validEmail, scope } = parsed.data;
+
+    const { enforceBudgetAndRateLimit, withRetry } = await import("../ai-budget-service");
+    const enforcement = await enforceBudgetAndRateLimit(tenantId, "analysis");
+    if (!enforcement.allowed) {
+      return res.status(429).json({
+        error: enforcement.errorType === "ratelimit" ? "AI-anropsgräns nådd" : "AI-budget överskriden",
+        message: enforcement.errorMessage,
+      });
+    }
 
     const customers = await storage.getCustomers(tenantId);
     const allOrders = await storage.getWorkOrders(tenantId, undefined, undefined, true, 50000);
@@ -1759,12 +1825,19 @@ app.post("/api/reports/sales-intelligence", requireAdmin, asyncHandler(async (re
       customerOrderMap.get(order.customerId)!.push(order);
     }
 
-    const customersWithoutActiveOrders: { name: string; customerNumber: string | null; lastOrderDate: string | null; totalHistoricOrders: number }[] = [];
-    const inactiveCustomers: { name: string; customerNumber: string | null; lastOrderDate: string; daysSinceLastOrder: number }[] = [];
-    const singleServiceCustomers: { name: string; customerNumber: string | null; serviceType: string; orderCount: number }[] = [];
-    const highVolumeCustomers: { name: string; customerNumber: string | null; orderCount: number; avgValue: number; totalValue: number }[] = [];
+    const customersWithoutActiveOrders: CustomerSummary[] = [];
+    const inactiveCustomers: InactiveCustomer[] = [];
+    const singleServiceCustomers: SingleServiceCustomer[] = [];
+    const highVolumeCustomers: HighVolumeCustomer[] = [];
 
-    for (const customer of customers) {
+    const scopeCustomers = scope === "active_customers"
+      ? customers.filter(c => {
+          const orders = customerOrderMap.get(c.id) || [];
+          return orders.some(o => activeStatuses.includes(o.orderStatus || ""));
+        })
+      : customers;
+
+    for (const customer of scopeCustomers) {
       const orders = customerOrderMap.get(customer.id) || [];
       const activeOrders = orders.filter(o => activeStatuses.includes(o.orderStatus || ""));
       const completedOrders = orders.filter(o => completedStatuses.includes(o.orderStatus || ""));
@@ -1821,11 +1894,41 @@ app.post("/api/reports/sales-intelligence", requireAdmin, asyncHandler(async (re
     highVolumeCustomers.sort((a, b) => a.avgValue - b.avgValue);
     inactiveCustomers.sort((a, b) => b.daysSinceLastOrder - a.daysSinceLastOrder);
 
+    const objectsWithMetadata = await db.select({
+      objectId: objectMetadata.objectId,
+      count: sql<number>`count(*)::int`,
+    }).from(objectMetadata)
+      .where(eq(objectMetadata.tenantId, tenantId))
+      .groupBy(objectMetadata.objectId);
+
+    const objectIdsWithMetadata = new Set(objectsWithMetadata.map(r => r.objectId));
+    const orderObjectIds = new Set(allOrders.map(o => o.objectId));
+
+    const metadataNoOrderIds = [...objectIdsWithMetadata].filter(id => !orderObjectIds.has(id));
+    const objectMetadataGaps: ObjectMetadataGap[] = [];
+    if (metadataNoOrderIds.length > 0) {
+      const gapObjectRows = await db.select()
+        .from(objects)
+        .where(and(eq(objects.tenantId, tenantId), inArray(objects.id, metadataNoOrderIds.slice(0, 50))));
+      const customerNameMap = new Map(customers.map(c => [c.id, c.name]));
+      const metaCountMap = new Map(objectsWithMetadata.map(r => [r.objectId, r.count]));
+      for (const obj of gapObjectRows) {
+        objectMetadataGaps.push({
+          objectName: obj.name,
+          objectNumber: obj.objectNumber,
+          customerName: customerNameMap.get(obj.customerId) || "Okänd",
+          metadataCount: metaCountMap.get(obj.id) || 0,
+          hasOrders: false,
+        });
+      }
+    }
+
     const articleTypes = articles.map(a => `${a.articleNumber} ${a.name}`).slice(0, 30).join(", ");
 
     const dataForAI = {
       companyName,
-      totalCustomers: customers.length,
+      scope,
+      totalCustomers: scopeCustomers.length,
       totalOrders: allOrders.length,
       activeOrders: allOrders.filter(o => activeStatuses.includes(o.orderStatus || "")).length,
       completedOrders: allOrders.filter(o => completedStatuses.includes(o.orderStatus || "")).length,
@@ -1833,6 +1936,7 @@ app.post("/api/reports/sales-intelligence", requireAdmin, asyncHandler(async (re
       inactiveCustomers: inactiveCustomers.slice(0, 20),
       singleServiceCustomers: singleServiceCustomers.slice(0, 20),
       highVolumeCustomers: highVolumeCustomers.slice(0, 15),
+      objectsWithMetadataButNoOrders: objectMetadataGaps.slice(0, 20),
       availableServices: articleTypes,
     };
 
@@ -1877,34 +1981,46 @@ Fokusera på:
 2. Kunder som kan korsförsäljas fler tjänster
 3. Inaktiva kunder som bör återaktiveras
 4. Kunder med hög volym men lågt genomsnittsvärde (potential för premium-tjänster)
-5. Uppskatta potentiellt intäktvärde i SEK
+5. Objekt med metadata men inga beställningar (outnyttjad potential)
+6. Uppskatta potentiellt intäktvärde i SEK
 
 Svara ENBART med valid JSON, ingen annan text.`;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.4,
-      max_tokens: 3000,
-    });
+    const completion = await withRetry(
+      () => openai.chat.completions.create({
+        model: enforcement.model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.4,
+        max_tokens: 3000,
+      }),
+      { totalAttempts: 2, label: "sales-intelligence" }
+    );
 
     const { trackOpenAIResponse } = await import("../api-usage-tracker");
     trackOpenAIResponse(completion, "sales-intelligence");
 
     const aiResponseText = completion.choices[0]?.message?.content || "{}";
 
-    const escHtml = (s: any): string => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const escHtml = (s: string | number | null | undefined): string =>
+      String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-    let aiReport: any;
+    let aiReport: SalesIntelReport;
     try {
       const cleaned = aiResponseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      const parsed = JSON.parse(cleaned);
+      const raw = JSON.parse(cleaned);
       aiReport = {
-        summary: typeof parsed.summary === "string" ? parsed.summary : "AI-analysen genererades utan sammanfattning.",
-        totalPotentialRevenue: typeof parsed.totalPotentialRevenue === "string" ? parsed.totalPotentialRevenue : "0 SEK",
-        opportunities: Array.isArray(parsed.opportunities) ? parsed.opportunities : [],
-        insights: Array.isArray(parsed.insights) ? parsed.insights.filter((i: any) => typeof i === "string") : [],
-        recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations.filter((r: any) => typeof r === "string") : [],
+        summary: typeof raw.summary === "string" ? raw.summary : "AI-analysen genererades utan sammanfattning.",
+        totalPotentialRevenue: typeof raw.totalPotentialRevenue === "string" ? raw.totalPotentialRevenue : "0 SEK",
+        opportunities: Array.isArray(raw.opportunities)
+          ? raw.opportunities.filter((o: unknown): o is SalesOpportunity =>
+              typeof o === "object" && o !== null && "customerName" in o)
+          : [],
+        insights: Array.isArray(raw.insights)
+          ? raw.insights.filter((i: unknown): i is string => typeof i === "string")
+          : [],
+        recommendations: Array.isArray(raw.recommendations)
+          ? raw.recommendations.filter((r: unknown): r is string => typeof r === "string")
+          : [],
       };
     } catch {
       aiReport = {
@@ -1916,9 +2032,15 @@ Svara ENBART med valid JSON, ingen annan text.`;
       };
     }
 
-    const opportunitiesHtml = aiReport.opportunities.map((opp: any) => {
+    const typeLabels: Record<string, string> = {
+      upsell: "Uppförsäljning",
+      "cross-sell": "Korsförsäljning",
+      reactivation: "Återaktivering",
+      "volume-increase": "Volymökning",
+    };
+
+    const opportunitiesHtml = aiReport.opportunities.map((opp) => {
       const priorityColor = opp.priority === "high" ? "#dc2626" : opp.priority === "medium" ? "#f59e0b" : "#22c55e";
-      const typeLabels: Record<string, string> = { upsell: "Uppförsäljning", "cross-sell": "Korsförsäljning", reactivation: "Återaktivering", "volume-increase": "Volymökning" };
       return `
         <tr style="border-bottom: 1px solid #e5e7eb;">
           <td style="padding: 12px 8px; font-weight: 600; color: #1B4B6B;">#${escHtml(opp.rank)}</td>
@@ -1936,11 +2058,11 @@ Svara ENBART med valid JSON, ingen annan text.`;
       `;
     }).join("");
 
-    const insightsHtml = aiReport.insights.map((insight: string) =>
+    const insightsHtml = aiReport.insights.map((insight) =>
       `<li style="padding: 6px 0; color: #374151;">${escHtml(insight)}</li>`
     ).join("");
 
-    const recommendationsHtml = aiReport.recommendations.map((rec: string) =>
+    const recommendationsHtml = aiReport.recommendations.map((rec) =>
       `<li style="padding: 6px 0; color: #374151;">${escHtml(rec)}</li>`
     ).join("");
 
