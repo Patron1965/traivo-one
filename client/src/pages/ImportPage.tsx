@@ -725,6 +725,14 @@ export default function ImportPage() {
     }));
   }, [skippedSteps, completedSteps, activeModusStep, modusResults]);
 
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
+  const { data: workOrders = [] } = useQuery<{ id: string }[]>({ queryKey: ["/api/work-orders"] });
+  const { data: resources = [] } = useQuery<Resource[]>({ queryKey: ["/api/resources"] });
+  const { data: objects = [] } = useQuery<ServiceObject[]>({ queryKey: ["/api/objects"] });
+  const { data: importBatches = [], isLoading: batchesLoading } = useQuery<ImportBatch[]>({ queryKey: ["/api/import/batches"] });
+
   useEffect(() => {
     let changed = false;
     const next = new Set(completedSteps);
@@ -737,14 +745,6 @@ export default function ImportPage() {
       }
     }
   }, [objects.length, workOrders.length]);
-
-  const eventSourceRef = useRef<EventSource | null>(null);
-
-  const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
-  const { data: workOrders = [] } = useQuery<{ id: string }[]>({ queryKey: ["/api/work-orders"] });
-  const { data: resources = [] } = useQuery<Resource[]>({ queryKey: ["/api/resources"] });
-  const { data: objects = [] } = useQuery<ServiceObject[]>({ queryKey: ["/api/objects"] });
-  const { data: importBatches = [], isLoading: batchesLoading } = useQuery<ImportBatch[]>({ queryKey: ["/api/import/batches"] });
 
   const undoBatchMutation = useMutation({
     mutationFn: async (batchId: string) => {
