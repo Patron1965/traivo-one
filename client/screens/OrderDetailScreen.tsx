@@ -784,6 +784,11 @@ export function OrderDetailScreen({ route, navigation }: any) {
                 <ThemedText variant="body" style={styles.articleName}>
                   {article.name}
                 </ThemedText>
+                {article.resolvedPrice != null && article.resolvedPrice > 0 ? (
+                  <ThemedText variant="caption" color={Colors.textMuted} style={{ marginRight: Spacing.sm }}>
+                    {formatPrice(article.resolvedPrice)}
+                  </ThemedText>
+                ) : null}
                 <ThemedText variant="body" color={Colors.textSecondary}>
                   {article.quantity} {article.unit}
                 </ThemedText>
@@ -793,6 +798,12 @@ export function OrderDetailScreen({ route, navigation }: any) {
               <View style={styles.orderValueRow}>
                 <ThemedText variant="label" color={Colors.textSecondary}>Ordervärde</ThemedText>
                 <ThemedText variant="label" color={Colors.primary}>{formatPrice(order.cachedValue)}</ThemedText>
+              </View>
+            ) : null}
+            {order.cachedCost != null && order.cachedCost > 0 ? (
+              <View style={styles.orderValueRow}>
+                <ThemedText variant="label" color={Colors.textSecondary}>Orderkostnad</ThemedText>
+                <ThemedText variant="label" color={Colors.textSecondary}>{formatPrice(order.cachedCost)}</ThemedText>
               </View>
             ) : null}
           </Card>

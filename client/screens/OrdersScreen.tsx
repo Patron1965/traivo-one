@@ -586,6 +586,7 @@ export function OrdersScreen({ navigation }: any) {
   const filteredOrders = useMemo(() => {
     const filtered = orders?.filter(o => {
       if (filter === 'all') return true;
+      if (filter === 'completed') return FINISHED_STATUSES.includes(o.status);
       return o.status === filter;
     }) || [];
     const sorted = [...filtered].sort((a, b) => {

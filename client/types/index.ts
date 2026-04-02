@@ -283,6 +283,7 @@ export interface Article {
   quantity?: number;
   category: string;
   isSeasonal?: boolean;
+  resolvedPrice?: number;
 }
 
 export interface Contact {
