@@ -110,7 +110,7 @@ function CustomMarker({ order, index, onDetailPress }: { order: Order; index: nu
             {order.scheduledTimeStart ? (
               <View style={styles.calloutRow}>
                 <Feather name="clock" size={12} color={Colors.textSecondary} />
-                <Text style={styles.calloutDetail}>{order.scheduledTimeStart} ({order.estimatedDuration} min)</Text>
+                <Text style={styles.calloutDetail}>{order.scheduledTimeStart} ({order.estimatedDuration > 0 ? `${order.estimatedDuration} min` : 'Ej angiven'})</Text>
               </View>
             ) : null}
             <View style={styles.calloutAction}>

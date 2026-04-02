@@ -370,7 +370,7 @@ function OrderCardContent({
             <View style={styles.durationRow}>
               <Feather name="briefcase" size={9} color={finished ? Colors.textMuted : Colors.textSecondary} />
               <ThemedText variant="caption" color={finished ? Colors.textMuted : Colors.textSecondary} style={styles.durationText}>
-                {order.estimatedDuration} min
+                {order.estimatedDuration > 0 ? `${order.estimatedDuration} min` : 'Ej angiven'}
               </ThemedText>
             </View>
             {order.isLocked ? (

@@ -29,7 +29,9 @@ export function ProgressCard({ completedCount, totalCount, progress, summary, lo
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
           <ThemedText variant="heading" color={Colors.primary}>
-            {summary?.totalDuration || summary?.estimatedTimeRemaining || 0}
+            {(summary?.totalDuration || summary?.estimatedTimeRemaining || 0) > 0
+              ? (summary?.totalDuration || summary?.estimatedTimeRemaining || 0)
+              : '–'}
           </ThemedText>
           <ThemedText variant="caption">min totalt</ThemedText>
         </View>

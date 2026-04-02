@@ -762,7 +762,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
             <View style={styles.infoRow}>
               <Feather name="clock" size={16} color={Colors.primary} />
               <ThemedText variant="body">
-                {order.scheduledTimeStart} - {order.scheduledTimeEnd} ({order.estimatedDuration} min)
+                {order.scheduledTimeStart} - {order.scheduledTimeEnd} ({order.estimatedDuration > 0 ? `${order.estimatedDuration} min` : 'Ej angiven'})
               </ThemedText>
             </View>
           ) : null}
