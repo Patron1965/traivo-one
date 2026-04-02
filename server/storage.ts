@@ -1241,6 +1241,7 @@ export class DatabaseStorage implements IStorage {
     .where(and(
       eq(workOrders.tenantId, tenantId),
       isNull(workOrders.deletedAt),
+      notInArray(workOrders.orderStatus, ['utford', 'fakturerad', 'avbruten', 'omojlig']),
       or(isNull(workOrders.scheduledDate), isNull(workOrders.resourceId))
     ))
     .orderBy(workOrders.priority, workOrders.plannedWindowEnd)
@@ -1251,6 +1252,7 @@ export class DatabaseStorage implements IStorage {
     const conditions: any[] = [
       eq(workOrders.tenantId, tenantId),
       isNull(workOrders.deletedAt),
+      notInArray(workOrders.orderStatus, ['utford', 'fakturerad', 'avbruten', 'omojlig']),
       or(isNull(workOrders.scheduledDate), isNull(workOrders.resourceId))
     ];
 
