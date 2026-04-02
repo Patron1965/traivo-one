@@ -1925,13 +1925,18 @@ app.post("/api/reports/sales-intelligence", requireAdmin, asyncHandler(async (re
 
     const articleTypes = articles.map(a => `${a.articleNumber} ${a.name}`).slice(0, 30).join(", ");
 
+    const scopeCustomerIds = new Set(scopeCustomers.map(c => c.id));
+    const scopeOrders = scope === "active_customers"
+      ? allOrders.filter(o => scopeCustomerIds.has(o.customerId))
+      : allOrders;
+
     const dataForAI = {
       companyName,
       scope,
       totalCustomers: scopeCustomers.length,
-      totalOrders: allOrders.length,
-      activeOrders: allOrders.filter(o => activeStatuses.includes(o.orderStatus || "")).length,
-      completedOrders: allOrders.filter(o => completedStatuses.includes(o.orderStatus || "")).length,
+      totalOrders: scopeOrders.length,
+      activeOrders: scopeOrders.filter(o => activeStatuses.includes(o.orderStatus || "")).length,
+      completedOrders: scopeOrders.filter(o => completedStatuses.includes(o.orderStatus || "")).length,
       customersWithoutActiveOrders: customersWithoutActiveOrders.slice(0, 20),
       inactiveCustomers: inactiveCustomers.slice(0, 20),
       singleServiceCustomers: singleServiceCustomers.slice(0, 20),
@@ -2087,7 +2092,7 @@ Svara ENBART med valid JSON, ingen annan text.`;
           <div style="margin-bottom: 24px; background: #f9fafb; padding: 16px; border-radius: 8px;">
             <h3 style="color: #1B4B6B; margin: 0 0 4px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Dataunderlag</h3>
             <p style="margin: 0; color: #6B7C8C; font-size: 13px;">
-              ${customers.length} kunder · ${allOrders.length} ordrar · ${customersWithoutActiveOrders.length} kunder utan aktiva ordrar · ${inactiveCustomers.length} inaktiva (>6 mån)
+              ${scopeCustomers.length} kunder · ${scopeOrders.length} ordrar · ${customersWithoutActiveOrders.length} kunder utan aktiva ordrar · ${inactiveCustomers.length} inaktiva (>6 mån)${scope === "active_customers" ? " · Filtrerat: enbart aktiva kunder" : ""}
             </p>
           </div>
 
