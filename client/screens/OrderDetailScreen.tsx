@@ -15,7 +15,7 @@ import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
 import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
 import { openMapNavigation } from '../lib/navigation-links';
-import { formatPrice } from '../lib/format';
+import { formatPrice, formatDuration as formatEstimatedDuration } from '../lib/format';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import type { Order, OrderStatus, TimeRestriction, SubStep, OrderNote, ImpossibleReason } from '../types';
 import { TIME_RESTRICTION_LABELS, ORDER_STATUS_SEQUENCE, IMPOSSIBLE_REASONS } from '../types';
@@ -763,7 +763,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
             <View style={styles.infoRow}>
               <Feather name="clock" size={16} color={Colors.primary} />
               <ThemedText variant="body">
-                {order.scheduledTimeStart} - {order.scheduledTimeEnd} ({order.estimatedDuration > 0 ? `${order.estimatedDuration} min` : 'Ej angiven'})
+                {order.scheduledTimeStart} - {order.scheduledTimeEnd} ({formatEstimatedDuration(order.estimatedDuration)})
               </ThemedText>
             </View>
           ) : null}

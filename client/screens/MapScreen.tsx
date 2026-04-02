@@ -8,6 +8,7 @@ import { ThemedText } from '../components/ThemedText';
 import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
+import { formatDuration } from '../lib/format';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import { useTeam } from '../hooks/useTeam';
 import { useAuth } from '../context/AuthContext';
@@ -110,7 +111,7 @@ function CustomMarker({ order, index, onDetailPress }: { order: Order; index: nu
             {order.scheduledTimeStart ? (
               <View style={styles.calloutRow}>
                 <Feather name="clock" size={12} color={Colors.textSecondary} />
-                <Text style={styles.calloutDetail}>{order.scheduledTimeStart} ({order.estimatedDuration > 0 ? `${order.estimatedDuration} min` : 'Ej angiven'})</Text>
+                <Text style={styles.calloutDetail}>{order.scheduledTimeStart} ({formatDuration(order.estimatedDuration)})</Text>
               </View>
             ) : null}
             <View style={styles.calloutAction}>

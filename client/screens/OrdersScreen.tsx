@@ -24,6 +24,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
 import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
+import { formatDuration } from '../lib/format';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import { useAuth } from '../context/AuthContext';
 import { useUrgentJob } from '../context/UrgentJobContext';
@@ -370,7 +371,7 @@ function OrderCardContent({
             <View style={styles.durationRow}>
               <Feather name="briefcase" size={9} color={finished ? Colors.textMuted : Colors.textSecondary} />
               <ThemedText variant="caption" color={finished ? Colors.textMuted : Colors.textSecondary} style={styles.durationText}>
-                {order.estimatedDuration > 0 ? `${order.estimatedDuration} min` : 'Ej angiven'}
+                {formatDuration(order.estimatedDuration)}
               </ThemedText>
             </View>
             {order.isLocked ? (

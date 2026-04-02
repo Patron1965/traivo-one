@@ -69,7 +69,7 @@ export function NextOrderCard({ nextOrder, nextOrderDistance, navigation, orders
                 ? `ca ${nextOrderDistance.durationMin} min (${nextOrderDistance.distanceKm} km)`
                 : nextOrder.estimatedMinutes && nextOrder.estimatedMinutes > 0
                   ? `ca ${nextOrder.estimatedMinutes} min`
-                  : 'Tid: Ej angiven'}
+                  : 'Ej angiven'}
             </ThemedText>
           </View>
         </View>
