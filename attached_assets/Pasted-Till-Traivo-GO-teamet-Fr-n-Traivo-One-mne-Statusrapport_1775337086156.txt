@@ -1,0 +1,47 @@
+Till: Traivo GO-teamet
+Från: Traivo One
+Ämne: Statusrapport — Åtgärder baserat på era senaste meddelanden
+
+1. Historisk ordervy med datumnavigering
+Datumparameter i API-anrop
+Bekräftat — GET /api/mobile/my-orders?date= fungerar korrekt. Ingen ändring behövdes.
+
+Prestandaoptimering (åtgärdad)
+Vi identifierade ett allvarligt prestandaproblem: endpointen laddade samtliga ~35 000 ordrar i minnet och filtrerade i JavaScript. Med den ökade belastningen från datumnavigering var detta ohållbart. Vi har nu ersatt detta med databasfiltrering — endpointen hämtar bara ordrar för den aktuella resursen och det valda datumet direkt från databasen. Svarstiderna bör vara markant bättre.
+
+Klar-filtret med fler statusar
+Verifierat. API:t returnerar alla statusar och filtrering sker på klientsidan. Vi ser inga problem med att fakturerad visas i förarens historik — det är utfört arbete som föraren rimligen bör kunna se.
+
+Prisvisning (öre → kronor)
+Bekräftat att cachedValue, cachedCost (på arbetsordern) samt resolvedPrice och resolvedCost (på artikelrader) redan exponeras i API-svaren. Inga serverändringar behövdes — prisraderna ska visas korrekt i appen.
+
+Tidsuppskattningar = 0
+Noterat. Ingen åtgärd krävs på vår sida.
+
+2. Statusetikett "Inlastad" borttagen
+Statusövergången planerad_las → paborjad
+Verifierad och fungerar. Endpointen PATCH /api/mobile/orders/:id/status accepterar övergången utan problem.
+
+Buggfix genomförd
+Vi hittade och åtgärdade ett fel i samband med verifieringen: när en förare tryckte "Starta" sattes orderStatus felaktigt tillbaka till planerad_resurs, oavsett om ordern hade status planerad_las. Nu behålls den befintliga orderStatus oförändrad — enbart executionStatus uppdateras till on_site och tidsstämpeln onSiteAt sätts.
+
+Skillnaden mellan planerad_resurs och planerad_las
+Det finns ingen operativ skillnad ur förarens perspektiv. planerad_las indikerar att ordern har genomgått en extra planeringsfas (lås/ruttoptimering), men det påverkar inte vad föraren behöver göra. Att visa båda som "Tilldelad" är helt korrekt.
+
+3. Restidsmedveten konfliktdetektering (ny funktion)
+Som en direkt följd av den ökade användningen av datumnavigering och schemaläggning har vi förbättrat konfliktdetekteringen i veckoplaneringen:
+
+Planeringsvyn beräknar nu uppskattad restid (Haversine, 50 km/h) mellan jobb och flaggar konflikter om en tekniker inte hinner resa mellan två uppdrag.
+Jobb på samma adress (< 100 m) påverkas inte.
+Konfliktmeddelanden visar nu restid och avstånd, t.ex. "Överlapp med 'Kärltvått X' (10:25) — ~12 min restid krävs (5.3 km)"
+Detta påverkar inte API:t — det är en ren planeringsfunktion i webgränssnittet.
+
+Sammanfattning
+
+Punkt	Status
+Prestandaoptimering my-orders	✅ Åtgärdad
+Prisexponering i API	✅ Redan tillgängligt
+planerad_las → paborjad	✅ Verifierad + buggfix
+"Inlastad" → "Tilldelad"	✅ Korrekt mappning
+Restidskonfliktdetektering	✅ Ny funktion i planeringsvyn
+Hör av er om ni har frågor eller om något behöver justeras.
