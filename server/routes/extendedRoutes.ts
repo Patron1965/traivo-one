@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback, assignUserToTenant } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
-import { objects, workOrders, articles , insertDeviationReportSchema, insertProtocolSchema, apiUsageLogs, taskDependencyInstances } from "@shared/schema";
+import { objects, workOrders, articles , insertDeviationReportSchema, insertProtocolSchema, apiUsageLogs, taskDependencyInstances, invitations } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
@@ -1560,6 +1560,20 @@ app.post("/api/admin/users", requireAdminAuth, asyncHandler(async (req, res) => 
     const tenantId = (req as any).tenantId;
     if (tenantId) {
       await assignUserToTenant(user.id, tenantId, (role || "user") as UserRole, (req as any).userId);
+    }
+
+    if (tenantId) {
+      await db
+        .insert(invitations)
+        .values({
+          email: email.toLowerCase(),
+          tenantId,
+          role: role || "user",
+          invitedBy: (req as any).userId || null,
+          status: "pending",
+        })
+        .onConflictDoNothing();
+      console.log(`[user-mgmt] Auto-invitation created for "${email}" in tenant "${tenantId}"`);
     }
 
     const { passwordHash: _, ...safeUser } = user;
