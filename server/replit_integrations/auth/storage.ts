@@ -43,17 +43,26 @@ class AuthStorage implements IAuthStorage {
       .limit(1);
 
     if (existing.length === 0) {
-      // Auto-assign to default tenant with 'user' role
+      // Check if there are any existing users in the default tenant
+      const existingTenantUsers = await db
+        .select()
+        .from(userTenantRoles)
+        .where(eq(userTenantRoles.tenantId, DEFAULT_TENANT_ID))
+        .limit(1);
+
+      // First user in tenant gets 'owner' role, subsequent users get 'user'
+      const role = existingTenantUsers.length === 0 ? "owner" : "user";
+
       await db
         .insert(userTenantRoles)
         .values({
           userId,
           tenantId: DEFAULT_TENANT_ID,
-          role: "user",
+          role,
         })
         .onConflictDoNothing();
       
-      console.log(`[auth] Auto-assigned user ${userId} to default tenant`);
+      console.log(`[auth] Auto-assigned user ${userId} to default tenant with role '${role}'`);
     }
   }
 

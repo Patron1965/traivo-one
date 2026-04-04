@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./seed";
+import { fixInitialOwnerRole } from "./startup-fixes";
 
 const app = express();
 const httpServer = createServer(app);
@@ -135,6 +136,13 @@ process.on('exit', (code) => {
       console.log('[startup] Database seeding complete');
     } catch (error) {
       console.error("Failed to seed database:", error);
+    }
+
+    // One-time fix: upgrade initial user to owner if still has 'user' role
+    try {
+      await fixInitialOwnerRole();
+    } catch (error) {
+      console.error("[startup] Failed to run owner role fix:", error);
     }
     
     console.log('[startup] Registering routes...');
