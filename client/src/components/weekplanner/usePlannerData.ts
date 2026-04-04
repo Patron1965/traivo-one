@@ -342,7 +342,8 @@ export function usePlannerData() {
     const advDays = (job.metadata as Record<string, number> | null)?.advanceNotificationDays || 0;
     if (advDays > 0) { const today = new Date(); today.setHours(0, 0, 0, 0); const daysUntil = Math.floor((dateObj.getTime() - today.getTime()) / 86400000); if (daysUntil < advDays) reasons.push(`Avisering krävs ${advDays} dagar i förväg — bara ${Math.max(0, daysUntil)} dagar kvar`); }
     if (dependenciesData?.dependencies) { for (const dep of (dependenciesData.dependencies[job.id] || [])) { const p = workOrders.find(wo => wo.id === dep.dependsOnWorkOrderId); if (p) { if (!p.scheduledDate || p.executionStatus === "not_planned") reasons.push(`⚠ Beroende "${p.title}" ej planerad (varning)`); else if (new Date(p.scheduledDate) > dateObj) reasons.push(`⚠ Beroende "${p.title}" planerad efter (${format(new Date(p.scheduledDate), "d MMM", { locale: sv })})`); } } }
-    if (startTime) { const [jH, jM] = startTime.split(":").map(Number); const jS = jH * 60 + jM; const jE = jS + (job.estimatedDuration || 60); for (const other of scheduledJobs.filter(j => j.id !== job.id && j.resourceId === resourceId && j.scheduledDate && isSameDay(new Date(j.scheduledDate), dateObj))) { if (!other.scheduledStartTime) continue; const [oH, oM] = other.scheduledStartTime.split(":").map(Number); if (jS < oH * 60 + oM + (other.estimatedDuration || 60) && jE > oH * 60 + oM) { reasons.push(`Överlapp med "${other.title}" (${other.scheduledStartTime})`); break; } } }
+    const activeSet = new Set(["skapad", "planerad_pre", "planerad_resurs", "planerad_las"]);
+    if (startTime) { const [jH, jM] = startTime.split(":").map(Number); const jS = jH * 60 + jM; const jE = jS + (job.estimatedDuration || 60); for (const other of scheduledJobs.filter(j => j.id !== job.id && j.resourceId === resourceId && j.scheduledDate && activeSet.has(j.orderStatus) && isSameDay(new Date(j.scheduledDate), dateObj))) { if (!other.scheduledStartTime) continue; const [oH, oM] = other.scheduledStartTime.split(":").map(Number); if (jS < oH * 60 + oM + (other.estimatedDuration || 60) && jE > oH * 60 + oM) { reasons.push(`Överlapp med "${other.title}" (${other.scheduledStartTime})`); break; } } }
     if (job.clusterId) {
       const cluster = clusterMap.get(job.clusterId);
       const resource = resources.find(r => r.id === resourceId);
@@ -366,7 +367,8 @@ export function usePlannerData() {
     return reasons;
   }, [scheduledJobs, timewindowMap, restrictionsByObject, dependenciesData, workOrders, clusterMap, resources, hardClusterBlocking]);
 
-  const jobConflicts = useMemo(() => { const c: Record<string, string[]> = {}; for (const j of scheduledJobs) { if (!j.scheduledDate || !j.resourceId) continue; const r = detectConflictsForJob(j, j.resourceId, format(new Date(j.scheduledDate), "yyyy-MM-dd"), j.scheduledStartTime || null); if (r.length > 0) c[j.id] = r; } return c; }, [scheduledJobs, detectConflictsForJob]);
+  const activeStatuses = useMemo(() => new Set(["skapad", "planerad_pre", "planerad_resurs", "planerad_las"]), []);
+  const jobConflicts = useMemo(() => { const c: Record<string, string[]> = {}; for (const j of scheduledJobs) { if (!j.scheduledDate || !j.resourceId) continue; if (!activeStatuses.has(j.orderStatus)) continue; const r = detectConflictsForJob(j, j.resourceId, format(new Date(j.scheduledDate), "yyyy-MM-dd"), j.scheduledStartTime || null); if (r.length > 0) c[j.id] = r; } return c; }, [scheduledJobs, detectConflictsForJob, activeStatuses]);
 
   const addToUndoStack = useCallback((action: PlannerAction) => { setUndoStack(prev => [...prev.slice(-19), action]); setRedoStack([]); }, []);
 
