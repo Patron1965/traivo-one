@@ -1,0 +1,41 @@
+Till: Traivo One-teamet
+Från: Traivo GO
+Ämne: Ny funktionalitet — Historisk ordervy med datumnavigering
+
+Vad har ändrats i Traivo GO?
+Orderlistan i mobilappen har utökats med en datumnavigering som låter förare bläddra bakåt dag för dag för att se tidigare utförda uppdrag.
+
+Vad behöver Traivo One ta hänsyn till?
+1. API-anrop med datumparameter
+
+Appen skickar nu GET /api/mobile/my-orders?date=2026-03-28 med valfritt datum. Tidigare skickades anropet utan datum (defaultade till dagens datum). Servern hanterar redan ?date=-parametern korrekt — ingen ändring behövs i backenden, men det är bra att vara medveten om att historiska datum nu aktivt används.
+
+2. Ökad belastning på historiska ordrar
+
+Med 35 320 utförda KINAB-ordrar i systemet kan förare nu bläddra till dagar med mycket data. Om GET /api/mobile/my-orders returnerar alla ordrar för ett datum utan begränsning, kan det ge stora svar. Överväg paginering om prestanda blir ett problem vid dagar med många ordrar.
+
+3. "Klar"-filtret inkluderar nu fler statusar
+
+Tidigare filtrerade appen bara på status === 'completed'. Nu inkluderas alla avslutade statusar:
+
+utford
+completed
+avslutad
+fakturerad
+Detta är en klientändring, men det innebär att alla dessa statusar nu är synliga för föraren i orderlistan. Verifiera att detta stämmer med affärslogiken — ska förare kunna se fakturerade ordrar i sin historik?
+
+4. Prisvisning (öre → kronor)
+
+Appen visar nu cachedValue, cachedCost och resolvedPrice om de finns i API-svaret. Alla värden divideras med 100 (öre → kronor). Kontrollera att dessa fält returneras korrekt i API-svaren från /api/mobile/orders/:id. Om de inte exponeras via mobil-API:t än, kommer prisraderna helt enkelt inte visas.
+
+5. Tidsuppskattningar = 0
+
+Ordrar med estimatedDuration: 0 (alla importerade KINAB-ordrar) visar nu "Ej angiven" istället för "0 min". Ingen åtgärd krävs — detta är rent kosmetiskt.
+
+Sammanfattning av åtgärder
+Punkt	Kräver åtgärd?	Prioritet
+Datumparameter i API-anrop	Nej (fungerar redan)	–
+Paginering vid stora datummängder	Överväg	Normal
+Klar-filter med fler statusar	Verifiera affärslogik	Normal
+Prisexponering i mobil-API	Kontrollera om fälten returneras	Normal
+Tidsvisning 0 min → Ej angiven	Nej	–

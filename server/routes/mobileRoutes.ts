@@ -146,28 +146,22 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
     const resourceId = req.mobileResourceId;
     const dateParam = req.query.date as string;
     
-    // Get all work orders for this resource
-    const tenantId = getTenantIdWithFallback(req);
-    const allOrders = await storage.getWorkOrders(tenantId);
+    let orders: Awaited<ReturnType<typeof storage.getWorkOrdersByResource>>;
     
-    // Filter by resource
-    let orders = allOrders.filter(o => o.resourceId === resourceId);
-    
-    // Filter by date if provided
     if (dateParam) {
       const targetDate = new Date(dateParam);
       targetDate.setHours(0, 0, 0, 0);
       const nextDay = new Date(targetDate);
       nextDay.setDate(nextDay.getDate() + 1);
-      
-      orders = orders.filter(o => {
-        if (!o.scheduledDate) return false;
-        const orderDate = new Date(o.scheduledDate);
-        return orderDate >= targetDate && orderDate < nextDay;
-      });
+      orders = await storage.getWorkOrdersByResource(resourceId, targetDate, nextDay);
+    } else {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      orders = await storage.getWorkOrdersByResource(resourceId, today, tomorrow);
     }
     
-    // Sort by scheduled time
     orders.sort((a, b) => {
       if (!a.scheduledStartTime && !b.scheduledStartTime) return 0;
       if (!a.scheduledStartTime) return 1;
