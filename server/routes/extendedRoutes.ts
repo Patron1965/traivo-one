@@ -1648,6 +1648,10 @@ app.patch("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, res
 }));
 
 app.delete("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, res) => {
+    const currentUserId = (req as any).userId;
+    if (req.params.id === currentUserId) {
+      return res.status(400).json({ error: "Du kan inte ta bort ditt eget konto" });
+    }
     await storage.deleteUser(req.params.id);
     res.json({ success: true });
 }));
