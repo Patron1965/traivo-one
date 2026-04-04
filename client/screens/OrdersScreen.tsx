@@ -522,8 +522,10 @@ export function OrdersScreen({ navigation }: any) {
   const { startPosition } = useAuth();
   const { activeJob, incomingJob } = useUrgentJob();
   const escalatedOrderId = activeJob?.orderId || incomingJob?.orderId || null;
-  const isToday = selectedDate === new Date().toISOString().split('T')[0];
-  const isFuture = selectedDate > new Date().toISOString().split('T')[0];
+  const todayStr = new Date().toISOString().split('T')[0];
+  const isToday = selectedDate === todayStr;
+  const maxDate = shiftDate(todayStr, 7);
+  const isAtMax = selectedDate >= maxDate;
 
   const { data: orders, isLoading, refetch } = useQuery<Order[]>({
     queryKey: ['/api/mobile/my-orders', selectedDate],
@@ -694,14 +696,14 @@ export function OrdersScreen({ navigation }: any) {
           ) : null}
         </Pressable>
         <Pressable
-          style={[styles.dateNavBtn, isToday ? styles.dateNavBtnDisabled : null]}
+          style={[styles.dateNavBtn, isAtMax ? styles.dateNavBtnDisabled : null]}
           onPress={() => {
-            if (!isToday) setSelectedDate(shiftDate(selectedDate, 1));
+            if (!isAtMax) setSelectedDate(shiftDate(selectedDate, 1));
           }}
-          disabled={isToday}
+          disabled={isAtMax}
           testID="button-date-next"
         >
-          <Feather name="chevron-right" size={28} color={isToday ? Colors.textMuted : Colors.primary} />
+          <Feather name="chevron-right" size={28} color={isAtMax ? Colors.textMuted : Colors.primary} />
         </Pressable>
       </View>
       <ScrollView
@@ -776,36 +778,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md,
+    paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.sm,
-    marginHorizontal: Spacing.md,
+    marginHorizontal: Spacing.lg,
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: Colors.primary + '30',
   },
   dateNavBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.primary + '15',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.primary + '20',
     alignItems: 'center',
     justifyContent: 'center',
   },
   dateNavBtnDisabled: {
-    backgroundColor: Colors.border + '30',
+    backgroundColor: Colors.border + '20',
   },
   dateNavCenter: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
   },
   todayBadge: {
     backgroundColor: Colors.primary,
     paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: BorderRadius.round,
     marginLeft: Spacing.xs,
   },
