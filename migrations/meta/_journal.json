@@ -169,6 +169,13 @@
       "when": 1774462168810,
       "tag": "0023_rainy_shocker",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1775340082394,
+      "tag": "0024_lyrical_lady_bullseye",
+      "breakpoints": true
     }
   ]
 }

@@ -172,7 +172,7 @@ export const objects = pgTable("objects", {
 export const resources = pgTable("resources", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  userId: varchar("user_id").references(() => users.id),
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'set null' }),
   name: text("name").notNull(),
   initials: text("initials"),
   resourceType: text("resource_type").default("person").notNull(),
@@ -1246,8 +1246,8 @@ export const tenantBranding = pgTable("tenant_branding", {
   // Dark mode
   darkModeEnabled: boolean("dark_mode_enabled").default(true),
   // Metadata
-  createdBy: varchar("created_by").references(() => users.id),
-  updatedBy: varchar("updated_by").references(() => users.id),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  updatedBy: varchar("updated_by").references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow(),
   publishedAt: timestamp("published_at"),
@@ -1256,7 +1256,7 @@ export const tenantBranding = pgTable("tenant_branding", {
 // User Tenant Roles - Links users to tenants with roles
 export const userTenantRoles = pgTable("user_tenant_roles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   // Role: owner, admin, user
   role: varchar("role", { length: 20 }).default("user").notNull(),
@@ -1265,7 +1265,7 @@ export const userTenantRoles = pgTable("user_tenant_roles", {
   // Status
   isActive: boolean("is_active").default(true),
   // Assigned by
-  assignedBy: varchar("assigned_by").references(() => users.id),
+  assignedBy: varchar("assigned_by").references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -1280,9 +1280,9 @@ export const invitations = pgTable("invitations", {
   email: varchar("email", { length: 255 }).notNull(),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   role: varchar("role", { length: 20 }).default("user").notNull(),
-  invitedBy: varchar("invited_by").references(() => users.id),
+  invitedBy: varchar("invited_by").references(() => users.id, { onDelete: 'set null' }),
   status: varchar("status", { length: 20 }).default("pending").notNull(),
-  usedBy: varchar("used_by").references(() => users.id),
+  usedBy: varchar("used_by").references(() => users.id, { onDelete: 'set null' }),
   usedAt: timestamp("used_at"),
   expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -1305,7 +1305,7 @@ export type InsertInvitation = z.infer<typeof insertInvitationSchema>;
 export const auditLogs = pgTable("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id),
-  userId: varchar("user_id").references(() => users.id),
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'set null' }),
   // Action: create, update, delete, login, logout, etc.
   action: varchar("action", { length: 100 }).notNull(),
   // Resource type: users, branding, tenants, etc.
@@ -1417,7 +1417,7 @@ export const tenantPackageInstallations = pgTable("tenant_package_installations"
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   packageId: varchar("package_id").references(() => industryPackages.id).notNull(),
   installedAt: timestamp("installed_at").defaultNow().notNull(),
-  installedBy: varchar("installed_by").references(() => users.id),
+  installedBy: varchar("installed_by").references(() => users.id, { onDelete: 'set null' }),
   // Vilka komponenter som installerades
   articlesInstalled: integer("articles_installed").default(0),
   metadataInstalled: integer("metadata_installed").default(0),
@@ -1711,7 +1711,7 @@ export const objectImages = pgTable("object_images", {
   description: text("description"),
   // Typ: photo, document, drawing, manual
   imageType: varchar("image_type", { length: 50 }).default("photo"),
-  uploadedBy: varchar("uploaded_by").references(() => users.id),
+  uploadedBy: varchar("uploaded_by").references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_object_images_object").on(table.objectId),
@@ -1822,7 +1822,7 @@ export const taskInformation = pgTable("task_information", {
   linkedArticleId: varchar("linked_article_id").references(() => articles.id),
   // Mängd (för artikel-kopplingar)
   quantity: integer("quantity"),
-  createdBy: varchar("created_by").references(() => users.id),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_task_info_work_order").on(table.workOrderId),
@@ -1998,7 +1998,7 @@ export const orderConcepts = pgTable("order_concepts", {
   estimatedHours: real("estimated_hours").default(0),
   orderMetadata: jsonb("order_metadata"),
 
-  createdBy: varchar("created_by").references(() => users.id),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
@@ -2131,7 +2131,7 @@ export const assignments = pgTable("assignments", {
   invoicedAt: timestamp("invoiced_at"),
   // Skapandemetod
   creationMethod: text("creation_method").default("automatic"),
-  createdBy: varchar("created_by").references(() => users.id),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
@@ -2200,7 +2200,7 @@ export const subscriptionChanges = pgTable("subscription_changes", {
   newValue: text("new_value"),
   monthlyDelta: real("monthly_delta"), // Ändring i månadsavgift (+ eller -)
   approvalStatus: text("approval_status").default("pending").notNull(), // pending, approved, rejected
-  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id, { onDelete: 'set null' }),
   approvedAt: timestamp("approved_at"),
   detectedAt: timestamp("detected_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -2311,7 +2311,7 @@ export const orderConceptRunLogs = pgTable("order_concept_run_logs", {
   tasksSkipped: integer("tasks_skipped").default(0),
   changesDetected: integer("changes_detected").default(0),
   details: jsonb("details"), // JSON with detailed changes
-  runBy: varchar("run_by").references(() => users.id),
+  runBy: varchar("run_by").references(() => users.id, { onDelete: 'set null' }),
   runAt: timestamp("run_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
@@ -2901,7 +2901,7 @@ export const customerBookingRequests = pgTable("customer_booking_requests", {
   preferredTimeSlot: text("preferred_time_slot"),
   customerNotes: text("customer_notes"),
   staffNotes: text("staff_notes"),
-  handledBy: varchar("handled_by").references(() => users.id),
+  handledBy: varchar("handled_by").references(() => users.id, { onDelete: 'set null' }),
   handledAt: timestamp("handled_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -2912,7 +2912,7 @@ export const customerPortalMessages = pgTable("customer_portal_messages", {
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   customerId: varchar("customer_id").references(() => customers.id).notNull(),
   sender: text("sender").notNull(), // "customer" or "staff"
-  senderUserId: varchar("sender_user_id").references(() => users.id),
+  senderUserId: varchar("sender_user_id").references(() => users.id, { onDelete: 'set null' }),
   message: text("message").notNull(),
   readAt: timestamp("read_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -2971,9 +2971,9 @@ export const customerIssueReports = pgTable("customer_issue_reports", {
   customerContact: text("customer_contact"),
   imageUrls: text("image_urls").array().default([]),
   staffNotes: text("staff_notes"),
-  assignedTo: varchar("assigned_to").references(() => users.id),
+  assignedTo: varchar("assigned_to").references(() => users.id, { onDelete: 'set null' }),
   resolvedAt: timestamp("resolved_at"),
-  resolvedBy: varchar("resolved_by").references(() => users.id),
+  resolvedBy: varchar("resolved_by").references(() => users.id, { onDelete: 'set null' }),
   resolution: text("resolution"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -3458,7 +3458,7 @@ export const protocols = pgTable("protocols", {
   
   // Utförande
   executedAt: timestamp("executed_at").notNull(),
-  executedBy: varchar("executed_by").references(() => users.id),
+  executedBy: varchar("executed_by").references(() => users.id, { onDelete: 'set null' }),
   executedByName: text("executed_by_name"),
   
   // Utförda åtgärder (JSON array)
@@ -3515,7 +3515,7 @@ export const deviationReports = pgTable("deviation_reports", {
   severityLevel: text("severity_level").default("medium").notNull(), // SeverityLevel
   
   // Vem upptäckte
-  reportedBy: varchar("reported_by").references(() => users.id),
+  reportedBy: varchar("reported_by").references(() => users.id, { onDelete: 'set null' }),
   reportedByName: text("reported_by_name"),
   reportedAt: timestamp("reported_at").defaultNow().notNull(),
   
@@ -3538,7 +3538,7 @@ export const deviationReports = pgTable("deviation_reports", {
   // Status och åtgärdshantering
   status: text("status").default("reported").notNull(), // reported, acknowledged, in_progress, resolved, cancelled
   resolvedAt: timestamp("resolved_at"),
-  resolvedBy: varchar("resolved_by").references(() => users.id),
+  resolvedBy: varchar("resolved_by").references(() => users.id, { onDelete: 'set null' }),
   resolutionNotes: text("resolution_notes"),
   
   // Kopplad order för åtgärd (om en separat order skapas)
@@ -3600,7 +3600,7 @@ export const qrCodeLinks = pgTable("qr_code_links", {
   lastScannedAt: timestamp("last_scanned_at"),
   // Skapad
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  createdBy: varchar("created_by").references(() => users.id),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
 }, (table) => [
   index("idx_qr_code_object").on(table.objectId),
   index("idx_qr_code_code").on(table.code),
@@ -3636,7 +3636,7 @@ export const publicIssueReports = pgTable("public_issue_reports", {
   linkedDeviationId: varchar("linked_deviation_id").references(() => deviationReports.id),
   linkedWorkOrderId: varchar("linked_work_order_id"),
   // Granskad av
-  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedBy: varchar("reviewed_by").references(() => users.id, { onDelete: 'set null' }),
   reviewedAt: timestamp("reviewed_at"),
   reviewNotes: text("review_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -3683,7 +3683,7 @@ export const customerChangeRequests = pgTable("customer_change_requests", {
   severity: text("severity"),
   createdByResourceId: varchar("created_by_resource_id").references(() => resources.id),
   linkedDeviationId: varchar("linked_deviation_id").references(() => deviationReports.id),
-  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedBy: varchar("reviewed_by").references(() => users.id, { onDelete: 'set null' }),
   reviewedAt: timestamp("reviewed_at"),
   reviewNotes: text("review_notes"),
   linkedWorkOrderId: varchar("linked_work_order_id"),
@@ -3745,7 +3745,7 @@ export const environmentalData = pgTable("environmental_data", {
   wasteType: text("waste_type"),
   // Datum
   recordedAt: timestamp("recorded_at").defaultNow().notNull(),
-  createdBy: varchar("created_by").references(() => users.id),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
 }, (table) => [
   index("idx_env_work_order").on(table.workOrderId),
   index("idx_env_resource").on(table.resourceId),
@@ -3873,7 +3873,7 @@ export const selfBookingSlots = pgTable("self_booking_slots", {
   areaZones: jsonb("area_zones").default([]), // Geografiska zoner som täcks
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  createdBy: varchar("created_by").references(() => users.id),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
 }, (table) => [
   index("idx_booking_slot_date").on(table.slotDate),
   index("idx_booking_slot_resource").on(table.resourceId),
@@ -4706,7 +4706,7 @@ export const recurringSlotPatterns = pgTable("recurring_slot_patterns", {
   isActive: boolean("is_active").default(true),
   generatedUntil: timestamp("generated_until"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  createdBy: varchar("created_by").references(() => users.id),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
 }, (table) => [
   index("idx_recurring_slot_tenant").on(table.tenantId),
 ]);
