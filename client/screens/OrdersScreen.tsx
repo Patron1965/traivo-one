@@ -676,7 +676,7 @@ export function OrdersScreen({ navigation }: any) {
           onPress={() => setSelectedDate(shiftDate(selectedDate, -1))}
           testID="button-date-prev"
         >
-          <Feather name="chevron-left" size={28} color={Colors.primary} />
+          <Feather name="chevron-left" size={28} color="#FFFFFF" />
         </Pressable>
         <Pressable
           style={styles.dateNavCenter}
@@ -703,7 +703,7 @@ export function OrdersScreen({ navigation }: any) {
           disabled={isAtMax}
           testID="button-date-next"
         >
-          <Feather name="chevron-right" size={28} color={isAtMax ? Colors.textMuted : Colors.primary} />
+          <Feather name="chevron-right" size={28} color={isAtMax ? Colors.textMuted : '#FFFFFF'} />
         </Pressable>
       </View>
       <ScrollView
@@ -784,18 +784,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderColor: Colors.primary + '30',
+    borderColor: Colors.primary + '40',
   },
   dateNavBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: Colors.primary + '20',
+    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   dateNavBtnDisabled: {
-    backgroundColor: Colors.border + '20',
+    backgroundColor: Colors.border,
   },
   dateNavCenter: {
     flexDirection: 'row',
