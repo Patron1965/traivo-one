@@ -591,6 +591,9 @@ export const ConflictListDialog = memo(function ConflictListDialog({ open, onOpe
         </DialogHeader>
         <ScrollArea className="flex-1 -mx-6 px-6">
           <div className="space-y-2 py-2">
+            {conflictEntries.length === 0 && (
+              <div className="text-center py-8 text-sm text-muted-foreground">Inga konflikter att visa</div>
+            )}
             {conflictEntries.map(({ job, reasons, resourceName, dateStr }) => (
               <button
                 key={job.id}
