@@ -493,19 +493,41 @@ interface RouteData {
   fallback?: boolean;
 }
 
+function formatDateLabel(dateStr: string): string {
+  const today = new Date().toISOString().split('T')[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  if (dateStr === today) return 'Idag';
+  if (dateStr === yesterday) return 'Igår';
+  const d = new Date(dateStr + 'T12:00:00');
+  const weekday = d.toLocaleDateString('sv-SE', { weekday: 'short' });
+  const day = d.getDate();
+  const month = d.toLocaleDateString('sv-SE', { month: 'short' });
+  return `${weekday} ${day} ${month}`;
+}
+
+function shiftDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T12:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
 export function OrdersScreen({ navigation }: any) {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<OrderStatus | 'all'>('all');
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const { currentPosition } = useGpsTracking();
   const { startPosition } = useAuth();
   const { activeJob, incomingJob } = useUrgentJob();
   const escalatedOrderId = activeJob?.orderId || incomingJob?.orderId || null;
+  const isToday = selectedDate === new Date().toISOString().split('T')[0];
+  const isFuture = selectedDate > new Date().toISOString().split('T')[0];
 
   const { data: orders, isLoading, refetch } = useQuery<Order[]>({
-    queryKey: ['/api/mobile/my-orders'],
+    queryKey: ['/api/mobile/my-orders', selectedDate],
+    queryFn: () => apiRequest('GET', `/api/mobile/my-orders?date=${selectedDate}`),
   });
 
   const routeOrigin = useMemo(() => {
@@ -570,6 +592,7 @@ export function OrdersScreen({ navigation }: any) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/summary'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders', selectedDate] });
     },
     onError: () => {
       triggerNotification(NotificationFeedbackType.Error);
@@ -645,10 +668,44 @@ export function OrdersScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
+      <View style={[styles.dateNav, { marginTop: headerHeight + Spacing.sm }]}>
+        <Pressable
+          style={styles.dateNavBtn}
+          onPress={() => setSelectedDate(shiftDate(selectedDate, -1))}
+          testID="button-date-prev"
+        >
+          <Feather name="chevron-left" size={22} color={Colors.primary} />
+        </Pressable>
+        <Pressable
+          style={styles.dateNavCenter}
+          onPress={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+          testID="button-date-today"
+        >
+          <Feather name="calendar" size={14} color={isToday ? Colors.primary : Colors.textSecondary} />
+          <ThemedText variant="label" color={isToday ? Colors.primary : Colors.text}>
+            {formatDateLabel(selectedDate)}
+          </ThemedText>
+          {!isToday ? (
+            <ThemedText variant="caption" color={Colors.primary} style={styles.todayLink}>
+              Idag
+            </ThemedText>
+          ) : null}
+        </Pressable>
+        <Pressable
+          style={[styles.dateNavBtn, isFuture ? { opacity: 0.3 } : null]}
+          onPress={() => {
+            if (!isFuture) setSelectedDate(shiftDate(selectedDate, 1));
+          }}
+          disabled={isFuture}
+          testID="button-date-next"
+        >
+          <Feather name="chevron-right" size={22} color={Colors.primary} />
+        </Pressable>
+      </View>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={[styles.filterScroll, { marginTop: headerHeight + Spacing.sm }]}
+        style={styles.filterScroll}
         contentContainerStyle={styles.filterContainer}
       >
         {FILTER_OPTIONS.map(opt => (
@@ -686,10 +743,20 @@ export function OrdersScreen({ navigation }: any) {
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Feather name="inbox" size={48} color={Colors.textMuted} />
+              <Feather name={isToday ? 'inbox' : 'calendar'} size={48} color={Colors.textMuted} />
               <ThemedText variant="body" color={Colors.textMuted}>
-                Inga uppdrag att visa
+                {isToday ? 'Inga uppdrag idag' : `Inga uppdrag ${formatDateLabel(selectedDate)}`}
               </ThemedText>
+              {!isToday ? (
+                <Pressable
+                  onPress={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+                  style={styles.backToTodayBtn}
+                  testID="button-back-to-today"
+                >
+                  <Feather name="arrow-left" size={14} color={Colors.primary} />
+                  <ThemedText variant="label" color={Colors.primary}>Tillbaka till idag</ThemedText>
+                </Pressable>
+              ) : null}
             </View>
           }
         />
@@ -702,6 +769,28 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  dateNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  dateNavBtn: {
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.round,
+  },
+  dateNavCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  todayLink: {
+    textDecorationLine: 'underline',
+    marginLeft: Spacing.xs,
   },
   filterScroll: {
     flexGrow: 0,
@@ -936,6 +1025,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.md,
     paddingTop: Spacing.xxxl * 2,
+  },
+  backToTodayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.round,
+    backgroundColor: Colors.primary + '15',
+    marginTop: Spacing.sm,
   },
   swipeActionsContainer: {
     ...StyleSheet.absoluteFillObject,
