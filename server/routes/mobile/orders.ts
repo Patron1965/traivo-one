@@ -263,7 +263,7 @@ router.patch('/orders/:id/status', async (req, res) => {
       }
       const statusLabels: Record<string, string> = {
         skapad: 'Skapad', planerad_pre: 'Förplanerad', planerad_resurs: 'Tilldelad',
-        planerad_las: 'Inlastad', utford: 'Utförd', fakturerad: 'Fakturerad',
+        planerad_las: 'Tilldelad', utford: 'Utförd', fakturerad: 'Fakturerad',
         impossible: 'Omöjlig', planned: 'Planerad', dispatched: 'Skickad',
         on_site: 'På plats', in_progress: 'Pågår', completed: 'Slutförd',
         failed: 'Misslyckad', cancelled: 'Avbruten', deferred: 'Uppskjuten',

@@ -26,7 +26,7 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
   planerad: 'Planerad',
   planerad_pre: 'Förplanerad',
   planerad_resurs: 'Tilldelad',
-  planerad_las: 'Inlastad',
+  planerad_las: 'Tilldelad',
   paborjad: 'Påbörjad',
   utford: 'Utförd',
   avslutad: 'Avslutad',
