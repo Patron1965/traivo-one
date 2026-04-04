@@ -123,7 +123,8 @@ import {
   protocols, deviationReports, qrCodeLinks, publicIssueReports, customerChangeRequests, environmentalData,
   visitConfirmations, technicianRatings, portalMessages, selfBookingSlots, selfBookings,
   tenantFeatures,
-  planningDecisionLog
+  planningDecisionLog,
+  invitations, recurringSlotPatterns
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray } from "drizzle-orm";
@@ -790,7 +791,39 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteUser(id: string): Promise<void> {
-    await db.delete(users).where(eq(users.id, id));
+    await db.transaction(async (tx) => {
+      await tx.delete(userTenantRoles).where(eq(userTenantRoles.userId, id));
+
+      await tx.update(resources).set({ userId: null }).where(eq(resources.userId, id));
+      await tx.update(tenantBranding).set({ createdBy: null }).where(eq(tenantBranding.createdBy, id));
+      await tx.update(tenantBranding).set({ updatedBy: null }).where(eq(tenantBranding.updatedBy, id));
+      await tx.update(userTenantRoles).set({ assignedBy: null }).where(eq(userTenantRoles.assignedBy, id));
+      await tx.update(invitations).set({ invitedBy: null }).where(eq(invitations.invitedBy, id));
+      await tx.update(invitations).set({ usedBy: null }).where(eq(invitations.usedBy, id));
+      await tx.update(auditLogs).set({ userId: null }).where(eq(auditLogs.userId, id));
+      await tx.update(tenantPackageInstallations).set({ installedBy: null }).where(eq(tenantPackageInstallations.installedBy, id));
+      await tx.update(objectImages).set({ uploadedBy: null }).where(eq(objectImages.uploadedBy, id));
+      await tx.update(taskInformation).set({ createdBy: null }).where(eq(taskInformation.createdBy, id));
+      await tx.update(orderConcepts).set({ createdBy: null }).where(eq(orderConcepts.createdBy, id));
+      await tx.update(assignments).set({ createdBy: null }).where(eq(assignments.createdBy, id));
+      await tx.update(subscriptionChanges).set({ approvedBy: null }).where(eq(subscriptionChanges.approvedBy, id));
+      await tx.update(orderConceptRunLogs).set({ runBy: null }).where(eq(orderConceptRunLogs.runBy, id));
+      await tx.update(customerBookingRequests).set({ handledBy: null }).where(eq(customerBookingRequests.handledBy, id));
+      await tx.update(customerPortalMessages).set({ senderUserId: null }).where(eq(customerPortalMessages.senderUserId, id));
+      await tx.update(customerIssueReports).set({ assignedTo: null }).where(eq(customerIssueReports.assignedTo, id));
+      await tx.update(customerIssueReports).set({ resolvedBy: null }).where(eq(customerIssueReports.resolvedBy, id));
+      await tx.update(protocols).set({ executedBy: null }).where(eq(protocols.executedBy, id));
+      await tx.update(deviationReports).set({ reportedBy: null }).where(eq(deviationReports.reportedBy, id));
+      await tx.update(deviationReports).set({ resolvedBy: null }).where(eq(deviationReports.resolvedBy, id));
+      await tx.update(qrCodeLinks).set({ createdBy: null }).where(eq(qrCodeLinks.createdBy, id));
+      await tx.update(customerChangeRequests).set({ reviewedBy: null }).where(eq(customerChangeRequests.reviewedBy, id));
+      await tx.update(publicIssueReports).set({ reviewedBy: null }).where(eq(publicIssueReports.reviewedBy, id));
+      await tx.update(environmentalData).set({ createdBy: null }).where(eq(environmentalData.createdBy, id));
+      await tx.update(selfBookingSlots).set({ createdBy: null }).where(eq(selfBookingSlots.createdBy, id));
+      await tx.update(recurringSlotPatterns).set({ createdBy: null }).where(eq(recurringSlotPatterns.createdBy, id));
+
+      await tx.delete(users).where(eq(users.id, id));
+    });
   }
 
   async upsertUser(userData: Partial<UpsertUser> & { id: string; email: string }): Promise<User> {

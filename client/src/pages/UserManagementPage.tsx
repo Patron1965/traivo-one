@@ -1351,9 +1351,12 @@ export default function UserManagementPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Ta bort användare?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Är du säker på att du vill ta bort {deleteTarget?.firstName} {deleteTarget?.lastName} ({deleteTarget?.email})?
-              Denna åtgärd kan inte ångras.
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>Är du säker på att du vill ta bort {deleteTarget?.firstName} {deleteTarget?.lastName} ({deleteTarget?.email})?</p>
+                <p className="text-sm text-amber-500 dark:text-amber-400">Detta kommer även att ta bort användarens rolltilldelningar och nollställa kopplingar i relaterade poster (t.ex. granskningar, tilldelningar, loggar).</p>
+                <p>Denna åtgärd kan inte ångras.</p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
