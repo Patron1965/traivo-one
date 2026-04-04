@@ -12,7 +12,7 @@ import { zoomLevels } from "./weekplanner/types";
 import { DroppableCell, DraggableJobCard } from "./weekplanner/DndComponents";
 import { JobCard, DragOverlayContent } from "./weekplanner/JobCard";
 import { UnscheduledSidebar } from "./weekplanner/UnscheduledSidebar";
-import { AssignDialog, SendScheduleDialog, ConflictDialog, ClearDialog, AutoFillDialog, DepChainDialog } from "./weekplanner/PlannerDialogs";
+import { AssignDialog, SendScheduleDialog, ConflictDialog, ClearDialog, AutoFillDialog, DepChainDialog, ConflictListDialog } from "./weekplanner/PlannerDialogs";
 import { PlannerToolbar, PlannerFooter } from "./weekplanner/PlannerToolbar";
 import { DisruptionPanel } from "./weekplanner/DisruptionPanel";
 import { DayTimelineView } from "./weekplanner/DayTimelineView";
@@ -28,6 +28,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const d = usePlannerData();
   const zoom = zoomLevels[d.zoomLevel];
   const [urgentDialogOpen, setUrgentDialogOpen] = useState(false);
+  const [conflictListOpen, setConflictListOpen] = useState(false);
   const [urgentPreselectedOrder, setUrgentPreselectedOrder] = useState<WorkOrderWithObject | null>(null);
 
   const handleEscalateUrgent = useCallback((job: WorkOrderWithObject) => {
@@ -63,6 +64,12 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     d.handleJobClick(jobId);
     onSelectJob?.(jobId);
   }, [d.handleJobClick, onSelectJob]);
+
+  const handleNavigateToConflictJob = useCallback((jobId: string, date: Date) => {
+    d.goToDay(date);
+    d.handleJobClick(jobId);
+    onSelectJob?.(jobId);
+  }, [d.goToDay, d.handleJobClick, onSelectJob]);
 
   const jobCardProps = useMemo(() => ({
     selectedJob: d.selectedJob,
@@ -222,6 +229,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
             jobConflictCount={Object.keys(d.jobConflicts).length}
             filteredScheduledCount={d.filteredScheduledJobs.length}
             unscheduledCount={d.unscheduledJobs.length}
+            onConflictClick={() => setConflictListOpen(true)}
           />
         </div>
 
@@ -293,6 +301,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       <ClearDialog open={d.clearDialogOpen} onOpenChange={d.setClearDialogOpen} viewMode={d.viewMode} jobCount={d.currentViewScheduledJobs.length} onConfirm={d.handleClearAllScheduled} loading={d.clearLoading} />
       <AutoFillDialog open={d.autoFillDialogOpen} onOpenChange={d.setAutoFillDialogOpen} overbooking={d.autoFillOverbooking} setOverbooking={d.setAutoFillOverbooking} geoClustering={d.autoFillGeoClustering} setGeoClustering={d.setAutoFillGeoClustering} geoSpread={d.autoFillGeoSpread} loading={d.autoFillLoading} applying={d.autoFillApplying} preview={d.autoFillPreview} skipped={d.autoFillSkipped} diag={d.autoFillDiag} resources={d.resources} viewMode={d.viewMode} currentWeekStart={d.currentWeekStart} currentDate={d.currentDate} onPreview={d.handleAutoFillPreview} onApply={d.handleAutoFillApply} />
       <DepChainDialog open={d.depChainDialogOpen} onOpenChange={(o) => { if (!o) { d.setDepChainDialogOpen(false); } }} depChainJobId={d.depChainJobId} workOrders={d.workOrders} depChainData={d.depChainData} />
+      <ConflictListDialog open={conflictListOpen} onOpenChange={setConflictListOpen} jobConflicts={d.jobConflicts} workOrders={d.workOrders} resources={d.resources} onNavigateToJob={handleNavigateToConflictJob} />
       <UrgentJobDialog open={urgentDialogOpen} onClose={() => setUrgentDialogOpen(false)} preselectedOrder={urgentPreselectedOrder} />
     </DndContext>
   );

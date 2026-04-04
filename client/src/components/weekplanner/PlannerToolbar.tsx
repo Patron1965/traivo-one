@@ -442,10 +442,12 @@ export const PlannerFooter = memo(function PlannerFooter({
   jobConflictCount,
   filteredScheduledCount,
   unscheduledCount,
+  onConflictClick,
 }: {
   jobConflictCount: number;
   filteredScheduledCount: number;
   unscheduledCount: number;
+  onConflictClick?: () => void;
 }) {
   return (
     <div className="px-3 py-1.5 border-t bg-muted/50 flex items-center justify-between gap-4 flex-wrap">
@@ -458,10 +460,14 @@ export const PlannerFooter = memo(function PlannerFooter({
         {jobConflictCount > 0 && (
           <>
             <span className="text-muted-foreground">|</span>
-            <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
+            <button
+              onClick={onConflictClick}
+              className="flex items-center gap-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:underline cursor-pointer transition-colors"
+              data-testid="button-show-conflicts"
+            >
               <AlertTriangle className="h-3 w-3" />
               <span>{jobConflictCount} konflikter</span>
-            </div>
+            </button>
           </>
         )}
       </div>

@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertTriangle, Loader2, User, Sparkles, Wand2, Mail, Copy, Check, Link2, ArrowRight, Trash2, Send, MapPin } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { AlertTriangle, Loader2, User, Sparkles, Wand2, Mail, Copy, Check, Link2, ArrowRight, Trash2, Send, MapPin, Calendar, ChevronRight } from "lucide-react";
 import { format, startOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useQuery } from "@tanstack/react-query";
@@ -539,6 +540,94 @@ export const DepChainDialog = memo(function DepChainDialog(props: DepChainDialog
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-close-dep-chain">Stäng</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+});
+
+interface ConflictListDialogProps {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  jobConflicts: Record<string, string[]>;
+  workOrders: WorkOrderWithObject[];
+  resources: Resource[];
+  onNavigateToJob: (jobId: string, date: Date) => void;
+}
+
+export const ConflictListDialog = memo(function ConflictListDialog({ open, onOpenChange, jobConflicts, workOrders, resources, onNavigateToJob }: ConflictListDialogProps) {
+  const resourceMap = useMemo(() => new Map(resources.map(r => [r.id, r])), [resources]);
+  const conflictEntries = useMemo(() => {
+    const entries: Array<{ job: WorkOrderWithObject; reasons: string[]; resourceName: string; dateStr: string }> = [];
+    for (const [jobId, reasons] of Object.entries(jobConflicts)) {
+      const job = workOrders.find(wo => wo.id === jobId);
+      if (!job) continue;
+      const resource = job.resourceId ? resourceMap.get(job.resourceId) : null;
+      entries.push({
+        job,
+        reasons,
+        resourceName: resource?.name || "Ej tilldelad",
+        dateStr: job.scheduledDate ? format(new Date(job.scheduledDate), "EEE d MMM", { locale: sv }) : "—",
+      });
+    }
+    entries.sort((a, b) => {
+      if (!a.job.scheduledDate || !b.job.scheduledDate) return 0;
+      return new Date(a.job.scheduledDate).getTime() - new Date(b.job.scheduledDate).getTime();
+    });
+    return entries;
+  }, [jobConflicts, workOrders, resourceMap]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[80vh] flex flex-col" data-testid="dialog-conflict-list">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-red-500" />
+            {conflictEntries.length} konflikter
+          </DialogTitle>
+          <DialogDescription>
+            Klicka på ett jobb för att navigera till det i planeringsvyn.
+          </DialogDescription>
+        </DialogHeader>
+        <ScrollArea className="flex-1 -mx-6 px-6">
+          <div className="space-y-2 py-2">
+            {conflictEntries.map(({ job, reasons, resourceName, dateStr }) => (
+              <button
+                key={job.id}
+                onClick={() => {
+                  if (job.scheduledDate) {
+                    onNavigateToJob(job.id, new Date(job.scheduledDate));
+                  }
+                  onOpenChange(false);
+                }}
+                className="w-full text-left rounded-lg border p-3 hover:bg-muted/50 transition-colors group cursor-pointer"
+                data-testid={`conflict-item-${job.id}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate">{job.title}</div>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1"><User className="h-3 w-3" />{resourceName}</span>
+                      <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{dateStr}</span>
+                      {job.scheduledStartTime && <span>{job.scheduledStartTime}</span>}
+                    </div>
+                    <div className="mt-1.5 space-y-0.5">
+                      {reasons.map((reason, i) => (
+                        <div key={i} className="flex items-start gap-1.5 text-xs text-red-600 dark:text-red-400">
+                          <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                          <span>{reason}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground shrink-0 mt-1 transition-colors" />
+                </div>
+              </button>
+            ))}
+          </div>
+        </ScrollArea>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-close-conflict-list">Stäng</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
