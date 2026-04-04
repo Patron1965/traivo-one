@@ -288,7 +288,6 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
     const updateData: any = {};
     
     if (status === 'paborjad' || status === 'in_progress') {
-      updateData.orderStatus = 'planerad_resurs';
       updateData.executionStatus = 'on_site';
       updateData.onSiteAt = new Date();
     } else if (status === 'dispatched') {
