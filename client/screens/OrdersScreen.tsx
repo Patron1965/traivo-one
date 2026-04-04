@@ -674,32 +674,34 @@ export function OrdersScreen({ navigation }: any) {
           onPress={() => setSelectedDate(shiftDate(selectedDate, -1))}
           testID="button-date-prev"
         >
-          <Feather name="chevron-left" size={22} color={Colors.primary} />
+          <Feather name="chevron-left" size={28} color={Colors.primary} />
         </Pressable>
         <Pressable
           style={styles.dateNavCenter}
           onPress={() => setSelectedDate(new Date().toISOString().split('T')[0])}
           testID="button-date-today"
         >
-          <Feather name="calendar" size={14} color={isToday ? Colors.primary : Colors.textSecondary} />
-          <ThemedText variant="label" color={isToday ? Colors.primary : Colors.text}>
+          <Feather name="calendar" size={16} color={isToday ? Colors.primary : Colors.textSecondary} />
+          <ThemedText variant="subtitle" color={isToday ? Colors.primary : Colors.text} style={{ fontWeight: '700' }}>
             {formatDateLabel(selectedDate)}
           </ThemedText>
           {!isToday ? (
-            <ThemedText variant="caption" color={Colors.primary} style={styles.todayLink}>
-              Idag
-            </ThemedText>
+            <View style={styles.todayBadge}>
+              <ThemedText variant="caption" color={Colors.textInverse} style={{ fontWeight: '700', fontSize: 11 }}>
+                Idag
+              </ThemedText>
+            </View>
           ) : null}
         </Pressable>
         <Pressable
-          style={[styles.dateNavBtn, isFuture ? { opacity: 0.3 } : null]}
+          style={[styles.dateNavBtn, isToday ? styles.dateNavBtnDisabled : null]}
           onPress={() => {
-            if (!isFuture) setSelectedDate(shiftDate(selectedDate, 1));
+            if (!isToday) setSelectedDate(shiftDate(selectedDate, 1));
           }}
-          disabled={isFuture}
+          disabled={isToday}
           testID="button-date-next"
         >
-          <Feather name="chevron-right" size={22} color={Colors.primary} />
+          <Feather name="chevron-right" size={28} color={isToday ? Colors.textMuted : Colors.primary} />
         </Pressable>
       </View>
       <ScrollView
@@ -775,11 +777,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    marginHorizontal: Spacing.md,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   dateNavBtn: {
-    padding: Spacing.sm,
-    borderRadius: BorderRadius.round,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dateNavBtnDisabled: {
+    backgroundColor: Colors.border + '30',
   },
   dateNavCenter: {
     flexDirection: 'row',
@@ -788,8 +802,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
   },
-  todayLink: {
-    textDecorationLine: 'underline',
+  todayBadge: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.round,
     marginLeft: Spacing.xs,
   },
   filterScroll: {
