@@ -253,7 +253,9 @@ app.get('/bundles/:platform/index.bundle', (req, res) => {
     }
 
     res.setHeader('Content-Type', 'application/javascript');
-    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.send(bundleCache[cacheKey].content);
   } catch (e) {
     console.error('Bundle serve error:', e);
