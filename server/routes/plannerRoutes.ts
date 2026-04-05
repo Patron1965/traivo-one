@@ -590,7 +590,7 @@ default_icon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" strok
 function showToast(type, title, message) {
 const container = document.getElementById('toast-container');
 const toast = document.createElement('div');
-const classMap = { status_changed:'toast-status', deviation_reported:'toast-deviation', order_reassigned:'toast-reassign' };
+const classMap = { status_changed:'toast-status', deviation_reported:'toast-deviation', order_reassigned:'toast-reassign', error:'toast-deviation' };
 toast.className = 'toast ' + (classMap[type] || 'toast-status');
 toast.innerHTML = '<div class="toast-icon">'+(SVG_ICONS[type]||SVG_ICONS.default_icon)+'</div><div class="toast-body"><div class="toast-title">'+esc(title)+'</div><div class="toast-msg">'+esc(message)+'</div><div class="toast-time">'+new Date().toLocaleTimeString('sv-SE')+'</div></div>';
 toast.onclick = function() { toast.remove(); };
@@ -708,7 +708,9 @@ return (meters/1000).toFixed(1)+' km';
 async function loadDrivers() {
 try {
   var res = await fetch('/api/planner/drivers/locations', {credentials:'include'});
-  driversData = await res.json();
+  var data = await res.json();
+  if(!res.ok || !Array.isArray(data)) { driversData = []; showToast('error','Kunde inte ladda f\\u00f6rare', data && data.error ? data.error : 'Servern svarade med ett ov\\u00e4ntat format'); return 0; }
+  driversData = data;
   driverLayer.clearLayers();
   driversData.forEach(function(d) {
     if(!d.latitude||!d.longitude) return;
@@ -719,7 +721,7 @@ try {
   });
   updateDriverPanel();
   return driversData.length;
-} catch(e) { console.error(e); return 0; }
+} catch(e) { console.error(e); driversData = []; return 0; }
 }
 
 function updateDriverPanel() {
@@ -820,11 +822,13 @@ renderRoutes();
 async function loadJobs() {
 try {
   var res = await fetch('/api/planner/orders?range='+currentRange, {credentials:'include'});
-  jobsData = await res.json();
+  var data = await res.json();
+  if(!res.ok || !Array.isArray(data)) { jobsData = []; showToast('error','Kunde inte ladda jobb', data && data.error ? data.error : 'Servern svarade med ett ov\\u00e4ntat format'); renderJobs(); updateDriverPanel(); return 0; }
+  jobsData = data;
   renderJobs();
   updateDriverPanel();
   return jobsData.length;
-} catch(e) { console.error(e); return 0; }
+} catch(e) { console.error(e); jobsData = []; return 0; }
 }
 
 function renderJobs() {
@@ -867,14 +871,16 @@ jobsData.forEach(function(j) {
 async function loadRoutes() {
 try {
   var res = await fetch('/api/planner/routes', {credentials:'include'});
-  routesData = await res.json();
+  var data = await res.json();
+  if(!res.ok || !Array.isArray(data)) { routesData = []; showToast('error','Kunde inte ladda rutter', data && data.error ? data.error : 'Servern svarade med ett ov\\u00e4ntat format'); return; }
+  routesData = data;
   routesData.forEach(function(r,i){ r._color = r.color || ROUTE_COLORS[i%ROUTE_COLORS.length]; });
   if(Object.keys(visibleRoutes).length === 0) {
     routesData.forEach(function(r){ visibleRoutes[r.resourceId] = true; });
   }
   updateRoutePanel();
   await renderRoutes();
-} catch(e) { console.error('Routes error:', e); }
+} catch(e) { console.error('Routes error:', e); routesData = []; }
 }
 
 async function renderRoutes() {
