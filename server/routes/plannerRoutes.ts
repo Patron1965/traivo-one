@@ -381,11 +381,21 @@ body{font-family:Inter,system-ui,sans-serif;background:#1a1a2e}
 .driver-status.traveling{background:#F39C12}
 .driver-status.on_site{background:#3B82F6}
 .driver-status.offline{background:#95A5A6}
-.filter-chips{display:flex;flex-wrap:wrap;gap:4px}
-.filter-chip{display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:11px;cursor:pointer;transition:all .15s;border:1px solid transparent;user-select:none}
-.filter-chip.active{opacity:1}
-.filter-chip.inactive{opacity:0.4}
-.filter-chip:hover{opacity:0.8}
+.status-filter-wrapper{position:relative}
+.status-filter-btn{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;background:#2d2d4a;color:#ccc;border:1px solid #3d3d5c;user-select:none;transition:all .15s;width:100%}
+.status-filter-btn:hover{background:#3d3d5c;color:#fff}
+.status-filter-btn .arrow{margin-left:auto;font-size:10px;transition:transform .15s}
+.status-filter-btn.open .arrow{transform:rotate(180deg)}
+.status-dropdown{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#1e1e36;border:1px solid #3d3d5c;border-radius:8px;z-index:1100;box-shadow:0 8px 24px rgba(0,0,0,0.4);max-height:320px;display:flex;flex-direction:column}
+.status-dropdown-actions{display:flex;gap:4px;padding:8px;border-bottom:1px solid #3d3d5c}
+.status-dropdown-actions button{flex:1;padding:4px 8px;border:none;border-radius:6px;font-size:11px;cursor:pointer;background:#2d2d4a;color:#aaa;transition:all .15s}
+.status-dropdown-actions button:hover{background:#3d3d5c;color:#fff}
+.status-dropdown-list{overflow-y:auto;padding:4px}
+.status-dropdown-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;font-size:12px;cursor:pointer;transition:all .15s;color:#ccc;user-select:none}
+.status-dropdown-item:hover{background:#2d2d4a}
+.status-dropdown-item.inactive{opacity:0.5}
+.status-dropdown-check{width:16px;height:16px;border-radius:4px;border:1.5px solid #555;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;transition:all .15s}
+.status-dropdown-item.active .status-dropdown-check{background:#8E44AD;border-color:#8E44AD;color:#fff}
 .filter-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
 .controls{position:absolute;top:10px;right:10px;z-index:1000;display:flex;gap:8px;flex-wrap:wrap}
 .controls button{padding:8px 16px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;transition:all .2s}
@@ -454,7 +464,20 @@ body{font-family:Inter,system-ui,sans-serif;background:#1a1a2e}
 </div>
 <div class="panel-section">
   <div class="panel-section-title">Statusfilter</div>
-  <div class="filter-chips" id="status-filters"></div>
+  <div class="status-filter-wrapper" id="status-filter-wrapper">
+    <div class="status-filter-btn" id="status-filter-btn" data-testid="status-filter-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+      <span id="status-filter-label">Statusfilter</span>
+      <span class="arrow">&#9660;</span>
+    </div>
+    <div class="status-dropdown" id="status-dropdown" style="display:none">
+      <div class="status-dropdown-actions">
+        <button id="status-select-all" data-testid="status-select-all">Markera alla</button>
+        <button id="status-deselect-all" data-testid="status-deselect-all">Avmarkera alla</button>
+      </div>
+      <div class="status-dropdown-list" id="status-dropdown-list"></div>
+    </div>
+  </div>
 </div>
 <div class="panel-section">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -530,24 +553,65 @@ function saveStatusFilters() {
 try { sessionStorage.setItem('nf_status_filters', JSON.stringify(statusFilters)); } catch(e) {}
 }
 
+function updateStatusFilterLabel() {
+  var total = Object.keys(STATUS_COLORS).length;
+  var active = Object.keys(STATUS_COLORS).filter(function(s) { return statusFilters[s]; }).length;
+  document.getElementById('status-filter-label').textContent = 'Statusfilter (' + active + '/' + total + ')';
+}
+
 function renderStatusFilters() {
-var container = document.getElementById('status-filters');
-container.innerHTML = Object.keys(STATUS_COLORS).map(function(status) {
-  var active = statusFilters[status];
-  return '<div class="filter-chip '+(active?'active':'inactive')+'" data-status="'+status+'" style="background:'+(active?STATUS_COLORS[status]+'22':'#2d2d4a')+';border-color:'+(active?STATUS_COLORS[status]:'transparent')+';color:'+(active?'#fff':'#888')+'"><div class="filter-dot" style="background:'+STATUS_COLORS[status]+'"></div>'+(STATUS_LABELS[status]||status)+'</div>';
-}).join('');
-container.querySelectorAll('.filter-chip').forEach(function(chip) {
-  chip.addEventListener('click', function() {
-    var s = chip.dataset.status;
-    statusFilters[s] = !statusFilters[s];
+  var container = document.getElementById('status-dropdown-list');
+  container.innerHTML = Object.keys(STATUS_COLORS).map(function(status) {
+    var active = statusFilters[status];
+    return '<div class="status-dropdown-item '+(active?'active':'inactive')+'" data-status="'+status+'" data-testid="status-item-'+status+'"><div class="status-dropdown-check">'+(active?'&#10003;':'')+'</div><div class="filter-dot" style="background:'+STATUS_COLORS[status]+'"></div><span>'+(STATUS_LABELS[status]||status)+'</span></div>';
+  }).join('');
+  container.querySelectorAll('.status-dropdown-item').forEach(function(item) {
+    item.addEventListener('click', function() {
+      var s = item.dataset.status;
+      statusFilters[s] = !statusFilters[s];
+      saveStatusFilters();
+      renderStatusFilters();
+      renderJobs();
+      renderRoutes();
+      updateInfoBar();
+    });
+  });
+  updateStatusFilterLabel();
+}
+
+(function initStatusDropdown() {
+  var btn = document.getElementById('status-filter-btn');
+  var dropdown = document.getElementById('status-dropdown');
+  btn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var open = dropdown.style.display !== 'none';
+    dropdown.style.display = open ? 'none' : 'flex';
+    btn.classList.toggle('open', !open);
+  });
+  document.addEventListener('click', function(e) {
+    var wrapper = document.getElementById('status-filter-wrapper');
+    if (!wrapper.contains(e.target)) {
+      dropdown.style.display = 'none';
+      btn.classList.remove('open');
+    }
+  });
+  document.getElementById('status-select-all').addEventListener('click', function() {
+    Object.keys(STATUS_COLORS).forEach(function(s) { statusFilters[s] = true; });
     saveStatusFilters();
     renderStatusFilters();
     renderJobs();
     renderRoutes();
     updateInfoBar();
   });
-});
-}
+  document.getElementById('status-deselect-all').addEventListener('click', function() {
+    Object.keys(STATUS_COLORS).forEach(function(s) { statusFilters[s] = false; });
+    saveStatusFilters();
+    renderStatusFilters();
+    renderJobs();
+    renderRoutes();
+    updateInfoBar();
+  });
+})();
 
 function createDriverIcon(status) {
 const color = status === 'traveling' ? '#F39C12' : status === 'on_site' ? '#27AE60' : '#3B82F6';
@@ -879,10 +943,14 @@ async function loadRoutes() {
 try {
   var res = await fetch('/api/planner/routes', {credentials:'include'});
   var data = await res.json();
+<<<<<<< HEAD
   if(!res.ok || !Array.isArray(data)) { routesData = []; routeLayer.clearLayers(); updateRoutePanel(); loadErrors = loadErrors.filter(function(e){return e!=='rutter'}); loadErrors.push('rutter'); updateInfoBar(); showToast('error','Kunde inte ladda rutter', data && data.error ? data.error : 'Servern svarade med ett ov\\u00e4ntat format'); return; }
   var hadRouteErr = loadErrors.some(function(e){return e==='rutter'});
   loadErrors = loadErrors.filter(function(e){return e!=='rutter'});
   if(hadRouteErr) updateInfoBar();
+=======
+  if(!res.ok || !Array.isArray(data)) { routesData = []; routeLayer.clearLayers(); updateRoutePanel(); updateInfoBar(); showToast('error','Kunde inte ladda rutter', data && data.error ? data.error : 'Servern svarade med ett ov\\u00e4ntat format'); return; }
+>>>>>>> f3cd257 (Saved your changes before starting work)
   routesData = data;
   routesData.forEach(function(r,i){ r._color = r.color || ROUTE_COLORS[i%ROUTE_COLORS.length]; });
   if(Object.keys(visibleRoutes).length === 0) {
@@ -890,7 +958,11 @@ try {
   }
   updateRoutePanel();
   await renderRoutes();
+<<<<<<< HEAD
 } catch(e) { console.error('Routes error:', e); routesData = []; routeLayer.clearLayers(); updateRoutePanel(); loadErrors = loadErrors.filter(function(e){return e!=='rutter'}); loadErrors.push('rutter'); updateInfoBar(); }
+=======
+} catch(e) { console.error('Routes error:', e); routesData = []; routeLayer.clearLayers(); updateRoutePanel(); updateInfoBar(); }
+>>>>>>> f3cd257 (Saved your changes before starting work)
 }
 
 async function renderRoutes() {
