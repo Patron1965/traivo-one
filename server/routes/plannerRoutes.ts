@@ -711,7 +711,9 @@ try {
   var res = await fetch('/api/planner/drivers/locations', {credentials:'include'});
   var data = await res.json();
   if(!res.ok || !Array.isArray(data)) { driversData = []; driverLayer.clearLayers(); updateDriverPanel(); loadErrors = loadErrors.filter(function(e){return e!=='f\\u00f6rare'}); loadErrors.push('f\\u00f6rare'); updateInfoBar(); showToast('error','Kunde inte ladda f\\u00f6rare', data && data.error ? data.error : 'Servern svarade med ett ov\\u00e4ntat format'); return 0; }
+  var hadError = loadErrors.some(function(e){return e==='f\\u00f6rare'});
   loadErrors = loadErrors.filter(function(e){return e!=='f\\u00f6rare'});
+  if(hadError) updateInfoBar();
   driversData = data;
   driverLayer.clearLayers();
   driversData.forEach(function(d) {
@@ -826,7 +828,9 @@ try {
   var res = await fetch('/api/planner/orders?range='+currentRange, {credentials:'include'});
   var data = await res.json();
   if(!res.ok || !Array.isArray(data)) { jobsData = []; jobCluster.clearLayers(); updateDriverPanel(); loadErrors = loadErrors.filter(function(e){return e!=='jobb'}); loadErrors.push('jobb'); updateInfoBar(); showToast('error','Kunde inte ladda jobb', data && data.error ? data.error : 'Servern svarade med ett ov\\u00e4ntat format'); return 0; }
+  var hadJobErr = loadErrors.some(function(e){return e==='jobb'});
   loadErrors = loadErrors.filter(function(e){return e!=='jobb'});
+  if(hadJobErr) updateInfoBar();
   jobsData = data;
   renderJobs();
   updateDriverPanel();
@@ -876,7 +880,9 @@ try {
   var res = await fetch('/api/planner/routes', {credentials:'include'});
   var data = await res.json();
   if(!res.ok || !Array.isArray(data)) { routesData = []; routeLayer.clearLayers(); updateRoutePanel(); loadErrors = loadErrors.filter(function(e){return e!=='rutter'}); loadErrors.push('rutter'); updateInfoBar(); showToast('error','Kunde inte ladda rutter', data && data.error ? data.error : 'Servern svarade med ett ov\\u00e4ntat format'); return; }
+  var hadRouteErr = loadErrors.some(function(e){return e==='rutter'});
   loadErrors = loadErrors.filter(function(e){return e!=='rutter'});
+  if(hadRouteErr) updateInfoBar();
   routesData = data;
   routesData.forEach(function(r,i){ r._color = r.color || ROUTE_COLORS[i%ROUTE_COLORS.length]; });
   if(Object.keys(visibleRoutes).length === 0) {
