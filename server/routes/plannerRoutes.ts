@@ -943,14 +943,10 @@ async function loadRoutes() {
 try {
   var res = await fetch('/api/planner/routes', {credentials:'include'});
   var data = await res.json();
-<<<<<<< HEAD
   if(!res.ok || !Array.isArray(data)) { routesData = []; routeLayer.clearLayers(); updateRoutePanel(); loadErrors = loadErrors.filter(function(e){return e!=='rutter'}); loadErrors.push('rutter'); updateInfoBar(); showToast('error','Kunde inte ladda rutter', data && data.error ? data.error : 'Servern svarade med ett ov\\u00e4ntat format'); return; }
   var hadRouteErr = loadErrors.some(function(e){return e==='rutter'});
   loadErrors = loadErrors.filter(function(e){return e!=='rutter'});
   if(hadRouteErr) updateInfoBar();
-=======
-  if(!res.ok || !Array.isArray(data)) { routesData = []; routeLayer.clearLayers(); updateRoutePanel(); updateInfoBar(); showToast('error','Kunde inte ladda rutter', data && data.error ? data.error : 'Servern svarade med ett ov\\u00e4ntat format'); return; }
->>>>>>> f3cd257 (Saved your changes before starting work)
   routesData = data;
   routesData.forEach(function(r,i){ r._color = r.color || ROUTE_COLORS[i%ROUTE_COLORS.length]; });
   if(Object.keys(visibleRoutes).length === 0) {
@@ -958,11 +954,7 @@ try {
   }
   updateRoutePanel();
   await renderRoutes();
-<<<<<<< HEAD
 } catch(e) { console.error('Routes error:', e); routesData = []; routeLayer.clearLayers(); updateRoutePanel(); loadErrors = loadErrors.filter(function(e){return e!=='rutter'}); loadErrors.push('rutter'); updateInfoBar(); }
-=======
-} catch(e) { console.error('Routes error:', e); routesData = []; routeLayer.clearLayers(); updateRoutePanel(); updateInfoBar(); }
->>>>>>> f3cd257 (Saved your changes before starting work)
 }
 
 async function renderRoutes() {
