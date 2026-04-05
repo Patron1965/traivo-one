@@ -308,17 +308,17 @@ app.patch("/api/planner/orders/:id/reassign", isAuthenticated, asyncHandler(asyn
 app.get("/planner/map", (req, res) => {
   const STATUS_COLORS: Record<string, string> = {
     planned: "#8E44AD",
-    planerad_resurs: "#8E44AD",
+    planerad_resurs: "#6C3483",
     en_route: "#F39C12",
     in_progress: "#27AE60",
-    paborjad: "#27AE60",
+    paborjad: "#E67E22",
     completed: "#1B8553",
-    avslutad: "#1B8553",
+    avslutad: "#2ECC71",
     deferred: "#E74C3C",
     cancelled: "#95A5A6",
     draft: "#6C757D",
     ny: "#3B82F6",
-    planerad: "#8E44AD",
+    planerad: "#9B59B6",
   };
 
   const STATUS_LABELS: Record<string, string> = {
