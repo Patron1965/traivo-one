@@ -513,6 +513,7 @@ function escHtml(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').repla
 let driversData = [];
 let jobsData = [];
 let routesData = [];
+let loadErrors = [];
 let selectedDriverId = null;
 let visibleRoutes = {};
 let statusFilters = {};
@@ -709,7 +710,8 @@ async function loadDrivers() {
 try {
   var res = await fetch('/api/planner/drivers/locations', {credentials:'include'});
   var data = await res.json();
-  if(!res.ok || !Array.isArray(data)) { driversData = []; showToast('error','Kunde inte ladda f\\u00f6rare', data && data.error ? data.error : 'Servern svarade med ett ov\\u00e4ntat format'); return 0; }
+  if(!res.ok || !Array.isArray(data)) { driversData = []; driverLayer.clearLayers(); updateDriverPanel(); loadErrors = loadErrors.filter(function(e){return e!=='f\\u00f6rare'}); loadErrors.push('f\\u00f6rare'); updateInfoBar(); showToast('error','Kunde inte ladda f\\u00f6rare', data && data.error ? data.error : 'Servern svarade med ett ov\\u00e4ntat format'); return 0; }
+  loadErrors = loadErrors.filter(function(e){return e!=='f\\u00f6rare'});
   driversData = data;
   driverLayer.clearLayers();
   driversData.forEach(function(d) {
@@ -721,7 +723,7 @@ try {
   });
   updateDriverPanel();
   return driversData.length;
-} catch(e) { console.error(e); driversData = []; return 0; }
+} catch(e) { console.error(e); driversData = []; driverLayer.clearLayers(); updateDriverPanel(); loadErrors = loadErrors.filter(function(e){return e!=='f\\u00f6rare'}); loadErrors.push('f\\u00f6rare'); updateInfoBar(); return 0; }
 }
 
 function updateDriverPanel() {
@@ -823,12 +825,13 @@ async function loadJobs() {
 try {
   var res = await fetch('/api/planner/orders?range='+currentRange, {credentials:'include'});
   var data = await res.json();
-  if(!res.ok || !Array.isArray(data)) { jobsData = []; showToast('error','Kunde inte ladda jobb', data && data.error ? data.error : 'Servern svarade med ett ov\\u00e4ntat format'); renderJobs(); updateDriverPanel(); return 0; }
+  if(!res.ok || !Array.isArray(data)) { jobsData = []; jobCluster.clearLayers(); updateDriverPanel(); loadErrors = loadErrors.filter(function(e){return e!=='jobb'}); loadErrors.push('jobb'); updateInfoBar(); showToast('error','Kunde inte ladda jobb', data && data.error ? data.error : 'Servern svarade med ett ov\\u00e4ntat format'); return 0; }
+  loadErrors = loadErrors.filter(function(e){return e!=='jobb'});
   jobsData = data;
   renderJobs();
   updateDriverPanel();
   return jobsData.length;
-} catch(e) { console.error(e); jobsData = []; return 0; }
+} catch(e) { console.error(e); jobsData = []; jobCluster.clearLayers(); updateDriverPanel(); loadErrors = loadErrors.filter(function(e){return e!=='jobb'}); loadErrors.push('jobb'); updateInfoBar(); return 0; }
 }
 
 function renderJobs() {
@@ -872,7 +875,8 @@ async function loadRoutes() {
 try {
   var res = await fetch('/api/planner/routes', {credentials:'include'});
   var data = await res.json();
-  if(!res.ok || !Array.isArray(data)) { routesData = []; showToast('error','Kunde inte ladda rutter', data && data.error ? data.error : 'Servern svarade med ett ov\\u00e4ntat format'); return; }
+  if(!res.ok || !Array.isArray(data)) { routesData = []; routeLayer.clearLayers(); updateRoutePanel(); loadErrors = loadErrors.filter(function(e){return e!=='rutter'}); loadErrors.push('rutter'); updateInfoBar(); showToast('error','Kunde inte ladda rutter', data && data.error ? data.error : 'Servern svarade med ett ov\\u00e4ntat format'); return; }
+  loadErrors = loadErrors.filter(function(e){return e!=='rutter'});
   routesData = data;
   routesData.forEach(function(r,i){ r._color = r.color || ROUTE_COLORS[i%ROUTE_COLORS.length]; });
   if(Object.keys(visibleRoutes).length === 0) {
@@ -880,7 +884,7 @@ try {
   }
   updateRoutePanel();
   await renderRoutes();
-} catch(e) { console.error('Routes error:', e); routesData = []; }
+} catch(e) { console.error('Routes error:', e); routesData = []; routeLayer.clearLayers(); updateRoutePanel(); loadErrors = loadErrors.filter(function(e){return e!=='rutter'}); loadErrors.push('rutter'); updateInfoBar(); }
 }
 
 async function renderRoutes() {
@@ -996,7 +1000,9 @@ function updateInfoBar() {
 var visJobs = jobsVisible ? jobsData.filter(function(j){return statusFilters[j.status]}).length : 0;
 var visRoutes = routesData.filter(function(r){return visibleRoutes[r.resourceId]!==false}).length;
 var bar = document.getElementById('info-bar');
-bar.innerHTML = '<span class="info-stat">'+driversData.length+' f\\u00f6rare</span>'
+var errorHtml = loadErrors.length > 0 ? '<span class="info-stat" style="color:#ef4444">\\u26a0 Fel vid laddning: '+loadErrors.join(', ')+'</span><span class="info-divider"></span>' : '';
+bar.innerHTML = errorHtml
+  +'<span class="info-stat">'+driversData.length+' f\\u00f6rare</span>'
   +'<span class="info-divider"></span>'
   +'<span class="info-stat">'+(jobsVisible?visJobs+' jobb':'Jobb dolda')+'</span>'
   +'<span class="info-divider"></span>'
