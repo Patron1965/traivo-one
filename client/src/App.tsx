@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, lazy, Suspense } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -12,7 +12,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { ThemeProvider, useTheme } from "@/hooks/use-theme";
 import { CommandPalette } from "@/components/CommandPalette";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
-import { WelcomeSplash } from "@/components/WelcomeSplash";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { FeatureProvider } from "@/lib/feature-context";
 import { TourProvider } from "@/hooks/use-tour";
@@ -251,27 +250,9 @@ function useFieldLoginRedirect() {
   return sessionStorage.getItem("field_login_redirect") !== null;
 }
 
-function useLoginSplash() {
-  const [showSplash, setShowSplash] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("login") === "1") {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("login");
-      window.history.replaceState({}, "", url.pathname + url.search);
-      return true;
-    }
-    return false;
-  });
-
-  const dismissSplash = useCallback(() => setShowSplash(false), []);
-
-  return { showSplash, dismissSplash };
-}
-
 function AppContent() {
   const [location] = useLocation();
   const { isAuthenticated, isLoading, accessGranted } = useAuth();
-  const { showSplash, dismissSplash } = useLoginSplash();
   
   const isPendingFieldRedirect = useFieldLoginRedirect();
   
@@ -432,7 +413,6 @@ function AppContent() {
 
   return (
     <TenantBrandingProvider>
-      {showSplash && <WelcomeSplash onComplete={dismissSplash} />}
       <AuthenticatedApp />
     </TenantBrandingProvider>
   );
