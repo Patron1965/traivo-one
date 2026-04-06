@@ -50,7 +50,7 @@ import { ObjectContactsPanel } from "@/components/ObjectContactsPanel";
 import { ObjectImagesGallery } from "@/components/ObjectImagesGallery";
 import { OnboardingGuide } from "@/components/OnboardingGuide";
 import { useLanguage } from "@/hooks/use-language";
-import { en as enLocale } from "date-fns/locale";
+import { enUS as enLocale } from "date-fns/locale";
 
 interface AIMessage {
   id: string;
