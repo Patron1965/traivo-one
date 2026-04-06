@@ -69,11 +69,12 @@ function AIAssistantPanel({
   todaysOrders: WorkOrder[];
   thisWeekOrders: WorkOrder[];
 }) {
+  const { t: tl } = useLanguage();
   const [messages, setMessages] = useState<AIMessage[]>([
     {
       id: "welcome",
       role: "assistant",
-      content: "Hej! Jag är din AI-assistent. Fråga mig om dagens arbete, kommande uppdrag eller om du behöver hjälp med något.",
+      content: tl("ai.greeting"),
     }
   ]);
   const [input, setInput] = useState("");
@@ -95,14 +96,14 @@ function AIAssistantPanel({
       setMessages(prev => [...prev, {
         id: `assistant-${Date.now()}`,
         role: "assistant",
-        content: data.answer || "Jag kunde tyvärr inte svara på det just nu.",
+        content: data.answer || tl("ai.error-answer"),
       }]);
     },
     onError: () => {
       setMessages(prev => [...prev, {
         id: `error-${Date.now()}`,
         role: "assistant",
-        content: "Ett fel uppstod. Försök igen senare.",
+        content: tl("ai.error-generic"),
       }]);
     },
   });
@@ -187,7 +188,7 @@ function AIAssistantPanel({
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Skriv din fråga..."
+            placeholder={tl("ai.input-placeholder")}
             disabled={askMutation.isPending}
             data-testid="input-ai-question"
           />
@@ -278,21 +279,25 @@ function QuickActionCard({
   );
 }
 
-const recentPageMap: Record<string, { title: string; icon: React.ElementType; color: string }> = {
-  "/": { title: "Start", icon: Calendar, color: "text-blue-500" },
-  "/home": { title: "Start", icon: Calendar, color: "text-blue-500" },
-  "/objects": { title: "Objekt", icon: Building2, color: "text-emerald-500" },
-  "/resources": { title: "Resurser", icon: Users, color: "text-purple-500" },
-  "/vehicles": { title: "Fordon", icon: Truck, color: "text-orange-500" },
-  "/clusters": { title: "Kluster", icon: Target, color: "text-cyan-500" },
-  "/planner": { title: "Veckoplanering", icon: Calendar, color: "text-green-500" },
-  "/order-stock": { title: "Orderstock", icon: FileText, color: "text-indigo-500" },
-  "/routes": { title: "Rutter", icon: Route, color: "text-amber-500" },
-  "/dashboard": { title: "Dashboard", icon: BarChart3, color: "text-pink-500" },
-  "/mobile": { title: "Mobilapp", icon: Smartphone, color: "text-teal-500" },
-};
+function getRecentPageMap(tl: (key: string) => string): Record<string, { title: string; icon: React.ElementType; color: string }> {
+  return {
+    "/": { title: tl("nav.today"), icon: Calendar, color: "text-blue-500" },
+    "/home": { title: tl("nav.today"), icon: Calendar, color: "text-blue-500" },
+    "/objects": { title: tl("nav.objects"), icon: Building2, color: "text-emerald-500" },
+    "/resources": { title: tl("nav.resources"), icon: Users, color: "text-purple-500" },
+    "/vehicles": { title: tl("nav.vehicles"), icon: Truck, color: "text-orange-500" },
+    "/clusters": { title: tl("nav.clusters"), icon: Target, color: "text-cyan-500" },
+    "/planner": { title: tl("nav.week-planner"), icon: Calendar, color: "text-green-500" },
+    "/order-stock": { title: tl("nav.order-stock"), icon: FileText, color: "text-indigo-500" },
+    "/routes": { title: tl("nav.route-planning"), icon: Route, color: "text-amber-500" },
+    "/dashboard": { title: tl("nav.dashboard"), icon: BarChart3, color: "text-pink-500" },
+    "/mobile": { title: tl("nav.mobile-field"), icon: Smartphone, color: "text-teal-500" },
+  };
+}
 
 function RecentPages() {
+  const { t: tl } = useLanguage();
+  const recentPageMap = getRecentPageMap(tl);
   const [recentUrls, setRecentUrls] = useState<string[]>([]);
 
   useEffect(() => {
@@ -339,6 +344,7 @@ function RecentPages() {
 }
 
 function RecentChanges({ orders }: { orders: WorkOrder[] }) {
+  const { t: tl } = useLanguage();
   const recentlyChanged = orders
     .filter(o => o.createdAt)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -347,11 +353,11 @@ function RecentChanges({ orders }: { orders: WorkOrder[] }) {
   if (recentlyChanged.length === 0) return null;
 
   const statusLabels: Record<string, { label: string; color: string }> = {
-    skapad: { label: "Skapad", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
-    planerad_pre: { label: "Förplanerad", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
-    planerad_resurs: { label: "Planerad", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
-    completed: { label: "Utförd", color: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200" },
-    scheduled: { label: "Schemalagd", color: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200" },
+    skapad: { label: tl("status.skapad"), color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
+    planerad_pre: { label: tl("status.pre-planned"), color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
+    planerad_resurs: { label: tl("status.planned"), color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
+    completed: { label: tl("status.utford"), color: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200" },
+    scheduled: { label: tl("status.scheduled"), color: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200" },
   };
 
   const [isOpen, setIsOpen] = useState(false);
@@ -449,6 +455,7 @@ function TodaysOrdersList({
   objectMap: Map<string, ServiceObject>; 
   onViewObject?: (object: ServiceObject) => void;
 }) {
+  const { t: tl } = useLanguage();
   const todaysOrders = orders.filter(order => {
     if (!order.scheduledDate) return false;
     return isToday(new Date(order.scheduledDate));
@@ -458,7 +465,7 @@ function TodaysOrdersList({
     return (
       <div className="text-center py-8 text-muted-foreground">
         <CheckCircle2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-        <p>Inga ordrar planerade idag</p>
+        <p>{tl("page.today.no-jobs-today")}</p>
       </div>
     );
   }
@@ -467,7 +474,7 @@ function TodaysOrdersList({
     <div className="space-y-3">
       {todaysOrders.map((order) => {
         const object = order.objectId ? objectMap.get(order.objectId) : null;
-        const locationName = object?.name || object?.address || "Okänd plats";
+        const locationName = object?.name || object?.address || tl("common.unknown-location");
         
         return (
           <div
@@ -476,7 +483,7 @@ function TodaysOrdersList({
             data-testid={`order-item-${order.id}`}
           >
             <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">{order.title || order.description || "Order"}</p>
+              <p className="font-medium truncate">{order.title || order.description || tl("common.order")}</p>
               <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
                 {order.scheduledStartTime && (
                   <span className="flex items-center gap-1">
@@ -491,9 +498,9 @@ function TodaysOrdersList({
               </div>
             </div>
             <Badge variant={order.orderStatus === "utford" ? "default" : "secondary"}>
-              {order.orderStatus === "utford" ? "Klar" : 
-               order.orderStatus === "planerad_resurs" ? "Planerad" : 
-               order.orderStatus === "planerad_las" ? "Låst" : "Ny"}
+              {order.orderStatus === "utford" ? tl("status.done") : 
+               order.orderStatus === "planerad_resurs" ? tl("status.planned") : 
+               order.orderStatus === "planerad_las" ? tl("status.planerad_las") : tl("status.new")}
             </Badge>
             {object && onViewObject && (
               <Button
@@ -745,11 +752,11 @@ export default function MyTasksPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Package className="h-5 w-5" />
-              Objektdetaljer
+              {tl("page.today.object-details")}
             </DialogTitle>
             {selectedObject && (
               <DialogDescription>
-                {selectedObject.name} - {selectedObject.address || "Ingen adress"}
+                {selectedObject.name} - {selectedObject.address || tl("common.no-address")}
               </DialogDescription>
             )}
           </DialogHeader>

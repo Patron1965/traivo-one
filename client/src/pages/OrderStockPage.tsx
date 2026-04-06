@@ -73,15 +73,17 @@ import { IMPOSSIBLE_REASON_LABELS } from "@shared/schema";
 
 type OrderStatus = 'skapad' | 'planerad_pre' | 'planerad_resurs' | 'planerad_las' | 'utford' | 'fakturerad' | 'omojlig';
 
-const STATUS_LABELS: Record<OrderStatus, string> = {
-  skapad: "Skapad",
-  planerad_pre: "Preliminärt planerad",
-  planerad_resurs: "Resurs tilldelad",
-  planerad_las: "Låst",
-  utford: "Utförd",
-  fakturerad: "Fakturerad",
-  omojlig: "Omöjlig"
-};
+function getStatusLabels(tl: (key: string) => string): Record<OrderStatus, string> {
+  return {
+    skapad: tl("status.skapad"),
+    planerad_pre: tl("status.planerad_pre"),
+    planerad_resurs: tl("status.planerad_resurs"),
+    planerad_las: tl("status.planerad_las"),
+    utford: tl("status.utford"),
+    fakturerad: tl("status.fakturerad"),
+    omojlig: tl("status.omojlig"),
+  };
+}
 
 const STATUS_COLORS: Record<OrderStatus, string> = {
   skapad: "bg-muted text-muted-foreground",
@@ -133,6 +135,7 @@ type PlanningFormData = z.infer<typeof planningFormSchema>;
 export default function OrderStockPage() {
   const { toast } = useToast();
   const { t: tl } = useLanguage();
+  const STATUS_LABELS = getStatusLabels(tl);
   const [, setLocation] = useLocation();
   const [includeSimulated, setIncludeSimulated] = useState(false);
   const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
@@ -242,7 +245,7 @@ export default function OrderStockPage() {
       setShowSalesIntelDialog(false);
     },
     onError: (err: Error) => {
-      toast({ title: err?.message || "Kunde inte skicka analys", variant: "destructive" });
+      toast({ title: err?.message || tl("toast.analysis-error"), variant: "destructive" });
     }
   });
 
@@ -309,14 +312,14 @@ export default function OrderStockPage() {
       return workOrderId;
     },
     onSuccess: async (workOrderId) => {
-      toast({ title: "Artikel tillagd" });
+      toast({ title: tl("toast.article-added") });
       setSelectedArticleId("");
       setLineQuantity(1);
       await queryClient.refetchQueries({ queryKey: ["/api/work-orders", workOrderId, "lines"] });
       await updateOrderInCache(workOrderId);
     },
     onError: () => {
-      toast({ title: "Kunde inte lägga till artikel", variant: "destructive" });
+      toast({ title: tl("toast.article-error"), variant: "destructive" });
     }
   });
 
@@ -326,12 +329,12 @@ export default function OrderStockPage() {
       return workOrderId;
     },
     onSuccess: async (workOrderId) => {
-      toast({ title: "Artikel borttagen" });
+      toast({ title: tl("toast.article-removed") });
       await queryClient.refetchQueries({ queryKey: ["/api/work-orders", workOrderId, "lines"] });
       await updateOrderInCache(workOrderId);
     },
     onError: () => {
-      toast({ title: "Kunde inte ta bort artikel", variant: "destructive" });
+      toast({ title: tl("toast.article-remove-error"), variant: "destructive" });
     }
   });
 
@@ -349,14 +352,14 @@ export default function OrderStockPage() {
       return apiRequest("POST", `/api/work-orders/${orderId}/status`, { status });
     },
     onSuccess: () => {
-      toast({ title: "Status uppdaterad" });
+      toast({ title: tl("toast.status-updated") });
       setShowStatusDialog(false);
       setSelectedOrder(null);
       queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
     },
     onError: () => {
-      toast({ title: "Kunde inte uppdatera status", variant: "destructive" });
+      toast({ title: tl("toast.status-error"), variant: "destructive" });
     }
   });
 
@@ -365,12 +368,12 @@ export default function OrderStockPage() {
       return apiRequest("POST", `/api/work-orders/${orderId}/promote`);
     },
     onSuccess: () => {
-      toast({ title: "Order befordrad till produktionsläge" });
+      toast({ title: tl("toast.order-promoted") });
       queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
     },
     onError: () => {
-      toast({ title: "Kunde inte befordra order", variant: "destructive" });
+      toast({ title: tl("toast.promote-error"), variant: "destructive" });
     }
   });
 
@@ -391,7 +394,7 @@ export default function OrderStockPage() {
       return apiRequest("PATCH", `/api/work-orders/${orderId}`, updates);
     },
     onSuccess: () => {
-      toast({ title: "Planering sparad" });
+      toast({ title: tl("toast.planning-saved") });
       setShowPlanningDialog(false);
       setPlanningOrder(null);
       planningForm.reset();
@@ -399,7 +402,7 @@ export default function OrderStockPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
     },
     onError: () => {
-      toast({ title: "Kunde inte spara planering", variant: "destructive" });
+      toast({ title: tl("toast.planning-error"), variant: "destructive" });
     }
   });
 
@@ -411,12 +414,12 @@ export default function OrderStockPage() {
       return apiRequest("PATCH", `/api/work-orders/${orderId}`, updates);
     },
     onSuccess: (_, { lock }) => {
-      toast({ title: lock ? "Order låst" : "Order upplåst" });
+      toast({ title: lock ? tl("toast.order-locked") : tl("toast.order-unlocked") });
       queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
     },
     onError: () => {
-      toast({ title: "Kunde inte ändra låsstatus", variant: "destructive" });
+      toast({ title: tl("toast.lock-error"), variant: "destructive" });
     }
   });
 
@@ -492,7 +495,7 @@ export default function OrderStockPage() {
       const response = await fetch(`/api/order-stock?${params.toString()}`);
       const data: OrderStockResponse = await response.json();
       
-      const headers = ["Titel", "Kund", "Objekt", "Status", "Värde", "Kostnad", "Produktionstid (min)", "Planerat datum"];
+      const headers = [tl("csv.title"), tl("csv.customer"), tl("csv.object"), tl("csv.status"), tl("csv.value"), tl("csv.cost"), tl("csv.production-time"), tl("csv.planned-date")];
       const rows = data.orders.map(order => {
         const customer = customerMap.get(order.customerId);
         const object = objectMap.get(order.objectId);
@@ -523,7 +526,7 @@ export default function OrderStockPage() {
       
       toast({ title: `Exporterade ${data.orders.length} ordrar` });
     } catch (error) {
-      toast({ title: "Kunde inte exportera", variant: "destructive" });
+      toast({ title: tl("toast.export-error"), variant: "destructive" });
     }
   };
 
@@ -666,9 +669,9 @@ export default function OrderStockPage() {
         variant="compact"
         defaultExpanded={false}
         insights={[
-          { type: "suggestion", title: "Prioriteringsförslag", description: "AI kan analysera ordrar och föreslå optimal prioritering baserat på deadlines och värde" },
-          { type: "optimization", title: "Batchoptimering", description: "Gruppera liknande ordrar för effektivare hantering" },
-          { type: "warning", title: "Deadline-varningar", description: "Identifiera ordrar som riskerar att missa sina tidsfönster" },
+          { type: "suggestion", title: tl("page.orderstock.ai-priority"), description: tl("page.orderstock.ai-priority-desc") },
+          { type: "optimization", title: tl("page.orderstock.ai-batch"), description: tl("page.orderstock.ai-batch-desc") },
+          { type: "warning", title: tl("page.orderstock.ai-deadline"), description: tl("page.orderstock.ai-deadline-desc") },
         ]}
       />
 
@@ -723,7 +726,7 @@ export default function OrderStockPage() {
                 <Label className="text-xs">Metadata-typ</Label>
                 <Select value={newFilterName} onValueChange={setNewFilterName}>
                   <SelectTrigger className="w-44" data-testid="select-metadata-type">
-                    <SelectValue placeholder="Välj typ..." />
+                    <SelectValue placeholder={tl("page.orderstock.select-type")} />
                   </SelectTrigger>
                   <SelectContent>
                     {metadataTypes.map(t => (
@@ -843,7 +846,7 @@ export default function OrderStockPage() {
               queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
               queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
               setSelectedIds(new Set());
-              toast({ title: "Statusändring klar", description: `${updated} ordrar uppdaterade` });
+              toast({ title: tl("toast.status-change-done"), description: `${updated} ${tl("toast.orders-updated")}` });
             }}
             data-testid="button-bulk-change-order-status"
           >
@@ -1130,7 +1133,7 @@ export default function OrderStockPage() {
                       <Select value={field.value || "none"} onValueChange={(val) => field.onChange(val === "none" ? "" : val)}>
                         <FormControl>
                           <SelectTrigger data-testid="select-planning-team">
-                            <SelectValue placeholder="Välj team" />
+                            <SelectValue placeholder={tl("page.orderstock.select-team")} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -1156,7 +1159,7 @@ export default function OrderStockPage() {
                       <Select value={field.value || "none"} onValueChange={(val) => field.onChange(val === "none" ? "" : val)}>
                         <FormControl>
                           <SelectTrigger data-testid="select-planning-resource">
-                            <SelectValue placeholder="Välj resurs" />
+                            <SelectValue placeholder={tl("page.orderstock.select-resource")} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -1224,7 +1227,7 @@ export default function OrderStockPage() {
                     <Label htmlFor="article-select">Artikel</Label>
                     <Select value={selectedArticleId} onValueChange={setSelectedArticleId}>
                       <SelectTrigger id="article-select" data-testid="select-article">
-                        <SelectValue placeholder="Välj artikel..." />
+                        <SelectValue placeholder={tl("page.orderstock.select-article")} />
                       </SelectTrigger>
                       <SelectContent>
                         {articles.map(article => (
@@ -1394,7 +1397,7 @@ export default function OrderStockPage() {
               <Label htmlFor="sales-scope">Analysomfång</Label>
               <Select value={salesScope} onValueChange={(v) => setSalesScope(v as "all" | "active_customers")}>
                 <SelectTrigger id="sales-scope" data-testid="select-sales-scope">
-                  <SelectValue placeholder="Välj omfång" />
+                  <SelectValue placeholder={tl("page.orderstock.select-scope")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Alla kunder</SelectItem>
