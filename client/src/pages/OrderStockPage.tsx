@@ -580,7 +580,7 @@ export default function OrderStockPage() {
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2">
             <TestTube2 className="h-4 w-4 text-muted-foreground" />
-            <Label htmlFor="sim-toggle" className="text-sm">Visa simulerade</Label>
+            <Label htmlFor="sim-toggle" className="text-sm">{tl("page.orderstock.show-simulated")}</Label>
             <Switch 
               id="sim-toggle"
               checked={includeSimulated} 
@@ -592,10 +592,10 @@ export default function OrderStockPage() {
           {includeSimulated && scenarios.length > 0 && (
             <Select value={selectedScenario || "all"} onValueChange={v => setSelectedScenario(v === "all" ? null : v)}>
               <SelectTrigger className="w-48" data-testid="select-scenario">
-                <SelectValue placeholder="Alla scenarier" />
+                <SelectValue placeholder={tl("page.orderstock.all-scenarios")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Alla scenarier</SelectItem>
+                <SelectItem value="all">{tl("page.orderstock.all-scenarios")}</SelectItem>
                 {scenarios.map(s => (
                   <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                 ))}
@@ -605,7 +605,7 @@ export default function OrderStockPage() {
           
           <Button variant="outline" onClick={handleExportCSV} className="gap-2" data-testid="button-export-csv">
             <Download className="h-4 w-4" />
-            Exportera CSV
+            {tl("page.orderstock.export-csv")}
           </Button>
           
           <Button 
@@ -614,7 +614,7 @@ export default function OrderStockPage() {
             data-testid="button-sales-intelligence"
           >
             <Sparkles className="h-4 w-4" />
-            AI Försäljningsanalys
+            {tl("page.orderstock.ai-sales")}
           </Button>
         </div>
       </div>
@@ -624,7 +624,7 @@ export default function OrderStockPage() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-2">
               <ListChecks className="h-5 w-5 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Totalt antal order</span>
+              <span className="text-sm text-muted-foreground">{tl("page.orderstock.total-orders")}</span>
             </div>
             <p className="text-2xl font-bold mt-2" data-testid="text-total-orders">{summary.totalOrders}</p>
           </CardContent>
@@ -634,7 +634,7 @@ export default function OrderStockPage() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-2">
               <CircleDollarSign className="h-5 w-5 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Totalt värde</span>
+              <span className="text-sm text-muted-foreground">{tl("page.orderstock.total-value")}</span>
             </div>
             <p className="text-2xl font-bold mt-2" data-testid="text-total-value">{formatCurrency(summary.totalValue)}</p>
           </CardContent>
@@ -644,7 +644,7 @@ export default function OrderStockPage() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-2">
               <CircleDollarSign className="h-5 w-5 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Total kostnad</span>
+              <span className="text-sm text-muted-foreground">{tl("page.orderstock.total-cost")}</span>
             </div>
             <p className="text-2xl font-bold mt-2" data-testid="text-total-cost">{formatCurrency(summary.totalCost)}</p>
           </CardContent>
@@ -654,7 +654,7 @@ export default function OrderStockPage() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Total produktionstid</span>
+              <span className="text-sm text-muted-foreground">{tl("page.orderstock.total-time")}</span>
             </div>
             <p className="text-2xl font-bold mt-2" data-testid="text-total-time">{formatMinutes(summary.totalProductionMinutes)}</p>
           </CardContent>
@@ -662,7 +662,7 @@ export default function OrderStockPage() {
       </div>
 
       <AICard
-        title="AI Orderanalys"
+        title={tl("page.orderstock.ai-analysis")}
         variant="compact"
         defaultExpanded={false}
         insights={[
@@ -801,7 +801,7 @@ export default function OrderStockPage() {
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Sök order, kund, objekt..."
+                placeholder={tl("page.orderstock.search")}
                 value={searchTerm}
                 onChange={e => handleSearchChange(e.target.value)}
                 className="pl-9"

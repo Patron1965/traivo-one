@@ -1341,7 +1341,7 @@ export default function ImportPage() {
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold" data-testid="text-import-title">{tl("page.import.title")}</h1>
-        <p className="text-muted-foreground">Importera kunddata, objekt och arbetsordrar från Modus 2.0 eller CSV-filer</p>
+        <p className="text-muted-foreground">{tl("page.import.description")}</p>
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "modus" | "manual" | "mapped" | "history" | "quality")}>

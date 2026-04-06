@@ -37,6 +37,7 @@ import {
   MessageCircle,
   type LucideIcon,
 } from "lucide-react";
+import { translate } from "./i18n";
 
 export interface NavItem {
   title: string;
@@ -54,8 +55,10 @@ export interface NavGroup {
   items: NavItem[];
 }
 
+const svFallback = (k: string) => translate(k, "sv");
+
 export function getGrunddataItems(t: (key: string, fallback: string) => string, tl?: (key: string) => string): NavItem[] {
-  const l = tl || ((k: string) => k);
+  const l = tl || svFallback;
   return [
     { title: t("object_plural", tl ? l("nav.objects") : "Objekt"), url: "/objects", icon: Building2, description: l("nav.objects.desc") },
     { title: t("resource_plural", tl ? l("nav.resources") : "Resurser"), url: "/resources", icon: Users, description: l("nav.resources.desc") },
@@ -69,7 +72,7 @@ export function getGrunddataItems(t: (key: string, fallback: string) => string, 
 }
 
 export function getOrdrarItems(t: (key: string, fallback: string) => string, tl?: (key: string) => string): NavItem[] {
-  const l = tl || ((k: string) => k);
+  const l = tl || svFallback;
   return [
     { title: l("nav.order-stock"), url: "/order-stock", icon: ClipboardList, description: l("nav.order-stock.desc") },
     { title: l("nav.assignments"), url: "/assignments", icon: UserCheck, description: l("nav.assignments.desc") },
@@ -79,7 +82,7 @@ export function getOrdrarItems(t: (key: string, fallback: string) => string, tl?
 }
 
 export function getPlaneringItems(tl?: (key: string) => string): NavItem[] {
-  const l = tl || ((k: string) => k);
+  const l = tl || svFallback;
   return [
     { title: l("nav.week-planner"), url: "/planner", icon: Calendar, description: l("nav.week-planner.desc") },
     { title: l("nav.route-planning"), url: "/routes", icon: Map, description: l("nav.route-planning.desc") },
@@ -89,7 +92,7 @@ export function getPlaneringItems(tl?: (key: string) => string): NavItem[] {
 }
 
 export function getOvervakningItems(tl?: (key: string) => string): NavItem[] {
-  const l = tl || ((k: string) => k);
+  const l = tl || svFallback;
   return [
     { title: l("nav.planner-map"), url: "/planner-map", icon: MapPin, description: l("nav.planner-map.desc") },
     { title: l("nav.historical-map"), url: "/historical-map", icon: History, description: l("nav.historical-map.desc") },
@@ -97,7 +100,7 @@ export function getOvervakningItems(tl?: (key: string) => string): NavItem[] {
 }
 
 export function getFaltItems(t: (key: string, fallback: string) => string, tl?: (key: string) => string): NavItem[] {
-  const l = tl || ((k: string) => k);
+  const l = tl || svFallback;
   return [
     { title: l("nav.mobile-field"), url: "/mobile", icon: Smartphone, description: l("nav.mobile-field.desc") },
     { title: l("nav.work-sessions"), url: "/work-sessions", icon: Clock, description: l("nav.work-sessions.desc") },
@@ -112,7 +115,7 @@ export function getFaltItems(t: (key: string, fallback: string) => string, tl?: 
 }
 
 export function getEkonomiItems(tl?: (key: string) => string): NavItem[] {
-  const l = tl || ((k: string) => k);
+  const l = tl || svFallback;
   return [
     { title: l("nav.reporting"), url: "/reporting", icon: BarChart3, description: l("nav.reporting.desc") },
     { title: l("nav.economics"), url: "/economics", icon: DollarSign, description: l("nav.economics.desc") },
@@ -123,7 +126,7 @@ export function getEkonomiItems(tl?: (key: string) => string): NavItem[] {
 }
 
 export function getAIItems(tl?: (key: string) => string): NavItem[] {
-  const l = tl || ((k: string) => k);
+  const l = tl || svFallback;
   return [
     { title: l("nav.ai-assistant"), url: "/ai-assistant", icon: Brain, description: l("nav.ai-assistant.desc") },
     { title: l("nav.predictive-planning"), url: "/predictive-planning", icon: TrendingUp, description: l("nav.predictive-planning.desc") },
@@ -132,7 +135,7 @@ export function getAIItems(tl?: (key: string) => string): NavItem[] {
 }
 
 export function getAdminItems(tl?: (key: string) => string): NavItem[] {
-  const l = tl || ((k: string) => k);
+  const l = tl || svFallback;
   return [
     { title: l("nav.production-control"), url: "/planning-parameters", icon: Settings2, description: l("nav.production-control.desc") },
     { title: l("nav.user-management"), url: "/user-management", icon: Users, description: l("nav.user-management.desc") },
@@ -151,7 +154,7 @@ export function getAdminItems(tl?: (key: string) => string): NavItem[] {
 export const adminItems: NavItem[] = getAdminItems();
 
 export function getNavGroups(t: (key: string, fallback: string) => string, tl?: (key: string) => string): NavGroup[] {
-  const l = tl || ((k: string) => k);
+  const l = tl || svFallback;
   return [
     { key: "ordrar", label: l("nav.ordrar"), items: getOrdrarItems(t, tl), icon: ClipboardList, group: "ordrar", colorClass: "text-amber-500" },
     { key: "planering", label: l("nav.planering"), items: [...getPlaneringItems(tl), ...getOvervakningItems(tl)], icon: Calendar, group: "planering", colorClass: "text-green-500" },
@@ -164,7 +167,7 @@ export function getNavGroups(t: (key: string, fallback: string) => string, tl?: 
 }
 
 export function getSidebarStartItems(tl?: (key: string) => string): NavItem[] {
-  const l = tl || ((k: string) => k);
+  const l = tl || svFallback;
   return [
     { title: l("nav.today"), url: "/", icon: Calendar, description: "" },
     { title: l("nav.dashboard"), url: "/dashboard", icon: BarChart3, description: "" },

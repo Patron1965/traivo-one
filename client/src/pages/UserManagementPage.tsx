@@ -529,7 +529,7 @@ export default function UserManagementPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">{tl("page.user-management.title")}</h1>
-          <p className="text-sm text-muted-foreground">Skapa och hantera användarkonton och team</p>
+          <p className="text-sm text-muted-foreground">{tl("page.user-management.description")}</p>
         </div>
       </div>
 
