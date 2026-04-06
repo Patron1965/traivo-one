@@ -10,6 +10,7 @@ import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useAuth } from "@/hooks/use-auth";
 import { ThemeProvider, useTheme } from "@/hooks/use-theme";
+import { LanguageProvider } from "@/hooks/use-language";
 import { CommandPalette } from "@/components/CommandPalette";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
@@ -461,12 +462,14 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <FeatureProvider>
-        <ThemeProvider>
-          <TooltipProvider>
-            <AppContent />
-            <Toaster />
-          </TooltipProvider>
-        </ThemeProvider>
+        <LanguageProvider>
+          <ThemeProvider>
+            <TooltipProvider>
+              <AppContent />
+              <Toaster />
+            </TooltipProvider>
+          </ThemeProvider>
+        </LanguageProvider>
       </FeatureProvider>
     </QueryClientProvider>
   );

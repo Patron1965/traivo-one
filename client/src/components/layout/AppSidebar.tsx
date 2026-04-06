@@ -16,8 +16,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 import { LogOut, Star, ChevronDown, ChevronRight } from "lucide-react";
-import { getNavGroups, sidebarStartItems, type NavItem } from "@/lib/navItems";
+import { getNavGroups, getSidebarStartItems, type NavItem } from "@/lib/navItems";
 import { useTerminology } from "@/hooks/use-terminology";
+import { useLanguage } from "@/hooks/use-language";
 import { useFeatures } from "@/lib/feature-context";
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -86,10 +87,11 @@ function Badge({ count }: { count: number }) {
 
 function UserFooter() {
   const { user } = useAuth();
+  const { t: tl } = useLanguage();
   
   const displayName = user?.firstName && user?.lastName 
     ? `${user.firstName} ${user.lastName}`
-    : user?.email || "Användare";
+    : user?.email || tl("user.default");
   
   const initials = user?.firstName && user?.lastName
     ? `${user.firstName[0]}${user.lastName[0]}`
@@ -103,7 +105,7 @@ function UserFooter() {
       </Avatar>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate" data-testid="text-user-name">{displayName}</p>
-        <p className="text-xs text-muted-foreground">Planerare</p>
+        <p className="text-xs text-muted-foreground">{tl("user.planner")}</p>
       </div>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -116,7 +118,7 @@ function UserFooter() {
           </a>
         </TooltipTrigger>
         <TooltipContent side="top">
-          <p>Logga ut</p>
+          <p>{tl("user.logout")}</p>
         </TooltipContent>
       </Tooltip>
     </div>
@@ -136,6 +138,7 @@ function NavItemRow({
   onToggleFavorite: (url: string) => void;
   badgeCount?: number;
 }) {
+  const { t: tl } = useLanguage();
   return (
     <SidebarMenuItem>
       <div className="flex items-center group/fav">
@@ -158,7 +161,7 @@ function NavItemRow({
               : "opacity-0 group-hover/fav:opacity-60 text-muted-foreground hover:text-yellow-500"
           }`}
           data-testid={`button-fav-${item.url.replace("/", "") || "home"}`}
-          aria-label={isFav ? "Ta bort favorit" : "Lägg till favorit"}
+          aria-label={isFav ? tl("fav.remove") : tl("fav.add")}
         >
           <Star className={`h-3.5 w-3.5 ${isFav ? "fill-yellow-500" : ""}`} />
         </button>
@@ -225,6 +228,7 @@ function CollapsibleNavGroup({
 
 export function AppSidebar() {
   const { t } = useTerminology();
+  const { t: tl } = useLanguage();
   const { isNavItemEnabled } = useFeatures();
   const { user } = useAuth();
   const userRole = user?.role || "user";
@@ -243,21 +247,23 @@ export function AppSidebar() {
     unreadMessages: 0,
   };
 
+  const startItems = useMemo(() => getSidebarStartItems(tl), [tl]);
+
   const navGroups = useMemo(() => {
-    return getNavGroups(t)
+    return getNavGroups(t, tl)
       .filter((g) => canAccessMenu(userRole, g.group as NavMenuGroup))
       .map((g) => ({
         ...g,
         items: g.items.filter((item) => isNavItemEnabled(item.url)),
       }))
       .filter((g) => g.items.length > 0);
-  }, [t, isNavItemEnabled, userRole]);
+  }, [t, tl, isNavItemEnabled, userRole]);
 
   const allItems = useMemo(() => {
-    const items = [...sidebarStartItems];
+    const items = [...startItems];
     navGroups.forEach((g) => items.push(...g.items));
     return items;
-  }, [navGroups]);
+  }, [startItems, navGroups]);
 
   const favoriteItems = useMemo(
     () =>
@@ -284,7 +290,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel data-testid="nav-group-favoriter">
             <Star className="h-3 w-3 mr-1 fill-yellow-500 text-yellow-500" />
-            Favoriter
+            {tl("nav.favorites")}
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -306,7 +312,7 @@ export function AppSidebar() {
               ) : (
                 <SidebarMenuItem>
                   <div className="px-3 py-2 text-xs text-muted-foreground" data-testid="text-no-favorites">
-                    Klicka på stjärnan bredvid en meny för att lägga till favoriter
+                    {tl("nav.favorites.empty")}
                   </div>
                 </SidebarMenuItem>
               )}
@@ -315,8 +321,8 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <CollapsibleNavGroup
-          label="Start"
-          items={sidebarStartItems}
+          label={tl("nav.home")}
+          items={startItems}
           defaultOpen={false}
           isFavorite={isFavorite}
           onToggleFavorite={toggleFavorite}

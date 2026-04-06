@@ -7,7 +7,9 @@ import traivoLogo from "@assets/traivo_logo_transparent.png";
 import { canAccessMenu, getRoleLabel, type NavMenuGroup } from "@/lib/role-config";
 import { useFeatures } from "@/lib/feature-context";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { GlobalAIButton } from "@/components/GlobalAIButton";
+import { useLanguage } from "@/hooks/use-language";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -121,6 +123,7 @@ interface NavDropdownProps {
 
 function NavDropdown({ label, items, icon: Icon, colorClass, badges, isFavorite, onToggleFavorite }: NavDropdownProps) {
   const [location] = useLocation();
+  const { t: tl } = useLanguage();
   const isActive = items.some((item) => item.url === location);
 
   const groupBadgeTotal = items.reduce((sum, item) => {
@@ -176,7 +179,7 @@ function NavDropdown({ label, items, icon: Icon, colorClass, badges, isFavorite,
                         : "opacity-0 group-hover/fav:opacity-60 text-muted-foreground hover:text-yellow-500"
                     }`}
                     data-testid={`button-fav-${item.url.replace("/", "") || "home"}`}
-                    aria-label={fav ? "Ta bort favorit" : "Lägg till favorit"}
+                    aria-label={fav ? tl("fav.remove") : tl("fav.add")}
                   >
                     <Star className={`h-3.5 w-3.5 ${fav ? "fill-yellow-500" : ""}`} />
                   </button>
@@ -199,6 +202,7 @@ interface FavoritesDropdownProps {
 
 function FavoritesDropdown({ allItems, badges, favorites, toggleFavorite }: FavoritesDropdownProps) {
   const [location] = useLocation();
+  const { t: tl } = useLanguage();
 
   const favoriteItems = useMemo(
     () =>
@@ -220,7 +224,7 @@ function FavoritesDropdown({ allItems, badges, favorites, toggleFavorite }: Favo
           data-testid="nav-dropdown-favoriter"
         >
           <Star className="h-3.5 w-3.5 fill-yellow-500 text-yellow-500" />
-          <span className="hidden xl:inline">Favoriter</span>
+          <span className="hidden xl:inline">{tl("nav.favorites")}</span>
           <ChevronDown className="h-2.5 w-2.5 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
@@ -248,7 +252,7 @@ function FavoritesDropdown({ allItems, badges, favorites, toggleFavorite }: Favo
                   }}
                   className="p-0.5 rounded text-yellow-500"
                   data-testid={`button-unfav-${item.url.replace("/", "") || "home"}`}
-                  aria-label="Ta bort favorit"
+                  aria-label={tl("fav.remove")}
                 >
                   <Star className="h-3.5 w-3.5 fill-yellow-500" />
                 </button>
@@ -263,6 +267,7 @@ function FavoritesDropdown({ allItems, badges, favorites, toggleFavorite }: Favo
 
 function GlobalSearch() {
   const { companyName } = useTenantBranding();
+  const { t: tl } = useLanguage();
   const openCommandPalette = () => {
     const event = new KeyboardEvent("keydown", {
       key: "k",
@@ -281,7 +286,7 @@ function GlobalSearch() {
       data-testid="button-global-search"
     >
       <Search className="h-4 w-4" />
-      <span className="hidden sm:inline">Sök i {companyName}...</span>
+      <span className="hidden sm:inline">{tl("common.search-in")} {companyName}...</span>
       <kbd className="pointer-events-none ml-auto hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-xs font-medium opacity-100 sm:flex">
         ⌘K
       </kbd>
@@ -291,11 +296,12 @@ function GlobalSearch() {
 
 function UserMenu() {
   const { user } = useAuth();
+  const { t: tl } = useLanguage();
 
   const displayName =
     user?.firstName && user?.lastName
       ? `${user.firstName} ${user.lastName}`
-      : user?.email || "Användare";
+      : user?.email || tl("user.default");
 
   const initials =
     user?.firstName && user?.lastName
@@ -329,14 +335,14 @@ function UserMenu() {
         <DropdownMenuItem asChild>
           <Link href="/settings" className="cursor-pointer" data-testid="nav-settings-menu">
             <Settings className="h-4 w-4 mr-2" />
-            Inställningar
+            {tl("user.settings")}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <a href="/api/logout" className="cursor-pointer text-destructive" data-testid="button-logout">
             <LogOut className="h-4 w-4 mr-2" />
-            Logga ut
+            {tl("user.logout")}
           </a>
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -363,6 +369,7 @@ export function TopNav() {
   const { user } = useAuth();
   const userRole = user?.role || "user";
   const { t } = useTerminology();
+  const { t: tl } = useLanguage();
   const { isNavItemEnabled } = useFeatures();
   const { favorites, toggleFavorite, isFavorite } = useFavorites(user?.id);
 
@@ -379,12 +386,12 @@ export function TopNav() {
   };
 
   const menuGroups = useMemo(() => {
-    const groups = getNavGroups(t);
+    const groups = getNavGroups(t, tl);
     return groups.map(g => ({
       ...g,
       items: g.items.filter(item => isNavItemEnabled(item.url)),
     }));
-  }, [t, isNavItemEnabled]);
+  }, [t, tl, isNavItemEnabled]);
 
   const roleFilteredItems = useMemo(() => {
     const items: NavItem[] = [];
@@ -421,7 +428,7 @@ export function TopNav() {
                 data-testid="nav-home"
               >
                 <Home className="h-3.5 w-3.5" />
-                <span className="hidden xl:inline">Start</span>
+                <span className="hidden xl:inline">{tl("nav.home")}</span>
               </Button>
             </Link>
             <FavoritesDropdown allItems={roleFilteredItems} badges={badgeCounts} favorites={favorites} toggleFavorite={toggleFavorite} />
@@ -469,6 +476,7 @@ export function TopNav() {
           <TourMenu />
 
           <GlobalAIButton />
+          <LanguageSwitcher />
           <ThemeToggle />
           <UserMenu />
         </div>

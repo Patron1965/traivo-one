@@ -54,103 +54,121 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-export function getGrunddataItems(t: (key: string, fallback: string) => string): NavItem[] {
+export function getGrunddataItems(t: (key: string, fallback: string) => string, tl?: (key: string) => string): NavItem[] {
+  const l = tl || ((k: string) => k);
   return [
-    { title: t("object_plural", "Objekt"), url: "/objects", icon: Building2, description: "Fastigheter och platser" },
-    { title: t("resource_plural", "Resurser"), url: "/resources", icon: Users, description: "Personal" },
-    { title: t("vehicle_plural", "Fordon"), url: "/vehicles", icon: Truck, description: t("vehicle_plural", "Fordon") },
-    { title: t("cluster_plural", "Kluster"), url: "/clusters", icon: Target, description: "Arbetsområden" },
-    { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, description: "Automatisk områdesindelning" },
-    { title: t("article_plural", "Artiklar"), url: "/articles", icon: Package, description: "Produkter och tjänster" },
-    { title: "Prislistor", url: "/price-lists", icon: Receipt, description: "Prissättning" },
-    { title: "Fleethantering", url: "/fleet", icon: Fuel, description: "Fordonsöversikt, underhåll och bränsle" },
+    { title: t("object_plural", tl ? l("nav.objects") : "Objekt"), url: "/objects", icon: Building2, description: l("nav.objects.desc") },
+    { title: t("resource_plural", tl ? l("nav.resources") : "Resurser"), url: "/resources", icon: Users, description: l("nav.resources.desc") },
+    { title: t("vehicle_plural", tl ? l("nav.vehicles") : "Fordon"), url: "/vehicles", icon: Truck, description: t("vehicle_plural", tl ? l("nav.vehicles") : "Fordon") },
+    { title: t("cluster_plural", tl ? l("nav.clusters") : "Kluster"), url: "/clusters", icon: Target, description: l("nav.clusters.desc") },
+    { title: l("nav.auto-cluster"), url: "/auto-cluster", icon: Layers, description: l("nav.auto-cluster.desc") },
+    { title: t("article_plural", tl ? l("nav.articles") : "Artiklar"), url: "/articles", icon: Package, description: l("nav.articles.desc") },
+    { title: l("nav.price-lists"), url: "/price-lists", icon: Receipt, description: l("nav.price-lists.desc") },
+    { title: l("nav.fleet"), url: "/fleet", icon: Fuel, description: l("nav.fleet.desc") },
   ];
 }
 
-export function getOrdrarItems(t: (key: string, fallback: string) => string): NavItem[] {
+export function getOrdrarItems(t: (key: string, fallback: string) => string, tl?: (key: string) => string): NavItem[] {
+  const l = tl || ((k: string) => k);
   return [
-    { title: "Orderstock", url: "/order-stock", icon: ClipboardList, description: `Alla ${t("work_order_plural", "uppgifter").toLowerCase()}` },
-    { title: "Uppdrag", url: "/assignments", icon: UserCheck, description: "Genererade uppgifter" },
-    { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw, description: "Återkommande tjänster" },
-    { title: "Orderkoncept", url: "/order-concepts", icon: ListChecks, description: "Intelligenta ordergeneratorer" },
+    { title: l("nav.order-stock"), url: "/order-stock", icon: ClipboardList, description: l("nav.order-stock.desc") },
+    { title: l("nav.assignments"), url: "/assignments", icon: UserCheck, description: l("nav.assignments.desc") },
+    { title: l("nav.subscriptions"), url: "/subscriptions", icon: RefreshCw, description: l("nav.subscriptions.desc") },
+    { title: l("nav.order-concepts"), url: "/order-concepts", icon: ListChecks, description: l("nav.order-concepts.desc") },
   ];
 }
 
-export function getPlaneringItems(): NavItem[] {
+export function getPlaneringItems(tl?: (key: string) => string): NavItem[] {
+  const l = tl || ((k: string) => k);
   return [
-    { title: "Veckoplanering", url: "/planner", icon: Calendar, description: "Planera veckans arbete" },
-    { title: "Ruttplanering", url: "/routes", icon: Map, description: "Optimera körvägar" },
-    { title: "Väderplanering", url: "/weather", icon: Cloud, description: "Planera efter väder" },
-    { title: "Årsplanering", url: "/annual-planning", icon: Target, description: "Årsmål & uppföljning" },
+    { title: l("nav.week-planner"), url: "/planner", icon: Calendar, description: l("nav.week-planner.desc") },
+    { title: l("nav.route-planning"), url: "/routes", icon: Map, description: l("nav.route-planning.desc") },
+    { title: l("nav.weather"), url: "/weather", icon: Cloud, description: l("nav.weather.desc") },
+    { title: l("nav.annual-planning"), url: "/annual-planning", icon: Target, description: l("nav.annual-planning.desc") },
   ];
 }
 
-export function getOvervakningItems(): NavItem[] {
+export function getOvervakningItems(tl?: (key: string) => string): NavItem[] {
+  const l = tl || ((k: string) => k);
   return [
-    { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin, description: "Realtidskarta med förare och uppdrag" },
-    { title: "Historisk Kartvy", url: "/historical-map", icon: History, description: "Spela upp rörelsemönster" },
+    { title: l("nav.planner-map"), url: "/planner-map", icon: MapPin, description: l("nav.planner-map.desc") },
+    { title: l("nav.historical-map"), url: "/historical-map", icon: History, description: l("nav.historical-map.desc") },
   ];
 }
 
-export function getFaltItems(t: (key: string, fallback: string) => string): NavItem[] {
+export function getFaltItems(t: (key: string, fallback: string) => string, tl?: (key: string) => string): NavItem[] {
+  const l = tl || ((k: string) => k);
   return [
-    { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone, description: "Fältarbete och protokoll" },
-    { title: "Arbetspass", url: "/work-sessions", icon: Clock, description: "Tidloggning och löneunderlag" },
-    { title: t("inspection_singular", "Besiktning"), url: "/inspections", icon: ClipboardCheck, description: "Inspektionsprotokoll" },
-    { title: "Kontrollmallar", url: "/checklist-templates", icon: ClipboardCheck, description: "Inspektionsfrågor per artikeltyp" },
-    { title: "Kundportal", url: "/customer-portal", icon: Building, description: "Extern kundvy" },
-    { title: "Kundrapporter", url: "/customer-reports", icon: Camera, description: "Fältrapporter från kunder" },
-    { title: "Bokningshantering", url: "/booking-slots", icon: CalendarDays, description: "Återkommande bokningsslots" },
-    { title: "Kundmeddelanden", url: "/portal-messages", icon: MessageCircle, description: "Chatt med portalanvändare" },
-    { title: "Växel & Tillgänglighet", url: "/telephony", icon: Phone, description: "Telefonsökning och resurstillgänglighet" },
+    { title: l("nav.mobile-field"), url: "/mobile", icon: Smartphone, description: l("nav.mobile-field.desc") },
+    { title: l("nav.work-sessions"), url: "/work-sessions", icon: Clock, description: l("nav.work-sessions.desc") },
+    { title: t("inspection_singular", tl ? l("nav.inspections") : "Besiktning"), url: "/inspections", icon: ClipboardCheck, description: l("nav.inspections.desc") },
+    { title: l("nav.checklist-templates"), url: "/checklist-templates", icon: ClipboardCheck, description: l("nav.checklist-templates.desc") },
+    { title: l("nav.customer-portal"), url: "/customer-portal", icon: Building, description: l("nav.customer-portal.desc") },
+    { title: l("nav.customer-reports"), url: "/customer-reports", icon: Camera, description: l("nav.customer-reports.desc") },
+    { title: l("nav.booking-slots"), url: "/booking-slots", icon: CalendarDays, description: l("nav.booking-slots.desc") },
+    { title: l("nav.portal-messages"), url: "/portal-messages", icon: MessageCircle, description: l("nav.portal-messages.desc") },
+    { title: l("nav.telephony"), url: "/telephony", icon: Phone, description: l("nav.telephony.desc") },
   ];
 }
 
-export function getEkonomiItems(): NavItem[] {
+export function getEkonomiItems(tl?: (key: string) => string): NavItem[] {
+  const l = tl || ((k: string) => k);
   return [
-    { title: "Rapportering", url: "/reporting", icon: BarChart3, description: "KPI och rapporter" },
-    { title: "Ekonomi", url: "/economics", icon: DollarSign, description: "Intäkter och kostnader" },
-    { title: "Fakturering", url: "/invoicing", icon: Receipt, description: "Fakturahantering och Fortnox-export" },
-    { title: "Proaktiv försäljning", url: "/proactive-sales", icon: TrendingUp, description: "Inaktiva kunder & intäkter" },
-    { title: "ROI-rapport", url: "/roi-report", icon: TrendingUp, description: "Avkastningsanalys per kund" },
+    { title: l("nav.reporting"), url: "/reporting", icon: BarChart3, description: l("nav.reporting.desc") },
+    { title: l("nav.economics"), url: "/economics", icon: DollarSign, description: l("nav.economics.desc") },
+    { title: l("nav.invoicing"), url: "/invoicing", icon: Receipt, description: l("nav.invoicing.desc") },
+    { title: l("nav.proactive-sales"), url: "/proactive-sales", icon: TrendingUp, description: l("nav.proactive-sales.desc") },
+    { title: l("nav.roi-report"), url: "/roi-report", icon: TrendingUp, description: l("nav.roi-report.desc") },
   ];
 }
 
-export function getAIItems(): NavItem[] {
+export function getAIItems(tl?: (key: string) => string): NavItem[] {
+  const l = tl || ((k: string) => k);
   return [
-    { title: "AI-Assistent", url: "/ai-assistant", icon: Brain, description: "AI-analys och optimering" },
-    { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp, description: "AI-prognoser" },
-    { title: "Prediktivt Underhåll", url: "/predictive-maintenance", icon: Activity, description: "IoT-baserad serviceprognos" },
+    { title: l("nav.ai-assistant"), url: "/ai-assistant", icon: Brain, description: l("nav.ai-assistant.desc") },
+    { title: l("nav.predictive-planning"), url: "/predictive-planning", icon: TrendingUp, description: l("nav.predictive-planning.desc") },
+    { title: l("nav.predictive-maintenance"), url: "/predictive-maintenance", icon: Activity, description: l("nav.predictive-maintenance.desc") },
   ];
 }
 
-export const adminItems: NavItem[] = [
-  { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2, description: "SLA och tider" },
-  { title: "Användarhantering", url: "/user-management", icon: Users, description: "Hantera användare och roller" },
-  { title: "Företagsinställningar", url: "/tenant-config", icon: Settings2, description: "Företag, artiklar, koder" },
-  { title: "Ny kund", url: "/onboarding", icon: Building2, description: "Skapa ny kund/företag" },
-  { title: "SMS-inställningar", url: "/sms-settings", icon: MessageSquare, description: "SMS-notifikationer" },
-  { title: "Fortnox", url: "/fortnox", icon: Receipt, description: "Fakturaexport" },
-  { title: "Importera data", url: "/import", icon: Upload, description: "Importera från fil" },
-  { title: "Metadatainställningar", url: "/metadata-settings", icon: Database, description: "Metadatakatalog" },
-  { title: "API-kostnader", url: "/api-costs", icon: Activity, description: "Övervaka API-användning" },
-  { title: "Systemöversikt", url: "/system-overview", icon: FileText, description: "Datastatistik" },
-  { title: "Inställningar", url: "/settings", icon: Settings, description: "Systeminställningar" },
-];
-
-export function getNavGroups(t: (key: string, fallback: string) => string): NavGroup[] {
+export function getAdminItems(tl?: (key: string) => string): NavItem[] {
+  const l = tl || ((k: string) => k);
   return [
-    { key: "ordrar", label: "Ordrar", items: getOrdrarItems(t), icon: ClipboardList, group: "ordrar", colorClass: "text-amber-500" },
-    { key: "planering", label: "Planering", items: [...getPlaneringItems(), ...getOvervakningItems()], icon: Calendar, group: "planering", colorClass: "text-green-500" },
-    { key: "falt", label: "Fält", items: getFaltItems(t), icon: Smartphone, group: "falt", colorClass: "text-teal-500" },
-    { key: "ekonomi", label: "Ekonomi", items: getEkonomiItems(), icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
-    { key: "ai", label: "AI", items: getAIItems(), icon: Brain, group: "analys", colorClass: "text-violet-500" },
-    { key: "grunddata", label: "Grunddata", items: getGrunddataItems(t), icon: Database, group: "grunddata", colorClass: "text-blue-500" },
-    { key: "admin", label: "Admin", items: adminItems, icon: Settings, group: "admin", colorClass: "text-orange-500" },
+    { title: l("nav.production-control"), url: "/planning-parameters", icon: Settings2, description: l("nav.production-control.desc") },
+    { title: l("nav.user-management"), url: "/user-management", icon: Users, description: l("nav.user-management.desc") },
+    { title: l("nav.company-settings"), url: "/tenant-config", icon: Settings2, description: l("nav.company-settings.desc") },
+    { title: l("nav.new-customer"), url: "/onboarding", icon: Building2, description: l("nav.new-customer.desc") },
+    { title: l("nav.sms-settings"), url: "/sms-settings", icon: MessageSquare, description: l("nav.sms-settings.desc") },
+    { title: l("nav.fortnox"), url: "/fortnox", icon: Receipt, description: l("nav.fortnox.desc") },
+    { title: l("nav.import"), url: "/import", icon: Upload, description: l("nav.import.desc") },
+    { title: l("nav.metadata-settings"), url: "/metadata-settings", icon: Database, description: l("nav.metadata-settings.desc") },
+    { title: l("nav.api-costs"), url: "/api-costs", icon: Activity, description: l("nav.api-costs.desc") },
+    { title: l("nav.system-overview"), url: "/system-overview", icon: FileText, description: l("nav.system-overview.desc") },
+    { title: l("nav.settings"), url: "/settings", icon: Settings, description: l("nav.settings.desc") },
   ];
 }
 
-export const sidebarStartItems: NavItem[] = [
-  { title: "Dagens arbete", url: "/", icon: Calendar, description: "" },
-  { title: "Dashboard", url: "/dashboard", icon: BarChart3, description: "" },
-];
+export const adminItems: NavItem[] = getAdminItems();
+
+export function getNavGroups(t: (key: string, fallback: string) => string, tl?: (key: string) => string): NavGroup[] {
+  const l = tl || ((k: string) => k);
+  return [
+    { key: "ordrar", label: l("nav.ordrar"), items: getOrdrarItems(t, tl), icon: ClipboardList, group: "ordrar", colorClass: "text-amber-500" },
+    { key: "planering", label: l("nav.planering"), items: [...getPlaneringItems(tl), ...getOvervakningItems(tl)], icon: Calendar, group: "planering", colorClass: "text-green-500" },
+    { key: "falt", label: l("nav.falt"), items: getFaltItems(t, tl), icon: Smartphone, group: "falt", colorClass: "text-teal-500" },
+    { key: "ekonomi", label: l("nav.ekonomi"), items: getEkonomiItems(tl), icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
+    { key: "ai", label: l("nav.ai"), items: getAIItems(tl), icon: Brain, group: "analys", colorClass: "text-violet-500" },
+    { key: "grunddata", label: l("nav.grunddata"), items: getGrunddataItems(t, tl), icon: Database, group: "grunddata", colorClass: "text-blue-500" },
+    { key: "admin", label: l("nav.admin"), items: getAdminItems(tl), icon: Settings, group: "admin", colorClass: "text-orange-500" },
+  ];
+}
+
+export function getSidebarStartItems(tl?: (key: string) => string): NavItem[] {
+  const l = tl || ((k: string) => k);
+  return [
+    { title: l("nav.today"), url: "/", icon: Calendar, description: "" },
+    { title: l("nav.dashboard"), url: "/dashboard", icon: BarChart3, description: "" },
+  ];
+}
+
+export const sidebarStartItems: NavItem[] = getSidebarStartItems();

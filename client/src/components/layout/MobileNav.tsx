@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { canAccessRoute } from "@/lib/role-config";
+import { useLanguage } from "@/hooks/use-language";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -47,93 +48,96 @@ import {
   Activity,
 } from "lucide-react";
 
-const navigationGroups = [
-  {
-    title: "Start",
-    items: [
-      { title: "Dagens arbete", url: "/", icon: Calendar },
-      { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-    ],
-  },
-  {
-    title: "Grunddata",
-    items: [
-      { title: "Kluster", url: "/clusters", icon: Target },
-      { title: "Auto-klustring", url: "/auto-cluster", icon: Layers },
-      { title: "Objekt", url: "/objects", icon: Building2 },
-      { title: "Resurser", url: "/resources", icon: Users },
-      { title: "Fordon", url: "/vehicles", icon: Truck },
-      { title: "Artiklar", url: "/articles", icon: Package },
-      { title: "Prislistor", url: "/price-lists", icon: Receipt },
-    ],
-  },
-  {
-    title: "Ordrar",
-    items: [
-      { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw },
-      { title: "Orderkoncept", url: "/order-concepts", icon: ListChecks },
-      { title: "Orderstock", url: "/order-stock", icon: ClipboardList },
-      { title: "Uppdrag", url: "/assignments", icon: UserCheck },
-    ],
-  },
-  {
-    title: "Planering & Karta",
-    items: [
-      { title: "Veckoplanering", url: "/planner", icon: Calendar },
-      { title: "Ruttplanering", url: "/routes", icon: Map },
-      { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin },
-      { title: "Historisk Kartvy", url: "/historical-map", icon: History },
-      { title: "Väderplanering", url: "/weather", icon: Cloud },
-    ],
-  },
-  {
-    title: "Fält & Utförande",
-    items: [
-      { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
-      { title: "Besiktning", url: "/inspections", icon: ClipboardList },
-      { title: "Kontrollmallar", url: "/checklist-templates", icon: ClipboardList },
-      { title: "Kundportal", url: "/customer-portal", icon: Building },
-    ],
-  },
-  {
-    title: "Analys",
-    items: [
-      { title: "AI-Assistent", url: "/ai-assistant", icon: Brain },
-      { title: "Rapportering", url: "/reporting", icon: BarChart3 },
-      { title: "Ekonomi", url: "/economics", icon: DollarSign },
-      { title: "Fakturering", url: "/invoicing", icon: Receipt },
-      { title: "Fleethantering", url: "/fleet", icon: Fuel },
-      { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp },
-    ],
-  },
-  {
-    title: "Administration",
-    items: [
-      { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2 },
-      { title: "Användarhantering", url: "/user-management", icon: Users },
-      { title: "Importera data", url: "/import", icon: Upload },
-      { title: "Metadatainställningar", url: "/metadata-settings", icon: Database },
-      { title: "API-kostnader", url: "/api-costs", icon: Activity },
-      { title: "Systemöversikt", url: "/system-overview", icon: FileText },
-      { title: "Inställningar", url: "/settings", icon: Settings },
-    ],
-  },
-];
+function getNavigationGroups(tl: (key: string) => string) {
+  return [
+    {
+      title: tl("mobile.start"),
+      items: [
+        { title: tl("nav.today"), url: "/", icon: Calendar },
+        { title: tl("nav.dashboard"), url: "/dashboard", icon: LayoutDashboard },
+      ],
+    },
+    {
+      title: tl("mobile.grunddata"),
+      items: [
+        { title: tl("nav.clusters"), url: "/clusters", icon: Target },
+        { title: tl("nav.auto-cluster"), url: "/auto-cluster", icon: Layers },
+        { title: tl("nav.objects"), url: "/objects", icon: Building2 },
+        { title: tl("nav.resources"), url: "/resources", icon: Users },
+        { title: tl("nav.vehicles"), url: "/vehicles", icon: Truck },
+        { title: tl("nav.articles"), url: "/articles", icon: Package },
+        { title: tl("nav.price-lists"), url: "/price-lists", icon: Receipt },
+      ],
+    },
+    {
+      title: tl("mobile.ordrar"),
+      items: [
+        { title: tl("nav.subscriptions"), url: "/subscriptions", icon: RefreshCw },
+        { title: tl("nav.order-concepts"), url: "/order-concepts", icon: ListChecks },
+        { title: tl("nav.order-stock"), url: "/order-stock", icon: ClipboardList },
+        { title: tl("nav.assignments"), url: "/assignments", icon: UserCheck },
+      ],
+    },
+    {
+      title: tl("mobile.planering"),
+      items: [
+        { title: tl("nav.week-planner"), url: "/planner", icon: Calendar },
+        { title: tl("nav.route-planning"), url: "/routes", icon: Map },
+        { title: tl("nav.planner-map"), url: "/planner-map", icon: MapPin },
+        { title: tl("nav.historical-map"), url: "/historical-map", icon: History },
+        { title: tl("nav.weather"), url: "/weather", icon: Cloud },
+      ],
+    },
+    {
+      title: tl("mobile.falt"),
+      items: [
+        { title: tl("nav.mobile-field"), url: "/mobile", icon: Smartphone },
+        { title: tl("nav.inspections"), url: "/inspections", icon: ClipboardList },
+        { title: tl("nav.checklist-templates"), url: "/checklist-templates", icon: ClipboardList },
+        { title: tl("nav.customer-portal"), url: "/customer-portal", icon: Building },
+      ],
+    },
+    {
+      title: tl("mobile.analys"),
+      items: [
+        { title: tl("nav.ai-assistant"), url: "/ai-assistant", icon: Brain },
+        { title: tl("nav.reporting"), url: "/reporting", icon: BarChart3 },
+        { title: tl("nav.economics"), url: "/economics", icon: DollarSign },
+        { title: tl("nav.invoicing"), url: "/invoicing", icon: Receipt },
+        { title: tl("nav.fleet"), url: "/fleet", icon: Fuel },
+        { title: tl("nav.predictive-planning"), url: "/predictive-planning", icon: TrendingUp },
+      ],
+    },
+    {
+      title: tl("mobile.admin"),
+      items: [
+        { title: tl("nav.production-control"), url: "/planning-parameters", icon: Settings2 },
+        { title: tl("nav.user-management"), url: "/user-management", icon: Users },
+        { title: tl("nav.import"), url: "/import", icon: Upload },
+        { title: tl("nav.metadata-settings"), url: "/metadata-settings", icon: Database },
+        { title: tl("nav.api-costs"), url: "/api-costs", icon: Activity },
+        { title: tl("nav.system-overview"), url: "/system-overview", icon: FileText },
+        { title: tl("nav.settings"), url: "/settings", icon: Settings },
+      ],
+    },
+  ];
+}
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
   const [location] = useLocation();
   const { user } = useAuth();
   const userRole = user?.role;
+  const { t: tl } = useLanguage();
 
   const filteredGroups = useMemo(() => {
-    return navigationGroups
+    return getNavigationGroups(tl)
       .map((group) => ({
         ...group,
         items: group.items.filter((item) => canAccessRoute(userRole, item.url)),
       }))
       .filter((group) => group.items.length > 0);
-  }, [userRole]);
+  }, [userRole, tl]);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
