@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/hooks/use-language";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { 
   Settings, 
@@ -54,6 +55,7 @@ const DEFAULT_SETTINGS: TenantSettings = {
 
 export default function SettingsPage() {
   const { toast } = useToast();
+  const { t: tl } = useLanguage();
   const [settings, setSettings] = useState<TenantSettings>(DEFAULT_SETTINGS);
   const [profile, setProfile] = useState({
     firstName: "Anna",
@@ -121,9 +123,9 @@ export default function SettingsPage() {
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
             <Settings className="h-6 w-6" />
-            Inställningar
+            {tl("page.settings.title")}
           </h1>
-          <p className="text-sm text-muted-foreground">Hantera ditt konto, företag och systempreferenser</p>
+          <p className="text-sm text-muted-foreground">{tl("page.settings.description")}</p>
         </div>
         <Badge variant="outline" className="gap-1">
           <Building2 className="h-3 w-3" />

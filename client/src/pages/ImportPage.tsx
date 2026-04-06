@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/hooks/use-language";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -627,6 +628,7 @@ function ColumnTable({ columns }: { columns: { name: string; required: boolean; 
 
 export default function ImportPage() {
   const { toast } = useToast();
+  const { t: tl } = useLanguage();
   const [selectedType, setSelectedType] = useState<ImportType>("customers");
   const [previewType, setPreviewType] = useState<ImportType>("customers");
   const [lastResult, setLastResult] = useState<ImportResult | null>(null);
@@ -1338,7 +1340,7 @@ export default function ImportPage() {
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold" data-testid="text-import-title">Importera data</h1>
+        <h1 className="text-2xl font-bold" data-testid="text-import-title">{tl("page.import.title")}</h1>
         <p className="text-muted-foreground">Importera kunddata, objekt och arbetsordrar från Modus 2.0 eller CSV-filer</p>
       </div>
 

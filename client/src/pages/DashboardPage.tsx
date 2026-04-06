@@ -9,16 +9,20 @@ import { CapacityOverview } from "@/components/dashboard/CapacityOverview";
 import { AutoDistributeToday } from "@/components/dashboard/AutoDistributeToday";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
-
-function getGreeting() {
-  const hour = new Date().getHours();
-  if (hour < 10) return "God morgon";
-  if (hour < 18) return "Hej";
-  return "God kväll";
-}
+import { en as enLocale } from "date-fns/locale";
+import { useLanguage } from "@/hooks/use-language";
 
 export default function DashboardPage() {
+  const { t: tl, language } = useLanguage();
+  const dateLocale = language === "en" ? enLocale : sv;
   const today = new Date();
+
+  function getGreeting() {
+    const hour = new Date().getHours();
+    if (hour < 10) return tl("page.dashboard.morning");
+    if (hour < 18) return tl("page.dashboard.hello");
+    return tl("page.dashboard.evening");
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -28,7 +32,7 @@ export default function DashboardPage() {
             {getGreeting()}!
           </h1>
           <p className="text-muted-foreground">
-            {format(today, "EEEE d MMMM yyyy", { locale: sv })} - Traivo Dashboard
+            {format(today, "EEEE d MMMM yyyy", { locale: dateLocale })} - Traivo Dashboard
           </p>
         </div>
         <div className="flex items-center gap-2">

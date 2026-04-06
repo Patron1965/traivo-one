@@ -49,6 +49,8 @@ import { Activity, ChevronDown } from "lucide-react";
 import { ObjectContactsPanel } from "@/components/ObjectContactsPanel";
 import { ObjectImagesGallery } from "@/components/ObjectImagesGallery";
 import { OnboardingGuide } from "@/components/OnboardingGuide";
+import { useLanguage } from "@/hooks/use-language";
+import { en as enLocale } from "date-fns/locale";
 
 interface AIMessage {
   id: string;
@@ -514,6 +516,8 @@ export default function MyTasksPage() {
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [selectedObject, setSelectedObject] = useState<ServiceObject | null>(null);
   const [objectDialogOpen, setObjectDialogOpen] = useState(false);
+  const { t: tl, language } = useLanguage();
+  const dateLocale = language === "en" ? enLocale : sv;
   const today = new Date();
   const weekStart = startOfWeek(today, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
@@ -564,7 +568,7 @@ export default function MyTasksPage() {
         <div className="flex items-start justify-between gap-4 mb-8 flex-wrap">
           <div>
             <p className="text-muted-foreground text-sm mb-1">
-              {format(today, "EEEE d MMMM yyyy", { locale: sv })}
+              {format(today, "EEEE d MMMM yyyy", { locale: dateLocale })}
             </p>
             {ordersLoading ? (
               <>
@@ -575,14 +579,14 @@ export default function MyTasksPage() {
               <>
                 <h1 className="text-3xl font-bold" data-testid="page-title">
                   {todaysOrders.length > 0 
-                    ? `${todaysOrders.length} jobb att utföra idag`
-                    : 'Inga jobb schemalagda idag'
+                    ? `${todaysOrders.length} ${tl("page.today.jobs")}`
+                    : tl("page.today.no-jobs")
                   }
                 </h1>
                 <p className="text-muted-foreground mt-2">
                   {todaysOrders.length > 0 
-                    ? `${todaysOrders.filter(o => o.orderStatus === "utford").length} slutförda, ${todaysOrders.filter(o => o.orderStatus !== "utford").length} kvar`
-                    : 'Planera nya jobb eller se veckans överblick'
+                    ? `${todaysOrders.filter(o => o.orderStatus === "utford").length} ${tl("page.today.completed")}, ${todaysOrders.filter(o => o.orderStatus !== "utford").length} ${tl("page.today.remaining")}`
+                    : tl("page.today.plan-new")
                   }
                 </p>
               </>
@@ -594,7 +598,7 @@ export default function MyTasksPage() {
             data-testid="button-open-ai-assistant"
           >
             <MessageCircle className="h-4 w-4 mr-2" />
-            Fråga din AI-assistent
+            {tl("page.today.ask-ai")}
           </Button>
         </div>
 
@@ -611,9 +615,9 @@ export default function MyTasksPage() {
             </Card>
           ) : (
             <StatCard
-              title="Dagens ordrar"
+              title={tl("page.today.orders")}
               value={todaysOrders.length}
-              description={`${todaysOrders.filter(o => o.orderStatus === "utford").length} slutförda`}
+              description={`${todaysOrders.filter(o => o.orderStatus === "utford").length} ${tl("page.today.completed")}`}
               icon={Calendar}
               href="/planner"
             />
@@ -628,9 +632,9 @@ export default function MyTasksPage() {
             </Card>
           ) : (
             <StatCard
-              title="Brådskande"
+              title={tl("page.today.urgent")}
               value={urgentOrders.length}
-              description="Kräver uppmärksamhet"
+              description={tl("page.today.needs-attention")}
               icon={AlertTriangle}
               href="/order-stock"
               variant={urgentOrders.length > 0 ? "warning" : "default"}
@@ -646,9 +650,9 @@ export default function MyTasksPage() {
             </Card>
           ) : (
             <StatCard
-              title="Denna vecka"
+              title={tl("page.today.this-week")}
               value={`${completedThisWeek}/${thisWeekOrders.length}`}
-              description="Ordrar klara"
+              description={tl("page.today.orders-done")}
               icon={CheckCircle2}
               href="/planner"
               variant={completedThisWeek === thisWeekOrders.length && thisWeekOrders.length > 0 ? "success" : "default"}
@@ -664,9 +668,9 @@ export default function MyTasksPage() {
             </Card>
           ) : (
             <StatCard
-              title="Aktiva resurser"
+              title={tl("page.today.active-resources")}
               value={activeResources}
-              description={`Av ${resources.length} totalt`}
+              description={`${tl("page.today.of-total")} ${resources.length} ${tl("page.today.total-suffix")}`}
               icon={Users}
               href="/resources"
             />
@@ -679,12 +683,12 @@ export default function MyTasksPage() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Calendar className="h-5 w-5 text-primary" />
-                Dagens jobb
+                {tl("page.today.todays-jobs")}
               </CardTitle>
               <CardDescription>
                 {todaysOrders.length > 0 
-                  ? `${todaysOrders.filter(o => o.orderStatus !== "utford").length} jobb kvar att utföra`
-                  : 'Inga jobb schemalagda för idag'
+                  ? `${todaysOrders.filter(o => o.orderStatus !== "utford").length} ${tl("page.today.jobs-remaining")}`
+                  : tl("page.today.no-jobs-today")
                 }
               </CardDescription>
             </div>
@@ -697,7 +701,7 @@ export default function MyTasksPage() {
               </Link>
               <Link href="/planner">
                 <Button variant="outline" size="sm" data-testid="button-view-planner">
-                  Veckoplanering
+                  {tl("page.planner.title")}
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               </Link>

@@ -28,6 +28,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { WorkOrder, SimulationScenario, Customer, Article, WorkOrderLine, Team, Resource, MetadataKatalog } from "@shared/schema";
+import { useLanguage } from "@/hooks/use-language";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { 
   Package, 
@@ -131,6 +132,7 @@ type PlanningFormData = z.infer<typeof planningFormSchema>;
 
 export default function OrderStockPage() {
   const { toast } = useToast();
+  const { t: tl } = useLanguage();
   const [, setLocation] = useLocation();
   const [includeSimulated, setIncludeSimulated] = useState(false);
   const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
@@ -572,7 +574,7 @@ export default function OrderStockPage() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-2">
           <Package className="h-6 w-6 text-muted-foreground" />
-          <h1 className="text-2xl font-semibold">Orderstock</h1>
+          <h1 className="text-2xl font-semibold">{tl("page.orderstock.title")}</h1>
         </div>
         
         <div className="flex items-center gap-4 flex-wrap">

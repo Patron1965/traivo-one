@@ -66,6 +66,7 @@ import {
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/hooks/use-language";
 import type { Resource, Team, TeamMember, ResourceProfile, Invitation } from "@shared/schema";
 
 interface UserData {
@@ -122,6 +123,7 @@ type SortDirection = "asc" | "desc";
 
 export default function UserManagementPage() {
   const { toast } = useToast();
+  const { t: tl } = useLanguage();
   const [activeTab, setActiveTab] = useState("users");
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -526,7 +528,7 @@ export default function UserManagementPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Användarhantering</h1>
+          <h1 className="text-2xl font-bold" data-testid="text-page-title">{tl("page.user-management.title")}</h1>
           <p className="text-sm text-muted-foreground">Skapa och hantera användarkonton och team</p>
         </div>
       </div>
