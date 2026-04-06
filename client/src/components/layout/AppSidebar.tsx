@@ -228,7 +228,7 @@ function CollapsibleNavGroup({
 
 export function AppSidebar() {
   const { t } = useTerminology();
-  const { t: tl } = useLanguage();
+  const { t: tl, language } = useLanguage();
   const { isNavItemEnabled } = useFeatures();
   const { user } = useAuth();
   const userRole = user?.role || "user";
@@ -250,14 +250,14 @@ export function AppSidebar() {
   const startItems = useMemo(() => getSidebarStartItems(tl), [tl]);
 
   const navGroups = useMemo(() => {
-    return getNavGroups(t, tl)
+    return getNavGroups(t, tl, language)
       .filter((g) => canAccessMenu(userRole, g.group as NavMenuGroup))
       .map((g) => ({
         ...g,
         items: g.items.filter((item) => isNavItemEnabled(item.url)),
       }))
       .filter((g) => g.items.length > 0);
-  }, [t, tl, isNavItemEnabled, userRole]);
+  }, [t, tl, language, isNavItemEnabled, userRole]);
 
   const allItems = useMemo(() => {
     const items = [...startItems];

@@ -369,7 +369,7 @@ export function TopNav() {
   const { user } = useAuth();
   const userRole = user?.role || "user";
   const { t } = useTerminology();
-  const { t: tl } = useLanguage();
+  const { t: tl, language } = useLanguage();
   const { isNavItemEnabled } = useFeatures();
   const { favorites, toggleFavorite, isFavorite } = useFavorites(user?.id);
 
@@ -386,12 +386,12 @@ export function TopNav() {
   };
 
   const menuGroups = useMemo(() => {
-    const groups = getNavGroups(t, tl);
+    const groups = getNavGroups(t, tl, language);
     return groups.map(g => ({
       ...g,
       items: g.items.filter(item => isNavItemEnabled(item.url)),
     }));
-  }, [t, tl, isNavItemEnabled]);
+  }, [t, tl, language, isNavItemEnabled]);
 
   const roleFilteredItems = useMemo(() => {
     const items: NavItem[] = [];

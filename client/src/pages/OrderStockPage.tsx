@@ -524,7 +524,7 @@ export default function OrderStockPage() {
       link.click();
       URL.revokeObjectURL(url);
       
-      toast({ title: `Exporterade ${data.orders.length} ordrar` });
+      toast({ title: `${tl("page.orderstock.exported")} ${data.orders.length} ${tl("page.orderstock.orders-suffix")}` });
     } catch (error) {
       toast({ title: tl("toast.export-error"), variant: "destructive" });
     }
@@ -723,7 +723,7 @@ export default function OrderStockPage() {
           <CardContent className="pt-4 pb-3">
             <div className="flex items-end gap-3 flex-wrap">
               <div className="space-y-1">
-                <Label className="text-xs">Metadata-typ</Label>
+                <Label className="text-xs">{tl("page.orderstock.metadata-type")}</Label>
                 <Select value={newFilterName} onValueChange={setNewFilterName}>
                   <SelectTrigger className="w-44" data-testid="select-metadata-type">
                     <SelectValue placeholder={tl("page.orderstock.select-type")} />
@@ -799,7 +799,7 @@ export default function OrderStockPage() {
           <div className="flex items-center gap-4 flex-wrap justify-between">
             <CardTitle className="flex items-center gap-2">
               <Filter className="h-5 w-5" />
-              Orderlista
+              {tl("page.orderstock.order-list-title")}
             </CardTitle>
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -850,14 +850,14 @@ export default function OrderStockPage() {
             }}
             data-testid="button-bulk-change-order-status"
           >
-            Ändra status
+            {tl("page.orderstock.change-status")}
           </Button>
         </BulkActionBar>
         <ScrollArea className="h-[500px]">
           <div className="divide-y">
             {displayOrders.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
-                Inga order hittades
+                {tl("page.orderstock.no-orders")}
               </div>
             ) : (
               displayOrders.map(order => {
@@ -1051,7 +1051,7 @@ export default function OrderStockPage() {
       <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Ändra orderstatus</DialogTitle>
+            <DialogTitle>{tl("page.orderstock.change-order-status")}</DialogTitle>
           </DialogHeader>
           {selectedOrder && (
             <div className="space-y-4">
@@ -1094,9 +1094,9 @@ export default function OrderStockPage() {
       <Dialog open={showPlanningDialog} onOpenChange={setShowPlanningDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Planera order</DialogTitle>
+            <DialogTitle>{tl("page.orderstock.plan-order")}</DialogTitle>
             <DialogDescription>
-              Tilldela team, resurs och datum för denna order
+              {tl("page.orderstock.plan-order-desc")}
             </DialogDescription>
           </DialogHeader>
           {planningOrder && (
@@ -1129,7 +1129,7 @@ export default function OrderStockPage() {
                   name="teamId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Team (förplanering)</FormLabel>
+                      <FormLabel>{tl("page.orderstock.team-pre-plan")}</FormLabel>
                       <Select value={field.value || "none"} onValueChange={(val) => field.onChange(val === "none" ? "" : val)}>
                         <FormControl>
                           <SelectTrigger data-testid="select-planning-team">
@@ -1137,7 +1137,7 @@ export default function OrderStockPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="none">Inget team</SelectItem>
+                          <SelectItem value="none">{tl("page.orderstock.no-team")}</SelectItem>
                           {teams.map((team) => (
                             <SelectItem key={team.id} value={team.id}>
                               {team.name}
@@ -1155,7 +1155,7 @@ export default function OrderStockPage() {
                   name="resourceId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Resurs (detaljplanering)</FormLabel>
+                      <FormLabel>{tl("page.orderstock.resource-detail")}</FormLabel>
                       <Select value={field.value || "none"} onValueChange={(val) => field.onChange(val === "none" ? "" : val)}>
                         <FormControl>
                           <SelectTrigger data-testid="select-planning-resource">
@@ -1163,7 +1163,7 @@ export default function OrderStockPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="none">Ingen resurs</SelectItem>
+                          <SelectItem value="none">{tl("page.orderstock.no-resource")}</SelectItem>
                           {resources.map((resource) => (
                             <SelectItem key={resource.id} value={resource.id}>
                               {resource.name}
@@ -1224,7 +1224,7 @@ export default function OrderStockPage() {
               <div className="space-y-4">
                 <div className="flex items-end gap-2 flex-wrap">
                   <div className="flex-1 min-w-[200px]">
-                    <Label htmlFor="article-select">Artikel</Label>
+                    <Label htmlFor="article-select">{tl("page.orderstock.article-label")}</Label>
                     <Select value={selectedArticleId} onValueChange={setSelectedArticleId}>
                       <SelectTrigger id="article-select" data-testid="select-article">
                         <SelectValue placeholder={tl("page.orderstock.select-article")} />
@@ -1275,7 +1275,7 @@ export default function OrderStockPage() {
                     </div>
                   ) : orderLines.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-4 text-center">
-                      Inga orderrader tillagda ännu
+                      {tl("page.orderstock.no-lines")}
                     </p>
                   ) : (
                     <div className="divide-y rounded-md border">
@@ -1289,10 +1289,10 @@ export default function OrderStockPage() {
                           >
                             <div className="flex-1">
                               <div className="font-medium">
-                                {article?.name || "Okänd artikel"}
+                                {article?.name || tl("page.orderstock.unknown-article")}
                               </div>
                               <div className="text-sm text-muted-foreground">
-                                {article?.articleNumber} | Antal: {line.quantity}
+                                {article?.articleNumber} | {tl("page.orderstock.quantity-label")}: {line.quantity}
                               </div>
                             </div>
                             <div className="text-right text-sm">
@@ -1394,27 +1394,27 @@ export default function OrderStockPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="sales-scope">Analysomfång</Label>
+              <Label htmlFor="sales-scope">{tl("page.orderstock.analysis-scope")}</Label>
               <Select value={salesScope} onValueChange={(v) => setSalesScope(v as "all" | "active_customers")}>
                 <SelectTrigger id="sales-scope" data-testid="select-sales-scope">
                   <SelectValue placeholder={tl("page.orderstock.select-scope")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Alla kunder</SelectItem>
-                  <SelectItem value="active_customers">Enbart kunder med aktiva ordrar</SelectItem>
+                  <SelectItem value="all">{tl("page.orderstock.all-customers")}</SelectItem>
+                  <SelectItem value="active_customers">{tl("page.orderstock.active-customers")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground space-y-1">
-              <p className="font-medium text-foreground">Analysen inkluderar:</p>
+              <p className="font-medium text-foreground">{tl("page.orderstock.ai-analysis-includes")}</p>
               <ul className="list-disc list-inside space-y-0.5 text-xs">
-                <li>Kunder utan aktiva ordrar</li>
-                <li>Inaktiva kunder (&gt;6 månader)</li>
-                <li>Korsförsäljningsmöjligheter</li>
-                <li>Kunder med hög volym men lågt snittvärde</li>
-                <li>Objekt med metadata men inga beställningar</li>
-                <li>Top 10 konkreta försäljningsförslag</li>
+                <li>{tl("page.orderstock.ai-customers-no-active")}</li>
+                <li>{tl("page.orderstock.ai-inactive-customers")}</li>
+                <li>{tl("page.orderstock.ai-cross-sell")}</li>
+                <li>{tl("page.orderstock.ai-high-volume-low-value")}</li>
+                <li>{tl("page.orderstock.ai-metadata-no-orders")}</li>
+                <li>{tl("page.orderstock.ai-top-suggestions")}</li>
               </ul>
             </div>
           </div>

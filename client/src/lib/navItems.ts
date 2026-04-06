@@ -57,15 +57,16 @@ export interface NavGroup {
 
 const svFallback = (k: string) => translate(k, "sv");
 
-export function getGrunddataItems(t: (key: string, fallback: string) => string, tl?: (key: string) => string): NavItem[] {
+export function getGrunddataItems(t: (key: string, fallback: string) => string, tl?: (key: string) => string, lang?: string): NavItem[] {
   const l = tl || svFallback;
+  const useI18n = lang === "en";
   return [
-    { title: t("object_plural", tl ? l("nav.objects") : "Objekt"), url: "/objects", icon: Building2, description: l("nav.objects.desc") },
-    { title: t("resource_plural", tl ? l("nav.resources") : "Resurser"), url: "/resources", icon: Users, description: l("nav.resources.desc") },
-    { title: t("vehicle_plural", tl ? l("nav.vehicles") : "Fordon"), url: "/vehicles", icon: Truck, description: t("vehicle_plural", tl ? l("nav.vehicles") : "Fordon") },
-    { title: t("cluster_plural", tl ? l("nav.clusters") : "Kluster"), url: "/clusters", icon: Target, description: l("nav.clusters.desc") },
+    { title: useI18n ? l("nav.objects") : t("object_plural", l("nav.objects")), url: "/objects", icon: Building2, description: l("nav.objects.desc") },
+    { title: useI18n ? l("nav.resources") : t("resource_plural", l("nav.resources")), url: "/resources", icon: Users, description: l("nav.resources.desc") },
+    { title: useI18n ? l("nav.vehicles") : t("vehicle_plural", l("nav.vehicles")), url: "/vehicles", icon: Truck, description: l("nav.vehicles") },
+    { title: useI18n ? l("nav.clusters") : t("cluster_plural", l("nav.clusters")), url: "/clusters", icon: Target, description: l("nav.clusters.desc") },
     { title: l("nav.auto-cluster"), url: "/auto-cluster", icon: Layers, description: l("nav.auto-cluster.desc") },
-    { title: t("article_plural", tl ? l("nav.articles") : "Artiklar"), url: "/articles", icon: Package, description: l("nav.articles.desc") },
+    { title: useI18n ? l("nav.articles") : t("article_plural", l("nav.articles")), url: "/articles", icon: Package, description: l("nav.articles.desc") },
     { title: l("nav.price-lists"), url: "/price-lists", icon: Receipt, description: l("nav.price-lists.desc") },
     { title: l("nav.fleet"), url: "/fleet", icon: Fuel, description: l("nav.fleet.desc") },
   ];
@@ -99,12 +100,13 @@ export function getOvervakningItems(tl?: (key: string) => string): NavItem[] {
   ];
 }
 
-export function getFaltItems(t: (key: string, fallback: string) => string, tl?: (key: string) => string): NavItem[] {
+export function getFaltItems(t: (key: string, fallback: string) => string, tl?: (key: string) => string, lang?: string): NavItem[] {
   const l = tl || svFallback;
+  const useI18n = lang === "en";
   return [
     { title: l("nav.mobile-field"), url: "/mobile", icon: Smartphone, description: l("nav.mobile-field.desc") },
     { title: l("nav.work-sessions"), url: "/work-sessions", icon: Clock, description: l("nav.work-sessions.desc") },
-    { title: t("inspection_singular", tl ? l("nav.inspections") : "Besiktning"), url: "/inspections", icon: ClipboardCheck, description: l("nav.inspections.desc") },
+    { title: useI18n ? l("nav.inspections") : t("inspection_singular", l("nav.inspections")), url: "/inspections", icon: ClipboardCheck, description: l("nav.inspections.desc") },
     { title: l("nav.checklist-templates"), url: "/checklist-templates", icon: ClipboardCheck, description: l("nav.checklist-templates.desc") },
     { title: l("nav.customer-portal"), url: "/customer-portal", icon: Building, description: l("nav.customer-portal.desc") },
     { title: l("nav.customer-reports"), url: "/customer-reports", icon: Camera, description: l("nav.customer-reports.desc") },
@@ -153,15 +155,15 @@ export function getAdminItems(tl?: (key: string) => string): NavItem[] {
 
 export const adminItems: NavItem[] = getAdminItems();
 
-export function getNavGroups(t: (key: string, fallback: string) => string, tl?: (key: string) => string): NavGroup[] {
+export function getNavGroups(t: (key: string, fallback: string) => string, tl?: (key: string) => string, lang?: string): NavGroup[] {
   const l = tl || svFallback;
   return [
     { key: "ordrar", label: l("nav.ordrar"), items: getOrdrarItems(t, tl), icon: ClipboardList, group: "ordrar", colorClass: "text-amber-500" },
     { key: "planering", label: l("nav.planering"), items: [...getPlaneringItems(tl), ...getOvervakningItems(tl)], icon: Calendar, group: "planering", colorClass: "text-green-500" },
-    { key: "falt", label: l("nav.falt"), items: getFaltItems(t, tl), icon: Smartphone, group: "falt", colorClass: "text-teal-500" },
+    { key: "falt", label: l("nav.falt"), items: getFaltItems(t, tl, lang), icon: Smartphone, group: "falt", colorClass: "text-teal-500" },
     { key: "ekonomi", label: l("nav.ekonomi"), items: getEkonomiItems(tl), icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
     { key: "ai", label: l("nav.ai"), items: getAIItems(tl), icon: Brain, group: "analys", colorClass: "text-violet-500" },
-    { key: "grunddata", label: l("nav.grunddata"), items: getGrunddataItems(t, tl), icon: Database, group: "grunddata", colorClass: "text-blue-500" },
+    { key: "grunddata", label: l("nav.grunddata"), items: getGrunddataItems(t, tl, lang), icon: Database, group: "grunddata", colorClass: "text-blue-500" },
     { key: "admin", label: l("nav.admin"), items: getAdminItems(tl), icon: Settings, group: "admin", colorClass: "text-orange-500" },
   ];
 }
