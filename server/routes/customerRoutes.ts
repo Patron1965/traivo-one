@@ -91,11 +91,12 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
 
   const interim = req.query.interim as string || undefined;
   const issue = req.query.issue as string || undefined;
-  const hasFilters = objectType || hierarchyLevel || accessType || interim || issue;
+  const clusterIdFilter = req.query.clusterId as string || undefined;
+  const hasFilters = objectType || hierarchyLevel || accessType || interim || issue || clusterIdFilter;
   const paginated = req.query.paginated === "true";
 
   if (paginated || req.query.limit || req.query.offset || req.query.search || req.query.customerId || noCluster || hasFilters) {
-    const filters = hasFilters ? { objectType, hierarchyLevel, accessType, isInterimObject: interim === "true" ? true : interim === "false" ? false : undefined, issue } : undefined;
+    const filters = hasFilters ? { objectType, hierarchyLevel, accessType, isInterimObject: interim === "true" ? true : interim === "false" ? false : undefined, issue, clusterId: clusterIdFilter } : undefined;
     const result = await storage.getObjectsPaginated(tenantId, limit, offset, search, customerIds, filters);
 
     if (noCluster) {

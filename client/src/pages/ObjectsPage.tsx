@@ -19,7 +19,7 @@ import {
   Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
   Map as MapIcon, List, Edit2, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, ChevronDown, ChevronUp, XCircle,
-  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera
+  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, Layers
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AICard } from "@/components/AICard";
@@ -86,6 +86,7 @@ export default function ObjectsPage() {
     return c ? [c] : [];
   });
   const [hierarchyFilter, setHierarchyFilterRaw] = useState("all");
+  const [clusterFilter, setClusterFilterRaw] = useState("all");
   const [setupTimeRange, setSetupTimeRange] = useState<[number, number]>([0, 60]);
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
@@ -106,6 +107,7 @@ export default function ObjectsPage() {
   const addCustomerFilter = (id: string) => { if (!customerFilter.includes(id)) { setCustomerFilter([...customerFilter, id]); } };
   const removeCustomerFilter = (id: string) => { setCustomerFilter(customerFilter.filter(c => c !== id)); };
   const setHierarchyFilter = (v: string) => { setHierarchyFilterRaw(v); setCurrentPage(0); };
+  const setClusterFilter = (v: string) => { setClusterFilterRaw(v); setCurrentPage(0); };
   const [interimFilter, setInterimFilter] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const toggleSelected = useCallback((id: string) => {
@@ -180,7 +182,7 @@ export default function ObjectsPage() {
   }, [searchQuery]);
 
   const { data: objectsData, isLoading } = useQuery<{ objects: ServiceObject[]; total: number }>({
-    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, typeFilter, accessFilter, hierarchyFilter, interimFilter, issueFilter],
+    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, typeFilter, accessFilter, hierarchyFilter, clusterFilter, interimFilter, issueFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
@@ -200,6 +202,9 @@ export default function ObjectsPage() {
       }
       if (hierarchyFilter !== "all") {
         params.append("hierarchyLevel", hierarchyFilter);
+      }
+      if (clusterFilter !== "all") {
+        params.append("clusterId", clusterFilter);
       }
       if (interimFilter) {
         params.append("interim", "true");
@@ -260,6 +265,19 @@ export default function ObjectsPage() {
     queryKey: ["/api/customers"],
     staleTime: 60000,
   });
+
+  const { data: clustersList = [] } = useQuery<Array<{ id: string; name: string; cachedObjectCount: number }>>({
+    queryKey: ["/api/clusters"],
+    staleTime: 60000,
+  });
+
+  const clusterMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of clustersList) {
+      m.set(c.id, c.name);
+    }
+    return m;
+  }, [clustersList]);
 
   const { data: setupLogs = [] } = useQuery<SetupTimeLog[]>({
     queryKey: ["/api/setup-time-logs"],
@@ -791,6 +809,21 @@ export default function ObjectsPage() {
                   <TooltipContent>Stad saknas</TooltipContent>
                 </Tooltip>
               )}
+              {obj.clusterId && clusterMap.get(obj.clusterId) && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="flex items-center gap-1 cursor-pointer text-teal-600 dark:text-teal-400 hover:underline"
+                      onClick={(e) => { e.stopPropagation(); navigate(`/clusters/${obj.clusterId}`); }}
+                      data-testid={`link-cluster-${obj.id}`}
+                    >
+                      <Layers className="h-3 w-3" />
+                      {clusterMap.get(obj.clusterId)}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Kluster — klicka för att visa</TooltipContent>
+                </Tooltip>
+              )}
               {level === 0 && customerName && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1157,6 +1190,13 @@ export default function ObjectsPage() {
                   <X className="h-3 w-3" />
                 </Badge>
               )}
+              {clusterFilter !== "all" && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setClusterFilter("all")} data-testid="badge-filter-cluster">
+                  <Layers className="h-3 w-3" />
+                  {clusterMap.get(clusterFilter) || clusterFilter}
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
               {(setupTimeRange[0] !== 0 || setupTimeRange[1] !== 60) && (
                 <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setSetupTimeRange([0, 60])} data-testid="badge-filter-setuptime">
                   Ställtid: {setupTimeRange[0]}-{setupTimeRange[1]} min
@@ -1217,6 +1257,19 @@ export default function ObjectsPage() {
                   <SelectItem value="all">Alla nivåer</SelectItem>
                   {Object.entries(hierarchyLevelLabels).map(([key, config]) => (
                     <SelectItem key={key} value={key}>{config.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={clusterFilter} onValueChange={setClusterFilter}>
+                <SelectTrigger className="w-[180px]" data-testid="select-cluster-filter">
+                  <SelectValue placeholder="Filtrera kluster" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla kluster</SelectItem>
+                  {clustersList.filter(c => c.cachedObjectCount > 0).map(c => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name} ({c.cachedObjectCount})
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

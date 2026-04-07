@@ -401,8 +401,8 @@ export default function ClustersPage() {
           <h1 className="text-2xl font-semibold">{t("cluster_plural")}</h1>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className="text-sm text-muted-foreground">
-              Kundhierarkier med dataärvning - navet i verksamheten
-              <HelpTooltip content="Kluster grupperar objekt geografiskt för att optimera rutter och planering. Varje kluster kan ha eget team, SLA-nivå och servicefrekvens." />
+              Arbetsområden — skapas automatiskt per kund
+              <HelpTooltip content="Kluster skapas automatiskt när objekt importeras eller läggs till. Varje kluster representerar en kunds objekt och kan konfigureras med team, SLA-nivå och servicefrekvens." />
             </span>
             {quickStats.total > 0 && (
               <Badge variant="secondary" className="text-xs font-normal gap-1">
@@ -429,9 +429,9 @@ export default function ClustersPage() {
             <Sparkles className="mr-2 h-4 w-4" />
             Auto-klustring
           </Button>
-          <Button onClick={handleOpenCreate} data-testid="button-create-cluster">
+          <Button variant="outline" onClick={handleOpenCreate} data-testid="button-create-cluster">
             <Plus className="mr-2 h-4 w-4" />
-            Nytt Kluster
+            Manuellt kluster
           </Button>
         </div>
       </div>
@@ -480,18 +480,19 @@ export default function ClustersPage() {
         <Card>
           <CardContent className="py-12 text-center">
             <Target className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">Inga kluster</h3>
+            <h3 className="text-lg font-medium mb-2">Inga kluster ännu</h3>
             <p className="text-muted-foreground mb-4">
-              Skapa ditt första kluster för att bygga kundhierarkier med dataärvning
+              Kluster skapas automatiskt när objekt importeras eller läggs till med en kund.
+              Du kan även skapa kluster manuellt eller använda auto-klustring.
             </p>
             <div className="flex items-center justify-center gap-3">
-              <Button onClick={handleOpenCreate} data-testid="button-create-cluster-empty">
-                <Plus className="mr-2 h-4 w-4" />
-                Skapa Kluster
-              </Button>
               <Button variant="outline" onClick={() => navigate("/auto-cluster")} data-testid="button-auto-cluster-empty">
                 <Sparkles className="mr-2 h-4 w-4" />
                 Auto-klustring
+              </Button>
+              <Button variant="outline" onClick={handleOpenCreate} data-testid="button-create-cluster-empty">
+                <Plus className="mr-2 h-4 w-4" />
+                Manuellt kluster
               </Button>
             </div>
           </CardContent>
@@ -789,8 +790,8 @@ export default function ClustersPage() {
             </DialogTitle>
             <DialogDescription>
               {editingCluster
-                ? "Uppdatera klusterinformation och kundhierarki"
-                : "Skapa ett nytt kluster med kundhierarki och dataärvning"}
+                ? "Uppdatera klusterinformation och konfiguration"
+                : "Kluster skapas normalt automatiskt per kund. Använd detta för speciella fall."}
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
