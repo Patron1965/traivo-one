@@ -128,6 +128,9 @@ export default function ObjectsPage() {
   const [batchGeoMapObjects, setBatchGeoMapObjects] = useState<ServiceObject[]>([]);
   const [batchGeoShowMap, setBatchGeoShowMap] = useState(false);
   const [batchGeoTab, setBatchGeoTab] = useState<string>("geocode");
+  const [batchFillCityOpen, setBatchFillCityOpen] = useState(false);
+  const [batchFillCityRunning, setBatchFillCityRunning] = useState(false);
+  const [batchFillCityResult, setBatchFillCityResult] = useState<{ total: number; updated: number; failed: number; remaining: number } | null>(null);
   const [exploreCity, setExploreCity] = useState("");
   const [exploreLoading, setExploreLoading] = useState(false);
   const [exploreData, setExploreData] = useState<{
@@ -222,6 +225,22 @@ export default function ObjectsPage() {
   });
   const interimCount = interimCountData?.total || 0;
 
+  const { data: missingCityData, refetch: refetchMissingCity } = useQuery<{
+    totalMissingCity: number;
+    canResolveFromPostalCode: number;
+    canResolveFromCoordinates: number;
+    canResolveFromAddress: number;
+    canResolve: number;
+  }>({
+    queryKey: ["/api/objects/missing-city-count"],
+    queryFn: async () => {
+      const res = await fetch("/api/objects/missing-city-count", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 30000,
+  });
+
   const { data: reportCountsData } = useQuery<Record<string, number>>({
     queryKey: ["/api/customer-change-requests/counts-by-object"],
     queryFn: async () => {
@@ -273,6 +292,53 @@ export default function ObjectsPage() {
     enabled: batchGeoOpen,
     staleTime: 30000,
   });
+
+  const { data: batchFillCityPreview } = useQuery<{
+    totalMissingCity: number;
+    withPostalCode: number;
+    withCoordinates: number;
+    withAddress: number;
+    noResolvableInfo: number;
+    byPostalPrefix: Array<{ prefix: string; count: number }>;
+  }>({
+    queryKey: ["/api/objects/batch-fill-city/preview"],
+    queryFn: async () => {
+      const res = await fetch("/api/objects/batch-fill-city/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) throw new Error("Preview failed");
+      return res.json();
+    },
+    enabled: batchFillCityOpen,
+    staleTime: 30000,
+  });
+
+  const handleBatchFillCity = useCallback(async () => {
+    setBatchFillCityRunning(true);
+    setBatchFillCityResult(null);
+    try {
+      const res = await fetch("/api/objects/batch-fill-city", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) throw new Error("Batch fill failed");
+      const result = await res.json();
+      setBatchFillCityResult(result);
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects/missing-city-count"] });
+      refetchMissingCity();
+      toast({ title: `${result.updated} objekt uppdaterade med stad` });
+    } catch {
+      toast({ title: "Batch-ifyllnad misslyckades", variant: "destructive" });
+    } finally {
+      setBatchFillCityRunning(false);
+    }
+  }, [toast, refetchMissingCity]);
 
   const updateObjectMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<ServiceObject> }) => {
@@ -926,15 +992,20 @@ export default function ObjectsPage() {
             {quickStats.avgSetup > 0 && (
               <Badge variant="outline" className="text-xs font-normal">Snitt ställtid: {quickStats.avgSetup} min</Badge>
             )}
-            {quickStats.missingCity > 0 && (
+            {(missingCityData?.totalMissingCity || 0) > 0 && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Badge variant="outline" className="text-xs font-normal text-amber-600 border-amber-300 gap-1 cursor-help">
+                  <Badge
+                    variant="outline"
+                    className="text-xs font-normal text-amber-600 border-amber-300 gap-1 cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                    onClick={() => setBatchFillCityOpen(true)}
+                    data-testid="badge-missing-city"
+                  >
                     <AlertTriangle className="h-3 w-3" />
-                    {quickStats.missingCity} utan stad
+                    {missingCityData!.totalMissingCity.toLocaleString("sv")} utan stad
                   </Badge>
                 </TooltipTrigger>
-                <TooltipContent>Objekt som saknar stadsuppgift</TooltipContent>
+                <TooltipContent>Klicka för att fylla i stad automatiskt</TooltipContent>
               </Tooltip>
             )}
           </div>
@@ -1881,6 +1952,103 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234,10"
               )}
             </TabsContent>
           </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={batchFillCityOpen} onOpenChange={(v) => { if (!batchFillCityRunning) { setBatchFillCityOpen(v); setBatchFillCityResult(null); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5" />
+              Fyll i stad automatiskt
+            </DialogTitle>
+            <DialogDescription>
+              Fyller i stad på objekt som saknar stadsuppgift via postnummeruppslag eller omvänd geocoding.
+            </DialogDescription>
+          </DialogHeader>
+
+          {batchFillCityPreview ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-md border text-center">
+                  <div className="text-2xl font-bold text-amber-600" data-testid="text-missing-city-total">{batchFillCityPreview.totalMissingCity.toLocaleString("sv")}</div>
+                  <div className="text-xs text-muted-foreground">Saknar stad</div>
+                </div>
+                <div className="p-3 rounded-md border text-center">
+                  <div className="text-2xl font-bold text-green-600" data-testid="text-resolvable-count">
+                    {(batchFillCityPreview.totalMissingCity - batchFillCityPreview.noResolvableInfo).toLocaleString("sv")}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Kan fyllas i</div>
+                </div>
+              </div>
+
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Via postnummer</span>
+                  <span className="font-medium">{batchFillCityPreview.withPostalCode.toLocaleString("sv")}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Via koordinater</span>
+                  <span className="font-medium">{batchFillCityPreview.withCoordinates.toLocaleString("sv")}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Via adress</span>
+                  <span className="font-medium">{batchFillCityPreview.withAddress.toLocaleString("sv")}</span>
+                </div>
+                {batchFillCityPreview.noResolvableInfo > 0 && (
+                  <div className="flex justify-between text-amber-600">
+                    <span>Kan ej avgöras</span>
+                    <span className="font-medium">{batchFillCityPreview.noResolvableInfo.toLocaleString("sv")}</span>
+                  </div>
+                )}
+              </div>
+
+              {batchFillCityPreview.byPostalPrefix.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Postnummerområden</p>
+                  <div className="flex flex-wrap gap-1">
+                    {batchFillCityPreview.byPostalPrefix.slice(0, 15).map(({ prefix, count }) => (
+                      <Badge key={prefix} variant="secondary" className="text-xs">{prefix}xx ({count})</Badge>
+                    ))}
+                    {batchFillCityPreview.byPostalPrefix.length > 15 && (
+                      <Badge variant="outline" className="text-xs">+{batchFillCityPreview.byPostalPrefix.length - 15} till</Badge>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {batchFillCityResult && (
+                <div className="p-3 rounded-md bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 space-y-1">
+                  <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                    <Check className="h-4 w-4" />
+                    <span className="font-medium">Batch-ifyllnad klar</span>
+                  </div>
+                  <div className="text-sm text-green-600 dark:text-green-400">
+                    {batchFillCityResult.updated} av {batchFillCityResult.total} objekt fick stad ifylld.
+                    {batchFillCityResult.remaining > 0 && ` ${batchFillCityResult.remaining} kunde inte avgöras.`}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBatchFillCityOpen(false)} disabled={batchFillCityRunning} data-testid="button-close-fill-city">
+              Stäng
+            </Button>
+            <Button
+              onClick={handleBatchFillCity}
+              disabled={batchFillCityRunning || !batchFillCityPreview || batchFillCityPreview.totalMissingCity === 0 || !!batchFillCityResult}
+              data-testid="button-run-fill-city"
+            >
+              {batchFillCityRunning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <MapPin className="h-4 w-4 mr-2" />}
+              {batchFillCityRunning ? "Fyller i stad..." : "Starta batch-ifyllnad"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

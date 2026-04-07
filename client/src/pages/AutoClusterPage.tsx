@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
-import { Loader2, Check, AlertTriangle, Target, Globe, Clock, Users, Building2, Hand, BarChart3, Map as MapIcon, List, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Info, Download, Upload, Mail, Crosshair, Filter } from "lucide-react";
+import { Loader2, Check, AlertTriangle, Target, Globe, Clock, Users, Building2, Hand, BarChart3, Map as MapIcon, List, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Info, Download, Upload, Mail, Crosshair, Filter, MapPin } from "lucide-react";
 import Papa from "papaparse";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -269,6 +269,9 @@ export default function AutoClusterPage() {
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [batchFillCityRunning, setBatchFillCityRunning] = useState(false);
+  const [batchFillCityResult, setBatchFillCityResult] = useState<{ updated: number; remaining: number } | null>(null);
+
   const clusterStatus = useQuery<{ total: number }>({
     queryKey: ["/api/clusters/status"],
     queryFn: async () => {
@@ -277,6 +280,45 @@ export default function AutoClusterPage() {
       return { total: Array.isArray(clusters) ? clusters.length : 0 };
     }
   });
+
+  const { data: missingCityData, refetch: refetchMissingCity } = useQuery<{
+    totalMissingCity: number;
+    canResolveFromPostalCode: number;
+    canResolveFromCoordinates: number;
+    canResolveFromAddress: number;
+    canResolve: number;
+  }>({
+    queryKey: ["/api/objects/missing-city-count"],
+    queryFn: async () => {
+      const res = await fetch("/api/objects/missing-city-count", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 30000,
+  });
+
+  const handleBatchFillCityFromCluster = useCallback(async () => {
+    setBatchFillCityRunning(true);
+    setBatchFillCityResult(null);
+    try {
+      const res = await fetch("/api/objects/batch-fill-city", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) throw new Error("Batch fill failed");
+      const result = await res.json();
+      setBatchFillCityResult({ updated: result.updated, remaining: result.remaining });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects/missing-city-count"] });
+      refetchMissingCity();
+      toast({ title: `${result.updated} objekt uppdaterade med stad` });
+    } catch {
+      toast({ title: "Batch-ifyllnad misslyckades", variant: "destructive" });
+    } finally {
+      setBatchFillCityRunning(false);
+    }
+  }, [toast, refetchMissingCity]);
 
   const generateMutation = useMutation({
     mutationFn: async () => {
@@ -822,7 +864,43 @@ export default function AutoClusterPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {key === "geographic" && (
-                  <p className="text-sm text-muted-foreground">Grupperar objekt per stad. Varje stad blir ett kluster med alla postnummerserier.</p>
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">Grupperar objekt per stad. Varje stad blir ett kluster med alla postnummerserier.</p>
+                    {missingCityData && missingCityData.totalMissingCity > 0 && (
+                      <div className="p-3 rounded-md border border-amber-300/50 bg-amber-50/50 dark:bg-amber-950/20 space-y-2" data-testid="warning-missing-city">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                            {missingCityData.totalMissingCity.toLocaleString("sv")} objekt saknar stad och kommer exkluderas från klustringen
+                          </span>
+                        </div>
+                        <p className="text-xs text-amber-600 dark:text-amber-400 ml-6">
+                          Dessa objekt hamnar i "Okänd stad" och kan inte tilldelas till något kluster. Du kan fylla i stad automatiskt via postnummeruppslag eller geocoding.
+                        </p>
+                        {batchFillCityResult ? (
+                          <div className="ml-6 p-2 rounded bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+                            <div className="flex items-center gap-1.5 text-sm text-green-700 dark:text-green-400">
+                              <Check className="h-3.5 w-3.5" />
+                              {batchFillCityResult.updated} objekt fick stad ifylld.
+                              {batchFillCityResult.remaining > 0 && ` ${batchFillCityResult.remaining} kvarstår.`}
+                            </div>
+                          </div>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="ml-6 text-amber-700 border-amber-300 hover:bg-amber-100 dark:text-amber-300 dark:border-amber-700 dark:hover:bg-amber-950/40"
+                            onClick={handleBatchFillCityFromCluster}
+                            disabled={batchFillCityRunning}
+                            data-testid="button-fill-city-from-cluster"
+                          >
+                            {batchFillCityRunning ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <MapPin className="h-3.5 w-3.5 mr-1.5" />}
+                            {batchFillCityRunning ? "Fyller i stad..." : "Fyll i stad automatiskt"}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
                 {key === "postalcode" && (
                   <p className="text-sm text-muted-foreground">Grupperar objekt efter de tre första siffrorna i postnumret. Ger finare geografisk uppdelning än stadsstrategi.</p>

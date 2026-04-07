@@ -3,7 +3,7 @@ import { storage } from "../storage";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
-import { geocodeAddress, searchDestinations, batchGeocode, isGoogleGeocodingAvailable } from "../google-geocoding";
+import { geocodeAddress, searchDestinations, batchGeocode, isGoogleGeocodingAvailable, reverseGeocode, lookupCityFromPostalCode } from "../google-geocoding";
 import { createInheritanceProcessor } from "../inheritance-processor";
 import { insertObjectParentSchema } from "@shared/schema";
 import { asyncHandler } from "../asyncHandler";
@@ -222,6 +222,140 @@ app.post("/api/objects/batch-geocode", asyncHandler(async (req, res) => {
     updated,
     updatedIds,
     googleAvailable: isGoogleGeocodingAvailable(),
+  });
+}));
+
+app.get("/api/objects/missing-city-count", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const allObjects = await storage.getObjects(tenantId);
+  let missingCity = 0;
+  let hasPostalCode = 0;
+  let hasCoordinates = 0;
+  let hasAddress = 0;
+  let canResolve = 0;
+  for (const obj of allObjects) {
+    if (!obj.city || obj.city.trim() === "") {
+      missingCity++;
+      const hasPC = !!(obj.postalCode && obj.postalCode.trim() !== "");
+      const hasCoord = !!(obj.latitude && obj.longitude);
+      const hasAddr = !!(obj.address && obj.address.trim() !== "");
+      if (hasPC) hasPostalCode++;
+      if (hasCoord) hasCoordinates++;
+      if (hasAddr) hasAddress++;
+      if (hasPC || hasCoord || hasAddr) canResolve++;
+    }
+  }
+  res.json({
+    totalMissingCity: missingCity,
+    canResolveFromPostalCode: hasPostalCode,
+    canResolveFromCoordinates: hasCoordinates,
+    canResolveFromAddress: hasAddress,
+    canResolve,
+  });
+}));
+
+app.post("/api/objects/batch-fill-city/preview", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const allObjects = await storage.getObjects(tenantId);
+  const missing = allObjects.filter(o => !o.city || o.city.trim() === "");
+
+  let withPostalCode = 0;
+  let withCoordinates = 0;
+  let withAddress = 0;
+  let noResolvableInfo = 0;
+  const postalCodeGroups = new Map<string, number>();
+
+  for (const obj of missing) {
+    const hasPC = !!(obj.postalCode && obj.postalCode.trim() !== "");
+    const hasCoord = !!(obj.latitude && obj.longitude);
+    const hasAddr = !!(obj.address && obj.address.trim() !== "");
+    if (hasPC) {
+      withPostalCode++;
+      const code = obj.postalCode!.replace(/\s/g, "").substring(0, 3);
+      postalCodeGroups.set(code, (postalCodeGroups.get(code) || 0) + 1);
+    }
+    if (hasCoord) withCoordinates++;
+    if (hasAddr) withAddress++;
+    if (!hasPC && !hasCoord && !hasAddr) noResolvableInfo++;
+  }
+
+  const byPostalPrefix = Array.from(postalCodeGroups.entries())
+    .map(([prefix, count]) => ({ prefix, count }))
+    .sort((a, b) => b.count - a.count);
+
+  res.json({
+    totalMissingCity: missing.length,
+    withPostalCode,
+    withCoordinates,
+    withAddress,
+    noResolvableInfo,
+    byPostalPrefix,
+  });
+}));
+
+app.post("/api/objects/batch-fill-city", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const allObjects = await storage.getObjects(tenantId);
+  const missing = allObjects.filter(o => !o.city || o.city.trim() === "");
+
+  const postalCodeCache = new Map<string, string | null>();
+  let updated = 0;
+  let failed = 0;
+  const updatedIds: string[] = [];
+
+  for (let i = 0; i < missing.length; i++) {
+    const obj = missing[i];
+    let city: string | null = null;
+    const updateData: Record<string, unknown> = {};
+
+    if (obj.postalCode && obj.postalCode.trim() !== "") {
+      const code = obj.postalCode.replace(/\s/g, "");
+      if (postalCodeCache.has(code)) {
+        city = postalCodeCache.get(code)!;
+      } else {
+        city = await lookupCityFromPostalCode(code, tenantId);
+        postalCodeCache.set(code, city);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    if (!city && obj.latitude && obj.longitude) {
+      const result = await reverseGeocode(obj.latitude, obj.longitude, tenantId);
+      if (result?.city) city = result.city;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    if (!city && obj.address && obj.address.trim() !== "") {
+      const result = await geocodeAddress(obj.address, tenantId);
+      if (result?.city) {
+        city = result.city;
+        if (!obj.latitude && result.latitude) {
+          updateData.latitude = result.latitude;
+          updateData.longitude = result.longitude;
+        }
+        if (result.postalCode && (!obj.postalCode || obj.postalCode.trim() === "")) {
+          updateData.postalCode = result.postalCode;
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    if (city) {
+      updateData.city = city;
+      await storage.updateObject(obj.id, updateData);
+      updated++;
+      updatedIds.push(obj.id);
+    } else {
+      failed++;
+    }
+  }
+
+  res.json({
+    total: missing.length,
+    updated,
+    failed,
+    updatedIds,
+    remaining: missing.length - updated,
   });
 }));
 

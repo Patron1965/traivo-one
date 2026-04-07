@@ -3,6 +3,8 @@ import { trackApiUsage } from "./api-usage-tracker";
 const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
 const GEOAPIFY_GEOCODE_URL = "https://api.geoapify.com/v1/geocode/search";
 const NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/search";
+const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse";
+const GEOAPIFY_REVERSE_URL = "https://api.geoapify.com/v1/geocode/reverse";
 
 export interface GeocodingResult {
   latitude: number;
@@ -269,4 +271,90 @@ export async function batchGeocode(
 
 export function isGoogleGeocodingAvailable(): boolean {
   return !!GEOAPIFY_API_KEY;
+}
+
+export async function reverseGeocode(
+  latitude: number,
+  longitude: number,
+  tenantId?: string
+): Promise<{ city?: string; postalCode?: string } | null> {
+  if (GEOAPIFY_API_KEY) {
+    try {
+      const params = new URLSearchParams({
+        lat: latitude.toString(),
+        lon: longitude.toString(),
+        apiKey: GEOAPIFY_API_KEY,
+        lang: "sv",
+      });
+      const startTime = Date.now();
+      const res = await fetch(`${GEOAPIFY_REVERSE_URL}?${params.toString()}`);
+      const data = await res.json();
+      const durationMs = Date.now() - startTime;
+
+      await trackApiUsage({
+        tenantId,
+        service: "geoapify-geocoding",
+        endpoint: "/geocode/reverse",
+        method: "reverseGeocode",
+        units: 1,
+        statusCode: res.status,
+        durationMs,
+      });
+
+      if (data.features && data.features.length > 0) {
+        const props = data.features[0].properties;
+        const city = props.city || props.town || props.village;
+        if (city) {
+          return { city, postalCode: props.postcode };
+        }
+      }
+    } catch (error) {
+      console.error("[geocoding] Geoapify reverse geocoding failed:", error);
+    }
+  }
+
+  try {
+    const params = new URLSearchParams({
+      lat: latitude.toString(),
+      lon: longitude.toString(),
+      format: "json",
+      addressdetails: "1",
+    });
+    const res = await fetch(`${NOMINATIM_REVERSE_URL}?${params.toString()}`, {
+      headers: { "User-Agent": "Traivo-FieldService/1.0" },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+
+    await trackApiUsage({
+      service: "nominatim",
+      endpoint: "/reverse",
+      method: "reverseGeocode",
+      units: 1,
+      statusCode: res.status,
+      durationMs: 0,
+    });
+
+    const addr = data.address || {};
+    const city = addr.city || addr.town || addr.village;
+    if (city) {
+      return { city, postalCode: addr.postcode };
+    }
+    return null;
+  } catch (error) {
+    console.error("[geocoding] Nominatim reverse geocoding failed:", error);
+    return null;
+  }
+}
+
+export async function lookupCityFromPostalCode(
+  postalCode: string,
+  tenantId?: string
+): Promise<string | null> {
+  const cleanCode = postalCode.replace(/\s/g, "");
+  if (!/^\d{5}$/.test(cleanCode)) return null;
+
+  const searchAddress = `${cleanCode}, Sverige`;
+  const result = await geocodeAddress(searchAddress, tenantId);
+  return result?.city || result?.components?.locality || null;
 }
