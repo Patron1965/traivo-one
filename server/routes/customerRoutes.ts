@@ -233,12 +233,20 @@ app.get("/api/objects/tree/:parentId/children", asyncHandler(async (req, res) =>
 app.get("/api/objects/tree/:parentId/descendants", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const { parentId } = req.params;
+  const { customerId } = req.query;
+
+  const customerClause = (customerId && typeof customerId === "string")
+    ? sql` AND customer_id = ${customerId}`
+    : sql``;
+  const customerClauseR = (customerId && typeof customerId === "string")
+    ? sql` AND o.customer_id = ${customerId}`
+    : sql``;
 
   const result = await db.execute(sql`
     WITH RECURSIVE tree AS (
-      SELECT id FROM objects WHERE id = ${parentId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
+      SELECT id FROM objects WHERE id = ${parentId} AND tenant_id = ${tenantId} AND deleted_at IS NULL${customerClause}
       UNION ALL
-      SELECT o.id FROM objects o INNER JOIN tree t ON o.parent_id = t.id WHERE o.tenant_id = ${tenantId} AND o.deleted_at IS NULL
+      SELECT o.id FROM objects o INNER JOIN tree t ON o.parent_id = t.id WHERE o.tenant_id = ${tenantId} AND o.deleted_at IS NULL${customerClauseR}
     )
     SELECT id FROM tree
   `);

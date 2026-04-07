@@ -142,13 +142,15 @@ export default function Step1ObjectSelection({
 
   const fetchAllDescendantIds = useCallback(async (parentId: string): Promise<string[]> => {
     try {
-      const res = await fetch(`/api/objects/tree/${parentId}/descendants`);
+      const params = new URLSearchParams();
+      if (effectiveCustomerId) params.set("customerId", effectiveCustomerId);
+      const res = await fetch(`/api/objects/tree/${parentId}/descendants?${params}`);
       if (res.ok) return res.json();
       return [parentId];
     } catch {
       return [parentId];
     }
-  }, []);
+  }, [effectiveCustomerId]);
 
   const flatRows = useMemo((): FlatRow[] => {
     if (isSearching) return [];
