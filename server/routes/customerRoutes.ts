@@ -1,11 +1,13 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { z } from "zod";
-import { insertCustomerSchema, insertObjectSchema } from "@shared/schema";
+import { insertCustomerSchema, insertObjectSchema, objects, customers } from "@shared/schema";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
+import { db } from "../db";
+import { eq, and, isNull, sql, ilike, or } from "drizzle-orm";
 
 export async function registerCustomerRoutes(app: Express) {
 
@@ -109,69 +111,78 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
 
 app.get("/api/objects/tree", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
-  const { customerId, search } = req.query;
-  const allObjects = await storage.getObjects(tenantId);
+  const { customerId, search, parentId } = req.query;
 
   if (search && typeof search === "string" && search.trim().length > 0) {
-    const q = search.toLowerCase().trim();
-    const allCustomers = await storage.getCustomers(tenantId);
-    const customerMap = new Map(allCustomers.map(c => [c.id, c.name]));
+    const q = `%${search.trim()}%`;
+    const rows = await db
+      .select({
+        id: objects.id,
+        name: objects.name,
+        objectNumber: objects.objectNumber,
+        objectType: objects.objectType,
+        address: objects.address,
+        customerId: objects.customerId,
+        customerName: customers.name,
+      })
+      .from(objects)
+      .leftJoin(customers, eq(objects.customerId, customers.id))
+      .where(and(
+        eq(objects.tenantId, tenantId),
+        isNull(objects.deletedAt),
+        or(
+          ilike(objects.name, q),
+          ilike(objects.address, q),
+          ilike(objects.objectNumber, q)
+        )
+      ))
+      .limit(100);
 
-    const matched = allObjects.filter(o =>
-      o.name.toLowerCase().includes(q) ||
-      (o.address && o.address.toLowerCase().includes(q)) ||
-      (o.objectNumber && o.objectNumber.toLowerCase().includes(q))
-    ).slice(0, 100);
-
-    const results = matched.map(obj => ({
-      id: obj.id,
-      name: obj.name,
-      objectNumber: obj.objectNumber,
-      objectType: obj.objectType,
-      address: obj.address,
-      customerId: obj.customerId,
-      customerName: customerMap.get(obj.customerId) || null,
-      children: [],
-    }));
-
-    return res.json(results);
+    return res.json(rows.map(r => ({ ...r, children: [] })));
   }
 
-  const filtered = customerId
-    ? allObjects.filter(o => o.customerId === customerId)
-    : allObjects;
+  const parentFilter = parentId && typeof parentId === "string"
+    ? eq(objects.parentId, parentId)
+    : isNull(objects.parentId);
 
-  const byParent = new Map<string | null, typeof filtered>();
-  for (const obj of filtered) {
-    const parentId = obj.parentId || null;
-    if (!byParent.has(parentId)) byParent.set(parentId, []);
-    byParent.get(parentId)!.push(obj);
+  const conditions = [
+    eq(objects.tenantId, tenantId),
+    isNull(objects.deletedAt),
+    parentFilter,
+  ];
+  if (customerId && typeof customerId === "string") {
+    conditions.push(eq(objects.customerId, customerId));
   }
 
-  type TreeNode = {
-    id: string;
-    name: string;
-    objectNumber: string | null;
-    objectType: string | null;
-    address: string | null;
-    customerId: string;
-    children: TreeNode[];
-  };
+  const customerFilter = (customerId && typeof customerId === "string")
+    ? sql` AND c.customer_id = ${customerId}`
+    : sql``;
+  const childCountSql = sql<number>`(SELECT count(*) FROM objects c WHERE c.parent_id = ${objects.id} AND c.tenant_id = ${tenantId} AND c.deleted_at IS NULL${customerFilter})`;
 
-  function buildTree(parentId: string | null): TreeNode[] {
-    const children = byParent.get(parentId) || [];
-    return children.map(obj => ({
-      id: obj.id,
-      name: obj.name,
-      objectNumber: obj.objectNumber,
-      objectType: obj.objectType,
-      address: obj.address,
-      customerId: obj.customerId,
-      children: buildTree(obj.id),
-    }));
-  }
+  const rows = await db
+    .select({
+      id: objects.id,
+      name: objects.name,
+      objectNumber: objects.objectNumber,
+      objectType: objects.objectType,
+      address: objects.address,
+      customerId: objects.customerId,
+      childCount: childCountSql,
+    })
+    .from(objects)
+    .where(and(...conditions))
+    .orderBy(objects.name);
 
-  res.json(buildTree(null));
+  res.json(rows.map(r => ({
+    id: r.id,
+    name: r.name,
+    objectNumber: r.objectNumber,
+    objectType: r.objectType,
+    address: r.address,
+    customerId: r.customerId,
+    childCount: Number(r.childCount) || 0,
+    children: [],
+  })));
 }));
 
 app.get("/api/objects/with-issues", asyncHandler(async (req, res) => {

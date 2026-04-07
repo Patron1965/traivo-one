@@ -1,28 +1,36 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Search, ChevronRight, ChevronDown, Building2, Clock, Users } from "lucide-react";
+import { Search, ChevronRight, ChevronDown, Building2, Clock, Users, Loader2 } from "lucide-react";
 import type { Customer, ObjectTimeRestriction, CustomerMode } from "@shared/schema";
 
 interface AggregatedSlotPreference extends ObjectTimeRestriction {
   objectName: string;
 }
 
-interface TreeNode {
+interface LazyTreeNode {
   id: string;
   name: string;
-  objectNumber?: string;
-  objectType?: string;
-  address?: string;
+  objectNumber?: string | null;
+  objectType?: string | null;
+  address?: string | null;
   customerId?: string;
-  customerName?: string;
-  children: TreeNode[];
+  customerName?: string | null;
+  childCount: number;
+  children: LazyTreeNode[];
+}
+
+interface FlatRow {
+  node: LazyTreeNode;
+  depth: number;
+  isExpanded: boolean;
+  hasChildren: boolean;
+  isLoading: boolean;
 }
 
 interface Step1Props {
@@ -33,121 +41,6 @@ interface Step1Props {
   onSelectCustomer: (id: string | null) => void;
   customerMode: CustomerMode;
   onCustomerModeChange: (mode: CustomerMode) => void;
-}
-
-function ObjectTreeNode({
-  node,
-  selectedIds,
-  onToggle,
-  onToggleAll,
-  depth = 0,
-}: {
-  node: TreeNode;
-  selectedIds: Set<string>;
-  onToggle: (id: string) => void;
-  onToggleAll: (ids: string[], selected: boolean) => void;
-  depth?: number;
-}) {
-  const [expanded, setExpanded] = useState(depth < 2);
-  const hasChildren = node.children.length > 0;
-
-  const allDescendantIds = useMemo(() => {
-    const ids: string[] = [];
-    function collect(n: TreeNode) {
-      ids.push(n.id);
-      n.children.forEach(collect);
-    }
-    collect(node);
-    return ids;
-  }, [node]);
-
-  const isSelected = selectedIds.has(node.id);
-  const someChildrenSelected = allDescendantIds.some(id => selectedIds.has(id));
-  const allChildrenSelected = allDescendantIds.every(id => selectedIds.has(id));
-
-  return (
-    <div style={{ paddingLeft: depth * 16 }}>
-      <div className="flex items-center gap-1 py-1 hover:bg-accent/50 rounded px-1 group" data-testid={`tree-node-${node.id}`}>
-        {hasChildren ? (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="p-0.5 rounded hover:bg-accent"
-            data-testid={`tree-expand-${node.id}`}
-          >
-            {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-          </button>
-        ) : (
-          <span className="w-5" />
-        )}
-        <Checkbox
-          checked={allChildrenSelected ? true : someChildrenSelected ? "indeterminate" : false}
-          onCheckedChange={() => {
-            if (hasChildren) {
-              onToggleAll(allDescendantIds, !allChildrenSelected);
-            } else {
-              onToggle(node.id);
-            }
-          }}
-          data-testid={`tree-checkbox-${node.id}`}
-        />
-        <span className="text-sm truncate flex-1">{node.name}</span>
-        {node.objectType && (
-          <span className="text-xs text-muted-foreground">{node.objectType}</span>
-        )}
-      </div>
-      {expanded && hasChildren && (
-        <div>
-          {node.children.map(child => (
-            <ObjectTreeNode
-              key={child.id}
-              node={child}
-              selectedIds={selectedIds}
-              onToggle={onToggle}
-              onToggleAll={onToggleAll}
-              depth={depth + 1}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SearchResultItem({
-  node,
-  selectedIds,
-  onToggle,
-}: {
-  node: TreeNode;
-  selectedIds: Set<string>;
-  onToggle: (id: string) => void;
-}) {
-  const isSelected = selectedIds.has(node.id);
-
-  return (
-    <div className="flex items-center gap-2 py-1.5 px-2 hover:bg-accent/50 rounded" data-testid={`search-result-${node.id}`}>
-      <Checkbox
-        checked={isSelected}
-        onCheckedChange={() => onToggle(node.id)}
-        data-testid={`search-checkbox-${node.id}`}
-      />
-      <div className="flex-1 min-w-0">
-        <div className="text-sm truncate">{node.name}</div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {node.customerName && (
-            <span className="flex items-center gap-1">
-              <Building2 className="h-3 w-3" />
-              {node.customerName}
-            </span>
-          )}
-          {node.address && <span className="truncate">{node.address}</span>}
-        </div>
-      </div>
-      {node.objectType && (
-        <span className="text-xs text-muted-foreground shrink-0">{node.objectType}</span>
-      )}
-    </div>
-  );
 }
 
 export default function Step1ObjectSelection({
@@ -162,32 +55,40 @@ export default function Step1ObjectSelection({
   const [customerSearch, setCustomerSearch] = useState("");
   const [objectSearch, setObjectSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [childrenCache, setChildrenCache] = useState<Map<string, LazyTreeNode[]>>(new Map());
+  const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(objectSearch), 300);
     return () => clearTimeout(timer);
   }, [objectSearch]);
 
+  useEffect(() => {
+    setExpandedIds(new Set());
+    setChildrenCache(new Map());
+  }, [selectedCustomerId, customerMode]);
+
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
 
   const isSearching = debouncedSearch.trim().length > 0;
-
   const effectiveCustomerId = customerMode === "FROM_METADATA" ? null : selectedCustomerId;
 
-  const { data: treeData = [], isLoading: treeLoading } = useQuery<TreeNode[]>({
-    queryKey: ["/api/objects/tree", effectiveCustomerId, isSearching ? null : "tree"],
+  const { data: rootNodes = [], isLoading: treeLoading } = useQuery<LazyTreeNode[]>({
+    queryKey: ["/api/objects/tree", "roots", effectiveCustomerId],
     queryFn: async () => {
-      const params = effectiveCustomerId ? `?customerId=${effectiveCustomerId}` : "";
-      const res = await fetch(`/api/objects/tree${params}`);
+      const params = new URLSearchParams();
+      if (effectiveCustomerId) params.set("customerId", effectiveCustomerId);
+      const res = await fetch(`/api/objects/tree?${params}`);
       if (!res.ok) throw new Error("Failed to fetch tree");
       return res.json();
     },
     enabled: !isSearching,
   });
 
-  const { data: searchResults = [], isLoading: searchLoading } = useQuery<TreeNode[]>({
+  const { data: searchResults = [], isLoading: searchLoading } = useQuery<LazyTreeNode[]>({
     queryKey: ["/api/objects/tree", "search", debouncedSearch],
     queryFn: async () => {
       const res = await fetch(`/api/objects/tree?search=${encodeURIComponent(debouncedSearch.trim())}`);
@@ -196,6 +97,76 @@ export default function Step1ObjectSelection({
     },
     enabled: isSearching,
   });
+
+  const loadChildren = useCallback(async (parentId: string): Promise<LazyTreeNode[]> => {
+    if (childrenCache.has(parentId)) return childrenCache.get(parentId)!;
+    if (loadingIds.has(parentId)) return [];
+    setLoadingIds(prev => new Set(prev).add(parentId));
+    try {
+      const params = new URLSearchParams({ parentId });
+      if (effectiveCustomerId) params.set("customerId", effectiveCustomerId);
+      const res = await fetch(`/api/objects/tree?${params}`);
+      if (res.ok) {
+        const children: LazyTreeNode[] = await res.json();
+        setChildrenCache(prev => new Map(prev).set(parentId, children));
+        return children;
+      }
+      return [];
+    } finally {
+      setLoadingIds(prev => {
+        const next = new Set(prev);
+        next.delete(parentId);
+        return next;
+      });
+    }
+  }, [childrenCache, loadingIds, effectiveCustomerId]);
+
+  const toggleExpand = useCallback((nodeId: string, hasChildren: boolean) => {
+    if (!hasChildren) return;
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+        loadChildren(nodeId);
+      }
+      return next;
+    });
+  }, [loadChildren]);
+
+  const flatRows = useMemo((): FlatRow[] => {
+    if (isSearching) return [];
+    const rows: FlatRow[] = [];
+    function flatten(nodes: LazyTreeNode[], depth: number) {
+      for (const node of nodes) {
+        const hasChildren = node.childCount > 0;
+        const isExpanded = expandedIds.has(node.id);
+        const isLoading2 = loadingIds.has(node.id);
+        rows.push({ node, depth, isExpanded, hasChildren, isLoading: isLoading2 });
+        if (isExpanded && hasChildren) {
+          const cached = childrenCache.get(node.id);
+          if (cached) {
+            flatten(cached, depth + 1);
+          }
+        }
+      }
+    }
+    flatten(rootNodes, 0);
+    return rows;
+  }, [rootNodes, expandedIds, childrenCache, loadingIds, isSearching]);
+
+  const collectDescendantIds = useCallback((nodeId: string, cacheOverride?: Map<string, LazyTreeNode[]>): string[] => {
+    const cache = cacheOverride || childrenCache;
+    const ids = [nodeId];
+    const children = cache.get(nodeId);
+    if (children) {
+      for (const child of children) {
+        ids.push(...collectDescendantIds(child.id, cache));
+      }
+    }
+    return ids;
+  }, [childrenCache]);
 
   const filteredCustomers = useMemo(() => {
     if (!customerSearch) return customers.slice(0, 20);
@@ -206,14 +177,8 @@ export default function Step1ObjectSelection({
     ).slice(0, 20);
   }, [customers, customerSearch]);
 
-  const filteredTree = useMemo(() => {
-    if (isSearching) return [];
-    return treeData;
-  }, [treeData, isSearching]);
-
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
   const loading = isSearching ? searchLoading : treeLoading;
-  const displayData = isSearching ? searchResults : filteredTree;
 
   const selectedIdsArray = useMemo(() => Array.from(selectedObjectIds), [selectedObjectIds]);
 
@@ -335,36 +300,105 @@ export default function Step1ObjectSelection({
             Söker bland alla kunder — {searchResults.length} träffar
           </p>
         )}
-        <ScrollArea className="h-[400px] border rounded-md p-2">
+        <div className="h-[400px] border rounded-md p-2 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
               Laddar objekt...
             </div>
-          ) : displayData.length === 0 ? (
+          ) : isSearching ? (
+            searchResults.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                Inga objekt hittades
+              </div>
+            ) : (
+              searchResults.map(node => (
+                <div key={node.id} className="flex items-center gap-2 py-1.5 px-2 hover:bg-accent/50 rounded" data-testid={`search-result-${node.id}`}>
+                  <Checkbox
+                    checked={selectedObjectIds.has(node.id)}
+                    onCheckedChange={() => onToggleObject(node.id)}
+                    data-testid={`search-checkbox-${node.id}`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm truncate">{node.name}</div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {node.customerName && (
+                        <span className="flex items-center gap-1">
+                          <Building2 className="h-3 w-3" />
+                          {node.customerName}
+                        </span>
+                      )}
+                      {node.address && <span className="truncate">{node.address}</span>}
+                    </div>
+                  </div>
+                  {node.objectType && (
+                    <span className="text-xs text-muted-foreground shrink-0">{node.objectType}</span>
+                  )}
+                </div>
+              ))
+            )
+          ) : flatRows.length === 0 ? (
             <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
               Inga objekt hittades
             </div>
-          ) : isSearching ? (
-            searchResults.map(node => (
-              <SearchResultItem
-                key={node.id}
-                node={node}
-                selectedIds={selectedObjectIds}
-                onToggle={onToggleObject}
-              />
-            ))
           ) : (
-            filteredTree.map(node => (
-              <ObjectTreeNode
-                key={node.id}
-                node={node}
-                selectedIds={selectedObjectIds}
-                onToggle={onToggleObject}
-                onToggleAll={onToggleAll}
-              />
-            ))
+            flatRows.map(({ node, depth, isExpanded, hasChildren, isLoading: rowLoading }) => {
+              const isSelected = selectedObjectIds.has(node.id);
+              const descendantIds = collectDescendantIds(node.id);
+              const allSelected = descendantIds.every(id => selectedObjectIds.has(id));
+              const someSelected = !allSelected && descendantIds.some(id => selectedObjectIds.has(id));
+
+              return (
+                <div key={node.id} style={{ paddingLeft: depth * 16 }}>
+                  <div className="flex items-center gap-1 py-1 hover:bg-accent/50 rounded px-1 group" data-testid={`tree-node-${node.id}`}>
+                    {hasChildren ? (
+                      <button
+                        onClick={() => toggleExpand(node.id, hasChildren)}
+                        className="p-0.5 rounded hover:bg-accent"
+                        data-testid={`tree-expand-${node.id}`}
+                      >
+                        {rowLoading ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : isExpanded ? (
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    ) : (
+                      <span className="w-5" />
+                    )}
+                    <Checkbox
+                      checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                      onCheckedChange={async () => {
+                        if (hasChildren) {
+                          let freshCache = childrenCache;
+                          if (!childrenCache.has(node.id)) {
+                            const loaded = await loadChildren(node.id);
+                            freshCache = new Map(childrenCache).set(node.id, loaded);
+                          }
+                          const freshIds = collectDescendantIds(node.id, freshCache);
+                          onToggleAll(freshIds, !allSelected);
+                        } else {
+                          onToggleObject(node.id);
+                        }
+                      }}
+                      data-testid={`tree-checkbox-${node.id}`}
+                    />
+                    <span className="text-sm truncate flex-1">{node.name}</span>
+                    {hasChildren && (
+                      <Badge variant="secondary" className="text-[10px] h-4 px-1">
+                        {node.childCount}
+                      </Badge>
+                    )}
+                    {node.objectType && (
+                      <span className="text-xs text-muted-foreground">{node.objectType}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
           )}
-        </ScrollArea>
+        </div>
       </div>
 
       {selectedObjectIds.size > 0 && slotPreferences.length > 0 && (

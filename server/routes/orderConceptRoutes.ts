@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
-import { objects, workOrders, customerCommunications, objectContacts } from "@shared/schema";
+import { objects, workOrders, customerCommunications, objectContacts, orderConceptArticles, orderConceptObjects, articleObjectMappings } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 
 export async function registerOrderConceptRoutes(app: Express) {
@@ -59,9 +59,15 @@ app.post("/api/order-concepts/:id/objects", asyncHandler(async (req, res) => {
     if (!Array.isArray(objectIds) || objectIds.length === 0) {
       throw new ValidationError("objectIds krävs");
     }
-    const tenantObjects = await storage.getObjects(tenantId);
-    const tenantObjectIds = new Set(tenantObjects.map(o => o.id));
-    const validObjectIds = objectIds.filter((id: string) => tenantObjectIds.has(id));
+    const validRows = await db
+      .select({ id: objects.id })
+      .from(objects)
+      .where(and(
+        eq(objects.tenantId, tenantId),
+        isNull(objects.deletedAt),
+        inArray(objects.id, objectIds)
+      ));
+    const validObjectIds = validRows.map(r => r.id);
     if (validObjectIds.length === 0) {
       throw new ValidationError("Inga giltiga objekt hittades");
     }
@@ -153,26 +159,30 @@ app.post("/api/order-concepts/:id/article-mappings/auto", asyncHandler(async (re
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
 
-    const conceptObjects = await storage.getOrderConceptObjects(req.params.id);
-    const conceptArticles = await storage.getOrderConceptArticles(req.params.id);
+    const orderConceptId = req.params.id;
 
-    let mappingsCreated = 0;
-    await db.transaction(async () => {
-      await storage.deleteArticleObjectMappings(req.params.id);
-      for (const article of conceptArticles) {
-        for (const obj of conceptObjects) {
-          if (!obj.included) continue;
-          await storage.createArticleObjectMapping({
-            orderConceptArticleId: article.id,
-            orderConceptObjectId: obj.id,
-            quantity: article.quantity || 1,
-          });
-          mappingsCreated++;
-        }
+    await db.transaction(async (tx) => {
+      const artIds = await tx.select({ id: orderConceptArticles.id })
+        .from(orderConceptArticles)
+        .where(eq(orderConceptArticles.orderConceptId, orderConceptId));
+      if (artIds.length > 0) {
+        await tx.delete(articleObjectMappings)
+          .where(inArray(articleObjectMappings.orderConceptArticleId, artIds.map(a => a.id)));
       }
+
+      await tx.execute(sql`
+        INSERT INTO article_object_mappings (id, order_concept_article_id, order_concept_object_id, quantity, created_at)
+        SELECT gen_random_uuid(), a.id, o.id, COALESCE(a.quantity, 1), NOW()
+        FROM order_concept_articles a
+        CROSS JOIN order_concept_objects o
+        WHERE a.order_concept_id = ${orderConceptId}
+          AND o.order_concept_id = ${orderConceptId}
+          AND o.included = true
+      `);
     });
 
-    res.json({ mappingsCreated });
+    const mappings = await storage.getArticleObjectMappings(orderConceptId);
+    res.json({ mappingsCreated: mappings.length });
 }));
 
 app.put("/api/order-concepts/:id/invoice-config", asyncHandler(async (req, res) => {
