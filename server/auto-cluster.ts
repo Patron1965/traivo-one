@@ -2,6 +2,10 @@ import { db } from "./db";
 import { clusters, objects, customers } from "@shared/schema";
 import { eq, and, isNull, sql } from "drizzle-orm";
 
+interface DbError extends Error {
+  code?: string;
+}
+
 const clusterLocks = new Map<string, Promise<string>>();
 
 export async function ensureClusterForCustomer(
@@ -60,8 +64,9 @@ async function _ensureClusterForCustomerImpl(
       .returning({ id: clusters.id });
 
     return newCluster.id;
-  } catch (err: any) {
-    if (err.code === "23505") {
+  } catch (err: unknown) {
+    const dbErr = err as DbError;
+    if (dbErr.code === "23505") {
       const [retry] = await db
         .select({ id: clusters.id })
         .from(clusters)
@@ -121,6 +126,13 @@ export async function ensureClusterAndAssign(
   customerId: string,
   objectId: string
 ): Promise<string> {
+  const [existingObj] = await db
+    .select({ clusterId: objects.clusterId })
+    .from(objects)
+    .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));
+
+  const oldClusterId = existingObj?.clusterId ?? null;
+
   const clusterId = await ensureClusterForCustomer(tenantId, customerId);
 
   await db
@@ -128,9 +140,15 @@ export async function ensureClusterAndAssign(
     .set({ clusterId })
     .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));
 
-  updateClusterCache(clusterId).catch((err) => {
+  updateClusterCache(clusterId).catch((err: unknown) => {
     console.error(`Failed to update cache for cluster ${clusterId}:`, err);
   });
+
+  if (oldClusterId && oldClusterId !== clusterId) {
+    updateClusterCache(oldClusterId).catch((err: unknown) => {
+      console.error(`Failed to update cache for old cluster ${oldClusterId}:`, err);
+    });
+  }
 
   return clusterId;
 }

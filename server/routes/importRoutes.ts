@@ -833,6 +833,7 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
     notifyImportProgress(importBatchId);
     
     const modusIdMap = new Map<string, string>();
+    const modusOldClusterIds = new Set<string>();
     const created: string[] = [];
     const updated: string[] = [];
     const errors: string[] = [];
@@ -965,6 +966,9 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
         }
 
         if (existingObject) {
+          if (existingObject.clusterId && existingObject.clusterId !== clusterId) {
+            modusOldClusterIds.add(existingObject.clusterId);
+          }
           const { parentId: _p, ...updateFields } = objectFields;
           const updatedObject = await storage.updateObject(existingObject.id, {
             ...updateFields,
@@ -1014,7 +1018,7 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
       }
     }
     
-    const affectedClusterIds = new Set<string>();
+    const affectedClusterIds = new Set<string>(modusOldClusterIds);
     for (const [, objId] of modusIdMap) {
       const obj = await storage.getObject(objId);
       if (obj?.clusterId) affectedClusterIds.add(obj.clusterId);
@@ -2220,6 +2224,7 @@ app.post("/api/import/modus/objects-mapped", upload.single("file"), asyncHandler
     const rows = result.data as Record<string, string>[];
     const imported: string[] = [];
     const errors: Array<{ row: number; column: string; error: string }> = [];
+    const mappedOldClusterIds = new Set<string>();
     
     const metadataMappings = Object.entries(columnMapping)
       .filter(([key]) => key.startsWith("meta:"))
@@ -2294,6 +2299,9 @@ app.post("/api/import/modus/objects-mapped", upload.single("file"), asyncHandler
 
         let objId: string;
         if (existing.length > 0) {
+          if (existing[0].clusterId && existing[0].clusterId !== clusterId) {
+            mappedOldClusterIds.add(existing[0].clusterId);
+          }
           await db.update(objects).set(objData).where(eq(objects.id, existing[0].id));
           objId = existing[0].id;
         } else {
@@ -2314,7 +2322,7 @@ app.post("/api/import/modus/objects-mapped", upload.single("file"), asyncHandler
       }
     }
     
-    const affectedClusterIdsMapped = new Set<string>();
+    const affectedClusterIdsMapped = new Set<string>(mappedOldClusterIds);
     const allMappedObjs = await db.select({ id: objects.id, clusterId: objects.clusterId })
       .from(objects).where(and(eq(objects.tenantId, tenantId), eq(objects.importBatchId, batchId)));
     for (const o of allMappedObjs) {
