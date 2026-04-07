@@ -36,7 +36,7 @@ export default function Step6Articles({
   });
 
   const filteredArticles = useMemo(() => {
-    if (!search) return [];
+    if (!search) return articles.slice(0, 15);
     const q = search.toLowerCase();
     return articles.filter(a =>
       a.name.toLowerCase().includes(q) ||
@@ -72,7 +72,7 @@ export default function Step6Articles({
             data-testid="input-article-search"
           />
         </div>
-        {search && filteredArticles.length > 0 && (
+        {filteredArticles.length > 0 && (
           <div className="border rounded-md mt-1 max-h-60 overflow-y-auto bg-popover">
             {filteredArticles.map(article => (
               <div
