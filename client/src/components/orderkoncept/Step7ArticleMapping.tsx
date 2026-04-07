@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Wand2, Link2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Article, ServiceObject } from "@shared/schema";
+import type { Article } from "@shared/schema";
 
 interface ConceptArticle {
   id: string;
@@ -17,7 +17,10 @@ interface ConceptArticle {
 interface ConceptObject {
   id: string;
   objectId: string;
-  object?: ServiceObject;
+  objectName?: string | null;
+  objectAddress?: string | null;
+  objectType?: string | null;
+  included?: boolean;
 }
 
 interface Mapping {
@@ -43,7 +46,6 @@ export default function Step7ArticleMapping({
   onMappingsUpdated,
 }: Step7Props) {
   const { data: articles = [] } = useQuery<Article[]>({ queryKey: ["/api/articles"] });
-  const { data: allObjects = [] } = useQuery<ServiceObject[]>({ queryKey: ["/api/objects"] });
 
   const enrichedArticles = useMemo(() => {
     return conceptArticles.map(ca => ({
@@ -52,12 +54,13 @@ export default function Step7ArticleMapping({
     }));
   }, [conceptArticles, articles]);
 
-  const enrichedObjects = useMemo(() => {
-    return conceptObjects.map(co => ({
-      ...co,
-      object: allObjects.find(o => o.id === co.objectId),
-    }));
-  }, [conceptObjects, allObjects]);
+  const objectNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const co of conceptObjects) {
+      map.set(co.id, co.objectName || co.objectId);
+    }
+    return map;
+  }, [conceptObjects]);
 
   const mappingsByArticle = useMemo(() => {
     const map = new Map<string, Mapping[]>();
@@ -125,11 +128,11 @@ export default function Step7ArticleMapping({
                   {articleMappings.length > 0 ? (
                     <div className="ml-6 space-y-1">
                       {articleMappings.map(m => {
-                        const obj = enrichedObjects.find(o => o.id === m.orderConceptObjectId);
+                        const objName = objectNameMap.get(m.orderConceptObjectId);
                         return (
                           <div key={m.id} className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                            <span>{obj?.object?.name || "Okänt objekt"}</span>
+                            <span>{objName || "Okänt objekt"}</span>
                             <span className="text-muted-foreground">x{m.quantity}</span>
                           </div>
                         );
@@ -149,7 +152,7 @@ export default function Step7ArticleMapping({
 
       {mappings.length > 0 && (
         <div className="text-sm text-muted-foreground text-center">
-          Totalt {mappings.length} kopplingar mellan {enrichedArticles.length} artiklar och {enrichedObjects.length} objekt
+          Totalt {mappings.length} kopplingar mellan {enrichedArticles.length} artiklar och {conceptObjects.length} objekt
         </div>
       )}
     </div>

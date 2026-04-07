@@ -21,8 +21,26 @@ app.get("/api/order-concepts/:id/wizard", asyncHandler(async (req, res) => {
     const concept = verifyTenantOwnership(rawConcept, tenantId);
     if (!concept) throw new NotFoundError("Orderkoncept hittades inte");
 
+    const { orderConceptObjects: oco } = await import("@shared/schema");
+    const enrichedConceptObjectsPromise = db
+      .select({
+        id: oco.id,
+        orderConceptId: oco.orderConceptId,
+        objectId: oco.objectId,
+        metadataSnapshot: oco.metadataSnapshot,
+        included: oco.included,
+        sortOrder: oco.sortOrder,
+        createdAt: oco.createdAt,
+        objectName: objects.name,
+        objectAddress: objects.address,
+        objectType: objects.objectType,
+      })
+      .from(oco)
+      .leftJoin(objects, eq(oco.objectId, objects.id))
+      .where(eq(oco.orderConceptId, concept.id))
+      .orderBy(oco.sortOrder);
     const [conceptObjects, conceptArticles, mappings, invoiceConfig, documentConfigs, schedules, filters] = await Promise.all([
-      storage.getOrderConceptObjects(concept.id),
+      enrichedConceptObjectsPromise,
       storage.getOrderConceptArticles(concept.id),
       storage.getArticleObjectMappings(concept.id),
       storage.getInvoiceConfiguration(concept.id),
@@ -47,8 +65,25 @@ app.get("/api/order-concepts/:id/objects", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
-    const objs = await storage.getOrderConceptObjects(req.params.id);
-    res.json(objs);
+    const { orderConceptObjects: oco } = await import("@shared/schema");
+    const rows = await db
+      .select({
+        id: oco.id,
+        orderConceptId: oco.orderConceptId,
+        objectId: oco.objectId,
+        metadataSnapshot: oco.metadataSnapshot,
+        included: oco.included,
+        sortOrder: oco.sortOrder,
+        createdAt: oco.createdAt,
+        objectName: objects.name,
+        objectAddress: objects.address,
+        objectType: objects.objectType,
+      })
+      .from(oco)
+      .leftJoin(objects, eq(oco.objectId, objects.id))
+      .where(eq(oco.orderConceptId, req.params.id))
+      .orderBy(oco.sortOrder);
+    res.json(rows);
 }));
 
 app.post("/api/order-concepts/:id/objects", asyncHandler(async (req, res) => {
