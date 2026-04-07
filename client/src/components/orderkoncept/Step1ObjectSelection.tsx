@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FixedSizeList } from "react-window";
+import { List } from "react-window";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -62,7 +62,7 @@ export default function Step1ObjectSelection({
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [childrenCache, setChildrenCache] = useState<Map<string, LazyTreeNode[]>>(new Map());
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
-  const listRef = useRef<FixedSizeList>(null);
+  const listRef = useRef<any>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(objectSearch), 300);
@@ -206,8 +206,10 @@ export default function Step1ObjectSelection({
     { value: 0, label: "Sön" },
   ];
 
-  const TreeRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
-    const { node, depth, isExpanded, hasChildren, isLoading: rowLoading } = flatRows[index];
+  const TreeRowComponent = useCallback(({ index, style }: { index: number; style: React.CSSProperties; ariaAttributes?: any }) => {
+    const row = flatRows[index];
+    if (!row) return null;
+    const { node, depth, isExpanded, hasChildren, isLoading: rowLoading } = row;
     const isSelected = selectedObjectIds.has(node.id);
 
     return (
@@ -257,8 +259,9 @@ export default function Step1ObjectSelection({
     );
   }, [flatRows, selectedObjectIds, toggleExpand, fetchAllDescendantIds, onToggleAll, onToggleObject]);
 
-  const SearchRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
+  const SearchRowComponent = useCallback(({ index, style }: { index: number; style: React.CSSProperties; ariaAttributes?: any }) => {
     const node = searchResults[index];
+    if (!node) return null;
     return (
       <div style={style} className="flex items-center gap-2 py-1.5 px-2 hover:bg-accent/50 rounded" data-testid={`search-result-${node.id}`}>
         <Checkbox
@@ -393,29 +396,27 @@ export default function Step1ObjectSelection({
                 Inga objekt hittades
               </div>
             ) : (
-              <FixedSizeList
-                height={LIST_HEIGHT}
-                width="100%"
-                itemCount={searchResults.length}
-                itemSize={ROW_HEIGHT + 8}
-              >
-                {SearchRow}
-              </FixedSizeList>
+              <List
+                style={{ height: LIST_HEIGHT, width: "100%" }}
+                rowCount={searchResults.length}
+                rowHeight={ROW_HEIGHT + 8}
+                rowComponent={SearchRowComponent}
+                rowProps={{}}
+              />
             )
           ) : flatRows.length === 0 ? (
             <div className="flex items-center justify-center text-sm text-muted-foreground" style={{ height: LIST_HEIGHT }}>
               Inga objekt hittades
             </div>
           ) : (
-            <FixedSizeList
-              ref={listRef}
-              height={LIST_HEIGHT}
-              width="100%"
-              itemCount={flatRows.length}
-              itemSize={ROW_HEIGHT}
-            >
-              {TreeRow}
-            </FixedSizeList>
+            <List
+              listRef={listRef}
+              style={{ height: LIST_HEIGHT, width: "100%" }}
+              rowCount={flatRows.length}
+              rowHeight={ROW_HEIGHT}
+              rowComponent={TreeRowComponent}
+              rowProps={{}}
+            />
           )}
         </div>
       </div>

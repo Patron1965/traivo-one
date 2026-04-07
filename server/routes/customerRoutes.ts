@@ -238,7 +238,7 @@ app.get("/api/objects/tree/:parentId/descendants", asyncHandler(async (req, res)
     WITH RECURSIVE tree AS (
       SELECT id FROM objects WHERE id = ${parentId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
       UNION ALL
-      SELECT o.id FROM objects o INNER JOIN tree t ON o.parent_id = t.id WHERE o.deleted_at IS NULL
+      SELECT o.id FROM objects o INNER JOIN tree t ON o.parent_id = t.id WHERE o.tenant_id = ${tenantId} AND o.deleted_at IS NULL
     )
     SELECT id FROM tree
   `);
