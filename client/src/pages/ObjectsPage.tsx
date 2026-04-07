@@ -17,7 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useToast } from "@/hooks/use-toast";
 import { 
   Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
-  Map as MapIcon, List, Edit2, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
+  Map as MapIcon, List, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, ChevronDown, ChevronUp, XCircle,
   Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, Layers
 } from "lucide-react";
@@ -33,7 +33,7 @@ import { AddressSearch } from "@/components/AddressSearch";
 import { GeocodedObjectsMap, ObjectsMapTab } from "@/components/ObjectsMapView";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { Checkbox } from "@/components/ui/checkbox";
-import type { ServiceObject, Customer, SetupTimeLog } from "@shared/schema";
+import type { ServiceObject, Customer } from "@shared/schema";
 
 const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
   koncern: { label: "Koncern", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
@@ -87,19 +87,16 @@ export default function ObjectsPage() {
   });
   const [hierarchyFilter, setHierarchyFilterRaw] = useState("all");
   const [clusterFilter, setClusterFilterRaw] = useState("all");
-  const [setupTimeRange, setSetupTimeRange] = useState<[number, number]>([0, 60]);
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [editingObject, setEditingObject] = useState<ServiceObject | null>(null);
-  const [editField, setEditField] = useState<"accessCode" | "avgSetupTime" | null>(null);
+  const [editField, setEditField] = useState<"accessCode" | null>(null);
   const [editValue, setEditValue] = useState("");
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [objectToCopy, setObjectToCopy] = useState<ServiceObject | null>(null);
   const [copyName, setCopyName] = useState("");
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [csvData, setCsvData] = useState("");
-  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
-  const [historyObject, setHistoryObject] = useState<ServiceObject | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const setTypeFilter = (v: string) => { setTypeFilterRaw(v); setCurrentPage(0); };
   const setAccessFilter = (v: string) => { setAccessFilterRaw(v); setCurrentPage(0); };
@@ -279,10 +276,6 @@ export default function ObjectsPage() {
     return m;
   }, [clustersList]);
 
-  const { data: setupLogs = [] } = useQuery<SetupTimeLog[]>({
-    queryKey: ["/api/setup-time-logs"],
-    staleTime: 60000,
-  });
 
   const { data: batchGeoPreview, refetch: refetchPreview } = useQuery<{
     totalNeedsGeo: number;
@@ -450,13 +443,7 @@ export default function ObjectsPage() {
     });
   }, []);
 
-  const filteredObjects = useMemo(() => {
-    return objects.filter(obj => {
-      const setupTime = obj.avgSetupTime || 0;
-      const matchesSetupTime = setupTime >= setupTimeRange[0] && setupTime <= setupTimeRange[1];
-      return matchesSetupTime;
-    });
-  }, [objects, setupTimeRange]);
+  const filteredObjects = objects;
 
   const filteredTopLevel = useMemo(() => filteredObjects.filter(obj => !obj.parentId), [filteredObjects]);
 
@@ -465,9 +452,9 @@ export default function ObjectsPage() {
     accessFilter !== "all" ? 1 : 0,
     customerFilter.length > 0 ? 1 : 0,
     hierarchyFilter !== "all" ? 1 : 0,
-    (setupTimeRange[0] !== 0 || setupTimeRange[1] !== 60) ? 1 : 0,
+    clusterFilter !== "all" ? 1 : 0,
     issueFilter ? 1 : 0,
-  ].reduce((a, b) => a + b, 0), [typeFilter, accessFilter, customerFilter, hierarchyFilter, setupTimeRange, issueFilter]);
+  ].reduce((a, b) => a + b, 0), [typeFilter, accessFilter, customerFilter, hierarchyFilter, clusterFilter, issueFilter]);
 
   const quickStats = useMemo(() => {
     const typeCounts: Record<string, number> = {};
@@ -498,7 +485,7 @@ export default function ObjectsPage() {
     setAccessFilter("all");
     setCustomerFilter([]);
     setHierarchyFilter("all");
-    setSetupTimeRange([0, 60]);
+    setClusterFilter("all");
     setIssueFilter(null);
     window.history.replaceState({}, "", window.location.pathname);
   };
@@ -511,24 +498,15 @@ export default function ObjectsPage() {
   }, [filteredObjects, selectedIds]);
   const mapPositions = useMemo<[number, number][]>(() => objectsWithCoords.map(o => [o.latitude!, o.longitude!]), [objectsWithCoords]);
 
-  const objectSetupLogs = useMemo(() => {
-    if (!historyObject) return [];
-    return setupLogs
-      .filter(log => log.objectId === historyObject.id)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [setupLogs, historyObject]);
-
-  const handleQuickEdit = useCallback((obj: ServiceObject, field: "accessCode" | "avgSetupTime") => {
+  const handleQuickEdit = useCallback((obj: ServiceObject, field: "accessCode") => {
     setEditingObject(obj);
     setEditField(field);
-    setEditValue(field === "accessCode" ? (obj.accessCode || "") : (obj.avgSetupTime?.toString() || "0"));
+    setEditValue(obj.accessCode || "");
   }, []);
 
   const saveQuickEdit = useCallback(() => {
     if (!editingObject || !editField) return;
-    const data = editField === "accessCode" 
-      ? { accessCode: editValue }
-      : { avgSetupTime: parseInt(editValue) || 0 };
+    const data = { accessCode: editValue };
     updateObjectMutation.mutate({ id: editingObject.id, data });
   }, [editingObject, editField, editValue, updateObjectMutation]);
 
@@ -587,8 +565,6 @@ export default function ObjectsPage() {
       const cityIdx = headers.indexOf("stad");
       const accessIdx = headers.indexOf("tillgång");
       const codeIdx = headers.indexOf("kod");
-      const setupIdx = headers.indexOf("ställtid");
-      
       const name = nameIdx >= 0 ? values[nameIdx] : "";
       if (!name) {
         errorCount++;
@@ -608,7 +584,6 @@ export default function ObjectsPage() {
         city: cityIdx >= 0 ? values[cityIdx] : null,
         accessType: accessIdx >= 0 ? (accessMap[values[accessIdx]?.toLowerCase()] || "open") : "open",
         accessCode: codeIdx >= 0 ? values[codeIdx] : null,
-        avgSetupTime: setupIdx >= 0 ? parseInt(values[setupIdx]) || 0 : 0,
         status: "active",
       };
       
@@ -630,7 +605,7 @@ export default function ObjectsPage() {
   };
 
   const exportCSV = () => {
-    const headers = ["Namn", "Objektnummer", "Typ", "Adress", "Stad", "Tillgång", "Kod", "Ställtid"];
+    const headers = ["Namn", "Objektnummer", "Typ", "Adress", "Stad", "Tillgång", "Kod"];
     const rows = filteredObjects.map(obj => [
       obj.name,
       obj.objectNumber || "",
@@ -639,7 +614,6 @@ export default function ObjectsPage() {
       obj.city || "",
       accessTypeLabels[obj.accessType || "open"]?.label || obj.accessType,
       obj.accessCode || "",
-      obj.avgSetupTime?.toString() || "0",
     ]);
     const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -652,10 +626,6 @@ export default function ObjectsPage() {
     toast({ title: "Export klar", description: `${filteredObjects.length} objekt exporterade` });
   };
 
-  const showHistory = useCallback((obj: ServiceObject) => {
-    setHistoryObject(obj);
-    setHistoryDialogOpen(true);
-  }, []);
 
   if (isLoading) {
     return (
@@ -851,27 +821,17 @@ export default function ObjectsPage() {
 
           <div className="flex items-center gap-1 shrink-0">
             <div className="text-right mr-2">
-              {isEditing && editField === "avgSetupTime" ? (
-                <Input 
-                  type="number"
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  className="h-6 w-14 text-xs px-1"
-                  onClick={(e) => e.stopPropagation()}
-                  data-testid="input-quick-edit-setup"
-                />
-              ) : (
-                <>
-                  {(obj.avgSetupTime || 0) > 0 ? (
-                    <>
-                      <div className="text-sm font-medium">{obj.avgSetupTime} min</div>
+              {(obj.avgSetupTime || 0) > 0 ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="cursor-help">
+                      <div className="text-sm font-medium" data-testid={`text-setup-time-${obj.id}`}>{obj.avgSetupTime} min</div>
                       <div className="text-xs text-muted-foreground">ställtid</div>
-                    </>
-                  ) : (
-                    <div className="text-xs text-muted-foreground/50">0 min</div>
-                  )}
-                </>
-              )}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Beräknad genomsnittlig ställtid</TooltipContent>
+                </Tooltip>
+              ) : null}
             </div>
 
             {isEditing ? (
@@ -905,14 +865,6 @@ export default function ObjectsPage() {
                     <TooltipContent><p>Redigera kod</p></TooltipContent>
                   </Tooltip>
                 )}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); handleQuickEdit(obj, "avgSetupTime"); }} data-testid={`button-edit-setup-${obj.id}`}>
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent><p>Redigera ställtid</p></TooltipContent>
-                </Tooltip>
                 <ObjectMetadataPanel object={obj} />
                 <ObjectContactsDialog object={obj} />
                 <DropdownMenu modal={false}>
@@ -925,10 +877,6 @@ export default function ObjectsPage() {
                     <DropdownMenuItem onClick={() => handleCopyObject(obj)} data-testid={`menu-copy-${obj.id}`}>
                       <Copy className="h-4 w-4 mr-2" />
                       Kopiera
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => showHistory(obj)} data-testid={`menu-history-${obj.id}`}>
-                      <Clock className="h-4 w-4 mr-2" />
-                      Ställtidshistorik
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setOverflowPanel({ objectId: obj.id, panel: "images" })} data-testid={`menu-images-${obj.id}`}>
                       <Image className="h-4 w-4 mr-2" />
@@ -1197,12 +1145,6 @@ export default function ObjectsPage() {
                   <X className="h-3 w-3" />
                 </Badge>
               )}
-              {(setupTimeRange[0] !== 0 || setupTimeRange[1] !== 60) && (
-                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setSetupTimeRange([0, 60])} data-testid="badge-filter-setuptime">
-                  Ställtid: {setupTimeRange[0]}-{setupTimeRange[1]} min
-                  <X className="h-3 w-3" />
-                </Badge>
-              )}
             </div>
           )}
         </CardHeader>
@@ -1273,18 +1215,6 @@ export default function ObjectsPage() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="flex items-center gap-4">
-              <Label className="text-sm text-muted-foreground shrink-0">Ställtid: {setupTimeRange[0]}-{setupTimeRange[1]} min</Label>
-              <Slider
-                value={setupTimeRange}
-                onValueChange={(v) => setSetupTimeRange(v as [number, number])}
-                min={0}
-                max={60}
-                step={5}
-                className="w-64"
-                data-testid="slider-setup-time"
-              />
             </div>
           </CardContent>
         )}
@@ -1451,14 +1381,14 @@ export default function ObjectsPage() {
               Importera objekt från CSV
             </DialogTitle>
             <DialogDescription>
-              Klistra in CSV-data med header: Namn, Objektnummer, Typ, Adress, Stad, Tillgång, Kod, Ställtid
+              Klistra in CSV-data med header: Namn, Objektnummer, Typ, Adress, Stad, Tillgång, Kod
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <textarea
               className="w-full h-48 p-3 text-sm font-mono border rounded-md bg-muted"
-              placeholder="Namn,Objektnummer,Typ,Adress,Stad,Tillgång,Kod,Ställtid
-Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234,10"
+              placeholder="Namn,Objektnummer,Typ,Adress,Stad,Tillgång,Kod
+Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
               value={csvData}
               onChange={(e) => setCsvData(e.target.value)}
               data-testid="textarea-csv-import"
@@ -1477,62 +1407,6 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234,10"
         </DialogContent>
       </Dialog>
 
-      <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Ställtidshistorik - {historyObject?.name}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {objectSetupLogs.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                Ingen ställtidshistorik registrerad för detta objekt
-              </p>
-            ) : (
-              <>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div className="p-3 bg-muted rounded-md">
-                    <div className="text-2xl font-semibold">
-                      {Math.round(objectSetupLogs.reduce((s, l) => s + l.durationMinutes, 0) / objectSetupLogs.length)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">min snitt</div>
-                  </div>
-                  <div className="p-3 bg-muted rounded-md">
-                    <div className="text-2xl font-semibold">
-                      {Math.min(...objectSetupLogs.map(l => l.durationMinutes))}
-                    </div>
-                    <div className="text-xs text-muted-foreground">min min</div>
-                  </div>
-                  <div className="p-3 bg-muted rounded-md">
-                    <div className="text-2xl font-semibold">
-                      {Math.max(...objectSetupLogs.map(l => l.durationMinutes))}
-                    </div>
-                    <div className="text-xs text-muted-foreground">min max</div>
-                  </div>
-                </div>
-                <div className="divide-y max-h-64 overflow-auto">
-                  {objectSetupLogs.slice(0, 10).map(log => (
-                    <div key={log.id} className="py-2 flex items-center justify-between">
-                      <div>
-                        <div className="text-sm">{log.category}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(log.createdAt).toLocaleDateString("sv-SE")}
-                        </div>
-                      </div>
-                      <Badge variant="secondary">{log.durationMinutes} min</Badge>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setHistoryDialogOpen(false)}>Stäng</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Create object dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
