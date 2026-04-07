@@ -181,8 +181,13 @@ app.post("/api/order-concepts/:id/article-mappings/auto", asyncHandler(async (re
       `);
     });
 
-    const mappings = await storage.getArticleObjectMappings(orderConceptId);
-    res.json({ mappingsCreated: mappings.length });
+    const countResult = await db.execute(sql`
+      SELECT count(*)::int as cnt FROM article_object_mappings aom
+      INNER JOIN order_concept_articles oca ON aom.order_concept_article_id = oca.id
+      WHERE oca.order_concept_id = ${orderConceptId}
+    `);
+    const mappingsCreated = (countResult.rows as Array<{ cnt: number }>)[0]?.cnt ?? 0;
+    res.json({ mappingsCreated });
 }));
 
 app.put("/api/order-concepts/:id/invoice-config", asyncHandler(async (req, res) => {

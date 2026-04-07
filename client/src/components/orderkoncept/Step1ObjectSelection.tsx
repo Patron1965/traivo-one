@@ -62,7 +62,7 @@ export default function Step1ObjectSelection({
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [childrenCache, setChildrenCache] = useState<Map<string, LazyTreeNode[]>>(new Map());
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
-  const listRef = useRef<any>(null);
+  const listRef = useRef<{ scrollToRow: (config: { index: number }) => void } | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(objectSearch), 300);
@@ -206,7 +206,7 @@ export default function Step1ObjectSelection({
     { value: 0, label: "Sön" },
   ];
 
-  const TreeRowComponent = useCallback(({ index, style }: { index: number; style: React.CSSProperties; ariaAttributes?: any }) => {
+  const TreeRowComponent = useCallback(({ index, style }: { index: number; style: React.CSSProperties; ariaAttributes?: Record<string, unknown> }) => {
     const row = flatRows[index];
     if (!row) return null;
     const { node, depth, isExpanded, hasChildren, isLoading: rowLoading } = row;
@@ -259,7 +259,7 @@ export default function Step1ObjectSelection({
     );
   }, [flatRows, selectedObjectIds, toggleExpand, fetchAllDescendantIds, onToggleAll, onToggleObject]);
 
-  const SearchRowComponent = useCallback(({ index, style }: { index: number; style: React.CSSProperties; ariaAttributes?: any }) => {
+  const SearchRowComponent = useCallback(({ index, style }: { index: number; style: React.CSSProperties; ariaAttributes?: Record<string, unknown> }) => {
     const node = searchResults[index];
     if (!node) return null;
     return (
