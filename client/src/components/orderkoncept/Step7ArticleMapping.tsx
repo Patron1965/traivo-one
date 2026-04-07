@@ -14,15 +14,6 @@ interface ConceptArticle {
   article?: Article;
 }
 
-interface ConceptObject {
-  id: string;
-  objectId: string;
-  objectName?: string | null;
-  objectAddress?: string | null;
-  objectType?: string | null;
-  included?: boolean;
-}
-
 interface Mapping {
   id: string;
   orderConceptArticleId: string;
@@ -33,19 +24,31 @@ interface Mapping {
 interface Step7Props {
   conceptId: string;
   conceptArticles: ConceptArticle[];
-  conceptObjects: ConceptObject[];
   mappings: Mapping[];
   onMappingsUpdated: () => void;
+}
+
+interface EnrichedObject {
+  id: string;
+  objectId: string;
+  objectName?: string | null;
+  objectAddress?: string | null;
+  objectType?: string | null;
+  included?: boolean;
 }
 
 export default function Step7ArticleMapping({
   conceptId,
   conceptArticles,
-  conceptObjects,
   mappings,
   onMappingsUpdated,
 }: Step7Props) {
   const { data: articles = [] } = useQuery<Article[]>({ queryKey: ["/api/articles"] });
+
+  const { data: conceptObjects = [] } = useQuery<EnrichedObject[]>({
+    queryKey: ["/api/order-concepts", conceptId, "objects"],
+    enabled: !!conceptId,
+  });
 
   const enrichedArticles = useMemo(() => {
     return conceptArticles.map(ca => ({

@@ -124,7 +124,6 @@ export default function OrderConceptWizardPage() {
     { documentType: "invoice", enabled: true, showPrice: true, distributionChannels: ["email", "portal"], recipients: [] },
   ]);
   const [conceptArticles, setConceptArticles] = useState<any[]>([]);
-  const [enrichedConceptObjects, setEnrichedConceptObjects] = useState<any[]>([]);
   const [mappings, setMappings] = useState<any[]>([]);
   const [schedules, setSchedules] = useState<ScheduleEntry[]>([]);
   const [minDaysBetween, setMinDaysBetween] = useState(60);
@@ -165,7 +164,6 @@ export default function OrderConceptWizardPage() {
       form.setValue("deliveryModel", wizardData.deliveryModel || "");
       if (wizardData.conceptObjects) {
         setSelectedObjectIds(new Set(wizardData.conceptObjects.map((o: any) => o.objectId)));
-        setEnrichedConceptObjects(wizardData.conceptObjects);
       }
       if (wizardData.conceptArticles) setConceptArticles(wizardData.conceptArticles);
       if (wizardData.mappings) setMappings(wizardData.mappings);
@@ -525,16 +523,6 @@ export default function OrderConceptWizardPage() {
     } catch {}
   }, [conceptId]);
 
-  const conceptObjectsForMapping = useMemo(() => {
-    if (enrichedConceptObjects.length > 0) {
-      return enrichedConceptObjects;
-    }
-    return Array.from(selectedObjectIds).map(objectId => ({
-      id: objectId,
-      objectId,
-    }));
-  }, [selectedObjectIds, enrichedConceptObjects]);
-
   const isSaving = createConceptMutation.isPending || saveStepMutation.isPending;
 
   if (isEditing && wizardLoading) {
@@ -777,7 +765,6 @@ export default function OrderConceptWizardPage() {
               <Step7ArticleMapping
                 conceptId={conceptId}
                 conceptArticles={conceptArticles}
-                conceptObjects={conceptObjectsForMapping}
                 mappings={mappings}
                 onMappingsUpdated={refreshMappings}
               />
