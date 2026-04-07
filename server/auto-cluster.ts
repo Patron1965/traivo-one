@@ -48,25 +48,48 @@ async function _ensureClusterForCustomerImpl(
 
   const clusterName = customer?.name || `Kluster (${customerId.slice(0, 8)})`;
 
-  const [newCluster] = await db
-    .insert(clusters)
-    .values({
-      tenantId,
-      rootCustomerId: customerId,
-      name: clusterName,
-      status: "active",
-    })
-    .returning({ id: clusters.id });
+  try {
+    const [newCluster] = await db
+      .insert(clusters)
+      .values({
+        tenantId,
+        rootCustomerId: customerId,
+        name: clusterName,
+        status: "active",
+      })
+      .returning({ id: clusters.id });
 
-  return newCluster.id;
+    return newCluster.id;
+  } catch (err: any) {
+    if (err.code === "23505") {
+      const [retry] = await db
+        .select({ id: clusters.id })
+        .from(clusters)
+        .where(
+          and(
+            eq(clusters.tenantId, tenantId),
+            eq(clusters.rootCustomerId, customerId),
+            isNull(clusters.deletedAt)
+          )
+        )
+        .limit(1);
+      if (retry) return retry.id;
+    }
+    throw err;
+  }
 }
 
-export async function updateClusterGeoCenter(clusterId: string): Promise<void> {
-  const result = await db
+export async function updateClusterCache(clusterId: string): Promise<void> {
+  const [totalRow] = await db
+    .select({ cnt: sql<number>`count(*)::int` })
+    .from(objects)
+    .where(and(eq(objects.clusterId, clusterId), isNull(objects.deletedAt)));
+
+  const [geoRow] = await db
     .select({
       avgLat: sql<number>`avg(${objects.latitude})`,
       avgLng: sql<number>`avg(${objects.longitude})`,
-      cnt: sql<number>`count(*)::int`,
+      geoCnt: sql<number>`count(*)::int`,
     })
     .from(objects)
     .where(
@@ -78,29 +101,25 @@ export async function updateClusterGeoCenter(clusterId: string): Promise<void> {
       )
     );
 
-  const row = result[0];
-  if (!row || row.cnt === 0) return;
+  const updateData: Record<string, unknown> = {
+    cachedObjectCount: totalRow?.cnt ?? 0,
+  };
 
-  const totalCount = await db
-    .select({ cnt: sql<number>`count(*)::int` })
-    .from(objects)
-    .where(and(eq(objects.clusterId, clusterId), isNull(objects.deletedAt)));
+  if (geoRow && geoRow.geoCnt > 0) {
+    updateData.centerLatitude = geoRow.avgLat;
+    updateData.centerLongitude = geoRow.avgLng;
+  }
 
   await db
     .update(clusters)
-    .set({
-      centerLatitude: row.avgLat,
-      centerLongitude: row.avgLng,
-      cachedObjectCount: totalCount[0]?.cnt ?? 0,
-    })
+    .set(updateData)
     .where(eq(clusters.id, clusterId));
 }
 
 export async function ensureClusterAndAssign(
   tenantId: string,
   customerId: string,
-  objectId: string,
-  hasCoordinates: boolean = false
+  objectId: string
 ): Promise<string> {
   const clusterId = await ensureClusterForCustomer(tenantId, customerId);
 
@@ -109,11 +128,9 @@ export async function ensureClusterAndAssign(
     .set({ clusterId })
     .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));
 
-  if (hasCoordinates) {
-    updateClusterGeoCenter(clusterId).catch((err) => {
-      console.error(`Failed to update geo center for cluster ${clusterId}:`, err);
-    });
-  }
+  updateClusterCache(clusterId).catch((err) => {
+    console.error(`Failed to update cache for cluster ${clusterId}:`, err);
+  });
 
   return clusterId;
 }

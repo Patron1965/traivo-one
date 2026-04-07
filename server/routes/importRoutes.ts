@@ -13,7 +13,7 @@ import { importJobs, notifyImportProgress } from "./helpers";
 import { geocodeAddress } from "../google-geocoding";
 import { objects, workOrders, customers, objectMetadata, workOrderLines, metadataKatalog } from "@shared/schema";
 import { createMetadata, getAllMetadataTypes } from "../metadata-queries";
-import { ensureClusterForCustomer, updateClusterGeoCenter } from "../auto-cluster";
+import { ensureClusterForCustomer, updateClusterCache } from "../auto-cluster";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -197,10 +197,7 @@ app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, 
         try {
           const clusterId = await ensureClusterForCustomer(tenantId, customerId);
           await storage.updateObject(createdObject.id, { clusterId });
-          if (objectData.latitude !== null && objectData.latitude !== undefined &&
-              objectData.longitude !== null && objectData.longitude !== undefined) {
-            csvImportClusterIds.add(clusterId);
-          }
+          csvImportClusterIds.add(clusterId);
         } catch (clusterErr) {
           console.error("Auto-cluster error:", clusterErr);
         }
@@ -217,7 +214,7 @@ app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, 
     }
     
     for (const cId of csvImportClusterIds) {
-      updateClusterGeoCenter(cId).catch(e => console.error("Geo center update error:", e));
+      updateClusterCache(cId).catch(e => console.error("Cluster cache update error:", e));
     }
     
     res.json({ imported: imported.length, errors });
@@ -1023,7 +1020,7 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
       if (obj?.clusterId) affectedClusterIds.add(obj.clusterId);
     }
     for (const cId of affectedClusterIds) {
-      updateClusterGeoCenter(cId).catch(e => console.error("Geo center update error:", e));
+      updateClusterCache(cId).catch(e => console.error("Cluster cache update error:", e));
     }
 
     job.phase = "metadata";
@@ -2318,15 +2315,15 @@ app.post("/api/import/modus/objects-mapped", upload.single("file"), asyncHandler
     }
     
     const affectedClusterIdsMapped = new Set<string>();
-    const allMappedObjs = await db.select({ id: objects.id, clusterId: objects.clusterId, latitude: objects.latitude, longitude: objects.longitude })
+    const allMappedObjs = await db.select({ id: objects.id, clusterId: objects.clusterId })
       .from(objects).where(and(eq(objects.tenantId, tenantId), eq(objects.importBatchId, batchId)));
     for (const o of allMappedObjs) {
-      if (o.clusterId && o.latitude !== null && o.longitude !== null) {
+      if (o.clusterId) {
         affectedClusterIdsMapped.add(o.clusterId);
       }
     }
     for (const cId of affectedClusterIdsMapped) {
-      updateClusterGeoCenter(cId).catch(e => console.error("Geo center update error:", e));
+      updateClusterCache(cId).catch(e => console.error("Cluster cache update error:", e));
     }
 
     const { importBatches } = await import("@shared/schema");

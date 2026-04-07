@@ -1637,8 +1637,7 @@ app.post("/api/public-issue-reports/:id/create-interim-object", asyncHandler(asy
     
     if (interimObject.customerId) {
       try {
-        const hasCoords = interimObject.latitude !== null && interimObject.longitude !== null;
-        await ensureClusterAndAssign(tenantId, interimObject.customerId, interimObject.id, hasCoords);
+        await ensureClusterAndAssign(tenantId, interimObject.customerId, interimObject.id);
       } catch (err) {
         console.error("Auto-cluster error on interim object:", err);
       }

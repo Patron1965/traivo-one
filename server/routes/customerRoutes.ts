@@ -393,8 +393,7 @@ app.post("/api/objects", asyncHandler(async (req, res) => {
   
   if (object.customerId) {
     try {
-      const hasCoords = object.latitude !== null && object.longitude !== null;
-      await ensureClusterAndAssign(tenantId, object.customerId, object.id, hasCoords);
+      await ensureClusterAndAssign(tenantId, object.customerId, object.id);
     } catch (err) {
       console.error("Auto-cluster error on object create:", err);
     }
