@@ -1,5 +1,6 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { FixedSizeList } from "react-window";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -43,6 +44,9 @@ interface Step1Props {
   onCustomerModeChange: (mode: CustomerMode) => void;
 }
 
+const ROW_HEIGHT = 32;
+const LIST_HEIGHT = 400;
+
 export default function Step1ObjectSelection({
   selectedObjectIds,
   onToggleObject,
@@ -58,6 +62,7 @@ export default function Step1ObjectSelection({
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [childrenCache, setChildrenCache] = useState<Map<string, LazyTreeNode[]>>(new Map());
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
+  const listRef = useRef<FixedSizeList>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(objectSearch), 300);
@@ -103,9 +108,9 @@ export default function Step1ObjectSelection({
     if (loadingIds.has(parentId)) return [];
     setLoadingIds(prev => new Set(prev).add(parentId));
     try {
-      const params = new URLSearchParams({ parentId });
+      const params = new URLSearchParams();
       if (effectiveCustomerId) params.set("customerId", effectiveCustomerId);
-      const res = await fetch(`/api/objects/tree?${params}`);
+      const res = await fetch(`/api/objects/tree/${parentId}/children?${params}`);
       if (res.ok) {
         const children: LazyTreeNode[] = await res.json();
         setChildrenCache(prev => new Map(prev).set(parentId, children));
@@ -135,6 +140,16 @@ export default function Step1ObjectSelection({
     });
   }, [loadChildren]);
 
+  const fetchAllDescendantIds = useCallback(async (parentId: string): Promise<string[]> => {
+    try {
+      const res = await fetch(`/api/objects/tree/${parentId}/descendants`);
+      if (res.ok) return res.json();
+      return [parentId];
+    } catch {
+      return [parentId];
+    }
+  }, []);
+
   const flatRows = useMemo((): FlatRow[] => {
     if (isSearching) return [];
     const rows: FlatRow[] = [];
@@ -155,18 +170,6 @@ export default function Step1ObjectSelection({
     flatten(rootNodes, 0);
     return rows;
   }, [rootNodes, expandedIds, childrenCache, loadingIds, isSearching]);
-
-  const collectDescendantIds = useCallback((nodeId: string, cacheOverride?: Map<string, LazyTreeNode[]>): string[] => {
-    const cache = cacheOverride || childrenCache;
-    const ids = [nodeId];
-    const children = cache.get(nodeId);
-    if (children) {
-      for (const child of children) {
-        ids.push(...collectDescendantIds(child.id, cache));
-      }
-    }
-    return ids;
-  }, [childrenCache]);
 
   const filteredCustomers = useMemo(() => {
     if (!customerSearch) return customers.slice(0, 20);
@@ -202,6 +205,85 @@ export default function Step1ObjectSelection({
     { value: 6, label: "Lör" },
     { value: 0, label: "Sön" },
   ];
+
+  const TreeRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
+    const { node, depth, isExpanded, hasChildren, isLoading: rowLoading } = flatRows[index];
+    const isSelected = selectedObjectIds.has(node.id);
+
+    return (
+      <div style={{ ...style, paddingLeft: depth * 16 }}>
+        <div className="flex items-center gap-1 py-0.5 hover:bg-accent/50 rounded px-1 h-full" data-testid={`tree-node-${node.id}`}>
+          {hasChildren ? (
+            <button
+              onClick={() => toggleExpand(node.id, hasChildren)}
+              className="p-0.5 rounded hover:bg-accent"
+              data-testid={`tree-expand-${node.id}`}
+            >
+              {rowLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : isExpanded ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
+            </button>
+          ) : (
+            <span className="w-5" />
+          )}
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={async () => {
+              if (hasChildren) {
+                const allIds = await fetchAllDescendantIds(node.id);
+                const allSelected = allIds.every(id => selectedObjectIds.has(id));
+                onToggleAll(allIds, !allSelected);
+              } else {
+                onToggleObject(node.id);
+              }
+            }}
+            data-testid={`tree-checkbox-${node.id}`}
+          />
+          <span className="text-sm truncate flex-1">{node.name}</span>
+          {hasChildren && (
+            <Badge variant="secondary" className="text-[10px] h-4 px-1">
+              {node.childCount}
+            </Badge>
+          )}
+          {node.objectType && (
+            <span className="text-xs text-muted-foreground">{node.objectType}</span>
+          )}
+        </div>
+      </div>
+    );
+  }, [flatRows, selectedObjectIds, toggleExpand, fetchAllDescendantIds, onToggleAll, onToggleObject]);
+
+  const SearchRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
+    const node = searchResults[index];
+    return (
+      <div style={style} className="flex items-center gap-2 py-1.5 px-2 hover:bg-accent/50 rounded" data-testid={`search-result-${node.id}`}>
+        <Checkbox
+          checked={selectedObjectIds.has(node.id)}
+          onCheckedChange={() => onToggleObject(node.id)}
+          data-testid={`search-checkbox-${node.id}`}
+        />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm truncate">{node.name}</div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {node.customerName && (
+              <span className="flex items-center gap-1">
+                <Building2 className="h-3 w-3" />
+                {node.customerName}
+              </span>
+            )}
+            {node.address && <span className="truncate">{node.address}</span>}
+          </div>
+        </div>
+        {node.objectType && (
+          <span className="text-xs text-muted-foreground shrink-0">{node.objectType}</span>
+        )}
+      </div>
+    );
+  }, [searchResults, selectedObjectIds, onToggleObject]);
 
   return (
     <div className="space-y-4" data-testid="step1-object-selection">
@@ -300,103 +382,40 @@ export default function Step1ObjectSelection({
             Söker bland alla kunder — {searchResults.length} träffar
           </p>
         )}
-        <div className="h-[400px] border rounded-md p-2 overflow-y-auto">
+        <div className="border rounded-md p-2">
           {loading ? (
-            <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+            <div className="flex items-center justify-center text-sm text-muted-foreground" style={{ height: LIST_HEIGHT }}>
               Laddar objekt...
             </div>
           ) : isSearching ? (
             searchResults.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+              <div className="flex items-center justify-center text-sm text-muted-foreground" style={{ height: LIST_HEIGHT }}>
                 Inga objekt hittades
               </div>
             ) : (
-              searchResults.map(node => (
-                <div key={node.id} className="flex items-center gap-2 py-1.5 px-2 hover:bg-accent/50 rounded" data-testid={`search-result-${node.id}`}>
-                  <Checkbox
-                    checked={selectedObjectIds.has(node.id)}
-                    onCheckedChange={() => onToggleObject(node.id)}
-                    data-testid={`search-checkbox-${node.id}`}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm truncate">{node.name}</div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      {node.customerName && (
-                        <span className="flex items-center gap-1">
-                          <Building2 className="h-3 w-3" />
-                          {node.customerName}
-                        </span>
-                      )}
-                      {node.address && <span className="truncate">{node.address}</span>}
-                    </div>
-                  </div>
-                  {node.objectType && (
-                    <span className="text-xs text-muted-foreground shrink-0">{node.objectType}</span>
-                  )}
-                </div>
-              ))
+              <FixedSizeList
+                height={LIST_HEIGHT}
+                width="100%"
+                itemCount={searchResults.length}
+                itemSize={ROW_HEIGHT + 8}
+              >
+                {SearchRow}
+              </FixedSizeList>
             )
           ) : flatRows.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+            <div className="flex items-center justify-center text-sm text-muted-foreground" style={{ height: LIST_HEIGHT }}>
               Inga objekt hittades
             </div>
           ) : (
-            flatRows.map(({ node, depth, isExpanded, hasChildren, isLoading: rowLoading }) => {
-              const isSelected = selectedObjectIds.has(node.id);
-              const descendantIds = collectDescendantIds(node.id);
-              const allSelected = descendantIds.every(id => selectedObjectIds.has(id));
-              const someSelected = !allSelected && descendantIds.some(id => selectedObjectIds.has(id));
-
-              return (
-                <div key={node.id} style={{ paddingLeft: depth * 16 }}>
-                  <div className="flex items-center gap-1 py-1 hover:bg-accent/50 rounded px-1 group" data-testid={`tree-node-${node.id}`}>
-                    {hasChildren ? (
-                      <button
-                        onClick={() => toggleExpand(node.id, hasChildren)}
-                        className="p-0.5 rounded hover:bg-accent"
-                        data-testid={`tree-expand-${node.id}`}
-                      >
-                        {rowLoading ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : isExpanded ? (
-                          <ChevronDown className="h-3.5 w-3.5" />
-                        ) : (
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                    ) : (
-                      <span className="w-5" />
-                    )}
-                    <Checkbox
-                      checked={allSelected ? true : someSelected ? "indeterminate" : false}
-                      onCheckedChange={async () => {
-                        if (hasChildren) {
-                          let freshCache = childrenCache;
-                          if (!childrenCache.has(node.id)) {
-                            const loaded = await loadChildren(node.id);
-                            freshCache = new Map(childrenCache).set(node.id, loaded);
-                          }
-                          const freshIds = collectDescendantIds(node.id, freshCache);
-                          onToggleAll(freshIds, !allSelected);
-                        } else {
-                          onToggleObject(node.id);
-                        }
-                      }}
-                      data-testid={`tree-checkbox-${node.id}`}
-                    />
-                    <span className="text-sm truncate flex-1">{node.name}</span>
-                    {hasChildren && (
-                      <Badge variant="secondary" className="text-[10px] h-4 px-1">
-                        {node.childCount}
-                      </Badge>
-                    )}
-                    {node.objectType && (
-                      <span className="text-xs text-muted-foreground">{node.objectType}</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })
+            <FixedSizeList
+              ref={listRef}
+              height={LIST_HEIGHT}
+              width="100%"
+              itemCount={flatRows.length}
+              itemSize={ROW_HEIGHT}
+            >
+              {TreeRow}
+            </FixedSizeList>
           )}
         </div>
       </div>

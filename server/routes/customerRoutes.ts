@@ -185,6 +185,67 @@ app.get("/api/objects/tree", asyncHandler(async (req, res) => {
   })));
 }));
 
+app.get("/api/objects/tree/:parentId/children", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const { parentId } = req.params;
+  const { customerId } = req.query;
+
+  const conditions = [
+    eq(objects.tenantId, tenantId),
+    isNull(objects.deletedAt),
+    eq(objects.parentId, parentId),
+  ];
+  if (customerId && typeof customerId === "string") {
+    conditions.push(eq(objects.customerId, customerId));
+  }
+
+  const customerFilter2 = (customerId && typeof customerId === "string")
+    ? sql` AND c.customer_id = ${customerId}`
+    : sql``;
+  const childCountSql2 = sql<number>`(SELECT count(*) FROM objects c WHERE c.parent_id = ${objects.id} AND c.tenant_id = ${tenantId} AND c.deleted_at IS NULL${customerFilter2})`;
+
+  const rows = await db
+    .select({
+      id: objects.id,
+      name: objects.name,
+      objectNumber: objects.objectNumber,
+      objectType: objects.objectType,
+      address: objects.address,
+      customerId: objects.customerId,
+      childCount: childCountSql2,
+    })
+    .from(objects)
+    .where(and(...conditions))
+    .orderBy(objects.name);
+
+  res.json(rows.map(r => ({
+    id: r.id,
+    name: r.name,
+    objectNumber: r.objectNumber,
+    objectType: r.objectType,
+    address: r.address,
+    customerId: r.customerId,
+    childCount: Number(r.childCount) || 0,
+    children: [],
+  })));
+}));
+
+app.get("/api/objects/tree/:parentId/descendants", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const { parentId } = req.params;
+
+  const result = await db.execute(sql`
+    WITH RECURSIVE tree AS (
+      SELECT id FROM objects WHERE id = ${parentId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
+      UNION ALL
+      SELECT o.id FROM objects o INNER JOIN tree t ON o.parent_id = t.id WHERE o.deleted_at IS NULL
+    )
+    SELECT id FROM tree
+  `);
+  const ids = (result.rows as Array<{ id: string }>).map(r => r.id);
+  res.json(ids);
+}));
+
 app.get("/api/objects/with-issues", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const { issueType, status, customerId, limit } = req.query;
