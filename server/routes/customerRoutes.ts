@@ -138,7 +138,7 @@ app.get("/api/objects/tree", asyncHandler(async (req, res) => {
       ))
       .limit(100);
 
-    return res.json(rows.map(r => ({ ...r, children: [] })));
+    return res.json(rows.map(r => ({ ...r, childCount: 0, children: [] })));
   }
 
   const parentFilter = parentId && typeof parentId === "string"
