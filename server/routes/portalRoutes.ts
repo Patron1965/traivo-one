@@ -12,6 +12,7 @@ import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirma
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
 import { isModuleEnabled } from "../feature-flags";
+import { ensureClusterAndAssign } from "../auto-cluster";
 
 export async function registerPortalRoutes(app: Express) {
 // ============================================
@@ -1633,11 +1634,22 @@ app.post("/api/public-issue-reports/:id/create-interim-object", asyncHandler(asy
       notes: `Skapat från felanmälan: ${report.title}`,
     };
     const interimObject = await storage.createObject(insertData);
+    
+    if (interimObject.customerId) {
+      try {
+        const hasCoords = interimObject.latitude !== null && interimObject.longitude !== null;
+        await ensureClusterAndAssign(tenantId, interimObject.customerId, interimObject.id, hasCoords);
+      } catch (err) {
+        console.error("Auto-cluster error on interim object:", err);
+      }
+    }
+    
     await storage.updatePublicIssueReport(report.id, tenantId, {
       objectId: interimObject.id,
       status: "converted",
     });
-    res.status(201).json(interimObject);
+    const updatedObj = await storage.getObject(interimObject.id);
+    res.status(201).json(updatedObj || interimObject);
 }));
 
 // ============================================

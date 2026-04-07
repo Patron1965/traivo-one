@@ -13,6 +13,7 @@ import { importJobs, notifyImportProgress } from "./helpers";
 import { geocodeAddress } from "../google-geocoding";
 import { objects, workOrders, customers, objectMetadata, workOrderLines, metadataKatalog } from "@shared/schema";
 import { createMetadata, getAllMetadataTypes } from "../metadata-queries";
+import { ensureClusterForCustomer, updateClusterGeoCenter } from "../auto-cluster";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -139,6 +140,7 @@ app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, 
     
     const imported: string[] = [];
     const errors: string[] = [];
+    const csvImportClusterIds = new Set<string>();
     
     // Sort by objectLevel to ensure parents are created first
     const rows = (result.data as Record<string, string>[]).sort((a, b) => {
@@ -192,7 +194,17 @@ app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, 
         
         const createdObject = await storage.createObject(objectData);
         
-        // Store mapping for parent lookups
+        try {
+          const clusterId = await ensureClusterForCustomer(tenantId, customerId);
+          await storage.updateObject(createdObject.id, { clusterId });
+          if (objectData.latitude !== null && objectData.latitude !== undefined &&
+              objectData.longitude !== null && objectData.longitude !== undefined) {
+            csvImportClusterIds.add(clusterId);
+          }
+        } catch (clusterErr) {
+          console.error("Auto-cluster error:", clusterErr);
+        }
+        
         if (objectData.objectNumber) {
           objectNumberMap.set(objectData.objectNumber, createdObject.id);
         }
@@ -202,6 +214,10 @@ app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, 
         console.error("Object import error:", err);
         errors.push(`Kunde inte importera: ${row.name || row.namn || "okänd"}`);
       }
+    }
+    
+    for (const cId of csvImportClusterIds) {
+      updateClusterGeoCenter(cId).catch(e => console.error("Geo center update error:", e));
     }
     
     res.json({ imported: imported.length, errors });
@@ -944,16 +960,31 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
         
         const existingObject = await storage.getObjectByObjectNumber(tenantId, objectNumber);
         
+        let clusterId: string | undefined;
+        try {
+          clusterId = await ensureClusterForCustomer(tenantId, customerId);
+        } catch (clusterErr) {
+          console.error("Auto-cluster error:", clusterErr);
+        }
+
         if (existingObject) {
           const { parentId: _p, ...updateFields } = objectFields;
-          const updatedObject = await storage.updateObject(existingObject.id, updateFields);
+          const updatedObject = await storage.updateObject(existingObject.id, {
+            ...updateFields,
+            ...(clusterId ? { clusterId } : {}),
+          });
           if (updatedObject) {
             modusIdMap.set(modusId, updatedObject.id);
             updated.push(name);
             job.updated++;
           }
         } else {
-          const createdObject = await storage.createObject({ tenantId, ...objectFields, importBatchId });
+          const createdObject = await storage.createObject({
+            tenantId,
+            ...objectFields,
+            ...(clusterId ? { clusterId } : {}),
+            importBatchId,
+          });
           modusIdMap.set(modusId, createdObject.id);
           created.push(name);
           job.created++;
@@ -986,6 +1017,15 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
       }
     }
     
+    const affectedClusterIds = new Set<string>();
+    for (const [, objId] of modusIdMap) {
+      const obj = await storage.getObject(objId);
+      if (obj?.clusterId) affectedClusterIds.add(obj.clusterId);
+    }
+    for (const cId of affectedClusterIds) {
+      updateClusterGeoCenter(cId).catch(e => console.error("Geo center update error:", e));
+    }
+
     job.phase = "metadata";
     notifyImportProgress(importBatchId);
     
@@ -2247,6 +2287,14 @@ app.post("/api/import/modus/objects-mapped", upload.single("file"), asyncHandler
             ))
           : [];
         
+        let clusterId: string | undefined;
+        try {
+          clusterId = await ensureClusterForCustomer(tenantId, customerId);
+        } catch (clusterErr) {
+          console.error("Auto-cluster error (mapped import):", clusterErr);
+        }
+        if (clusterId) objData.clusterId = clusterId;
+
         let objId: string;
         if (existing.length > 0) {
           await db.update(objects).set(objData).where(eq(objects.id, existing[0].id));
@@ -2269,6 +2317,18 @@ app.post("/api/import/modus/objects-mapped", upload.single("file"), asyncHandler
       }
     }
     
+    const affectedClusterIdsMapped = new Set<string>();
+    const allMappedObjs = await db.select({ id: objects.id, clusterId: objects.clusterId, latitude: objects.latitude, longitude: objects.longitude })
+      .from(objects).where(and(eq(objects.tenantId, tenantId), eq(objects.importBatchId, batchId)));
+    for (const o of allMappedObjs) {
+      if (o.clusterId && o.latitude !== null && o.longitude !== null) {
+        affectedClusterIdsMapped.add(o.clusterId);
+      }
+    }
+    for (const cId of affectedClusterIdsMapped) {
+      updateClusterGeoCenter(cId).catch(e => console.error("Geo center update error:", e));
+    }
+
     const { importBatches } = await import("@shared/schema");
     await db.insert(importBatches).values({
       tenantId,

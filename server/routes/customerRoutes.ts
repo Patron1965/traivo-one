@@ -8,6 +8,7 @@ import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { db } from "../db";
 import { eq, and, isNull, sql, ilike, or } from "drizzle-orm";
+import { ensureClusterAndAssign } from "../auto-cluster";
 
 export async function registerCustomerRoutes(app: Express) {
 
@@ -389,7 +390,18 @@ app.post("/api/objects", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const data = insertObjectSchema.parse({ ...req.body, tenantId });
   const object = await storage.createObject(data);
-  res.status(201).json(object);
+  
+  if (object.customerId) {
+    try {
+      const hasCoords = object.latitude !== null && object.longitude !== null;
+      await ensureClusterAndAssign(tenantId, object.customerId, object.id, hasCoords);
+    } catch (err) {
+      console.error("Auto-cluster error on object create:", err);
+    }
+  }
+  
+  const updated = await storage.getObject(object.id);
+  res.status(201).json(updated || object);
 }));
 
 app.patch("/api/objects/:id", asyncHandler(async (req, res) => {
