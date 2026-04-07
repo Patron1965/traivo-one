@@ -113,6 +113,9 @@ export async function updateClusterCache(clusterId: string): Promise<void> {
   if (geoRow && geoRow.geoCnt > 0) {
     updateData.centerLatitude = geoRow.avgLat;
     updateData.centerLongitude = geoRow.avgLng;
+  } else {
+    updateData.centerLatitude = null;
+    updateData.centerLongitude = null;
   }
 
   await db
