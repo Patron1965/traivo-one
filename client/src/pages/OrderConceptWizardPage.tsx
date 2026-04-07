@@ -245,11 +245,6 @@ export default function OrderConceptWizardPage() {
         return "complete";
       case 7: {
         if (conceptArticles.length > 0 && mappings.length === 0) return "warning";
-        if (mappings.length > 0 && selectedObjectIds.size > 0) {
-          const mappedObjectIds = new Set(mappings.map((m: any) => m.objectId));
-          const hasUnmapped = Array.from(selectedObjectIds).some(id => !mappedObjectIds.has(id));
-          if (hasUnmapped) return "warning";
-        }
         return "complete";
       }
       case 8:
@@ -290,11 +285,6 @@ export default function OrderConceptWizardPage() {
         if (conceptArticles.length > 0 && mappings.length === 0) {
           return "Koppla artiklar till objekt innan du fortsätter.";
         }
-        const mappedObjectIds = new Set(mappings.map((m: any) => m.objectId));
-        const unmappedCount = Array.from(selectedObjectIds).filter(id => !mappedObjectIds.has(id)).length;
-        if (unmappedCount > 0) {
-          return `${unmappedCount} objekt saknar artikelkoppling. Alla valda objekt måste ha minst en artikel.`;
-        }
         break;
       }
     }
@@ -322,11 +312,11 @@ export default function OrderConceptWizardPage() {
   });
 
   const saveStepMutation = useMutation({
-    mutationFn: async ({ step, overrideConceptId }: { step: number; overrideConceptId?: string }) => {
+    mutationFn: async ({ step, nextStep, overrideConceptId }: { step: number; nextStep?: number; overrideConceptId?: string }) => {
       const cId = overrideConceptId || conceptId;
       if (!cId) return;
       await apiRequest("PATCH", `/api/order-concepts/${cId}`, {
-        currentStep: step,
+        currentStep: nextStep ?? step,
         name: conceptName,
         customerMode,
         customerId: customerMode === "HARDCODED" ? selectedCustomerId : null,
@@ -343,13 +333,13 @@ export default function OrderConceptWizardPage() {
         estimatedHours,
       });
 
-      if (step >= 1 && selectedObjectIds.size > 0) {
+      if ((step === 1 || step === 2) && selectedObjectIds.size > 0) {
         await apiRequest("POST", `/api/order-concepts/${cId}/objects`, {
           objectIds: Array.from(selectedObjectIds),
         });
       }
 
-      if (step >= 4) {
+      if (step === 4) {
         await apiRequest("PUT", `/api/order-concepts/${cId}/invoice-config`, {
           headerMetadata,
           lineMetadata,
@@ -359,7 +349,7 @@ export default function OrderConceptWizardPage() {
         });
       }
 
-      if (step >= 5) {
+      if (step === 5) {
         await apiRequest("PUT", `/api/order-concepts/${cId}/documents`, {
           documents: documents.map(d => ({
             documentType: d.documentType,
@@ -371,7 +361,7 @@ export default function OrderConceptWizardPage() {
         });
       }
 
-      if (step >= 9) {
+      if (step === 9) {
         const enabledSchedules = schedules.filter(s => s.enabled).map(s => ({
           season: s.season,
           startDate: s.startDate ? new Date(s.startDate).toISOString() : undefined,
@@ -406,18 +396,16 @@ export default function OrderConceptWizardPage() {
       activeConceptId = created.id;
     }
 
+    const newStep = currentStep < 9 ? currentStep + 1 : currentStep;
+
     if (activeConceptId) {
-      await saveStepMutation.mutateAsync({ step: currentStep, overrideConceptId: activeConceptId });
+      await saveStepMutation.mutateAsync({ step: currentStep, nextStep: newStep, overrideConceptId: activeConceptId });
     }
 
     if (currentStep < 9) {
-      const newStep = currentStep + 1;
       setShowResumeBanner(false);
       setCurrentStep(newStep);
       setHasUnsavedWork(false);
-      if (activeConceptId) {
-        try { await apiRequest("PATCH", `/api/order-concepts/${activeConceptId}`, { currentStep: newStep }); } catch {}
-      }
     }
   }, [conceptId, currentStep, conceptName, createConceptMutation, saveStepMutation, validateCurrentStep]);
 
