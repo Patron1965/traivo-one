@@ -34,7 +34,7 @@ interface ProactiveSalesResponse {
 export default function ProactiveSalesPage() {
   const [search, setSearch] = useState("");
   const [monthsThreshold, setMonthsThreshold] = useState("12");
-  const [sortBy, setSortBy] = useState<"days" | "revenue">("days");
+  const [sortBy, setSortBy] = useState<"days" | "revenue">("revenue");
 
   const debouncedSearch = useDebounce(search, 300);
 

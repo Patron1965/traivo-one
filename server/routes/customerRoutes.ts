@@ -16,7 +16,7 @@ app.get("/api/proactive-sales/inactive", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const months = Math.max(1, Math.min(60, parseInt(req.query.months as string) || 12));
   const search = (req.query.search as string || "").trim();
-  const sortBy = (req.query.sortBy as string) === "revenue" ? "revenue" : "days";
+  const sortBy = (req.query.sortBy as string) === "days" ? "days" : "revenue";
   const limit = Math.max(1, Math.min(500, parseInt(req.query.limit as string) || 200));
 
   const cutoffDate = new Date();
@@ -28,8 +28,8 @@ app.get("/api/proactive-sales/inactive", asyncHandler(async (req, res) => {
     : sql``;
 
   const orderByClause = sortBy === "revenue"
-    ? sql`ORDER BY total_revenue DESC, days_since_last_order DESC`
-    : sql`ORDER BY days_since_last_order DESC, total_revenue DESC`;
+    ? sql`ORDER BY CASE WHEN agg.order_count IS NULL THEN 1 ELSE 0 END, total_revenue DESC, days_since_last_order DESC`
+    : sql`ORDER BY CASE WHEN agg.order_count IS NULL THEN 1 ELSE 0 END, days_since_last_order DESC, total_revenue DESC`;
 
   const inactiveBase = sql`
     FROM customers c
