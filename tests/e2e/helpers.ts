@@ -146,6 +146,22 @@ export async function mockAuth(page: Page) {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
     }
 
+    if (url.includes("/api/planner/work-orders") || url.includes("/api/work-orders")) {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+    }
+
+    if (url.includes("/api/order-stock")) {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+    }
+
+    if (url.includes("/api/notifications")) {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+    }
+
+    if (url.includes("/api/optimization/")) {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "idle" }) });
+    }
+
     return route.fulfill({
       status: 200,
       contentType: "application/json",
