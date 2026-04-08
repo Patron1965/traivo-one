@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Search, TrendingDown, Users, DollarSign, AlertTriangle, Phone, Mail, UserCircle } from "lucide-react";
+import { Loader2, Search, TrendingDown, Users, DollarSign, AlertTriangle, Phone, Mail, UserCircle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 
 interface InactiveCustomer {
   id: string;
@@ -31,14 +31,18 @@ interface ProactiveSalesResponse {
   };
 }
 
+type SortField = "name" | "lastOrderDate" | "daysSinceLastOrder" | "orderCount" | "totalRevenue";
+type SortDir = "asc" | "desc";
+
 export default function ProactiveSalesPage() {
   const [search, setSearch] = useState("");
   const [monthsThreshold, setMonthsThreshold] = useState("12");
-  const [sortBy, setSortBy] = useState<"days" | "revenue">("revenue");
+  const [sortField, setSortField] = useState<SortField>("totalRevenue");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const debouncedSearch = useDebounce(search, 300);
 
-  const queryParams = new URLSearchParams({ months: monthsThreshold, sortBy });
+  const queryParams = new URLSearchParams({ months: monthsThreshold });
   if (debouncedSearch) queryParams.set("search", debouncedSearch);
   const queryUrl = `/api/proactive-sales/inactive?${queryParams}`;
 
@@ -48,6 +52,48 @@ export default function ProactiveSalesPage() {
 
   const inactiveCustomers = data?.customers ?? [];
   const summary = data?.summary ?? { inactiveCount: 0, totalCustomers: 0, totalLostRevenue: 0, totalRevenueAll: 0 };
+
+  const sortedCustomers = useMemo(() => {
+    const sorted = [...inactiveCustomers];
+    sorted.sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "name":
+          cmp = a.name.localeCompare(b.name, "sv");
+          break;
+        case "lastOrderDate":
+          cmp = (a.lastOrderDate ?? "").localeCompare(b.lastOrderDate ?? "");
+          break;
+        case "daysSinceLastOrder":
+          cmp = a.daysSinceLastOrder - b.daysSinceLastOrder;
+          break;
+        case "orderCount":
+          cmp = a.orderCount - b.orderCount;
+          break;
+        case "totalRevenue":
+          cmp = a.totalRevenue - b.totalRevenue;
+          break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return sorted;
+  }, [inactiveCustomers, sortField, sortDir]);
+
+  function toggleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir(field === "name" ? "asc" : "desc");
+    }
+  }
+
+  function SortIcon({ field }: { field: SortField }) {
+    if (sortField !== field) return <ArrowUpDown className="h-3.5 w-3.5 ml-1 opacity-40" />;
+    return sortDir === "asc"
+      ? <ArrowUp className="h-3.5 w-3.5 ml-1 text-blue-500 dark:text-blue-400" />
+      : <ArrowDown className="h-3.5 w-3.5 ml-1 text-blue-500 dark:text-blue-400" />;
+  }
 
   if (isLoading) {
     return (
@@ -150,18 +196,9 @@ export default function ProactiveSalesPage() {
                 <SelectItem value="24">Inaktiv &gt; 24 månader</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={sortBy} onValueChange={(v) => setSortBy(v as "days" | "revenue")}>
-              <SelectTrigger className="w-[180px]" data-testid="select-sort-by">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="days">Längst sedan aktivitet</SelectItem>
-                <SelectItem value="revenue">Högst intäkt</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
-          {inactiveCustomers.length === 0 ? (
+          {sortedCustomers.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
               <p>Inga inaktiva kunder hittades med nuvarande filter</p>
@@ -171,17 +208,62 @@ export default function ProactiveSalesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Kund</TableHead>
+                    <TableHead>
+                      <button
+                        className="flex items-center hover:text-foreground transition-colors cursor-pointer"
+                        onClick={() => toggleSort("name")}
+                        data-testid="sort-name"
+                      >
+                        Kund
+                        <SortIcon field="name" />
+                      </button>
+                    </TableHead>
                     <TableHead className="hidden md:table-cell">Kontaktperson</TableHead>
                     <TableHead className="hidden md:table-cell">Kontakt</TableHead>
-                    <TableHead className="text-right">Senaste order</TableHead>
-                    <TableHead className="text-right">Dagar sedan</TableHead>
-                    <TableHead className="text-right hidden lg:table-cell">Ordrar</TableHead>
-                    <TableHead className="text-right">Historisk intäkt</TableHead>
+                    <TableHead className="text-right">
+                      <button
+                        className="flex items-center justify-end w-full hover:text-foreground transition-colors cursor-pointer"
+                        onClick={() => toggleSort("lastOrderDate")}
+                        data-testid="sort-last-order"
+                      >
+                        Senaste order
+                        <SortIcon field="lastOrderDate" />
+                      </button>
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <button
+                        className="flex items-center justify-end w-full hover:text-foreground transition-colors cursor-pointer"
+                        onClick={() => toggleSort("daysSinceLastOrder")}
+                        data-testid="sort-days-since"
+                      >
+                        Dagar sedan
+                        <SortIcon field="daysSinceLastOrder" />
+                      </button>
+                    </TableHead>
+                    <TableHead className="text-right hidden lg:table-cell">
+                      <button
+                        className="flex items-center justify-end w-full hover:text-foreground transition-colors cursor-pointer"
+                        onClick={() => toggleSort("orderCount")}
+                        data-testid="sort-orders"
+                      >
+                        Ordrar
+                        <SortIcon field="orderCount" />
+                      </button>
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <button
+                        className="flex items-center justify-end w-full hover:text-foreground transition-colors cursor-pointer"
+                        onClick={() => toggleSort("totalRevenue")}
+                        data-testid="sort-revenue"
+                      >
+                        Historisk intäkt
+                        <SortIcon field="totalRevenue" />
+                      </button>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {inactiveCustomers.map((cust) => (
+                  {sortedCustomers.map((cust) => (
                     <TableRow key={cust.id} data-testid={`row-inactive-customer-${cust.id}`}>
                       <TableCell>
                         <div>
