@@ -60,6 +60,8 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     teamResourceIds: [],
     priceListId: "",
   });
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerPopoverOpen, setCustomerPopoverOpen] = useState(false);
   const [objectSearch, setObjectSearch] = useState("");
   const [objectPopoverOpen, setObjectPopoverOpen] = useState(false);
   const [selectedObjectName, setSelectedObjectName] = useState("");
@@ -75,6 +77,17 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
+
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearch) return customers.slice(0, 50);
+    const q = customerSearch.toLowerCase();
+    return customers.filter(c => c.name.toLowerCase().includes(q)).slice(0, 50);
+  }, [customers, customerSearch]);
+
+  const selectedCustomerName = useMemo(() => {
+    if (!formData.customerId) return "";
+    return customers.find(c => c.id === formData.customerId)?.name || "";
+  }, [customers, formData.customerId]);
 
   const debouncedSearch = useMemo(() => {
     let timeoutId: NodeJS.Timeout;
@@ -352,23 +365,57 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Kund</Label>
-              <Select 
-                value={formData.customerId} 
-                onValueChange={(v) => {
-                  setFormData({...formData, customerId: v, objectId: ""});
-                  setSelectedObjectName("");
-                  setObjectSearch("");
-                }}
-              >
-                <SelectTrigger data-testid="select-customer">
-                  <SelectValue placeholder="Välj kund" />
-                </SelectTrigger>
-                <SelectContent>
-                  {customers.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={customerPopoverOpen} onOpenChange={setCustomerPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={customerPopoverOpen}
+                    className="w-full justify-between font-normal"
+                    data-testid="select-customer"
+                  >
+                    {selectedCustomerName || "Sök kund..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[300px] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Skriv för att söka kund..."
+                      value={customerSearch}
+                      onValueChange={setCustomerSearch}
+                    />
+                    <CommandList>
+                      {filteredCustomers.length === 0 && (
+                        <CommandEmpty>Ingen kund hittad</CommandEmpty>
+                      )}
+                      <CommandGroup>
+                        {filteredCustomers.map(c => (
+                          <CommandItem
+                            key={c.id}
+                            value={c.id}
+                            onSelect={() => {
+                              setFormData({...formData, customerId: c.id, objectId: ""});
+                              setSelectedObjectName("");
+                              setObjectSearch("");
+                              setCustomerPopoverOpen(false);
+                              setCustomerSearch("");
+                            }}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", formData.customerId === c.id ? "opacity-100" : "opacity-0")} />
+                            {c.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                      {!customerSearch && customers.length > 50 && (
+                        <div className="px-3 py-2 text-xs text-muted-foreground text-center border-t">
+                          Visar 50 av {customers.length} — skriv för att söka
+                        </div>
+                      )}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
 
             <div className="space-y-2">
