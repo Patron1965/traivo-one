@@ -87,14 +87,31 @@ app.get("/api/proactive-sales/inactive", asyncHandler(async (req, res) => {
     `),
   ]);
 
-  const totalCustomers = parseInt((totalCustomersResult as any).rows?.[0]?.count ?? "0");
-  const totalRevenueAll = parseInt((totalRevenueResult as any).rows?.[0]?.total ?? "0");
-  const summaryRow = (summaryResult as any).rows?.[0];
+  interface InactiveRow {
+    id: string;
+    name: string;
+    contact_person: string | null;
+    email: string | null;
+    phone: string | null;
+    address: string | null;
+    city: string | null;
+    last_order_date: string | null;
+    order_count: string;
+    total_revenue: string;
+    days_since_last_order: string;
+  }
+  interface SummaryRow { inactive_count: string; lost_revenue: string }
+  interface CountRow { count: string }
+  interface TotalRow { total: string }
+
+  const totalCustomers = parseInt((totalCustomersResult.rows as CountRow[])[0]?.count ?? "0");
+  const totalRevenueAll = parseInt((totalRevenueResult.rows as TotalRow[])[0]?.total ?? "0");
+  const summaryRow = (summaryResult.rows as SummaryRow[])[0];
   const inactiveCount = parseInt(summaryRow?.inactive_count ?? "0");
   const totalLostRevenue = parseInt(summaryRow?.lost_revenue ?? "0");
 
-  const rows = (inactiveRows as any).rows || [];
-  const inactiveList = rows.map((r: any) => ({
+  const rows = inactiveRows.rows as InactiveRow[];
+  const inactiveList = rows.map((r) => ({
     id: r.id,
     name: r.name,
     contactPerson: r.contact_person,
