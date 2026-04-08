@@ -624,11 +624,11 @@ export default function InvoicingPage() {
                                 <TableHeader>
                                   <TableRow>
                                     <TableHead>Beskrivning</TableHead>
-                                    <TableHead>Objekt</TableHead>
+                                    <TableHead className="hidden md:table-cell">Objekt</TableHead>
                                     <TableHead className="text-right">Antal</TableHead>
-                                    <TableHead className="text-right">À-pris</TableHead>
+                                    <TableHead className="text-right hidden md:table-cell">À-pris</TableHead>
                                     <TableHead className="text-right">Belopp</TableHead>
-                                    <TableHead>Datum</TableHead>
+                                    <TableHead className="hidden lg:table-cell">Datum</TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -640,16 +640,16 @@ export default function InvoicingPage() {
                                           <Badge variant="outline" className="ml-2 text-xs border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400">Manuell</Badge>
                                         )}
                                       </TableCell>
-                                      <TableCell className="text-muted-foreground text-sm">
+                                      <TableCell className="text-muted-foreground text-sm hidden md:table-cell">
                                         {line.objectName || "-"}
                                         {line.objectAddress && (
                                           <span className="block text-xs">{line.objectAddress}</span>
                                         )}
                                       </TableCell>
                                       <TableCell className="text-right">{line.quantity}</TableCell>
-                                      <TableCell className="text-right">{formatCurrency(line.unitPrice)}</TableCell>
+                                      <TableCell className="text-right hidden md:table-cell">{formatCurrency(line.unitPrice)}</TableCell>
                                       <TableCell className="text-right font-medium">{formatCurrency(line.total)}</TableCell>
-                                      <TableCell className="text-sm text-muted-foreground">
+                                      <TableCell className="text-sm text-muted-foreground hidden lg:table-cell">
                                         {line.completedAt ? format(new Date(line.completedAt), "d MMM", { locale: sv }) : "-"}
                                       </TableCell>
                                     </TableRow>
@@ -738,10 +738,10 @@ export default function InvoicingPage() {
                         <TableHead>Kund</TableHead>
                         <TableHead>Beskrivning</TableHead>
                         <TableHead className="text-right">Antal</TableHead>
-                        <TableHead className="text-right">À-pris</TableHead>
+                        <TableHead className="text-right hidden md:table-cell">À-pris</TableHead>
                         <TableHead className="text-right">Belopp</TableHead>
-                        <TableHead>Kostnadsställe</TableHead>
-                        <TableHead>Skapad</TableHead>
+                        <TableHead className="hidden lg:table-cell">Kostnadsställe</TableHead>
+                        <TableHead className="hidden lg:table-cell">Skapad</TableHead>
                         <TableHead></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -756,15 +756,15 @@ export default function InvoicingPage() {
                             <TableCell data-testid={`text-manual-desc-${ml.id}`}>
                               {ml.description}
                               {ml.status === "queued" && (
-                                <Badge variant="outline" className="ml-2 text-xs border-yellow-300 text-yellow-600">Köad för export</Badge>
+                                <Badge variant="outline" className="ml-2 text-xs border-yellow-300 dark:border-yellow-700 text-yellow-600 dark:text-yellow-400">Köad för export</Badge>
                               )}
                               {ml.notes && <span className="block text-xs text-muted-foreground">{ml.notes}</span>}
                             </TableCell>
                             <TableCell className="text-right">{ml.quantity}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(ml.unitPrice)}</TableCell>
+                            <TableCell className="text-right hidden md:table-cell">{formatCurrency(ml.unitPrice)}</TableCell>
                             <TableCell className="text-right font-medium">{formatCurrency(ml.quantity * ml.unitPrice)}</TableCell>
-                            <TableCell className="text-sm text-muted-foreground">{ml.costCenter || "-"}</TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
+                            <TableCell className="text-sm text-muted-foreground hidden lg:table-cell">{ml.costCenter || "-"}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground hidden lg:table-cell">
                               {format(new Date(ml.createdAt), "d MMM HH:mm", { locale: sv })}
                             </TableCell>
                             <TableCell>

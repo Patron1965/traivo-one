@@ -921,7 +921,7 @@ export default function ReportingDashboardPage() {
           <h1 className="text-2xl font-semibold" data-testid="text-page-title">Rapportering & Analys</h1>
           <p className="text-muted-foreground">Nyckeltal, produktivitet och avvikelsestatistik</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <Select value={timeRange} onValueChange={(v) => setTimeRange(v as typeof timeRange)}>
             <SelectTrigger className="w-[140px]" data-testid="select-time-range">
               <SelectValue />

@@ -430,10 +430,10 @@ export default function AssignmentsPage() {
                 <TableHead>Uppgift</TableHead>
                 <TableHead>Objekt</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Värde</TableHead>
-                <TableHead>Tid</TableHead>
-                <TableHead>Resurs</TableHead>
-                <TableHead>Planerad</TableHead>
+                <TableHead className="hidden md:table-cell">Värde</TableHead>
+                <TableHead className="hidden lg:table-cell">Tid</TableHead>
+                <TableHead className="hidden md:table-cell">Resurs</TableHead>
+                <TableHead className="hidden lg:table-cell">Planerad</TableHead>
                 <TableHead className="text-right">Åtgärder</TableHead>
               </TableRow>
             </TableHeader>
@@ -463,17 +463,17 @@ export default function AssignmentsPage() {
                         {ASSIGNMENT_STATUS_LABELS[assignment.status as AssignmentStatus] || assignment.status}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       <span className="text-sm font-medium text-green-600 dark:text-green-400">
                         {formatCurrency(assignment.cachedValue)}
                       </span>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden lg:table-cell">
                       <span className="text-sm text-muted-foreground">
                         {assignment.estimatedDuration || 60} min
                       </span>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       {resource ? (
                         <div className="flex items-center gap-1">
                           <User className="h-3 w-3" />
@@ -483,7 +483,7 @@ export default function AssignmentsPage() {
                         <span className="text-muted-foreground text-sm">Ej tilldelad</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden lg:table-cell">
                       {assignment.scheduledDate ? (
                         <div className="flex items-center gap-1 text-sm">
                           <Calendar className="h-3 w-3" />
