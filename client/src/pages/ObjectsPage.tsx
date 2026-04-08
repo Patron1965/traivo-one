@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useTerminology } from "@/hooks/use-terminology";
@@ -992,6 +992,12 @@ export default function ObjectsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Link href="/objects/duplicates">
+            <Button variant="outline" data-testid="button-duplicates">
+              <Copy className="h-4 w-4 mr-2" />
+              Dubbletter
+            </Button>
+          </Link>
           <Button variant="outline" onClick={() => { setBatchGeoOpen(true); setBatchGeoResult(null); }} data-testid="button-batch-geocode">
             <Globe className="h-4 w-4 mr-2" />
             Batch-geocodning

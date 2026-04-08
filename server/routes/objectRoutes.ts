@@ -5,9 +5,11 @@ import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { geocodeAddress, searchDestinations, batchGeocode, isGoogleGeocodingAvailable, reverseGeocode, lookupCityFromPostalCode } from "../google-geocoding";
 import { createInheritanceProcessor } from "../inheritance-processor";
-import { insertObjectParentSchema } from "@shared/schema";
+import { insertObjectParentSchema, objects, workOrders, workOrderObjects, objectArticles, objectContacts, objectImages, objectMetadata, objectParents, objectPayers, objectTimeRestrictions } from "@shared/schema";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
+import { db } from "../db";
+import { sql, eq, and, isNull, inArray } from "drizzle-orm";
 
 type ServiceObject = Awaited<ReturnType<typeof storage.getObjects>>[number];
 
@@ -473,6 +475,256 @@ app.post("/api/clusters/:id/process-inheritance", asyncHandler(async (req, res) 
     success: true,
     processed: result.processed,
     errors: result.errors
+  });
+}));
+
+app.get("/api/objects/duplicates/summary", asyncHandler(async (_req, res) => {
+  const result = await db.execute(sql`
+    SELECT 
+      COUNT(*) as total_groups,
+      SUM(cnt - 1) as removable_count,
+      (SELECT COUNT(*) FROM objects WHERE deleted_at IS NULL) as total_objects
+    FROM (
+      SELECT name, address, customer_id, COUNT(*) as cnt
+      FROM objects
+      WHERE deleted_at IS NULL
+      GROUP BY name, address, customer_id
+      HAVING COUNT(*) > 1
+    ) t
+  `);
+  const row = result.rows[0] || {};
+  res.json({
+    totalGroups: Number(row.total_groups || 0),
+    removableCount: Number(row.removable_count || 0),
+    totalObjects: Number(row.total_objects || 0),
+  });
+}));
+
+app.get("/api/objects/duplicates", asyncHandler(async (req, res) => {
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const limit = Math.min(50, parseInt(req.query.limit as string) || 20);
+  const offset = (page - 1) * limit;
+
+  const groups = await db.execute(sql`
+    SELECT name, address, customer_id, COUNT(*) as cnt
+    FROM objects
+    WHERE deleted_at IS NULL
+    GROUP BY name, address, customer_id
+    HAVING COUNT(*) > 1
+    ORDER BY COUNT(*) DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `);
+
+  const duplicateGroups = [];
+  for (const g of groups.rows) {
+    const memberRows = await db.execute(sql`
+      SELECT o.id, o.name, o.address, o.object_number, o.customer_id, o.cluster_id,
+             o.latitude, o.longitude, o.city, o.postal_code, o.object_type,
+             o.created_at,
+             c.name as customer_name,
+             (SELECT COUNT(*) FROM work_orders wo WHERE wo.object_id = o.id) as work_order_count,
+             (SELECT COUNT(*) FROM work_order_objects woo WHERE woo.object_id = o.id) as linked_wo_count,
+             (SELECT COUNT(*) FROM object_articles oa WHERE oa.object_id = o.id) as article_count,
+             (SELECT COUNT(*) FROM object_contacts oc WHERE oc.object_id = o.id) as contact_count
+      FROM objects o
+      LEFT JOIN customers c ON o.customer_id = c.id
+      WHERE o.name = ${g.name}
+        AND ${g.address ? sql`o.address = ${g.address}` : sql`o.address IS NULL`}
+        AND ${g.customer_id ? sql`o.customer_id = ${g.customer_id}` : sql`o.customer_id IS NULL`}
+        AND o.deleted_at IS NULL
+      ORDER BY
+        (SELECT COUNT(*) FROM work_orders wo WHERE wo.object_id = o.id) DESC,
+        o.created_at ASC
+    `);
+
+    duplicateGroups.push({
+      name: g.name,
+      address: g.address,
+      customerId: g.customer_id,
+      customerName: memberRows.rows[0]?.customer_name || null,
+      count: Number(g.cnt),
+      members: memberRows.rows.map(m => ({
+        id: m.id,
+        name: m.name,
+        address: m.address,
+        objectNumber: m.object_number,
+        customerId: m.customer_id,
+        customerName: m.customer_name,
+        clusterId: m.cluster_id,
+        latitude: m.latitude,
+        longitude: m.longitude,
+        city: m.city,
+        postalCode: m.postal_code,
+        objectType: m.object_type,
+        createdAt: m.created_at,
+        workOrderCount: Number(m.work_order_count || 0),
+        linkedWoCount: Number(m.linked_wo_count || 0),
+        articleCount: Number(m.article_count || 0),
+        contactCount: Number(m.contact_count || 0),
+      }))
+    });
+  }
+
+  res.json({ groups: duplicateGroups, page, limit });
+}));
+
+app.post("/api/objects/duplicates/merge", asyncHandler(async (req, res) => {
+  const schema = z.object({
+    keepId: z.string().uuid(),
+    removeIds: z.array(z.string().uuid()).min(1),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+
+  const { keepId, removeIds } = parsed.data;
+  if (removeIds.includes(keepId)) {
+    throw new ValidationError("keepId cannot be in removeIds");
+  }
+
+  const keepObj = await db.select().from(objects).where(eq(objects.id, keepId)).limit(1);
+  if (!keepObj.length) throw new NotFoundError("Object to keep");
+
+  let reassigned = 0;
+
+  for (const removeId of removeIds) {
+    const tables = [
+      { table: 'work_orders', col: 'object_id' },
+      { table: 'work_order_objects', col: 'object_id' },
+      { table: 'assignments', col: 'object_id' },
+      { table: 'protocols', col: 'object_id' },
+      { table: 'deviation_reports', col: 'object_id' },
+      { table: 'setup_time_logs', col: 'object_id' },
+      { table: 'planning_parameters', col: 'object_id' },
+      { table: 'predictive_forecasts', col: 'object_id' },
+      { table: 'annual_goals', col: 'object_id' },
+      { table: 'customer_booking_requests', col: 'object_id' },
+      { table: 'customer_change_requests', col: 'object_id' },
+      { table: 'customer_communications', col: 'object_id' },
+      { table: 'customer_issue_reports', col: 'object_id' },
+      { table: 'public_issue_reports', col: 'object_id' },
+      { table: 'qr_code_links', col: 'object_id' },
+      { table: 'self_bookings', col: 'object_id' },
+      { table: 'subscription_changes', col: 'object_id' },
+      { table: 'subscriptions', col: 'object_id' },
+      { table: 'iot_devices', col: 'object_id' },
+      { table: 'inspection_metadata', col: 'object_id' },
+      { table: 'task_metadata_updates', col: 'object_id' },
+    ];
+
+    for (const { table, col } of tables) {
+      try {
+        const result = await db.execute(
+          sql`UPDATE ${sql.identifier(table)} SET ${sql.identifier(col)} = ${keepId} WHERE ${sql.identifier(col)} = ${removeId}`
+        );
+        reassigned += Number((result as any).rowCount || 0);
+      } catch {}
+    }
+
+    const childTables = [
+      'object_articles', 'object_contacts', 'object_images',
+      'object_metadata', 'object_payers', 'object_time_restrictions', 'object_parents'
+    ];
+    for (const table of childTables) {
+      try {
+        await db.execute(
+          sql`UPDATE ${sql.identifier(table)} SET object_id = ${keepId} WHERE object_id = ${removeId}`
+        );
+      } catch {}
+    }
+
+    await db.update(objects)
+      .set({ deletedAt: new Date() })
+      .where(eq(objects.id, removeId));
+  }
+
+  res.json({
+    success: true,
+    kept: keepId,
+    removed: removeIds.length,
+    reassigned,
+  });
+}));
+
+app.post("/api/objects/duplicates/auto-merge", asyncHandler(async (req, res) => {
+  const schema = z.object({
+    maxGroups: z.number().int().min(1).max(500).default(100),
+    dryRun: z.boolean().default(true),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+
+  const { maxGroups, dryRun } = parsed.data;
+
+  const groups = await db.execute(sql`
+    SELECT name, address, customer_id, COUNT(*) as cnt
+    FROM objects
+    WHERE deleted_at IS NULL
+    GROUP BY name, address, customer_id
+    HAVING COUNT(*) > 1
+    ORDER BY COUNT(*) DESC
+    LIMIT ${maxGroups}
+  `);
+
+  let totalRemoved = 0;
+  let totalReassigned = 0;
+  let groupsProcessed = 0;
+
+  for (const g of groups.rows) {
+    const members = await db.execute(sql`
+      SELECT o.id,
+             (SELECT COUNT(*) FROM work_orders wo WHERE wo.object_id = o.id) as wo_count
+      FROM objects o
+      WHERE o.name = ${g.name}
+        AND ${g.address ? sql`o.address = ${g.address}` : sql`o.address IS NULL`}
+        AND ${g.customer_id ? sql`o.customer_id = ${g.customer_id}` : sql`o.customer_id IS NULL`}
+        AND o.deleted_at IS NULL
+      ORDER BY
+        (SELECT COUNT(*) FROM work_orders wo WHERE wo.object_id = o.id) DESC,
+        o.created_at ASC
+    `);
+
+    if (members.rows.length < 2) continue;
+
+    const keepId = members.rows[0].id as string;
+    const removeIds = members.rows.slice(1).map(m => m.id as string);
+
+    if (!dryRun) {
+      const tables = [
+        'work_orders', 'work_order_objects', 'assignments', 'protocols',
+        'deviation_reports', 'setup_time_logs', 'planning_parameters',
+        'predictive_forecasts', 'annual_goals', 'customer_booking_requests',
+        'customer_change_requests', 'customer_communications', 'customer_issue_reports',
+        'public_issue_reports', 'qr_code_links', 'self_bookings',
+        'subscription_changes', 'subscriptions', 'iot_devices',
+        'inspection_metadata', 'task_metadata_updates',
+        'object_articles', 'object_contacts', 'object_images',
+        'object_metadata', 'object_payers', 'object_time_restrictions', 'object_parents'
+      ];
+
+      for (const removeId of removeIds) {
+        for (const table of tables) {
+          try {
+            const result = await db.execute(
+              sql`UPDATE ${sql.identifier(table)} SET object_id = ${keepId} WHERE object_id = ${removeId}`
+            );
+            totalReassigned += Number((result as any).rowCount || 0);
+          } catch {}
+        }
+        await db.update(objects)
+          .set({ deletedAt: new Date() })
+          .where(eq(objects.id, removeId));
+      }
+    }
+
+    totalRemoved += removeIds.length;
+    groupsProcessed++;
+  }
+
+  res.json({
+    dryRun,
+    groupsProcessed,
+    totalRemoved,
+    totalReassigned,
   });
 }));
 
