@@ -119,7 +119,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       if (!res.ok) throw new Error("Failed to fetch objects");
       return res.json();
     },
-    enabled: objectPopoverOpen && objectSearch.length >= 2,
+    enabled: objectSearch.length >= 2,
   });
 
   const objects = objectsResponse?.objects || [];
