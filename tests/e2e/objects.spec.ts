@@ -40,13 +40,12 @@ test.describe("Objects page", () => {
     expect(sliderCount).toBe(0);
   });
 
-  test("clear all filters button exists when filters visible", async ({ page }) => {
+  test("filter panel has type and access dropdowns", async ({ page }) => {
     await navigateTo(page, "/objects");
     await page.locator('[data-testid="button-toggle-filters"]').click();
     await expect(page.locator('[data-testid="select-type-filter"]')).toBeVisible({ timeout: 5000 });
-    const clearBtn = page.locator('[data-testid="button-clear-filters"]');
-    const hasClear = await clearBtn.isVisible({ timeout: 3000 }).catch(() => false);
-    expect(typeof hasClear).toBe("boolean");
+    await expect(page.locator('[data-testid="select-access-filter"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Filtrera kund").first()).toBeVisible({ timeout: 5000 });
   });
 
   test("create dialog opens with form fields", async ({ page }) => {
