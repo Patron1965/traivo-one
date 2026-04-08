@@ -42,6 +42,7 @@ app.get("/api/proactive-sales/inactive", asyncHandler(async (req, res) => {
       FROM work_orders
       WHERE tenant_id = ${tenantId}
         AND status IN ('completed', 'scheduled', 'in_progress')
+        AND deleted_at IS NULL
       GROUP BY customer_id
     ) agg ON agg.customer_id = c.id
     WHERE c.tenant_id = ${tenantId}
@@ -83,7 +84,7 @@ app.get("/api/proactive-sales/inactive", asyncHandler(async (req, res) => {
     db.execute(sql`
       SELECT COALESCE(SUM(cached_value), 0) as total
       FROM work_orders
-      WHERE tenant_id = ${tenantId} AND status IN ('completed', 'scheduled', 'in_progress')
+      WHERE tenant_id = ${tenantId} AND status IN ('completed', 'scheduled', 'in_progress') AND deleted_at IS NULL
     `),
   ]);
 
