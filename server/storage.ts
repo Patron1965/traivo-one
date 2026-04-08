@@ -1299,8 +1299,8 @@ export class DatabaseStorage implements IStorage {
       conditions.push(
         or(
           sql`LOWER(${workOrders.title}) LIKE ${searchTerm}`,
-          sql`${workOrders.objectId} IN (SELECT id FROM objects WHERE LOWER(name) LIKE ${searchTerm})`,
-          sql`${workOrders.customerId} IN (SELECT id FROM customers WHERE LOWER(name) LIKE ${searchTerm})`
+          sql`${workOrders.objectId} IN (SELECT id FROM ${objects} WHERE ${objects.tenantId} = ${tenantId} AND LOWER(name) LIKE ${searchTerm})`,
+          sql`${workOrders.customerId} IN (SELECT id FROM ${customers} WHERE ${customers.tenantId} = ${tenantId} AND LOWER(name) LIKE ${searchTerm})`
         )
       );
     }
@@ -2168,8 +2168,8 @@ export class DatabaseStorage implements IStorage {
       const searchTerm = `%${options.search.trim().toLowerCase()}%`;
       searchConditions = and(paginatedConditions, or(
         sql`lower(${workOrders.title}) LIKE ${searchTerm}`,
-        sql`${workOrders.customerId} IN (SELECT id FROM ${customers} WHERE lower(name) LIKE ${searchTerm})`,
-        sql`${workOrders.objectId} IN (SELECT id FROM ${objects} WHERE lower(name) LIKE ${searchTerm})`
+        sql`${workOrders.customerId} IN (SELECT id FROM ${customers} WHERE ${customers.tenantId} = ${tenantId} AND lower(name) LIKE ${searchTerm})`,
+        sql`${workOrders.objectId} IN (SELECT id FROM ${objects} WHERE ${objects.tenantId} = ${tenantId} AND lower(name) LIKE ${searchTerm})`
       ));
     }
     
@@ -3209,137 +3209,207 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getEffectiveMetadata(objectId: string, tenantId: string, contextParentId?: string): Promise<Record<string, unknown>> {
-    const definitions = await db.select()
-      .from(metadataDefinitions)
-      .where(eq(metadataDefinitions.tenantId, tenantId));
-    const result: Record<string, unknown> = {};
-    
-    const ancestorChain: string[] = [];
-    let currentObj = await this.getObject(objectId);
-    
-    if (contextParentId && currentObj) {
-      const contextParent = await this.getObject(contextParentId);
-      if (contextParent) {
-        let cp: any = contextParent;
-        ancestorChain.push(cp.id);
-        while (cp?.parentId) {
-          ancestorChain.push(cp.parentId);
-          cp = await this.getObject(cp.parentId);
+    const startId = contextParentId || objectId;
+
+    interface AncestorMetaRow {
+      ancestor_id: string;
+      depth: number;
+      definition_id: string;
+      field_key: string;
+      propagation_type: string | null;
+      meta_object_id: string | null;
+      meta_value: string | null;
+      meta_value_json: unknown;
+      breaks_inheritance: boolean | null;
+    }
+
+    const rows = await db.execute(sql`
+      WITH RECURSIVE ancestors AS (
+        SELECT id, parent_id, 0 AS depth
+        FROM objects
+        WHERE id = ${startId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
+        UNION ALL
+        SELECT o.id, o.parent_id, a.depth + 1
+        FROM objects o
+        JOIN ancestors a ON o.id = a.parent_id
+        WHERE o.tenant_id = ${tenantId} AND o.deleted_at IS NULL
+      ),
+      all_object_ids AS (
+        ${contextParentId
+          ? sql`SELECT ${objectId} AS id, -1 AS depth UNION ALL SELECT id, depth FROM ancestors`
+          : sql`SELECT id, depth FROM ancestors`
         }
+      )
+      SELECT
+        a.id AS ancestor_id,
+        a.depth,
+        md.id AS definition_id,
+        md.field_key,
+        md.propagation_type,
+        om.object_id AS meta_object_id,
+        om.value AS meta_value,
+        om.value_json AS meta_value_json,
+        om.breaks_inheritance
+      FROM all_object_ids a
+      CROSS JOIN metadata_definitions md
+      LEFT JOIN object_metadata om
+        ON om.object_id = a.id
+        AND om.definition_id = md.id
+        AND om.tenant_id = ${tenantId}
+      WHERE md.tenant_id = ${tenantId}
+      ORDER BY a.depth ASC, md.id
+    `);
+
+    const typedRows = rows.rows as AncestorMetaRow[];
+
+    const definitions = new Map<string, { fieldKey: string; propagationType: string | null }>();
+    const metaByObjectDef = new Map<string, { value: string | null; valueJson: unknown; breaksInheritance: boolean | null }>();
+
+    for (const row of typedRows) {
+      if (!definitions.has(row.definition_id)) {
+        definitions.set(row.definition_id, {
+          fieldKey: row.field_key,
+          propagationType: row.propagation_type,
+        });
       }
-    } else {
-      while (currentObj?.parentId) {
-        ancestorChain.push(currentObj.parentId);
-        currentObj = await this.getObject(currentObj.parentId);
+      if (row.meta_object_id !== null) {
+        metaByObjectDef.set(`${row.ancestor_id}::${row.definition_id}`, {
+          value: row.meta_value,
+          valueJson: row.meta_value_json,
+          breaksInheritance: row.breaks_inheritance,
+        });
       }
     }
-    
-    // For each definition, try to get the effective value
-    for (const def of definitions) {
-      // First check if the object has its own value
-      const [ownMeta] = await db.select()
-        .from(objectMetadata)
-        .where(and(
-          eq(objectMetadata.objectId, objectId),
-          eq(objectMetadata.definitionId, def.id)
-        ));
-      
+
+    const ancestorOrder: string[] = [];
+    const seenAncestors = new Set<string>();
+    for (const row of typedRows) {
+      if (!seenAncestors.has(row.ancestor_id)) {
+        seenAncestors.add(row.ancestor_id);
+        ancestorOrder.push(row.ancestor_id);
+      }
+    }
+
+    const result: Record<string, unknown> = {};
+
+    for (const [defId, def] of definitions) {
+      const ownMeta = metaByObjectDef.get(`${objectId}::${defId}`);
+
       if (ownMeta) {
-        // Prefer valueJson for structured data, fall back to value string
-        if (ownMeta.valueJson !== null) {
-          result[def.fieldKey] = ownMeta.valueJson;
-        } else {
-          result[def.fieldKey] = ownMeta.value;
-        }
+        result[def.fieldKey] = ownMeta.valueJson !== null ? ownMeta.valueJson : ownMeta.value;
         continue;
       }
-      
-      // If no own value and propagation is 'fixed', skip inheritance
+
       if (def.propagationType === 'fixed') {
         result[def.fieldKey] = null;
         continue;
       }
-      
-      // Walk up the pre-built ancestor chain looking for inherited value
+
+      const chain = contextParentId ? ancestorOrder : ancestorOrder.slice(1);
       let inheritedValue: unknown = null;
-      
-      for (const ancestorId of ancestorChain) {
-        const [ancestorMeta] = await db.select()
-          .from(objectMetadata)
-          .where(and(
-            eq(objectMetadata.objectId, ancestorId),
-            eq(objectMetadata.definitionId, def.id)
-          ));
-        
+
+      for (const ancestorId of chain) {
+        const ancestorMeta = metaByObjectDef.get(`${ancestorId}::${defId}`);
         if (ancestorMeta) {
-          // Found metadata at this ancestor - check if it has a concrete value
           const hasValue = ancestorMeta.value !== null || ancestorMeta.valueJson !== null;
-          
           if (hasValue) {
-            // Prefer valueJson for structured data, fall back to value string
-            if (ancestorMeta.valueJson !== null) {
-              inheritedValue = ancestorMeta.valueJson;
-            } else {
-              inheritedValue = ancestorMeta.value;
-            }
+            inheritedValue = ancestorMeta.valueJson !== null ? ancestorMeta.valueJson : ancestorMeta.value;
             break;
           }
-          
-          // Metadata record exists but has no value - if it breaks inheritance, stop
           if (ancestorMeta.breaksInheritance) {
             break;
           }
         }
-        
-        // No value at this ancestor - continue searching up the chain
       }
-      
+
       result[def.fieldKey] = inheritedValue;
     }
-    
+
     return result;
   }
 
   async findInvoiceStopLevel(objectId: string, tenantId: string): Promise<{ objectId: string; objectName: string; customerId: string; invoiceReference: string | null } | null> {
-    let currentObj = await this.getObject(objectId);
-    
-    while (currentObj) {
-      const meta = await db.select()
-        .from(objectMetadata)
-        .where(and(eq(objectMetadata.objectId, currentObj.id), eq(objectMetadata.tenantId, tenantId)));
-      
-      const defs = await db.select()
-        .from(metadataDefinitions)
-        .where(eq(metadataDefinitions.tenantId, tenantId));
-      
-      const invoiceStopDef = defs.find(d => d.fieldKey === 'invoice_stop');
-      if (invoiceStopDef) {
-        const stopMeta = meta.find(m => m.definitionId === invoiceStopDef.id);
-        if (stopMeta && (stopMeta.value === 'true' || stopMeta.value === '1')) {
-          const refDef = defs.find(d => d.fieldKey === 'fakturaref');
-          const refMeta = meta.find(m => refDef && m.definitionId === refDef.id);
-          return {
-            objectId: currentObj.id,
-            objectName: currentObj.name,
-            customerId: currentObj.customerId,
-            invoiceReference: refMeta?.value || null,
-          };
-        }
+    interface InvoiceHierarchyRow {
+      obj_id: string;
+      obj_name: string;
+      customer_id: string;
+      depth: number;
+      definition_id: string | null;
+      field_key: string | null;
+      meta_value: string | null;
+    }
+
+    const rows = await db.execute(sql`
+      WITH RECURSIVE hierarchy AS (
+        SELECT id, name, customer_id, parent_id, 0 AS depth
+        FROM objects
+        WHERE id = ${objectId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
+        UNION ALL
+        SELECT o.id, o.name, o.customer_id, o.parent_id, h.depth + 1
+        FROM objects o
+        JOIN hierarchy h ON o.id = h.parent_id
+        WHERE o.tenant_id = ${tenantId} AND o.deleted_at IS NULL
+      ),
+      relevant_defs AS (
+        SELECT id, field_key
+        FROM metadata_definitions
+        WHERE tenant_id = ${tenantId}
+          AND field_key IN ('invoice_stop', 'fakturaref')
+      )
+      SELECT
+        h.id AS obj_id,
+        h.name AS obj_name,
+        h.customer_id,
+        h.depth,
+        rd.id AS definition_id,
+        rd.field_key,
+        om.value AS meta_value
+      FROM hierarchy h
+      LEFT JOIN relevant_defs rd ON true
+      LEFT JOIN object_metadata om
+        ON om.object_id = h.id
+        AND om.definition_id = rd.id
+        AND om.tenant_id = ${tenantId}
+      ORDER BY h.depth ASC, rd.field_key
+    `);
+
+    const typedRows = rows.rows as InvoiceHierarchyRow[];
+    if (typedRows.length === 0) return null;
+
+    const objectsInOrder: { id: string; name: string; customerId: string }[] = [];
+    const metaByObjField = new Map<string, string | null>();
+    const seenObjects = new Set<string>();
+
+    for (const row of typedRows) {
+      if (!seenObjects.has(row.obj_id)) {
+        seenObjects.add(row.obj_id);
+        objectsInOrder.push({ id: row.obj_id, name: row.obj_name, customerId: row.customer_id });
       }
-      
-      if (!currentObj.parentId) {
+      if (row.field_key && row.meta_value !== null) {
+        metaByObjField.set(`${row.obj_id}::${row.field_key}`, row.meta_value);
+      }
+    }
+
+    for (const obj of objectsInOrder) {
+      const stopValue = metaByObjField.get(`${obj.id}::invoice_stop`);
+      if (stopValue === 'true' || stopValue === '1') {
+        const refValue = metaByObjField.get(`${obj.id}::fakturaref`) || null;
         return {
-          objectId: currentObj.id,
-          objectName: currentObj.name,
-          customerId: currentObj.customerId,
-          invoiceReference: null,
+          objectId: obj.id,
+          objectName: obj.name,
+          customerId: obj.customerId,
+          invoiceReference: refValue,
         };
       }
-      
-      currentObj = await this.getObject(currentObj.parentId);
     }
-    
-    return null;
+
+    const root = objectsInOrder[objectsInOrder.length - 1];
+    return {
+      objectId: root.id,
+      objectName: root.name,
+      customerId: root.customerId,
+      invoiceReference: null,
+    };
   }
 
   // Object Payers

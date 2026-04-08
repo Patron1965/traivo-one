@@ -138,7 +138,6 @@ process.on('exit', (code) => {
       console.error("Failed to seed database:", error);
     }
 
-    // One-time fix: upgrade initial user to owner if still has 'user' role
     try {
       await fixInitialOwnerRole();
     } catch (error) {

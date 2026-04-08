@@ -315,6 +315,7 @@ export const workOrders = pgTable("work_orders", {
   index("idx_work_orders_tenant_date").on(table.tenantId, table.scheduledDate),
   index("idx_work_orders_resource_date").on(table.resourceId, table.scheduledDate),
   index("idx_work_orders_tenant_deleted").on(table.tenantId, table.deletedAt),
+  index("idx_work_orders_tenant_resource_date").on(table.tenantId, table.resourceId, table.scheduledDate),
 ]);
 
 // Orderrader - artiklar kopplade till en order med beräknade priser
@@ -680,9 +681,11 @@ export const subscriptions = pgTable("subscriptions", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
+  index("idx_subscriptions_tenant").on(table.tenantId),
   index("idx_subscriptions_customer").on(table.customerId),
   index("idx_subscriptions_object").on(table.objectId),
-  index("idx_subscriptions_next_gen").on(table.nextGenerationDate)
+  index("idx_subscriptions_next_gen").on(table.nextGenerationDate),
+  index("idx_subscriptions_tenant_status").on(table.tenantId, table.status),
 ]);
 
 // Resurs-positionshistorik för breadcrumb trail och realtidsspårning
@@ -755,7 +758,10 @@ export const clusters = pgTable("clusters", {
   status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
-});
+}, (table) => [
+  index("idx_clusters_tenant").on(table.tenantId),
+  index("idx_clusters_tenant_status").on(table.tenantId, table.status),
+]);
 
 // Team - grupper av resurser
 export const teams = pgTable("teams", {
@@ -1694,8 +1700,11 @@ export const objectMetadata = pgTable("object_metadata", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
+  index("idx_object_metadata_tenant").on(table.tenantId),
   index("idx_object_metadata_object").on(table.objectId),
   index("idx_object_metadata_definition").on(table.definitionId),
+  index("idx_object_metadata_object_definition").on(table.objectId, table.definitionId),
+  index("idx_object_metadata_tenant_object").on(table.tenantId, table.objectId),
 ]);
 
 // ============================================
