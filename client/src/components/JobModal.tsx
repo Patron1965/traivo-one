@@ -363,67 +363,76 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
+            <div className="space-y-2 relative">
               <Label>Kund</Label>
-              <Popover open={customerPopoverOpen} onOpenChange={setCustomerPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={customerPopoverOpen}
-                    className="w-full justify-between font-normal"
+              <div className="relative">
+                <div className="flex items-center border rounded-md bg-background">
+                  <Search className="ml-3 h-4 w-4 shrink-0 opacity-50" />
+                  <input
+                    className="flex h-9 w-full bg-transparent px-2 py-1 text-sm outline-none placeholder:text-muted-foreground"
+                    placeholder={selectedCustomerName || "Sök kund..."}
+                    value={customerSearch}
+                    onChange={(e) => {
+                      setCustomerSearch(e.target.value);
+                      if (!customerPopoverOpen) setCustomerPopoverOpen(true);
+                    }}
+                    onFocus={() => setCustomerPopoverOpen(true)}
+                    onBlur={() => setTimeout(() => setCustomerPopoverOpen(false), 150)}
                     data-testid="select-customer"
-                  >
-                    {selectedCustomerName || "Sök kund..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[300px] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
-                  <div className="flex items-center border-b px-3">
-                    <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                    <input
-                      className="flex h-11 w-full bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
-                      placeholder="Skriv för att söka kund..."
-                      value={customerSearch}
-                      onChange={(e) => setCustomerSearch(e.target.value)}
-                      autoFocus
-                    />
+                  />
+                  {formData.customerId && (
+                    <button
+                      type="button"
+                      className="mr-2 opacity-50 hover:opacity-100"
+                      onClick={() => {
+                        setFormData({...formData, customerId: "", objectId: ""});
+                        setSelectedObjectName("");
+                        setCustomerSearch("");
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                {customerPopoverOpen && (
+                  <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
+                    <ScrollArea className="max-h-[200px]">
+                      {filteredCustomers.length === 0 ? (
+                        <div className="py-4 text-center text-sm text-muted-foreground">Ingen kund hittad</div>
+                      ) : (
+                        <div className="p-1">
+                          {filteredCustomers.map(c => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              className={cn(
+                                "relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
+                                formData.customerId === c.id && "bg-accent"
+                              )}
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => {
+                                setFormData({...formData, customerId: c.id, objectId: ""});
+                                setSelectedObjectName("");
+                                setObjectSearch("");
+                                setCustomerPopoverOpen(false);
+                                setCustomerSearch("");
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4 shrink-0", formData.customerId === c.id ? "opacity-100" : "opacity-0")} />
+                              {c.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {!customerSearch && customers.length > 50 && (
+                        <div className="px-3 py-2 text-xs text-muted-foreground text-center border-t">
+                          Visar 50 av {customers.length} — skriv för att söka
+                        </div>
+                      )}
+                    </ScrollArea>
                   </div>
-                  <ScrollArea className="max-h-[200px]">
-                    {filteredCustomers.length === 0 ? (
-                      <div className="py-6 text-center text-sm text-muted-foreground">Ingen kund hittad</div>
-                    ) : (
-                      <div className="p-1">
-                        {filteredCustomers.map(c => (
-                          <button
-                            key={c.id}
-                            type="button"
-                            className={cn(
-                              "relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
-                              formData.customerId === c.id && "bg-accent"
-                            )}
-                            onClick={() => {
-                              setFormData({...formData, customerId: c.id, objectId: ""});
-                              setSelectedObjectName("");
-                              setObjectSearch("");
-                              setCustomerPopoverOpen(false);
-                              setCustomerSearch("");
-                            }}
-                          >
-                            <Check className={cn("mr-2 h-4 w-4", formData.customerId === c.id ? "opacity-100" : "opacity-0")} />
-                            {c.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {!customerSearch && customers.length > 50 && (
-                      <div className="px-3 py-2 text-xs text-muted-foreground text-center border-t">
-                        Visar 50 av {customers.length} — skriv för att söka
-                      </div>
-                    )}
-                  </ScrollArea>
-                </PopoverContent>
-              </Popover>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2">
