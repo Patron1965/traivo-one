@@ -1,16 +1,123 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { z } from "zod";
-import { insertCustomerSchema, insertObjectSchema, objects, customers } from "@shared/schema";
+import { insertCustomerSchema, insertObjectSchema, objects, customers, workOrders } from "@shared/schema";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { db } from "../db";
-import { eq, and, isNull, sql, ilike, or } from "drizzle-orm";
+import { eq, and, isNull, sql, ilike, or, inArray } from "drizzle-orm";
 import { ensureClusterAndAssign } from "../auto-cluster";
 
 export async function registerCustomerRoutes(app: Express) {
+
+app.get("/api/proactive-sales/inactive", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const months = Math.max(1, Math.min(60, parseInt(req.query.months as string) || 12));
+  const search = (req.query.search as string || "").trim();
+  const sortBy = (req.query.sortBy as string) === "revenue" ? "revenue" : "days";
+  const limit = Math.max(1, Math.min(500, parseInt(req.query.limit as string) || 200));
+
+  const cutoffDate = new Date();
+  cutoffDate.setMonth(cutoffDate.getMonth() - months);
+  const cutoffStr = cutoffDate.toISOString().split("T")[0];
+
+  const searchCondition = search
+    ? sql`AND (c.name ILIKE ${'%' + search + '%'} OR COALESCE(c.email, '') ILIKE ${'%' + search + '%'} OR COALESCE(c.contact_person, '') ILIKE ${'%' + search + '%'})`
+    : sql``;
+
+  const orderByClause = sortBy === "revenue"
+    ? sql`ORDER BY total_revenue DESC, days_since_last_order DESC`
+    : sql`ORDER BY days_since_last_order DESC, total_revenue DESC`;
+
+  const inactiveBase = sql`
+    FROM customers c
+    LEFT JOIN (
+      SELECT
+        customer_id,
+        MAX(scheduled_date) as last_order_date,
+        COUNT(*) as order_count,
+        SUM(COALESCE(cached_value, 0)) as total_revenue
+      FROM work_orders
+      WHERE tenant_id = ${tenantId}
+        AND status IN ('completed', 'scheduled', 'in_progress')
+      GROUP BY customer_id
+    ) agg ON agg.customer_id = c.id
+    WHERE c.tenant_id = ${tenantId}
+      AND c.deleted_at IS NULL
+      AND (agg.last_order_date IS NULL OR agg.last_order_date < ${cutoffStr}::date)
+      ${searchCondition}
+  `;
+
+  const [inactiveRows, summaryResult, totalCustomersResult, totalRevenueResult] = await Promise.all([
+    db.execute(sql`
+      SELECT
+        c.id,
+        c.name,
+        c.contact_person,
+        c.email,
+        c.phone,
+        c.address,
+        c.city,
+        agg.last_order_date,
+        agg.order_count,
+        agg.total_revenue,
+        CASE
+          WHEN agg.last_order_date IS NULL THEN 9999
+          ELSE EXTRACT(DAY FROM NOW() - agg.last_order_date)::int
+        END as days_since_last_order
+      ${inactiveBase}
+      ${orderByClause}
+      LIMIT ${limit}
+    `),
+    db.execute(sql`
+      SELECT
+        COUNT(*)::int as inactive_count,
+        COALESCE(SUM(agg.total_revenue), 0)::bigint as lost_revenue
+      ${inactiveBase}
+    `),
+    db.execute(sql`
+      SELECT COUNT(*) as count FROM customers WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
+    `),
+    db.execute(sql`
+      SELECT COALESCE(SUM(cached_value), 0) as total
+      FROM work_orders
+      WHERE tenant_id = ${tenantId} AND status IN ('completed', 'scheduled', 'in_progress')
+    `),
+  ]);
+
+  const totalCustomers = parseInt((totalCustomersResult as any).rows?.[0]?.count ?? "0");
+  const totalRevenueAll = parseInt((totalRevenueResult as any).rows?.[0]?.total ?? "0");
+  const summaryRow = (summaryResult as any).rows?.[0];
+  const inactiveCount = parseInt(summaryRow?.inactive_count ?? "0");
+  const totalLostRevenue = parseInt(summaryRow?.lost_revenue ?? "0");
+
+  const rows = (inactiveRows as any).rows || [];
+  const inactiveList = rows.map((r: any) => ({
+    id: r.id,
+    name: r.name,
+    contactPerson: r.contact_person,
+    email: r.email,
+    phone: r.phone,
+    address: r.address,
+    city: r.city,
+    lastOrderDate: r.last_order_date ? new Date(r.last_order_date).toISOString().split("T")[0] : null,
+    daysSinceLastOrder: parseInt(r.days_since_last_order),
+    orderCount: parseInt(r.order_count || "0"),
+    totalRevenue: parseInt(r.total_revenue || "0"),
+  }));
+
+  res.json({
+    customers: inactiveList,
+    summary: {
+      inactiveCount,
+      totalCustomers,
+      totalLostRevenue,
+      totalRevenueAll,
+    },
+  });
+}));
 
 app.get("/api/customers", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);

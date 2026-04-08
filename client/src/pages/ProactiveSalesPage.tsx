@@ -1,24 +1,34 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Search, TrendingDown, Users, DollarSign, AlertTriangle, Phone, Mail } from "lucide-react";
-import type { Customer, WorkOrder } from "@shared/schema";
+import { Loader2, Search, TrendingDown, Users, DollarSign, AlertTriangle, Phone, Mail, UserCircle } from "lucide-react";
 
 interface InactiveCustomer {
   id: string;
   name: string;
+  contactPerson?: string | null;
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+  city?: string | null;
   lastOrderDate: string | null;
   daysSinceLastOrder: number;
   totalRevenue: number;
   orderCount: number;
+}
+
+interface ProactiveSalesResponse {
+  customers: InactiveCustomer[];
+  summary: {
+    inactiveCount: number;
+    totalCustomers: number;
+    totalLostRevenue: number;
+    totalRevenueAll: number;
+  };
 }
 
 export default function ProactiveSalesPage() {
@@ -26,74 +36,18 @@ export default function ProactiveSalesPage() {
   const [monthsThreshold, setMonthsThreshold] = useState("12");
   const [sortBy, setSortBy] = useState<"days" | "revenue">("days");
 
-  const { data: customers = [], isLoading: customersLoading } = useQuery<Customer[]>({
-    queryKey: ["/api/customers"],
+  const debouncedSearch = useDebounce(search, 300);
+
+  const queryParams = new URLSearchParams({ months: monthsThreshold, sortBy });
+  if (debouncedSearch) queryParams.set("search", debouncedSearch);
+  const queryUrl = `/api/proactive-sales/inactive?${queryParams}`;
+
+  const { data, isLoading } = useQuery<ProactiveSalesResponse>({
+    queryKey: [queryUrl],
   });
 
-  const { data: workOrders = [], isLoading: ordersLoading } = useQuery<WorkOrder[]>({
-    queryKey: ["/api/work-orders"],
-  });
-
-  const inactiveCustomers = useMemo(() => {
-    const now = new Date();
-    const thresholdMs = parseInt(monthsThreshold) * 30 * 24 * 60 * 60 * 1000;
-
-    const customerOrderData = new Map<string, { lastDate: Date | null; total: number; count: number }>();
-
-    for (const wo of workOrders) {
-      if (!wo.customerId) continue;
-      const existing = customerOrderData.get(wo.customerId) || { lastDate: null, total: 0, count: 0 };
-      
-      if (wo.scheduledDate) {
-        const d = new Date(wo.scheduledDate);
-        if (!existing.lastDate || d > existing.lastDate) existing.lastDate = d;
-      }
-      existing.total += (wo.cachedValue || 0);
-      existing.count++;
-      customerOrderData.set(wo.customerId, existing);
-    }
-
-    const results: InactiveCustomer[] = [];
-
-    for (const cust of customers) {
-      const data = customerOrderData.get(cust.id);
-      const lastDate = data?.lastDate || null;
-      const daysSince = lastDate ? Math.floor((now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)) : 9999;
-      
-      if (daysSince * 24 * 60 * 60 * 1000 < thresholdMs && data) continue;
-
-      if (search) {
-        const q = search.toLowerCase();
-        if (!cust.name.toLowerCase().includes(q) && !(cust.email || "").toLowerCase().includes(q)) continue;
-      }
-
-      results.push({
-        id: cust.id,
-        name: cust.name,
-        email: cust.email,
-        phone: cust.phone,
-        address: cust.address,
-        lastOrderDate: lastDate ? lastDate.toISOString().split("T")[0] : null,
-        daysSinceLastOrder: daysSince,
-        totalRevenue: data?.total || 0,
-        orderCount: data?.count || 0,
-      });
-    }
-
-    results.sort((a, b) => sortBy === "days" 
-      ? b.daysSinceLastOrder - a.daysSinceLastOrder
-      : b.totalRevenue - a.totalRevenue
-    );
-
-    return results;
-  }, [customers, workOrders, monthsThreshold, search, sortBy]);
-
-  const totalLostRevenue = useMemo(() => 
-    inactiveCustomers.reduce((sum, c) => sum + c.totalRevenue, 0), 
-    [inactiveCustomers]
-  );
-
-  const isLoading = customersLoading || ordersLoading;
+  const inactiveCustomers = data?.customers ?? [];
+  const summary = data?.summary ?? { inactiveCount: 0, totalCustomers: 0, totalLostRevenue: 0, totalRevenueAll: 0 };
 
   if (isLoading) {
     return (
@@ -104,9 +58,9 @@ export default function ProactiveSalesPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold" data-testid="heading-proactive-sales">Proaktiv försäljning</h1>
+        <h1 className="text-2xl font-semibold" data-testid="heading-proactive-sales">Proaktiv försäljning</h1>
         <p className="text-muted-foreground">Identifiera inaktiva kunder och potentiella försäljningsmöjligheter</p>
       </div>
 
@@ -115,10 +69,10 @@ export default function ProactiveSalesPage() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
-                <AlertTriangle className="h-5 w-5 text-amber-600" />
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold" data-testid="stat-inactive-count">{inactiveCustomers.length}</p>
+                <p className="text-2xl font-bold" data-testid="stat-inactive-count">{summary.inactiveCount}</p>
                 <p className="text-xs text-muted-foreground">Inaktiva kunder</p>
               </div>
             </div>
@@ -128,10 +82,10 @@ export default function ProactiveSalesPage() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                <Users className="h-5 w-5 text-blue-600" />
+                <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{customers.length}</p>
+                <p className="text-2xl font-bold">{summary.totalCustomers}</p>
                 <p className="text-xs text-muted-foreground">Totalt antal kunder</p>
               </div>
             </div>
@@ -141,11 +95,11 @@ export default function ProactiveSalesPage() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
-                <TrendingDown className="h-5 w-5 text-red-600" />
+                <TrendingDown className="h-5 w-5 text-red-600 dark:text-red-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold" data-testid="stat-lost-revenue">
-                  {(totalLostRevenue / 100).toLocaleString("sv-SE")} kr
+                  {(summary.totalLostRevenue / 100).toLocaleString("sv-SE")} kr
                 </p>
                 <p className="text-xs text-muted-foreground">Historisk intäkt (inaktiva)</p>
               </div>
@@ -156,11 +110,11 @@ export default function ProactiveSalesPage() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                <DollarSign className="h-5 w-5 text-green-600" />
+                <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold">
-                  {((workOrders.reduce((s, wo) => s + (wo.cachedValue || 0), 0)) / 100).toLocaleString("sv-SE")} kr
+                  {(summary.totalRevenueAll / 100).toLocaleString("sv-SE")} kr
                 </p>
                 <p className="text-xs text-muted-foreground">Total intäkt (alla)</p>
               </div>
@@ -213,38 +167,56 @@ export default function ProactiveSalesPage() {
               <p>Inga inaktiva kunder hittades med nuvarande filter</p>
             </div>
           ) : (
-            <div className="border rounded-lg overflow-auto">
+            <div className="border rounded-lg overflow-auto dark:border-gray-700">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Kund</TableHead>
-                    <TableHead>Kontakt</TableHead>
+                    <TableHead className="hidden md:table-cell">Kontaktperson</TableHead>
+                    <TableHead className="hidden md:table-cell">Kontakt</TableHead>
                     <TableHead className="text-right">Senaste order</TableHead>
                     <TableHead className="text-right">Dagar sedan</TableHead>
-                    <TableHead className="text-right">Ordrar</TableHead>
+                    <TableHead className="text-right hidden lg:table-cell">Ordrar</TableHead>
                     <TableHead className="text-right">Historisk intäkt</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {inactiveCustomers.slice(0, 100).map((cust) => (
+                  {inactiveCustomers.map((cust) => (
                     <TableRow key={cust.id} data-testid={`row-inactive-customer-${cust.id}`}>
                       <TableCell>
                         <div>
                           <p className="font-medium">{cust.name}</p>
-                          {cust.address && <p className="text-xs text-muted-foreground">{cust.address}</p>}
+                          {(cust.address || cust.city) && (
+                            <p className="text-xs text-muted-foreground">
+                              {[cust.address, cust.city].filter(Boolean).join(", ")}
+                            </p>
+                          )}
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
+                      <TableCell className="hidden md:table-cell">
+                        {cust.contactPerson ? (
+                          <div className="flex items-center gap-1.5 text-sm text-foreground">
+                            <UserCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                            {cust.contactPerson}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <div className="flex flex-col gap-1">
                           {cust.phone && (
-                            <a href={`tel:${cust.phone}`} className="text-blue-600 hover:underline text-sm flex items-center gap-1" data-testid={`link-phone-${cust.id}`}>
+                            <a href={`tel:${cust.phone}`} className="text-blue-600 dark:text-blue-400 hover:underline text-sm flex items-center gap-1" data-testid={`link-phone-${cust.id}`}>
                               <Phone className="h-3 w-3" />{cust.phone}
                             </a>
                           )}
                           {cust.email && (
-                            <a href={`mailto:${cust.email}`} className="text-blue-600 hover:underline text-sm flex items-center gap-1" data-testid={`link-email-${cust.id}`}>
-                              <Mail className="h-3 w-3" />
+                            <a href={`mailto:${cust.email}`} className="text-blue-600 dark:text-blue-400 hover:underline text-sm flex items-center gap-1" data-testid={`link-email-${cust.id}`}>
+                              <Mail className="h-3 w-3" />{cust.email}
                             </a>
+                          )}
+                          {!cust.phone && !cust.email && (
+                            <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </div>
                       </TableCell>
@@ -256,7 +228,7 @@ export default function ProactiveSalesPage() {
                           {cust.daysSinceLastOrder >= 9999 ? "—" : `${cust.daysSinceLastOrder}d`}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right text-sm">{cust.orderCount}</TableCell>
+                      <TableCell className="text-right text-sm hidden lg:table-cell">{cust.orderCount}</TableCell>
                       <TableCell className="text-right font-medium text-sm">
                         {(cust.totalRevenue / 100).toLocaleString("sv-SE")} kr
                       </TableCell>
@@ -270,4 +242,13 @@ export default function ProactiveSalesPage() {
       </Card>
     </div>
   );
+}
+
+function useDebounce(value: string, delay: number) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debouncedValue;
 }
