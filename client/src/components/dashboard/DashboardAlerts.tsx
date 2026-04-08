@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertTriangle,
@@ -130,7 +130,7 @@ export function DashboardAlerts() {
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <ScrollArea className="max-h-[320px]">
+        <div className="max-h-[320px] overflow-y-auto">
           <div className="space-y-4">
             {overdue.length > 0 && (
               <div data-testid="alerts-section-overdue">
@@ -249,7 +249,7 @@ export function DashboardAlerts() {
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
       </CardContent>
     </Card>
   );

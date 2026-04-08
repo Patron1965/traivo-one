@@ -1546,7 +1546,7 @@ export default function ImportPage() {
                           {customerValidation.duplicateCount} dubbletter hittade
                         </span>
                       </div>
-                      <ScrollArea className="max-h-32">
+                      <div className="max-h-32 overflow-y-auto">
                         <ul className="text-xs space-y-1 text-amber-600 dark:text-amber-400">
                           {customerValidation.preview.filter(p => p.duplicate).slice(0, 20).map((p, i) => (
                             <li key={i}>
@@ -1554,7 +1554,7 @@ export default function ImportPage() {
                             </li>
                           ))}
                         </ul>
-                      </ScrollArea>
+                      </div>
                     </div>
                   )}
 
@@ -1562,7 +1562,7 @@ export default function ImportPage() {
                     <summary className="cursor-pointer text-muted-foreground hover:text-foreground font-medium text-xs">
                       Visa förhandsgranskning ({customerValidation.preview.length} rader)
                     </summary>
-                    <ScrollArea className="max-h-48 mt-2">
+                    <div className="max-h-48 overflow-y-auto mt-2">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -1599,7 +1599,7 @@ export default function ImportPage() {
                           ))}
                         </TableBody>
                       </Table>
-                    </ScrollArea>
+                    </div>
                   </details>
 
                   <div className="flex items-center gap-3">
@@ -2276,13 +2276,13 @@ export default function ImportPage() {
                         <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
                           Visa felmeddelanden ({modusResults["invoice-lines"].errors.length})
                         </summary>
-                        <ScrollArea className="max-h-32 mt-2">
+                        <div className="max-h-32 overflow-y-auto mt-2">
                           <ul className="text-xs text-red-500 space-y-0.5 ml-4 list-disc">
                             {modusResults["invoice-lines"].errors.map((e: string, i: number) => (
                               <li key={i}>{e}</li>
                             ))}
                           </ul>
-                        </ScrollArea>
+                        </div>
                       </details>
                     </div>
                   )}
@@ -2513,7 +2513,7 @@ export default function ImportPage() {
                           Markera alla ({objects.length} objekt) — {selectedMetadataObjects.size} valda
                         </span>
                       </div>
-                      <ScrollArea className="max-h-48">
+                      <div className="max-h-48 overflow-y-auto">
                         <div className="divide-y">
                           {objects.slice(0, 200).map(obj => (
                             <div key={obj.id} className="flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-muted/30">
@@ -2539,7 +2539,7 @@ export default function ImportPage() {
                             </div>
                           )}
                         </div>
-                      </ScrollArea>
+                      </div>
                     </div>
                   )}
 
@@ -2637,11 +2637,11 @@ export default function ImportPage() {
                         <div className="col-span-full">
                           <details className="text-xs">
                             <summary className="text-red-600 cursor-pointer font-medium">Visa fel ({metadataCsvResult.errors.length})</summary>
-                            <ScrollArea className="max-h-24 mt-1">
+                            <div className="max-h-24 overflow-y-auto mt-1">
                               <ul className="text-muted-foreground space-y-0.5 ml-4 list-disc">
                                 {metadataCsvResult.errors.map((err, i) => <li key={i}>{err}</li>)}
                               </ul>
-                            </ScrollArea>
+                            </div>
                           </details>
                         </div>
                       )}
@@ -2689,7 +2689,7 @@ export default function ImportPage() {
                 <CardDescription>Tidigare importer med möjlighet att ångra</CardDescription>
               </CardHeader>
               <CardContent>
-                <ScrollArea className="max-h-60">
+                <div className="max-h-60 overflow-y-auto">
                   <div className="space-y-2">
                     {importBatches.map((batch) => (
                       <div 
@@ -2735,7 +2735,7 @@ export default function ImportPage() {
                       </div>
                     ))}
                   </div>
-                </ScrollArea>
+                </div>
               </CardContent>
             </Card>
           )}

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { BarChart3, User, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
@@ -126,7 +126,7 @@ export function CapacityOverview() {
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <ScrollArea className="max-h-[320px]">
+        <div className="max-h-[320px] overflow-y-auto">
           <div className="space-y-3">
             {sorted.map((r) => {
               const color = getUtilizationColor(r.utilization);
@@ -166,7 +166,7 @@ export function CapacityOverview() {
               );
             })}
           </div>
-        </ScrollArea>
+        </div>
 
         <div className="flex items-center justify-center gap-4 mt-4 pt-3 border-t">
           <div className="flex items-center gap-1.5">

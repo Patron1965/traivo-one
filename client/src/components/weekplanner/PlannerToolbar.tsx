@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -213,7 +213,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                   <Separator className="mb-2" />
                 </>
               )}
-              <ScrollArea className="max-h-64">
+              <div className="max-h-64 overflow-y-auto">
                 <div className="space-y-1">
                   {resources.map((resource) => (
                     <label key={resource.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer" data-testid={`resource-filter-${resource.id}`}>
@@ -234,7 +234,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                     </label>
                   ))}
                 </div>
-              </ScrollArea>
+              </div>
             </PopoverContent>
           </Popover>
 

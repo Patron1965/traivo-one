@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -524,7 +524,7 @@ export default function FleetManagementPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ScrollArea className="max-h-[300px]">
+                  <div className="max-h-[300px] overflow-y-auto">
                     <div className="space-y-2">
                       {sortedByServiceUrgency.map(vehicle => {
                         const status = getServiceStatus(vehicle);
@@ -546,7 +546,7 @@ export default function FleetManagementPage() {
                         </div>
                       )}
                     </div>
-                  </ScrollArea>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -597,7 +597,7 @@ export default function FleetManagementPage() {
                 ) : filteredMaintenanceLogs.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">Inga underhållsposter</div>
                 ) : (
-                  <ScrollArea className="max-h-[400px]">
+                  <div className="max-h-[400px] overflow-y-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -628,7 +628,7 @@ export default function FleetManagementPage() {
                         ))}
                       </TableBody>
                     </Table>
-                  </ScrollArea>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -728,7 +728,7 @@ export default function FleetManagementPage() {
                 ) : filteredFuelLogs.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">Inga tankningsposter</div>
                 ) : (
-                  <ScrollArea className="max-h-[400px]">
+                  <div className="max-h-[400px] overflow-y-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -761,7 +761,7 @@ export default function FleetManagementPage() {
                         ))}
                       </TableBody>
                     </Table>
-                  </ScrollArea>
+                  </div>
                 )}
               </CardContent>
             </Card>

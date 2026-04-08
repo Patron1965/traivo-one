@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
@@ -735,7 +735,7 @@ export default function InvoicingPage() {
               </Card>
             ) : (
               <Card>
-                <ScrollArea className="max-h-[600px]">
+                <div className="max-h-[600px] overflow-y-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -787,7 +787,7 @@ export default function InvoicingPage() {
                       })}
                     </TableBody>
                   </Table>
-                </ScrollArea>
+                </div>
               </Card>
             )}
           </TabsContent>
@@ -872,7 +872,7 @@ export default function InvoicingPage() {
               </Card>
             ) : (
               <Card>
-                <ScrollArea className="max-h-[600px]">
+                <div className="max-h-[600px] overflow-y-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -967,7 +967,7 @@ export default function InvoicingPage() {
                       ))}
                     </TableBody>
                   </Table>
-                </ScrollArea>
+                </div>
               </Card>
             )}
           </TabsContent>

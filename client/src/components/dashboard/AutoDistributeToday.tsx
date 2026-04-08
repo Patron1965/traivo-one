@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Sparkles, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -99,7 +98,7 @@ export function AutoDistributeToday() {
           </DialogHeader>
 
           {result && result.assignments.length > 0 && (
-            <ScrollArea className="max-h-[400px]">
+            <div className="max-h-[400px] overflow-y-auto">
               <div className="space-y-2 pr-4">
                 {result.assignments.map((a, i) => (
                   <Card key={a.workOrderId} className="p-3" data-testid={`auto-distribute-preview-${i}`}>
@@ -129,7 +128,7 @@ export function AutoDistributeToday() {
                   </Card>
                 ))}
               </div>
-            </ScrollArea>
+            </div>
           )}
 
           {result && result.totalUnplanned > result.totalAssigned && (

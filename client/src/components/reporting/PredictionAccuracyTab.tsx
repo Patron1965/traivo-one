@@ -465,7 +465,7 @@ function AdjustDurationsDialog({ open, onOpenChange, suggestions, onApply, isApp
             Granska och godkänn varje förslag individuellt.
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="max-h-[50vh]">
+        <div className="max-h-[50vh] overflow-y-auto">
           <div className="space-y-3 pr-4">
             {suggestions.map(s => {
               const isAppliedItem = applied.has(s.article_id);
@@ -523,7 +523,7 @@ function AdjustDurationsDialog({ open, onOpenChange, suggestions, onApply, isApp
               </p>
             )}
           </div>
-        </ScrollArea>
+        </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-close-adjust">Stäng</Button>
         </DialogFooter>

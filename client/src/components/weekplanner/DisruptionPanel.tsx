@@ -4,7 +4,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -109,7 +109,7 @@ export function DisruptionPanel() {
         </Badge>
       </div>
 
-      <ScrollArea className="max-h-[300px]">
+      <div className="max-h-[300px] overflow-y-auto">
         <div className="space-y-2">
           {activeDisruptions.map(event => {
             const Icon = typeIcons[event.type] || AlertCircle;
@@ -245,7 +245,7 @@ export function DisruptionPanel() {
             );
           })}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
