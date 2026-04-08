@@ -48,7 +48,11 @@ export function ObjectContactsPanel({ objectId, tenantId, readOnly = false }: Ob
 
   const { data: contacts = [], isLoading } = useQuery<ObjectContact[]>({
     queryKey: ["/api/objects", objectId, "contacts", "inherited"],
-    queryFn: () => fetch(`/api/objects/${objectId}/contacts?inherited=true`).then(r => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`/api/objects/${objectId}/contacts?inherited=true`);
+      if (!r.ok) return [];
+      return r.json();
+    },
   });
 
   const createMutation = useMutation({

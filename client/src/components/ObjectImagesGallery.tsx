@@ -49,7 +49,11 @@ export function ObjectImagesGallery({ objectId, tenantId, readOnly = false }: Ob
 
   const { data: images = [], isLoading } = useQuery<ObjectImage[]>({
     queryKey: ["/api/objects", objectId, "images"],
-    queryFn: () => fetch(`/api/objects/${objectId}/images`).then(r => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`/api/objects/${objectId}/images`);
+      if (!r.ok) return [];
+      return r.json();
+    },
   });
 
   const createMutation = useMutation({

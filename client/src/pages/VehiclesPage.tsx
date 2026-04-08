@@ -182,7 +182,11 @@ export default function VehiclesPage() {
   const weekEnd = addDays(availabilityWeekStart, 6);
   const { data: bookings = [] } = useQuery<EquipmentBooking[]>({
     queryKey: ["/api/equipment-bookings", availabilityWeekStart.toISOString(), weekEnd.toISOString()],
-    queryFn: () => fetch(`/api/equipment-bookings?startDate=${availabilityWeekStart.toISOString()}&endDate=${weekEnd.toISOString()}`).then(r => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`/api/equipment-bookings?startDate=${availabilityWeekStart.toISOString()}&endDate=${weekEnd.toISOString()}`);
+      if (!r.ok) return [];
+      return r.json();
+    },
   });
   const { data: resources = [] } = useQuery<Resource[]>({ queryKey: ["/api/resources"] });
   const { data: teams = [] } = useQuery<Team[]>({ queryKey: ["/api/teams"] });

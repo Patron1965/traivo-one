@@ -47,7 +47,11 @@ export function TaskTimewindowsEditor({ workOrderId, tenantId, readOnly = false 
 
   const { data: timewindows = [], isLoading } = useQuery<TaskDesiredTimewindow[]>({
     queryKey: ["/api/work-orders", workOrderId, "timewindows"],
-    queryFn: () => fetch(`/api/work-orders/${workOrderId}/timewindows`).then(r => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`/api/work-orders/${workOrderId}/timewindows`);
+      if (!r.ok) return [];
+      return r.json();
+    },
   });
 
   const createMutation = useMutation({
