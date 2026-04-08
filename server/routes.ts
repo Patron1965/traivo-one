@@ -406,8 +406,8 @@ export async function registerRoutes(
     }
   });
 
-  registerCustomerRoutes(app);
   registerObjectRoutes(app);
+  registerCustomerRoutes(app);
   registerResourceRoutes(app);
   registerWorkOrderRoutes(app);
   registerImportRoutes(app);
