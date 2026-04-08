@@ -69,6 +69,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
   const [pendingObjectId, setPendingObjectId] = useState("");
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
   const [teamPopoverOpen, setTeamPopoverOpen] = useState(false);
+  const [teamSearchQuery, setTeamSearchQuery] = useState("");
   const [competencyWarning, setCompetencyWarning] = useState<{ hasWarning: boolean; message?: string; missingArticles?: Array<{ id: string; name: string }> } | null>(null);
   const [checkingCompetency, setCheckingCompetency] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<Array<{ resourceId: string; resourceName: string; date: string; startTime: string; score: number; reasons: string[] }>>([]);
@@ -435,36 +436,47 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 relative">
               <Label>Objekt</Label>
-              <Popover open={objectPopoverOpen} onOpenChange={setObjectPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={objectPopoverOpen}
-                    className="w-full justify-between font-normal"
+              <div className="relative">
+                <div className="flex items-center border rounded-md bg-background">
+                  <Search className="ml-3 h-4 w-4 shrink-0 opacity-50" />
+                  <input
+                    className="flex h-9 w-full bg-transparent px-2 py-1 text-sm outline-none placeholder:text-muted-foreground"
+                    placeholder={selectedObjectName || "Sök objekt..."}
+                    value={objectSearch}
+                    onChange={(e) => {
+                      setObjectSearch(e.target.value);
+                      if (!objectPopoverOpen) setObjectPopoverOpen(true);
+                    }}
+                    onFocus={() => setObjectPopoverOpen(true)}
+                    onBlur={() => setTimeout(() => setObjectPopoverOpen(false), 200)}
                     data-testid="select-object"
-                  >
-                    {selectedObjectName || "Sök objekt..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[300px] p-0" align="start">
-                  <Command shouldFilter={false}>
-                    <CommandInput 
-                      placeholder="Skriv för att söka..." 
-                      value={objectSearch}
-                      onValueChange={setObjectSearch}
-                    />
-                    <CommandList>
+                  />
+                  {formData.objectId && (
+                    <button
+                      type="button"
+                      className="mr-2 opacity-50 hover:opacity-100"
+                      onClick={() => {
+                        setFormData({...formData, objectId: ""});
+                        setSelectedObjectName("");
+                        setObjectSearch("");
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                {objectPopoverOpen && (
+                  <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
+                    <ScrollArea className="max-h-[200px]">
                       {objectsLoading && (
                         <div className="flex items-center justify-center py-6">
                           <Loader2 className="h-4 w-4 animate-spin" />
                         </div>
                       )}
                       {!objectsLoading && objects.length === 0 && objectSearch.length >= 2 && (
-                        <CommandEmpty>Inga objekt hittades</CommandEmpty>
+                        <div className="py-4 text-center text-sm text-muted-foreground">Inga objekt hittades</div>
                       )}
                       {!objectsLoading && objects.length === 0 && objectSearch.length < 2 && (
                         <div className="py-4 text-center text-sm text-muted-foreground">
@@ -472,14 +484,20 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                         </div>
                       )}
                       {objects.length > 0 && (
-                        <CommandGroup>
+                        <div className="p-1">
                           {objects.map((obj) => (
-                            <CommandItem
+                            <button
                               key={obj.id}
-                              value={obj.id}
-                              onSelect={async () => {
+                              type="button"
+                              className={cn(
+                                "relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
+                                formData.objectId === obj.id && "bg-accent"
+                              )}
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={async () => {
                                 setSelectedObjectName(obj.name);
                                 setObjectPopoverOpen(false);
+                                setObjectSearch("");
                                 try {
                                   const res = await fetch(`/api/objects/${obj.id}/billing-customers`);
                                   const data = await res.json();
@@ -495,26 +513,21 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                                 }
                               }}
                             >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  formData.objectId === obj.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              <div className="flex flex-col">
+                              <Check className={cn("mr-2 h-4 w-4 shrink-0", formData.objectId === obj.id ? "opacity-100" : "opacity-0")} />
+                              <div className="flex flex-col items-start">
                                 <span>{obj.name}</span>
                                 {obj.address && (
                                   <span className="text-xs text-muted-foreground">{obj.address}</span>
                                 )}
                               </div>
-                            </CommandItem>
+                            </button>
                           ))}
-                        </CommandGroup>
+                        </div>
                       )}
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+                    </ScrollArea>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -595,73 +608,83 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
               </div>
             )}
 
-            <div className="space-y-2">
+            <div className="space-y-2 relative">
               <Label className="flex items-center gap-1.5">
                 <Users className="h-3.5 w-3.5" />
                 Tekniker {formData.teamResourceIds.length > 1 && <Badge variant="secondary" className="text-xs px-1.5 py-0">{formData.teamResourceIds.length} st</Badge>}
               </Label>
-              <Popover open={teamPopoverOpen} onOpenChange={setTeamPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    className="w-full justify-between font-normal h-auto min-h-[36px]"
-                    data-testid="select-resource"
-                  >
-                    {formData.teamResourceIds.length === 0 ? (
-                      <span className="text-muted-foreground">Välj tekniker...</span>
-                    ) : (
-                      <div className="flex flex-wrap gap-1 py-0.5">
-                        {formData.teamResourceIds.map((id, i) => {
-                          const r = resources.find(res => res.id === id);
-                          return (
-                            <Badge
-                              key={id}
-                              variant={i === 0 ? "default" : "secondary"}
-                              className="text-xs gap-1 pr-1"
+              <div className="relative">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-md border bg-background px-3 h-auto min-h-[36px] text-sm"
+                  onClick={() => setTeamPopoverOpen(!teamPopoverOpen)}
+                  data-testid="select-resource"
+                >
+                  {formData.teamResourceIds.length === 0 ? (
+                    <span className="text-muted-foreground py-1.5">Välj tekniker...</span>
+                  ) : (
+                    <div className="flex flex-wrap gap-1 py-1">
+                      {formData.teamResourceIds.map((id, i) => {
+                        const r = resources.find(res => res.id === id);
+                        return (
+                          <Badge
+                            key={id}
+                            variant={i === 0 ? "default" : "secondary"}
+                            className="text-xs gap-1 pr-1"
+                          >
+                            {r?.name || id}
+                            <span
+                              role="button"
+                              className="hover:bg-background/20 rounded-full p-0.5 cursor-pointer"
+                              onClick={(e) => { e.stopPropagation(); removeTeamMember(id); }}
+                              data-testid={`button-remove-resource-${id}`}
                             >
-                              {r?.name || id}
-                              <span
-                                role="button"
-                                className="hover:bg-background/20 rounded-full p-0.5 cursor-pointer"
-                                onClick={(e) => { e.stopPropagation(); removeTeamMember(id); }}
-                                data-testid={`button-remove-resource-${id}`}
-                              >
-                                <X className="h-3 w-3" />
-                              </span>
-                            </Badge>
-                          );
-                        })}
-                      </div>
-                    )}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[250px] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Sök tekniker..." />
-                    <CommandList>
-                      <CommandEmpty>Inga tekniker hittades</CommandEmpty>
-                      <CommandGroup>
-                        {resources.map(r => (
-                          <CommandItem
+                              <X className="h-3 w-3" />
+                            </span>
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </button>
+                {teamPopoverOpen && (
+                  <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
+                    <div className="flex items-center border-b px-3">
+                      <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                      <input
+                        className="flex h-9 w-full bg-transparent py-1 text-sm outline-none placeholder:text-muted-foreground"
+                        placeholder="Sök tekniker..."
+                        autoFocus
+                        onChange={(e) => {
+                          const q = e.target.value.toLowerCase();
+                          setTeamSearchQuery(q);
+                        }}
+                      />
+                    </div>
+                    <ScrollArea className="max-h-[200px]">
+                      <div className="p-1">
+                        {resources.filter(r => !teamSearchQuery || r.name.toLowerCase().includes(teamSearchQuery)).map(r => (
+                          <button
                             key={r.id}
-                            value={r.name}
-                            onSelect={() => toggleTeamMember(r.id)}
+                            type="button"
+                            className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => toggleTeamMember(r.id)}
                             data-testid={`option-resource-${r.id}`}
                           >
-                            <Check className={cn("mr-2 h-4 w-4", formData.teamResourceIds.includes(r.id) ? "opacity-100" : "opacity-0")} />
+                            <Check className={cn("mr-2 h-4 w-4 shrink-0", formData.teamResourceIds.includes(r.id) ? "opacity-100" : "opacity-0")} />
                             <span>{r.name}</span>
                             {formData.teamResourceIds[0] === r.id && (
                               <Badge variant="outline" className="ml-auto text-xs">Ansvarig</Badge>
                             )}
-                          </CommandItem>
+                          </button>
                         ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+                      </div>
+                    </ScrollArea>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

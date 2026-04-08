@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, MapPin, User, Calendar, Clock, Package, Check, ChevronsUpDown, Tag, ShoppingCart, DollarSign, MessageSquare, Send, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Loader2, Plus, Trash2, MapPin, User, Calendar, Clock, Package, Check, ChevronsUpDown, Tag, ShoppingCart, DollarSign, MessageSquare, Send, CheckCircle2, XCircle, AlertCircle, Search } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -517,28 +517,31 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
                   <Package className="h-4 w-4" />
                   Kopplade objekt {linkedObjects.length > 0 && `(${linkedObjects.length})`}
                 </h4>
-                <Popover open={objectPopoverOpen} onOpenChange={setObjectPopoverOpen}>
-                  <PopoverTrigger asChild>
-                    <Button size="sm" variant="outline" data-testid="button-add-object">
-                      <Plus className="h-4 w-4 mr-1" />
-                      Lägg till objekt
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[350px] p-0" align="end">
-                    <Command shouldFilter={false}>
-                      <CommandInput 
-                        placeholder="Sök objekt..." 
-                        value={objectSearch}
-                        onValueChange={setObjectSearch}
-                      />
-                      <CommandList>
+                <div className="relative">
+                  <Button size="sm" variant="outline" data-testid="button-add-object" onClick={() => setObjectPopoverOpen(!objectPopoverOpen)}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Lägg till objekt
+                  </Button>
+                  {objectPopoverOpen && (
+                    <div className="absolute z-50 mt-1 right-0 w-[350px] rounded-md border bg-popover shadow-md">
+                      <div className="flex items-center border-b px-3">
+                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                        <input
+                          className="flex h-9 w-full bg-transparent py-1 text-sm outline-none placeholder:text-muted-foreground"
+                          placeholder="Sök objekt..."
+                          value={objectSearch}
+                          onChange={(e) => setObjectSearch(e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+                      <ScrollArea className="max-h-[200px]">
                         {searchLoading && (
                           <div className="flex items-center justify-center py-6">
                             <Loader2 className="h-4 w-4 animate-spin" />
                           </div>
                         )}
                         {!searchLoading && searchObjects.length === 0 && objectSearch.length >= 2 && (
-                          <CommandEmpty>Inga objekt hittades</CommandEmpty>
+                          <div className="py-4 text-center text-sm text-muted-foreground">Inga objekt hittades</div>
                         )}
                         {!searchLoading && searchObjects.length === 0 && objectSearch.length < 2 && (
                           <div className="py-4 text-center text-sm text-muted-foreground">
@@ -546,37 +549,41 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
                           </div>
                         )}
                         {searchObjects.length > 0 && (
-                          <CommandGroup>
+                          <div className="p-1">
                             {searchObjects.map((obj) => {
                               const isLinked = linkedObjects.some(o => o.objectId === obj.id);
                               return (
-                                <CommandItem
+                                <button
                                   key={obj.id}
-                                  value={obj.id}
-                                  onSelect={() => handleAddObject(obj.id)}
+                                  type="button"
                                   disabled={isLinked || addObjectMutation.isPending}
-                                  className={cn(isLinked && "opacity-50")}
+                                  className={cn(
+                                    "relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
+                                    isLinked && "opacity-50 cursor-not-allowed"
+                                  )}
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => handleAddObject(obj.id)}
                                 >
                                   {isLinked ? (
-                                    <Check className="mr-2 h-4 w-4" />
+                                    <Check className="mr-2 h-4 w-4 shrink-0" />
                                   ) : (
-                                    <div className="mr-2 h-4 w-4" />
+                                    <div className="mr-2 h-4 w-4 shrink-0" />
                                   )}
-                                  <div className="flex flex-col">
+                                  <div className="flex flex-col items-start">
                                     <span>{obj.name}</span>
                                     {obj.address && (
                                       <span className="text-xs text-muted-foreground">{obj.address}</span>
                                     )}
                                   </div>
-                                </CommandItem>
+                                </button>
                               );
                             })}
-                          </CommandGroup>
+                          </div>
                         )}
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                      </ScrollArea>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {objectsLoading ? (
