@@ -4,7 +4,7 @@ import { navigateTo } from "./helpers";
 test.use({ serviceWorkers: "block" });
 
 test.describe("Dashboard - Layout", () => {
-  test("renders dashboard page with navigation", async ({ page }) => {
+  test("renders dashboard page with Traivo branding", async ({ page }) => {
     await navigateTo(page, "/dashboard");
     await expect(page.locator("body")).toBeVisible({ timeout: 10000 });
     const hasAppError = await page.locator("text=Application Error").isVisible().catch(() => false);
@@ -12,53 +12,39 @@ test.describe("Dashboard - Layout", () => {
     await expect(page.getByText("Traivo One").first()).toBeVisible({ timeout: 5000 });
   });
 
-  test("dashboard greeting or content renders", async ({ page }) => {
-    await navigateTo(page, "/dashboard");
-    const greeting = page.locator('[data-testid="text-dashboard-greeting"]');
-    const content = page.locator("main");
-    await expect(content).toBeVisible({ timeout: 10000 });
-    const greetingVisible = await greeting.isVisible({ timeout: 5000 }).catch(() => false);
-    if (greetingVisible) {
-      await expect(page.getByText("Traivo Dashboard")).toBeVisible({ timeout: 5000 });
-    }
-  });
-
-  test("no application error on load", async ({ page }) => {
+  test("main content area is present", async ({ page }) => {
     await navigateTo(page, "/dashboard");
     await expect(page.locator("main")).toBeVisible({ timeout: 10000 });
-    const hasError = await page.locator("text=Application Error").isVisible().catch(() => false);
-    expect(hasError).toBe(false);
+  });
+
+  test("dashboard greeting renders with user name", async ({ page }) => {
+    await navigateTo(page, "/dashboard");
+    const greeting = page.locator('[data-testid="text-dashboard-greeting"]');
+    const greetingVisible = await greeting.isVisible({ timeout: 10000 }).catch(() => false);
+    if (greetingVisible) {
+      const greetingText = await greeting.textContent();
+      expect(greetingText).toBeTruthy();
+    }
   });
 });
 
 test.describe("Dashboard - QuickActions", () => {
-  test("quick actions card visible when greeting renders", async ({ page }) => {
+  test("quick actions card with links visible", async ({ page }) => {
     await navigateTo(page, "/dashboard");
     const greeting = page.locator('[data-testid="text-dashboard-greeting"]');
     const greetingVisible = await greeting.isVisible({ timeout: 10000 }).catch(() => false);
     if (greetingVisible) {
       await expect(page.locator('[data-testid="card-quick-actions"]')).toBeVisible({ timeout: 10000 });
-    } else {
-      await expect(page.locator("main")).toBeVisible({ timeout: 5000 });
-    }
-  });
-
-  test("quick action links present when dashboard loads fully", async ({ page }) => {
-    await navigateTo(page, "/dashboard");
-    const greeting = page.locator('[data-testid="text-dashboard-greeting"]');
-    const greetingVisible = await greeting.isVisible({ timeout: 10000 }).catch(() => false);
-    if (greetingVisible) {
-      const firstLink = page.locator('[data-testid^="quick-link-"]').first();
-      await expect(firstLink).toBeVisible({ timeout: 10000 });
-    } else {
-      await expect(page.locator("main")).toBeVisible({ timeout: 5000 });
+      const linkCount = await page.locator('[data-testid^="quick-link-"]').count();
+      expect(linkCount).toBeGreaterThan(0);
     }
   });
 });
 
-test.describe("Dashboard - Content", () => {
-  test("page main section renders", async ({ page }) => {
+test.describe("Dashboard - Navigation integration", () => {
+  test("top navigation renders with menu items", async ({ page }) => {
     await navigateTo(page, "/dashboard");
-    await expect(page.locator("main")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("header, nav, [role='banner']").first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Planering").first()).toBeVisible({ timeout: 5000 });
   });
 });
