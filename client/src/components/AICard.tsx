@@ -36,10 +36,10 @@ const insightIcons = {
 };
 
 const insightColors = {
-  suggestion: "text-blue-500",
-  warning: "text-amber-500",
-  optimization: "text-purple-500",
-  info: "text-green-500",
+  suggestion: "text-blue-600 dark:text-blue-400",
+  warning: "text-amber-600 dark:text-amber-400",
+  optimization: "text-purple-600 dark:text-purple-400",
+  info: "text-green-600 dark:text-green-400",
 };
 
 export function AICard({
@@ -56,8 +56,8 @@ export function AICard({
 
   if (variant === "inline") {
     return (
-      <div className="flex items-center gap-2 p-2 rounded-md bg-purple-500/5 border border-purple-500/20">
-        <Sparkles className="h-4 w-4 text-purple-500 shrink-0" />
+      <div className="flex items-center gap-2 p-2 rounded-md bg-purple-500/5 dark:bg-purple-400/10 border border-purple-500/20 dark:border-purple-400/20">
+        <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
         <span className="text-sm">{title}</span>
         {children}
       </div>
@@ -67,13 +67,13 @@ export function AICard({
   if (variant === "compact") {
     return (
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-        <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-blue-500/5">
+        <Card className="border-purple-500/20 dark:border-purple-400/20 bg-gradient-to-br from-purple-500/5 to-blue-500/5 dark:from-purple-400/10 dark:to-blue-400/10">
           <CollapsibleTrigger asChild>
             <CardHeader className="pb-2 cursor-pointer hover-elevate" data-testid="button-ai-card-toggle">
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <div className="p-1 rounded-md bg-purple-500/20">
-                    <Sparkles className="h-3.5 w-3.5 text-purple-500" />
+                  <div className="p-1 rounded-md bg-purple-500/20 dark:bg-purple-400/20">
+                    <Sparkles className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
                   </div>
                   {title}
                   {insights.length > 0 && (
@@ -133,12 +133,12 @@ export function AICard({
   }
 
   return (
-    <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-blue-500/5">
+    <Card className="border-purple-500/20 dark:border-purple-400/20 bg-gradient-to-br from-purple-500/5 to-blue-500/5 dark:from-purple-400/10 dark:to-blue-400/10">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
-            <div className="p-1.5 rounded-md bg-purple-500/20">
-              <Sparkles className="h-4 w-4 text-purple-500" />
+            <div className="p-1.5 rounded-md bg-purple-500/20 dark:bg-purple-400/20">
+              <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
             </div>
             {title}
           </CardTitle>

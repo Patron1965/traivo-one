@@ -34,7 +34,7 @@ export function ObjectCard({
   status,
   onClick,
 }: ObjectCardProps) {
-  const setupTimeColor = avgSetupTime < 10 ? "text-green-600" : avgSetupTime < 20 ? "text-orange-500" : "text-red-500";
+  const setupTimeColor = avgSetupTime < 10 ? "text-green-600 dark:text-green-400" : avgSetupTime < 20 ? "text-orange-500 dark:text-orange-400" : "text-red-500 dark:text-red-400";
 
   return (
     <Card 

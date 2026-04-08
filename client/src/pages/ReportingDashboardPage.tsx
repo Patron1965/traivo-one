@@ -54,11 +54,11 @@ function KPICard({ title, value, subtitle, change, changeLabel, icon, variant = 
             {change !== undefined && (
               <div className="flex items-center gap-1 mt-2">
                 {change >= 0 ? (
-                  <ArrowUpRight className="h-3 w-3 text-green-600" />
+                  <ArrowUpRight className="h-3 w-3 text-green-600 dark:text-green-400" />
                 ) : (
-                  <ArrowDownRight className="h-3 w-3 text-red-600" />
+                  <ArrowDownRight className="h-3 w-3 text-red-600 dark:text-red-400" />
                 )}
-                <span className={`text-xs font-medium ${change >= 0 ? "text-green-600" : "text-red-600"}`}>
+                <span className={`text-xs font-medium ${change >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
                   {change >= 0 ? "+" : ""}{change}%
                 </span>
                 {changeLabel && <span className="text-xs text-muted-foreground">{changeLabel}</span>}
@@ -244,17 +244,17 @@ function RouteFeedbackTab() {
         <KPICard
           title="Antal svar"
           value={summary.totalCount}
-          icon={<MessageSquare className="h-4 w-4 text-blue-500" />}
+          icon={<MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
         />
         <KPICard
           title="Nöjda förare (4-5)"
           value={`${summary.totalCount > 0 ? Math.round((((summary.ratingDistribution[4] || 0) + (summary.ratingDistribution[5] || 0)) / summary.totalCount) * 100) : 0}%`}
-          icon={<Award className="h-4 w-4 text-green-500" />}
+          icon={<Award className="h-4 w-4 text-green-600 dark:text-green-400" />}
         />
         <KPICard
           title="Kategorier"
           value={Object.keys(summary.byCategory).length}
-          icon={<BarChart3 className="h-4 w-4 text-purple-500" />}
+          icon={<BarChart3 className="h-4 w-4 text-purple-600 dark:text-purple-400" />}
           subtitle="unika orsaker"
         />
       </div>
@@ -918,7 +918,7 @@ export default function ReportingDashboardPage() {
     <div className="space-y-6 p-6" data-testid="reporting-dashboard">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Rapportering & Analys</h1>
+          <h1 className="text-2xl font-semibold" data-testid="text-page-title">Rapportering & Analys</h1>
           <p className="text-muted-foreground">Nyckeltal, produktivitet och avvikelsestatistik</p>
         </div>
         <div className="flex items-center gap-3">
@@ -952,7 +952,7 @@ export default function ReportingDashboardPage() {
           subtitle={`${kpis.completionRate}% slutförandegrad`}
           change={kpis.completionChange}
           changeLabel="vs föreg."
-          icon={<CheckCircle2 className="h-5 w-5 text-green-600" />}
+          icon={<CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />}
           variant={kpis.completionRate >= 80 ? "success" : kpis.completionRate >= 50 ? "default" : "warning"}
         />
         <KPICard
@@ -967,7 +967,7 @@ export default function ReportingDashboardPage() {
           title="Marginal"
           value={`${kpis.marginPercent}%`}
           subtitle={`${Math.round(kpis.margin / 1000)}k kr`}
-          icon={<TrendingUp className="h-5 w-5 text-green-600" />}
+          icon={<TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />}
           variant={kpis.marginPercent >= 30 ? "success" : kpis.marginPercent >= 15 ? "default" : "warning"}
         />
         <KPICard
@@ -982,7 +982,7 @@ export default function ReportingDashboardPage() {
           subtitle={`${deviationKpis.open} öppna`}
           change={deviationKpis.change}
           changeLabel="vs föreg."
-          icon={<AlertTriangle className="h-5 w-5 text-orange-500" />}
+          icon={<AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />}
           variant={deviationKpis.critical > 3 ? "danger" : deviationKpis.total > 0 ? "warning" : "default"}
         />
       </div>
@@ -1280,7 +1280,7 @@ export default function ReportingDashboardPage() {
               subtitle={`av ${kpis.totalOrders} totalt`}
               change={kpis.completionChange}
               changeLabel="vs föreg."
-              icon={<CheckCircle2 className="h-5 w-5 text-green-600" />}
+              icon={<CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />}
               variant="success"
             />
             <KPICard
@@ -1300,7 +1300,7 @@ export default function ReportingDashboardPage() {
               title="Misslyckade"
               value={filteredOrders.filter(wo => wo.orderStatus === "omojlig").length}
               subtitle="markerade omöjliga"
-              icon={<CircleSlash className="h-5 w-5 text-red-500" />}
+              icon={<CircleSlash className="h-5 w-5 text-red-600 dark:text-red-400" />}
               variant={filteredOrders.filter(wo => wo.orderStatus === "omojlig").length > 3 ? "danger" : "default"}
             />
           </div>
@@ -1410,21 +1410,21 @@ export default function ReportingDashboardPage() {
               value={deviationKpis.total}
               change={deviationKpis.change}
               changeLabel="vs föreg."
-              icon={<AlertTriangle className="h-5 w-5 text-orange-500" />}
+              icon={<AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />}
               variant={deviationKpis.total > 10 ? "danger" : deviationKpis.total > 0 ? "warning" : "default"}
             />
             <KPICard
               title="Åtgärdsgrad"
               value={`${deviationKpis.resolutionRate}%`}
               subtitle={`${deviationKpis.resolved} åtgärdade`}
-              icon={<CheckCircle2 className="h-5 w-5 text-green-600" />}
+              icon={<CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />}
               variant={deviationKpis.resolutionRate >= 80 ? "success" : deviationKpis.resolutionRate >= 50 ? "default" : "warning"}
             />
             <KPICard
               title="Kritiska"
               value={deviationKpis.critical}
               subtitle="hög/kritisk allvarlighet"
-              icon={<ShieldAlert className="h-5 w-5 text-red-500" />}
+              icon={<ShieldAlert className="h-5 w-5 text-red-600 dark:text-red-400" />}
               variant={deviationKpis.critical > 0 ? "danger" : "default"}
             />
             <KPICard

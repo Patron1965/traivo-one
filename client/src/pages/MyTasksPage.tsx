@@ -131,7 +131,7 @@ function AIAssistantPanel({
       <CardHeader className="flex flex-row items-center justify-between gap-4 pb-3 border-b shrink-0">
         <div className="flex items-center gap-2">
           <div className="p-2 rounded-lg bg-purple-500/10">
-            <Sparkles className="h-5 w-5 text-purple-500" />
+            <Sparkles className="h-5 w-5 text-purple-600 dark:text-purple-400" />
           </div>
           <div>
             <CardTitle className="text-base">AI-Assistent</CardTitle>
@@ -151,7 +151,7 @@ function AIAssistantPanel({
             >
               {msg.role === "assistant" && (
                 <div className="p-1.5 rounded-full bg-purple-500/10 h-7 w-7 flex items-center justify-center shrink-0">
-                  <Bot className="h-4 w-4 text-purple-500" />
+                  <Bot className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                 </div>
               )}
               <div
@@ -173,7 +173,7 @@ function AIAssistantPanel({
           {askMutation.isPending && (
             <div className="flex gap-2 justify-start">
               <div className="p-1.5 rounded-full bg-purple-500/10 h-7 w-7 flex items-center justify-center shrink-0">
-                <Bot className="h-4 w-4 text-purple-500" />
+                <Bot className="h-4 w-4 text-purple-600 dark:text-purple-400" />
               </div>
               <div className="bg-muted rounded-lg px-3 py-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -281,15 +281,15 @@ function QuickActionCard({
 
 function getRecentPageMap(tl: (key: string) => string): Record<string, { title: string; icon: React.ElementType; color: string }> {
   return {
-    "/": { title: tl("nav.today"), icon: Calendar, color: "text-blue-500" },
-    "/home": { title: tl("nav.today"), icon: Calendar, color: "text-blue-500" },
+    "/": { title: tl("nav.today"), icon: Calendar, color: "text-blue-600 dark:text-blue-400" },
+    "/home": { title: tl("nav.today"), icon: Calendar, color: "text-blue-600 dark:text-blue-400" },
     "/objects": { title: tl("nav.objects"), icon: Building2, color: "text-emerald-500" },
-    "/resources": { title: tl("nav.resources"), icon: Users, color: "text-purple-500" },
-    "/vehicles": { title: tl("nav.vehicles"), icon: Truck, color: "text-orange-500" },
+    "/resources": { title: tl("nav.resources"), icon: Users, color: "text-purple-600 dark:text-purple-400" },
+    "/vehicles": { title: tl("nav.vehicles"), icon: Truck, color: "text-orange-500 dark:text-orange-400" },
     "/clusters": { title: tl("nav.clusters"), icon: Target, color: "text-cyan-500" },
-    "/planner": { title: tl("nav.week-planner"), icon: Calendar, color: "text-green-500" },
+    "/planner": { title: tl("nav.week-planner"), icon: Calendar, color: "text-green-600 dark:text-green-400" },
     "/order-stock": { title: tl("nav.order-stock"), icon: FileText, color: "text-indigo-500" },
-    "/routes": { title: tl("nav.route-planning"), icon: Route, color: "text-amber-500" },
+    "/routes": { title: tl("nav.route-planning"), icon: Route, color: "text-amber-500 dark:text-amber-400" },
     "/dashboard": { title: tl("nav.dashboard"), icon: BarChart3, color: "text-pink-500" },
     "/mobile": { title: tl("nav.mobile-field"), icon: Smartphone, color: "text-teal-500" },
   };
@@ -570,9 +570,8 @@ export default function MyTasksPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
-        <div className="flex items-start justify-between gap-4 mb-8 flex-wrap">
+    <div className="p-6 space-y-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <p className="text-muted-foreground text-sm mb-1">
               {format(today, "EEEE d MMMM yyyy", { locale: dateLocale })}
@@ -584,7 +583,7 @@ export default function MyTasksPage() {
               </>
             ) : (
               <>
-                <h1 className="text-3xl font-bold" data-testid="page-title">
+                <h1 className="text-2xl font-semibold" data-testid="page-title">
                   {todaysOrders.length > 0 
                     ? `${todaysOrders.length} ${tl("page.today.jobs")}`
                     : tl("page.today.no-jobs")
@@ -738,7 +737,6 @@ export default function MyTasksPage() {
 
         {/* Proactive AI Tips - smaller */}
         <ProactiveTips />
-      </div>
 
       <AIAssistantPanel 
         isOpen={aiPanelOpen} 

@@ -393,27 +393,26 @@ export default function InvoicingPage() {
   const draftManualLines = manualLines.filter(ml => ml.status === "draft" || ml.status === "queued");
 
   return (
-    <div className="min-h-screen bg-background" data-testid="invoicing-page">
-      <div className="container mx-auto px-4 py-6 max-w-7xl">
-        <div className="flex items-center justify-between mb-6">
+    <div className="p-6 space-y-6" data-testid="invoicing-page">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Fakturering</h1>
+            <h1 className="text-2xl font-semibold" data-testid="text-page-title">Fakturering</h1>
             <p className="text-muted-foreground">Förhandsgranska, hantera och exportera fakturor till Fortnox</p>
           </div>
           <div className="flex items-center gap-2">
             {fortnoxStatus?.connected ? (
-              <Badge variant="outline" className="border-green-500 text-green-600" data-testid="badge-fortnox-connected">
+              <Badge variant="outline" className="border-green-500 text-green-600 dark:text-green-400" data-testid="badge-fortnox-connected">
                 <CheckCircle2 className="h-3 w-3 mr-1" /> Fortnox ansluten
               </Badge>
             ) : (
-              <Badge variant="outline" className="border-yellow-500 text-yellow-600" data-testid="badge-fortnox-disconnected">
+              <Badge variant="outline" className="border-yellow-500 dark:border-yellow-700 text-yellow-600 dark:text-yellow-400" data-testid="badge-fortnox-disconnected">
                 <AlertTriangle className="h-3 w-3 mr-1" /> Fortnox ej ansluten
               </Badge>
             )}
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card data-testid="card-kpi-invoices">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
@@ -590,7 +589,7 @@ export default function InvoicingPage() {
                                 {INVOICE_TYPE_LABELS[invoice.invoiceType] || invoice.invoiceType}
                               </Badge>
                               {invoice.lines.some(l => l.workOrderId.startsWith("manual:")) && (
-                                <Badge variant="outline" className="text-xs border-blue-300 text-blue-600">
+                                <Badge variant="outline" className="text-xs border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400">
                                   Manuella rader
                                 </Badge>
                               )}
@@ -638,7 +637,7 @@ export default function InvoicingPage() {
                                       <TableCell className="font-medium">
                                         {line.description}
                                         {line.workOrderId.startsWith("manual:") && (
-                                          <Badge variant="outline" className="ml-2 text-xs border-blue-300 text-blue-600">Manuell</Badge>
+                                          <Badge variant="outline" className="ml-2 text-xs border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400">Manuell</Badge>
                                         )}
                                       </TableCell>
                                       <TableCell className="text-muted-foreground text-sm">
@@ -823,7 +822,7 @@ export default function InvoicingPage() {
               <Card data-testid="card-export-stat-exported">
                 <CardContent className="p-4 flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
                   </div>
                   <div>
                     <div className="text-2xl font-bold">{exportStats.exported}</div>
@@ -834,7 +833,7 @@ export default function InvoicingPage() {
               <Card data-testid="card-export-stat-credited">
                 <CardContent className="p-4 flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                    <CreditCard className="h-5 w-5 text-purple-600" />
+                    <CreditCard className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                   </div>
                   <div>
                     <div className="text-2xl font-bold">{exportStats.credited}</div>
@@ -845,7 +844,7 @@ export default function InvoicingPage() {
               <Card data-testid="card-export-stat-failed">
                 <CardContent className="p-4 flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
-                    <XCircle className="h-5 w-5 text-red-600" />
+                    <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
                   </div>
                   <div>
                     <div className="text-2xl font-bold">{exportStats.failed}</div>
@@ -893,7 +892,7 @@ export default function InvoicingPage() {
                           </TableCell>
                           <TableCell>
                             {exp.isCreditInvoice ? (
-                              <Badge variant="outline" className="border-purple-300 text-purple-600 gap-1">
+                              <Badge variant="outline" className="border-purple-300 dark:border-purple-700 text-purple-600 dark:text-purple-400 gap-1">
                                 <Undo2 className="h-3 w-3" /> Kredit
                               </Badge>
                             ) : (
@@ -908,7 +907,7 @@ export default function InvoicingPage() {
                               <span className="font-medium">{exp.fortnoxInvoiceNumber}</span>
                             ) : "-"}
                           </TableCell>
-                          <TableCell className={`text-right font-medium ${(exp.totalAmount || 0) < 0 ? "text-red-600" : ""}`}>
+                          <TableCell className={`text-right font-medium ${(exp.totalAmount || 0) < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
                             {exp.totalAmount != null ? formatCurrency(exp.totalAmount) : "-"}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">{exp.costCenter || "-"}</TableCell>
@@ -937,19 +936,19 @@ export default function InvoicingPage() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => setCreditDialogExport(exp)}
-                                  className="text-purple-600 border-purple-300 hover:bg-purple-50"
+                                  className="text-purple-600 dark:text-purple-400 border-purple-300 dark:border-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950/30"
                                   data-testid={`button-credit-${exp.id}`}
                                 >
                                   <Undo2 className="h-3 w-3 mr-1" /> Kreditera
                                 </Button>
                               )}
                               {exp.creditedByExportId && exp.status === "credited" && (
-                                <Badge variant="outline" className="text-xs border-purple-300 text-purple-600">
+                                <Badge variant="outline" className="text-xs border-purple-300 dark:border-purple-700 text-purple-600 dark:text-purple-400">
                                   Krediterad
                                 </Badge>
                               )}
                               {exp.creditedByExportId && exp.status !== "credited" && (
-                                <Badge variant="outline" className="text-xs border-yellow-300 text-yellow-600">
+                                <Badge variant="outline" className="text-xs border-yellow-300 dark:border-yellow-700 text-yellow-600 dark:text-yellow-400">
                                   Kredit väntar
                                 </Badge>
                               )}
@@ -969,7 +968,6 @@ export default function InvoicingPage() {
             )}
           </TabsContent>
         </Tabs>
-      </div>
 
       <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
         <DialogContent data-testid="dialog-export-confirm">
@@ -1067,7 +1065,7 @@ export default function InvoicingPage() {
                       <TableCell>
                         <span className="font-medium">{line.description}</span>
                         {line.workOrderId.startsWith("manual:") && (
-                          <Badge variant="outline" className="ml-2 text-xs border-blue-300 text-blue-600">Manuell</Badge>
+                          <Badge variant="outline" className="ml-2 text-xs border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400">Manuell</Badge>
                         )}
                         {line.objectAddress && <span className="block text-xs text-muted-foreground">{line.objectAddress}</span>}
                       </TableCell>
@@ -1261,7 +1259,7 @@ export default function InvoicingPage() {
         <DialogContent data-testid="dialog-credit-confirm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Undo2 className="h-5 w-5 text-purple-600" />
+              <Undo2 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
               Skapa kreditfaktura
             </DialogTitle>
             <DialogDescription>
@@ -1294,13 +1292,13 @@ export default function InvoicingPage() {
                   <span className="font-medium">{creditDialogExport.totalAmount != null ? formatCurrency(creditDialogExport.totalAmount) : "-"}</span>
                 </div>
                 <Separator />
-                <div className="flex justify-between text-sm font-bold text-red-600">
+                <div className="flex justify-between text-sm font-bold text-red-600 dark:text-red-400">
                   <span>Kreditbelopp:</span>
                   <span>{creditDialogExport.totalAmount != null ? formatCurrency(-creditDialogExport.totalAmount) : "-"}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-md text-sm">
-                <AlertTriangle className="h-4 w-4 text-purple-600 shrink-0" />
+                <AlertTriangle className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
                 <span>Originalfakturan markeras som krediterad. Kreditfakturan skapas med status "Väntar" och kan skickas till Fortnox.</span>
               </div>
             </div>

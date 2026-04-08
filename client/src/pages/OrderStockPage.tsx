@@ -898,7 +898,7 @@ export default function OrderStockPage() {
                       {status === "omojlig" && order.impossibleReason && (
                         <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded-md text-xs" data-testid={`impossible-details-${order.id}`}>
                           <div className="flex items-center gap-2 flex-wrap">
-                            <XCircle className="h-3 w-3 text-red-500" />
+                            <XCircle className="h-3 w-3 text-red-600 dark:text-red-400" />
                             <span className="font-medium text-red-700 dark:text-red-300">
                               {IMPOSSIBLE_REASON_LABELS[order.impossibleReason as keyof typeof IMPOSSIBLE_REASON_LABELS] || order.impossibleReason}
                             </span>

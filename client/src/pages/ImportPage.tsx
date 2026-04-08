@@ -1338,9 +1338,9 @@ export default function ImportPage() {
   const previewTemplate = CSV_TEMPLATES[previewType];
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold" data-testid="text-import-title">{tl("page.import.title")}</h1>
+        <h1 className="text-2xl font-semibold" data-testid="text-import-title">{tl("page.import.title")}</h1>
         <p className="text-muted-foreground">{tl("page.import.description")}</p>
       </div>
 
@@ -1467,7 +1467,7 @@ export default function ImportPage() {
                       <Users className="h-4 w-4" />
                       Steg 0: Kundlista-import (valfritt)
                       {customerImportResult && (
-                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 text-green-600 border-green-200" data-testid="badge-customer-import-done">
+                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800" data-testid="badge-customer-import-done">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           {customerImportResult.imported} importerade
                         </Badge>
@@ -1582,15 +1582,15 @@ export default function ImportPage() {
                               <TableCell className="text-xs">{[p.address, p.postalCode, p.city].filter(Boolean).join(", ") || "—"}</TableCell>
                               <TableCell className="text-xs">
                                 {p.duplicate ? (
-                                  <Badge variant="outline" className="text-xs bg-amber-50 text-amber-600 border-amber-200">
+                                  <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800">
                                     <AlertTriangle className="h-3 w-3 mr-1" /> Dubblett
                                   </Badge>
                                 ) : p.errors.length > 0 ? (
-                                  <Badge variant="outline" className="text-xs bg-red-50 text-red-600 border-red-200">
+                                  <Badge variant="outline" className="text-xs bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800">
                                     <AlertCircle className="h-3 w-3 mr-1" /> Fel
                                   </Badge>
                                 ) : (
-                                  <Badge variant="outline" className="text-xs bg-green-50 text-green-600 border-green-200">
+                                  <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800">
                                     <CheckCircle className="h-3 w-3 mr-1" /> Ny
                                   </Badge>
                                 )}
@@ -1995,19 +1995,19 @@ export default function ImportPage() {
                       <Truck className="h-4 w-4" />
                       Importera uppgifter (arbetsordrar)
                       {objects.length === 0 && !completedSteps.has(2) && (
-                        <Badge variant="outline" className="text-xs ml-2 bg-red-50 text-red-600 border-red-200" data-testid="badge-quality-step-3">
+                        <Badge variant="outline" className="text-xs ml-2 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800" data-testid="badge-quality-step-3">
                           <AlertCircle className="h-3 w-3 mr-1" />
                           Importera objekt först
                         </Badge>
                       )}
                       {objects.length === 0 && completedSteps.has(2) && (
-                        <Badge variant="outline" className="text-xs ml-2 bg-amber-50 text-amber-600 border-amber-200" data-testid="badge-quality-step-3">
+                        <Badge variant="outline" className="text-xs ml-2 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800" data-testid="badge-quality-step-3">
                           <AlertCircle className="h-3 w-3 mr-1" />
                           {modusResults.objects?.errors?.length ? `${modusResults.objects.errors.length} varningar` : "0 objekt"}
                         </Badge>
                       )}
                       {objects.length > 0 && (
-                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 text-green-600 border-green-200" data-testid="badge-quality-step-3">
+                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800" data-testid="badge-quality-step-3">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           {objects.length} objekt redo
                         </Badge>
@@ -2172,17 +2172,17 @@ export default function ImportPage() {
                       <FileSpreadsheet className="h-4 w-4" />
                       Importera fakturarader (valfritt)
                       {completedSteps.has(3) && modusResults.tasks ? (
-                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 text-green-600 border-green-200" data-testid="badge-quality-step-4">
+                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800" data-testid="badge-quality-step-4">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           {modusResults.tasks.imported} uppgifter att koppla
                         </Badge>
                       ) : !completedSteps.has(3) ? (
-                        <Badge variant="outline" className="text-xs ml-2 bg-amber-50 text-amber-600 border-amber-200" data-testid="badge-quality-step-4">
+                        <Badge variant="outline" className="text-xs ml-2 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800" data-testid="badge-quality-step-4">
                           <Info className="h-3 w-3 mr-1" />
                           Kräver uppgifter
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-xs ml-2 bg-blue-50 text-blue-600 border-blue-200" data-testid="badge-quality-step-4">
+                        <Badge variant="outline" className="text-xs ml-2 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800" data-testid="badge-quality-step-4">
                           <Info className="h-3 w-3 mr-1" />
                           Valfritt
                         </Badge>
@@ -2303,17 +2303,17 @@ export default function ImportPage() {
                       <Clock className="h-4 w-4" />
                       Analysera händelser (valfritt)
                       {completedSteps.has(3) && modusResults.tasks ? (
-                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 text-green-600 border-green-200" data-testid="badge-quality-step-5">
+                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800" data-testid="badge-quality-step-5">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           {modusResults.tasks.imported} uppgifter att analysera
                         </Badge>
                       ) : !completedSteps.has(3) ? (
-                        <Badge variant="outline" className="text-xs ml-2 bg-amber-50 text-amber-600 border-amber-200" data-testid="badge-quality-step-5">
+                        <Badge variant="outline" className="text-xs ml-2 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800" data-testid="badge-quality-step-5">
                           <Info className="h-3 w-3 mr-1" />
                           Kräver uppgifter
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-xs ml-2 bg-blue-50 text-blue-600 border-blue-200" data-testid="badge-quality-step-5">
+                        <Badge variant="outline" className="text-xs ml-2 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800" data-testid="badge-quality-step-5">
                           <Info className="h-3 w-3 mr-1" />
                           Valfritt
                         </Badge>
@@ -2432,12 +2432,12 @@ export default function ImportPage() {
                       <Tag className="h-4 w-4" />
                       Metadata-tilldelning (valfritt)
                       {objects.length > 0 ? (
-                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 text-green-600 border-green-200" data-testid="badge-quality-step-6">
+                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800" data-testid="badge-quality-step-6">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           {objects.length} objekt tillgängliga
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-xs ml-2 bg-amber-50 text-amber-600 border-amber-200" data-testid="badge-quality-step-6">
+                        <Badge variant="outline" className="text-xs ml-2 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800" data-testid="badge-quality-step-6">
                           <AlertCircle className="h-3 w-3 mr-1" />
                           Importera objekt först
                         </Badge>

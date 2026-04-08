@@ -587,7 +587,7 @@ export default function ResourcesPage() {
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className="text-sm text-muted-foreground">{resources.length} tekniker registrerade</span>
             <Badge variant="secondary" className="text-xs font-normal gap-1">
-              <CircleCheck className="h-3 w-3 text-green-500" />
+              <CircleCheck className="h-3 w-3 text-green-600 dark:text-green-400" />
               {teamStats.availableToday} tillgängliga idag
             </Badge>
             <Badge variant="outline" className="text-xs font-normal gap-1">

@@ -246,10 +246,10 @@ export default function AssignmentsPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4">
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold">Uppgifter</h1>
+          <h1 className="text-2xl font-semibold">Uppgifter</h1>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className="text-sm text-muted-foreground">
               Hantera och följ upp genererade arbetsuppgifter
@@ -260,7 +260,7 @@ export default function AssignmentsPage() {
                   {filteredAssignments.length} av {assignments.length} visas
                 </Badge>
                 {assignments.filter(a => a.status === "not_planned").length > 0 && (
-                  <Badge variant="outline" className="text-xs font-normal text-amber-600 border-amber-300">
+                  <Badge variant="outline" className="text-xs font-normal text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700">
                     {assignments.filter(a => a.status === "not_planned").length} ej planerade
                   </Badge>
                 )}
@@ -288,28 +288,28 @@ export default function AssignmentsPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-green-600" />
+              <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
               <span className="text-sm text-muted-foreground">Totalt värde</span>
             </div>
-            <div className="text-2xl font-bold mt-1 text-green-600">{formatCurrency(totals.value)}</div>
+            <div className="text-2xl font-bold mt-1 text-green-600 dark:text-green-400">{formatCurrency(totals.value)}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-red-600" />
+              <DollarSign className="h-4 w-4 text-red-600 dark:text-red-400" />
               <span className="text-sm text-muted-foreground">Total kostnad</span>
             </div>
-            <div className="text-2xl font-bold mt-1 text-red-600">{formatCurrency(totals.cost)}</div>
+            <div className="text-2xl font-bold mt-1 text-red-600 dark:text-red-400">{formatCurrency(totals.cost)}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <Timer className="h-4 w-4 text-blue-600" />
+              <Timer className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               <span className="text-sm text-muted-foreground">Total tid</span>
             </div>
-            <div className="text-2xl font-bold mt-1 text-blue-600">{Math.round(totals.time / 60)} tim</div>
+            <div className="text-2xl font-bold mt-1 text-blue-600 dark:text-blue-400">{Math.round(totals.time / 60)} tim</div>
           </CardContent>
         </Card>
       </div>
@@ -464,7 +464,7 @@ export default function AssignmentsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm font-medium text-green-600">
+                      <span className="text-sm font-medium text-green-600 dark:text-green-400">
                         {formatCurrency(assignment.cachedValue)}
                       </span>
                     </TableCell>
@@ -768,11 +768,11 @@ export default function AssignmentsPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           {candidate.available ? (
-                            <Badge variant="outline" className="bg-green-50 text-green-700">
+                            <Badge variant="outline" className="bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400">
                               Tillgänglig
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="bg-red-50 text-red-700">
+                            <Badge variant="outline" className="bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400">
                               Ej tillgänglig
                             </Badge>
                           )}
