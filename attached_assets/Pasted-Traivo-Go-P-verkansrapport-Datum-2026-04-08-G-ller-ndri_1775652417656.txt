@@ -1,0 +1,62 @@
+Traivo Go — Påverkansrapport
+Datum: 2026-04-08 Gäller: Ändringar i Task #124 (Tomma tillstånd / UI), Task #125 (Svenska felmeddelanden), Task #126 (Databasoptimering)
+
+Sammanfattning
+Tre uppgifter har nyligen mergats i Traivo-plattformen. Nedan redovisas vilka ändringar som kan påverka Traivo Go (mobil-appen / Driver Core) och vilka som inte påverkar.
+
+1. Task #124 — Tomma tillstånd (EmptyState UI)
+Påverkan på Traivo Go: Ingen
+
+Dessa ändringar rör enbart webb-frontenden (React-komponenter). Sidorna ResourcesPage, InvoicingPage, OrderStockPage, FleetManagementPage och MyTasksPage har fått nya EmptyState-komponenter. Inga API-endpoints, dataformat eller databasscheman har ändrats.
+
+2. Task #125 — Tydliga svenska felmeddelanden
+Påverkan på Traivo Go: Låg till medel — kräver uppmärksamhet
+
+Vad som ändrats
+Felmeddelanden i server-svar har översatts från engelska till svenska i flera filer:
+
+server/routes.ts — Globala felhanterare (dashboard stats, alerts, kapacitet, tenant-info)
+server/routes/importRoutes.ts — Import/geocoding-fel
+server/mcp/index.ts — Interna serverfel
+Vad som påverkar Traivo Go
+De mobila API-rutterna (/api/mobile/*) hade redan svenska felmeddelanden i server/routes/helpers.ts (t.ex. "Ogiltig token", "Sessionen har gått ut"). Dessa har inte ändrats.
+
+Dock: Om Traivo Go anropar generella endpoints (t.ex. /api/objects, /api/customers, /api/work-orders) och appens felhantering matchar mot specifika engelska felsträngar, kan beteendet påverkas. Specifikt:
+
+Endpoint/område	Tidigare	Nu
+404-fel (globalt)	"Resource not found"	"Resurs hittades inte"
+500-fel (globalt)	"Internal server error"	"Ett oväntat serverfel uppstod"
+403-fel (globalt)	"Forbidden"	"Åtkomst nekad"
+Valideringsfel	"Validation failed"	Oförändrat (fortfarande "Validation failed")
+Rekommendation
+Granska om Traivo Go matchar mot engelska felsträngar i sin error-hantering (t.ex. if error.message == "Resource not found"). Om så är fallet behöver appen uppdateras.
+Bästa praxis: Matcha alltid mot HTTP-statuskoder (401, 403, 404, 500) snarare än felmeddelande-strängar. Då påverkas inte appen av språkändringar.
+3. Task #126 — Databasoptimering (Index och effektivare queries)
+Påverkan på Traivo Go: Ingen funktionell — enbart prestandaförbättring
+
+Vad som ändrats
+Nya index på tabellerna clusters, subscriptions, object_metadata och work_orders (tenant-scoped och funktionella index med LOWER())
+Optimerade queries i metadata-hantering (refaktorering till enstaka SQL-anrop med CTE:er)
+Optimerade söksubfrågor i orderlager med tenant-filter
+Påverkan
+API-svarsformaten är oförändrade — samma JSON-struktur returneras
+Prestandaförbättring — Mobila API-anrop som berör objekt, arbetsordrar och metadata bör bli snabbare, särskilt:
+GET /api/mobile/my-orders (använder work_orders-index)
+Metadata-relaterade anrop (effektivare queries)
+Ingen migrationsrisk — Enbart CREATE INDEX IF NOT EXISTS, inga destruktiva ändringar
+Checklista för Traivo Go-teamet
+#	Åtgärd	Prioritet
+1	Verifiera att felhantering i appen matchar mot HTTP-statuskoder, inte strängar	Hög
+2	Testa inloggning, orderhämtning och synk efter deploy	Medel
+3	Inga kodändringar krävs för databasoptimering	Låg (informativt)
+4	Inga kodändringar krävs för EmptyState UI	Ingen åtgärd
+Mobila API-endpoints (referens)
+Alla /api/mobile/*-routes är oförändrade i denna iteration:
+
+Auth: /api/mobile/login, /logout, /me
+Ordrar: /api/mobile/my-orders, /orders/:id, /orders/:id/status
+Synk: /api/mobile/sync, /sync/status
+Arbetspass: /api/mobile/work-sessions/*
+GPS/Rapportering: /api/mobile/gps, /summary, /weather
+AI: /api/mobile/ai/chat, /transcribe, /analyze-image
+Konfiguration: /api/mobile/app-config, /version-check, /preferences
