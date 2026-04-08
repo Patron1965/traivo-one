@@ -38,6 +38,7 @@ import {
 import { format, subDays, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Customer, Article } from "@shared/schema";
+import { EmptyState } from "@/components/EmptyState";
 
 interface InvoiceLine {
   workOrderId: string;
@@ -546,12 +547,15 @@ export default function InvoicingPage() {
               </div>
             ) : filteredPreviews.length === 0 ? (
               <Card>
-                <CardContent className="py-16 text-center">
-                  <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-                  <h3 className="font-medium text-lg mb-1">Inga fakturor att visa</h3>
-                  <p className="text-muted-foreground text-sm">
-                    Justera datumintervall eller kundfilter. Endast slutförda ordrar och manuella rader visas.
-                  </p>
+                <CardContent className="p-0">
+                  <EmptyState
+                    icon={FileText}
+                    title="Inga fakturor att visa"
+                    description="Justera datumintervall eller kundfilter. Endast slutförda ordrar och manuella rader genererar fakturor."
+                    actionLabel="Skapa manuell rad"
+                    onAction={() => setManualLineDialogOpen(true)}
+                    actionIcon={Plus}
+                  />
                 </CardContent>
               </Card>
             ) : (

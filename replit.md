@@ -24,6 +24,7 @@ The user interface features a sticky TopNav with smart navigation, global search
 - **Responsive filters:** Filter/action rows use `flex-wrap` to stack on narrow viewports.
 - **Dialog overflow:** Base `DialogContent` includes `max-h-[90vh] overflow-y-auto` to prevent viewport overflow.
 - **Color conventions:** Status/indicator colors always paired with `dark:` variants (e.g., `text-green-600 dark:text-green-400`, `bg-green-100 dark:bg-green-900/30`).
+- **Empty states:** Reusable `EmptyState` component (`client/src/components/EmptyState.tsx`) with icon, title, description, and action button. Used across ResourcesPage, InvoicingPage, OrderStockPage, FleetManagementPage, MyTasksPage.
 - **E2E tests:** Playwright test suite includes `tests/e2e/darkmode.spec.ts` (10 tests) covering dark mode rendering on all key pages plus mobile viewport.
 
 ### Technical Implementations

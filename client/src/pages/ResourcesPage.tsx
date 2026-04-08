@@ -62,9 +62,11 @@ import {
   CircleCheck,
   ChevronLeft,
   ChevronRight,
+  UserPlus,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AICard } from "@/components/AICard";
+import { EmptyState } from "@/components/EmptyState";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { QueryErrorState } from "@/components/ErrorBoundary";
@@ -833,9 +835,21 @@ export default function ResourcesPage() {
       </div>
 
       {filteredResources.length === 0 && !isLoading && (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">Inga resurser hittades</p>
-        </div>
+        <Card>
+          <CardContent className="p-0">
+            <EmptyState
+              icon={Users}
+              title={searchQuery || filterStatus !== "all" ? "Inga resurser matchade filtren" : "Inga resurser ännu"}
+              description={searchQuery || filterStatus !== "all"
+                ? "Försök med andra sökord eller rensa filtren"
+                : "Lägg till tekniker och resurser som ska schemaläggas för fältarbete"
+              }
+              actionLabel={searchQuery || filterStatus !== "all" ? undefined : "Lägg till resurs"}
+              onAction={searchQuery || filterStatus !== "all" ? undefined : () => setCreateOpen(true)}
+              actionIcon={UserPlus}
+            />
+          </CardContent>
+        </Card>
       )}
 
       {totalPages > 1 && (

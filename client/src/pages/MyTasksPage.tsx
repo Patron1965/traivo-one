@@ -46,6 +46,7 @@ import { apiRequest } from "@/lib/queryClient";
 import type { WorkOrder, Resource, ServiceObject } from "@shared/schema";
 import { ProactiveTips } from "@/components/ProactiveTips";
 import { Activity, ChevronDown } from "lucide-react";
+import { EmptyState } from "@/components/EmptyState";
 import { ObjectContactsPanel } from "@/components/ObjectContactsPanel";
 import { ObjectImagesGallery } from "@/components/ObjectImagesGallery";
 import { OnboardingGuide } from "@/components/OnboardingGuide";
@@ -463,10 +464,14 @@ function TodaysOrdersList({
 
   if (todaysOrders.length === 0) {
     return (
-      <div className="text-center py-8 text-muted-foreground">
-        <CheckCircle2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-        <p>{tl("page.today.no-jobs-today")}</p>
-      </div>
+      <EmptyState
+        icon={CheckCircle2}
+        title={tl("page.today.no-jobs-today")}
+        description="Inga arbetsordrar schemalagda för idag. Planera in jobb via veckoplaneraren."
+        actionLabel="Öppna Veckoplaneraren"
+        onAction={() => window.location.href = "/planner"}
+        actionIcon={Calendar}
+      />
     );
   }
 

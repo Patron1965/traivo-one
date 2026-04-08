@@ -60,10 +60,12 @@ import {
   Search,
   Sparkles,
   Send,
-  Mail
+  Mail,
+  ClipboardList
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { AICard } from "@/components/AICard";
+import { EmptyState } from "@/components/EmptyState";
 import { ExecutionStatusTracker } from "@/components/ExecutionStatusTracker";
 import { TaskTimewindowsEditor } from "@/components/TaskTimewindowsEditor";
 import { TaskDependenciesView } from "@/components/TaskDependenciesView";
@@ -856,9 +858,14 @@ export default function OrderStockPage() {
         <ScrollArea className="h-[500px]">
           <div className="divide-y">
             {displayOrders.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">
-                {tl("page.orderstock.no-orders")}
-              </div>
+              <EmptyState
+                icon={ClipboardList}
+                title={tl("page.orderstock.no-orders")}
+                description="Skapa arbetsordrar via orderkoncept eller lägg till manuellt"
+                actionLabel="Gå till Orderkoncept"
+                onAction={() => setLocation("/order-concepts")}
+                actionIcon={ArrowRight}
+              />
             ) : (
               displayOrders.map(order => {
                 const customer = customerMap.get(order.customerId);

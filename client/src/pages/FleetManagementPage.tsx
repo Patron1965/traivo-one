@@ -32,6 +32,7 @@ import {
   Plus, Search, Calendar, Gauge, TrendingUp, Clock,
   ChevronRight, ChevronDown, BarChart3, DollarSign, Activity
 } from "lucide-react";
+import { EmptyState } from "@/components/EmptyState";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, differenceInDays, addDays, isPast, isFuture } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -503,10 +504,12 @@ export default function FleetManagementPage() {
 
             {filteredVehicles.length === 0 && (
               <Card>
-                <CardContent className="py-12 text-center">
-                  <Truck className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-                  <h3 className="font-medium">Inga fordon hittades</h3>
-                  <p className="text-sm text-muted-foreground">Lägg till fordon under Fordon-sidan</p>
+                <CardContent className="p-0">
+                  <EmptyState
+                    icon={Truck}
+                    title="Inga fordon registrerade"
+                    description="Registrera fordon för att spåra underhåll, bränsleförbrukning och fordonshistorik"
+                  />
                 </CardContent>
               </Card>
             )}
