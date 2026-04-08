@@ -10,7 +10,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CalendarIcon, Loader2, ChevronsUpDown, Check, Package, Anchor, Users, X, MessageSquare, Receipt, Sparkles, AlertTriangle } from "lucide-react";
+import { CalendarIcon, Loader2, ChevronsUpDown, Check, Package, Anchor, Users, X, MessageSquare, Receipt, Sparkles, AlertTriangle, Search } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -379,23 +379,30 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[300px] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
-                  <Command shouldFilter={false}>
-                    <CommandInput
+                  <div className="flex items-center border-b px-3">
+                    <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                    <input
+                      className="flex h-11 w-full bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
                       placeholder="Skriv för att söka kund..."
                       value={customerSearch}
-                      onValueChange={setCustomerSearch}
-                      onKeyDown={(e) => e.stopPropagation()}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                      autoFocus
                     />
-                    <CommandList>
-                      {filteredCustomers.length === 0 && (
-                        <CommandEmpty>Ingen kund hittad</CommandEmpty>
-                      )}
-                      <CommandGroup>
+                  </div>
+                  <ScrollArea className="max-h-[200px]">
+                    {filteredCustomers.length === 0 ? (
+                      <div className="py-6 text-center text-sm text-muted-foreground">Ingen kund hittad</div>
+                    ) : (
+                      <div className="p-1">
                         {filteredCustomers.map(c => (
-                          <CommandItem
+                          <button
                             key={c.id}
-                            value={c.id}
-                            onSelect={() => {
+                            type="button"
+                            className={cn(
+                              "relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
+                              formData.customerId === c.id && "bg-accent"
+                            )}
+                            onClick={() => {
                               setFormData({...formData, customerId: c.id, objectId: ""});
                               setSelectedObjectName("");
                               setObjectSearch("");
@@ -405,16 +412,16 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                           >
                             <Check className={cn("mr-2 h-4 w-4", formData.customerId === c.id ? "opacity-100" : "opacity-0")} />
                             {c.name}
-                          </CommandItem>
+                          </button>
                         ))}
-                      </CommandGroup>
-                      {!customerSearch && customers.length > 50 && (
-                        <div className="px-3 py-2 text-xs text-muted-foreground text-center border-t">
-                          Visar 50 av {customers.length} — skriv för att söka
-                        </div>
-                      )}
-                    </CommandList>
-                  </Command>
+                      </div>
+                    )}
+                    {!customerSearch && customers.length > 50 && (
+                      <div className="px-3 py-2 text-xs text-muted-foreground text-center border-t">
+                        Visar 50 av {customers.length} — skriv för att söka
+                      </div>
+                    )}
+                  </ScrollArea>
                 </PopoverContent>
               </Popover>
             </div>
