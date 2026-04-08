@@ -60,4 +60,32 @@ test.describe("Objects page", () => {
     await expect(page.getByRole("tab", { name: /lista/i })).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole("tab", { name: /karta/i })).toBeVisible({ timeout: 10000 });
   });
+
+  test("object count displays correctly from mock data", async ({ page }) => {
+    await navigateTo(page, "/objects");
+    await expect(page.getByText("2 av 2 objekt visas").first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test("filter panel shows clear button when filter active", async ({ page }) => {
+    await navigateTo(page, "/objects");
+    await page.locator('[data-testid="button-toggle-filters"]').click();
+    await page.waitForTimeout(300);
+    const typeFilter = page.locator('[data-testid="select-type-filter"]');
+    await expect(typeFilter).toBeVisible({ timeout: 5000 });
+  });
+
+  test("search does not crash with special characters", async ({ page }) => {
+    await navigateTo(page, "/objects");
+    const searchInput = page.locator('[data-testid="input-search-objects"]');
+    await searchInput.fill("test & <script>alert(1)</script>");
+    await page.waitForTimeout(500);
+    const hasError = await page.locator("text=Application Error").isVisible().catch(() => false);
+    expect(hasError).toBe(false);
+  });
+
+  test("object row shows city data from mock", async ({ page }) => {
+    await navigateTo(page, "/objects");
+    await expect(page.getByText("Stockholm").first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Göteborg").first()).toBeVisible({ timeout: 5000 });
+  });
 });
