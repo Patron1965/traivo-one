@@ -42,3 +42,9 @@ id = "1GvZoQINbrCIz3dpV3PzM"
 uri = "file://docs/Traivo-GO-Rapport-KINAB-Import.md"
 type = "text"
 title = "Traivo GO — Teknisk rapport efter KINAB-import"
+
+[[outputs]]
+id = "z54ip1M2VSRiBJO_MysLi"
+uri = "file://.local/traivo-go-impact-report.md"
+type = "text"
+title = "Traivo Go — Påverkansrapport"
