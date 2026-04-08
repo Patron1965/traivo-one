@@ -346,7 +346,7 @@ app.post("/api/routes/directions", asyncHandler(async (req, res) => {
 
     const apiKey = process.env.GEOAPIFY_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: "Geoapify API key not configured" });
+      return res.status(500).json({ error: "Geoapify API-nyckel saknas. Konfigurera den i inställningarna." });
     }
 
     const waypoints = coordinates
@@ -360,7 +360,7 @@ app.post("/api/routes/directions", asyncHandler(async (req, res) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Geoapify routing error:", errorText);
-      return res.status(response.status).json({ error: "Route calculation failed" });
+      return res.status(response.status).json({ error: "Kunde inte beräkna rutten" });
     }
 
     const data = await response.json();
@@ -373,7 +373,7 @@ app.post("/api/routes/optimize", asyncHandler(async (req, res) => {
     
     const apiKey = process.env.GEOAPIFY_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: "Geoapify API key not configured" });
+      return res.status(500).json({ error: "Geoapify API-nyckel saknas. Konfigurera den i inställningarna." });
     }
 
     const response = await fetch(

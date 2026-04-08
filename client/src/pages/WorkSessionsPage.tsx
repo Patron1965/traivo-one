@@ -96,7 +96,7 @@ export default function WorkSessionsPage() {
       toast({ title: "Arbetspass skapat" });
       setSessionDialogOpen(false);
     },
-    onError: (e: Error) => toast({ title: "Fel", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Kunde inte skapa arbetspass", description: e.message, variant: "destructive" }),
   });
 
   const updateSessionMutation = useMutation({
@@ -107,7 +107,7 @@ export default function WorkSessionsPage() {
       toast({ title: "Arbetspass uppdaterat" });
       setSessionDialogOpen(false);
     },
-    onError: (e: Error) => toast({ title: "Fel", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Kunde inte uppdatera arbetspass", description: e.message, variant: "destructive" }),
   });
 
   const checkInMutation = useMutation({
@@ -136,7 +136,7 @@ export default function WorkSessionsPage() {
       toast({ title: "Tidspost tillagd" });
       setEntryDialogOpen(false);
     },
-    onError: (e: Error) => toast({ title: "Fel", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Kunde inte lägga till tidspost", description: e.message, variant: "destructive" }),
   });
 
   const updateEntryMutation = useMutation({
@@ -147,7 +147,7 @@ export default function WorkSessionsPage() {
       toast({ title: "Tidspost uppdaterad" });
       setEntryDialogOpen(false);
     },
-    onError: (e: Error) => toast({ title: "Fel", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Kunde inte uppdatera tidspost", description: e.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -250,8 +250,8 @@ export default function WorkSessionsPage() {
       a.click();
       URL.revokeObjectURL(url);
       toast({ title: "Löneunderlag exporterat" });
-    } catch {
-      toast({ title: "Exportfel", variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Kunde inte exportera löneunderlag", description: error instanceof Error ? error.message : "Försök igen senare", variant: "destructive" });
     }
   };
 

@@ -149,8 +149,8 @@ function PlannerChat() {
         followUpQuestions: data.followUpQuestions,
       }]);
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte bearbeta frågan", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte bearbeta frågan", description: error.message, variant: "destructive" });
     },
   });
 
@@ -397,8 +397,8 @@ function AssistedPlanningPanel() {
     onSuccess: (data) => {
       toast({ title: "Plan genererad", description: data.explanation?.slice(0, 100) || "Klart!" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte skapa plan", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skapa plan", description: error.message, variant: "destructive" });
     },
   });
 

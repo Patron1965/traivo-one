@@ -40,7 +40,10 @@ async function portalFetch(url: string, options: RequestInit = {}) {
     window.location.href = "/portal";
     throw new Error("Session expired");
   }
-  if (!res.ok) throw new Error("Något gick fel");
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.error || error.message || "Kunde inte hämta inställningar");
+  }
   return res.json();
 }
 
@@ -96,10 +99,10 @@ export default function PortalSettingsPage() {
         description: "Dina notifieringsinställningar har uppdaterats.",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Fel",
-        description: "Kunde inte spara inställningar. Försök igen.",
+        title: "Kunde inte spara inställningar",
+        description: error.message || "Försök igen senare.",
         variant: "destructive",
       });
     },

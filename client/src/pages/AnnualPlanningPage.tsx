@@ -286,7 +286,7 @@ export default function AnnualPlanningPage() {
       form.reset();
       toast({ title: "Årsmål skapat" });
     },
-    onError: () => toast({ title: "Fel", description: "Kunde inte skapa årsmål.", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte skapa årsmål", description: error.message, variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
@@ -299,7 +299,7 @@ export default function AnnualPlanningPage() {
       form.reset();
       toast({ title: "Årsmål uppdaterat" });
     },
-    onError: () => toast({ title: "Fel", description: "Kunde inte uppdatera årsmål.", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte uppdatera årsmål", description: error.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -310,7 +310,7 @@ export default function AnnualPlanningPage() {
       setItemToDelete(null);
       toast({ title: "Årsmål borttaget" });
     },
-    onError: () => toast({ title: "Fel", description: "Kunde inte ta bort årsmål.", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte ta bort årsmål", description: error.message, variant: "destructive" }),
   });
 
   const generateMutation = useMutation({
@@ -326,7 +326,7 @@ export default function AnnualPlanningPage() {
         description: `${data.created} nya mål skapade, ${data.skipped} hoppades över (finns redan).`,
       });
     },
-    onError: () => toast({ title: "Fel", description: "Kunde inte generera mål.", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte generera mål", description: error.message, variant: "destructive" }),
   });
 
   const aiDistributeMutation = useMutation({
@@ -345,7 +345,7 @@ export default function AnnualPlanningPage() {
       setAiDistributeDialogOpen(false);
       toast({ title: "AI-fördelning klar", description: `${data.proposals.length} mål analyserade` });
     },
-    onError: () => toast({ title: "Fel", description: "Kunde inte analysera fördelning.", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte analysera fördelning", description: error.message, variant: "destructive" }),
   });
 
   const [aiProposalYear, setAiProposalYear] = useState(currentYear);
@@ -372,7 +372,7 @@ export default function AnnualPlanningPage() {
       if (data.deficit > 0) parts.push(`${data.deficit} kunde ej schemaläggas (tidsrestriktioner)`);
       toast({ title: "Fördelning tillämpad", description: `${parts.join(", ")} arbetsordrar för ${data.goalsProcessed} mål.` });
     },
-    onError: () => toast({ title: "Fel", description: "Kunde inte tillämpa fördelning.", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte tillämpa fördelning", description: error.message, variant: "destructive" }),
   });
 
   const handleEdit = (goal: AnnualGoalWithProgress) => {

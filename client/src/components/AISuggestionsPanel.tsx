@@ -222,10 +222,10 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
         });
       }
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Fel",
-        description: "Kunde inte generera AI-förslag. Försök igen.",
+        title: "Kunde inte generera AI-förslag",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -248,10 +248,10 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
         });
       }
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Fel",
-        description: "Kunde inte generera schemaläggning. Försök igen.",
+        title: "Kunde inte generera schemaläggning",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -277,10 +277,10 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
       setAutoScheduleResult(null);
       onScheduleApplied?.();
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Fel",
-        description: "Kunde inte tillämpa schemaläggningen.",
+        title: "Kunde inte tillämpa schemaläggningen",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -315,10 +315,10 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
         return { ...prev, assignments: newAssignments, decisionTrace: newTrace };
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Fel",
-        description: "Kunde inte tillämpa ordern.",
+        title: "Kunde inte tillämpa ordern",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -343,10 +343,10 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
       });
       onApplySuggestion?.(suggestion);
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Fel",
-        description: "Kunde inte tillämpa förslaget.",
+        title: "Kunde inte tillämpa förslaget",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -368,10 +368,10 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
         });
       }
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Fel",
-        description: "Kunde inte optimera rutter.",
+        title: "Kunde inte optimera rutter",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -394,10 +394,10 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
         });
       }
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Fel",
-        description: "Kunde inte analysera arbetsbelastning.",
+        title: "Kunde inte analysera arbetsbelastning",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -428,7 +428,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
       };
       setChatMessages(prev => [...prev, assistantMessage]);
     },
-    onError: () => {
+    onError: (error: Error) => {
       const errorMessage: ChatMessage = {
         id: `msg-${Date.now()}`,
         role: "assistant",
@@ -462,10 +462,10 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
         description: data.message,
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Fel",
-        description: "Kunde inte utföra åtgärden.",
+        title: "Kunde inte utföra åtgärden",
+        description: error.message,
         variant: "destructive",
       });
     },

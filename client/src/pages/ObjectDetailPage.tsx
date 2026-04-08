@@ -320,8 +320,8 @@ export default function ObjectDetailPage() {
       toast({ title: "Sparat", description: "Objektet har uppdaterats." });
       setEditDialogOpen(false);
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte spara ändringarna.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte spara ändringarna", description: error.message, variant: "destructive" });
     },
   });
 
@@ -335,8 +335,8 @@ export default function ObjectDetailPage() {
       setContactDialogOpen(false);
       setContactForm({ name: "", contactType: "primary", phone: "", email: "", role: "" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte lägga till kontakt.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte lägga till kontakt", description: error.message, variant: "destructive" });
     },
   });
 
@@ -348,8 +348,8 @@ export default function ObjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "contacts"] });
       toast({ title: "Kontakt borttagen" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte ta bort kontakt.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort kontakt", description: error.message, variant: "destructive" });
     },
   });
 
@@ -363,8 +363,8 @@ export default function ObjectDetailPage() {
       setImageDialogOpen(false);
       setImageForm({ imageUrl: "", imageType: "photo", description: "" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte lägga till bild.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte lägga till bild", description: error.message, variant: "destructive" });
     },
   });
 
@@ -376,8 +376,8 @@ export default function ObjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "images"] });
       toast({ title: "Bild borttagen" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte ta bort bild.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort bild", description: error.message, variant: "destructive" });
     },
   });
 
@@ -391,8 +391,8 @@ export default function ObjectDetailPage() {
       setRestrictionDialogOpen(false);
       setRestrictionForm({ restrictionType: "time_window", description: "", startTime: "", endTime: "", weekdays: [], isBlockingAllDay: false, preference: "unfavorable", reason: "" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte lägga till tidsrestriktion.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte lägga till tidsrestriktion", description: error.message, variant: "destructive" });
     },
   });
 
@@ -404,8 +404,8 @@ export default function ObjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "time-restrictions"] });
       toast({ title: "Tidsrestriktion borttagen" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte ta bort tidsrestriktion.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort tidsrestriktion", description: error.message, variant: "destructive" });
     },
   });
 
@@ -417,8 +417,8 @@ export default function ObjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/metadata/objects", objectId] });
       toast({ title: "Metadata tillagd" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte lägga till metadata.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte lägga till metadata", description: error.message, variant: "destructive" });
     },
   });
 
@@ -430,8 +430,8 @@ export default function ObjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/metadata/objects", objectId] });
       toast({ title: "Metadata borttagen" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte ta bort metadata.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort metadata", description: error.message, variant: "destructive" });
     },
   });
 
@@ -446,8 +446,8 @@ export default function ObjectDetailPage() {
       setWorkOrderDialogOpen(false);
       setWorkOrderForm({ title: "", description: "", scheduledDate: "" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte skapa arbetsorder.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skapa arbetsorder", description: error.message, variant: "destructive" });
     },
   });
 

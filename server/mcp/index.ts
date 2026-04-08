@@ -234,6 +234,6 @@ export async function handleMcpMessage(req: Request, res: Response) {
     await transport.handlePostMessage(req, res);
   } catch (error) {
     console.error("MCP message error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Internt serverfel" });
   }
 }

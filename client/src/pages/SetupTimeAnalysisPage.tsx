@@ -78,10 +78,10 @@ export default function SetupTimeAnalysisPage() {
         description: "Objektens estimat har uppdaterats baserat på historisk data." 
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({ 
-        title: "Fel", 
-        description: "Kunde inte tillämpa uppdateringar.", 
+        title: "Kunde inte tillämpa uppdateringar", 
+        description: error.message, 
         variant: "destructive" 
       });
     },

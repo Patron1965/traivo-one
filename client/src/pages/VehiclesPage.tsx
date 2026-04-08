@@ -203,7 +203,7 @@ export default function VehiclesPage() {
       vehicleForm.reset();
       toast({ title: "Fordon skapat", description: "Fordonet har lagts till." });
     },
-    onError: (error: Error) => toast({ title: "Fel", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte skapa fordon", description: error.message, variant: "destructive" }),
   });
 
   const updateVehicleMutation = useMutation({
@@ -222,7 +222,7 @@ export default function VehiclesPage() {
       vehicleForm.reset();
       toast({ title: "Fordon uppdaterat" });
     },
-    onError: (error: Error) => toast({ title: "Fel", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte uppdatera fordon", description: error.message, variant: "destructive" }),
   });
 
   const deleteVehicleMutation = useMutation({
@@ -233,7 +233,7 @@ export default function VehiclesPage() {
       setItemToDelete(null);
       toast({ title: "Fordon borttaget" });
     },
-    onError: (error: Error) => toast({ title: "Fel", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte ta bort fordon", description: error.message, variant: "destructive" }),
   });
 
   const createEquipmentMutation = useMutation({
@@ -250,7 +250,7 @@ export default function VehiclesPage() {
       equipmentForm.reset();
       toast({ title: "Utrustning skapad", description: "Utrustningen har lagts till." });
     },
-    onError: (error: Error) => toast({ title: "Fel", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte skapa utrustning", description: error.message, variant: "destructive" }),
   });
 
   const updateEquipmentMutation = useMutation({
@@ -263,7 +263,7 @@ export default function VehiclesPage() {
       equipmentForm.reset();
       toast({ title: "Utrustning uppdaterad" });
     },
-    onError: (error: Error) => toast({ title: "Fel", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte uppdatera utrustning", description: error.message, variant: "destructive" }),
   });
 
   const deleteEquipmentMutation = useMutation({
@@ -274,7 +274,7 @@ export default function VehiclesPage() {
       setItemToDelete(null);
       toast({ title: "Utrustning borttagen" });
     },
-    onError: (error: Error) => toast({ title: "Fel", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte ta bort utrustning", description: error.message, variant: "destructive" }),
   });
 
   const filteredVehicles = useMemo(() => {

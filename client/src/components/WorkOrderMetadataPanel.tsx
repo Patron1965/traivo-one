@@ -74,8 +74,8 @@ export function WorkOrderMetadataPanel({
       queryClient.invalidateQueries({ queryKey: ["/api/metadata/article-preview", objectId, firstArticleId] });
       queryClient.invalidateQueries({ queryKey: ["/api/metadata/object", objectId] });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte spara metadata", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte spara metadata", description: error.message, variant: "destructive" });
     },
   });
 

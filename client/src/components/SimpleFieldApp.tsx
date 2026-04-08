@@ -620,8 +620,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/mobile/tasks", selectedJobId, "metadata-context"] });
       toast({ title: "Metadata uppdaterad", description: `${metadataLabel} = ${newValue}` });
-    } catch {
-      toast({ title: "Fel", description: "Kunde inte spara metadata", variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Kunde inte spara metadata", description: error instanceof Error ? error.message : "Försök igen", variant: "destructive" });
     } finally {
       setSavingMetadata(null);
     }
@@ -712,8 +712,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       toast({ title: data.actionLabel, description: "Snabbåtgärd registrerad och planerare notifierad." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte utföra snabbåtgärden.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte utföra snabbåtgärden", description: error.message, variant: "destructive" });
     },
   });
 
@@ -775,10 +775,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       setView("jobs");
       setSelectedJobId(null);
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({ 
-        title: "Fel", 
-        description: "Kunde inte markera ordern som omöjlig.", 
+        title: "Kunde inte markera ordern som omöjlig", 
+        description: error.message, 
         variant: "destructive" 
       });
     },
@@ -809,10 +809,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       setChangeRequestSeverity("medium");
       setChangeRequestPhoto(null);
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Fel",
-        description: "Kunde inte skicka kundrapport.",
+        title: "Kunde inte skicka kundrapport",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -839,10 +839,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         });
       }
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({ 
-        title: "Fel", 
-        description: "Kunde inte skicka notifiering till kund.", 
+        title: "Kunde inte skicka notifiering till kund", 
+        description: error.message, 
         variant: "destructive" 
       });
     },
@@ -873,8 +873,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       setShowInspectionPanel(false);
       queryClient.invalidateQueries({ queryKey: ["/api/inspection-metadata"] });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte spara besiktning.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte spara besiktning", description: error.message, variant: "destructive" });
     },
   });
 

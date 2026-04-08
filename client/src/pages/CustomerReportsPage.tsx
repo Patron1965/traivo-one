@@ -149,8 +149,8 @@ export default function CustomerReportsPage() {
       setReviewNotes("");
       setNewStatus("");
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte uppdatera status.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte uppdatera status", description: error.message, variant: "destructive" });
     },
   });
 
@@ -165,8 +165,8 @@ export default function CustomerReportsPage() {
       toast({ title: "Arbetsorder skapad", description: "En ny arbetsorder har skapats från denna rapport." });
       setSelectedReport(null);
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte skapa arbetsorder.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skapa arbetsorder", description: error.message, variant: "destructive" });
     },
   });
 

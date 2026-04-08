@@ -120,7 +120,7 @@ export default function PriceListsPage() {
       toast({ title: "Prislista skapad", description: "Prislistan har lagts till." });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte skapa prislista", description: error.message, variant: "destructive" });
     },
   });
 
@@ -135,7 +135,7 @@ export default function PriceListsPage() {
       toast({ title: "Prislista uppdaterad", description: "Prislistan har uppdaterats." });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte uppdatera prislista", description: error.message, variant: "destructive" });
     },
   });
 
@@ -150,7 +150,7 @@ export default function PriceListsPage() {
       toast({ title: "Prislista borttagen", description: "Prislistan har tagits bort." });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte ta bort prislista", description: error.message, variant: "destructive" });
     },
   });
 

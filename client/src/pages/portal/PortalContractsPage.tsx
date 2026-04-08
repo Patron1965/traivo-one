@@ -31,7 +31,10 @@ async function portalFetch(url: string) {
     window.location.href = "/portal";
     throw new Error("Session expired");
   }
-  if (!res.ok) throw new Error("Något gick fel");
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.error || error.message || "Kunde inte hämta avtalsdata");
+  }
   return res.json();
 }
 

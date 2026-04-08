@@ -93,7 +93,7 @@ function BrandingTab() {
       toast({ title: "Logotyp uppladdad", description: "Logotypen har sparats." });
     },
     onError: (error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte hämta data", description: error.message, variant: "destructive" });
     },
   });
 
@@ -113,8 +113,8 @@ function BrandingTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/system/tenant-branding"] });
       toast({ title: "Varumärke uppdaterat", description: "Ändringarna har sparats." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte spara ändringar.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte spara ändringar", description: error.message, variant: "destructive" });
     },
   });
 
@@ -126,8 +126,8 @@ function BrandingTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/system/tenant-branding"] });
       toast({ title: "Publicerat", description: "Varumärket är nu live." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte publicera.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte publicera", description: error.message, variant: "destructive" });
     },
   });
 
@@ -517,8 +517,8 @@ function UsersTab() {
       setShowAddDialog(false);
       setNewUser({ email: "", name: "", role: "viewer", permissions: [], password: "" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte skapa användare.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skapa användare", description: error.message, variant: "destructive" });
     },
   });
 
@@ -531,8 +531,8 @@ function UsersTab() {
       toast({ title: "Användare uppdaterad", description: "Ändringarna har sparats." });
       setEditingUser(null);
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte uppdatera användare.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte uppdatera användare", description: error.message, variant: "destructive" });
     },
   });
 
@@ -544,8 +544,8 @@ function UsersTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/system/user-roles"] });
       toast({ title: "Användare borttagen" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte ta bort användare.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort användare", description: error.message, variant: "destructive" });
     },
   });
 
@@ -559,8 +559,8 @@ function UsersTab() {
       setShowImportDialog(false);
       setImportData([]);
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte importera användare.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte importera användare", description: error.message, variant: "destructive" });
     },
   });
 

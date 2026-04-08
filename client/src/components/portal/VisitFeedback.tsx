@@ -81,7 +81,7 @@ export function VisitFeedback({ workOrder, portalFetch }: VisitFeedbackProps) {
     },
     onError: (error: Error) => {
       toast({
-        title: "Något gick fel",
+        title: "Kunde inte kvittera besöket",
         description: error.message,
         variant: "destructive",
       });
@@ -109,7 +109,7 @@ export function VisitFeedback({ workOrder, portalFetch }: VisitFeedbackProps) {
     },
     onError: (error: Error) => {
       toast({
-        title: "Något gick fel",
+        title: "Kunde inte spara betyget",
         description: error.message,
         variant: "destructive",
       });

@@ -80,7 +80,7 @@ export function SelfBookingWidget({ portalFetch, objects = [] }: SelfBookingWidg
     },
     onError: (error: Error) => {
       toast({
-        title: "Något gick fel",
+        title: "Kunde inte skapa bokningen",
         description: error.message,
         variant: "destructive",
       });
@@ -102,7 +102,7 @@ export function SelfBookingWidget({ portalFetch, objects = [] }: SelfBookingWidg
     },
     onError: (error: Error) => {
       toast({
-        title: "Något gick fel",
+        title: "Kunde inte avboka",
         description: error.message,
         variant: "destructive",
       });

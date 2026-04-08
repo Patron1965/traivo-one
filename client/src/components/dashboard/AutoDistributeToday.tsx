@@ -45,7 +45,7 @@ export function AutoDistributeToday() {
         setPreviewOpen(true);
       }
     } catch {
-      toast({ title: "Fel", description: "Kunde inte hämta fördelningsförslag.", variant: "destructive" });
+      toast({ title: "Kunde inte hämta fördelningsförslag", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -66,7 +66,7 @@ export function AutoDistributeToday() {
       setPreviewOpen(false);
       setResult(null);
     } catch {
-      toast({ title: "Fel", description: "Kunde inte tillämpa fördelningen.", variant: "destructive" });
+      toast({ title: "Kunde inte tillämpa fördelningen", description: error.message, variant: "destructive" });
     } finally {
       setApplying(false);
     }

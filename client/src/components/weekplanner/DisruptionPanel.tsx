@@ -80,8 +80,8 @@ export function DisruptionPanel() {
       queryClient.invalidateQueries({ queryKey: ["/api/disruptions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte tillämpa förslaget", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte tillämpa förslaget", description: error.message, variant: "destructive" });
     },
   });
 

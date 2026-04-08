@@ -183,7 +183,7 @@ export default function OnboardingWizardPage() {
     },
     onError: (error: Error) => {
       toast({
-        title: "Fel vid skapande",
+        title: "Kunde inte skapa företagskonto",
         description: error.message,
         variant: "destructive",
       });

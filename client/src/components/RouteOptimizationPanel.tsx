@@ -212,8 +212,8 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
         }
       }
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte starta optimering", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte starta optimering", description: error.message, variant: "destructive" });
     },
   });
 

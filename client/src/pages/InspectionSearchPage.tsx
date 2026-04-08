@@ -119,8 +119,8 @@ export default function InspectionSearchPage() {
       setSelectedInspections(new Set());
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte skapa åtgärdsorder.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skapa åtgärdsorder", description: error.message, variant: "destructive" });
     },
   });
 

@@ -117,8 +117,8 @@ export default function PredictiveMaintenancePage() {
         description: `${result.analyzedObjects} objekt analyserade. ${result.urgentCount} kr\u00e4ver service inom 7 dagar.`,
       });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte k\u00f6ra prediktiv analys", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte köra prediktiv analys", description: error.message, variant: "destructive" });
     },
   });
 
@@ -130,8 +130,8 @@ export default function PredictiveMaintenancePage() {
       setCreateOrderDialog(null);
       toast({ title: "Arbetsorder skapad", description: "En ny arbetsorder har skapats fr\u00e5n prognosen." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte skapa arbetsorder", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skapa arbetsorder", description: error.message, variant: "destructive" });
     },
   });
 

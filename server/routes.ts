@@ -95,7 +95,7 @@ export async function registerRoutes(
       }
     } catch (error) {
       console.error("Failed to fetch tenant info:", error);
-      res.status(500).json({ error: "Failed to fetch tenant info" });
+      res.status(500).json({ error: "Kunde inte hämta organisationsuppgifter" });
     }
   });
 
@@ -228,7 +228,7 @@ export async function registerRoutes(
       });
     } catch (error) {
       console.error("Failed to fetch dashboard stats:", error);
-      res.status(500).json({ error: "Failed to fetch stats" });
+      res.status(500).json({ error: "Kunde inte hämta dashboard-statistik" });
     }
   });
 
@@ -339,7 +339,7 @@ export async function registerRoutes(
       });
     } catch (error) {
       console.error("Failed to fetch dashboard alerts:", error);
-      res.status(500).json({ error: "Failed to fetch alerts" });
+      res.status(500).json({ error: "Kunde inte hämta varningar" });
     }
   });
 
@@ -402,7 +402,7 @@ export async function registerRoutes(
       });
     } catch (error) {
       console.error("Failed to fetch capacity:", error);
-      res.status(500).json({ error: "Failed to fetch capacity" });
+      res.status(500).json({ error: "Kunde inte hämta kapacitetsdata" });
     }
   });
 

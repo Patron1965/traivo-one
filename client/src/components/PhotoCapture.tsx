@@ -114,8 +114,8 @@ export function PhotoCapture({
     } catch (error) {
       console.error("Upload error:", error);
       toast({
-        title: "Fel vid uppladdning",
-        description: "Kunde inte ladda upp bilden.",
+        title: "Kunde inte ladda upp bilden",
+        description: error instanceof Error ? error.message : "Försök igen",
         variant: "destructive",
       });
     } finally {

@@ -232,8 +232,8 @@ export default function ClustersPage() {
       form.reset();
       toast({ title: "Kluster skapat", description: "Klustret har lagts till" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte skapa kluster", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skapa klustret", description: error.message, variant: "destructive" });
     },
   });
 
@@ -247,8 +247,8 @@ export default function ClustersPage() {
       form.reset();
       toast({ title: "Kluster uppdaterat", description: "Ändringar har sparats" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte uppdatera kluster", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte uppdatera klustret", description: error.message, variant: "destructive" });
     },
   });
 
@@ -260,8 +260,8 @@ export default function ClustersPage() {
       setClusterToDelete(null);
       toast({ title: "Kluster borttaget", description: "Klustret har tagits bort" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte ta bort kluster", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort klustret", description: error.message, variant: "destructive" });
     },
   });
 
@@ -271,8 +271,8 @@ export default function ClustersPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/clusters"] });
       toast({ title: "Cache uppdaterad", description: "Klusterstatistik har uppdaterats" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte uppdatera cache", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte uppdatera cache", description: error.message, variant: "destructive" });
     },
   });
 

@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from "react";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { AlertTriangle, RefreshCw, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -31,6 +31,10 @@ export class ErrorBoundary extends Component<Props, State> {
     this.setState({ hasError: false, error: undefined });
   };
 
+  handleReload = () => {
+    window.location.reload();
+  };
+
   render() {
     if (this.state.hasError) {
       if (this.props.fallback) {
@@ -38,7 +42,7 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="flex items-center justify-center min-h-[200px] p-4">
+        <div className="flex items-center justify-center min-h-[200px] p-4" data-testid="error-boundary">
           <Card className="max-w-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-destructive">
@@ -48,17 +52,23 @@ export class ErrorBoundary extends Component<Props, State> {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Ett oväntat fel uppstod. Försök att ladda om sidan.
+                Ett oväntat fel uppstod i denna del av sidan. Du kan försöka igen eller ladda om hela sidan.
               </p>
               {this.state.error && (
                 <p className="text-xs text-muted-foreground font-mono bg-muted p-2 rounded">
                   {this.state.error.message}
                 </p>
               )}
-              <Button onClick={this.handleRetry} className="w-full">
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Försök igen
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={this.handleRetry} variant="outline" className="flex-1" data-testid="button-error-retry">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Försök igen
+                </Button>
+                <Button onClick={this.handleReload} className="flex-1" data-testid="button-error-reload">
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Ladda om sidan
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>

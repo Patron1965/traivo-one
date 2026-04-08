@@ -283,7 +283,7 @@ export default function ArticlesPage() {
       toast({ title: "Artikel skapad", description: "Artikeln har lagts till." });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte skapa artikel", description: error.message, variant: "destructive" });
     },
   });
 
@@ -298,7 +298,7 @@ export default function ArticlesPage() {
       toast({ title: "Artikel uppdaterad", description: "Artikeln har uppdaterats." });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte uppdatera artikel", description: error.message, variant: "destructive" });
     },
   });
 
@@ -313,7 +313,7 @@ export default function ArticlesPage() {
       toast({ title: "Artikel borttagen", description: "Artikeln har tagits bort." });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte ta bort artikel", description: error.message, variant: "destructive" });
     },
   });
 

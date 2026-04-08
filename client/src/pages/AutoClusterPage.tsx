@@ -341,8 +341,8 @@ export default function AutoClusterPage() {
         toast({ title: "Förslag genererade", description: `${result.suggestions.length} kluster föreslagna` });
       }
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte generera klusterförslag.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte generera klusterförslag", description: error.message, variant: "destructive" });
     },
   });
 
@@ -358,8 +358,8 @@ export default function AutoClusterPage() {
       setSelectedSuggestions(new Set());
       setGeneratedResult(null);
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte skapa kluster.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skapa kluster", description: error.message, variant: "destructive" });
     },
   });
 
@@ -382,8 +382,8 @@ export default function AutoClusterPage() {
       setAutoAssignResult(result);
       setAutoAssignApplied(false);
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte analysera objekt utan stad.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte analysera objekt utan stad", description: error.message, variant: "destructive" });
     },
   });
 
@@ -721,8 +721,8 @@ export default function AutoClusterPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       toast({ title: "Exporterad", description: `${generatedResult.unclusteredObjects.count.toLocaleString("sv")} objekt exporterade till CSV.` });
-    } catch {
-      toast({ title: "Fel", description: "Kunde inte exportera objekt.", variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Kunde inte exportera objekt", description: error instanceof Error ? error.message : "Försök igen", variant: "destructive" });
     } finally {
       setIsExporting(false);
     }
@@ -763,21 +763,21 @@ export default function AutoClusterPage() {
             title: "Importerad",
             description: `${result.updated} av ${result.total} objekt uppdaterade.${result.errors.length > 0 ? ` ${result.errors.length} fel.` : ""} Generera om kluster för att se effekten.`,
           });
-        } catch {
-          toast({ title: "Fel", description: "Kunde inte importera korrigeringar.", variant: "destructive" });
+        } catch (error) {
+          toast({ title: "Kunde inte importera korrigeringar", description: error instanceof Error ? error.message : "Försök igen", variant: "destructive" });
         } finally {
           setIsImporting(false);
           if (fileInputRef.current) fileInputRef.current.value = "";
         }
       },
       error: () => {
-        toast({ title: "Fel", description: "Kunde inte läsa CSV-filen.", variant: "destructive" });
+        toast({ title: "Kunde inte läsa CSV-filen", description: "Kontrollera att filen har korrekt format", variant: "destructive" });
         setIsImporting(false);
       }
     });
     };
     reader.onerror = () => {
-      toast({ title: "Fel", description: "Kunde inte läsa filen.", variant: "destructive" });
+      toast({ title: "Kunde inte läsa filen", description: "Kontrollera att filen är giltig och försök igen", variant: "destructive" });
       setIsImporting(false);
     };
     reader.readAsText(file, "utf-8");

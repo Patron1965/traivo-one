@@ -124,7 +124,7 @@ export default function ProcurementsPage() {
       toast({ title: "Upphandling skapad", description: "Den nya upphandlingen har lagts till." });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte skapa upphandling", description: error.message, variant: "destructive" });
     },
   });
 
@@ -140,7 +140,7 @@ export default function ProcurementsPage() {
       toast({ title: "Upphandling uppdaterad" });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte uppdatera upphandling", description: error.message, variant: "destructive" });
     },
   });
 
@@ -155,7 +155,7 @@ export default function ProcurementsPage() {
       toast({ title: "Upphandling borttagen" });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte ta bort upphandling", description: error.message, variant: "destructive" });
     },
   });
 

@@ -157,8 +157,8 @@ export function SignatureCapture({
     } catch (error) {
       console.error("Signature save error:", error);
       toast({
-        title: "Fel",
-        description: "Kunde inte spara signaturen.",
+        title: "Kunde inte spara signaturen",
+        description: error.message,
         variant: "destructive",
       });
     } finally {

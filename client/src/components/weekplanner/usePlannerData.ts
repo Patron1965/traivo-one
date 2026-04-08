@@ -214,26 +214,26 @@ export function usePlannerData() {
       return { previousData: prev };
     },
     onSuccess: (updated, vars) => { queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === vars.id ? { ...j, ...updated } : j)); queryClient.invalidateQueries({ queryKey: ["/api/work-orders", "unscheduled-paginated"] }); setUnscheduledPage(0); },
-    onError: (_err, _vars, ctx) => { if (ctx?.previousData) queryClient.setQueryData(workOrdersQueryKey, ctx.previousData); toast({ title: "Fel", description: "Kunde inte uppdatera jobbet.", variant: "destructive" }); },
+    onError: (_err, _vars, ctx) => { if (ctx?.previousData) queryClient.setQueryData(workOrdersQueryKey, ctx.previousData); toast({ title: "Kunde inte uppdatera jobbet", description: error.message, variant: "destructive" }); },
   });
 
   const unscheduleWorkOrderMutation = useMutation({
     mutationFn: async (id: string) => (await apiRequest("PATCH", `/api/work-orders/${id}`, { resourceId: null, scheduledDate: null, scheduledStartTime: null, orderStatus: "skapad" })).json() as Promise<WorkOrderWithObject>,
     onMutate: async (id) => { await queryClient.cancelQueries({ queryKey: workOrdersQueryKey }); const prev = queryClient.getQueryData<WorkOrderWithObject[]>(workOrdersQueryKey); queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === id ? { ...j, resourceId: null, scheduledDate: null, scheduledStartTime: null, orderStatus: "skapad" as const } : j)); return { previousData: prev }; },
     onSuccess: (updated, id) => { queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === id ? { ...j, ...updated } : j)); queryClient.invalidateQueries({ queryKey: ["/api/work-orders", "unscheduled-paginated"] }); setUnscheduledPage(0); toast({ title: "Avschemalagt", description: "Jobbet flyttades tillbaka till oschemalagda." }); },
-    onError: (_err, _id, ctx) => { if (ctx?.previousData) queryClient.setQueryData(workOrdersQueryKey, ctx.previousData); toast({ title: "Fel", description: "Kunde inte avschemalägg jobbet.", variant: "destructive" }); },
+    onError: (_err, _id, ctx) => { if (ctx?.previousData) queryClient.setQueryData(workOrdersQueryKey, ctx.previousData); toast({ title: "Kunde inte avschemalägg jobbet", description: error.message, variant: "destructive" }); },
   });
 
   const applyActionMutation = useMutation({
     mutationFn: async ({ jobId, state }: { jobId: string; state: PlannerAction["previousState"] }) => (await apiRequest("PATCH", `/api/work-orders/${jobId}`, { resourceId: state.resourceId, scheduledDate: state.scheduledDate, scheduledStartTime: state.scheduledStartTime, orderStatus: state.orderStatus })).json() as Promise<WorkOrderWithObject>,
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: workOrdersQueryKey }); queryClient.invalidateQueries({ queryKey: ["/api/work-orders", "unscheduled-paginated"] }); setUnscheduledPage(0); },
-    onError: () => { toast({ title: "Fel", description: "Kunde inte ångra/göra om ändringen.", variant: "destructive" }); },
+    onError: (error: Error) => { toast({ title: "Kunde inte ångra/göra om ändringen", description: error.message, variant: "destructive" }); },
   });
 
   const sendScheduleMutation = useMutation({
     mutationFn: async ({ resourceId, jobs, dateRange }: { resourceId: string; jobs: Array<{ id: string; title: string; objectName?: string; objectAddress?: string; scheduledDate: string; scheduledStartTime?: string; estimatedDuration?: number; accessCode?: string; keyNumber?: string }>; dateRange: { start: string; end: string } }) => (await apiRequest("POST", `/api/notifications/send-schedule/${resourceId}`, { jobs, dateRange, fieldAppUrl: `${window.location.origin}/field` })).json(),
     onSuccess: (data) => { if (data.success) { toast({ title: "Schema skickat!", description: `Schemat har skickats till ${data.recipient}` }); setSendScheduleDialogOpen(false); } else { toast({ title: "Kunde inte skicka", description: data.error || "Ett fel uppstod", variant: "destructive" }); } },
-    onError: (err) => { toast({ title: "Fel", description: err instanceof Error ? err.message : "Kunde inte skicka schema", variant: "destructive" }); },
+    onError: (err) => { toast({ title: "Kunde inte skicka schema", description: err instanceof Error ? err.message : "Försök igen senare.", variant: "destructive" }); },
   });
 
   const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
@@ -465,17 +465,17 @@ export function usePlannerData() {
 
   const handleClearAllScheduled = async () => {
     setClearLoading(true);
-    try { let cs: Date, ce: Date; if (viewMode === "month") { cs = startOfMonth(currentDate); ce = addDays(cs, getDaysInMonth(currentDate) - 1); } else if (viewMode === "day") { cs = currentDate; ce = currentDate; } else { cs = currentWeekStart; ce = addDays(currentWeekStart, 4); } const data = await (await apiRequest("POST", "/api/work-orders/bulk-unschedule", { startDate: format(cs, "yyyy-MM-dd"), endDate: format(ce, "yyyy-MM-dd") })).json(); queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] }); setUnscheduledPage(0); setClearDialogOpen(false); toast({ title: "Planering rensad", description: `${data.count} jobb avplanerade och flyttade tillbaka till orderstocken.` }); } catch { toast({ title: "Fel", description: "Kunde inte rensa planeringen", variant: "destructive" }); } finally { setClearLoading(false); }
+    try { let cs: Date, ce: Date; if (viewMode === "month") { cs = startOfMonth(currentDate); ce = addDays(cs, getDaysInMonth(currentDate) - 1); } else if (viewMode === "day") { cs = currentDate; ce = currentDate; } else { cs = currentWeekStart; ce = addDays(currentWeekStart, 4); } const data = await (await apiRequest("POST", "/api/work-orders/bulk-unschedule", { startDate: format(cs, "yyyy-MM-dd"), endDate: format(ce, "yyyy-MM-dd") })).json(); queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] }); setUnscheduledPage(0); setClearDialogOpen(false); toast({ title: "Planering rensad", description: `${data.count} jobb avplanerade och flyttade tillbaka till orderstocken.` }); } catch (error) { toast({ title: "Kunde inte rensa planeringen", description: error.message, variant: "destructive" }); } finally { setClearLoading(false); }
   };
 
   const handleAutoFillPreview = async () => {
     setAutoFillLoading(true); setAutoFillPreview(null);
-    try { const ws = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 }); const data = await (await apiRequest("POST", "/api/auto-plan-week", { weekStartDate: format(ws, "yyyy-MM-dd"), resourceIds: resources.map(r => r.id), overbookingPercent: autoFillOverbooking, geoClusteringEnabled: autoFillGeoClustering })).json(); setAutoFillPreview(data.assignments || []); setAutoFillSkipped(data.totalSkipped || 0); setAutoFillDiag(data.totalUnscheduled != null ? { totalUnscheduled: data.totalUnscheduled, capacityPerDay: data.capacityPerDay || {}, maxMinutesPerDay: data.maxMinutesPerDay || 480, resourceCount: data.resourceCount || 0, clusterSkipped: data.clusterSkipped || 0 } : null); setAutoFillGeoSpread(data.geoSpreadPerDay || null); } catch { toast({ title: "Fel", description: "Kunde inte generera planering", variant: "destructive" }); } finally { setAutoFillLoading(false); }
+    try { const ws = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 }); const data = await (await apiRequest("POST", "/api/auto-plan-week", { weekStartDate: format(ws, "yyyy-MM-dd"), resourceIds: resources.map(r => r.id), overbookingPercent: autoFillOverbooking, geoClusteringEnabled: autoFillGeoClustering })).json(); setAutoFillPreview(data.assignments || []); setAutoFillSkipped(data.totalSkipped || 0); setAutoFillDiag(data.totalUnscheduled != null ? { totalUnscheduled: data.totalUnscheduled, capacityPerDay: data.capacityPerDay || {}, maxMinutesPerDay: data.maxMinutesPerDay || 480, resourceCount: data.resourceCount || 0, clusterSkipped: data.clusterSkipped || 0 } : null); setAutoFillGeoSpread(data.geoSpreadPerDay || null); } catch (error) { toast({ title: "Kunde inte generera planering", description: error.message, variant: "destructive" }); } finally { setAutoFillLoading(false); }
   };
 
   const handleAutoFillApply = async () => {
     if (!autoFillPreview || autoFillPreview.length === 0) return; setAutoFillApplying(true);
-    try { const data = await (await apiRequest("POST", "/api/auto-plan-week/apply", { assignments: autoFillPreview })).json(); toast({ title: "Planering tillämpad", description: `${data.applied} uppdrag planerade${autoFillSkipped > 0 ? `, ${autoFillSkipped} ryms ej denna vecka` : ""}` }); setAutoFillDialogOpen(false); setAutoFillPreview(null); queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] }); setUnscheduledPage(0); } catch { toast({ title: "Fel", description: "Kunde inte tillämpa planering", variant: "destructive" }); } finally { setAutoFillApplying(false); }
+    try { const data = await (await apiRequest("POST", "/api/auto-plan-week/apply", { assignments: autoFillPreview })).json(); toast({ title: "Planering tillämpad", description: `${data.applied} uppdrag planerade${autoFillSkipped > 0 ? `, ${autoFillSkipped} ryms ej denna vecka` : ""}` }); setAutoFillDialogOpen(false); setAutoFillPreview(null); queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] }); setUnscheduledPage(0); } catch (error) { toast({ title: "Kunde inte tillämpa planering", description: error.message, variant: "destructive" }); } finally { setAutoFillApplying(false); }
   };
 
   const handleCarryOver = useCallback(async () => {
@@ -493,7 +493,7 @@ export function usePlannerData() {
       } else {
         toast({ title: "Inga jobb att flytta", description: "Alla jobb från igår är redan avslutade." });
       }
-    } catch { toast({ title: "Fel", description: "Kunde inte flytta jobb", variant: "destructive" }); }
+    } catch (error) { toast({ title: "Kunde inte flytta jobb", description: error.message, variant: "destructive" }); }
   }, [toast]);
 
   const handleOpenDepChain = useCallback((jobId: string) => { setDepChainJobId(jobId); setDepChainDialogOpen(true); }, []);

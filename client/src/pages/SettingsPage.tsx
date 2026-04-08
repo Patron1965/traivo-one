@@ -82,8 +82,8 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/tenant/settings"] });
       toast({ title: "Inställningar sparade", description: "Dina ändringar har sparats." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte spara inställningar.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte spara inställningar", description: error.message, variant: "destructive" });
     },
   });
 
@@ -104,8 +104,8 @@ export default function SettingsPage() {
     onSuccess: () => {
       toast({ title: "Export klar", description: "Filen har laddats ner." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte exportera data.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte exportera data", description: error.message, variant: "destructive" });
     },
   });
 

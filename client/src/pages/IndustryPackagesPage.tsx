@@ -68,10 +68,10 @@ export default function IndustryPackagesPage() {
         description: `${data.results?.filter((r: any) => r.status === "created").length || 0} paket skapades`,
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Fel",
-        description: "Kunde inte skapa branschpaket",
+        title: "Kunde inte skapa branschpaket",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -92,7 +92,7 @@ export default function IndustryPackagesPage() {
       });
       setInstallingPackageId(null);
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Installationsfel",
         description: "Kunde inte installera paketet",

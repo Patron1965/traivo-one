@@ -178,7 +178,7 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
       toast({ title: "Metadata tillagd", description: "Metadata har lagts till på jobbet." });
     },
     onError: (error: any) => {
-      toast({ title: "Fel", description: error.message || "Kunde inte lägga till metadata.", variant: "destructive" });
+      toast({ title: "Kunde inte lägga till metadata", description: error.message || "Försök igen senare.", variant: "destructive" });
     },
   });
 
@@ -190,8 +190,8 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
       queryClient.invalidateQueries({ queryKey: ["/api/metadata/work-orders", workOrderId] });
       toast({ title: "Metadata borttagen", description: "Metadata har tagits bort från jobbet." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte ta bort metadata.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort metadata", description: error.message, variant: "destructive" });
     },
   });
 
@@ -262,7 +262,7 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
       }
     },
     onError: (error: any) => {
-      toast({ title: "Fel", description: error.message || "Kunde inte skicka SMS.", variant: "destructive" });
+      toast({ title: "Kunde inte skicka SMS", description: error.message || "Försök igen senare.", variant: "destructive" });
     },
   });
 
@@ -276,8 +276,8 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
       setObjectPopoverOpen(false);
       toast({ title: "Objekt tillagt", description: "Objektet har lagts till på jobbet." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte lägga till objektet.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte lägga till objektet", description: error.message, variant: "destructive" });
     },
   });
 
@@ -289,8 +289,8 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId, "objects"] });
       toast({ title: "Objekt borttaget", description: "Objektet har tagits bort från jobbet." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte ta bort objektet.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort objektet", description: error.message, variant: "destructive" });
     },
   });
 
@@ -341,7 +341,7 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
       toast({ title: "Artikel tillagd", description: "Artikeln har lagts till på jobbet." });
     },
     onError: (error: any) => {
-      toast({ title: "Fel", description: error.message || "Kunde inte lägga till artikeln.", variant: "destructive" });
+      toast({ title: "Kunde inte lägga till artikeln", description: error.message || "Försök igen senare.", variant: "destructive" });
     },
   });
 

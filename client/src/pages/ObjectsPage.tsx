@@ -344,8 +344,8 @@ export default function ObjectsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/objects/missing-city-count"] });
       refetchMissingCity();
       toast({ title: `${result.updated} objekt uppdaterade med stad` });
-    } catch {
-      toast({ title: "Batch-ifyllnad misslyckades", variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Batch-ifyllnad misslyckades", description: error instanceof Error ? error.message : "Ett oväntat fel uppstod", variant: "destructive" });
     } finally {
       setBatchFillCityRunning(false);
     }
@@ -361,8 +361,8 @@ export default function ObjectsPage() {
       setEditingObject(null);
       setEditField(null);
     },
-    onError: () => {
-      toast({ title: "Fel vid uppdatering", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte uppdatera objektet", description: error.message, variant: "destructive" });
     },
   });
 
@@ -374,8 +374,8 @@ export default function ObjectsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
       toast({ title: "Objekt verifierat", description: "Det rapporterade objektet har verifierats och är nu ett vanligt objekt." });
     },
-    onError: () => {
-      toast({ title: "Fel vid verifiering", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte verifiera objektet", description: error.message, variant: "destructive" });
     },
   });
 
@@ -387,8 +387,8 @@ export default function ObjectsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
       toast({ title: "Objekt avvisat", description: "Det rapporterade objektet har avvisats." });
     },
-    onError: () => {
-      toast({ title: "Fel vid avvisning", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte avvisa objektet", description: error.message, variant: "destructive" });
     },
   });
 
@@ -404,8 +404,8 @@ export default function ObjectsPage() {
       setCreateDialogOpen(false);
       setNewObject({ name: "", objectType: "fastighet", accessType: "open", accessCode: "", address: "", customerId: "", latitude: null, longitude: null, city: "", postalCode: "", entranceLatitude: null, entranceLongitude: null, addressDescriptor: "" });
     },
-    onError: () => {
-      toast({ title: "Fel vid skapande", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skapa objektet", description: error.message, variant: "destructive" });
     },
   });
 
@@ -1024,7 +1024,7 @@ export default function ObjectsPage() {
               if (!res.ok) throw new Error("API error");
               const data = await res.json();
               setServicePatternDialog({ open: true, loading: false, data });
-            } catch { toast({ title: "Fel", description: "Kunde inte analysera servicemönster", variant: "destructive" }); setServicePatternDialog({ open: true, loading: false, data: { summary: "Kunde inte analysera servicemönster.", patterns: [], anomalies: [] } }); }
+            } catch (error) { toast({ title: "Kunde inte analysera servicemönster", description: error instanceof Error ? error.message : "Försök igen senare.", variant: "destructive" }); setServicePatternDialog({ open: true, loading: false, data: { summary: "Kunde inte analysera servicemönster.", patterns: [], anomalies: [] } }); }
           }}},
           { type: "optimization", title: "Gruppering", description: "Föreslå optimal gruppering av objekt baserat på geografi och servicebehov", action: { label: "Analysera", onClick: async () => {
             setClusterDialog({ open: true, loading: true });
@@ -1034,7 +1034,7 @@ export default function ObjectsPage() {
               if (!res.ok) throw new Error("API error");
               const data = await res.json();
               setClusterDialog({ open: true, loading: false, data });
-            } catch { toast({ title: "Fel", description: "Kunde inte generera klusterförslag", variant: "destructive" }); setClusterDialog({ open: true, loading: false, data: { message: "Kunde inte generera klusterförslag." } }); }
+            } catch (error) { toast({ title: "Kunde inte generera klusterförslag", description: error instanceof Error ? error.message : "Försök igen senare.", variant: "destructive" }); setClusterDialog({ open: true, loading: false, data: { message: "Kunde inte generera klusterförslag." } }); }
           }}},
           { type: "info", title: "Underhållsprognoser", description: "Prediktera kommande servicebehov baserat på historik", action: { label: "Analysera", onClick: async () => {
             setMaintenanceDialog({ open: true, loading: true });
@@ -1044,7 +1044,7 @@ export default function ObjectsPage() {
               if (!res.ok) throw new Error("API error");
               const data = await res.json();
               setMaintenanceDialog({ open: true, loading: false, data });
-            } catch { toast({ title: "Fel", description: "Kunde inte generera prognoser", variant: "destructive" }); setMaintenanceDialog({ open: true, loading: false, data: { overdue: [], upcoming: [], summary: "Kunde inte generera prognoser.", totalPredicted: 0 } }); }
+            } catch (error) { toast({ title: "Kunde inte generera prognoser", description: error instanceof Error ? error.message : "Försök igen senare.", variant: "destructive" }); setMaintenanceDialog({ open: true, loading: false, data: { overdue: [], upcoming: [], summary: "Kunde inte generera prognoser.", totalPredicted: 0 } }); }
           }}},
         ]}
       />

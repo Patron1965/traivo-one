@@ -169,8 +169,8 @@ function ClusterSettingsCard() {
       queryClient.invalidateQueries({ queryKey: ["/api/cluster-settings"] });
       toast({ title: "Sparat", description: "Klusterinställningar uppdaterade" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte spara inställningen", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte spara inställningen", description: error.message, variant: "destructive" });
     },
   });
 

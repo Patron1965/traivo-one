@@ -52,7 +52,7 @@ export default function BookingSlotsAdminPage() {
       setFormData({ name: "", dayOfWeek: "1", startTime: "08:00", endTime: "12:00", maxBookings: "3", weeksAhead: "8" });
     },
     onError: (err: Error) => {
-      toast({ title: "Fel", description: err.message, variant: "destructive" });
+      toast({ title: "Kunde inte skapa bokningsslotmönster", description: err.message, variant: "destructive" });
     },
   });
 

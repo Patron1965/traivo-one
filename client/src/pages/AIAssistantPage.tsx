@@ -151,10 +151,10 @@ export default function AIAssistantPage() {
         { role: "assistant", content: data.response || data.message }
       ]);
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Fel",
-        description: "Kunde inte skicka meddelande till AI-assistenten.",
+        title: "Kunde inte skicka meddelande till AI-assistenten",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -175,10 +175,10 @@ export default function AIAssistantPage() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Fel",
-        description: "Kunde inte generera schemaläggning.",
+        title: "Kunde inte generera schemaläggning",
+        description: error.message,
         variant: "destructive",
       });
     },

@@ -82,7 +82,7 @@ export function MetadataLabelsTab() {
       toast({ title: "Etikett skapad" });
       closeDialog();
     },
-    onError: () => toast({ title: "Fel vid skapande", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte skapa etikett", description: error.message, variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
@@ -92,7 +92,7 @@ export function MetadataLabelsTab() {
       toast({ title: "Etikett uppdaterad" });
       closeDialog();
     },
-    onError: () => toast({ title: "Fel vid uppdatering", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte uppdatera etikett", description: error.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -101,7 +101,7 @@ export function MetadataLabelsTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/metadata-labels"] });
       toast({ title: "Etikett raderad" });
     },
-    onError: () => toast({ title: "Kan inte radera systemmetadata", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte radera etikett", description: error.message, variant: "destructive" }),
   });
 
   const closeDialog = () => {

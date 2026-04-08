@@ -353,10 +353,10 @@ export default function ClusterDetailPage() {
         description: "Alla ärvda värden har uppdaterats för objekten i klustret.",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Fel",
-        description: "Kunde inte räkna om ärvda värden.",
+        title: "Kunde inte räkna om ärvda värden",
+        description: error.message,
         variant: "destructive",
       });
     },

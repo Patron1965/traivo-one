@@ -86,7 +86,7 @@ export function DataQualityDashboard() {
       });
     },
     onError: (err: Error) => {
-      toast({ title: "Fel", description: err.message, variant: "destructive" });
+      toast({ title: "Kunde inte bygga hierarki", description: err.message, variant: "destructive" });
     },
   });
 
@@ -104,7 +104,7 @@ export function DataQualityDashboard() {
       });
     },
     onError: (err: Error) => {
-      toast({ title: "Fel", description: err.message, variant: "destructive" });
+      toast({ title: "Kunde inte geokoda objekt", description: err.message, variant: "destructive" });
     },
   });
 
@@ -121,7 +121,7 @@ export function DataQualityDashboard() {
       });
     },
     onError: (err: Error) => {
-      toast({ title: "Fel", description: err.message, variant: "destructive" });
+      toast({ title: "Kunde inte uppdatera orderstatus", description: err.message, variant: "destructive" });
     },
   });
 
@@ -138,7 +138,7 @@ export function DataQualityDashboard() {
       toast({ title: "Sparat", description: "Objektet uppdaterades" });
     },
     onError: (err: Error) => {
-      toast({ title: "Fel", description: err.message, variant: "destructive" });
+      toast({ title: "Kunde inte spara objektet", description: err.message, variant: "destructive" });
     },
   });
 

@@ -212,7 +212,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       handleClose();
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte skapa jobb", description: error.message, variant: "destructive" });
     },
   });
 
@@ -289,7 +289,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
 
   const handleSubmit = () => {
     if (!formData.title || !formData.customerId || !formData.objectId) {
-      toast({ title: "Fel", description: "Fyll i titel, kund och objekt.", variant: "destructive" });
+      toast({ title: "Saknade uppgifter", description: "Fyll i titel, kund och objekt.", variant: "destructive" });
       return;
     }
 
@@ -631,7 +631,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                         toast({ title: "AI-förslag", description: "Inga lämpliga resurser hittades.", variant: "destructive" });
                       }
                     } catch {
-                      toast({ title: "Fel", description: "Kunde inte hämta AI-förslag.", variant: "destructive" });
+                      toast({ title: "Kunde inte hämta AI-förslag", description: error instanceof Error ? error.message : "Försök igen senare.", variant: "destructive" });
                     } finally {
                       setLoadingAiSuggestions(false);
                     }

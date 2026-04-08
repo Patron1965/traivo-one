@@ -153,7 +153,7 @@ export default function FleetManagementPage() {
       setFuelDialogOpen(false);
       toast({ title: "Tankning registrerad" });
     },
-    onError: (error: Error) => toast({ title: "Fel", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte registrera tankning", description: error.message, variant: "destructive" }),
   });
 
   const createMaintenanceMutation = useMutation({
@@ -163,7 +163,7 @@ export default function FleetManagementPage() {
       setMaintenanceDialogOpen(false);
       toast({ title: "Underhåll registrerat" });
     },
-    onError: (error: Error) => toast({ title: "Fel", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte registrera underhåll", description: error.message, variant: "destructive" }),
   });
 
   const vehicleMap = useMemo(() => new Map(vehicles.map(v => [v.id, v])), [vehicles]);

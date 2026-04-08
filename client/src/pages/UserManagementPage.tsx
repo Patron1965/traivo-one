@@ -193,7 +193,7 @@ export default function UserManagementPage() {
       setInviteForm({ email: "", role: "user" });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte skicka inbjudan", description: error.message, variant: "destructive" });
     },
   });
 
@@ -204,7 +204,7 @@ export default function UserManagementPage() {
       toast({ title: "Inbjudan borttagen" });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte ta bort inbjudan", description: error.message, variant: "destructive" });
     },
   });
 
@@ -216,7 +216,7 @@ export default function UserManagementPage() {
       closeDialog();
     },
     onError: (err: any) => {
-      toast({ title: "Fel", description: err?.message || "Kunde inte skapa användare", variant: "destructive" });
+      toast({ title: "Kunde inte skapa användare", description: err?.message || "Okänt fel", variant: "destructive" });
     },
   });
 
@@ -228,7 +228,7 @@ export default function UserManagementPage() {
       closeDialog();
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte uppdatera användare", description: error.message, variant: "destructive" });
     },
   });
 
@@ -240,7 +240,7 @@ export default function UserManagementPage() {
       setInlineEditingResource(null);
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte uppdatera användare", description: error.message, variant: "destructive" });
     },
   });
 
@@ -252,7 +252,7 @@ export default function UserManagementPage() {
       toast({ title: "Uppdaterat", description: "Valda användare har uppdaterats." });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte massuppdatera", description: error.message, variant: "destructive" });
     },
   });
 
@@ -264,7 +264,7 @@ export default function UserManagementPage() {
       setDeleteTarget(null);
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte ta bort användare", description: error.message, variant: "destructive" });
     },
   });
 
@@ -284,7 +284,7 @@ export default function UserManagementPage() {
       closeTeamDialog();
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte skapa team", description: error.message, variant: "destructive" });
     },
   });
 
@@ -296,7 +296,7 @@ export default function UserManagementPage() {
       closeTeamDialog();
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte uppdatera team", description: error.message, variant: "destructive" });
     },
   });
 
@@ -309,7 +309,7 @@ export default function UserManagementPage() {
       setDeleteTeamTarget(null);
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte ta bort team", description: error.message, variant: "destructive" });
     },
   });
 
@@ -324,7 +324,7 @@ export default function UserManagementPage() {
       setAddMemberRole("medlem");
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte lägga till medlem", description: error.message, variant: "destructive" });
     },
   });
 
@@ -335,7 +335,7 @@ export default function UserManagementPage() {
       toast({ title: "Borttagen", description: "Medlemmen har tagits bort från teamet." });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte ta bort medlem", description: error.message, variant: "destructive" });
     },
   });
 
@@ -396,7 +396,7 @@ export default function UserManagementPage() {
       updateMutation.mutate({ id: editingUser.id, data });
     } else {
       if (!form.email || !form.password) {
-        toast({ title: "Fel", description: "E-post och lösenord krävs", variant: "destructive" });
+        toast({ title: "Saknade uppgifter", description: "E-post och lösenord krävs", variant: "destructive" });
         return;
       }
       createMutation.mutate(form);
@@ -405,7 +405,7 @@ export default function UserManagementPage() {
 
   const handleTeamSubmit = () => {
     if (!teamForm.name.trim()) {
-      toast({ title: "Fel", description: "Teamnamn krävs", variant: "destructive" });
+      toast({ title: "Saknade uppgifter", description: "Teamnamn krävs", variant: "destructive" });
       return;
     }
     if (editingTeam) {

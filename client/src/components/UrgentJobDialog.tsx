@@ -116,7 +116,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
       toast({ title: "Akut jobb skickat", description: `Tilldelat till ${selectedResource?.name}` });
     },
     onError: (err: any) => {
-      toast({ title: "Fel", description: err.message || "Kunde inte tilldela", variant: "destructive" });
+      toast({ title: "Kunde inte tilldela akut jobb", description: err.message || "Försök igen", variant: "destructive" });
     },
   });
 

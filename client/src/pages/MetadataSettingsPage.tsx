@@ -165,8 +165,8 @@ export default function MetadataSettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['/api/metadata/types'] });
       toast({ title: 'Standardtyper skapade', description: 'Metadatatyper har lagts till' });
     },
-    onError: () => {
-      toast({ title: 'Fel', description: 'Kunde inte skapa standardtyper', variant: 'destructive' });
+    onError: (error: Error) => {
+      toast({ title: 'Kunde inte skapa standardtyper', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -179,9 +179,8 @@ export default function MetadataSettingsPage() {
       setAddDialogOpen(false);
       toast({ title: 'Metadatatyp skapad' });
     },
-    onError: (error: any) => {
-      const msg = error?.message?.includes('finns redan') ? error.message : 'Kunde inte skapa metadatatyp';
-      toast({ title: 'Fel', description: msg, variant: 'destructive' });
+    onError: (error: Error) => {
+      toast({ title: 'Kunde inte skapa metadatatyp', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -194,8 +193,8 @@ export default function MetadataSettingsPage() {
       setEditingType(null);
       toast({ title: 'Metadatatyp uppdaterad' });
     },
-    onError: () => {
-      toast({ title: 'Fel', description: 'Kunde inte uppdatera metadatatyp', variant: 'destructive' });
+    onError: (error: Error) => {
+      toast({ title: 'Kunde inte uppdatera metadatatyp', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -207,8 +206,8 @@ export default function MetadataSettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['/api/metadata/types'] });
       toast({ title: 'Metadatatyp borttagen' });
     },
-    onError: () => {
-      toast({ title: 'Fel', description: 'Kunde inte ta bort metadatatyp', variant: 'destructive' });
+    onError: (error: Error) => {
+      toast({ title: 'Kunde inte ta bort metadatatyp', description: error.message, variant: 'destructive' });
     },
   });
 

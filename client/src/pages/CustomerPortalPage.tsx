@@ -178,10 +178,10 @@ export default function CustomerPortalPage() {
         description: "Din extrabokning har registrerats och kommer att hanteras av planeringsavdelningen.",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Fel vid bokning",
-        description: "Kunde inte skapa bokning. Försök igen eller kontakta kundtjänst.",
+        title: "Kunde inte skapa bokning",
+        description: error.message || "Försök igen eller kontakta kundtjänst.",
         variant: "destructive",
       });
     },
