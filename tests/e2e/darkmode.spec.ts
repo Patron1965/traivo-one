@@ -18,7 +18,7 @@ test.describe("Dark mode smoke tests", () => {
   for (const { name, path } of darkModePages) {
     test(`${name} (${path}) renders in dark mode without crash`, async ({ page }) => {
       await page.addInitScript(() => {
-        localStorage.setItem("traivo-theme", "dark");
+        localStorage.setItem("theme", "dark");
       });
       await navigateTo(page, path);
       await page.evaluate(() => {
