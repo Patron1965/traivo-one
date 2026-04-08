@@ -534,7 +534,7 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
                           autoFocus
                         />
                       </div>
-                      <ScrollArea className="max-h-[200px]">
+                      <div className="max-h-[200px] overflow-y-auto">
                         {searchLoading && (
                           <div className="flex items-center justify-center py-6">
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -580,7 +580,7 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
                             })}
                           </div>
                         )}
-                      </ScrollArea>
+                      </div>
                     </div>
                   )}
                 </div>

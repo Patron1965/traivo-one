@@ -397,7 +397,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                 </div>
                 {customerPopoverOpen && (
                   <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
-                    <ScrollArea className="max-h-[200px]">
+                    <div className="max-h-[200px] overflow-y-auto">
                       {filteredCustomers.length === 0 ? (
                         <div className="py-4 text-center text-sm text-muted-foreground">Ingen kund hittad</div>
                       ) : (
@@ -430,7 +430,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                           Visar 50 av {customers.length} — skriv för att söka
                         </div>
                       )}
-                    </ScrollArea>
+                    </div>
                   </div>
                 )}
               </div>
@@ -469,7 +469,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                 </div>
                 {objectPopoverOpen && (
                   <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
-                    <ScrollArea className="max-h-[200px]">
+                    <div className="max-h-[200px] overflow-y-auto">
                       {objectsLoading && (
                         <div className="flex items-center justify-center py-6">
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -524,7 +524,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                           ))}
                         </div>
                       )}
-                    </ScrollArea>
+                    </div>
                   </div>
                 )}
               </div>
@@ -662,26 +662,24 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                         }}
                       />
                     </div>
-                    <ScrollArea className="max-h-[200px]">
-                      <div className="p-1">
-                        {resources.filter(r => !teamSearchQuery || r.name.toLowerCase().includes(teamSearchQuery)).map(r => (
-                          <button
-                            key={r.id}
-                            type="button"
-                            className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => toggleTeamMember(r.id)}
-                            data-testid={`option-resource-${r.id}`}
-                          >
-                            <Check className={cn("mr-2 h-4 w-4 shrink-0", formData.teamResourceIds.includes(r.id) ? "opacity-100" : "opacity-0")} />
-                            <span>{r.name}</span>
-                            {formData.teamResourceIds[0] === r.id && (
-                              <Badge variant="outline" className="ml-auto text-xs">Ansvarig</Badge>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </ScrollArea>
+                    <div className="max-h-[200px] overflow-y-auto p-1">
+                      {resources.filter(r => !teamSearchQuery || r.name.toLowerCase().includes(teamSearchQuery)).map(r => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => toggleTeamMember(r.id)}
+                          data-testid={`option-resource-${r.id}`}
+                        >
+                          <Check className={cn("mr-2 h-4 w-4 shrink-0", formData.teamResourceIds.includes(r.id) ? "opacity-100" : "opacity-0")} />
+                          <span>{r.name}</span>
+                          {formData.teamResourceIds[0] === r.id && (
+                            <Badge variant="outline" className="ml-auto text-xs">Ansvarig</Badge>
+                          )}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
