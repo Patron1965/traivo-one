@@ -546,15 +546,21 @@ def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int, 
             ))
 
         from alns import _route_feasible as alns_feasible, _solution_dependencies_valid as alns_deps_valid
+        from alns import _compute_route_schedule
+
+        all_schedule: dict[str, tuple[int, int]] = {}
+        for ar in improved_solution.routes:
+            sched = _compute_route_schedule(ar, time_matrix)
+            all_schedule.update(sched)
 
         all_feasible = True
         for ar in improved_solution.routes:
-            if ar.stops and not alns_feasible(ar, time_matrix, distance_matrix):
+            if ar.stops and not alns_feasible(ar, time_matrix, distance_matrix, global_schedule=all_schedule):
                 all_feasible = False
                 print(f"[alns] WARNING: Route for vehicle {ar.vehicle.id} failed final feasibility check")
                 break
 
-        if not alns_deps_valid(improved_solution):
+        if not alns_deps_valid(improved_solution, time_matrix):
             all_feasible = False
             print("[alns] WARNING: Final solution failed dependency validation")
 

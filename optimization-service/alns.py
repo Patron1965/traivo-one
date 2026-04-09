@@ -91,9 +91,26 @@ class ALNSSolution:
         return total
 
 
+def _compute_route_schedule(route: ALNSRoute, time_matrix: list[list[int]]
+                            ) -> dict[str, tuple[int, int]]:
+    schedule: dict[str, tuple[int, int]] = {}
+    v = route.vehicle
+    current_time = v.start_time
+    prev_idx = v.depot_idx
+    for s in route.stops:
+        travel = time_matrix[prev_idx][s.loc_idx]
+        arrival = current_time + travel
+        effective_arrival = max(arrival, s.tw_start) if s.tw_start is not None else arrival
+        departure = effective_arrival + s.duration
+        schedule[s.id] = (effective_arrival, departure)
+        current_time = departure
+        prev_idx = s.loc_idx
+    return schedule
+
+
 def _route_feasible(route: ALNSRoute, time_matrix: list[list[int]],
                     dist_matrix: list[list[int]],
-                    dep_map: Optional[dict[str, set[str]]] = None) -> bool:
+                    global_schedule: Optional[dict[str, tuple[int, int]]] = None) -> bool:
     v = route.vehicle
     current_time = v.start_time
     total_demand = 0
@@ -103,8 +120,11 @@ def _route_feasible(route: ALNSRoute, time_matrix: list[list[int]],
     for s in route.stops:
         if s.depends_on_ids:
             for dep_id in s.depends_on_ids:
-                if dep_id not in seen_ids:
-                    return False
+                if dep_id in seen_ids:
+                    continue
+                if global_schedule and dep_id in global_schedule:
+                    continue
+                return False
 
         travel = time_matrix[prev_idx][s.loc_idx]
         arrival = current_time + travel
@@ -130,11 +150,19 @@ def _route_feasible(route: ALNSRoute, time_matrix: list[list[int]],
     return True
 
 
-def _solution_dependencies_valid(solution: "ALNSSolution") -> bool:
+def _solution_dependencies_valid(solution: "ALNSSolution",
+                                 time_matrix: Optional[list[list[int]]] = None) -> bool:
+    all_schedule: dict[str, tuple[int, int]] = {}
+    if time_matrix:
+        for route in solution.routes:
+            sched = _compute_route_schedule(route, time_matrix)
+            all_schedule.update(sched)
+
     stop_positions: dict[str, tuple[int, int]] = {}
     for ri, route in enumerate(solution.routes):
         for si, s in enumerate(route.stops):
             stop_positions[s.id] = (ri, si)
+
     for ri, route in enumerate(solution.routes):
         for si, s in enumerate(route.stops):
             for dep_id in s.depends_on_ids:
@@ -143,6 +171,11 @@ def _solution_dependencies_valid(solution: "ALNSSolution") -> bool:
                 dep_ri, dep_si = stop_positions[dep_id]
                 if dep_ri == ri and dep_si >= si:
                     return False
+                if dep_ri != ri and all_schedule:
+                    dep_departure = all_schedule.get(dep_id, (0, 0))[1]
+                    stop_arrival = all_schedule.get(s.id, (0, 0))[0]
+                    if dep_departure > stop_arrival:
+                        return False
     return True
 
 
@@ -615,7 +648,7 @@ def run_alns(solution: ALNSSolution,
             time_matrix=time_matrix, rng=rng,
         )
 
-        if not _solution_dependencies_valid(candidate):
+        if not _solution_dependencies_valid(candidate, time_matrix):
             iterations_done += 1
             temperature *= config.cooling_rate
             continue
