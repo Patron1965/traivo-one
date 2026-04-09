@@ -1029,10 +1029,42 @@ export async function optimizeAsync(
   _requestedBy?: string,
 ): Promise<VRPOptimizationResult | { jobId: string; status: "queued" }> {
   const { isServiceAvailable, callOptimizationService, convertORToolsToVRPResult } = await import("./services/optimizationQueue");
+  const { isOSRMAvailable, osrmTable } = await import("./osrm-client");
+  type PrecomputedDistanceEntry = import("./services/optimizationQueue").PrecomputedDistanceEntry;
 
   const serviceUp = await isServiceAvailable();
 
   if (serviceUp && stops.length <= OPTIMIZE_ASYNC_THRESHOLD) {
+    let distanceMatrix: PrecomputedDistanceEntry[] | undefined;
+
+    const allLocations = [
+      ...vehicles.map(v => ({ lat: v.home_lat, lng: v.home_lng })),
+      ...stops.map(s => ({ lat: s.lat, lng: s.lng })),
+    ];
+
+    if (await isOSRMAvailable()) {
+      try {
+        const tableResult = await osrmTable(allLocations);
+        if (tableResult && tableResult.distances.length === allLocations.length) {
+          distanceMatrix = [];
+          for (let i = 0; i < allLocations.length; i++) {
+            for (let j = 0; j < allLocations.length; j++) {
+              if (i === j) continue;
+              distanceMatrix.push({
+                from_idx: i,
+                to_idx: j,
+                distance_m: Math.round(tableResult.distances[i][j]),
+                duration_s: Math.round(tableResult.durations[i][j]),
+              });
+            }
+          }
+          console.log(`[optimize-async] OSRM matrix: ${allLocations.length}×${allLocations.length} (${distanceMatrix.length} entries)`);
+        }
+      } catch (err) {
+        console.warn("[optimize-async] OSRM matrix failed, using Haversine fallback:", err instanceof Error ? err.message : err);
+      }
+    }
+
     const orResult = await callOptimizationService({
       stops: stops.map(s => ({
         id: s.id,
@@ -1053,6 +1085,7 @@ export async function optimizeAsync(
         start_time: v.start_time ?? 28800,
         end_time: v.end_time ?? 61200,
       })),
+      distanceMatrix,
     });
 
     const stopMap = new Map(stops.map(s => [s.id, {

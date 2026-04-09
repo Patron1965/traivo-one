@@ -51,10 +51,18 @@ class Vehicle(BaseModel):
     end_time: int = 61200
 
 
+class DistanceMatrixEntry(BaseModel):
+    from_idx: int
+    to_idx: int
+    distance_m: int
+    duration_s: int
+
+
 class OptimizeRequest(BaseModel):
     stops: list[Stop]
     vehicles: list[Vehicle]
     max_solve_seconds: int = Field(default=30, ge=1, le=300)
+    distance_matrix: Optional[list[DistanceMatrixEntry]] = None
 
 
 class RouteStopResult(BaseModel):
@@ -87,14 +95,45 @@ def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def build_distance_matrix(locations: list[tuple[float, float]]) -> list[list[int]]:
+def build_distance_matrix(locations: list[tuple[float, float]], precomputed: Optional[list[DistanceMatrixEntry]] = None) -> list[list[int]]:
     n = len(locations)
     matrix = [[0] * n for _ in range(n)]
+    if precomputed:
+        for entry in precomputed:
+            if 0 <= entry.from_idx < n and 0 <= entry.to_idx < n:
+                matrix[entry.from_idx][entry.to_idx] = entry.distance_m
+        for i in range(n):
+            for j in range(n):
+                if i != j and matrix[i][j] == 0:
+                    dist_km = haversine_km(locations[i][0], locations[i][1], locations[j][0], locations[j][1])
+                    matrix[i][j] = int(dist_km * 1000)
+        return matrix
     for i in range(n):
         for j in range(n):
             if i != j:
                 dist_km = haversine_km(locations[i][0], locations[i][1], locations[j][0], locations[j][1])
                 matrix[i][j] = int(dist_km * 1000)
+    return matrix
+
+
+def build_time_matrix(locations: list[tuple[float, float]], precomputed: Optional[list[DistanceMatrixEntry]] = None) -> list[list[int]]:
+    n = len(locations)
+    matrix = [[0] * n for _ in range(n)]
+    if precomputed:
+        for entry in precomputed:
+            if 0 <= entry.from_idx < n and 0 <= entry.to_idx < n:
+                matrix[entry.from_idx][entry.to_idx] = entry.duration_s
+        for i in range(n):
+            for j in range(n):
+                if i != j and matrix[i][j] == 0:
+                    dist_km = haversine_km(locations[i][0], locations[i][1], locations[j][0], locations[j][1])
+                    matrix[i][j] = int(dist_km / 40 * 3600)
+        return matrix
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                dist_km = haversine_km(locations[i][0], locations[i][1], locations[j][0], locations[j][1])
+                matrix[i][j] = int(dist_km / 40 * 3600)
     return matrix
 
 
@@ -192,7 +231,7 @@ def solve_nearest_neighbor(stops: list[Stop], vehicles: list[Vehicle]) -> Optimi
     )
 
 
-def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int) -> OptimizeResponse:
+def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int, precomputed_matrix: Optional[list[DistanceMatrixEntry]] = None) -> OptimizeResponse:
     if not HAS_ORTOOLS:
         return solve_nearest_neighbor(stops, vehicles)
 
@@ -209,7 +248,8 @@ def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int) 
     for s in stops:
         locations.append((s.lat, s.lng))
 
-    distance_matrix = build_distance_matrix(locations)
+    distance_matrix = build_distance_matrix(locations, precomputed_matrix)
+    time_matrix = build_time_matrix(locations, precomputed_matrix)
 
     manager = pywrapcp.RoutingIndexManager(len(locations), len(vehicles), depot_indices, depot_indices)
     routing = pywrapcp.RoutingModel(manager)
@@ -222,12 +262,12 @@ def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int) 
     transit_callback_index = routing.RegisterTransitCallback(distance_callback)
     routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
-    time_per_m = 3600 / (40 * 1000)
-
     def time_callback(from_index, to_index):
         from_node = manager.IndexToNode(from_index)
         to_node = manager.IndexToNode(to_index)
-        travel = int(distance_matrix[from_node][to_node] * time_per_m)
+        travel = time_matrix[from_node][to_node]
+        if travel == 0 and from_node != to_node:
+            travel = int(distance_matrix[from_node][to_node] * 3600 / (40 * 1000))
         service = 0
         if to_node >= stop_start_index:
             service = stops[to_node - stop_start_index].duration
@@ -331,7 +371,7 @@ def optimize(req: OptimizeRequest):
     if not req.vehicles:
         raise HTTPException(status_code=400, detail="No vehicles provided")
 
-    if len(req.stops) > 50 and HAS_SKLEARN:
+    if len(req.stops) > 50 and HAS_SKLEARN and not req.distance_matrix:
         n_clusters = max(len(req.vehicles), len(req.stops) // 20)
         clusters = pre_cluster(req.stops, n_clusters)
         all_routes: list[RouteResult] = []
@@ -356,7 +396,7 @@ def optimize(req: OptimizeRequest):
         )
 
     if HAS_ORTOOLS:
-        return solve_ortools(req.stops, req.vehicles, req.max_solve_seconds)
+        return solve_ortools(req.stops, req.vehicles, req.max_solve_seconds, req.distance_matrix)
     return solve_nearest_neighbor(req.stops, req.vehicles)
 
 

@@ -2,6 +2,7 @@ import { trackApiUsage } from "./api-usage-tracker";
 import { db } from "./db";
 import { distanceCache } from "@shared/schema";
 import { eq, lt } from "drizzle-orm";
+import { isOSRMAvailable, osrmRoute, osrmTable, getOSRMStatus } from "./osrm-client";
 
 const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
 const ROUTING_URL = "https://api.geoapify.com/v1/routing";
@@ -9,7 +10,7 @@ const ROUTING_URL = "https://api.geoapify.com/v1/routing";
 export interface DistanceResult {
   distanceKm: number;
   durationMin: number;
-  source: "geoapify" | "haversine";
+  source: "osrm" | "geoapify" | "haversine";
 }
 
 interface L1CacheEntry {
@@ -74,7 +75,7 @@ async function getL2(key: string): Promise<DistanceResult | null> {
     return {
       distanceKm: row.distanceKm,
       durationMin: row.durationMin,
-      source: row.source as "geoapify" | "haversine",
+      source: row.source as "osrm" | "geoapify" | "haversine",
     };
   } catch (err) {
     console.warn("[distance-cache] L2 read error:", err instanceof Error ? err.message : err);
@@ -122,6 +123,25 @@ export async function getRoutingDistance(
   if (l2Hit) {
     setL1(key, l2Hit);
     return l2Hit;
+  }
+
+  const osrmAvailable = await isOSRMAvailable();
+  if (osrmAvailable) {
+    try {
+      const osrmResult = await osrmRoute({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });
+      if (osrmResult) {
+        const result: DistanceResult = {
+          distanceKm: osrmResult.distanceMeters / 1000,
+          durationMin: Math.round(osrmResult.durationSeconds / 60),
+          source: "osrm",
+        };
+        setL1(key, result);
+        await setL2(key, lat1, lng1, lat2, lng2, result);
+        return result;
+      }
+    } catch (err) {
+      console.warn("[distance-matrix] OSRM failed, trying Geoapify:", err instanceof Error ? err.message : err);
+    }
   }
 
   if (!GEOAPIFY_API_KEY) {
@@ -218,15 +238,6 @@ export async function getBatchDistances(
 
   if (l2Misses.length === 0) return results;
 
-  if (!GEOAPIFY_API_KEY) {
-    for (const pair of l2Misses) {
-      const fb = haversineFallback(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng);
-      results.set(pair.id, fb);
-      setL1(coordKey(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng), fb);
-    }
-    return results;
-  }
-
   const BATCH_SIZE = 5;
   for (let i = 0; i < l2Misses.length; i += BATCH_SIZE) {
     const batch = l2Misses.slice(i, i + BATCH_SIZE);
@@ -261,6 +272,36 @@ export interface DistanceMatrixEntry {
 export async function precomputeDistanceMatrix(
   stops: CoordStop[],
 ): Promise<DistanceMatrixEntry[]> {
+  const matrix: DistanceMatrixEntry[] = [];
+
+  for (const stop of stops) {
+    matrix.push({ fromId: stop.id, toId: stop.id, distanceKm: 0, durationMin: 0 });
+  }
+
+  if (stops.length >= 2 && await isOSRMAvailable()) {
+    const tableResult = await osrmTable(stops.map(s => ({ lat: s.lat, lng: s.lng })));
+    if (tableResult && tableResult.distances.length === stops.length) {
+      console.log(`[distance-matrix] OSRM table API: ${stops.length}×${stops.length} matrix computed`);
+      for (let i = 0; i < stops.length; i++) {
+        for (let j = 0; j < stops.length; j++) {
+          if (i === j) continue;
+          const distKm = tableResult.distances[i][j] / 1000;
+          const durMin = Math.round(tableResult.durations[i][j] / 60);
+          matrix.push({
+            fromId: stops[i].id,
+            toId: stops[j].id,
+            distanceKm: distKm,
+            durationMin: durMin,
+          });
+          const key = coordKey(stops[i].lat, stops[i].lng, stops[j].lat, stops[j].lng);
+          const result: DistanceResult = { distanceKm: distKm, durationMin: durMin, source: "osrm" };
+          setL1(key, result);
+        }
+      }
+      return matrix;
+    }
+  }
+
   const pairs: BatchPair[] = [];
   for (let i = 0; i < stops.length; i++) {
     for (let j = 0; j < stops.length; j++) {
@@ -276,11 +317,6 @@ export async function precomputeDistanceMatrix(
   }
 
   const results = await getBatchDistances(pairs);
-  const matrix: DistanceMatrixEntry[] = [];
-
-  for (const stop of stops) {
-    matrix.push({ fromId: stop.id, toId: stop.id, distanceKm: 0, durationMin: 0 });
-  }
 
   for (const [pairId, result] of results) {
     const [fromId, toId] = pairId.split("|");
@@ -422,11 +458,13 @@ export function getDistanceCacheStats(): {
   l1Size: number;
   l1MaxSize: number;
   l2TtlHours: number;
+  osrm: ReturnType<typeof getOSRMStatus>;
 } {
   return {
     l1Size: l1Cache.size,
     l1MaxSize: L1_MAX_SIZE,
     l2TtlHours: L2_TTL_HOURS,
+    osrm: getOSRMStatus(),
   };
 }
 

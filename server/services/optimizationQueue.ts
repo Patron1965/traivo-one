@@ -26,10 +26,18 @@ export interface OptimizationVehicle {
   end_time: number;
 }
 
+export interface PrecomputedDistanceEntry {
+  from_idx: number;
+  to_idx: number;
+  distance_m: number;
+  duration_s: number;
+}
+
 export interface OptimizationJobData {
   stops: OptimizationStop[];
   vehicles: OptimizationVehicle[];
   maxSolveSeconds?: number;
+  distanceMatrix?: PrecomputedDistanceEntry[];
 }
 
 export interface ORToolsRouteStop {
@@ -78,7 +86,7 @@ export async function isServiceAvailable(): Promise<boolean> {
 }
 
 export async function callOptimizationService(data: OptimizationJobData): Promise<OptimizationJobResult> {
-  const payload = {
+  const payload: Record<string, unknown> = {
     stops: data.stops.map(s => ({
       id: s.id,
       lat: s.lat,
@@ -100,6 +108,10 @@ export async function callOptimizationService(data: OptimizationJobData): Promis
     })),
     max_solve_seconds: data.maxSolveSeconds ?? 30,
   };
+
+  if (data.distanceMatrix && data.distanceMatrix.length > 0) {
+    payload.distance_matrix = data.distanceMatrix;
+  }
 
   const response = await fetch(`${OPTIMIZATION_SERVICE_URL}/optimize`, {
     method: "POST",
