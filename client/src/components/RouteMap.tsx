@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { MapPin, Clock, Car, ArrowRight, Route, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, BarChart3, MapPinned, Sparkles, Package, Eye, EyeOff, Palette, PackageSearch } from "lucide-react";
+import { MapPin, Clock, Car, ArrowRight, Route, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, BarChart3, MapPinned, Package, Eye, EyeOff, Palette, PackageSearch } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, startOfDay, endOfDay, addDays, startOfWeek, endOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -466,83 +466,6 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="text-xs font-medium">Tillgångstyper</div>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(accessTypeGroups).map(([type, count]) => {
-                  const config = accessTypeLabels[type] || { label: type, icon: DoorOpen };
-                  const Icon = config.icon;
-                  return (
-                    <Badge key={type} variant="secondary" className="text-xs gap-1 no-default-hover-elevate">
-                      <Icon className="h-3 w-3" />
-                      {config.label}: {count}
-                    </Badge>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    size="sm" 
-                    variant={colorMode === "accessType" ? "default" : "outline"}
-                    onClick={() => setColorMode("accessType")}
-                    data-testid="button-color-access"
-                  >
-                    <Palette className="h-3 w-3 mr-1" />
-                    Tillgång
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Färglägg efter tillgångstyp</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    size="sm" 
-                    variant={colorMode === "setupTime" ? "default" : "outline"}
-                    onClick={() => setColorMode("setupTime")}
-                    data-testid="button-color-setup"
-                  >
-                    <Clock className="h-3 w-3 mr-1" />
-                    Ställtid
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Färglägg efter ställtid</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    size="sm" 
-                    variant={showAccessCodes ? "default" : "outline"}
-                    onClick={() => setShowAccessCodes(!showAccessCodes)}
-                    data-testid="button-toggle-codes"
-                  >
-                    {showAccessCodes ? <Eye className="h-3 w-3 mr-1" /> : <EyeOff className="h-3 w-3 mr-1" />}
-                    Koder
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{showAccessCodes ? "Dölj portkoder" : "Visa portkoder på kartan"}</TooltipContent>
-              </Tooltip>
-            </div>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  className="w-full" 
-                  variant="outline"
-                  asChild
-                  data-testid="button-go-to-optimization"
-                >
-                  <Link href="/optimization">
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    Inför Optimering
-                  </Link>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Förbered data och konfiguration inför ruttoptimering</TooltipContent>
-            </Tooltip>
           </CardContent>
         </Card>
 
@@ -775,6 +698,54 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
             })}
           </MapContainer>
           
+          <div className="absolute top-4 right-4 flex gap-1 z-[1000]">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  size="sm" 
+                  variant={colorMode === "accessType" ? "default" : "secondary"}
+                  onClick={() => setColorMode("accessType")}
+                  className="h-7 text-xs shadow-md"
+                  data-testid="button-color-access"
+                >
+                  <Palette className="h-3 w-3 mr-1" />
+                  Tillgång
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Färglägg efter tillgångstyp</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  size="sm" 
+                  variant={colorMode === "setupTime" ? "default" : "secondary"}
+                  onClick={() => setColorMode("setupTime")}
+                  className="h-7 text-xs shadow-md"
+                  data-testid="button-color-setup"
+                >
+                  <Clock className="h-3 w-3 mr-1" />
+                  Ställtid
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Färglägg efter ställtid</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  size="sm" 
+                  variant={showAccessCodes ? "default" : "secondary"}
+                  onClick={() => setShowAccessCodes(!showAccessCodes)}
+                  className="h-7 text-xs shadow-md"
+                  data-testid="button-toggle-codes"
+                >
+                  {showAccessCodes ? <Eye className="h-3 w-3 mr-1" /> : <EyeOff className="h-3 w-3 mr-1" />}
+                  Koder
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{showAccessCodes ? "Dölj portkoder" : "Visa portkoder på kartan"}</TooltipContent>
+            </Tooltip>
+          </div>
+
           <div className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-sm rounded-md shadow-md p-3 space-y-1.5 z-[1000]">
             {colorMode === "setupTime" ? (
               <>
