@@ -293,57 +293,43 @@ export default function RoutesPage() {
         </div>
       )}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Sparkles className="h-4 w-4" />
-            Optimering
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-3 items-end">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">Datum</label>
-              <Input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-[160px]"
-                data-testid="input-vrp-date"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">Kluster</label>
-              <Select value={selectedCluster} onValueChange={setSelectedCluster}>
-                <SelectTrigger className="w-[180px]" data-testid="select-vrp-cluster">
-                  <SelectValue placeholder="Alla kluster" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alla kluster</SelectItem>
-                  {clusters.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  onClick={() => vrpMutation.mutate()}
-                  disabled={vrpMutation.isPending}
-                  data-testid="button-run-vrp"
-                >
-                  {vrpMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <RouteIcon className="h-4 w-4 mr-2" />
-                  )}
-                  Kör optimering
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Optimera dagens rutter</TooltipContent>
-            </Tooltip>
-          </div>
+      <div className="flex flex-wrap gap-3 items-center">
+        <Input
+          type="date"
+          value={selectedDate}
+          onChange={(e) => setSelectedDate(e.target.value)}
+          className="w-[160px]"
+          data-testid="input-vrp-date"
+        />
+        <Select value={selectedCluster} onValueChange={setSelectedCluster}>
+          <SelectTrigger className="w-[180px]" data-testid="select-vrp-cluster">
+            <SelectValue placeholder="Alla kluster" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alla kluster</SelectItem>
+            {clusters.map(c => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              onClick={() => vrpMutation.mutate()}
+              disabled={vrpMutation.isPending}
+              data-testid="button-run-vrp"
+            >
+              {vrpMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RouteIcon className="h-4 w-4 mr-2" />
+              )}
+              Kör optimering
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Optimera dagens rutter</TooltipContent>
+        </Tooltip>
+      </div>
 
           {vrpResult && (
             <div className="space-y-4">
@@ -641,8 +627,6 @@ export default function RoutesPage() {
               )}
             </div>
           )}
-        </CardContent>
-      </Card>
       
       <div className="flex-1 min-h-[400px]">
         <RouteMap />
