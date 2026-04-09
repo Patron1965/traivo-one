@@ -46,13 +46,21 @@
 **Navigera:** Menyn > Ordrar > Orderstock
 
 **Visa:**
-- Filtrera ordrar efter status: Planerad, Tilldelad, Utförd, Fakturerad
-- Visa orderdetaljer: artiklar, tidsuppskattning, prioritet, tidsfönster
-- Bulkåtgärder: ändra status, tilldela resurs, låsa schema
-- Sök och sortera bland ordrar
+- Sammanfattningskort: totalt antal ordrar, totalt värde (kr), total kostnad, total produktionstid
+- Statusfilter-chips: Skapad, Preliminärt planerad, Resurs tilldelad, Låst, Utförd, Fakturerad, Omöjlig (med antal per status)
+- AI Orderanalys (expanderbar sektion med AI-insikter)
+- Sök bland ordrar med fritext
+- Metadata-filter för avancerad filtrering
+- Orderlista med adress, kund, värde, tid och status per order
+- "Planera"-knapp per order för att tilldela resurs, team och datum
+- Bulkåtgärder: markera flera ordrar → ändra status eller batch-planera
+- Exportera CSV och AI Försäljningsanalys (skickas via e-post)
+- Visa simulerade ordrar (toggle)
+- Paginering (50 ordrar per sida)
 
 **Lyft fram:**
-- "Hela orderflödet hanteras här - från skapad till fakturerad. Alla steg är spårbara."
+- "Hela orderflödet hanteras här — från skapad till fakturerad. Varje steg är spårbart."
+- "AI:n analyserar orderstocken och ger insikter direkt i vyn."
 
 ### 2.2 Abonnemang (`/subscriptions`)
 **Navigera:** Menyn > Ordrar > Abonnemang
