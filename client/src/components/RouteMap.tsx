@@ -709,46 +709,79 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                     }}
                   >
                     <Popup>
-                      <div className="p-1 min-w-[200px]">
-                        <div className="font-medium text-base">{job.title}</div>
-                        <div className="text-sm text-gray-600">{obj.name}</div>
-                        <div className="text-sm text-gray-600">{obj.address}</div>
-                        
-                        <div className="mt-2 pt-2 border-t border-gray-200 space-y-1">
-                          <div className="text-sm flex items-center gap-2">
-                            <span className="font-medium">Tillgång:</span>
-                            <span className="flex items-center gap-1">
-                              {accessTypeLabels[accessType]?.label || accessType}
-                              {showAccessCodes && obj.accessCode && (
-                                <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-mono">
-                                  {obj.accessCode}
-                                </span>
+                      <div className="p-1 min-w-[220px] max-w-[320px]">
+                        {(() => {
+                          const colocatedJobs = stackCount > 1
+                            ? displayJobs.filter(j => {
+                                const o = objectMap.get(j.objectId);
+                                if (!o?.latitude || !o?.longitude) return false;
+                                return `${o.latitude.toFixed(4)},${o.longitude.toFixed(4)}` === addrKey;
+                              })
+                            : [job];
+
+                          return (
+                            <>
+                              <div className="text-sm text-gray-600">{obj.address}</div>
+                              {stackCount > 1 && (
+                                <div className="mt-1 mb-1 px-1.5 py-0.5 bg-red-50 text-red-700 rounded text-xs font-medium inline-block">
+                                  {stackCount} ordrar på denna adress
+                                </div>
                               )}
-                              {showAccessCodes && obj.keyNumber && (
-                                <span className="ml-1 px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-xs font-mono">
-                                  Nyckel: {obj.keyNumber}
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                          <div className="text-sm">
-                            <span className="font-medium">Ställtid:</span> {setupTime} min
-                          </div>
-                          <div className="text-sm">
-                            <span className="font-medium">Arbetstid:</span> {job.estimatedDuration} min
-                          </div>
-                          
-                          {totalContainers > 0 && (
-                            <div className="text-sm pt-1 border-t border-gray-200 mt-1">
-                              <span className="font-medium">Objekt:</span>{" "}
-                              {obj.containerCount ? `K1: ${obj.containerCount}` : ""}
-                              {obj.containerCountK2 ? ` K2: ${obj.containerCountK2}` : ""}
-                              {obj.containerCountK3 ? ` K3: ${obj.containerCountK3}` : ""}
-                              {obj.containerCountK4 ? ` K4: ${obj.containerCountK4}` : ""}
-                              <span className="text-gray-500 ml-1">({totalContainers} st)</span>
-                            </div>
-                          )}
-                        </div>
+
+                              {colocatedJobs.map((cj, ci) => {
+                                const co = objectMap.get(cj.objectId);
+                                const cSetup = co?.avgSetupTime || 0;
+                                const cAccess = co?.accessType || "open";
+                                const cContainers = (co?.containerCount || 0) +
+                                  (co?.containerCountK2 || 0) +
+                                  (co?.containerCountK3 || 0) +
+                                  (co?.containerCountK4 || 0);
+                                const cIdx = displayJobs.indexOf(cj);
+
+                                return (
+                                  <div key={cj.id} className={`${ci > 0 ? "mt-2 pt-2 border-t border-gray-200" : "mt-1"}`}>
+                                    <div className="font-medium text-base flex items-center gap-2">
+                                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-600 text-white text-[10px] font-bold shrink-0">
+                                        {cIdx + 1}
+                                      </span>
+                                      {cj.title}
+                                    </div>
+                                    <div className="text-sm text-gray-600">{co?.name || cj.objectName}</div>
+
+                                    <div className="mt-1 space-y-0.5 text-sm">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-medium">Tillgång:</span>
+                                        <span>{accessTypeLabels[cAccess]?.label || cAccess}</span>
+                                        {showAccessCodes && co?.accessCode && (
+                                          <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-mono">
+                                            {co.accessCode}
+                                          </span>
+                                        )}
+                                        {showAccessCodes && co?.keyNumber && (
+                                          <span className="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-xs font-mono">
+                                            Nyckel: {co.keyNumber}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div><span className="font-medium">Ställtid:</span> {cSetup} min</div>
+                                      <div><span className="font-medium">Arbetstid:</span> {cj.estimatedDuration} min</div>
+                                      {cContainers > 0 && (
+                                        <div>
+                                          <span className="font-medium">Objekt:</span>{" "}
+                                          {co?.containerCount ? `K1: ${co.containerCount}` : ""}
+                                          {co?.containerCountK2 ? ` K2: ${co.containerCountK2}` : ""}
+                                          {co?.containerCountK3 ? ` K3: ${co.containerCountK3}` : ""}
+                                          {co?.containerCountK4 ? ` K4: ${co.containerCountK4}` : ""}
+                                          <span className="text-gray-500 ml-1">({cContainers} st)</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </>
+                          );
+                        })()}
                       </div>
                     </Popup>
                   </Marker>
