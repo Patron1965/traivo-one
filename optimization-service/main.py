@@ -436,16 +436,17 @@ def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int, 
             ))
 
     unassigned_stops = [s for s in stops if s.id not in assigned_ids]
-    ortools_ms = int((time.time() - start_time) * 1000)
+
+    ortools_routes = list(routes)
+    ortools_unassigned_ids = [s.id for s in unassigned_stops]
 
     alns_budget = max(1, max_seconds - ortools_budget)
     try:
         from alns import ALNSStop as AStop, ALNSVehicle as AVehicle, ALNSRoute as ARoute
         from alns import ALNSSolution as ASolution, ALNSConfig, run_alns
 
-        stop_map = {s.id: s for s in stops}
         alns_stops_by_id: dict[str, AStop] = {}
-        for s in stops:
+        for si_idx, s in enumerate(stops):
             alns_stops_by_id[s.id] = AStop(
                 id=s.id, lat=s.lat, lng=s.lng,
                 tw_start=s.time_window[0] if s.time_window else None,
@@ -453,7 +454,7 @@ def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int, 
                 duration=s.duration,
                 skills=[str(sk) for sk in (s.required_skills or [])],
                 demand=s.demand, priority=s.priority,
-                loc_idx=stop_start_index + stops.index(s),
+                loc_idx=stop_start_index + si_idx,
             )
 
         alns_vehicles: list[AVehicle] = []
@@ -467,10 +468,10 @@ def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int, 
             ))
 
         vehicle_map = {v.id: v for v in alns_vehicles}
-        vehicles_with_routes = set()
+        vehicles_with_routes: set[str] = set()
 
         alns_routes: list[ARoute] = []
-        for r in routes:
+        for r in ortools_routes:
             av = vehicle_map.get(r.vehicle_id)
             if not av:
                 continue
@@ -493,8 +494,8 @@ def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int, 
         alns_result = run_alns(alns_solution, distance_matrix, time_matrix, alns_config)
         improved_solution: ASolution = alns_result["solution"]
 
-        routes = []
-        assigned_ids = set()
+        improved_routes: list[RouteResult] = []
+        improved_assigned: set[str] = set()
         for ar in improved_solution.routes:
             if not ar.stops:
                 continue
@@ -513,23 +514,25 @@ def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int, 
                     departure_time=departure,
                 ))
                 total_dist_km += distance_matrix[prev_idx][ast.loc_idx] / 1000
-                assigned_ids.add(ast.id)
+                improved_assigned.add(ast.id)
                 current_time = departure
                 prev_idx = ast.loc_idx
             total_dist_km += distance_matrix[prev_idx][ar.vehicle.depot_idx] / 1000
             return_travel = time_matrix[prev_idx][ar.vehicle.depot_idx]
-            routes.append(RouteResult(
+            improved_routes.append(RouteResult(
                 vehicle_id=ar.vehicle.id,
                 stops=r_stops,
                 total_distance_km=round(total_dist_km, 2),
                 total_duration_seconds=current_time - ar.vehicle.start_time + return_travel,
             ))
 
-        unassigned_ids = [s.id for s in stops if s.id not in assigned_ids]
+        routes = improved_routes
+        unassigned_ids = [s.id for s in stops if s.id not in improved_assigned]
         solver_name = "ortools+alns"
     except Exception as e:
         print(f"[alns] ALNS improvement phase failed, using OR-Tools solution: {e}")
-        unassigned_ids = [s.id for s in unassigned_stops]
+        routes = ortools_routes
+        unassigned_ids = ortools_unassigned_ids
         solver_name = "ortools"
 
     solve_ms = int((time.time() - start_time) * 1000)

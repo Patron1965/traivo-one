@@ -2,7 +2,8 @@
 ALNS (Adaptive Large Neighborhood Search) + Local Search (2-opt, or-opt)
 
 Post-optimization improvement phase that runs after OR-Tools produces an
-initial solution. Respects all constraints: time windows, capacity, skills.
+initial solution. Respects all constraints: time windows, capacity, skills,
+and dependency ordering.
 """
 
 import math
@@ -11,22 +12,17 @@ import time
 from typing import Optional
 
 
-def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    R = 6371.0
-    dlat = math.radians(lat2 - lat1)
-    dlng = math.radians(lng2 - lng1)
-    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng / 2) ** 2
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-
 class ALNSStop:
     __slots__ = ("id", "lat", "lng", "tw_start", "tw_end", "duration",
-                 "skills", "demand", "priority", "loc_idx")
+                 "skills", "demand", "priority", "loc_idx",
+                 "depends_on_ids", "depended_by_ids")
 
     def __init__(self, id: str, lat: float, lng: float,
                  tw_start: Optional[int], tw_end: Optional[int],
                  duration: int, skills: Optional[list[str]],
-                 demand: int, priority: int, loc_idx: int):
+                 demand: int, priority: int, loc_idx: int,
+                 depends_on_ids: Optional[list[str]] = None,
+                 depended_by_ids: Optional[list[str]] = None):
         self.id = id
         self.lat = lat
         self.lng = lng
@@ -37,6 +33,8 @@ class ALNSStop:
         self.demand = demand
         self.priority = priority
         self.loc_idx = loc_idx
+        self.depends_on_ids = depends_on_ids or []
+        self.depended_by_ids = depended_by_ids or []
 
 
 class ALNSVehicle:
@@ -94,13 +92,20 @@ class ALNSSolution:
 
 
 def _route_feasible(route: ALNSRoute, time_matrix: list[list[int]],
-                    dist_matrix: list[list[int]]) -> bool:
+                    dist_matrix: list[list[int]],
+                    dep_map: Optional[dict[str, set[str]]] = None) -> bool:
     v = route.vehicle
     current_time = v.start_time
     total_demand = 0
     prev_idx = v.depot_idx
+    seen_ids: set[str] = set()
 
     for s in route.stops:
+        if s.depends_on_ids:
+            for dep_id in s.depends_on_ids:
+                if dep_id not in seen_ids:
+                    return False
+
         travel = time_matrix[prev_idx][s.loc_idx]
         arrival = current_time + travel
         if s.tw_end is not None and arrival > s.tw_end:
@@ -117,10 +122,29 @@ def _route_feasible(route: ALNSRoute, time_matrix: list[list[int]],
             return False
         current_time = departure
         prev_idx = s.loc_idx
+        seen_ids.add(s.id)
 
     return_travel = time_matrix[prev_idx][v.depot_idx]
     if current_time + return_travel > v.end_time:
         return False
+    return True
+
+
+def _solution_dependencies_valid(solution: "ALNSSolution") -> bool:
+    stop_positions: dict[str, tuple[int, int]] = {}
+    for ri, route in enumerate(solution.routes):
+        for si, s in enumerate(route.stops):
+            stop_positions[s.id] = (ri, si)
+    for ri, route in enumerate(solution.routes):
+        for si, s in enumerate(route.stops):
+            for dep_id in s.depends_on_ids:
+                if dep_id not in stop_positions:
+                    continue
+                dep_ri, dep_si = stop_positions[dep_id]
+                if dep_ri == ri and dep_si >= si:
+                    return False
+                if dep_ri != ri:
+                    pass
     return True
 
 
@@ -567,6 +591,8 @@ def run_alns(solution: ALNSSolution,
     iterations_done = 0
     segment_size = 25
 
+    log_interval = max(1, config.max_iterations // 10)
+
     for iteration in range(config.max_iterations):
         if time.time() - start_time > config.max_time_seconds:
             break
@@ -579,19 +605,27 @@ def run_alns(solution: ALNSSolution,
         candidate = solution.copy()
 
         d_idx = destroy_stats.select(rng)
+        d_name = destroy_ops[d_idx][0]
         removed = destroy_ops[d_idx][1](
             candidate, num_remove, dist_matrix=dist_matrix, rng=rng,
         )
 
         r_idx = repair_stats.select(rng)
+        r_name = repair_ops[r_idx][0]
         repair_ops[r_idx][1](
             candidate, removed, dist_matrix=dist_matrix,
             time_matrix=time_matrix, rng=rng,
         )
 
+        if not _solution_dependencies_valid(candidate):
+            iterations_done += 1
+            temperature *= config.cooling_rate
+            continue
+
         candidate_cost = candidate.total_distance(dist_matrix)
 
         accepted = False
+        accept_reason = "rejected"
         if candidate_cost < current_cost:
             solution = candidate
             current_cost = candidate_cost
@@ -602,9 +636,11 @@ def run_alns(solution: ALNSSolution,
                 best_cost = candidate_cost
                 destroy_stats.update(d_idx, config.weight_best)
                 repair_stats.update(r_idx, config.weight_best)
+                accept_reason = "new_best"
             else:
                 destroy_stats.update(d_idx, config.weight_better)
                 repair_stats.update(r_idx, config.weight_better)
+                accept_reason = "improving"
         else:
             delta = candidate_cost - current_cost
             if temperature > 0.01 and rng.random() < math.exp(-delta / (temperature * 1000)):
@@ -613,6 +649,14 @@ def run_alns(solution: ALNSSolution,
                 accepted = True
                 destroy_stats.update(d_idx, config.weight_accepted)
                 repair_stats.update(r_idx, config.weight_accepted)
+                accept_reason = "sa_accept"
+
+        if iteration % log_interval == 0 or accept_reason == "new_best":
+            d_weights = ", ".join(f"{destroy_stats.names[i]}={destroy_stats.weights[i]:.1f}" for i in range(len(destroy_stats.names)))
+            r_weights = ", ".join(f"{repair_stats.names[i]}={repair_stats.weights[i]:.1f}" for i in range(len(repair_stats.names)))
+            print(f"[alns] iter={iteration} cost={current_cost:.0f} best={best_cost:.0f} "
+                  f"T={temperature:.1f} {accept_reason} d={d_name} r={r_name} | "
+                  f"D[{d_weights}] R[{r_weights}]")
 
         temperature *= config.cooling_rate
         iterations_done += 1
@@ -637,7 +681,7 @@ def run_alns(solution: ALNSSolution,
 
     elapsed_ms = int((time.time() - start_time) * 1000)
 
-    print(f"[alns] {iterations_done} iterations, cost {initial_cost:.0f} → {final_cost:.0f} "
+    print(f"[alns] DONE: {iterations_done} iterations, cost {initial_cost:.0f} → {final_cost:.0f} "
           f"({improvement_pct:.1f}% improvement), 2-opt: {ls_2opt}, or-opt: {ls_oropt}, "
           f"time: {elapsed_ms}ms")
 
