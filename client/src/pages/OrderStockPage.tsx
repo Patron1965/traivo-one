@@ -61,7 +61,8 @@ import {
   Sparkles,
   Send,
   Mail,
-  ClipboardList
+  ClipboardList,
+  CalendarPlus
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { AICard } from "@/components/AICard";
@@ -253,6 +254,7 @@ export default function OrderStockPage() {
 
   const [showPlanningDialog, setShowPlanningDialog] = useState(false);
   const [planningOrder, setPlanningOrder] = useState<WorkOrder | null>(null);
+  const [showBatchPlanningDialog, setShowBatchPlanningDialog] = useState(false);
 
   const planningForm = useForm<PlanningFormData>({
     resolver: zodResolver(planningFormSchema),
@@ -438,6 +440,58 @@ export default function OrderStockPage() {
   const onPlanningSubmit = (data: PlanningFormData) => {
     if (planningOrder) {
       planningMutation.mutate({ orderId: planningOrder.id, data });
+    }
+  };
+
+  const batchPlanningForm = useForm<PlanningFormData>({
+    resolver: zodResolver(planningFormSchema),
+    defaultValues: { teamId: "", resourceId: "", scheduledDate: "" },
+  });
+
+  const batchPlanningMutation = useMutation({
+    mutationFn: async ({ orderIds, data }: { orderIds: string[]; data: PlanningFormData }) => {
+      const updates: Record<string, any> = {};
+      if (data.teamId) updates.teamId = data.teamId;
+      if (data.resourceId) updates.resourceId = data.resourceId;
+      if (data.scheduledDate) updates.scheduledDate = new Date(data.scheduledDate);
+      if (data.resourceId) {
+        updates.orderStatus = "planerad_resurs";
+      } else if (data.teamId) {
+        updates.orderStatus = "planerad_pre";
+      }
+      let success = 0;
+      let failed = 0;
+      for (const id of orderIds) {
+        try {
+          await apiRequest("PATCH", `/api/work-orders/${id}`, updates);
+          success++;
+        } catch {
+          failed++;
+        }
+      }
+      return { success, failed };
+    },
+    onSuccess: ({ success, failed }) => {
+      toast({
+        title: `${success} ordrar planerade`,
+        description: failed > 0 ? `${failed} kunde inte uppdateras` : undefined,
+        variant: failed > 0 ? "destructive" : "default",
+      });
+      setShowBatchPlanningDialog(false);
+      batchPlanningForm.reset();
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    },
+    onError: () => {
+      toast({ title: tl("toast.planning-error"), variant: "destructive" });
+    },
+  });
+
+  const onBatchPlanningSubmit = (data: PlanningFormData) => {
+    const orderIds = Array.from(selectedIds);
+    if (orderIds.length > 0) {
+      batchPlanningMutation.mutate({ orderIds, data });
     }
   };
 
@@ -854,6 +908,18 @@ export default function OrderStockPage() {
           >
             {tl("page.orderstock.change-status")}
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              batchPlanningForm.reset({ teamId: "", resourceId: "", scheduledDate: "" });
+              setShowBatchPlanningDialog(true);
+            }}
+            data-testid="button-batch-plan"
+          >
+            <CalendarPlus className="h-4 w-4 mr-1" />
+            Batch Planera
+          </Button>
         </BulkActionBar>
         <ScrollArea className="h-[500px]">
           <div className="divide-y">
@@ -1199,6 +1265,103 @@ export default function OrderStockPage() {
               </form>
             </Form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showBatchPlanningDialog} onOpenChange={setShowBatchPlanningDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarPlus className="h-5 w-5" />
+              Batch Planera
+            </DialogTitle>
+            <DialogDescription>
+              Tilldela datum, team och resurs till {selectedIds.size} valda ordrar samtidigt.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...batchPlanningForm}>
+            <form onSubmit={batchPlanningForm.handleSubmit(onBatchPlanningSubmit)} className="space-y-4">
+              <div className="rounded-md bg-muted p-3 text-sm">
+                <span className="font-medium">{selectedIds.size}</span> ordrar valda
+              </div>
+
+              <FormField
+                control={batchPlanningForm.control}
+                name="scheduledDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Datum</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} data-testid="input-batch-planning-date" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={batchPlanningForm.control}
+                name="teamId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{tl("page.orderstock.team-pre-plan")}</FormLabel>
+                    <Select value={field.value || "none"} onValueChange={(val) => field.onChange(val === "none" ? "" : val)}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-batch-planning-team">
+                          <SelectValue placeholder={tl("page.orderstock.select-team")} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">{tl("page.orderstock.no-team")}</SelectItem>
+                        {teams.map((team) => (
+                          <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={batchPlanningForm.control}
+                name="resourceId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{tl("page.orderstock.resource-detail")}</FormLabel>
+                    <Select value={field.value || "none"} onValueChange={(val) => field.onChange(val === "none" ? "" : val)}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-batch-planning-resource">
+                          <SelectValue placeholder={tl("page.orderstock.select-resource")} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">{tl("page.orderstock.no-resource")}</SelectItem>
+                        {resources.map((resource) => (
+                          <SelectItem key={resource.id} value={resource.id}>{resource.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setShowBatchPlanningDialog(false)}>
+                  Avbryt
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={batchPlanningMutation.isPending}
+                  data-testid="button-save-batch-planning"
+                >
+                  {batchPlanningMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Planera {selectedIds.size} ordrar
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
 
