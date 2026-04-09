@@ -578,7 +578,7 @@ export default function RoutesPage() {
             </div>
           )}
       
-      <div className="flex-1 min-h-[400px]">
+      <div className="flex-1 min-h-[500px]">
         <RouteMap />
       </div>
     </div>

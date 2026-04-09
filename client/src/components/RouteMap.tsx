@@ -311,8 +311,8 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
     : [59.196, 17.626];
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 h-full">
-      <div className="w-full lg:w-[420px] flex flex-col gap-4 overflow-auto">
+    <div className="flex flex-col lg:flex-row gap-4 h-full min-h-[500px]">
+      <div className="w-full lg:w-[300px] shrink-0 flex flex-col gap-4 overflow-auto">
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
