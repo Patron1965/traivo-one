@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Loader2, Sparkles, TrendingUp, Clock, MapPin, Route as RouteIcon, Truck, AlertCircle, Check, Map, Cloud, CloudRain, Wind, Thermometer, Lightbulb, Monitor } from "lucide-react";
+import { Loader2, Sparkles, TrendingUp, Clock, MapPin, Route as RouteIcon, Truck, AlertCircle, AlertTriangle, Check, Map, CloudRain, Wind, Thermometer, Lightbulb, Monitor } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -225,20 +225,28 @@ export default function RoutesPage() {
       
       {recommendations && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {recommendations.weather && (
-            <Card className="hover-elevate" data-testid="card-weather-info">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  {recommendations.weather.precipitation > 5 ? (
-                    <CloudRain className="h-4 w-4 text-blue-500" />
-                  ) : (
-                    <Cloud className="h-4 w-4 text-muted-foreground" />
-                  )}
-                  Väder {selectedDate}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex items-center gap-4 text-sm">
+          {recommendations.weather && recommendations.weather.impact !== "none" && (
+            <Card className={`hover-elevate border-l-4 ${
+              recommendations.weather.impact === "severe" || recommendations.weather.impact === "high" 
+                ? "border-l-red-500 dark:border-l-red-400" 
+                : "border-l-yellow-500 dark:border-l-yellow-400"
+            }`} data-testid="card-weather-warning">
+              <CardContent className="py-3 space-y-1">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <AlertTriangle className={`h-4 w-4 ${
+                    recommendations.weather.impact === "severe" || recommendations.weather.impact === "high"
+                      ? "text-red-500 dark:text-red-400"
+                      : "text-yellow-500 dark:text-yellow-400"
+                  }`} />
+                  Vädervarning {selectedDate}
+                  <Badge 
+                    variant={recommendations.weather.impact === "severe" || recommendations.weather.impact === "high" ? "destructive" : "secondary"}
+                    className="text-xs ml-auto"
+                  >
+                    Kapacitet: {Math.round(recommendations.weather.capacityMultiplier * 100)}%
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Thermometer className="h-3 w-3" />
                     {Math.round(recommendations.weather.temperature)}°C
@@ -251,16 +259,8 @@ export default function RoutesPage() {
                     <Wind className="h-3 w-3" />
                     {Math.round(recommendations.weather.windSpeed)} m/s
                   </span>
+                  <span className="ml-auto">{recommendations.weather.description}</span>
                 </div>
-                <p className="text-xs text-muted-foreground">{recommendations.weather.description}</p>
-                {recommendations.weather.impact !== "none" && (
-                  <Badge 
-                    variant={recommendations.weather.impact === "severe" || recommendations.weather.impact === "high" ? "destructive" : "secondary"}
-                    className="text-xs"
-                  >
-                    Kapacitet: {Math.round(recommendations.weather.capacityMultiplier * 100)}%
-                  </Badge>
-                )}
               </CardContent>
             </Card>
           )}
