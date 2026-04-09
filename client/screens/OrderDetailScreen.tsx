@@ -314,13 +314,17 @@ export function OrderDetailScreen({ route, navigation }: any) {
     refetchInterval: 30000,
   });
 
-  const activeEntry = timeEntries?.find(e => e.endedAt === null) || null;
+  const MAX_TIMER_SECONDS = 24 * 3600;
+  const rawActiveEntry = timeEntries?.find(e => e.endedAt === null) || null;
+  const activeEntry = rawActiveEntry && (Date.now() - new Date(rawActiveEntry.startedAt).getTime()) < MAX_TIMER_SECONDS * 1000
+    ? rawActiveEntry : null;
 
   useEffect(() => {
     if (activeEntry) {
       const startMs = new Date(activeEntry.startedAt).getTime();
       const update = () => {
-        setElapsedSeconds(Math.floor((Date.now() - startMs) / 1000));
+        const elapsed = Math.floor((Date.now() - startMs) / 1000);
+        setElapsedSeconds(Math.min(elapsed, MAX_TIMER_SECONDS));
       };
       update();
       timerRef.current = setInterval(update, 1000);

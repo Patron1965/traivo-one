@@ -228,42 +228,41 @@ function buildFallbackResponse(parsed: { lon: number; lat: number }[]) {
   };
 }
 
+async function closeOpenEntries(orderId: string, driverId: string, now: Date, statusFilter?: string) {
+  const statusClause = statusFilter ? ` AND status = '${statusFilter}'` : '';
+  await pool.query(
+    `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND ended_at IS NULL${statusClause}`,
+    [now, orderId, driverId]
+  );
+}
+
 async function handleTimeEntries(orderId: string, driverId: string, newStatus: string) {
   const now = new Date();
   try {
-    if (newStatus === 'dispatched') {
+    if (newStatus === 'dispatched' || newStatus === 'en_route') {
+      await closeOpenEntries(orderId, driverId, now);
       await pool.query(
         `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'travel', $3)`,
         [orderId, driverId, now]
       );
     } else if (newStatus === 'on_site') {
-      await pool.query(
-        `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND status = 'travel' AND ended_at IS NULL`,
-        [now, orderId, driverId]
-      );
+      await closeOpenEntries(orderId, driverId, now, 'travel');
       await pool.query(
         `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'on_site', $3)`,
         [orderId, driverId, now]
       );
-    } else if (newStatus === 'in_progress') {
-      await pool.query(
-        `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND status = 'on_site' AND ended_at IS NULL`,
-        [now, orderId, driverId]
-      );
+    } else if (newStatus === 'in_progress' || newStatus === 'paborjad') {
+      await closeOpenEntries(orderId, driverId, now);
       await pool.query(
         `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'working', $3)`,
         [orderId, driverId, now]
       );
     } else if (newStatus === 'completed' || newStatus === 'utford') {
-      await pool.query(
-        `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND ended_at IS NULL`,
-        [now, orderId, driverId]
-      );
+      await closeOpenEntries(orderId, driverId, now);
     } else if (newStatus === 'failed' || newStatus === 'impossible' || newStatus === 'cancelled') {
-      await pool.query(
-        `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND ended_at IS NULL`,
-        [now, orderId, driverId]
-      );
+      await closeOpenEntries(orderId, driverId, now);
+    } else if (newStatus === 'planerad_resurs' || newStatus === 'planerad_las' || newStatus === 'planerad_pre') {
+      await closeOpenEntries(orderId, driverId, now);
     }
   } catch (err: any) {
     console.error('Error managing time entries:', err.message);

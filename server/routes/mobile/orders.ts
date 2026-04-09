@@ -204,7 +204,7 @@ router.post('/travel-times', async (req, res) => {
 
 router.patch('/orders/:id/status', async (req, res) => {
   const { status: newStatus } = req.body;
-  const allowedStatuses = ['planned', 'dispatched', 'en_route', 'on_site', 'in_progress', 'completed', 'failed', 'cancelled', 'deferred', 'planerad_pre', 'planerad_resurs', 'planerad_las', 'utford', 'fakturerad', 'impossible'];
+  const allowedStatuses = ['planned', 'dispatched', 'en_route', 'on_site', 'in_progress', 'completed', 'failed', 'cancelled', 'deferred', 'planerad_pre', 'planerad_resurs', 'planerad_las', 'paborjad', 'utford', 'fakturerad', 'impossible'];
   if (!newStatus || typeof newStatus !== 'string') {
     return res.status(400).json({ error: 'Status krävs' });
   }
@@ -220,7 +220,7 @@ router.patch('/orders/:id/status', async (req, res) => {
         return;
       }
       order.status = newStatus;
-      if (newStatus === 'on_site' || newStatus === 'in_progress' || newStatus === 'planerad_las') {
+      if (newStatus === 'on_site' || newStatus === 'in_progress' || newStatus === 'paborjad' || newStatus === 'planerad_las') {
         order.actualStartTime = order.actualStartTime || new Date().toISOString();
       }
       if (newStatus === 'completed' || newStatus === 'utford') {
@@ -263,7 +263,7 @@ router.patch('/orders/:id/status', async (req, res) => {
       }
       const statusLabels: Record<string, string> = {
         skapad: 'Skapad', planerad_pre: 'Förplanerad', planerad_resurs: 'Tilldelad',
-        planerad_las: 'Tilldelad', utford: 'Utförd', fakturerad: 'Fakturerad',
+        planerad_las: 'Tilldelad', paborjad: 'Påbörjad', utford: 'Utförd', fakturerad: 'Fakturerad',
         impossible: 'Omöjlig', planned: 'Planerad', dispatched: 'Skickad',
         on_site: 'På plats', in_progress: 'Pågår', completed: 'Slutförd',
         failed: 'Misslyckad', cancelled: 'Avbruten', deferred: 'Uppskjuten',
