@@ -24,7 +24,6 @@ except ImportError:
 
 try:
     from sklearn.cluster import KMeans, DBSCAN
-    from sklearn.metrics import pairwise_distances
     import numpy as np
     HAS_SKLEARN = True
 except ImportError:
@@ -206,9 +205,13 @@ def dbscan_pre_cluster(
         for ci, cl in enumerate(cluster_list):
             centroid_lat = sum(s.lat for s in cl) / len(cl)
             centroid_lng = sum(s.lng for s in cl) / len(cl)
-            d = haversine_km(ns.lat, ns.lng, centroid_lat, centroid_lng)
-            if d < best_dist:
-                best_dist = d
+            geo_d = haversine_km(ns.lat, ns.lng, centroid_lat, centroid_lng)
+            norm_geo = geo_d / max_geo_dist if max_geo_dist > 0 else 0
+            rep_stop = cl[0]
+            temp_d = temporal_distance(ns, rep_stop)
+            combined = ((1.0 - temporal_weight) * norm_geo + temporal_weight * temp_d) * max_geo_dist
+            if combined < best_dist:
+                best_dist = combined
                 best_idx = ci
         cluster_list[best_idx].append(ns)
 
