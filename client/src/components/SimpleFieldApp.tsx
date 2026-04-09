@@ -10,7 +10,7 @@ import {
   HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X,
   Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
   User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share,
-  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText
+  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText, ListTodo
 } from "lucide-react";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -37,6 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DailyProgressCard } from "@/components/DailyProgressCard";
 import { DayReport } from "@/components/DayReport";
+import { FieldTodoList, getUncompletedTodoCount } from "@/components/FieldTodoList";
 import { VoiceInput } from "@/components/VoiceInput";
 import {
   Dialog,
@@ -46,7 +47,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-type View = "jobs" | "job" | "report";
+type View = "jobs" | "job" | "report" | "todo";
 
 interface MyReportItem {
   id: string;
@@ -1120,6 +1121,12 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         resourceId={resourceId || ""}
         onBack={() => setView("jobs")}
       />
+    );
+  }
+
+  if (view === "todo") {
+    return (
+      <FieldTodoList onBack={() => setView("jobs")} />
     );
   }
 
@@ -2653,12 +2660,29 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         </Button>
         <Button
           variant="outline"
+          className="h-12 gap-2 px-4 relative"
+          onClick={() => setView("todo")}
+          data-testid="button-open-todo-list"
+        >
+          <ListTodo className="h-5 w-5 text-orange-500" />
+          Att göra
+          {(() => {
+            const count = getUncompletedTodoCount();
+            return count > 0 ? (
+              <span className="absolute -top-1.5 -right-1.5 bg-orange-500 text-white text-[10px] font-bold rounded-full h-5 min-w-5 flex items-center justify-center px-1" data-testid="badge-todo-count">
+                {count}
+              </span>
+            ) : null;
+          })()}
+        </Button>
+        <Button
+          variant="outline"
           className="h-12 gap-2 px-4"
           onClick={() => setView("report")}
           data-testid="button-open-day-report"
         >
           <FileText className="h-5 w-5 text-teal-500" />
-          Dagsrapport
+          Rapport
         </Button>
       </div>
     </div>

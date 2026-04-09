@@ -237,12 +237,13 @@
 - Pull-to-refresh och statusindikator (online/offline/GPS)
 - AI-fältassistent för frågor under arbete
 - **Dagsrapport**: sammanfattning av dagens arbete — slutförandegrad, tid (beräknad vs faktisk), foton, signaturer, material, jobbtyper — med exportfunktion
+- **Personlig att-göra-lista**: egna uppgifter som inte är kopplade till ordrar (t.ex. "Tanka bilen", "Ring kund X") — sparas lokalt, fungerar offline, badge visar antal kvarvarande
 
 **Lyft fram:**
 - "Traivo Go är en PWA som fungerar offline. Teknikern ser sin rutt, dokumenterar arbetet, och allt synkas automatiskt när uppkopplingen kommer tillbaka."
-- "Inga pappersprotokoll — allt digitalt direkt i fält. Dagsrapporten ger en komplett sammanfattning att ta med sig."
+- "Inga pappersprotokoll — allt digitalt direkt i fält. Dagsrapporten och att-göra-listan ger teknikern full kontroll."
 
-**Wow-moment:** Visa dagsrapporten — teknikern ser hela sin dag sammanfattad med ett klick.
+**Wow-moment:** Visa att-göra-listan — teknikern kan snabbt lägga till egna påminnelser som lever kvar mellan sessioner.
 
 ### 5.2 Arbetspass / Snöret (`/work-sessions`)
 **Navigera:** Menyn > Fält > Arbetspass
