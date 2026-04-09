@@ -39,6 +39,7 @@ class Stop(BaseModel):
     required_skills: Optional[list[str]] = None
     demand: int = 1
     priority: int = 1
+    depends_on: Optional[list[str]] = None
 
 
 class Vehicle(BaseModel):
@@ -63,6 +64,8 @@ class OptimizeRequest(BaseModel):
     vehicles: list[Vehicle]
     max_solve_seconds: int = Field(default=30, ge=1, le=300)
     distance_matrix: Optional[list[DistanceMatrixEntry]] = None
+    alns_time_fraction: float = Field(default=0.4, ge=0.0, le=0.9)
+    dependencies: Optional[list[list[str]]] = None
 
 
 class RouteStopResult(BaseModel):
@@ -322,7 +325,7 @@ def solve_nearest_neighbor(stops: list[Stop], vehicles: list[Vehicle]) -> Optimi
     )
 
 
-def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int, precomputed_matrix: Optional[list[DistanceMatrixEntry]] = None) -> OptimizeResponse:
+def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int, precomputed_matrix: Optional[list[DistanceMatrixEntry]] = None, alns_time_fraction: float = 0.4, dep_edges: Optional[list[list[str]]] = None) -> OptimizeResponse:
     if not HAS_ORTOOLS:
         return solve_nearest_neighbor(stops, vehicles)
 
@@ -384,7 +387,7 @@ def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int, 
     for node in range(stop_start_index, stop_start_index + len(stops)):
         routing.AddDisjunction([manager.NodeToIndex(node)], 100000)
 
-    ortools_budget = max(1, int(max_seconds * 0.6))
+    ortools_budget = max(1, int(max_seconds * (1.0 - alns_time_fraction)))
     search_parameters = pywrapcp.DefaultRoutingSearchParameters()
     search_parameters.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
     search_parameters.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
@@ -445,6 +448,20 @@ def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int, 
         from alns import ALNSStop as AStop, ALNSVehicle as AVehicle, ALNSRoute as ARoute
         from alns import ALNSSolution as ASolution, ALNSConfig, run_alns
 
+        dep_by_stop: dict[str, list[str]] = {}
+        depended_by: dict[str, list[str]] = {}
+        if dep_edges:
+            for edge in dep_edges:
+                if len(edge) >= 2:
+                    before_id, after_id = edge[0], edge[1]
+                    dep_by_stop.setdefault(after_id, []).append(before_id)
+                    depended_by.setdefault(before_id, []).append(after_id)
+        for s in stops:
+            if s.depends_on:
+                for dep_id in s.depends_on:
+                    dep_by_stop.setdefault(s.id, []).append(dep_id)
+                    depended_by.setdefault(dep_id, []).append(s.id)
+
         alns_stops_by_id: dict[str, AStop] = {}
         for si_idx, s in enumerate(stops):
             alns_stops_by_id[s.id] = AStop(
@@ -455,6 +472,8 @@ def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int, 
                 skills=[str(sk) for sk in (s.required_skills or [])],
                 demand=s.demand, priority=s.priority,
                 loc_idx=stop_start_index + si_idx,
+                depends_on_ids=dep_by_stop.get(s.id, []),
+                depended_by_ids=depended_by.get(s.id, []),
             )
 
         alns_vehicles: list[AVehicle] = []
@@ -526,9 +545,28 @@ def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int, 
                 total_duration_seconds=current_time - ar.vehicle.start_time + return_travel,
             ))
 
-        routes = improved_routes
-        unassigned_ids = [s.id for s in stops if s.id not in improved_assigned]
-        solver_name = "ortools+alns"
+        from alns import _route_feasible as alns_feasible, _solution_dependencies_valid as alns_deps_valid
+
+        all_feasible = True
+        for ar in improved_solution.routes:
+            if ar.stops and not alns_feasible(ar, time_matrix, distance_matrix):
+                all_feasible = False
+                print(f"[alns] WARNING: Route for vehicle {ar.vehicle.id} failed final feasibility check")
+                break
+
+        if not alns_deps_valid(improved_solution):
+            all_feasible = False
+            print("[alns] WARNING: Final solution failed dependency validation")
+
+        if all_feasible:
+            routes = improved_routes
+            unassigned_ids = [s.id for s in stops if s.id not in improved_assigned]
+            solver_name = "ortools+alns"
+        else:
+            print("[alns] Final validation failed, falling back to OR-Tools solution")
+            routes = ortools_routes
+            unassigned_ids = ortools_unassigned_ids
+            solver_name = "ortools"
     except Exception as e:
         print(f"[alns] ALNS improvement phase failed, using OR-Tools solution: {e}")
         routes = ortools_routes
@@ -579,7 +617,8 @@ def optimize(req: OptimizeRequest):
 
         for cluster_stops in clusters:
             if HAS_ORTOOLS:
-                result = solve_ortools(cluster_stops, req.vehicles, req.max_solve_seconds)
+                result = solve_ortools(cluster_stops, req.vehicles, req.max_solve_seconds,
+                                       alns_time_fraction=req.alns_time_fraction, dep_edges=req.dependencies)
             else:
                 result = solve_nearest_neighbor(cluster_stops, req.vehicles)
             all_routes.extend(result.routes)
@@ -595,7 +634,8 @@ def optimize(req: OptimizeRequest):
         )
 
     if HAS_ORTOOLS:
-        return solve_ortools(req.stops, req.vehicles, req.max_solve_seconds, req.distance_matrix)
+        return solve_ortools(req.stops, req.vehicles, req.max_solve_seconds, req.distance_matrix,
+                             alns_time_fraction=req.alns_time_fraction, dep_edges=req.dependencies)
     return solve_nearest_neighbor(req.stops, req.vehicles)
 
 

@@ -139,12 +139,10 @@ def _solution_dependencies_valid(solution: "ALNSSolution") -> bool:
         for si, s in enumerate(route.stops):
             for dep_id in s.depends_on_ids:
                 if dep_id not in stop_positions:
-                    continue
+                    return False
                 dep_ri, dep_si = stop_positions[dep_id]
                 if dep_ri == ri and dep_si >= si:
                     return False
-                if dep_ri != ri:
-                    pass
     return True
 
 
