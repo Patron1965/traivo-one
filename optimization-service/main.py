@@ -384,10 +384,11 @@ def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int, 
     for node in range(stop_start_index, stop_start_index + len(stops)):
         routing.AddDisjunction([manager.NodeToIndex(node)], 100000)
 
+    ortools_budget = max(1, int(max_seconds * 0.6))
     search_parameters = pywrapcp.DefaultRoutingSearchParameters()
     search_parameters.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
     search_parameters.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-    search_parameters.time_limit.seconds = max_seconds
+    search_parameters.time_limit.seconds = ortools_budget
 
     solution = routing.SolveWithParameters(search_parameters)
 
@@ -434,16 +435,119 @@ def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int, 
                 total_duration_seconds=end_time - start_t,
             ))
 
-    unassigned = [s.id for s in stops if s.id not in assigned_ids]
+    unassigned_stops = [s for s in stops if s.id not in assigned_ids]
+    ortools_ms = int((time.time() - start_time) * 1000)
+
+    alns_budget = max(1, max_seconds - ortools_budget)
+    try:
+        from alns import ALNSStop as AStop, ALNSVehicle as AVehicle, ALNSRoute as ARoute
+        from alns import ALNSSolution as ASolution, ALNSConfig, run_alns
+
+        stop_map = {s.id: s for s in stops}
+        alns_stops_by_id: dict[str, AStop] = {}
+        for s in stops:
+            alns_stops_by_id[s.id] = AStop(
+                id=s.id, lat=s.lat, lng=s.lng,
+                tw_start=s.time_window[0] if s.time_window else None,
+                tw_end=s.time_window[1] if s.time_window else None,
+                duration=s.duration,
+                skills=[str(sk) for sk in (s.required_skills or [])],
+                demand=s.demand, priority=s.priority,
+                loc_idx=stop_start_index + stops.index(s),
+            )
+
+        alns_vehicles: list[AVehicle] = []
+        for vi_idx, v in enumerate(vehicles):
+            alns_vehicles.append(AVehicle(
+                id=v.id, capacity=v.capacity,
+                skills=[str(sk) for sk in (v.skills or [])],
+                home_lat=v.home_lat, home_lng=v.home_lng,
+                start_time=v.start_time, end_time=v.end_time,
+                depot_idx=depot_indices[vi_idx],
+            ))
+
+        vehicle_map = {v.id: v for v in alns_vehicles}
+        vehicles_with_routes = set()
+
+        alns_routes: list[ARoute] = []
+        for r in routes:
+            av = vehicle_map.get(r.vehicle_id)
+            if not av:
+                continue
+            r_stops = [alns_stops_by_id[rs.stop_id] for rs in r.stops if rs.stop_id in alns_stops_by_id]
+            alns_routes.append(ARoute(av, r_stops))
+            vehicles_with_routes.add(r.vehicle_id)
+
+        for av in alns_vehicles:
+            if av.id not in vehicles_with_routes:
+                alns_routes.append(ARoute(av, []))
+
+        alns_unassigned = [alns_stops_by_id[s.id] for s in unassigned_stops if s.id in alns_stops_by_id]
+
+        alns_solution = ASolution(alns_routes, alns_unassigned)
+        alns_config = ALNSConfig(
+            max_iterations=min(500, len(stops) * 20),
+            max_time_seconds=float(alns_budget),
+        )
+
+        alns_result = run_alns(alns_solution, distance_matrix, time_matrix, alns_config)
+        improved_solution: ASolution = alns_result["solution"]
+
+        routes = []
+        assigned_ids = set()
+        for ar in improved_solution.routes:
+            if not ar.stops:
+                continue
+            r_stops: list[RouteStopResult] = []
+            current_time = ar.vehicle.start_time
+            prev_idx = ar.vehicle.depot_idx
+            total_dist_km = 0.0
+            for seq, ast in enumerate(ar.stops, 1):
+                travel = time_matrix[prev_idx][ast.loc_idx]
+                arrival = current_time + travel
+                effective_arrival = max(arrival, ast.tw_start) if ast.tw_start is not None else arrival
+                departure = effective_arrival + ast.duration
+                r_stops.append(RouteStopResult(
+                    stop_id=ast.id, sequence=seq,
+                    arrival_time=effective_arrival,
+                    departure_time=departure,
+                ))
+                total_dist_km += distance_matrix[prev_idx][ast.loc_idx] / 1000
+                assigned_ids.add(ast.id)
+                current_time = departure
+                prev_idx = ast.loc_idx
+            total_dist_km += distance_matrix[prev_idx][ar.vehicle.depot_idx] / 1000
+            return_travel = time_matrix[prev_idx][ar.vehicle.depot_idx]
+            routes.append(RouteResult(
+                vehicle_id=ar.vehicle.id,
+                stops=r_stops,
+                total_distance_km=round(total_dist_km, 2),
+                total_duration_seconds=current_time - ar.vehicle.start_time + return_travel,
+            ))
+
+        unassigned_ids = [s.id for s in stops if s.id not in assigned_ids]
+        solver_name = "ortools+alns"
+    except Exception as e:
+        print(f"[alns] ALNS improvement phase failed, using OR-Tools solution: {e}")
+        unassigned_ids = [s.id for s in unassigned_stops]
+        solver_name = "ortools"
+
     solve_ms = int((time.time() - start_time) * 1000)
 
     return OptimizeResponse(
         success=True,
         routes=routes,
-        unassigned_stop_ids=unassigned,
+        unassigned_stop_ids=unassigned_ids,
         solve_time_ms=solve_ms,
-        solver="ortools",
+        solver=solver_name,
     )
+
+
+try:
+    from alns import run_alns as _alns_check
+    HAS_ALNS = True
+except ImportError:
+    HAS_ALNS = False
 
 
 @app.get("/health")
@@ -452,6 +556,7 @@ def health():
         "status": "ok",
         "ortools_available": HAS_ORTOOLS,
         "sklearn_available": HAS_SKLEARN,
+        "alns_available": HAS_ALNS,
     }
 
 
