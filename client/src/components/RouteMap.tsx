@@ -18,10 +18,30 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 
-const createNumberedIcon = (number: number, color: string) => {
+const createNumberedIcon = (number: number, color: string, stackCount?: number) => {
+  const badge = stackCount && stackCount > 1
+    ? `<div style="
+        position: absolute;
+        top: -6px;
+        right: -8px;
+        background-color: #ef4444;
+        color: white;
+        border-radius: 50%;
+        width: 16px;
+        height: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        font-weight: bold;
+        border: 1.5px solid white;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      ">${stackCount}</div>`
+    : "";
   return L.divIcon({
     className: "custom-marker",
     html: `<div style="
+      position: relative;
       background-color: ${color};
       color: white;
       border-radius: 50%;
@@ -34,7 +54,7 @@ const createNumberedIcon = (number: number, color: string) => {
       font-size: 12px;
       border: 2px solid white;
       box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-    ">${number}</div>`,
+    ">${number}${badge}</div>`,
     iconSize: [28, 28],
     iconAnchor: [14, 14],
   });
@@ -253,6 +273,18 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
 
   const routePositions = useMemo(() => getJobPositions(displayJobs), [displayJobs, objectMap]);
   const positionsKey = routePositions.map(([lat, lon]) => `${lat.toFixed(5)},${lon.toFixed(5)}`).join("|");
+
+  const addressCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const job of displayJobs) {
+      const obj = objectMap.get(job.objectId);
+      if (obj?.latitude && obj?.longitude) {
+        const key = `${obj.latitude.toFixed(4)},${obj.longitude.toFixed(4)}`;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [displayJobs, objectMap]);
 
   useEffect(() => {
     if (routePositions.length >= 2) {
@@ -525,7 +557,21 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium truncate">{job.title}</div>
-                          <div className="text-xs text-muted-foreground truncate">{job.objectName || "Okänt objekt"}</div>
+                          <div className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                            {job.objectName || "Okänt objekt"}
+                            {(() => {
+                              const o = objectMap.get(job.objectId);
+                              if (!o?.latitude || !o?.longitude) return null;
+                              const k = `${o.latitude.toFixed(4)},${o.longitude.toFixed(4)}`;
+                              const cnt = addressCounts.get(k) || 1;
+                              if (cnt <= 1) return null;
+                              return (
+                                <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 no-default-hover-elevate">
+                                  {cnt} ordrar
+                                </Badge>
+                              );
+                            })()}
+                          </div>
                           <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
                             {job.scheduledStartTime && (
                               <span className="flex items-center gap-1">
@@ -583,24 +629,48 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
             {jobPositions.length > 0 && <MapFitBounds positions={jobPositions} />}
             
             {routeData?.geometry && routeData.geometry.coordinates ? (
-              routeData.geometry.type === "MultiLineString" ? (
-                (routeData.geometry as GeoJSON.MultiLineString).coordinates.map((line, i) => (
-                  <Polyline
-                    key={`route-line-${i}`}
-                    positions={line.map(([lon, lat]) => [lat, lon] as [number, number])}
+              <>
+                {routeData.geometry.type === "MultiLineString" ? (
+                  (routeData.geometry as GeoJSON.MultiLineString).coordinates.map((line, i) => (
+                    <Polyline
+                      key={`route-line-${i}`}
+                      positions={line.map(([lon, lat]) => [lat, lon] as [number, number])}
+                      color="#3b82f6"
+                      weight={4}
+                      opacity={0.8}
+                    />
+                  ))
+                ) : (
+                  <Polyline 
+                    positions={(routeData.geometry as GeoJSON.LineString).coordinates.map(([lon, lat]) => [lat, lon] as [number, number])}
                     color="#3b82f6"
                     weight={4}
                     opacity={0.8}
                   />
-                ))
-              ) : (
-                <Polyline 
-                  positions={(routeData.geometry as GeoJSON.LineString).coordinates.map(([lon, lat]) => [lat, lon] as [number, number])}
-                  color="#3b82f6"
-                  weight={4}
-                  opacity={0.8}
-                />
-              )
+                )}
+                {routePositions.map((pos, i) => {
+                  const allCoords = routeData.geometry.type === "MultiLineString"
+                    ? (routeData.geometry as GeoJSON.MultiLineString).coordinates.flat()
+                    : (routeData.geometry as GeoJSON.LineString).coordinates;
+                  let nearest = allCoords[0];
+                  let minDist = Infinity;
+                  for (const c of allCoords) {
+                    const d = (c[0] - pos[1]) ** 2 + (c[1] - pos[0]) ** 2;
+                    if (d < minDist) { minDist = d; nearest = c; }
+                  }
+                  if (minDist < 0.00001) return null;
+                  return (
+                    <Polyline
+                      key={`connector-${i}`}
+                      positions={[pos, [nearest[1], nearest[0]] as [number, number]]}
+                      color="#3b82f6"
+                      weight={2}
+                      opacity={0.5}
+                      dashArray="4, 4"
+                    />
+                  );
+                })}
+              </>
             ) : jobPositions.length > 1 && (
               <Polyline 
                 positions={jobPositions} 
@@ -625,12 +695,15 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                 (obj.containerCountK2 || 0) + 
                 (obj.containerCountK3 || 0) + 
                 (obj.containerCountK4 || 0);
+
+              const addrKey = `${obj.latitude.toFixed(4)},${obj.longitude.toFixed(4)}`;
+              const stackCount = addressCounts.get(addrKey) || 1;
               
               return (
                 <Fragment key={job.id}>
                   <Marker
                     position={[obj.latitude, obj.longitude]}
-                    icon={createNumberedIcon(index + 1, markerColor)}
+                    icon={createNumberedIcon(index + 1, markerColor, stackCount)}
                     eventHandlers={{
                       click: () => onNavigate?.(job.id),
                     }}
