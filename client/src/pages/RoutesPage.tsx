@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Loader2, Sparkles, TrendingUp, Clock, MapPin, Route as RouteIcon, Truck, AlertCircle, AlertTriangle, Check, Map, CloudRain, Wind, Thermometer, Lightbulb, Monitor } from "lucide-react";
+import { Loader2, Sparkles, TrendingUp, Clock, MapPin, Route as RouteIcon, Truck, AlertCircle, AlertTriangle, Check, Map, CloudRain, Wind, Thermometer, Monitor } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -202,134 +202,84 @@ export default function RoutesPage() {
 
   return (
     <div className="h-full p-6 flex flex-col gap-4 overflow-auto">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Ruttplanering</h1>
-          <p className="text-sm text-muted-foreground">Optimera dagens rutter och minimera körtid</p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="text-2xl font-semibold">Ruttplanering</h1>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="w-[150px] h-9"
+            data-testid="input-vrp-date"
+          />
+          <Select value={selectedCluster} onValueChange={setSelectedCluster}>
+            <SelectTrigger className="w-[160px] h-9" data-testid="select-vrp-cluster">
+              <SelectValue placeholder="Alla kluster" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alla kluster</SelectItem>
+              {clusters.map(c => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={() => vrpMutation.mutate()}
+                disabled={vrpMutation.isPending}
+                size="sm"
+                data-testid="button-run-vrp"
+              >
+                {vrpMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RouteIcon className="h-4 w-4 mr-2" />
+                )}
+                Kör optimering
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Optimera dagens rutter</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
+                onClick={() => window.open("/monitor/popout", "traivo-monitor", "width=1200,height=800,menubar=no,toolbar=no,location=no,status=no")}
+                data-testid="button-popout-monitor"
+              >
+                <Monitor className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Öppna kartövervakning i eget fönster</TooltipContent>
+          </Tooltip>
         </div>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.open("/monitor/popout", "traivo-monitor", "width=1200,height=800,menubar=no,toolbar=no,location=no,status=no")}
-              data-testid="button-popout-monitor"
-            >
-              <Monitor className="h-4 w-4 mr-2" />
-              Övervaka i eget fönster
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Öppna kartövervakning i ett separat fönster</TooltipContent>
-        </Tooltip>
       </div>
-      
-      {recommendations && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {recommendations.weather && recommendations.weather.impact !== "none" && (
-            <Card className={`hover-elevate border-l-4 ${
-              recommendations.weather.impact === "severe" || recommendations.weather.impact === "high" 
-                ? "border-l-red-500 dark:border-l-red-400" 
-                : "border-l-yellow-500 dark:border-l-yellow-400"
-            }`} data-testid="card-weather-warning">
-              <CardContent className="py-3 space-y-1">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <AlertTriangle className={`h-4 w-4 ${
-                    recommendations.weather.impact === "severe" || recommendations.weather.impact === "high"
-                      ? "text-red-500 dark:text-red-400"
-                      : "text-yellow-500 dark:text-yellow-400"
-                  }`} />
-                  Vädervarning {selectedDate}
-                  <Badge 
-                    variant={recommendations.weather.impact === "severe" || recommendations.weather.impact === "high" ? "destructive" : "secondary"}
-                    className="text-xs ml-auto"
-                  >
-                    Kapacitet: {Math.round(recommendations.weather.capacityMultiplier * 100)}%
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Thermometer className="h-3 w-3" />
-                    {Math.round(recommendations.weather.temperature)}°C
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <CloudRain className="h-3 w-3" />
-                    {recommendations.weather.precipitation} mm
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Wind className="h-3 w-3" />
-                    {Math.round(recommendations.weather.windSpeed)} m/s
-                  </span>
-                  <span className="ml-auto">{recommendations.weather.description}</span>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          
-          {recommendations?.recommendations?.length > 0 && (
-            <Card className="hover-elevate" data-testid="card-ai-recommendations">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Lightbulb className="h-4 w-4 text-yellow-500" />
-                  AI-rekommendationer
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {recommendations.recommendations.slice(0, 3).map((rec, idx) => (
-                  <div key={idx} className="text-sm border-l-2 pl-2" style={{
-                    borderColor: rec.priority === "high" ? "hsl(var(--destructive))" 
-                      : rec.priority === "medium" ? "hsl(var(--chart-3))" 
-                      : "hsl(var(--muted-foreground))"
-                  }}>
-                    <p className="font-medium">{rec.title}</p>
-                    <p className="text-xs text-muted-foreground">{rec.description}</p>
-                    {rec.actionable && (
-                      <Badge variant="outline" className="text-xs mt-1">{rec.actionable}</Badge>
-                    )}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
+
+      {recommendations && recommendations.weather && recommendations.weather.impact !== "none" && (
+        <div className={`flex items-center gap-3 px-3 py-2 rounded-md border-l-4 ${
+          recommendations.weather.impact === "severe" || recommendations.weather.impact === "high" 
+            ? "border-l-red-500 bg-red-50 dark:bg-red-950/20 dark:border-l-red-400" 
+            : "border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950/20 dark:border-l-yellow-400"
+        }`} data-testid="card-weather-warning">
+          <AlertTriangle className={`h-4 w-4 shrink-0 ${
+            recommendations.weather.impact === "severe" || recommendations.weather.impact === "high"
+              ? "text-red-500 dark:text-red-400"
+              : "text-yellow-500 dark:text-yellow-400"
+          }`} />
+          <span className="text-sm">
+            {Math.round(recommendations.weather.temperature)}°C, {recommendations.weather.precipitation} mm, {Math.round(recommendations.weather.windSpeed)} m/s — {recommendations.weather.description}
+          </span>
+          <Badge 
+            variant={recommendations.weather.impact === "severe" || recommendations.weather.impact === "high" ? "destructive" : "secondary"}
+            className="text-xs ml-auto shrink-0"
+          >
+            Kapacitet: {Math.round(recommendations.weather.capacityMultiplier * 100)}%
+          </Badge>
         </div>
       )}
-
-      <div className="flex flex-wrap gap-3 items-center">
-        <Input
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="w-[160px]"
-          data-testid="input-vrp-date"
-        />
-        <Select value={selectedCluster} onValueChange={setSelectedCluster}>
-          <SelectTrigger className="w-[180px]" data-testid="select-vrp-cluster">
-            <SelectValue placeholder="Alla kluster" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Alla kluster</SelectItem>
-            {clusters.map(c => (
-              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              onClick={() => vrpMutation.mutate()}
-              disabled={vrpMutation.isPending}
-              data-testid="button-run-vrp"
-            >
-              {vrpMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RouteIcon className="h-4 w-4 mr-2" />
-              )}
-              Kör optimering
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Optimera dagens rutter</TooltipContent>
-        </Tooltip>
-      </div>
 
           {vrpResult && (
             <div className="space-y-4">
