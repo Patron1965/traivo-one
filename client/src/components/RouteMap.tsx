@@ -763,7 +763,6 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                                           </span>
                                         )}
                                       </div>
-                                      <div><span className="font-medium">Ställtid:</span> {cSetup} min</div>
                                       <div><span className="font-medium">Arbetstid:</span> {cj.estimatedDuration} min</div>
                                       {cContainers > 0 && (
                                         <div>
