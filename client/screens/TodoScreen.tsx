@@ -1,15 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, TextInput, Pressable, StyleSheet, Platform, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, TextInput, Pressable, StyleSheet, Platform, Animated, ActivityIndicator } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useFocusEffect } from '@react-navigation/native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, BorderRadius, FontSize } from '../constants/theme';
 import { hapticLight, hapticSuccess } from '../utils/haptics';
+import { apiRequest } from '../lib/query-client';
 
 const STORAGE_KEY = 'traivo_go_personal_todos';
 
@@ -43,6 +46,10 @@ export function TodoScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [inputText, setInputText] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useFocusEffect(
     useCallback(() => {
@@ -50,9 +57,39 @@ export function TodoScreen() {
     }, [])
   );
 
+  useEffect(() => {
+    if (isRecording) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.2, duration: 600, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [isRecording, pulseAnim]);
+
   const persist = useCallback(async (items: TodoItem[]) => {
     setTodos(items);
     await saveTodos(items);
+  }, []);
+
+  const addTodoFromText = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    hapticSuccess();
+    const item: TodoItem = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      text: trimmed,
+      completed: false,
+      createdAt: new Date().toISOString(),
+    };
+    setTodos(prev => {
+      const updated = [item, ...prev];
+      saveTodos(updated);
+      return updated;
+    });
   }, []);
 
   const addTodo = useCallback(() => {
@@ -68,6 +105,51 @@ export function TodoScreen() {
     persist([item, ...todos]);
     setInputText('');
   }, [inputText, todos, persist]);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (!permission.granted) return;
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recording.startAsync();
+      recordingRef.current = recording;
+      setIsRecording(true);
+      hapticLight();
+    } catch {
+      setIsRecording(false);
+    }
+  }, []);
+
+  const stopRecording = useCallback(async () => {
+    setIsRecording(false);
+    const recording = recordingRef.current;
+    if (!recording) return;
+    try {
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      recordingRef.current = null;
+      if (!uri) return;
+      setIsTranscribing(true);
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const result = await apiRequest('POST', '/api/mobile/ai/transcribe', { audio: base64 });
+      if (result.text) {
+        addTodoFromText(result.text);
+      }
+    } catch {
+    } finally {
+      setIsTranscribing(false);
+    }
+  }, [addTodoFromText]);
+
+  const handleMicPress = useCallback(() => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  }, [isRecording, startRecording, stopRecording]);
 
   const toggleTodo = useCallback((id: string) => {
     hapticLight();
@@ -148,23 +230,49 @@ export function TodoScreen() {
       <View style={[s.inputRow, { marginTop: headerHeight + Spacing.sm }]}>
         <TextInput
           style={s.input}
-          placeholder="Ny uppgift..."
-          placeholderTextColor={Colors.textMuted}
+          placeholder={isRecording ? 'Lyssnar...' : isTranscribing ? 'Bearbetar...' : 'Ny uppgift...'}
+          placeholderTextColor={isRecording ? '#EF4444' : Colors.textMuted}
           value={inputText}
           onChangeText={setInputText}
           onSubmitEditing={addTodo}
           returnKeyType="done"
+          editable={!isRecording && !isTranscribing}
           testID="input-todo"
         />
-        <Pressable
-          style={[s.addBtn, !inputText.trim() ? s.addBtnDisabled : null]}
-          onPress={addTodo}
-          disabled={!inputText.trim()}
-          testID="button-add-todo"
-        >
-          <Feather name="plus" size={22} color="#FFFFFF" />
-        </Pressable>
+        {isTranscribing ? (
+          <View style={s.addBtn}>
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          </View>
+        ) : (
+          <Animated.View style={{ transform: [{ scale: isRecording ? pulseAnim : 1 }] }}>
+            <Pressable
+              style={[s.micBtn, isRecording ? s.micBtnRecording : null]}
+              onPress={handleMicPress}
+              testID="button-mic-todo"
+            >
+              <Feather name={isRecording ? 'mic-off' : 'mic'} size={22} color="#FFFFFF" />
+            </Pressable>
+          </Animated.View>
+        )}
+        {inputText.trim() ? (
+          <Pressable
+            style={s.addBtn}
+            onPress={addTodo}
+            testID="button-add-todo"
+          >
+            <Feather name="plus" size={22} color="#FFFFFF" />
+          </Pressable>
+        ) : null}
       </View>
+
+      {isRecording ? (
+        <View style={s.recordingHint}>
+          <View style={s.recordingDot} />
+          <ThemedText variant="caption" color="#EF4444">
+            Tala in din uppgift — tryck igen för att stoppa
+          </ThemedText>
+        </View>
+      ) : null}
 
       {completed.length > 0 ? (
         <Pressable style={s.clearBtn} onPress={clearCompleted} testID="button-clear-completed">
@@ -226,6 +334,30 @@ const s = StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  micBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micBtnRecording: {
+    backgroundColor: '#EF4444',
+  },
+  recordingHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.sm,
+  },
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#EF4444',
   },
   addBtnDisabled: {
     opacity: 0.4,
