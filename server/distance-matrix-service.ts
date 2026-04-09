@@ -283,11 +283,24 @@ export async function precomputeDistanceMatrix(
     if (tableResult && tableResult.distances.length === stops.length) {
       console.log(`[distance-matrix] OSRM table API: ${stops.length}×${stops.length} matrix computed`);
       const l2Promises: Promise<void>[] = [];
+      let nullCount = 0;
       for (let i = 0; i < stops.length; i++) {
         for (let j = 0; j < stops.length; j++) {
           if (i === j) continue;
-          const distKm = tableResult.distances[i][j] / 1000;
-          const durMin = Math.round(tableResult.durations[i][j] / 60);
+          const rawDist = tableResult.distances[i][j];
+          const rawDur = tableResult.durations[i][j];
+          let distKm: number;
+          let durMin: number;
+          let source: DistanceResult["source"] = "osrm";
+          if (isNaN(rawDist) || isNaN(rawDur)) {
+            nullCount++;
+            distKm = haversineDistanceKm(stops[i].lat, stops[i].lng, stops[j].lat, stops[j].lng);
+            durMin = Math.round((distKm / 40) * 60);
+            source = "haversine";
+          } else {
+            distKm = rawDist / 1000;
+            durMin = Math.round(rawDur / 60);
+          }
           matrix.push({
             fromId: stops[i].id,
             toId: stops[j].id,
@@ -295,10 +308,13 @@ export async function precomputeDistanceMatrix(
             durationMin: durMin,
           });
           const key = coordKey(stops[i].lat, stops[i].lng, stops[j].lat, stops[j].lng);
-          const result: DistanceResult = { distanceKm: distKm, durationMin: durMin, source: "osrm" };
+          const result: DistanceResult = { distanceKm: distKm, durationMin: durMin, source };
           setL1(key, result);
           l2Promises.push(setL2(key, stops[i].lat, stops[i].lng, stops[j].lat, stops[j].lng, result));
         }
+      }
+      if (nullCount > 0) {
+        console.warn(`[distance-matrix] OSRM returned ${nullCount} unreachable pairs, filled with Haversine`);
       }
       await Promise.all(l2Promises);
       return matrix;
@@ -327,6 +343,78 @@ export async function precomputeDistanceMatrix(
   }
 
   return matrix;
+}
+
+export interface PrecomputedDistanceEntry {
+  from_idx: number;
+  to_idx: number;
+  distance_m: number;
+  duration_s: number;
+}
+
+export async function computeORToolsMatrix(
+  locations: Array<{ lat: number; lng: number }>,
+): Promise<PrecomputedDistanceEntry[] | null> {
+  if (locations.length < 2) return null;
+
+  try {
+    const osrmAvail = await isOSRMAvailable();
+    if (osrmAvail) {
+      const tableResult = await osrmTable(locations);
+      if (tableResult && tableResult.distances.length === locations.length) {
+        const entries: PrecomputedDistanceEntry[] = [];
+        let nullCount = 0;
+        for (let i = 0; i < locations.length; i++) {
+          for (let j = 0; j < locations.length; j++) {
+            if (i === j) continue;
+            const rawDist = tableResult.distances[i][j];
+            const rawDur = tableResult.durations[i][j];
+            if (isNaN(rawDist) || isNaN(rawDur)) {
+              nullCount++;
+              const distKm = haversineDistanceKm(locations[i].lat, locations[i].lng, locations[j].lat, locations[j].lng);
+              entries.push({
+                from_idx: i,
+                to_idx: j,
+                distance_m: Math.round(distKm * 1000),
+                duration_s: Math.round((distKm / 40) * 3600),
+              });
+            } else {
+              entries.push({
+                from_idx: i,
+                to_idx: j,
+                distance_m: Math.round(rawDist),
+                duration_s: Math.round(rawDur),
+              });
+            }
+          }
+        }
+        if (nullCount > 0) {
+          console.warn(`[distance-matrix] OSRM matrix: ${nullCount} unreachable pairs filled with Haversine`);
+        }
+        console.log(`[distance-matrix] OSRM OR-Tools matrix: ${locations.length}×${locations.length} (${entries.length} entries)`);
+        return entries;
+      }
+    }
+
+    const entries: PrecomputedDistanceEntry[] = [];
+    for (let i = 0; i < locations.length; i++) {
+      for (let j = 0; j < locations.length; j++) {
+        if (i === j) continue;
+        const dr = await getRoutingDistance(locations[i].lat, locations[i].lng, locations[j].lat, locations[j].lng);
+        entries.push({
+          from_idx: i,
+          to_idx: j,
+          distance_m: Math.round(dr.distanceKm * 1000),
+          duration_s: Math.round(dr.durationMin * 60),
+        });
+      }
+    }
+    console.log(`[distance-matrix] Fallback OR-Tools matrix: ${locations.length}×${locations.length} (${entries.length} entries)`);
+    return entries;
+  } catch (err) {
+    console.warn("[distance-matrix] OR-Tools matrix computation failed:", err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 export interface GeoCluster {

@@ -107,9 +107,16 @@ export async function osrmTable(
 
     _consecutiveFailures = 0;
 
+    const safeDurations = (data.durations as (number | null)[][]).map((row: (number | null)[]) =>
+      row.map((v: number | null) => v !== null && v !== undefined ? v : NaN)
+    );
+    const safeDistances = (data.distances as (number | null)[][]).map((row: (number | null)[]) =>
+      row.map((v: number | null) => v !== null && v !== undefined ? v : NaN)
+    );
+
     return {
-      durations: data.durations,
-      distances: data.distances,
+      durations: safeDurations,
+      distances: safeDistances,
       sources: data.sources,
       destinations: data.destinations,
     };
@@ -155,8 +162,10 @@ async function osrmTableChunked(
 
         for (let si = 0; si < srcIndices.length; si++) {
           for (let di = 0; di < dstIndices.length; di++) {
-            durations[srcIndices[si]][dstIndices[di]] = data.durations[si][di];
-            distances[srcIndices[si]][dstIndices[di]] = data.distances[si][di];
+            const dur = data.durations[si][di];
+            const dist = data.distances[si][di];
+            durations[srcIndices[si]][dstIndices[di]] = dur !== null && dur !== undefined ? dur : NaN;
+            distances[srcIndices[si]][dstIndices[di]] = dist !== null && dist !== undefined ? dist : NaN;
           }
         }
       } catch (err) {

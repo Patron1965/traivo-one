@@ -250,10 +250,20 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
 
   await updateProgress(jobId, 60);
 
+  const { computeORToolsMatrix } = await import("./distance-matrix-service");
+  const allLocations = [
+    ...vehicles.map(v => ({ lat: v.home_lat, lng: v.home_lng })),
+    ...stops.map(s => ({ lat: s.lat, lng: s.lng })),
+  ];
+  const distanceMatrix = await computeORToolsMatrix(allLocations) ?? undefined;
+
+  await updateProgress(jobId, 75);
+
   const orResult = await callOptimizationService({
     stops,
     vehicles,
     maxSolveSeconds: 60,
+    distanceMatrix,
   });
 
   await updateProgress(jobId, 90);

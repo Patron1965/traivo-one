@@ -1029,7 +1029,6 @@ export async function optimizeAsync(
   _requestedBy?: string,
 ): Promise<VRPOptimizationResult | { jobId: string; status: "queued" }> {
   const { isServiceAvailable, callOptimizationService, convertORToolsToVRPResult } = await import("./services/optimizationQueue");
-  const { isOSRMAvailable, osrmTable } = await import("./osrm-client");
   type PrecomputedDistanceEntry = import("./services/optimizationQueue").PrecomputedDistanceEntry;
 
   const serviceUp = await isServiceAvailable();
@@ -1042,47 +1041,8 @@ export async function optimizeAsync(
       ...stops.map(s => ({ lat: s.lat, lng: s.lng })),
     ];
 
-    try {
-      const osrmAvail = await isOSRMAvailable();
-      if (osrmAvail) {
-        const tableResult = await osrmTable(allLocations);
-        if (tableResult && tableResult.distances.length === allLocations.length) {
-          distanceMatrix = [];
-          for (let i = 0; i < allLocations.length; i++) {
-            for (let j = 0; j < allLocations.length; j++) {
-              if (i === j) continue;
-              distanceMatrix.push({
-                from_idx: i,
-                to_idx: j,
-                distance_m: Math.round(tableResult.distances[i][j]),
-                duration_s: Math.round(tableResult.durations[i][j]),
-              });
-            }
-          }
-          console.log(`[optimize-async] OSRM matrix: ${allLocations.length}×${allLocations.length} (${distanceMatrix.length} entries)`);
-        }
-      }
-
-      if (!distanceMatrix) {
-        const { getRoutingDistance } = await import("./distance-matrix-service");
-        distanceMatrix = [];
-        for (let i = 0; i < allLocations.length; i++) {
-          for (let j = 0; j < allLocations.length; j++) {
-            if (i === j) continue;
-            const dr = await getRoutingDistance(allLocations[i].lat, allLocations[i].lng, allLocations[j].lat, allLocations[j].lng);
-            distanceMatrix.push({
-              from_idx: i,
-              to_idx: j,
-              distance_m: Math.round(dr.distanceKm * 1000),
-              duration_s: Math.round(dr.durationMin * 60),
-            });
-          }
-        }
-        console.log(`[optimize-async] Fallback matrix via distance-matrix-service: ${allLocations.length}×${allLocations.length}`);
-      }
-    } catch (err) {
-      console.warn("[optimize-async] Matrix computation failed, Python will use Haversine:", err instanceof Error ? err.message : err);
-    }
+    const { computeORToolsMatrix } = await import("./distance-matrix-service");
+    distanceMatrix = await computeORToolsMatrix(allLocations) ?? undefined;
 
     const orResult = await callOptimizationService({
       stops: stops.map(s => ({

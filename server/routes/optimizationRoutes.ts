@@ -175,7 +175,13 @@ export async function registerOptimizationRoutes(app: Express) {
 
     if (serviceUp) {
       if (stops.length <= ASYNC_THRESHOLD) {
-        const result = await callOptimizationService({ stops, vehicles, maxSolveSeconds: req.body.maxSolveSeconds });
+        const { computeORToolsMatrix } = await import("../distance-matrix-service");
+        const allLocations = [
+          ...vehicles.map(v => ({ lat: v.home_lat, lng: v.home_lng })),
+          ...stops.map(s => ({ lat: s.lat, lng: s.lng })),
+        ];
+        const distanceMatrix = await computeORToolsMatrix(allLocations) ?? undefined;
+        const result = await callOptimizationService({ stops, vehicles, maxSolveSeconds: req.body.maxSolveSeconds, distanceMatrix });
 
         const stopMap = new Map(stops.map(s => [s.id, {
           title: s.id,
