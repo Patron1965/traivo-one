@@ -666,25 +666,6 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
             })}
           </MapContainer>
           
-          <div className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-sm rounded-md shadow-md p-2.5 space-y-1 z-[1000]">
-            <div className="text-xs font-medium">Tillgångstyp</div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="w-2.5 h-2.5 rounded-full bg-green-500"></span>
-              <span>Öppen</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
-              <span>Kod</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
-              <span>Nyckel</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
-              <span>Möte</span>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>
