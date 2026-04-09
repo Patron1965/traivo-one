@@ -30,6 +30,7 @@ import {
   Bell,
   ChevronDown,
   Home,
+  LayoutDashboard,
   ArrowLeft,
   Star,
 } from "lucide-react";
@@ -429,6 +430,17 @@ export function TopNav() {
               >
                 <Home className="h-3.5 w-3.5" />
                 <span className="hidden xl:inline">{tl("nav.home")}</span>
+              </Button>
+            </Link>
+            <Link href="/dashboard">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1 h-8 px-2 text-xs"
+                data-testid="nav-dashboard"
+              >
+                <LayoutDashboard className="h-3.5 w-3.5" />
+                <span className="hidden xl:inline">{tl("nav.dashboard")}</span>
               </Button>
             </Link>
             <FavoritesDropdown allItems={roleFilteredItems} badges={badgeCounts} favorites={favorites} toggleFavorite={toggleFavorite} />
