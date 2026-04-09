@@ -1354,6 +1354,7 @@ app.get("/api/ai/route-recommendations", asyncHandler(async (req, res) => {
         let totalDistanceKm = 0;
         let totalWorkMinutes = 0;
         let totalDriveMinutes = 0;
+        let totalRouteLegs = 0;
 
         type OrderType = typeof todaysOrders[0];
         const resEntries = Array.from(resourceOrdersMap.entries());
@@ -1361,10 +1362,16 @@ app.get("/api/ai/route-recommendations", asyncHandler(async (req, res) => {
           const [resId, resOrders] = resEntries[e];
           const res2 = resources.find(r => r.id === resId);
 
-          const resWork = resOrders.reduce((s: number, o: OrderType) => s + (o.estimatedDuration || 60), 0);
-          totalWorkMinutes += resWork;
+          const sortedOrders = resOrders.slice().sort((a: OrderType, b: OrderType) => {
+            const aTime = a.scheduledStartTime || "";
+            const bTime = b.scheduledStartTime || "";
+            if (aTime && bTime) return aTime.localeCompare(bTime);
+            if (aTime) return -1;
+            if (bTime) return 1;
+            return 0;
+          });
 
-          const ordersWithCoords = resOrders
+          const ordersWithCoords = sortedOrders
             .map((o: OrderType) => {
               const obj = objectMap.get(o.objectId);
               return { order: o, lat: obj?.latitude ?? null, lng: obj?.longitude ?? null };
@@ -1372,6 +1379,9 @@ app.get("/api/ai/route-recommendations", asyncHandler(async (req, res) => {
             .filter((x: { order: OrderType; lat: number | null; lng: number | null }): x is { order: OrderType; lat: number; lng: number } => x.lat != null && x.lng != null);
 
           if (ordersWithCoords.length === 0) continue;
+
+          const resWork = ordersWithCoords.reduce((s: number, x: { order: OrderType }) => s + (x.order.estimatedDuration || 60), 0);
+          totalWorkMinutes += resWork;
 
           const pairs: BatchPair[] = [];
           let prevLat = res2?.homeLatitude ?? ordersWithCoords[0].lat;
@@ -1410,14 +1420,17 @@ app.get("/api/ai/route-recommendations", asyncHandler(async (req, res) => {
 
           totalDistanceKm += resDist;
           totalDriveMinutes += resDrive;
+          totalRouteLegs += pairs.length;
         }
 
-        const totalTime = totalWorkMinutes + totalDriveMinutes;
-        currentRouteStats = {
-          totalDistanceKm: Math.round(totalDistanceKm * 10) / 10,
-          totalDurationMinutes: Math.round(totalTime),
-          avgEfficiency: totalTime > 0 ? Math.round((totalWorkMinutes / totalTime) * 100) : 0,
-        };
+        if (totalRouteLegs > 0) {
+          const totalTime = totalWorkMinutes + totalDriveMinutes;
+          currentRouteStats = {
+            totalDistanceKm: Math.round(totalDistanceKm * 10) / 10,
+            totalDurationMinutes: Math.round(totalTime),
+            avgEfficiency: totalTime > 0 ? Math.round((totalWorkMinutes / totalTime) * 100) : 0,
+          };
+        }
       }
     } catch (err) {
       console.warn("[route-recommendations] Failed to calculate current route stats:", err instanceof Error ? err.message : err);
