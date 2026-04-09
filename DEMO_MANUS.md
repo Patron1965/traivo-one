@@ -27,7 +27,7 @@
 - "Det här är det första teknikern och planeraren ser varje morgon - en komplett bild av dagens arbete."
 
 ### 1.2 Dashboard (`/dashboard`)
-**Navigera:** Klicka "Dashboard" i vänstermenyn.
+**Navigera:** Öppna hamburgermenyn (☰) och klicka "Dashboard", eller navigera direkt till `/dashboard`.
 
 **Visa:**
 - Produktionsöversikt: antal ordrar, aktiva resurser, kapacitetsutnyttjande
