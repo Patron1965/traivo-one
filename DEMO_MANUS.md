@@ -10,33 +10,51 @@
 - Logga in i systemet
 - Kontrollera att det finns demodata (ordrar, objekt, resurser, kluster)
 - Ha en sekundär skärm redo om du vill visa pop-out-kartläge
-- Välj ljust eller mörkt tema via inställningsikonen (solikon i toppmeny)
+- Välj ljust eller mörkt tema via sol/måne-ikonen i toppmenyn
 
 ---
 
 ## Del 1: Överblick och daglig styrning (5-7 min)
 
 ### 1.1 Dagens arbete (`/` eller `/home`)
-**Navigera:** Klicka på Traivo-logotypen eller "Dagens arbete" i menyn.
+**Navigera:** Klicka på Traivo-logotypen eller "Hem"-ikonen i toppmenyn.
 
 **Visa:**
-- Dagens uppgifter per resurs med status (planerad, pågående, utförd)
-- Snabbåtgärder: skapa order, tilldela jobb
+- Hälsning med dagens datum och antal jobb idag
+- Statistikkort: dagens ordrar (klara/kvar), akuta ordrar, veckans framsteg, aktiva resurser
+- Dagens jobb-lista med tider, platser och statusbadges
+- Framstegsindikator (progress bar) för dagens slutförda uppgifter
+- Senast besökta sidor och senaste aktivitet
+- Proaktiva AI-tips med automatiska insikter
+- Onboarding-guide för nya användare
+- "Fråga AI"-knapp som öppnar AI-assistenten
 
 **Lyft fram:**
-- "Det här är det första teknikern och planeraren ser varje morgon - en komplett bild av dagens arbete."
+- "Det här är det första planeraren ser varje morgon — en komplett bild av dagens arbete med AI-drivna tips."
+- "Tekniker med fältroll omdirigeras automatiskt till mobilappen."
 
 ### 1.2 Dashboard (`/dashboard`)
 **Navigera:** Klicka "Dashboard" i toppmenyn (bredvid Hem-ikonen), eller navigera direkt till `/dashboard`.
 
 **Visa:**
-- Produktionsöversikt: antal ordrar, aktiva resurser, kapacitetsutnyttjande
-- Effektivitetsgrad och trender
-- AI-drivna anomalivarningar
-- Snabbknappar för vanliga åtgärder
+- Hälsning med datum och "Auto-fördela idag"-knapp (AI tilldelar oplanerade ordrar automatiskt)
+- QuickStats: slutförda ordrar, väntande, omöjliga, aktiva resurser, kunder, ordervärde — med trendpilar
+- Snabbknappar: Veckoplanering, Karta, Arbetsordrar, AI-optimering, Import, Fakturering
+- Orderstatus-cirkeldiagram (klickbart — navigerar till orderstock)
+- Topp-5 kunder efter ordervärde
+- Ekonomiska trender: intäkt, kostnad och marginal senaste 30 dagarna
+- Ställtidsanalys: trend, kategorifördelning och objekt med högst ställtid
+- Resursbeläggning: planerad vs faktisk tid per resurs
+- Varningar: försenade ordrar, lediga resurser, dubbelbokningar
+- Kapacitetsöversikt: beläggningsgrad per resurs med färgkodade staplar
+- AI-anomalivarningar med "AI Förklara"-knapp
+- Prediktiva insikter: kommande servicebehov och försenade objekt
+- Exportera månadsrapport som PDF
 
 **Lyft fram:**
-- "Dashboarden ger realtidsöverblick utan att behöva gräva i data. AI:n flaggar automatiskt avvikelser."
+- "Dashboarden ger realtidsöverblick utan att behöva gräva i data. AI:n flaggar automatiskt avvikelser och föreslår åtgärder."
+
+**Wow-moment:** Klicka "Auto-fördela idag" och visa hur AI:n direkt tilldelar ordrar baserat på kapacitet och geografi.
 
 ---
 
@@ -66,20 +84,30 @@
 **Navigera:** Menyn > Ordrar > Abonnemang
 
 **Visa:**
-- Återkommande serviceavtal med frekvens och nästa planerade datum
+- Rutnät med abonnemangskort: namn, kund, objekt, periodicitet, status (Aktiv/Pausad)
+- Nästa genereringsdatum och månadsvärde (kr/mån) per kort
+- Sök bland abonnemang
+- "Generera ordrar"-knapp för att manuellt trigga ordergenerering
+- "Nytt abonnemang"-dialog med flexibel schemaläggning (veckodag, tidsslot, frekvens)
+- Objektförhandsvisning direkt från kortet
 
 **Lyft fram:**
-- "Abonnemang genererar ordrar automatiskt enligt schema - ingen manuell hantering."
+- "Abonnemang genererar ordrar automatiskt enligt schema — ingen manuell hantering. Flexibla frekvenser från veckovis till årligen."
 
 ### 2.3* Orderkoncept (`/order-concepts`)
 **Navigera:** Menyn > Ordrar > Orderkoncept
 
 **Visa:**
-- Intelligenta ordergeneratorer som skapar ordrar baserat på regler
-- Wizard för att skapa nya koncept
+- Tre scenariotyper: Avrop (engångs), Schema (återkommande), Abonnemang (fast avgift)
+- Statistikkort med antal aktiva koncept per typ
+- Flikar och sökfunktion för filtrering
+- "Nytt koncept (Wizard)"-knapp som startar 9-stegs guide
+- Förhandsgranskning med intäktsberäkning och leveransplan innan körning
+- Avancerade objektmatchningsregler baserat på metadata
+- Beroendemallar mellan artiklar
 
 **Lyft fram:**
-- "Orderkoncept automatiserar orderskapande utifrån affärsregler - skalbar orderhantering."
+- "Orderkoncept automatiserar orderskapande utifrån affärsregler — en 9-stegs wizard gör det enkelt att konfigurera komplexa modeller."
 
 ---
 
@@ -89,26 +117,37 @@
 **Navigera:** Menyn > Planering > Veckoplanering
 
 **Visa:**
-- Drag-and-drop av ordrar mellan resurser och dagar
-- Dag/vecka/månadsvyer
-- Oplanerade ordrar i sidopanel
-- AI-förslag för optimal placering
-- Konfliktindikatorer vid dubbelbokning eller kapacitetsöverskridande
+- Drag-and-drop av ordrar mellan resurser och dagar (via @dnd-kit)
+- Vyer: Dag (tidslinje), Vecka (rutnät), Månad (kalender), Ruttkartvvy
+- Oplanerade ordrar i sidopanel med filter för kund, prioritet, kluster och team
+- AI-förslagspanel: flytta, byta och balansera rekommendationer
+- Auto-schemaläggning: AI tilldelar hela orderstocken automatiskt
+- AI-planeringschatt: ställ frågor som "Vem har minst arbete?" och utför åtgärder via text
+- VRP-ruttoptimering direkt i planerarvyn
+- Konfliktindikatorer i realtid vid drag-over (hårda block och mjuka varningar)
+- Konfliktdialog vid dubbelbokning med möjlighet att ändå schemalägga
+- Bulkflytt: markera flera ordrar och dra som grupp
 
 **Lyft fram:**
 - "Drag-and-drop gör planeringen intuitiv. AI:n föreslår automatiskt bästa placering baserat på geografi, kompetens och kapacitet."
+- "Konflikter fångas upp direkt — systemet varnar för dubbelbokningar och serviceområdesbrott."
 
-**Wow-moment:** Dra en order till en resurs och visa hur systemet direkt beräknar påverkan.
+**Wow-moment:** Dra en order till en resurs och visa hur systemet direkt visar konflikter eller godkänner placeringen.
 
 ### 3.2 Ruttplanering (`/routes`)
 **Navigera:** Menyn > Planering > Ruttplanering
 
 **Visa:**
 - Välj datum och eventuellt kluster
-- Klicka "Optimera rutter" - VRP-motorn beräknar optimala rutter
-- "Före / Efter jämförelse"-kortet: verklig distans, tid, effektivitet
-- Visa sparad körtid och distans i procent
-- Expandera kartan och visa ruttgeometri
+- Klicka "Optimera rutter" — VRP-motorn beräknar optimala rutter (asynkront med polling)
+- "Före / Efter"-jämförelse: tilldelade ordrar, total tid, distans och effektivitet
+- Sekvensvisning per resurs: nuvarande ordning vs. optimerad ordning
+- Interaktiv karta med färgkodade rutter, numrerade stopp och klustervisualisering
+- Riktiga väggeometrier (inte fågelvägen)
+- Vädervarning med kapacitetsmultiplikator vid dåligt väder
+- AI-rekommendationer för rutten
+- "Tillämpa"-knapp för att spara optimerade rutter
+- Pop-out kartövervakning
 
 **Lyft fram:**
 - "Ruttoptimeringen använder riktiga vägavstånd via OSRM och OR-Tools VRP-motor. Jämförelsen visar exakt hur mycket tid och bränsle som sparas."
@@ -120,22 +159,31 @@
 **Navigera:** Menyn > Planering > Väderplanering
 
 **Visa:**
-- Veckans väderprognos med påverkan på kapacitet
-- Automatisk kapacitetsjustering vid dåligt väder
-- Rekommendationer baserade på väderdata
+- Klusterväljare för att visa väder per geografisk region
+- Sammanfattningskort med väderutsikter och varningsruta vid hög påverkan
+- Dagliga prognosekort (7-16 dagar) med temperatur, nederbörd, vind och väderikon
+- Påverkans-badge per dag: Ingen, Låg, Medel, Stor, Allvarlig (färgkodad)
+- Kapacitetsdiagram: tillgänglig kapacitet per dag som stapeldiagram
+- AI-rekommendationer vid dåligt väder (t.ex. "Prioritera inomhusuppgifter", "Förläng körtider")
 
 **Lyft fram:**
-- "Systemet anpassar automatiskt kapaciteten efter väder - snöstorm minskar kapaciteten, fint väder ökar den."
+- "Systemet anpassar automatiskt kapaciteten efter väder — snöstorm kan sänka kapaciteten till 40-50%, och AI:n ger konkreta råd."
 
 ### 3.4* Årsplanering (`/annual-planning`)
 **Navigera:** Menyn > Planering > Årsplanering
 
 **Visa:**
-- Långsiktig fördelning av besök över året
-- Säsongsbaserad planering
+- KPI-kort: totalt antal mål, på plan (grönt), risk (gult), kritisk (rött), genomsnittlig framsteg
+- Flikar: Alla mål, Varningar, AI-fördelning
+- Mål per kund/objekt/kluster med artikeltyp, målantal och framstegsstapel
+- Prognosstatus: På plan, Risk eller Kritisk baserat på förväntat tempo
+- AI-fördelning: analys och optimalt besöksschema per månad (stapeldiagram)
+- Jämför nuvarande vs. AI-föreslagen fördelning
+- Generera mål från abonnemang och orderkoncept
+- Bulk-generera arbetsordrar för att nå årets mål
 
 **Lyft fram:**
-- "AI:n fördelar tusentals besök optimalt över året med hänsyn till säsong och kapacitet."
+- "AI:n fördelar tusentals besök optimalt över året med hänsyn till säsong och kapacitet. Varningar flaggar mål som riskerar att inte nås."
 
 ---
 
@@ -145,63 +193,90 @@
 **Navigera:** Menyn > Planering > Planerarvy Karta
 
 **Visa:**
-- Realtidskarta med resurser och deras positioner
-- Klicka på resurser för att se deras dagliga rutt
-- GPS-spårning av tekniker
+- Fullskärmskarta med realtidspositioner, hastighet och status per resurs (Kör, På plats, Offline)
+- Färgkodade rutter med numrerade stopp per förare
+- Statusfiltrering i sidebar: Planerad, På väg, Utförd, Försenad
+- "Akut jobb"-knapp för att snabbt skapa och tilldela prioriterade uppgifter
+- Realtidsnotifieringar via SSE (statusändringar, omdirigering)
+- Pop-out-läge för dual-screen
+- Helskärmsläge
 
 **Lyft fram:**
-- "Planeraren kan i realtid se var alla tekniker befinner sig och följa deras framsteg."
+- "Planeraren kan i realtid se var alla tekniker befinner sig, följa deras framsteg och agera direkt vid avvikelser."
 
 ### 4.2* Historisk kartvy (`/historical-map`)
+
 **Visa:**
-- Historisk uppspelning av rörelsemönster
-- Analys av faktiska vs. planerade rutter
+- Datumväljare och resursväljare
+- Animerad uppspelning av resursens rörelser under vald dag med justerbar hastighet
+- KPI-overlay: slutförandegrad, genomsnittstid per uppgift, aktiva resurser
+- Breadcrumb-trail: fullständig dagsrutt (streckad) och avspelad sträcka (heldragen)
+- Statusmarkörer med färgkodning (grön = på plats, blå = kör, gul = paus)
 
 **Lyft fram:**
-- "Historiska data visar var det finns förbättringspotential i ruttplaneringen."
+- "Historiska data visar exakt hur dagen såg ut — identifiera förbättringspotential i ruttplaneringen."
 
 ---
 
 ## Del 5: Fältarbetaren - Traivo Go (5-7 min)
 
-### 5.1 Mobilapp (`/field`)
-**Navigera:** Menyn > Fält > Mobilapp Fält (eller öppna `/field` direkt)
+### 5.1 Mobilapp (`/mobile`)
+**Navigera:** Menyn > Fält > Mobilapp Fält (eller öppna `/mobile` direkt)
 
 **Visa:**
-- Dagens schema i mobilvy med stoppordning
-- Starta/pausa/slutför jobb
-- Fotodokumentation och signaturinsamling
-- Materialloggning (artiklar och mängder)
-- Avvikelserapportering med foton
+- Mobilvänligt kortbaserat gränssnitt med mörkt/ljust tema
+- Daglig framstegskort: klara/kvar jobb
+- Jobbista sorterad på starttid med statusbadges
+- Starta/pausa/slutför jobb med inbyggd timer
+- Navigation till nästa stopp (Google Maps / Apple Maps)
+- Fotodokumentation och signaturinsamling på skärm
+- Materialloggning: artiklar, mängder och enheter (st, meter, kg)
+- Avvikelserapportering med foton och orsak
+- "Omöjligt jobb"-dialog med fotodokumentation
+- Beroendehantering: blockerade jobb visas som låsta
+- Pull-to-refresh och statusindikator (online/offline/GPS)
+- AI-fältassistent för frågor under arbete
 
 **Lyft fram:**
 - "Traivo Go är en PWA som fungerar offline. Teknikern ser sin rutt, dokumenterar arbetet, och allt synkas automatiskt när uppkopplingen kommer tillbaka."
-- "Inga pappersprotokoll - allt digitalt direkt i fält."
+- "Inga pappersprotokoll — allt digitalt direkt i fält."
 
-**Wow-moment:** Visa offline-funktionaliteten - appen fungerar utan internet.
+**Wow-moment:** Visa offline-funktionaliteten — appen fungerar utan internet och synkar vid anslutning.
 
 ### 5.2 Arbetspass / Snöret (`/work-sessions`)
 **Navigera:** Menyn > Fält > Arbetspass
 
 **Visa:**
-- Tidsloggning per tekniker och dag
-- Start/sluttid, pauser, övertid
-- Underlag för löneberäkning
+- Arbetspasskort per resurs med in-/utcheckning
+- Tidsloggning per aktivitetstyp: Arbete, Resa, Ställtid, Rast, Vila
+- Flikar: Arbetspass och Veckosammanställning
+- Veckosammanställning med tidsstatistik och regelefterlevnad
+- Automatisk flaggning av vilotidsbrott: nattovila (<11h) och veckovila (<36h)
+- Exportera löneunderlag som CSV
 
 **Lyft fram:**
-- "Automatisk tidsregistrering kopplad till jobbstatus - inga tidrapporter att fylla i manuellt."
+- "Automatisk tidsregistrering med kontroll mot arbetstidsregler — inga tidrapporter att fylla i manuellt."
 
 ### 5.3* Besiktning (`/inspections`)
-**Visa:**
-- Sökbara besiktningsprotokoll med foton och signaturer
 
-### 5.4* Kundportal (`/customer-portal`)
 **Visa:**
-- Extern portal där kunder kan se sina objekt, fakturor och rapportera ärenden
-- QR-kodbaserad ärenderapportering
+- Statistikkort: Totalt, OK (grönt), Varning (gult), Fel (rött)
+- Filter: besiktningstyp, status, fritextsök
+- Tabell med typ, status, objekt, adress, antal problem, inspektör och datum
+- "Skapa åtgärdsorder"-knapp för att generera ordrar direkt från besiktningsresultat
+- Exportera CSV
+
+### 5.4* Kundportal — internt läge (`/customer-portal`)
+
+**Visa:**
+- Kundsökning och kundväljare (admin-läge)
+- Dashboard-kort: hämtningsställen, aktiva abonnemang, kommande hämtningar
+- Lista: kommande och nyligen utförda hämtningar med statusbadges
+- Interaktiv karta med kundens alla objekt
+- "Ny extrabokning"-dialog för extratjänster
 
 **Lyft fram:**
-- "Kunder har sin egen portal med full insyn - minskar telefonsamtal och förbättrar servicen."
+- "Kunder har sin egen portal med full insyn — minskar telefonsamtal och förbättrar servicen."
 
 ---
 
@@ -211,40 +286,57 @@
 **Navigera:** Menyn > Grunddata > Objekt
 
 **Visa:**
-- Lista med alla serviceobjekt (fastigheter, utrymmen)
-- Klicka på ett objekt för detaljer: adress, koordinater, åtkomstkoder, nyckelhantering
-- Klusterbadge som visar vilken geografisk grupp objektet tillhör
-- Kartvy med alla objekt utplacerade
-- Filter: status, typ, kluster, postnummer
+- Listvy och kartvy med alla serviceobjekt
+- Filter: sök, typ, åtkomsttyp, hierarkinivå, kund, kluster, interim
+- Klicka på objekt för detaljer: adress, koordinater, åtkomstkoder, kontakter, bilder
+- Klusterbadge med klickbar länk
+- Inline-redigering av åtkomstkoder
+- Bulkåtgärder: statusuppdatering och radering
+- AI-kort: servicepatternanalys och underhållsprediktion
+- Batch-geokodning och "fyll i stad"-verktyg för saknad data
+- Verifiera/avvisa kundrapporterade objekt
 
 **Lyft fram:**
-- "Varje objekt har komplett information som teknikern behöver i fält - åtkomstkoder, kontaktuppgifter, historik."
+- "Varje objekt har komplett information som teknikern behöver i fält — åtkomstkoder, kontaktuppgifter, historik. AI:n hittar mönster och anomalier."
 
 ### 6.2 Resurser (`/resources`)
 **Navigera:** Menyn > Grunddata > Resurser
 
 **Visa:**
-- Personal med kompetenser, hemposition, tillgänglighet
-- Kopplade artiklar (vad resursen kan utföra)
-- Effektivitetsfaktor per resurs
+- Rutnät med resurskort: initialer, telefon, e-post, status
+- Beläggningsindikator: planerade timmar vs. veckotimmar (progress bar)
+- Statusbadges: Tillgänglig, Semester, Sjuk
+- Filter: sök, kompetens, tillgänglighet
+- "Dela Traivo Go"-knapp för att skicka fältapplänk till teknikern
+- Kompetensmappning: koppla artiklar med effektivitetsfaktor
+- AI-kort: kapacitetsbalansering och kompetensoptimering
 
 **Lyft fram:**
-- "Resurser har kompetenskoppling - systemet tilldelar bara jobb som teknikern faktiskt kan utföra."
+- "Resurser har kompetenskoppling — systemet tilldelar bara jobb som teknikern faktiskt kan utföra."
 
 ### 6.3 Kluster (`/clusters`)
 **Navigera:** Menyn > Grunddata > Kluster
 
 **Visa:**
-- Geografiska arbetsområden med automatisk klustring
-- Klicka in på ett kluster: kartvyn, ingående objekt, SLA-mål
-- Auto-kluster (`/auto-cluster`): AI-driven indelning
+- Listvy och interaktiv kartvy med kluster som färgade cirklar
+- Klicka in på ett kluster: kartvy, ingående objekt, aktiva ordrar
+- SLA-konfiguration: Standard, Premium, Enterprise
+- Auto-kluster (`/auto-cluster`): AI-driven klustring baserat på datakoncentration
+- AI-kort: hierarkioptimering och arvsanalys
 
 **Lyft fram:**
 - "Kluster skapas automatiskt baserat på kundägande. AI:n grupperar objekt efter närhet och tidslogik."
 
 ### 6.4* Fordon och Fleet (`/vehicles`, `/fleet`)
+
 **Visa:**
-- Fordonsregister, bränsleförbrukning, underhållsschema
+- Fordon: flikar för Fordon, Utrustning och Tillgänglighet
+- Fordonskort: registreringsnummer, typ, bränsle, serviceindikator (röd/gul/grön)
+- Utrustningshantering med inventarienummer
+- Tillgänglighetskalender: vem använder vilket fordon under veckan
+- Fleet-dashboard (`/fleet`): KPI-kort, bränsleförbrukning, underhållskostnader
+- Bränsleloggning och underhållslogg
+- Analysflikar: Översikt, Underhåll, Bränsle (med diagram)
 
 ---
 
@@ -254,40 +346,55 @@
 **Navigera:** Menyn > Ekonomi & Analys > Rapportering
 
 **Visa:**
-- Produktions-KPI:er: slutförda ordrar, effektivitet, marginal
-- Ruttfeedback-analys från tekniker
-- Prediktionsprecision: hur väl AI-prognoser stämmer
+- KPI-kort: totala ordrar, slutförandegrad (med trendjämförelse), totalt värde, marginal, effektivitet, resursbeläggning
+- Ruttfeedback-flik: snittbetyg, stjärnfördelning och orsaksdiagram
+- Prediktionsprecisions-flik: hur väl AI-prognoser stämmer
+- Trenddiagram: ordervolym och värde över tid
 
 **Lyft fram:**
-- "Alla nyckeltal samlade på ett ställe. Vi mäter inte bara produktion utan även hur väl AI:ns prognoser träffar."
+- "Alla nyckeltal samlade på ett ställe. Vi mäter inte bara produktion utan även hur väl AI:ns prognoser träffar — och vad teknikerna tycker om rutterna."
 
 ### 7.2 Ekonomi (`/economics`)
+
 **Visa:**
-- Intäkts- och kostnadsanalys per kund, kluster, resurs
-- Marginalberäkning
+- KPI-kort: total intäkt, total kostnad, nettomarginal, snittordervärde
+- Lönsamhet per kluster: rankad lista efter marginal
+- Kundlönsamhet: mest lönsamma vs. kunder som behöver uppmärksamhet
+- Finansiella trender: månatlig intäkt vs. kostnad och dagliga intäktskurvor
+- Varning om ordrar saknar ekonomiska data
 
 ### 7.3 Fakturering (`/invoicing`)
 **Navigera:** Menyn > Ekonomi & Analys > Fakturering
 
 **Visa:**
-- Fakturagenerering baserad på utförda ordrar
-- Fortnox-export
-- Flerkund-fakturering
+- Flikar: Förhandsvisning, Manuell, Exporthistorik
+- Förhandsvisning av fakturor genererade från utförda ordrar med raddetaljer och moms
+- Manuella fakturarader: artikel, antal, pris
+- Fortnox-integrering: anslutningsstatus och bulkexport
+- Kreditfakturor från exporthistoriken
 
 **Lyft fram:**
-- "Fakturering är direkt kopplad till utfört arbete - ingen manuell hantering. Export till Fortnox med ett klick."
+- "Fakturering är direkt kopplad till utfört arbete — ingen manuell hantering. Export till Fortnox med ett klick."
 
 ### 7.4 ROI-rapport (`/roi-report`)
+
 **Visa:**
-- Beräknad avkastning: sparad tid, bränsle, administration
-- Per-kund-analys av lönsamhet
+- Diagram: slutförandegrad, ställtidsreduktion, CO2-besparingar, produktivitet (ordrar/dag/resurs)
+- Jämförelse: första vs. andra halvan av period — visar förbättring över tid
+- Miljöpåverkan: CO2-reduktion och bränslebesparing
+- Generera PDF med företagsbranding
+- "Dela med kund"-knapp: skapar tidsbegränsad extern länk
 
 **Lyft fram:**
-- "ROI-rapporten visar konkret i kronor vad optimeringen sparar - tid, bränsle och administration."
+- "ROI-rapporten visar konkret i kronor vad optimeringen sparar — tid, bränsle och administration. Kan delas direkt med kunden."
 
 ### 7.5* Proaktiv försäljning (`/proactive-sales`)
+
 **Visa:**
-- AI-identifierade försäljningsmöjligheter baserat på kunddata och historik
+- Tabell med inaktiva kunder: senaste orderdatum, dagar sedan senast, historisk intäkt
+- Inaktivitetsfilter: 3, 6, 12 eller 24 månader
+- KPI-kort: historisk intäkt "at risk"
+- Direktlänkar: telefonnummer och e-post för kontakt
 
 ---
 
@@ -297,22 +404,37 @@
 **Navigera:** Menyn > AI > AI-Assistent
 
 **Visa:**
-- Konversationsbaserad AI: ställ frågor om data, planeringsstöd
-- Exempel: "Vilka kunder har flest ordrar denna månad?" eller "Föreslå optimering för fredag"
+- Flikar: Översikt, Schemaläggning, Prediktioner, Rekommendationer, Chatt
+- KPI-kort: Effektivitet, Ställtid, Resursbeläggning, Förseningar
+- Väderpåverkan: 7-dagars kapacitetsprognos med rekommendationer
+- Auto-schemaläggning: optimera veckans schema med ett klick
+- Proaktiva AI-tips med bedömd effekt
+- Underhållsvarningar: fordon och utrustning
+- AI-planeringschatt: ställ frågor på svenska och utför åtgärder via text
 
 **Lyft fram:**
-- "AI-assistenten förstår hela systemets data - ställ frågor på vanlig svenska och få svar direkt."
+- "AI-assistenten förstår hela systemets data — ställ frågor på vanlig svenska och få svar direkt."
 
-**Wow-moment:** Ställ en fråga och visa hur AI:n analyserar datan i realtid.
+**Wow-moment:** Ställ en fråga i chatten och visa hur AI:n analyserar datan i realtid.
 
 ### 8.2 Prediktiv Planering (`/predictive-planning`)
+
 **Visa:**
-- AI-prognoser för framtida servicebehov
-- Trendanalys baserad på historik
+- KPI-kort med prognossammanfattning
+- Orderprognos per vecka (linjediagram)
+- Resursbehov: beräknat antal resurser per vecka (stapeldiagram), konfigurerbart 2-12 veckor framåt
+- Datakvalitetsbedömning: Hög/Medel/Låg tillförlitlighet
+- AI-rekommendationer: kapacitetsvarningar och optimeringsmöjligheter
+- Klusteröversikt: trend, ordermängd och konfidensgrad per kluster
 
 ### 8.3* Prediktivt Underhåll (`/predictive-maintenance`)
+
 **Visa:**
-- IoT-signalbaserade prognoser för nästa servicetillfälle
+- Statistikrad: Akut, Kommande, Senare, Konfidensgrad
+- Tabell: objekt, nästa serviceatum, dagar kvar, konfidensgrad, IoT-signaler
+- Färgkodade badges: Röd (akut <7 dagar), Gul (kommande <30 dagar), Grå (normal)
+- "Kör analys"-knapp: analysera IoT-signaler och beräkna optimala serviceintervall
+- "Skapa order"-knapp per rad: generera arbetsorder direkt från prognos
 
 ---
 
@@ -322,41 +444,52 @@
 **Navigera:** Öppna `/portal` i en ny flik
 
 **Visa:**
-- Inloggning via e-post/verifiering
-- Dashboard med kundspecifik översikt
-- Klusteröversikt: kundens objekt och status
-- Fakturor och avtal
-- Ärenderapportering med foto
-- ROI-rapport ur kundens perspektiv
+- Välkomstsektion med personlig hälsning och företagsbranding
+- Snabbåtgärder: Boka extratömning, Ändra bokning, Kontakta oss, Ny förfrågan
+- Statistikkort: Utförda besök, Kommande besök, Dina platser, Öppna ärenden
+- AI-insikter med proaktiva tips
+- Live ETA-widget för realtidsspårning
+- Sidnavigering: Översikt, Mina platser, Fakturor, Tjänsteavtal, Ärenden, Fältdokumentation, ROI-rapport, Inställningar
 
 **Lyft fram:**
-- "Kundportalen ger full transparens. Kunden ser sina objekt, fakturor och kan rapportera ärenden direkt - white-label med kundens varumärke."
+- "Kundportalen ger full transparens. Kunden ser sina objekt, fakturor och kan rapportera ärenden direkt — white-label med kundens varumärke."
 
 ---
 
 ## Del 10*: Administration (2-4 min)
 
 ### 10.1 Företagsinställningar (`/tenant-config`)
+
 **Visa:**
-- Företagsinfo, varumärke/logotyp, terminologi (anpassningsbara begrepp)
-- Modulhantering: aktivera/avaktivera funktioner per kund
-- Etiketter, IoT-konfiguration
+- 10 flikar: Företagsinfo, Varumärke, Terminologi, Artiklar & koder, Moduler m.fl.
+- Framstegsspårning: "3/5 klart" för att guida administratörer genom konfigurationen
+- Företagsinfo: namn, org.nummer
+- Varumärke: färger och logotyp för portalen
+- Terminologi: anpassa systemets begrepp till branschens språk
+- Moduler: aktivera/avaktivera funktioner per kund (t.ex. AI-planering, IoT, besiktning)
 
 **Lyft fram:**
 - "Multi-tenant med full white-label. Varje kund kan ha egen terminologi, logotyp och aktiverade moduler."
 
 ### 10.2 Användarhantering (`/user-management`)
+
 **Visa:**
-- Roller: Admin, Planerare, Tekniker
-- Teamhantering och behörigheter
+- Dashboard-kort: Totala användare, Aktiva, Admins, Aktiva team
+- Flikar: Användare, Team, Inbjudningar
+- Sökbar tabell med inline-redigering av roller (Admin, Planerare, Tekniker, Kund)
+- Status-toggle och "senast inloggad"-spårning
+- Teamhantering med resurskoppling och anpassade färger
 
 ### 10.3 Import (`/import`)
+
 **Visa:**
-- CSV/Excel-import med mappning och validering
-- Modus 2.0-import för befintliga system
+- Stegvisare: 1. Ladda upp → 2. Mappa → 3. Förhandsgranska → 4. Importera
+- Datakvalitets-scorecard: övergripande poäng (t.ex. "85%") med kategorier (adresser, obligatoriska fält, dubbletter)
+- Nedladdningsbara CSV-mallar för Kunder, Resurser och Objekt
+- Importhistorik med "Ångra"-funktion (rollback)
 
 **Lyft fram:**
-- "Import från befintliga system med intelligent mappning - migrering utan manuellt arbete."
+- "Import från befintliga system med intelligent mappning och kvalitetskontroll — migrering utan manuellt arbete."
 
 ---
 
@@ -364,28 +497,29 @@
 
 ### Sammanfattning av nyckelvärden
 
-1. **AI-driven optimering** - Ruttplanering, resursallokering och prediktiv analys
-2. **Realtidsinsyn** - Kartövervakning, GPS-spårning, live dashboards
-3. **Komplett fältlösning** - Traivo Go med offline-stöd, foto, signatur, protokoll
-4. **Ekonomisk kontroll** - Fakturering, ROI-analys, marginalberäkning
-5. **Kundportal** - Transparens och self-service för slutkunder
-6. **Multi-tenant** - White-label, modulbaserat, anpassningsbar terminologi
-7. **Integrationsstöd** - Fortnox, SMS, IoT, import från befintliga system
+1. **AI-driven optimering** — Ruttplanering, resursallokering, auto-schemaläggning och prediktiv analys
+2. **Realtidsinsyn** — Kartövervakning, GPS-spårning, live dashboards med anomalivarningar
+3. **Komplett fältlösning** — Traivo Go med offline-stöd, foto, signatur, material och timer
+4. **Ekonomisk kontroll** — Fakturering med Fortnox, ROI-analys, marginalberäkning, CO2-spårning
+5. **Kundportal** — Transparens, self-service, live ETA och white-label branding
+6. **Multi-tenant** — White-label, modulbaserat, anpassningsbar terminologi, rollbaserad åtkomst
+7. **Integrationsstöd** — Fortnox, SMS, IoT, CSV/Modus-import, OSRM, OR-Tools
 
 ### Vanliga frågor att vara beredd på
 
 | Fråga | Svar |
 |-------|------|
-| Hur hanteras offline? | Traivo Go cachar data lokalt (IndexedDB) och synkar automatiskt |
+| Hur hanteras offline? | Traivo Go cachar data lokalt och synkar automatiskt vid anslutning |
 | Vilken kartdata används? | OSRM för riktiga vägavstånd, OpenStreetMap för kartor |
 | Hur fungerar optimeringen? | OR-Tools VRP-motor med ALNS-förbättring, tidsfönster, kompetens och kapacitet |
-| Kan kunder se sina egna data? | Ja, via kundportalen med white-label branding |
+| Kan kunder se sina egna data? | Ja, via kundportalen med white-label branding och live ETA |
 | Hur integreras med ekonomisystem? | Fortnox-export med ett klick, samt API för andra system |
-| Hur snabbt kan man komma igång? | Import från befintliga system (CSV/Modus), onboarding-wizard |
-| Stöd för flera företag? | Ja, full multi-tenant med isolerad data per kund |
-| Hur hanteras väder? | Automatisk kapacitetsjustering baserad på Open-Meteo prognos |
+| Hur snabbt kan man komma igång? | Import med kvalitetskontroll, nedladdningsbara mallar, onboarding-guide |
+| Stöd för flera företag? | Ja, full multi-tenant med isolerad data, egna moduler och terminologi |
+| Hur hanteras väder? | Automatisk kapacitetsjustering (40-100%) baserad på Open-Meteo prognos |
+| Hur mäts ROI? | CO2-besparingar, ställtidsreduktion, produktivitet — delbar som PDF eller länk |
 
 ---
 
 > **Tips:** Sektioner markerade med * kan hoppas över vid kortare genomgångar.
-> Anpassa ordningen efter publikens intresse - börja med det som är viktigast för dem.
+> Anpassa ordningen efter publikens intresse — börja med det som är viktigast för dem.
