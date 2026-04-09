@@ -41,7 +41,7 @@ An AI-first approach guides all functionalities. Route optimization is offloaded
 - **Drizzle ORM:** Database interactions.
 - **OpenAI API:** AI planning, conversational AI.
 - **Geoapify:** Route calculation (Routing API) and VRP optimization (Route Planner API).
-- **OSRM (Open Source Routing Machine):** Real road-network distances and durations via Table API (batch N×N) and Route API. Integrated as primary distance source with fallback chain: OSRM → Geoapify → Haversine. Configured via `OSRM_BASE_URL`, `OSRM_TIMEOUT`, `OSRM_PROFILE`, `OSRM_ENABLED` environment variables. Client: `server/osrm-client.ts`. Pre-computed matrices passed to Python OR-Tools service for accurate travel times.
+- **OSRM (Open Source Routing Machine):** Real road-network distances and durations via Table API (batch N×N) and Route API. Integrated as primary distance source with fallback chain: OSRM → Geoapify → Haversine. Configured via `OSRM_BASE_URL`, `OSRM_TIMEOUT`, `OSRM_PROFILE`, `OSRM_ENABLED` environment variables. Client: `server/osrm-client.ts`. Pre-computed matrices passed to Python OR-Tools service for accurate travel times. Distance cache uses geohash-based keys (precision 9, ~5m) for stable deduplication. L1 in-memory cache holds up to 50k entries (2h TTL) with batch eviction; L2 database cache has 24h TTL. Route-optimizer savings calculations use OSRM-backed distances via `getRoutingDistance` with Haversine fallback.
 - **OpenStreetMap Nominatim:** Geocoding fallback.
 - **External Traivo Optimization Service:** Dedicated route optimization.
 - **DataClean Service:** External service for data validation and geocoding.

@@ -1,5 +1,6 @@
 import type { WorkOrder, Resource, ServiceObject, Cluster } from "@shared/schema";
 import { trackApiUsage } from "./api-usage-tracker";
+import { getBatchDistances } from "./distance-matrix-service";
 import type { VRPConstraintOptions } from "./vrp-constraints";
 
 const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
@@ -118,7 +119,7 @@ function nearestNeighborOptimization(stops: RouteStop[], startCoord?: Coordinate
   return result;
 }
 
-function calculateTotalDistance(stops: RouteStop[], startCoord?: Coordinates): number {
+function calculateTotalDistanceHaversine(stops: RouteStop[], startCoord?: Coordinates): number {
   if (stops.length === 0) return 0;
   
   let total = 0;
@@ -130,6 +131,40 @@ function calculateTotalDistance(stops: RouteStop[], startCoord?: Coordinates): n
   }
   
   return total;
+}
+
+async function calculateTotalDistance(stops: RouteStop[], startCoord?: Coordinates): Promise<number> {
+  if (stops.length === 0) return 0;
+
+  try {
+    const pairs: Array<{ id: string; fromLat: number; fromLng: number; toLat: number; toLng: number }> = [];
+    let current = startCoord || { lat: stops[0].latitude, lng: stops[0].longitude };
+
+    for (let i = 0; i < stops.length; i++) {
+      pairs.push({
+        id: `leg-${i}`,
+        fromLat: current.lat,
+        fromLng: current.lng,
+        toLat: stops[i].latitude,
+        toLng: stops[i].longitude,
+      });
+      current = { lat: stops[i].latitude, lng: stops[i].longitude };
+    }
+
+    const results = await getBatchDistances(pairs);
+    let total = 0;
+    for (let i = 0; i < stops.length; i++) {
+      const r = results.get(`leg-${i}`);
+      if (r) total += r.distanceKm;
+      else total += haversineDistance(
+        i === 0 ? (startCoord || { lat: stops[0].latitude, lng: stops[0].longitude }) : { lat: stops[i - 1].latitude, lng: stops[i - 1].longitude },
+        { lat: stops[i].latitude, lng: stops[i].longitude }
+      );
+    }
+    return total;
+  } catch {
+    return calculateTotalDistanceHaversine(stops, startCoord);
+  }
 }
 
 async function getRouteFromGeoapify(coordinates: [number, number][]): Promise<{
@@ -247,13 +282,13 @@ export async function optimizeResourceDayRoute(
       ? { lat: resource.homeLatitude, lng: resource.homeLongitude }
       : undefined);
   
-  // Beräkna originaldistans från den ursprungliga ordningen
-  const originalDistance = calculateTotalDistance(originalStops, startCoord);
+  // Beräkna originaldistans från den ursprungliga ordningen (OSRM med Haversine-fallback)
+  const originalDistance = await calculateTotalDistance(originalStops, startCoord);
   const originalDriveTime = (originalDistance / 40) * 60; // 40 km/h snitt
   
   // Optimera och beräkna ny distans
   const optimizedStops = nearestNeighborOptimization(stops, startCoord);
-  const optimizedDistance = calculateTotalDistance(optimizedStops, startCoord);
+  const optimizedDistance = await calculateTotalDistance(optimizedStops, startCoord);
   const optimizedDriveTime = (optimizedDistance / 40) * 60;
   
   const optimizedOrder = optimizedStops.map(s => s.workOrderId);

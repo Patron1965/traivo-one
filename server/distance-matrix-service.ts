@@ -20,11 +20,40 @@ interface L1CacheEntry {
 
 const l1Cache = new Map<string, L1CacheEntry>();
 const L1_TTL = 2 * 60 * 60 * 1000;
-const L1_MAX_SIZE = 5000;
+const L1_MAX_SIZE = 50_000;
+const L1_EVICT_BATCH = 5_000;
 const L2_TTL_HOURS = 24;
 
+function encodeGeohash(lat: number, lng: number, precision: number = 9): string {
+  const BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz";
+  let minLat = -90, maxLat = 90, minLng = -180, maxLng = 180;
+  let hash = "";
+  let isLng = true;
+  let bit = 0;
+  let ch = 0;
+  while (hash.length < precision) {
+    if (isLng) {
+      const mid = (minLng + maxLng) / 2;
+      if (lng >= mid) { ch = ch | (1 << (4 - bit)); minLng = mid; }
+      else { maxLng = mid; }
+    } else {
+      const mid = (minLat + maxLat) / 2;
+      if (lat >= mid) { ch = ch | (1 << (4 - bit)); minLat = mid; }
+      else { maxLat = mid; }
+    }
+    isLng = !isLng;
+    bit++;
+    if (bit === 5) {
+      hash += BASE32[ch];
+      bit = 0;
+      ch = 0;
+    }
+  }
+  return hash;
+}
+
 function coordKey(lat1: number, lng1: number, lat2: number, lng2: number): string {
-  return `${lat1.toFixed(4)},${lng1.toFixed(4)}|${lat2.toFixed(4)},${lng2.toFixed(4)}`;
+  return `${encodeGeohash(lat1, lng1)}|${encodeGeohash(lat2, lng2)}`;
 }
 
 export function haversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -54,9 +83,13 @@ function evictL1() {
     if (now - entry.timestamp > L1_TTL) l1Cache.delete(key);
   }
   if (l1Cache.size > L1_MAX_SIZE) {
-    const entries = [...l1Cache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
-    const toRemove = entries.slice(0, entries.length - L1_MAX_SIZE + 500);
-    for (const [key] of toRemove) l1Cache.delete(key);
+    const cutoff = L1_MAX_SIZE - L1_EVICT_BATCH;
+    let removed = 0;
+    for (const key of l1Cache.keys()) {
+      if (l1Cache.size <= cutoff || removed >= L1_EVICT_BATCH) break;
+      l1Cache.delete(key);
+      removed++;
+    }
   }
 }
 
