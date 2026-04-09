@@ -56,6 +56,8 @@ Traivo GO är en React Native/Expo-mobilapp för fältpersonal (förare/tekniker
 | Team | TeamScreen.tsx | Teamöversikt |
 | Mina avvikelser | MyDeviationsScreen.tsx | Historik över rapporterade avvikelser |
 | Kundrapporter | CustomerReportsScreen.tsx | Kundrapporter |
+| Att göra | TodoScreen.tsx | Personlig att-göra-lista (AsyncStorage, offline) |
+| Dagsrapport | DayReportScreen.tsx | Sammanfattning av dagens arbete med dela-funktion |
 | Aviseringar | NotificationsScreen.tsx | Push-aviseringar |
 | Inställningar | SettingsScreen.tsx | Appinställningar |
 | Login | LoginScreen.tsx | Inloggning |

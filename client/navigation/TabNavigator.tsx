@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { StyleSheet, View, Platform, Image, Pressable } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { HomeScreen } from '../screens/HomeScreen';
 import { OrdersScreen } from '../screens/OrdersScreen';
 import { MapScreen } from '../screens/MapScreen';
+import { TodoScreen, getUncompletedTodoCount } from '../screens/TodoScreen';
+import { DayReportScreen } from '../screens/DayReportScreen';
 import { ScreenErrorBoundary } from '../components/ScreenErrorBoundary';
 import { HamburgerMenuButton } from '../components/HamburgerMenu';
 import { useScreenOptions } from '../hooks/useScreenOptions';
@@ -31,8 +34,27 @@ function TabIcon({ name, color, focused }: { name: string; color: string; focuse
   );
 }
 
+function TodoBadgeWrapper({ children }: { children: React.ReactNode }) {
+  const [count, setCount] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      getUncompletedTodoCount().then(setCount);
+    }, [])
+  );
+  return <>{children}</>;
+}
+
 export function TabNavigator() {
   const screenOptions = useScreenOptions();
+  const [todoBadge, setTodoBadge] = useState<number>(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      getUncompletedTodoCount().then(setTodoBadge);
+      const interval = setInterval(() => getUncompletedTodoCount().then(setTodoBadge), 5000);
+      return () => clearInterval(interval);
+    }, [])
+  );
 
   return (
     <Tab.Navigator
@@ -79,6 +101,19 @@ export function TabNavigator() {
         }}
       />
       <Tab.Screen
+        name="TodoTab"
+        component={TodoScreen}
+        options={{
+          headerTitle: 'Att göra',
+          tabBarLabel: 'Att göra',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="list" color={color} focused={focused} />
+          ),
+          tabBarBadge: todoBadge > 0 ? todoBadge : undefined,
+          tabBarBadgeStyle: styles.todoBadge,
+        }}
+      />
+      <Tab.Screen
         name="MapTab"
         options={{
           headerTitle: 'Karta',
@@ -94,6 +129,17 @@ export function TabNavigator() {
           </ScreenErrorBoundary>
         )}
       </Tab.Screen>
+      <Tab.Screen
+        name="ReportTab"
+        component={DayReportScreen}
+        options={{
+          headerTitle: 'Rapport',
+          tabBarLabel: 'Rapport',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="file-text" color={color} focused={focused} />
+          ),
+        }}
+      />
     </Tab.Navigator>
   );
 }
@@ -130,5 +176,13 @@ const styles = StyleSheet.create({
   },
   tabIconWrapActive: {
     backgroundColor: Colors.infoLight,
+  },
+  todoBadge: {
+    backgroundColor: '#F97316',
+    fontSize: 10,
+    fontWeight: '700',
+    minWidth: 18,
+    height: 18,
+    lineHeight: 14,
   },
 });
