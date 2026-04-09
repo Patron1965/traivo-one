@@ -297,7 +297,7 @@ export default function RoutesPage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Sparkles className="h-4 w-4" />
-            VRP-optimering (VROOM)
+            Optimering
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -338,10 +338,10 @@ export default function RoutesPage() {
                   ) : (
                     <RouteIcon className="h-4 w-4 mr-2" />
                   )}
-                  Kör VRP-optimering
+                  Kör optimering
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Optimera rutter med VROOM-algoritmen</TooltipContent>
+              <TooltipContent>Optimera dagens rutter</TooltipContent>
             </Tooltip>
           </div>
 
