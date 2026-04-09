@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Progress } from "@/components/ui/progress";
 import { MapPin, Clock, Car, ArrowRight, Route, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, BarChart3, MapPinned, Package, PackageSearch } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, startOfDay, endOfDay, addDays, startOfWeek, endOfWeek } from "date-fns";
@@ -400,7 +399,7 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-4 gap-2 text-center">
+            <div className="grid grid-cols-3 gap-2 text-center">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div className="p-2 bg-muted rounded-md hover-elevate cursor-help">
@@ -433,37 +432,6 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
                 </TooltipTrigger>
                 <TooltipContent>{routeData ? "Körtid beräknad via Geoapify" : "Uppskattad körtid"}</TooltipContent>
               </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="p-2 bg-muted rounded-md hover-elevate cursor-help">
-                    <div className="text-lg font-semibold">{totalSetupTime}</div>
-                    <div className="text-[10px] text-muted-foreground">min ställ</div>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>Total ställtid inkl. reducering vid samma tillgångstyp</TooltipContent>
-              </Tooltip>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Effektivitet (arbete / total tid)</span>
-                <span className="font-medium">{efficiencyPercent}%</span>
-              </div>
-              <Progress value={efficiencyPercent} className="h-2" />
-              <div className="flex gap-2 text-[10px] text-muted-foreground justify-center">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                  Arbete {totalWorkTime}m
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-                  Ställtid {totalSetupTime}m
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-gray-400"></span>
-                  Körning {estimatedDriveTime}m
-                </span>
-              </div>
             </div>
 
           </CardContent>
