@@ -353,17 +353,20 @@ app.post("/api/routes/directions", asyncHandler(async (req, res) => {
       .map(([lon, lat]: [number, number]) => `${lat},${lon}`)
       .join("|");
 
+    console.log(`[routing] Requesting Geoapify route with ${coordinates.length} waypoints`);
+
     const response = await fetch(
       `https://api.geoapify.com/v1/routing?waypoints=${waypoints}&mode=drive&apiKey=${apiKey}`
     );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Geoapify routing error:", errorText);
+      console.error("[routing] Geoapify routing error:", response.status, errorText);
       return res.status(response.status).json({ error: "Kunde inte beräkna rutten" });
     }
 
     const data = await response.json();
+    console.log(`[routing] Got ${data?.features?.length || 0} features, distance: ${data?.features?.[0]?.properties?.distance || 'N/A'}`);
     res.json(data);
 }));
 

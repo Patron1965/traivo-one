@@ -221,7 +221,13 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
     try {
       const coordinates = positions.map(([lat, lon]) => [lon, lat]);
       
-      const response = await apiRequest("POST", "/api/routes/directions", { coordinates });
+      const response = await fetch("/api/routes/directions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coordinates }),
+        credentials: "include",
+      });
+      if (!response.ok) return null;
       const data = await response.json();
       
       if (data && data.features && data.features.length > 0) {
@@ -245,20 +251,23 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
     }
   };
 
-  // Fetch route when jobs or their order changes
-  const jobsKey = displayJobs.map(j => j.id).join(",");
+  const routePositions = useMemo(() => getJobPositions(displayJobs), [displayJobs, objectMap]);
+  const positionsKey = routePositions.map(([lat, lon]) => `${lat.toFixed(5)},${lon.toFixed(5)}`).join("|");
+
   useEffect(() => {
-    const positions = getJobPositions(displayJobs);
-    if (positions.length >= 2) {
+    if (routePositions.length >= 2) {
       setIsLoadingRoute(true);
-      fetchRoute(positions).then(data => {
+      fetchRoute(routePositions).then(data => {
         setRouteData(data);
+        setIsLoadingRoute(false);
+      }).catch(() => {
+        setRouteData(null);
         setIsLoadingRoute(false);
       });
     } else {
       setRouteData(null);
     }
-  }, [jobsKey]);
+  }, [positionsKey]);
 
   const calculateDistance = (positions: [number, number][]) => {
     // Use route data if available, otherwise fallback to Haversine
@@ -300,7 +309,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
     return total;
   };
 
-  const jobPositions = useMemo(() => getJobPositions(displayJobs), [displayJobs, objectMap]);
+  const jobPositions = routePositions;
 
   const totalSetupTime = calculateSetupTime(displayJobs);
   const totalWorkTime = displayJobs.reduce((sum, job) => sum + (job.estimatedDuration || 0), 0);
