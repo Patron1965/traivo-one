@@ -63,7 +63,14 @@ const TIME_STATUS_COLORS: Record<string, string> = {
   working: Colors.secondary,
 };
 
-const TRAIVO_STATUS_SEQUENCE: OrderStatus[] = ORDER_STATUS_SEQUENCE;
+const FIELD_DRIVER_SEQUENCE: OrderStatus[] = [
+  'planerad_resurs',
+  'planerad_las',
+  'dispatched',
+  'on_site',
+  'in_progress',
+  'utford',
+];
 
 const DRIVER_STATUS_SEQUENCE: OrderStatus[] = [
   'planned',
@@ -73,6 +80,10 @@ const DRIVER_STATUS_SEQUENCE: OrderStatus[] = [
   'in_progress',
   'completed',
 ];
+
+function isFieldDriverFlow(status: OrderStatus): boolean {
+  return FIELD_DRIVER_SEQUENCE.includes(status);
+}
 
 function isDriverFlow(status: OrderStatus): boolean {
   return DRIVER_STATUS_SEQUENCE.includes(status);
@@ -377,60 +388,55 @@ export function OrderDetailScreen({ route, navigation }: any) {
   });
 
   function getNextStatus(current: OrderStatus): OrderStatus | null {
+    if (isFieldDriverFlow(current)) {
+      const idx = FIELD_DRIVER_SEQUENCE.indexOf(current);
+      if (idx === -1 || idx >= FIELD_DRIVER_SEQUENCE.length - 1) return null;
+      return FIELD_DRIVER_SEQUENCE[idx + 1];
+    }
     if (isDriverFlow(current)) {
       const idx = DRIVER_STATUS_SEQUENCE.indexOf(current);
       if (idx === -1 || idx >= DRIVER_STATUS_SEQUENCE.length - 1) return null;
       return DRIVER_STATUS_SEQUENCE[idx + 1];
     }
-    const idx = TRAIVO_STATUS_SEQUENCE.indexOf(current);
-    if (idx === -1 || idx >= TRAIVO_STATUS_SEQUENCE.length - 1) return null;
-    return TRAIVO_STATUS_SEQUENCE[idx + 1];
+    return null;
   }
 
   function getNextStatusLabel(status: OrderStatus): string {
     const labels: Record<string, string> = {
-      ny: 'Starta',
-      skapad: 'Förplanera',
-      planerad: 'Tilldela',
-      planerad_pre: 'Tilldela resurs',
-      planerad_resurs: 'Starta',
-      planerad_las: 'Starta',
-      paborjad: 'Slutför',
-      planned: 'Starta körning',
-      dispatched: 'På väg',
+      planerad_resurs: 'Starta resa',
+      planerad_las: 'Starta resa',
+      dispatched: 'På plats',
+      on_site: 'Starta arbete',
+      in_progress: 'Slutför arbete',
+      planned: 'Starta resa',
       en_route: 'På plats',
-      on_site: 'Utför',
-      in_progress: 'Slutför',
+      completed: 'Slutförd',
     };
     return labels[status] || 'Nästa steg';
   }
 
   function getNextStatusSubLabel(status: OrderStatus): string | null {
     const subLabels: Record<string, string> = {
-      planned: 'Navigera till uppdraget',
-      dispatched: 'Påbörja körning till kund',
-      en_route: 'Tidsregistrering börjar när du anländer',
-      on_site: 'Gör jobbet, logga material och anteckningar',
+      planerad_resurs: 'Påbörja körning till kund',
+      planerad_las: 'Påbörja körning till kund',
+      dispatched: 'Jag har anlänt till platsen',
+      on_site: 'Börja utföra uppdraget',
       in_progress: 'Markera uppdraget som klart',
-      paborjad: 'Slutför och markera som utförd',
+      planned: 'Påbörja körning till kund',
+      en_route: 'Jag har anlänt till platsen',
     };
     return subLabels[status] || null;
   }
 
   function getNextStatusIcon(status: OrderStatus): string {
     const icons: Record<string, string> = {
-      ny: 'play',
-      skapad: 'clipboard',
-      planerad: 'user-check',
-      planerad_pre: 'user-check',
-      planerad_resurs: 'truck',
-      planerad_las: 'truck',
-      paborjad: 'check-circle',
-      planned: 'navigation',
-      dispatched: 'truck',
-      en_route: 'map-pin',
+      planerad_resurs: 'navigation',
+      planerad_las: 'navigation',
+      dispatched: 'map-pin',
       on_site: 'play',
       in_progress: 'check-circle',
+      planned: 'navigation',
+      en_route: 'map-pin',
     };
     return icons[status] || 'arrow-right';
   }
