@@ -131,8 +131,6 @@ interface RouteData {
   geometry: GeoJSON.LineString | GeoJSON.MultiLineString | null;
 }
 
-type ColorMode = "setupTime" | "accessType";
-
 export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
   const mapConfig = useMapConfig();
   const [selectedResource, setSelectedResource] = useState<string>("");
@@ -153,7 +151,6 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
   const [viewMode, setViewMode] = useState<"day" | "week">("day");
   const [routeData, setRouteData] = useState<RouteData | null>(null);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
-  const [colorMode, setColorMode] = useState<ColorMode>("accessType");
   const [showAccessCodes, setShowAccessCodes] = useState(false);
   const { toast } = useToast();
 
@@ -322,28 +319,8 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
     return total;
   };
 
-  const calculateSetupTime = (jobs: WorkOrderWithObject[]) => {
-    let total = 0;
-    let prevAccessType: string | null = null;
-    
-    for (const job of jobs) {
-      const obj = objectMap.get(job.objectId);
-      const accessType = obj?.accessType || "open";
-      const baseSetupTime = obj?.avgSetupTime || 0;
-      
-      if (prevAccessType === accessType && accessType !== "open") {
-        total += Math.round(baseSetupTime * 0.5);
-      } else {
-        total += baseSetupTime;
-      }
-      prevAccessType = accessType;
-    }
-    return total;
-  };
-
   const jobPositions = routePositions;
 
-  const totalSetupTime = calculateSetupTime(displayJobs);
   const totalWorkTime = displayJobs.reduce((sum, job) => sum + (job.estimatedDuration || 0), 0);
   const totalDistance = routeData?.distance ?? calculateDistance(jobPositions);
   const estimatedDriveTime = routeData?.duration ?? Math.round(totalDistance * 2);
@@ -358,7 +335,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
     return groups;
   }, [displayJobs, objectMap]);
 
-  const totalDayTime = totalWorkTime + totalSetupTime + estimatedDriveTime;
+  const totalDayTime = totalWorkTime + estimatedDriveTime;
   const efficiencyPercent = totalDayTime > 0 ? Math.round((totalWorkTime / totalDayTime) * 100) : 0;
 
   const isLoading = resourcesLoading || workOrdersLoading;
@@ -530,13 +507,8 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
               <div className="divide-y">
                 {displayJobs.map((job, index) => {
                   const obj = objectMap.get(job.objectId);
-                  const setupTime = obj?.avgSetupTime || 0;
                   const accessType = obj?.accessType || "open";
                   const hasCoords = obj?.latitude && obj?.longitude;
-                  const prevJob = index > 0 ? displayJobs[index - 1] : null;
-                  const prevObj = prevJob ? objectMap.get(prevJob.objectId) : null;
-                  const sameAccessAsPrev = prevObj?.accessType === accessType && accessType !== "open";
-                  const effectiveSetupTime = sameAccessAsPrev ? Math.round(setupTime * 0.5) : setupTime;
                   const AccessIcon = accessTypeLabels[accessType]?.icon || DoorOpen;
 
                   return (
@@ -549,8 +521,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                         <div className="flex items-center gap-2">
                           <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
                           <div 
-                            className="flex h-6 w-6 items-center justify-center rounded-full text-white text-xs font-medium"
-                            style={{ backgroundColor: getSetupTimeColor(effectiveSetupTime) }}
+                            className="flex h-6 w-6 items-center justify-center rounded-full text-white text-xs font-medium bg-[#4A9B9B]"
                           >
                             {index + 1}
                           </div>
@@ -590,12 +561,6 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                               </Badge>
                             )}
                           </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <SetupTimeBadge minutes={effectiveSetupTime} />
-                          {sameAccessAsPrev && (
-                            <span className="text-[9px] text-green-600 dark:text-green-400">-50%</span>
-                          )}
                         </div>
                       </div>
                       {index < displayJobs.length - 1 && (
@@ -685,11 +650,8 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
               const obj = objectMap.get(job.objectId);
               if (!obj?.latitude || !obj?.longitude) return null;
               
-              const setupTime = obj?.avgSetupTime || 0;
               const accessType = obj?.accessType || "open";
-              const markerColor = colorMode === "accessType" 
-                ? getAccessTypeColor(accessType) 
-                : getSetupTimeColor(setupTime);
+              const markerColor = getAccessTypeColor(accessType);
               
               const totalContainers = (obj.containerCount || 0) + 
                 (obj.containerCountK2 || 0) + 
