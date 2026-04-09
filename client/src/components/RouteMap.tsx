@@ -336,7 +336,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
 
   return (
     <div className="flex flex-col lg:flex-row gap-4" style={{ minHeight: "calc(100vh - 180px)" }}>
-      <div className="w-full lg:w-[280px] shrink-0 flex flex-col gap-3 overflow-auto">
+      <div className="w-full lg:w-[280px] shrink-0 flex flex-col gap-3 lg:overflow-y-auto lg:max-h-[calc(100vh-200px)]">
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -486,7 +486,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                 </Button>
               </div>
             ) : (
-              <div className="divide-y max-h-[350px] overflow-auto">
+              <div className="divide-y">
                 {displayJobs.map((job, index) => {
                   const obj = objectMap.get(job.objectId);
                   const setupTime = obj?.avgSetupTime || 0;

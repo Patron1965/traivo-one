@@ -284,9 +284,9 @@ export default function RoutesPage() {
           {vrpResult && (
             <div className="space-y-4">
               {!vrpResult.success ? (
-                <div className="flex items-center gap-2 text-destructive text-sm">
-                  <AlertCircle className="h-4 w-4" />
-                  {vrpResult.error}
+                <div className="flex items-start gap-2 text-destructive text-sm p-3 bg-red-50 dark:bg-red-950/20 rounded-md border border-red-200 dark:border-red-800">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span className="break-words">{vrpResult.error}</span>
                 </div>
               ) : (
                 <>
