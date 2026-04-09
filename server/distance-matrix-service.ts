@@ -282,6 +282,7 @@ export async function precomputeDistanceMatrix(
     const tableResult = await osrmTable(stops.map(s => ({ lat: s.lat, lng: s.lng })));
     if (tableResult && tableResult.distances.length === stops.length) {
       console.log(`[distance-matrix] OSRM table API: ${stops.length}×${stops.length} matrix computed`);
+      const l2Promises: Promise<void>[] = [];
       for (let i = 0; i < stops.length; i++) {
         for (let j = 0; j < stops.length; j++) {
           if (i === j) continue;
@@ -296,8 +297,10 @@ export async function precomputeDistanceMatrix(
           const key = coordKey(stops[i].lat, stops[i].lng, stops[j].lat, stops[j].lng);
           const result: DistanceResult = { distanceKm: distKm, durationMin: durMin, source: "osrm" };
           setL1(key, result);
+          l2Promises.push(setL2(key, stops[i].lat, stops[i].lng, stops[j].lat, stops[j].lng, result));
         }
       }
+      await Promise.all(l2Promises);
       return matrix;
     }
   }
