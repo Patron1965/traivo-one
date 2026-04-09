@@ -140,11 +140,12 @@ export default function RoutesPage() {
         const statsRes = await apiRequest("GET", `/api/ai/route-recommendations?date=${selectedDate}`);
         const statsData = await statsRes.json();
         if (statsData?.statistics) {
+          const routeStats = statsData.currentRouteStats;
           setCurrentStats({
             totalOrders: statsData.statistics.totalOrders || 0,
-            totalDurationMinutes: (statsData.statistics.totalOrders || 0) * (statsData.statistics.avgDurationMinutes || 60),
-            totalDistanceKm: Math.round((statsData.statistics.totalOrders || 0) * 3.5),
-            avgEfficiency: statsData.statistics.totalOrders > 0 ? 65 : 0,
+            totalDurationMinutes: routeStats?.totalDurationMinutes ?? 0,
+            totalDistanceKm: routeStats?.totalDistanceKm ?? 0,
+            avgEfficiency: routeStats?.avgEfficiency ?? 0,
             resourceCount: statsData.statistics.activeResources || 0,
           });
         }
@@ -336,15 +337,15 @@ export default function RoutesPage() {
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Tid</span>
-                                  <span>{currentStats.totalDurationMinutes} min</span>
+                                  <span>{currentStats.totalDurationMinutes > 0 ? `${currentStats.totalDurationMinutes} min` : "—"}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Distans</span>
-                                  <span>~{currentStats.totalDistanceKm} km</span>
+                                  <span>{currentStats.totalDistanceKm > 0 ? `${currentStats.totalDistanceKm} km` : "—"}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Effektivitet</span>
-                                  <span>~{currentStats.avgEfficiency}%</span>
+                                  <span>{currentStats.avgEfficiency > 0 ? `${currentStats.avgEfficiency}%` : "—"}</span>
                                 </div>
                               </div>
                             </div>
@@ -359,7 +360,7 @@ export default function RoutesPage() {
                                   <span className="text-muted-foreground">Tid</span>
                                   <span className="font-medium">
                                     {vrpResult.summary.totalDurationMinutes} min
-                                    {currentStats.totalDurationMinutes > vrpResult.summary.totalDurationMinutes && (
+                                    {currentStats.totalDurationMinutes > 0 && currentStats.totalDurationMinutes > vrpResult.summary.totalDurationMinutes && (
                                       <Badge variant="secondary" className="ml-1 text-[10px] text-green-600">
                                         -{currentStats.totalDurationMinutes - vrpResult.summary.totalDurationMinutes} min
                                       </Badge>
@@ -370,9 +371,9 @@ export default function RoutesPage() {
                                   <span className="text-muted-foreground">Distans</span>
                                   <span className="font-medium">
                                     {vrpResult.summary.totalDistanceKm} km
-                                    {currentStats.totalDistanceKm > vrpResult.summary.totalDistanceKm && (
+                                    {currentStats.totalDistanceKm > 0 && currentStats.totalDistanceKm > vrpResult.summary.totalDistanceKm && (
                                       <Badge variant="secondary" className="ml-1 text-[10px] text-green-600">
-                                        -{currentStats.totalDistanceKm - vrpResult.summary.totalDistanceKm} km
+                                        -{Math.round((currentStats.totalDistanceKm - vrpResult.summary.totalDistanceKm) * 10) / 10} km
                                       </Badge>
                                     )}
                                   </span>
@@ -381,7 +382,7 @@ export default function RoutesPage() {
                                   <span className="text-muted-foreground">Effektivitet</span>
                                   <span className="font-medium">
                                     {vrpResult.summary.avgEfficiency}%
-                                    {vrpResult.summary.avgEfficiency > currentStats.avgEfficiency && (
+                                    {currentStats.avgEfficiency > 0 && vrpResult.summary.avgEfficiency > currentStats.avgEfficiency && (
                                       <Badge variant="secondary" className="ml-1 text-[10px] text-green-600">
                                         +{vrpResult.summary.avgEfficiency - currentStats.avgEfficiency}%
                                       </Badge>

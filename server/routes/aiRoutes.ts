@@ -1333,17 +1333,94 @@ app.get("/api/ai/route-recommendations", asyncHandler(async (req, res) => {
       if (!resourceOrdersMap.has(o.resourceId)) resourceOrdersMap.set(o.resourceId, []);
       resourceOrdersMap.get(o.resourceId)!.push(o);
     });
-    for (const [resId, orders] of resourceOrdersMap) {
+    Array.from(resourceOrdersMap.entries()).forEach(([resId, orders]) => {
       const res2 = resources.find(r => r.id === resId);
       currentRoutes.push({
         resourceId: resId,
         resourceName: res2?.name || resId,
-        orders: orders.map(o => ({
+        orders: orders.map((o: typeof todaysOrders[0]) => ({
           title: o.title || o.orderNumber || "Order",
           address: o.address || "",
           orderId: o.id,
         })),
       });
+    });
+
+    const objectMap = new Map(objects.map(o => [o.id, o]));
+    let currentRouteStats: { totalDistanceKm: number; totalDurationMinutes: number; avgEfficiency: number } | null = null;
+    try {
+      const assignedOrders = todaysOrders.filter(o => o.resourceId);
+      if (assignedOrders.length > 0) {
+        let totalDistanceKm = 0;
+        let totalWorkMinutes = 0;
+        let totalDriveMinutes = 0;
+
+        type OrderType = typeof todaysOrders[0];
+        const resEntries = Array.from(resourceOrdersMap.entries());
+        for (let e = 0; e < resEntries.length; e++) {
+          const [resId, resOrders] = resEntries[e];
+          const res2 = resources.find(r => r.id === resId);
+
+          const resWork = resOrders.reduce((s: number, o: OrderType) => s + (o.estimatedDuration || 60), 0);
+          totalWorkMinutes += resWork;
+
+          const ordersWithCoords = resOrders
+            .map((o: OrderType) => {
+              const obj = objectMap.get(o.objectId);
+              return { order: o, lat: obj?.latitude ?? null, lng: obj?.longitude ?? null };
+            })
+            .filter((x: { order: OrderType; lat: number | null; lng: number | null }): x is { order: OrderType; lat: number; lng: number } => x.lat != null && x.lng != null);
+
+          if (ordersWithCoords.length === 0) continue;
+
+          const pairs: BatchPair[] = [];
+          let prevLat = res2?.homeLatitude ?? ordersWithCoords[0].lat;
+          let prevLng = res2?.homeLongitude ?? ordersWithCoords[0].lng;
+
+          for (let i = 0; i < ordersWithCoords.length; i++) {
+            pairs.push({
+              id: `leg-${resId}-${i}`,
+              fromLat: prevLat,
+              fromLng: prevLng,
+              toLat: ordersWithCoords[i].lat,
+              toLng: ordersWithCoords[i].lng,
+            });
+            prevLat = ordersWithCoords[i].lat;
+            prevLng = ordersWithCoords[i].lng;
+          }
+
+          const distances = await getBatchDistances(pairs);
+          let resDist = 0;
+          let resDrive = 0;
+          for (let i = 0; i < ordersWithCoords.length; i++) {
+            const r = distances.get(`leg-${resId}-${i}`);
+            if (r) {
+              resDist += r.distanceKm;
+              resDrive += r.durationMin;
+            } else {
+              const d = haversineDistanceKm(
+                i === 0 ? (res2?.homeLatitude ?? ordersWithCoords[0].lat) : ordersWithCoords[i - 1].lat,
+                i === 0 ? (res2?.homeLongitude ?? ordersWithCoords[0].lng) : ordersWithCoords[i - 1].lng,
+                ordersWithCoords[i].lat, ordersWithCoords[i].lng
+              );
+              resDist += d;
+              resDrive += Math.round((d / 35) * 60);
+            }
+          }
+
+          totalDistanceKm += resDist;
+          totalDriveMinutes += resDrive;
+        }
+
+        const totalTime = totalWorkMinutes + totalDriveMinutes;
+        currentRouteStats = {
+          totalDistanceKm: Math.round(totalDistanceKm * 10) / 10,
+          totalDurationMinutes: Math.round(totalTime),
+          avgEfficiency: totalTime > 0 ? Math.round((totalWorkMinutes / totalTime) * 100) : 0,
+        };
+      }
+    } catch (err) {
+      console.warn("[route-recommendations] Failed to calculate current route stats:", err instanceof Error ? err.message : err);
     }
 
     res.json({
@@ -1362,6 +1439,7 @@ app.get("/api/ai/route-recommendations", asyncHandler(async (req, res) => {
         activeResources: Object.keys(ordersPerResource).length,
         avgDurationMinutes: Math.round(avgDuration),
       },
+      currentRouteStats,
       currentRoutes,
       recommendations,
       summary: recommendations.length > 0 
