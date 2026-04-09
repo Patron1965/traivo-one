@@ -23,7 +23,8 @@ except ImportError:
     HAS_ORTOOLS = False
 
 try:
-    from sklearn.cluster import KMeans
+    from sklearn.cluster import KMeans, DBSCAN
+    from sklearn.metrics import pairwise_distances
     import numpy as np
     HAS_SKLEARN = True
 except ImportError:
@@ -137,18 +138,105 @@ def build_time_matrix(locations: list[tuple[float, float]], precomputed: Optiona
     return matrix
 
 
-def pre_cluster(stops: list[Stop], n_clusters: int) -> list[list[Stop]]:
-    if not HAS_SKLEARN or len(stops) <= n_clusters:
+def temporal_distance(a: Stop, b: Stop) -> float:
+    tw_a = a.time_window
+    tw_b = b.time_window
+    if not tw_a or not tw_b or len(tw_a) < 2 or len(tw_b) < 2:
+        return 0.0
+    overlap_start = max(tw_a[0], tw_b[0])
+    overlap_end = min(tw_a[1], tw_b[1])
+    overlap = max(0, overlap_end - overlap_start)
+    max_span = max(tw_a[1] - tw_a[0], tw_b[1] - tw_b[0])
+    if max_span == 0:
+        return 0.0
+    return 1.0 - (overlap / max_span)
+
+
+def dbscan_pre_cluster(
+    stops: list[Stop],
+    n_clusters: int,
+    epsilon_km: float = 15.0,
+    min_samples: int = 3,
+    temporal_weight: float = 0.3,
+) -> list[list[Stop]]:
+    if not HAS_SKLEARN or len(stops) <= min_samples:
         return [stops]
 
+    max_geo_dist = 1.0
+    for i in range(len(stops)):
+        for j in range(i + 1, len(stops)):
+            d = haversine_km(stops[i].lat, stops[i].lng, stops[j].lat, stops[j].lng)
+            if d > max_geo_dist:
+                max_geo_dist = d
+
+    n = len(stops)
+    dist_matrix = np.zeros((n, n))
+    geo_weight = 1.0 - temporal_weight
+    for i in range(n):
+        for j in range(i + 1, n):
+            geo_d = haversine_km(stops[i].lat, stops[i].lng, stops[j].lat, stops[j].lng)
+            norm_geo = geo_d / max_geo_dist
+            temp_d = temporal_distance(stops[i], stops[j])
+            combined = (geo_weight * norm_geo + temporal_weight * temp_d) * max_geo_dist
+            dist_matrix[i][j] = combined
+            dist_matrix[j][i] = combined
+
+    dbscan = DBSCAN(eps=epsilon_km, min_samples=min_samples, metric="precomputed")
+    labels = dbscan.fit_predict(dist_matrix)
+
+    unique_labels = set(labels)
+    unique_labels.discard(-1)
+
+    if len(unique_labels) <= 1:
+        return pre_cluster_kmeans(stops, n_clusters)
+
+    clusters: dict[int, list[Stop]] = {}
+    noise: list[Stop] = []
+    for i, label in enumerate(labels):
+        if label == -1:
+            noise.append(stops[i])
+        else:
+            clusters.setdefault(int(label), []).append(stops[i])
+
+    cluster_list = list(clusters.values())
+
+    for ns in noise:
+        best_idx = 0
+        best_dist = float("inf")
+        for ci, cl in enumerate(cluster_list):
+            centroid_lat = sum(s.lat for s in cl) / len(cl)
+            centroid_lng = sum(s.lng for s in cl) / len(cl)
+            d = haversine_km(ns.lat, ns.lng, centroid_lat, centroid_lng)
+            if d < best_dist:
+                best_dist = d
+                best_idx = ci
+        cluster_list[best_idx].append(ns)
+
+    noise_count = len(noise)
+    print(f"[dbscan-py] {len(stops)} stops → {len(cluster_list)} clusters, {noise_count} noise points assigned")
+    return cluster_list
+
+
+def pre_cluster_kmeans(stops: list[Stop], n_clusters: int) -> list[list[Stop]]:
+    if not HAS_SKLEARN or len(stops) <= n_clusters:
+        return [stops]
     coords = np.array([[s.lat, s.lng] for s in stops])
     kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
     labels = kmeans.fit_predict(coords)
-
     clusters: dict[int, list[Stop]] = {}
     for i, label in enumerate(labels):
         clusters.setdefault(int(label), []).append(stops[i])
     return list(clusters.values())
+
+
+def pre_cluster(stops: list[Stop], n_clusters: int) -> list[list[Stop]]:
+    if not HAS_SKLEARN or len(stops) <= n_clusters:
+        return [stops]
+    try:
+        return dbscan_pre_cluster(stops, n_clusters)
+    except Exception as e:
+        print(f"[dbscan-py] DBSCAN failed, falling back to K-Means: {e}")
+        return pre_cluster_kmeans(stops, n_clusters)
 
 
 def solve_nearest_neighbor(stops: list[Stop], vehicles: list[Vehicle]) -> OptimizeResponse:

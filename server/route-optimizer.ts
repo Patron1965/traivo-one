@@ -615,15 +615,17 @@ export async function optimizeRoutesVRP(
   const PRE_CLUSTER_THRESHOLD = 50;
   if (enrichedJobs.length > PRE_CLUSTER_THRESHOLD && enrichedAgents.length > 1) {
     try {
-      const { geographicPreCluster, haversineDistanceKm } = await import("./distance-matrix-service");
-      const stops = enrichedJobs.map(j => ({
+      const { haversineDistanceKm } = await import("./distance-matrix-service");
+      const dbscanMod = await import("./dbscan-clustering");
+      const stops: Array<{ id: string; lat: number; lng: number; timeWindows?: [number, number][] }> = enrichedJobs.map(j => ({
         id: j.id || "",
         lat: j.location[1],
         lng: j.location[0],
+        timeWindows: j.time_windows as [number, number][] | undefined,
       }));
       const clusterCount = Math.min(enrichedAgents.length, Math.ceil(enrichedJobs.length / 15));
-      const geoClusters = geographicPreCluster(stops, clusterCount);
-      console.log(`[VRP] Pre-clustering ${enrichedJobs.length} jobs into ${geoClusters.length} geographic clusters`);
+      const geoClusters = dbscanMod.dbscanPreCluster(stops, clusterCount);
+      console.log(`[VRP] DBSCAN pre-clustering ${enrichedJobs.length} jobs into ${geoClusters.length} clusters`);
 
       const jobMap = new Map(enrichedJobs.map(j => [j.id, j]));
       const agentUsed = new Set<number>();
