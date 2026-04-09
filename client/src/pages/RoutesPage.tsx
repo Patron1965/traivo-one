@@ -579,7 +579,7 @@ export default function RoutesPage() {
           )}
       
       <div className="flex-1">
-        <RouteMap />
+        <RouteMap initialDate={selectedDate} />
       </div>
     </div>
   );

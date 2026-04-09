@@ -40,6 +40,8 @@ app.get("/api/work-orders", asyncHandler(async (req, res) => {
     } else if (!startDate && endDate) {
       startDate = new Date(0);
     }
+    if (startDate) startDate.setHours(0, 0, 0, 0);
+    if (endDate) endDate.setHours(23, 59, 59, 999);
   }
 
   if (status === 'unscheduled') {

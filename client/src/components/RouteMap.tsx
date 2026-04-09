@@ -102,6 +102,7 @@ function MapFitBounds({ positions }: MapFitBoundsProps) {
 
 interface RouteMapProps {
   onNavigate?: (jobId: string) => void;
+  initialDate?: string;
 }
 
 interface RouteData {
@@ -112,10 +113,23 @@ interface RouteData {
 
 type ColorMode = "setupTime" | "accessType";
 
-export function RouteMap({ onNavigate }: RouteMapProps) {
+export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
   const mapConfig = useMapConfig();
   const [selectedResource, setSelectedResource] = useState<string>("");
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    if (initialDate) {
+      const parts = initialDate.split("-");
+      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    }
+    return new Date();
+  });
+  useEffect(() => {
+    if (initialDate) {
+      const parts = initialDate.split("-");
+      setSelectedDate(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
+    }
+  }, [initialDate]);
+
   const [viewMode, setViewMode] = useState<"day" | "week">("day");
   const [routeData, setRouteData] = useState<RouteData | null>(null);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
@@ -125,10 +139,6 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
 
   const { data: resources = [], isLoading: resourcesLoading } = useQuery<Resource[]>({
     queryKey: ["/api/resources"],
-  });
-
-  const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrderWithObject[]>({
-    queryKey: ["/api/work-orders"],
   });
 
   const activeResource = selectedResource || (resources.length > 0 ? resources[0].id : "");
@@ -147,6 +157,20 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
   };
 
   const { start: periodStart, end: periodEnd } = getDateRange();
+
+  const queryStartDate = format(periodStart, "yyyy-MM-dd");
+  const queryEndDate = format(periodEnd, "yyyy-MM-dd");
+
+  const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrderWithObject[]>({
+    queryKey: ["/api/work-orders", queryStartDate, queryEndDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/work-orders?startDate=${queryStartDate}&endDate=${queryEndDate}&includeUnscheduled=false`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch work orders");
+      return res.json();
+    },
+  });
 
   // Hämta endast objekt som visas i aktuell period
   const displayJobObjectIds = useMemo(() => {
