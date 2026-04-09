@@ -1,0 +1,22 @@
+OSRM Integration in Optimization Loop
+What & Why
+The ALNS optimizer currently uses Haversine (straight-line) distances, which can produce 15-30% errors vs actual road distances. Integrating OSRM's Table API into the optimization loop will give realistic road-based distances and travel times, making route optimization significantly more accurate.
+
+Done looks like
+The optimizer uses real road distances from OSRM instead of Haversine for all route evaluations
+An OSRM distance matrix is pre-fetched via the Table API before optimization starts (batch request for all stop-pairs)
+An LRU cache (up to 50k entries) stores OSRM results to avoid redundant requests across optimization iterations
+Automatic fallback to Haversine if OSRM is unavailable or times out
+The DistanceMatrixCache uses geohash-based keys instead of floating-point lat/lon keys (fixes precision issue)
+Existing API contracts and frontend remain unchanged — this is a backend-only improvement
+Out of scope
+Real-time traffic data from external providers (HERE/TomTom)
+Changes to the frontend or mobile app
+OSRM server deployment (use the existing public demo or a self-hosted instance via env var)
+Tasks
+OSRM client with Table API — Create an async OSRM client that batch-fetches distance/duration matrices for a set of coordinates using the OSRM Table API. Include retry logic and timeout handling.
+LRU distance cache — Replace the current DistanceMatrixCache with a geohash-keyed LRU cache (max 50k entries). The cache should store both distance (km) and duration (minutes) per pair.
+Pre-compute matrix before optimization — Before ALNS starts, call the OSRM Table API to pre-populate the cache with all stop-to-stop and depot-to-stop distances. For large instances, batch into chunks of ~100 coordinates.
+Replace cachedDistance in evaluateRoute — Update evaluateRoute() and all cost calculation functions to use OSRM-backed distances. Update estimateDuration() to use OSRM travel times when available.
+Haversine fallback — If OSRM fails or is not configured, fall back to current Haversine behavior seamlessly. Log a warning when fallback is used.
+OSRM base URL configuration — Add OSRM_BASE_URL environment variable (default: public OSRM demo server). Document in replit.md.
