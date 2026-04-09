@@ -113,6 +113,23 @@ export default function RoutesPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const pollForResult = async (jobId: string): Promise<VRPResult> => {
+    const maxAttempts = 60;
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const res = await fetch(`/api/ai/optimization-job/${jobId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Kunde inte hämta optimeringsstatus");
+      const job = await res.json();
+      if (job.status === "completed" && job.result) {
+        return job.result as VRPResult;
+      }
+      if (job.status === "failed") {
+        throw new Error(job.error || "Optimering misslyckades");
+      }
+    }
+    throw new Error("Optimering tog för lång tid");
+  };
+
   const vrpMutation = useMutation({
     mutationFn: async () => {
       const body: { date?: string; clusterId?: string } = {};
@@ -144,7 +161,13 @@ export default function RoutesPage() {
       }
       
       const response = await apiRequest("POST", "/api/ai/optimize-vrp", body);
-      return response.json() as Promise<VRPResult>;
+      const data = await response.json();
+
+      if (data.jobId && data.status === "queued") {
+        return pollForResult(data.jobId);
+      }
+
+      return data as VRPResult;
     },
     onSuccess: (data) => {
       setVrpResult(data);
@@ -152,12 +175,14 @@ export default function RoutesPage() {
         toast({
           title: "Ruttoptimering klar",
           description: `${data.summary.assignedOrders} av ${data.summary.totalOrders} ordrar tilldelade med ${data.summary.avgEfficiency}% effektivitet`,
+          duration: 10000,
         });
       } else {
         toast({
           title: "Optimering misslyckades",
           description: data.error || "Något gick fel",
           variant: "destructive",
+          duration: 15000,
         });
       }
     },
@@ -166,6 +191,7 @@ export default function RoutesPage() {
         title: "Fel vid optimering",
         description: error.message,
         variant: "destructive",
+        duration: 15000,
       });
     },
   });
