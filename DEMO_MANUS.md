@@ -236,12 +236,13 @@
 - Beroendehantering: blockerade jobb visas som låsta
 - Pull-to-refresh och statusindikator (online/offline/GPS)
 - AI-fältassistent för frågor under arbete
+- **Dagsrapport**: sammanfattning av dagens arbete — slutförandegrad, tid (beräknad vs faktisk), foton, signaturer, material, jobbtyper — med exportfunktion
 
 **Lyft fram:**
 - "Traivo Go är en PWA som fungerar offline. Teknikern ser sin rutt, dokumenterar arbetet, och allt synkas automatiskt när uppkopplingen kommer tillbaka."
-- "Inga pappersprotokoll — allt digitalt direkt i fält."
+- "Inga pappersprotokoll — allt digitalt direkt i fält. Dagsrapporten ger en komplett sammanfattning att ta med sig."
 
-**Wow-moment:** Visa offline-funktionaliteten — appen fungerar utan internet och synkar vid anslutning.
+**Wow-moment:** Visa dagsrapporten — teknikern ser hela sin dag sammanfattad med ett klick.
 
 ### 5.2 Arbetspass / Snöret (`/work-sessions`)
 **Navigera:** Menyn > Fält > Arbetspass

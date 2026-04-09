@@ -10,7 +10,7 @@ import {
   HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X,
   Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
   User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share,
-  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database
+  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText
 } from "lucide-react";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -36,6 +36,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DailyProgressCard } from "@/components/DailyProgressCard";
+import { DayReport } from "@/components/DayReport";
 import { VoiceInput } from "@/components/VoiceInput";
 import {
   Dialog,
@@ -45,7 +46,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-type View = "jobs" | "job";
+type View = "jobs" | "job" | "report";
 
 interface MyReportItem {
   id: string;
@@ -1109,6 +1110,16 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
         <p className="text-lg text-muted-foreground">Laddar schema...</p>
       </div>
+    );
+  }
+
+  if (view === "report") {
+    return (
+      <DayReport
+        workOrders={workOrders}
+        resourceId={resourceId || ""}
+        onBack={() => setView("jobs")}
+      />
     );
   }
 
@@ -2630,15 +2641,24 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         )}
       </div>
 
-      <div className="p-4 border-t bg-card">
+      <div className="p-4 border-t bg-card flex gap-2">
         <Button
           variant="outline"
-          className="w-full h-12 gap-2"
+          className="flex-1 h-12 gap-2"
           onClick={() => setShowAiPanel(!showAiPanel)}
           data-testid="button-ask-ai-general"
         >
           <HelpCircle className="h-5 w-5 text-purple-500" />
-          {showAiPanel ? "Visa jobb" : "Fråga AI om hjälp"}
+          {showAiPanel ? "Visa jobb" : "Fråga AI"}
+        </Button>
+        <Button
+          variant="outline"
+          className="h-12 gap-2 px-4"
+          onClick={() => setView("report")}
+          data-testid="button-open-day-report"
+        >
+          <FileText className="h-5 w-5 text-teal-500" />
+          Dagsrapport
         </Button>
       </div>
     </div>
