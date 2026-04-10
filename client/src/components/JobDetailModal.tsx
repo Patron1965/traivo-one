@@ -712,83 +712,91 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                   <Tag className="h-4 w-4" />
                   Metadata
                 </h4>
-                <Popover open={metadataPopoverOpen} onOpenChange={setMetadataPopoverOpen}>
-                  <PopoverTrigger asChild>
-                    <Button size="sm" variant="outline" data-testid="button-add-metadata">
-                      <Plus className="h-4 w-4 mr-1" />
-                      Lägg till metadata
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[350px]" align="end" onOpenAutoFocus={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Metadatatyp</label>
-                        <Select value={selectedMetadataType} onValueChange={(val) => { setSelectedMetadataType(val); setMetadataValue(""); }}>
-                          <SelectTrigger data-testid="select-metadata-type">
-                            <SelectValue placeholder="Välj typ..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {metadataTypes.map((type) => (
-                              <SelectItem key={type.id} value={type.namn}>
-                                {type.namn}
-                                {type.beskrivning && (
-                                  <span className="text-muted-foreground ml-2">- {type.beskrivning}</span>
-                                )}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Värde</label>
-                        {(() => {
-                          const selectedType = metadataTypes.find(t => t.namn === selectedMetadataType);
-                          const datatype = selectedType?.datatyp || 'string';
-                          
-                          if (datatype === 'boolean') {
-                            return (
-                              <Select value={metadataValue} onValueChange={setMetadataValue}>
-                                <SelectTrigger data-testid="input-metadata-value">
-                                  <SelectValue placeholder="Välj värde..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="true">Ja</SelectItem>
-                                  <SelectItem value="false">Nej</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            );
-                          }
-                          
-                          return (
-                            <Input
-                              type={datatype === 'integer' || datatype === 'decimal' ? 'number' : 'text'}
-                              step={datatype === 'decimal' ? '0.01' : undefined}
-                              placeholder={
-                                datatype === 'integer' ? 'Ange heltal...' :
-                                datatype === 'decimal' ? 'Ange decimaltal...' :
-                                datatype === 'datetime' ? 'ÅÅÅÅ-MM-DD' :
-                                'Ange värde...'
-                              }
-                              value={metadataValue}
-                              onChange={(e) => setMetadataValue(e.target.value)}
-                              data-testid="input-metadata-value"
-                            />
-                          );
-                        })()}
-                      </div>
-                      <Button
-                        onClick={handleAddMetadata}
-                        disabled={addMetadataMutation.isPending || !selectedMetadataType || !metadataValue.trim()}
-                        className="w-full"
-                        data-testid="button-confirm-add-metadata"
-                      >
-                        {addMetadataMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                        Lägg till
-                      </Button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
+                <Button size="sm" variant="outline" data-testid="button-add-metadata" onClick={() => setMetadataPopoverOpen(!metadataPopoverOpen)}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Lägg till metadata
+                </Button>
               </div>
+
+              {metadataPopoverOpen && (
+                <div className="border rounded-md p-3 space-y-3 bg-muted/30">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Metadatatyp</label>
+                    <Select value={selectedMetadataType} onValueChange={(val) => { setSelectedMetadataType(val); setMetadataValue(""); }}>
+                      <SelectTrigger data-testid="select-metadata-type">
+                        <SelectValue placeholder="Välj typ..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {metadataTypes.map((type) => (
+                          <SelectItem key={type.id} value={type.namn}>
+                            {type.namn}
+                            {type.beskrivning && (
+                              <span className="text-muted-foreground ml-2">- {type.beskrivning}</span>
+                            )}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Värde</label>
+                    {(() => {
+                      const selectedType = metadataTypes.find(t => t.namn === selectedMetadataType);
+                      const datatype = selectedType?.datatyp || 'string';
+
+                      if (datatype === 'boolean') {
+                        return (
+                          <Select value={metadataValue} onValueChange={setMetadataValue}>
+                            <SelectTrigger data-testid="input-metadata-value">
+                              <SelectValue placeholder="Välj värde..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="true">Ja</SelectItem>
+                              <SelectItem value="false">Nej</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        );
+                      }
+
+                      return (
+                        <Input
+                          type={datatype === 'integer' || datatype === 'decimal' ? 'number' : 'text'}
+                          step={datatype === 'decimal' ? '0.01' : undefined}
+                          placeholder={
+                            datatype === 'integer' ? 'Ange heltal...' :
+                            datatype === 'decimal' ? 'Ange decimaltal...' :
+                            datatype === 'datetime' ? 'ÅÅÅÅ-MM-DD' :
+                            'Ange värde...'
+                          }
+                          value={metadataValue}
+                          onChange={(e) => setMetadataValue(e.target.value)}
+                          data-testid="input-metadata-value"
+                        />
+                      );
+                    })()}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleAddMetadata}
+                      disabled={addMetadataMutation.isPending || !selectedMetadataType || !metadataValue.trim()}
+                      className="flex-1"
+                      size="sm"
+                      data-testid="button-confirm-add-metadata"
+                    >
+                      {addMetadataMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      Lägg till
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setMetadataPopoverOpen(false); setSelectedMetadataType(""); setMetadataValue(""); }}
+                      data-testid="button-cancel-metadata"
+                    >
+                      Avbryt
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {metadataLoading ? (
                 <div className="flex items-center justify-center py-4">
