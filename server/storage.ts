@@ -1131,10 +1131,12 @@ export class DatabaseStorage implements IStorage {
     
     if (startDate && endDate) {
       if (includeUnscheduled) {
+        const plannableStatuses = ["skapad", "planerad_pre"];
         conditions.push(
           or(
             isNull(workOrders.scheduledDate),
-            and(gte(workOrders.scheduledDate, startDate), lte(workOrders.scheduledDate, endDate))
+            and(gte(workOrders.scheduledDate, startDate), lte(workOrders.scheduledDate, endDate)),
+            inArray(workOrders.orderStatus, plannableStatuses)
           )!
         );
       } else {
@@ -1411,10 +1413,12 @@ export class DatabaseStorage implements IStorage {
 
     if (startDate && endDate) {
       if (includeUnscheduled) {
+        const plannableStatuses = ["skapad", "planerad_pre"];
         conditions.push(
           or(
             isNull(workOrders.scheduledDate),
-            and(gte(workOrders.scheduledDate, startDate), lte(workOrders.scheduledDate, endDate))
+            and(gte(workOrders.scheduledDate, startDate), lte(workOrders.scheduledDate, endDate)),
+            inArray(workOrders.orderStatus, plannableStatuses)
           )!
         );
       } else {

@@ -448,8 +448,9 @@ app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
       restrictionsByObject.get(r.objectId)!.push(r);
     }
 
+    const plannableStatuses = new Set(["skapad", "planerad_pre"]);
     const unscheduledOrders = allWorkOrders.filter(wo => 
-      (!wo.scheduledDate || !wo.resourceId) && 
+      (plannableStatuses.has(wo.orderStatus) || !wo.scheduledDate || !wo.resourceId) && 
       wo.orderStatus !== "utford" && wo.orderStatus !== "avbruten" &&
       wo.executionStatus !== "completed" && wo.executionStatus !== "invoiced"
     );
@@ -530,7 +531,8 @@ app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
     const HOURS_PER_DAY = 8;
     const maxMinutesPerDay = HOURS_PER_DAY * 60 * (1 + overbookingPercent / 100);
 
-    const existingScheduled = allWorkOrders.filter(wo => wo.scheduledDate && wo.resourceId);
+    const unscheduledIds = new Set(unscheduledOrders.map(wo => wo.id));
+    const existingScheduled = allWorkOrders.filter(wo => wo.scheduledDate && wo.resourceId && !unscheduledIds.has(wo.id));
     const resourceDayMinutes: Record<string, Record<string, number>> = {};
     for (const resource of selectedResources) {
       resourceDayMinutes[resource.id] = {};
