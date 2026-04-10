@@ -613,28 +613,6 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                     opacity={0.8}
                   />
                 )}
-                {routePositions.map((pos, i) => {
-                  const allCoords = routeData.geometry.type === "MultiLineString"
-                    ? (routeData.geometry as GeoJSON.MultiLineString).coordinates.flat()
-                    : (routeData.geometry as GeoJSON.LineString).coordinates;
-                  let nearest = allCoords[0];
-                  let minDist = Infinity;
-                  for (const c of allCoords) {
-                    const d = (c[0] - pos[1]) ** 2 + (c[1] - pos[0]) ** 2;
-                    if (d < minDist) { minDist = d; nearest = c; }
-                  }
-                  if (minDist < 0.00001) return null;
-                  return (
-                    <Polyline
-                      key={`connector-${i}`}
-                      positions={[pos, [nearest[1], nearest[0]] as [number, number]]}
-                      color="#3b82f6"
-                      weight={2}
-                      opacity={0.5}
-                      dashArray="4, 4"
-                    />
-                  );
-                })}
               </>
             ) : jobPositions.length > 1 && (
               <Polyline 

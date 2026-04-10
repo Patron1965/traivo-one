@@ -361,11 +361,16 @@ app.post("/api/routes/directions", asyncHandler(async (req, res) => {
 
           if (segResult?.geometry?.coordinates) {
             const segGeoCoords = segResult.geometry.coordinates as [number, number][];
+
+            const startWp = coordinates[i] as [number, number];
+            const endWp = coordinates[i + 1] as [number, number];
+
             if (i === 0) {
-              allCoords.push(...segGeoCoords);
-            } else {
-              allCoords.push(...segGeoCoords.slice(1));
+              allCoords.push(startWp);
             }
+            allCoords.push(...segGeoCoords);
+            allCoords.push(endWp);
+
             totalDistance += segResult.distanceMeters;
             totalDuration += segResult.durationSeconds;
           } else {
