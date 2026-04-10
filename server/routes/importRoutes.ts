@@ -348,29 +348,52 @@ app.post("/api/routes/directions", asyncHandler(async (req, res) => {
 
     if (isOSRMEnabled()) {
       try {
-        console.log(`[routing] Trying OSRM route with ${coordinates.length} waypoints`);
-        const osrmResult = await osrmRouteMulti(
-          coordinates as [number, number][],
-          { overview: "full", geometries: "geojson" }
-        );
+        console.log(`[routing] Trying OSRM segment-by-segment with ${coordinates.length} waypoints`);
 
-        if (osrmResult?.geometry) {
-          console.log(`[routing] OSRM success: distance=${Math.round(osrmResult.distanceMeters)}m, duration=${Math.round(osrmResult.durationSeconds)}s`);
+        const allCoords: [number, number][] = [];
+        let totalDistance = 0;
+        let totalDuration = 0;
+        let allSuccess = true;
+
+        for (let i = 0; i < coordinates.length - 1; i++) {
+          const segCoords = [coordinates[i], coordinates[i + 1]] as [number, number][];
+          const segResult = await osrmRouteMulti(segCoords, { overview: "full", geometries: "geojson" });
+
+          if (segResult?.geometry?.coordinates) {
+            const segGeoCoords = segResult.geometry.coordinates as [number, number][];
+            if (i === 0) {
+              allCoords.push(...segGeoCoords);
+            } else {
+              allCoords.push(...segGeoCoords.slice(1));
+            }
+            totalDistance += segResult.distanceMeters;
+            totalDuration += segResult.durationSeconds;
+          } else {
+            allSuccess = false;
+            break;
+          }
+        }
+
+        if (allSuccess && allCoords.length > 1) {
+          console.log(`[routing] OSRM success (${coordinates.length - 1} segments): distance=${Math.round(totalDistance)}m, duration=${Math.round(totalDuration)}s, points=${allCoords.length}`);
           const geojson = {
             type: "FeatureCollection",
             features: [{
               type: "Feature",
-              geometry: osrmResult.geometry,
+              geometry: {
+                type: "LineString",
+                coordinates: allCoords,
+              },
               properties: {
-                distance: osrmResult.distanceMeters,
-                time: osrmResult.durationSeconds,
+                distance: totalDistance,
+                time: totalDuration,
                 source: "osrm",
               },
             }],
           };
           return res.json(geojson);
         }
-        console.warn("[routing] OSRM returned no geometry, falling back to Geoapify");
+        console.warn("[routing] OSRM segment routing incomplete, falling back to Geoapify");
       } catch (err) {
         console.warn("[routing] OSRM failed, falling back to Geoapify:", err instanceof Error ? err.message : err);
       }
