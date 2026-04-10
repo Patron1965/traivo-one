@@ -192,7 +192,7 @@ export async function registerRoutes(
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
-      const [orderStats] = await db.execute(sql`
+      const orderResult = await db.execute(sql`
         SELECT
           COUNT(*) FILTER (WHERE order_status IN ('utford', 'fakturerad')) AS completed,
           COUNT(*) FILTER (WHERE order_status NOT IN ('utford', 'fakturerad', 'omojlig')) AS pending,
@@ -202,19 +202,23 @@ export async function registerRoutes(
           COUNT(*) AS total
         FROM work_orders WHERE tenant_id = ${tenantId}
       `);
-      const [customerStats] = await db.execute(sql`
+      const customerResult = await db.execute(sql`
         SELECT COUNT(*) AS total FROM customers WHERE tenant_id = ${tenantId}
       `);
-      const [resourceStats] = await db.execute(sql`
+      const resourceResult = await db.execute(sql`
         SELECT COUNT(*) FILTER (WHERE status = 'active') AS active FROM resources WHERE tenant_id = ${tenantId}
       `);
-      const [clusterStats] = await db.execute(sql`
+      const clusterResult = await db.execute(sql`
         SELECT COUNT(*) FILTER (WHERE status = 'active') AS active FROM clusters WHERE tenant_id = ${tenantId}
       `);
-      const stats = orderStats as Record<string, string | number | null>;
-      const custStats = customerStats as Record<string, string | number | null>;
-      const resStats = resourceStats as Record<string, string | number | null>;
-      const cluStats = clusterStats as Record<string, string | number | null>;
+      const getRow = (result: any) => {
+        const rows = Array.isArray(result) ? result : result?.rows;
+        return (Array.isArray(rows) ? rows[0] : result) || {};
+      };
+      const stats = getRow(orderResult) as Record<string, string | number | null>;
+      const custStats = getRow(customerResult) as Record<string, string | number | null>;
+      const resStats = getRow(resourceResult) as Record<string, string | number | null>;
+      const cluStats = getRow(clusterResult) as Record<string, string | number | null>;
       res.json({
         completedOrders: Number(stats.completed || 0),
         pendingOrders: Number(stats.pending || 0),
@@ -240,7 +244,7 @@ export async function registerRoutes(
       const startOfToday = new Date(todayStr + "T00:00:00.000Z");
       const endOfToday = new Date(todayStr + "T23:59:59.999Z");
 
-      const [overdueRows] = await db.execute(sql`
+      const overdueResult = await db.execute(sql`
         SELECT id, title, scheduled_date, resource_id, object_id, order_status
         FROM work_orders
         WHERE tenant_id = ${tenantId}
@@ -251,13 +255,14 @@ export async function registerRoutes(
         ORDER BY scheduled_date ASC
         LIMIT 20
       `);
+      const overdueRows = Array.isArray(overdueResult) ? overdueResult : (overdueResult as any)?.rows || [];
 
       const activeResources = await storage.getResources(tenantId);
       const activeResourceIds = activeResources.filter(r => r.status === "active").map(r => r.id);
 
       let idleResources: { id: string; name: string }[] = [];
       if (activeResourceIds.length > 0) {
-        const [busyRows] = await db.execute(sql`
+        const busyResult = await db.execute(sql`
           SELECT DISTINCT resource_id
           FROM work_orders
           WHERE tenant_id = ${tenantId}
@@ -267,17 +272,16 @@ export async function registerRoutes(
             AND order_status NOT IN ('utford', 'fakturerad', 'omojlig')
             AND deleted_at IS NULL
         `);
+        const busyRows = Array.isArray(busyResult) ? busyResult : (busyResult as any)?.rows || [];
         const busyIds = new Set(
-          Array.isArray(busyRows)
-            ? (busyRows as any[]).map((r: any) => r.resource_id)
-            : [(busyRows as any)?.resource_id].filter(Boolean)
+          (busyRows as any[]).map((r: any) => r.resource_id).filter(Boolean)
         );
         idleResources = activeResources
           .filter(r => r.status === "active" && !busyIds.has(r.id))
           .map(r => ({ id: r.id, name: r.name }));
       }
 
-      const [collisionRows] = await db.execute(sql`
+      const collisionResult = await db.execute(sql`
         SELECT a.id AS order_a_id, a.title AS order_a_title,
                a.scheduled_start_time AS start_a, a.estimated_duration AS duration_a,
                b.id AS order_b_id, b.title AS order_b_title,
@@ -299,12 +303,13 @@ export async function registerRoutes(
           AND b.deleted_at IS NULL
         LIMIT 50
       `);
+      const collisionRows = Array.isArray(collisionResult) ? collisionResult : (collisionResult as any)?.rows || [];
 
       const parseTime = (t: string) => {
         const [h, m] = t.split(":").map(Number);
         return h * 60 + (m || 0);
       };
-      const collisionList = Array.isArray(collisionRows) ? collisionRows as any[] : collisionRows ? [collisionRows] : [];
+      const collisionList = collisionRows as any[];
       const doubleBookings: any[] = [];
       for (const row of collisionList) {
         if (!row.start_a || !row.start_b) continue;
@@ -323,7 +328,7 @@ export async function registerRoutes(
         }
       }
 
-      const overdueList = Array.isArray(overdueRows) ? overdueRows as any[] : overdueRows ? [overdueRows] : [];
+      const overdueList = overdueRows as any[];
       const overdueAlerts = overdueList.map((r: any) => ({
         id: r.id,
         title: r.title || `Order ${(r.id || "").slice(0, 8)}`,
@@ -355,7 +360,7 @@ export async function registerRoutes(
       const activeResources = await storage.getResources(tenantId);
       const active = activeResources.filter(r => r.status === "active");
 
-      const [orderRows] = await db.execute(sql`
+      const orderResult = await db.execute(sql`
         SELECT resource_id, 
                COALESCE(SUM(estimated_duration), 0) AS booked_minutes
         FROM work_orders
@@ -367,9 +372,10 @@ export async function registerRoutes(
           AND deleted_at IS NULL
         GROUP BY resource_id
       `);
+      const orderRows = Array.isArray(orderResult) ? orderResult : (orderResult as any)?.rows || [];
 
       const bookedMap = new Map<string, number>();
-      const rowList = Array.isArray(orderRows) ? orderRows as any[] : orderRows ? [orderRows] : [];
+      const rowList = orderRows as any[];
       for (const row of rowList) {
         if (row.resource_id) {
           bookedMap.set(row.resource_id, Number(row.booked_minutes || 0));
