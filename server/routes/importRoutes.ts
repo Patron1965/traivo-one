@@ -344,6 +344,38 @@ app.post("/api/routes/directions", asyncHandler(async (req, res) => {
       throw new ValidationError("At least 2 coordinates required");
     }
 
+    const { osrmRouteMulti, isOSRMEnabled } = await import("../osrm-client");
+
+    if (isOSRMEnabled()) {
+      try {
+        console.log(`[routing] Trying OSRM route with ${coordinates.length} waypoints`);
+        const osrmResult = await osrmRouteMulti(
+          coordinates as [number, number][],
+          { overview: "full", geometries: "geojson" }
+        );
+
+        if (osrmResult?.geometry) {
+          console.log(`[routing] OSRM success: distance=${Math.round(osrmResult.distanceMeters)}m, duration=${Math.round(osrmResult.durationSeconds)}s`);
+          const geojson = {
+            type: "FeatureCollection",
+            features: [{
+              type: "Feature",
+              geometry: osrmResult.geometry,
+              properties: {
+                distance: osrmResult.distanceMeters,
+                time: osrmResult.durationSeconds,
+                source: "osrm",
+              },
+            }],
+          };
+          return res.json(geojson);
+        }
+        console.warn("[routing] OSRM returned no geometry, falling back to Geoapify");
+      } catch (err) {
+        console.warn("[routing] OSRM failed, falling back to Geoapify:", err instanceof Error ? err.message : err);
+      }
+    }
+
     const apiKey = process.env.GEOAPIFY_API_KEY;
     if (!apiKey) {
       return res.status(500).json({ error: "Geoapify API-nyckel saknas. Konfigurera den i inställningarna." });

@@ -222,6 +222,50 @@ export async function osrmRoute(
   }
 }
 
+export async function osrmRouteMulti(
+  coordinates: [number, number][],
+  options?: { overview?: "full" | "simplified" | "false"; geometries?: "geojson" | "polyline" },
+): Promise<{
+  distanceMeters: number;
+  durationSeconds: number;
+  geometry?: any;
+} | null> {
+  if (!OSRM_ENABLED || coordinates.length < 2) return null;
+
+  const overview = options?.overview ?? "full";
+  const geometries = options?.geometries ?? "geojson";
+  const coordStr = coordinates.map(([lng, lat]) => `${lng},${lat}`).join(";");
+  const url = `${OSRM_BASE_URL}/route/v1/${OSRM_PROFILE}/${coordStr}?overview=${overview}&geometries=${geometries}`;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), OSRM_TIMEOUT);
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      _consecutiveFailures++;
+      console.warn(`[OSRM] Route multi API error: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.code !== "Ok" || !data.routes || data.routes.length === 0) return null;
+
+    _consecutiveFailures = 0;
+    const route = data.routes[0];
+    return {
+      distanceMeters: route.distance,
+      durationSeconds: route.duration,
+      geometry: route.geometry,
+    };
+  } catch (err) {
+    _consecutiveFailures++;
+    console.warn("[OSRM] Route multi API fetch failed:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 export function getOSRMStatus(): {
   enabled: boolean;
   baseUrl: string;
