@@ -222,24 +222,38 @@ function StatCard({
   href: string;
   variant?: "default" | "warning" | "success";
 }) {
-  const bgClass = variant === "warning" 
-    ? "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800" 
-    : variant === "success" 
-    ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800"
-    : "";
+  const styleMap = {
+    warning: {
+      card: "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800",
+      iconBg: "bg-amber-100 dark:bg-amber-900/40",
+      iconColor: "text-amber-600 dark:text-amber-400",
+    },
+    success: {
+      card: "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800",
+      iconBg: "bg-emerald-100 dark:bg-emerald-900/40",
+      iconColor: "text-emerald-600 dark:text-emerald-400",
+    },
+    default: {
+      card: "",
+      iconBg: "bg-sky-50 dark:bg-sky-900/30",
+      iconColor: "text-sky-600 dark:text-sky-400",
+    },
+  };
+
+  const s = styleMap[variant];
   
   return (
     <Link href={href}>
-      <Card className={`hover-elevate cursor-pointer transition-all ${bgClass}`} data-testid={`card-stat-${title.toLowerCase().replace(/\s/g, '-')}`}>
+      <Card className={`hover-elevate cursor-pointer transition-all ${s.card}`} data-testid={`card-stat-${title.toLowerCase().replace(/\s/g, '-')}`}>
         <CardContent className="p-6">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
-              <p className="text-sm text-muted-foreground">{title}</p>
+              <p className="text-sm font-medium text-muted-foreground">{title}</p>
               <p className="text-3xl font-bold mt-1">{value}</p>
               <p className="text-sm text-muted-foreground mt-2">{description}</p>
             </div>
-            <div className="p-3 rounded-lg bg-muted/50">
-              <Icon className="h-6 w-6 text-muted-foreground" />
+            <div className={`p-3 rounded-xl ${s.iconBg}`}>
+              <Icon className={`h-6 w-6 ${s.iconColor}`} />
             </div>
           </div>
         </CardContent>
@@ -319,7 +333,9 @@ function RecentPages() {
     <Card className="mb-8">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <History className="h-4 w-4 text-muted-foreground" />
+          <div className="p-1 rounded-md bg-indigo-100 dark:bg-indigo-900/30">
+            <History className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+          </div>
           Senast besökta
         </CardTitle>
       </CardHeader>
@@ -370,7 +386,9 @@ function RecentChanges({ orders }: { orders: WorkOrder[] }) {
           <CardHeader className="pb-3 cursor-pointer hover:bg-muted/30 transition-colors rounded-t-lg">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base">
-                <Activity className="h-4 w-4 text-muted-foreground" />
+                <div className="p-1 rounded-md bg-orange-100 dark:bg-orange-900/30">
+                  <Activity className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
+                </div>
                 Senaste aktivitet
                 <span className="text-xs font-normal text-muted-foreground">({recentlyChanged.length})</span>
               </CardTitle>
@@ -419,12 +437,12 @@ function DailyProgress({ orders }: { orders: WorkOrder[] }) {
   if (total === 0) return null;
 
   return (
-    <Card className="mb-8 bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
+    <Card className="mb-8 bg-gradient-to-r from-[#1B4B6B]/5 via-[#4A9B9B]/5 to-[#7DBFB0]/8 dark:from-[#1B4B6B]/15 dark:via-[#4A9B9B]/10 dark:to-[#7DBFB0]/15 border-[#4A9B9B]/20 dark:border-[#4A9B9B]/30">
       <CardContent className="py-6">
         <div className="flex items-center justify-between gap-4 mb-3">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <CheckCircle2 className="h-5 w-5 text-primary" />
+            <div className="p-2 rounded-lg bg-[#4A9B9B]/15 dark:bg-[#4A9B9B]/25">
+              <CheckCircle2 className="h-5 w-5 text-[#1B4B6B] dark:text-[#7DBFB0]" />
             </div>
             <div>
               <p className="font-semibold">Dagens framsteg</p>
@@ -433,7 +451,7 @@ function DailyProgress({ orders }: { orders: WorkOrder[] }) {
               </p>
             </div>
           </div>
-          <div className="text-3xl font-bold text-primary">{percentage}%</div>
+          <div className="text-3xl font-bold text-[#1B4B6B] dark:text-[#7DBFB0]">{percentage}%</div>
         </div>
         <Progress value={percentage} className="h-2" />
         {percentage === 100 && (
@@ -484,7 +502,7 @@ function TodaysOrdersList({
         return (
           <div
             key={order.id}
-            className="flex items-center gap-4 p-4 rounded-lg bg-muted/30 hover-elevate"
+            className="flex items-center gap-4 p-4 rounded-lg bg-muted/30 dark:bg-muted/20 border border-transparent hover:border-[#4A9B9B]/20 dark:hover:border-[#4A9B9B]/30 hover-elevate transition-colors"
             data-testid={`order-item-${order.id}`}
           >
             <div className="flex-1 min-w-0">
@@ -576,41 +594,43 @@ export default function MyTasksPage() {
 
   return (
     <div className="p-6 space-y-6">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <p className="text-muted-foreground text-sm mb-1">
-              {format(today, "EEEE d MMMM yyyy", { locale: dateLocale })}
-            </p>
-            {ordersLoading ? (
-              <>
-                <Skeleton className="h-9 w-64 mb-2" />
-                <Skeleton className="h-5 w-48" />
-              </>
-            ) : (
-              <>
-                <h1 className="text-2xl font-semibold" data-testid="page-title">
-                  {todaysOrders.length > 0 
-                    ? `${todaysOrders.length} ${tl("page.today.jobs")}`
-                    : tl("page.today.no-jobs")
-                  }
-                </h1>
-                <p className="text-muted-foreground mt-2">
-                  {todaysOrders.length > 0 
-                    ? `${todaysOrders.filter(o => o.orderStatus === "utford").length} ${tl("page.today.completed")}, ${todaysOrders.filter(o => o.orderStatus !== "utford").length} ${tl("page.today.remaining")}`
-                    : tl("page.today.plan-new")
-                  }
-                </p>
-              </>
-            )}
+        <div className="rounded-xl bg-gradient-to-r from-[#1B4B6B]/8 via-[#4A9B9B]/6 to-[#7DBFB0]/8 dark:from-[#1B4B6B]/20 dark:via-[#4A9B9B]/15 dark:to-[#7DBFB0]/20 border border-[#1B4B6B]/10 dark:border-[#4A9B9B]/20 p-6 -mx-0">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-sm font-medium text-[#1B4B6B]/70 dark:text-[#7DBFB0]/80 mb-1">
+                {format(today, "EEEE d MMMM yyyy", { locale: dateLocale })}
+              </p>
+              {ordersLoading ? (
+                <>
+                  <Skeleton className="h-9 w-64 mb-2" />
+                  <Skeleton className="h-5 w-48" />
+                </>
+              ) : (
+                <>
+                  <h1 className="text-2xl font-semibold text-foreground" data-testid="page-title">
+                    {todaysOrders.length > 0 
+                      ? `${todaysOrders.length} ${tl("page.today.jobs")}`
+                      : tl("page.today.no-jobs")
+                    }
+                  </h1>
+                  <p className="text-muted-foreground mt-2">
+                    {todaysOrders.length > 0 
+                      ? `${todaysOrders.filter(o => o.orderStatus === "utford").length} ${tl("page.today.completed")}, ${todaysOrders.filter(o => o.orderStatus !== "utford").length} ${tl("page.today.remaining")}`
+                      : tl("page.today.plan-new")
+                    }
+                  </p>
+                </>
+              )}
+            </div>
+            <Button 
+              onClick={() => setAiPanelOpen(true)}
+              className="bg-[#1B4B6B] hover:bg-[#1B4B6B]/90 dark:bg-[#4A9B9B] dark:hover:bg-[#4A9B9B]/90 text-white shadow-sm"
+              data-testid="button-open-ai-assistant"
+            >
+              <MessageCircle className="h-4 w-4 mr-2" />
+              {tl("page.today.ask-ai")}
+            </Button>
           </div>
-          <Button 
-            onClick={() => setAiPanelOpen(true)}
-            className="bg-purple-600 hover:bg-purple-700 text-white"
-            data-testid="button-open-ai-assistant"
-          >
-            <MessageCircle className="h-4 w-4 mr-2" />
-            {tl("page.today.ask-ai")}
-          </Button>
         </div>
 
         <OnboardingGuide />
@@ -689,11 +709,13 @@ export default function MyTasksPage() {
         </div>
 
         {/* Dagens jobb - huvudfokus */}
-        <Card className="mb-6">
+        <Card className="mb-6 border-l-4 border-l-[#1B4B6B] dark:border-l-[#4A9B9B]">
           <CardHeader className="flex flex-row items-center justify-between gap-4 pb-4">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-primary" />
+                <div className="p-1.5 rounded-lg bg-[#1B4B6B]/10 dark:bg-[#4A9B9B]/20">
+                  <Calendar className="h-4 w-4 text-[#1B4B6B] dark:text-[#4A9B9B]" />
+                </div>
                 {tl("page.today.todays-jobs")}
               </CardTitle>
               <CardDescription>
