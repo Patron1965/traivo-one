@@ -169,6 +169,11 @@ function NavDropdown({ label, items, icon: Icon, colorClass, badges, isFavorite,
                 <div className="flex items-center gap-1.5 mt-0.5">
                   {badgeCount > 0 && <DropdownBadge count={badgeCount} />}
                   <button
+                    tabIndex={-1}
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -246,6 +251,11 @@ function FavoritesDropdown({ allItems, badges, favorites, toggleFavorite }: Favo
                 <span className="flex-1 font-medium">{item.title}</span>
                 {badgeCount > 0 && <DropdownBadge count={badgeCount} />}
                 <button
+                  tabIndex={-1}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
