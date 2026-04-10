@@ -501,6 +501,12 @@ export function usePlannerData() {
 
   const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
   const lastSelectedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setSelectedJobIds(new Set());
+    lastSelectedRef.current = null;
+  }, [viewMode, currentDate, currentWeekStart]);
+
   const toggleJobSelection = useCallback((jobId: string, shiftKey = false) => {
     setSelectedJobIds(prev => {
       const next = new Set(prev);
