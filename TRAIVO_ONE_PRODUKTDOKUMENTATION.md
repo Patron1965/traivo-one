@@ -38,7 +38,7 @@
 
 Traivo One är ett **enterprise-fältsystem** byggt för att ge små, medelstora och stora bolag ett komplett verktyg för fältverksamhet. Systemet hanterar hela kedjan från planering och ruttoptimering till fältexekvering, uppföljning och kundkommunikation.
 
-Traivo One har växt långt bortom en enkel ruttplanerare. Systemet innehåller idag en **dedikerad Python OR-Tools-optimeringstjänst** med CVRPTW och ALNS-metaheuristik, 132 databastabeller, 800+ API-endpoints, AI-integrationer, kundportal, IoT-integration, fakturering med Fortnox-export, och en komplett fältapp.
+Traivo One har växt långt bortom en enkel ruttplanerare. Systemet innehåller idag en **dedikerad Python OR-Tools-optimeringstjänst** med CVRPTW och ALNS-metaheuristik, 131 databastabeller, 800+ API-endpoints, AI-integrationer, kundportal, IoT-integration, fakturering med Fortnox-export, och en komplett fältapp.
 
 ### Kärnlöfte
 
@@ -131,14 +131,14 @@ Traivo One är ett **komplett digitalt ekosystem för fältverksamhet** som hant
 | **AI-planering** | AI Planning Assistant, Auto-Scheduling, Conversational Planner, AI Command Center | Implementerad |
 | **Fakturering** | Fakturaunderlag, prisliste- och artikelhantering, Fortnox-export | Implementerad |
 | **IoT-integration** | Sensorsignaler, automatisk ordergenerering, enhetshantering | Implementerad |
-| **Multi-tenant** | Full tenant-isolering, rollbaserad åtkomst (9 roller), feature-flaggor | Implementerad |
+| **Multi-tenant** | Full tenant-isolering, rollbaserad åtkomst (8 roller), feature-flaggor | Implementerad |
 | **Integrationsplattform** | REST API (800+ endpoints), MCP-server, Fortnox, IoT | Implementerad |
 
 ### 2.3 Varför är Traivo One "Enterprise-nivå"?
 
 1. **Full multi-tenant-arkitektur** — Varje tenant har isolerad data, konfiguration och feature-flaggor
-2. **9 roller** — owner, admin, planner, technician, user, viewer, customer, reporter + module guards
-3. **132 databastabeller** — Komplett datamodell för hela fältverksamheten
+2. **8 roller** — owner, admin, planner, technician, user, viewer, customer, reporter — med module guards
+3. **131 databastabeller** — Komplett datamodell för hela fältverksamheten
 4. **AI-integration** — OpenAI för planering, auto-scheduling, konversation, analys
 5. **VRP med constraints** — Tidsfönster, kompetenskrav, kapacitet, beroenden
 6. **Prediktiv analys** — Prognoser, anomalier, trender
@@ -192,7 +192,7 @@ Traivo One riktar sig till **nordiska avfallshanteringsbolag och fältservicefö
 | **Logistik & Distribution** | 5–30 fordon | Dagliga leveranser, ruttoptimering | Distributörer |
 | **Enterprise med fältpersonal** | 20–200+ användare | Komplex fältverksamhet | Stora servicebolag |
 
-### Användarroller (implementerade)
+### Användarroller (8 roller, implementerade i `server/routes.ts`)
 
 | Roll | Beskrivning | Primära uppgifter |
 |------|-------------|-------------------|
@@ -491,9 +491,9 @@ ASYNC_THRESHOLD = 30 ordrar
 
 ## 8. Datamodell
 
-### 8.1 Översikt — 132 tabeller
+### 8.1 Översikt — 131 tabeller
 
-Traivo One använder **132 PostgreSQL-tabeller** via Drizzle ORM. Här är de viktigaste grupperade per domän:
+Traivo One använder **131 PostgreSQL-tabeller** (definierade via `pgTable()` i `shared/schema.ts`) med Drizzle ORM. Här är de viktigaste grupperade per domän:
 
 #### Kärntabeller (multi-tenant)
 
@@ -684,42 +684,71 @@ GET  /api/nav-badges                  Navigations-badges (oplanerade, olästa)
 
 #### VRP-optimering
 ```
-POST /api/optimize/vrp                OR-Tools CVRPTW + ALNS
-GET  /api/optimize/status/:jobId      Status för asynkrona jobb
-POST /api/optimize/simulate           Simulering utan att spara
+POST /api/ai/optimize-vrp             OR-Tools CVRPTW + ALNS (synkron/asynkron)
+POST /api/ai/optimize-vrp/apply       Applicera optimeringsresultat
+GET  /api/ai/optimization-job/:jobId  Status för asynkrona jobb
+POST /api/optimization/jobs           Starta optimeringsjobb
+GET  /api/optimization/jobs/:id/status  Hämta jobbstatus
+GET  /api/optimization/jobs/:id/result  Hämta jobbresultat
+POST /api/optimization/apply/:id      Applicera jobbresultat
 POST /api/route-geometry              Ruttgeometri via Geoapify
+POST /api/ai/optimize-routes          Ruttoptimering (NN-baserad)
 ```
 
 #### AI-planering
 ```
-POST /api/ai/plan                     AI-planeringsförslag
 POST /api/ai/auto-schedule            Automatisk schemaläggning
-POST /api/ai/conversation             Konversations-AI
-POST /api/ai/analyze                  AI-analys av data
+POST /api/ai/auto-schedule/apply      Applicera auto-schema
+POST /api/ai/planning-suggestions     AI-planeringsförslag
+GET  /api/ai/planning-analysis        Planeringsanalys
+POST /api/ai/planner-chat             Konversations-AI för planering
+POST /api/ai/planner-chat/execute     Exekvera AI-åtgärd
+POST /api/ai/workload-analysis        Arbetsbelastningsanalys
+POST /api/ai/field-assistant          Fält-AI-assistent
+POST /api/ai/explain-anomaly          Förklara anomali
+GET  /api/ai/route-recommendations    Ruttrekommendationer
+GET  /api/ai/proactive-tips           Proaktiva tips
 ```
 
-#### Mobil fältapp
+#### Mobil fältapp (100+ endpoints)
 ```
-GET  /api/mobile/day-orders           Dagens ordrar för resurs
-POST /api/mobile/update-status        Uppdatera orderstatus
+POST /api/mobile/login                Fältinloggning
+GET  /api/mobile/my-orders            Dagens ordrar för resurs
+GET  /api/mobile/orders/:id           Hämta specifik order
+PATCH /api/mobile/orders/:id/status   Uppdatera orderstatus
 POST /api/mobile/gps                  Rapportera GPS-position
-POST /api/mobile/work-session         Start/stopp arbetspass
-GET  /api/mobile/next-stop            Nästa stopp med navigation
+POST /api/mobile/work-sessions/start  Starta arbetspass
+PATCH /api/mobile/work-sessions/:id/stop  Stoppa arbetspass
+POST /api/mobile/orders/:id/signature Sparar signatur
+POST /api/mobile/orders/:id/materials Registrera materialförbrukning
+POST /api/mobile/orders/:id/photos    Ladda upp foto
+GET  /api/mobile/route-optimized      Optimerad rutt för dagen
+GET  /api/mobile/statistics           Fältstatistik
+POST /api/mobile/ai/chat              AI-assistent i fält
+POST /api/mobile/ai/transcribe        Röst-till-text
+POST /api/mobile/ai/analyze-image     Bildanalys
+POST /api/mobile/sync                 Offline-synk
 ```
 
 #### Kundportal
 ```
-GET  /api/portal/my-objects           Kundens objekt
-POST /api/portal/booking              Boka service
+POST /api/portal/auth/request-link    Begär inloggningslänk
+POST /api/portal/auth/verify          Verifiera token
+GET  /api/portal/me                   Portalanvändarens profil
+GET  /api/portal/objects              Kundens objekt
+GET  /api/portal/orders               Kundens ordrar
+POST /api/portal/booking-requests     Boka service
 GET  /api/portal/messages             Portal-meddelanden
-POST /api/portal/issue-report         Felanmälan
+POST /api/portal/messages             Skicka meddelande
+POST /api/portal/issue-reports        Felanmälan
+GET  /api/portal/invoices             Kundens fakturor
+GET  /api/portal/service-contracts    Serviceavtal
 ```
 
 #### IoT
 ```
 POST /api/iot/signals                 Ta emot sensorsignaler
 GET  /api/iot/devices                 Lista IoT-enheter
-POST /api/iot/auto-generate           Automatisk ordergenerering
 ```
 
 ---
@@ -854,13 +883,13 @@ OR-Tools-optimeringstjänsten (`optimization-service/`) körs som en **separat P
 
 ### Implementerat (Nuvarande kodbasen)
 
-Alla 40 features från den ursprungliga roadmapen är **implementerade**, plus ytterligare 30+:
+Majoriteten av de ursprungliga 40 roadmap-features har implementerats, och systemet har utökats med ytterligare moduler:
 
-| # | Feature | Status |
+| # | Feature-grupp | Status |
 |---|---------|--------|
 | 1–15 | MVP-features (CRUD, geocoding, optimering, mobilvy, auth) | ✅ Implementerat |
 | 16–28 | Enterprise Fas 2 (import, CRM, inspektioner, rapporter, SMS) | ✅ Implementerat |
-| 29–40 | Enterprise Fas 3 (kundsparning, OSRM, AI, team, integrationer) | ✅ Implementerat |
+| 29–40 | Enterprise Fas 3 (OSRM, AI, team, integrationer) | ✅ Huvudsakligen implementerat |
 | 41+ | Utökade features (IoT, Fortnox, ALNS, prediktiv, disruption) | ✅ Implementerat |
 
 ### Framtida utvecklingsområden
@@ -959,9 +988,9 @@ traivo-one/
 
 ## 15. Utvecklingsplan
 
-### Status: Implementerat
+### Status
 
-Hela den ursprungliga utvecklingsplanen (Sprint 1–5+) är fullständigt implementerad. Systemet är i aktiv drift som funktionell prototyp med alla enterprise-features byggda.
+Den ursprungliga utvecklingsplanen (Sprint 1–5+) är till största delen genomförd. Systemet fungerar som en funktionell prototyp med de flesta enterprise-features implementerade i kodbasen.
 
 ### Pågående utveckling
 
@@ -997,7 +1026,7 @@ Hela den ursprungliga utvecklingsplanen (Sprint 1–5+) är fullständigt implem
 | **AI-integration** | ✅ OpenAI (planering, analys, konversation) | GNN, RL, Transformer-ETA |
 | **IoT** | ✅ Automatisk ordergenerering | Ej fokus |
 | **Fakturering** | ✅ Fortnox-export | Ej fokus |
-| **Datamodell** | 132 tabeller | 18+ tabeller (ruttfokuserade) |
+| **Datamodell** | 131 tabeller | 18+ tabeller (ruttfokuserade) |
 | **API:er** | 800+ endpoints | Ruttfokuserade endpoints |
 | **Kodstorlek** | ~130 000 rader | ~15 000+ rader |
 
