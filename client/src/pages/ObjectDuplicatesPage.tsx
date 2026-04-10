@@ -21,6 +21,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 interface DuplicateMember {
   id: string;
@@ -150,11 +151,13 @@ export default function ObjectDuplicatesPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
-        <div>
-          <h1 className="text-2xl font-semibold" data-testid="text-page-title">Dubbletthantering</h1>
-          <p className="text-sm text-muted-foreground">Hitta och slå ihop duplicerade objekt</p>
-        </div>
       </div>
+      <PageHeader
+        icon={Copy}
+        title="Dubbletthantering"
+        description="Hitta och slå ihop duplicerade objekt"
+        testId="text-page-title"
+      />
 
       {summaryLoading ? (
         <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>

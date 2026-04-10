@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useTerminology } from "@/hooks/use-terminology";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -456,47 +457,46 @@ export default function ArticlesPage() {
   return (
     <div className="h-full flex flex-col p-6">
       <div className="flex flex-col gap-4 mb-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold" data-testid="text-page-title">{t("article_plural")}</h1>
-            <div className="flex items-center gap-3 mt-1 flex-wrap">
-              <span className="text-sm text-muted-foreground">
-                Produkter och tjänster som kan läggas på ordrar
-              </span>
-              {quickStats.topTypes.map(([label, count]) => (
-                <Badge key={label} variant="secondary" className="text-xs font-normal" data-testid={`badge-stat-type-${label}`}>
-                  {count} {label}
-                </Badge>
-              ))}
-              {quickStats.activeCount > 0 && (
-                <Badge variant="outline" className="text-xs font-normal gap-1 text-green-600 border-green-300">
-                  <CircleCheck className="h-3 w-3" />
-                  {quickStats.activeCount} aktiva
-                </Badge>
-              )}
-              {quickStats.inactiveCount > 0 && (
-                <Badge variant="outline" className="text-xs font-normal gap-1 text-muted-foreground">
-                  <CircleX className="h-3 w-3" />
-                  {quickStats.inactiveCount} inaktiva
-                </Badge>
-              )}
-              {quickStats.withHook > 0 && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge variant="outline" className="text-xs font-normal gap-1 cursor-help">
-                      <Link className="h-3 w-3" />
-                      {quickStats.withHook} med fasthakning
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>Artiklar kopplade till en hierarkinivå</TooltipContent>
-                </Tooltip>
-              )}
-            </div>
-          </div>
+        <PageHeader
+          icon={Package}
+          title={t("article_plural")}
+          description="Produkter och tjänster som kan läggas på ordrar"
+          testId="text-page-title"
+        >
           <Button onClick={openCreateDialog} data-testid="button-create-article">
             <Plus className="h-4 w-4 mr-2" />
             Ny artikel
           </Button>
+        </PageHeader>
+        <div className="flex items-center gap-3 flex-wrap">
+          {quickStats.topTypes.map(([label, count]) => (
+            <Badge key={label} variant="secondary" className="text-xs font-normal" data-testid={`badge-stat-type-${label}`}>
+              {count} {label}
+            </Badge>
+          ))}
+          {quickStats.activeCount > 0 && (
+            <Badge variant="outline" className="text-xs font-normal gap-1 text-green-600 border-green-300">
+              <CircleCheck className="h-3 w-3" />
+              {quickStats.activeCount} aktiva
+            </Badge>
+          )}
+          {quickStats.inactiveCount > 0 && (
+            <Badge variant="outline" className="text-xs font-normal gap-1 text-muted-foreground">
+              <CircleX className="h-3 w-3" />
+              {quickStats.inactiveCount} inaktiva
+            </Badge>
+          )}
+          {quickStats.withHook > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="text-xs font-normal gap-1 cursor-help">
+                  <Link className="h-3 w-3" />
+                  {quickStats.withHook} med fasthakning
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>Artiklar kopplade till en hierarkinivå</TooltipContent>
+            </Tooltip>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">

@@ -12,6 +12,7 @@ import { MessageSquare, Settings, Send, AlertCircle, CheckCircle2, Loader2, Exte
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { PageHelp } from "@/components/ui/help-tooltip";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 interface SmsConfig {
   smsEnabled: boolean;
@@ -105,19 +106,17 @@ export default function SmsSettingsPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="p-6 max-w-4xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <MessageSquare className="h-8 w-8 text-primary" />
-            <div>
-              <h1 className="text-2xl font-bold" data-testid="text-page-title">SMS-inställningar</h1>
-              <p className="text-muted-foreground">Konfigurera SMS-notifikationer för dina kunder</p>
-            </div>
-          </div>
+        <PageHeader
+          icon={MessageSquare}
+          title="SMS-inställningar"
+          description="Konfigurera SMS-notifikationer för dina kunder"
+          testId="text-page-title"
+        >
           <PageHelp
             title="SMS-inställningar"
             description="Här konfigurerar du SMS-notifikationer för att skicka meddelanden till dina kunder. Du kan aktivera SMS-funktionen, välja leverantör och testa att det fungerar."
           />
-        </div>
+        </PageHeader>
 
         <Card>
           <CardHeader>

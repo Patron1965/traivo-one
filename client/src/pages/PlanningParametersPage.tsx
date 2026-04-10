@@ -41,7 +41,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, Pencil, Settings2, Clock, CalendarDays, Bell, Star } from "lucide-react";
+import { Loader2, Plus, Trash2, Pencil, Settings2, Clock, CalendarDays, Bell, Star, Sliders } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { insertPlanningParameterSchema, type PlanningParameter, type Customer, type ServiceObject } from "@shared/schema";
@@ -255,16 +256,12 @@ export default function PlanningParametersPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold">Produktionsstyrning</h1>
-          <p className="text-muted-foreground">SLA-nivåer, tidsfönster och planeringsbegränsningar</p>
-        </div>
+      <PageHeader icon={Sliders} title="Produktionsstyrning" description="SLA-nivåer, tidsfönster och planeringsbegränsningar">
         <Button onClick={openCreateDialog} className="gap-2" data-testid="button-new-parameter">
           <Plus className="h-4 w-4" />
           Ny parameter
         </Button>
-      </div>
+      </PageHeader>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {parameters.map((param) => {

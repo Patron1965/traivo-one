@@ -65,6 +65,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { AICard } from "@/components/AICard";
 import { EmptyState } from "@/components/EmptyState";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -583,29 +584,21 @@ export default function ResourcesPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold">{t("resource_plural")}</h1>
-          <div className="flex items-center gap-3 mt-1 flex-wrap">
-            <span className="text-sm text-muted-foreground">{resources.length} tekniker registrerade</span>
-            <Badge variant="secondary" className="text-xs font-normal gap-1">
-              <CircleCheck className="h-3 w-3 text-green-600 dark:text-green-400" />
-              {teamStats.availableToday} tillgängliga idag
-            </Badge>
-            <Badge variant="outline" className="text-xs font-normal gap-1">
-              <TrendingUp className="h-3 w-3" />
-              {teamStats.totalWorkloadHours} av {teamStats.totalWeeklyHours}h planerat ({teamStats.teamUtilization}%)
-            </Badge>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <ShareFieldAppButton />
-          <Button onClick={openCreateDialog} data-testid="button-add-resource">
-            <Plus className="h-4 w-4 mr-2" />
-            Lägg till resurs
-          </Button>
-        </div>
-      </div>
+      <PageHeader icon={Users} title={t("resource_plural")} description={`${resources.length} tekniker registrerade`}>
+        <Badge variant="secondary" className="text-xs font-normal gap-1">
+          <CircleCheck className="h-3 w-3 text-green-600 dark:text-green-400" />
+          {teamStats.availableToday} tillgängliga idag
+        </Badge>
+        <Badge variant="outline" className="text-xs font-normal gap-1">
+          <TrendingUp className="h-3 w-3" />
+          {teamStats.totalWorkloadHours} av {teamStats.totalWeeklyHours}h planerat ({teamStats.teamUtilization}%)
+        </Badge>
+        <ShareFieldAppButton />
+        <Button onClick={openCreateDialog} data-testid="button-add-resource">
+          <Plus className="h-4 w-4 mr-2" />
+          Lägg till resurs
+        </Button>
+      </PageHeader>
 
       <AICard
         title="AI Resursanalys"

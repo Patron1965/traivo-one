@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { PageHeader } from "@/components/layout/PageHeader";
 import type { PriceList, Customer } from "@shared/schema";
 
 const priceListTypeOptions = [
@@ -219,18 +220,17 @@ export default function PriceListsPage() {
   return (
     <div className="h-full flex flex-col p-6">
       <div className="flex flex-col gap-4 mb-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold" data-testid="text-page-title">Prislistor</h1>
-            <p className="text-muted-foreground">
-              Hantera prislistor och kundpriser
-            </p>
-          </div>
+        <PageHeader
+          icon={DollarSign}
+          title="Prislistor"
+          description="Hantera prislistor och kundpriser"
+          testId="text-page-title"
+        >
           <Button onClick={openCreateDialog} data-testid="button-create-price-list">
             <Plus className="h-4 w-4 mr-2" />
             Ny prislista
           </Button>
-        </div>
+        </PageHeader>
 
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-[400px]">

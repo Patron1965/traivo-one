@@ -19,6 +19,7 @@ import {
   ArrowRight, Info, Settings, ChevronDown, ChevronUp, ListChecks, History, Undo2,
   SkipForward, Ban, BarChart3, ClipboardList, Tag, AlertTriangle, Merge, Copy
 } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ImportSummaryView } from "@/components/ImportSummaryView";
 import { ImportHealthOverview } from "@/components/ImportHealthOverview";
@@ -1339,10 +1340,7 @@ export default function ImportPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold" data-testid="text-import-title">{tl("page.import.title")}</h1>
-        <p className="text-muted-foreground">{tl("page.import.description")}</p>
-      </div>
+      <PageHeader icon={Upload} title={tl("page.import.title")} description={tl("page.import.description")} testId="text-import-title" />
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "modus" | "manual" | "mapped" | "history" | "quality")}>
         <TabsList className="grid w-full grid-cols-5">

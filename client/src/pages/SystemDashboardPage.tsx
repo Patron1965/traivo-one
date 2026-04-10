@@ -37,9 +37,11 @@ import {
   Eye,
   EyeOff,
   ImageIcon,
-  X
+  X,
+  Activity
 } from "lucide-react";
 import { useUpload } from "@/hooks/use-upload";
+import { PageHeader } from "@/components/layout/PageHeader";
 import type { BrandingTemplate, TenantBranding, UserTenantRole, AuditLog } from "@shared/schema";
 
 const AVAILABLE_MODULES = [
@@ -1170,13 +1172,8 @@ function AuditLogsTab() {
 
 export default function SystemDashboardPage() {
   return (
-    <div className="container mx-auto p-6 max-w-6xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">System Dashboard</h1>
-        <p className="text-muted-foreground">
-          Konfigurera varumärke, hantera användare och granska aktivitetsloggar
-        </p>
-      </div>
+    <div className="container mx-auto p-6 max-w-6xl space-y-6">
+      <PageHeader icon={Activity} title="System Dashboard" description="Konfigurera varumärke, hantera användare och granska aktivitetsloggar" testId="text-page-title" />
 
       <Tabs defaultValue="branding" className="space-y-6">
         <TabsList data-testid="tabs-system-dashboard">

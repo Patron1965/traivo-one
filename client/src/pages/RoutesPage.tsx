@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Loader2, Sparkles, TrendingUp, Clock, MapPin, Route as RouteIcon, Truck, AlertCircle, AlertTriangle, Check, Map, CloudRain, Wind, Thermometer, Monitor } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -229,61 +230,57 @@ export default function RoutesPage() {
 
   return (
     <div className="h-full p-6 flex flex-col gap-4 overflow-auto">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-semibold">Ruttplanering</h1>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="w-[150px] h-9"
-            data-testid="input-vrp-date"
-          />
-          <Select value={selectedCluster} onValueChange={setSelectedCluster}>
-            <SelectTrigger className="w-[160px] h-9" data-testid="select-vrp-cluster">
-              <SelectValue placeholder="Alla kluster" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Alla kluster</SelectItem>
-              {clusters.map(c => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={() => vrpMutation.mutate()}
-                disabled={vrpMutation.isPending}
-                size="sm"
-                data-testid="button-run-vrp"
-              >
-                {vrpMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <RouteIcon className="h-4 w-4 mr-2" />
-                )}
-                Kör optimering
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Optimera dagens rutter</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-9 w-9"
-                onClick={() => window.open("/monitor/popout", "traivo-monitor", "width=1200,height=800,menubar=no,toolbar=no,location=no,status=no")}
-                data-testid="button-popout-monitor"
-              >
-                <Monitor className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Öppna kartövervakning i eget fönster</TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
+      <PageHeader icon={RouteIcon} title="Ruttplanering">
+        <Input
+          type="date"
+          value={selectedDate}
+          onChange={(e) => setSelectedDate(e.target.value)}
+          className="w-[150px] h-9"
+          data-testid="input-vrp-date"
+        />
+        <Select value={selectedCluster} onValueChange={setSelectedCluster}>
+          <SelectTrigger className="w-[160px] h-9" data-testid="select-vrp-cluster">
+            <SelectValue placeholder="Alla kluster" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alla kluster</SelectItem>
+            {clusters.map(c => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              onClick={() => vrpMutation.mutate()}
+              disabled={vrpMutation.isPending}
+              size="sm"
+              data-testid="button-run-vrp"
+            >
+              {vrpMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RouteIcon className="h-4 w-4 mr-2" />
+              )}
+              Kör optimering
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Optimera dagens rutter</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => window.open("/monitor/popout", "traivo-monitor", "width=1200,height=800,menubar=no,toolbar=no,location=no,status=no")}
+              data-testid="button-popout-monitor"
+            >
+              <Monitor className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Öppna kartövervakning i eget fönster</TooltipContent>
+        </Tooltip>
+      </PageHeader>
 
       {recommendations && recommendations.weather && recommendations.weather.impact !== "none" && (
         <div className={`flex items-center gap-3 px-3 py-2 rounded-md border-l-4 ${

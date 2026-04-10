@@ -17,6 +17,8 @@ import {
   Zap,
   Tag,
 } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Building } from "lucide-react";
 import {
   CompanyInfoTab,
   ArticlesExecutionTab,
@@ -53,18 +55,12 @@ export default function TenantConfigPage() {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Företagsinställningar</h1>
-          <p className="text-muted-foreground">Konfigurera {tenant?.name || "ert företag"} med rätt inställningar före dataimport</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge variant={completedCount === completionSteps.length ? "default" : "secondary"} className="text-sm px-3 py-1">
-            <Zap className="h-4 w-4 mr-1" />
-            {completedCount}/{completionSteps.length} klart
-          </Badge>
-        </div>
-      </div>
+      <PageHeader icon={Building} title="Företagsinställningar" description={`Konfigurera ${tenant?.name || "ert företag"} med rätt inställningar före dataimport`}>
+        <Badge variant={completedCount === completionSteps.length ? "default" : "secondary"} className="text-sm px-3 py-1">
+          <Zap className="h-4 w-4 mr-1" />
+          {completedCount}/{completionSteps.length} klart
+        </Badge>
+      </PageHeader>
 
       <Card>
         <CardContent className="pt-6">

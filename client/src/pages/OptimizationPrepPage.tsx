@@ -25,11 +25,13 @@ import {
   DoorOpen,
   Users,
   Package,
-  PieChart
+  PieChart,
+  Zap
 } from "lucide-react";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
+import { PageHeader } from "@/components/layout/PageHeader";
 import type { WorkOrderWithObject, Resource, ServiceObject, Customer } from "@shared/schema";
 
 type OptimizationStatus = "idle" | "validating" | "ready" | "sending" | "optimizing" | "completed" | "error";
@@ -232,12 +234,7 @@ export default function OptimizationPrepPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold" data-testid="text-page-title">Inför Optimering</h1>
-          <p className="text-muted-foreground">Förbered och validera data för veckooptimering</p>
-        </div>
-      </div>
+      <PageHeader icon={Zap} title="Inför Optimering" description="Förbered och validera data för veckooptimering" testId="text-page-title" />
 
       <Card>
         <CardHeader className="pb-4">

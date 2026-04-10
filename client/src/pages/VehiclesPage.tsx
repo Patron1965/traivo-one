@@ -68,6 +68,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link } from "wouter";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, differenceInDays } from "date-fns";
@@ -394,56 +395,48 @@ export default function VehiclesPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold">Fordonspark och Utrustning</h1>
-          <div className="flex items-center gap-3 mt-1 flex-wrap">
-            <span className="text-sm text-muted-foreground">Hantera fordon, maskiner och verktyg</span>
-            {fleetStats.active > 0 && (
-              <Badge variant="secondary" className="text-xs font-normal gap-1">
-                <Truck className="h-3 w-3" />
-                {fleetStats.active} aktiva fordon
-              </Badge>
-            )}
-            {fleetStats.serviceOverdue > 0 && (
-              <Badge variant="outline" className="text-xs font-normal gap-1 text-red-600 border-red-300">
-                <CircleAlert className="h-3 w-3" />
-                {fleetStats.serviceOverdue} service försenad
-              </Badge>
-            )}
-            {fleetStats.serviceSoon > 0 && (
-              <Badge variant="outline" className="text-xs font-normal gap-1 text-amber-600 border-amber-300">
-                <AlertTriangle className="h-3 w-3" />
-                {fleetStats.serviceSoon} service snart
-              </Badge>
-            )}
-            {fleetStats.serviceOk > 0 && fleetStats.serviceOverdue === 0 && fleetStats.serviceSoon === 0 && (
-              <Badge variant="outline" className="text-xs font-normal gap-1 text-green-600 border-green-300">
-                <CircleCheck className="h-3 w-3" />
-                Alla servade
-              </Badge>
-            )}
-          </div>
+      <PageHeader icon={Truck} title="Fordonspark och Utrustning" description="Hantera fordon, maskiner och verktyg" testId="text-page-title">
+        {fleetStats.active > 0 && (
+          <Badge variant="secondary" className="text-xs font-normal gap-1">
+            <Truck className="h-3 w-3" />
+            {fleetStats.active} aktiva fordon
+          </Badge>
+        )}
+        {fleetStats.serviceOverdue > 0 && (
+          <Badge variant="outline" className="text-xs font-normal gap-1 text-red-600 border-red-300">
+            <CircleAlert className="h-3 w-3" />
+            {fleetStats.serviceOverdue} service försenad
+          </Badge>
+        )}
+        {fleetStats.serviceSoon > 0 && (
+          <Badge variant="outline" className="text-xs font-normal gap-1 text-amber-600 border-amber-300">
+            <AlertTriangle className="h-3 w-3" />
+            {fleetStats.serviceSoon} service snart
+          </Badge>
+        )}
+        {fleetStats.serviceOk > 0 && fleetStats.serviceOverdue === 0 && fleetStats.serviceSoon === 0 && (
+          <Badge variant="outline" className="text-xs font-normal gap-1 text-green-600 border-green-300">
+            <CircleCheck className="h-3 w-3" />
+            Alla servade
+          </Badge>
+        )}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Sök..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 w-[200px]"
+            data-testid="input-search"
+          />
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Sök..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 w-[200px]"
-              data-testid="input-search"
-            />
-          </div>
-          <Link href="/fleet">
-            <Button variant="outline" size="sm" data-testid="button-fleet-dashboard">
-              <BarChart3 className="h-4 w-4 mr-2" />
-              Fordonsdashboard
-            </Button>
-          </Link>
-        </div>
-      </div>
+        <Link href="/fleet">
+          <Button variant="outline" size="sm" data-testid="button-fleet-dashboard">
+            <BarChart3 className="h-4 w-4 mr-2" />
+            Fordonsdashboard
+          </Button>
+        </Link>
+      </PageHeader>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>

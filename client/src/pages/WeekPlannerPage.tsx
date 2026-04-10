@@ -6,7 +6,8 @@ import { AISuggestionsPanel } from "@/components/AISuggestionsPanel";
 import { RouteOptimizationPanel } from "@/components/RouteOptimizationPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, X, AlertTriangle, Route } from "lucide-react";
+import { Calendar, Sparkles, X, AlertTriangle, Route } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { format, startOfWeek, addDays } from "date-fns";
 
 export default function WeekPlannerPage() {
@@ -36,6 +37,9 @@ export default function WeekPlannerPage() {
 
   return (
     <div className="flex h-full relative flex-col">
+      <div className="px-4 pt-4">
+        <PageHeader icon={Calendar} title="Veckoplanerare" testId="text-page-title" />
+      </div>
       {filterParam === "unassigned" && (
         <div className="flex items-center gap-3 px-4 py-2 bg-amber-50 border-b border-amber-200 dark:bg-amber-950/20 dark:border-amber-800" data-testid="banner-unassigned-filter">
           <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />

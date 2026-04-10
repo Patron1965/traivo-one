@@ -21,6 +21,7 @@ import { sv } from "date-fns/locale";
 import type { Procurement, Customer, ServiceObject } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 const statusLabels: Record<string, string> = {
   draft: "Utkast",
@@ -280,16 +281,16 @@ export default function ProcurementsPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold">Upphandlingar</h1>
-          <p className="text-sm text-muted-foreground">{procurements.length} upphandlingar</p>
-        </div>
+      <PageHeader
+        icon={FileText}
+        title="Upphandlingar"
+        description={`${procurements.length} upphandlingar`}
+      >
         <Button onClick={() => setShowCreateDialog(true)} data-testid="button-add-procurement">
           <Plus className="h-4 w-4 mr-2" />
           Ny upphandling
         </Button>
-      </div>
+      </PageHeader>
 
       {(deadlineWarnings.length > 0 || overdueDeadlines.length > 0) && (
         <Card className="border-amber-500/50 bg-amber-500/5">

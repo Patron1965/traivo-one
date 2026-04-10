@@ -51,6 +51,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Switch } from "@/components/ui/switch";
 
 const articleTypeOptions = [
@@ -217,35 +218,24 @@ export default function ChecklistTemplatesPage() {
 
   return (
     <div className="p-6 space-y-6" data-testid="checklist-templates-page">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2" data-testid="text-page-title">
-            <ClipboardCheck className="h-6 w-6 text-primary" />
-            Kontrollmallar
-          </h1>
-          <div className="flex items-center gap-3 mt-1 flex-wrap">
-            <span className="text-sm text-muted-foreground">
-              Definiera inspektionsfrågor per artikeltyp. Fältarbetare får automatiskt rätt checklista.
-            </span>
-            {templates.length > 0 && (
-              <>
-                <Badge variant="secondary" className="text-xs font-normal">
-                  {templates.length} {templates.length === 1 ? "mall" : "mallar"}
-                </Badge>
-                <Badge variant="outline" className="text-xs font-normal text-green-600 border-green-300">
-                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                  {templates.filter(t => t.isActive).length} aktiva
-                </Badge>
-                {templates.filter(t => !t.isActive).length > 0 && (
-                  <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
-                    <XCircle className="h-3 w-3 mr-1" />
-                    {templates.filter(t => !t.isActive).length} inaktiva
-                  </Badge>
-                )}
-              </>
+      <PageHeader icon={ClipboardCheck} title="Kontrollmallar" description="Definiera inspektionsfrågor per artikeltyp. Fältarbetare får automatiskt rätt checklista." testId="text-page-title">
+        {templates.length > 0 && (
+          <>
+            <Badge variant="secondary" className="text-xs font-normal">
+              {templates.length} {templates.length === 1 ? "mall" : "mallar"}
+            </Badge>
+            <Badge variant="outline" className="text-xs font-normal text-green-600 border-green-300">
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              {templates.filter(t => t.isActive).length} aktiva
+            </Badge>
+            {templates.filter(t => !t.isActive).length > 0 && (
+              <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+                <XCircle className="h-3 w-3 mr-1" />
+                {templates.filter(t => !t.isActive).length} inaktiva
+              </Badge>
             )}
-          </div>
-        </div>
+          </>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button onClick={openNew} data-testid="button-create-template">
@@ -255,7 +245,7 @@ export default function ChecklistTemplatesPage() {
           </TooltipTrigger>
           <TooltipContent>Skapa en ny checklista-mall</TooltipContent>
         </Tooltip>
-      </div>
+      </PageHeader>
 
       {templates.length === 0 ? (
         <Card>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +65,7 @@ import {
   History,
   ArrowRight,
   ArrowLeft,
+  Lightbulb,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -537,18 +539,17 @@ export default function OrderConceptsPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Orderkoncept</h1>
-          <p className="text-muted-foreground">
-            Automatisera ordrar: avrop, schemalagda leveranser och abonnemang
-          </p>
-        </div>
+      <PageHeader
+        icon={Lightbulb}
+        title="Orderkoncept"
+        description="Automatisera ordrar: avrop, schemalagda leveranser och abonnemang"
+        testId="text-page-title"
+      >
         <PageHelp
           title="Orderkoncept"
           description="Orderkoncept definierar hur arbetsordrar genereras automatiskt. Välj scenario: Avrop (engångsorder), Schema (återkommande med leveransplan) eller Abonnemang (fast månadsavgift med automatisk kalkyl)."
         />
-      </div>
+      </PageHeader>
 
       <div className="grid grid-cols-3 gap-4">
         <Card data-testid="stat-avrop">

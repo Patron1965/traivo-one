@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Search, TrendingDown, Users, DollarSign, AlertTriangle, Phone, Mail, UserCircle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Loader2, Search, TrendingDown, Users, DollarSign, AlertTriangle, Phone, Mail, UserCircle, ArrowUpDown, ArrowUp, ArrowDown, Target } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 interface InactiveCustomer {
   id: string;
@@ -105,10 +106,7 @@ export default function ProactiveSalesPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold" data-testid="heading-proactive-sales">Proaktiv försäljning</h1>
-        <p className="text-muted-foreground">Identifiera inaktiva kunder och potentiella försäljningsmöjligheter</p>
-      </div>
+      <PageHeader icon={Target} title="Proaktiv försäljning" description="Identifiera inaktiva kunder och potentiella försäljningsmöjligheter" testId="heading-proactive-sales" />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>

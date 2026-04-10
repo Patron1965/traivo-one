@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Download, Leaf, Factory, Droplets, Truck, FileText, Award, TrendingDown, Recycle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 import { format } from "date-fns";
@@ -220,22 +221,17 @@ export default function EnvironmentalCertificatePage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <Leaf className="h-6 w-6 text-green-600" />
-            Miljöcertifikat
-          </h1>
-          <div className="flex items-center gap-3 mt-1 flex-wrap">
-            <span className="text-sm text-muted-foreground">Generera årliga hållbarhetsrapporter per kund</span>
-            {customers && customers.length > 0 && (
-              <Badge variant="secondary" className="text-xs font-normal">
-                {customers.length} kunder
-              </Badge>
-            )}
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        icon={Leaf}
+        title="Miljöcertifikat"
+        description="Generera årliga hållbarhetsrapporter per kund"
+      >
+        {customers && customers.length > 0 && (
+          <Badge variant="secondary" className="text-xs font-normal">
+            {customers.length} kunder
+          </Badge>
+        )}
+      </PageHeader>
 
       <Card data-testid="certificate-selector">
         <CardHeader>

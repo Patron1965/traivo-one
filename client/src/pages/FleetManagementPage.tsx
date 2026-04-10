@@ -32,6 +32,7 @@ import {
   Plus, Search, Calendar, Gauge, TrendingUp, Clock,
   ChevronRight, ChevronDown, BarChart3, DollarSign, Activity
 } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, differenceInDays, addDays, isPast, isFuture } from "date-fns";
@@ -303,54 +304,43 @@ export default function FleetManagementPage() {
   return (
     <div className="min-h-screen bg-background" data-testid="fleet-management-page">
       <div className="p-6">
-        <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2" data-testid="text-page-title">
-              <Truck className="h-6 w-6 text-primary" />
-              Fleethantering
-            </h1>
-            <div className="flex items-center gap-3 mt-1 flex-wrap">
-              <span className="text-sm text-muted-foreground">Fordonsöversikt, underhåll och bränsleuppföljning</span>
-              {activeVehicles.length > 0 && (
-                <Badge variant="secondary" className="text-xs font-normal">
-                  {activeVehicles.length} aktiva fordon
-                </Badge>
-              )}
-              {kpis.overdueService > 0 && (
-                <Badge variant="outline" className="text-xs font-normal text-red-600 border-red-300 gap-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  {kpis.overdueService} försenad service
-                </Badge>
-              )}
-              {kpis.overdueInspection > 0 && (
-                <Badge variant="outline" className="text-xs font-normal text-amber-600 border-amber-300 gap-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  {kpis.overdueInspection} utgången besiktning
-                </Badge>
-              )}
-            </div>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="outline" onClick={() => { setFuelForm(f => ({ ...f, vehicleId: "" })); setFuelDialogOpen(true); }} data-testid="button-add-fuel">
-                  <Fuel className="h-4 w-4 mr-1" /> Registrera tankning
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Lägg till en ny tankningspost</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button onClick={() => { setMaintenanceForm(f => ({ ...f, vehicleId: "" })); setMaintenanceDialogOpen(true); }} data-testid="button-add-maintenance">
-                  <Wrench className="h-4 w-4 mr-1" /> Registrera underhåll
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Registrera service eller reparation</TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
+        <PageHeader icon={Truck} title="Fleethantering" description="Fordonsöversikt, underhåll och bränsleuppföljning" testId="text-page-title">
+          {activeVehicles.length > 0 && (
+            <Badge variant="secondary" className="text-xs font-normal">
+              {activeVehicles.length} aktiva fordon
+            </Badge>
+          )}
+          {kpis.overdueService > 0 && (
+            <Badge variant="outline" className="text-xs font-normal text-red-600 border-red-300 gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              {kpis.overdueService} försenad service
+            </Badge>
+          )}
+          {kpis.overdueInspection > 0 && (
+            <Badge variant="outline" className="text-xs font-normal text-amber-600 border-amber-300 gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              {kpis.overdueInspection} utgången besiktning
+            </Badge>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" onClick={() => { setFuelForm(f => ({ ...f, vehicleId: "" })); setFuelDialogOpen(true); }} data-testid="button-add-fuel">
+                <Fuel className="h-4 w-4 mr-1" /> Registrera tankning
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Lägg till en ny tankningspost</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={() => { setMaintenanceForm(f => ({ ...f, vehicleId: "" })); setMaintenanceDialogOpen(true); }} data-testid="button-add-maintenance">
+                <Wrench className="h-4 w-4 mr-1" /> Registrera underhåll
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Registrera service eller reparation</TooltipContent>
+          </Tooltip>
+        </PageHeader>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 mt-6">
           <Tooltip>
             <TooltipTrigger asChild>
               <Card className="hover-elevate cursor-help" data-testid="card-kpi-vehicles">

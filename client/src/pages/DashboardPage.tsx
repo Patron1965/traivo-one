@@ -12,7 +12,8 @@ import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { enUS as enLocale } from "date-fns/locale";
 import { useLanguage } from "@/hooks/use-language";
-import { ChevronDown, ChevronUp, Eye, EyeOff, RotateCcw } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronUp, Eye, EyeOff, RotateCcw } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -158,68 +159,63 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-semibold" data-testid="text-dashboard-greeting">
-            {getGreeting()}!
-          </h1>
-          <p className="text-muted-foreground">
-            {format(today, "EEEE d MMMM yyyy", { locale: dateLocale })} - Traivo Dashboard
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        icon={BarChart3}
+        title={`${getGreeting()}!`}
+        description={`${format(today, "EEEE d MMMM yyyy", { locale: dateLocale })} - Traivo Dashboard`}
+        testId="text-dashboard-greeting"
+      >
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={collapsedCount === ALL_SECTIONS.length ? expandAll : collapseAll}
+                className="gap-1.5 text-muted-foreground"
+                data-testid="button-toggle-all-sections"
+              >
+                {collapsedCount === ALL_SECTIONS.length ? (
+                  <>
+                    <Eye className="h-4 w-4" />
+                    <span className="hidden sm:inline">Visa alla</span>
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="h-4 w-4" />
+                    <span className="hidden sm:inline">Dölj alla</span>
+                  </>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {collapsedCount === ALL_SECTIONS.length
+                ? "Visa alla sektioner"
+                : "Dölj alla sektioner"}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        {collapsedCount > 0 && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={collapsedCount === ALL_SECTIONS.length ? expandAll : collapseAll}
+                  onClick={resetSections}
                   className="gap-1.5 text-muted-foreground"
-                  data-testid="button-toggle-all-sections"
+                  data-testid="button-reset-sections"
                 >
-                  {collapsedCount === ALL_SECTIONS.length ? (
-                    <>
-                      <Eye className="h-4 w-4" />
-                      <span className="hidden sm:inline">Visa alla</span>
-                    </>
-                  ) : (
-                    <>
-                      <EyeOff className="h-4 w-4" />
-                      <span className="hidden sm:inline">Dölj alla</span>
-                    </>
-                  )}
+                  <RotateCcw className="h-4 w-4" />
+                  <span className="hidden sm:inline">Återställ</span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>
-                {collapsedCount === ALL_SECTIONS.length
-                  ? "Visa alla sektioner"
-                  : "Dölj alla sektioner"}
-              </TooltipContent>
+              <TooltipContent>Visa alla sektioner igen</TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          {collapsedCount > 0 && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={resetSections}
-                    className="gap-1.5 text-muted-foreground"
-                    data-testid="button-reset-sections"
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                    <span className="hidden sm:inline">Återställ</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Visa alla sektioner igen</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-          <AutoDistributeToday />
-        </div>
-      </div>
+        )}
+        <AutoDistributeToday />
+      </PageHeader>
 
       <CollapsibleSection
         id="quickStats"

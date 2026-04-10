@@ -15,6 +15,7 @@ import {
 import { format, addDays, startOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 interface AIRecommendation {
   id: string;
@@ -187,10 +188,7 @@ export default function AIPlanningPage() {
   if (analysisQuery.isLoading) {
     return (
       <div className="container py-8 space-y-6">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-8 w-8 text-purple-500" />
-          <h1 className="text-3xl font-bold tracking-tight">AI Planeringsassistent</h1>
-        </div>
+        <PageHeader icon={Sparkles} title="AI Planeringsassistent" />
         <div className="flex items-center justify-center py-16">
           <div className="text-center space-y-3">
             <Loader2 className="h-8 w-8 animate-spin mx-auto text-purple-500" />
@@ -204,10 +202,7 @@ export default function AIPlanningPage() {
   if (analysisQuery.isError || !analysis) {
     return (
       <div className="container py-8 space-y-6">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-8 w-8 text-purple-500" />
-          <h1 className="text-3xl font-bold tracking-tight">AI Planeringsassistent</h1>
-        </div>
+        <PageHeader icon={Sparkles} title="AI Planeringsassistent" />
         <Card>
           <CardContent className="p-8">
             <div className="flex items-center gap-3">
@@ -236,45 +231,34 @@ export default function AIPlanningPage() {
 
   return (
     <div className="container py-8 space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Sparkles className="h-8 w-8 text-purple-500" />
-            AI Planeringsassistent
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Intelligent analys och optimering av din veckoplanering
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Select value={selectedWeek} onValueChange={setSelectedWeek}>
-            <SelectTrigger className="w-[180px]" data-testid="select-week">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="current">Denna vecka</SelectItem>
-              <SelectItem value="next">Nästa vecka</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button
-            onClick={() => runAnalysisMutation.mutate()}
-            disabled={isAnalyzing}
-            data-testid="button-run-analysis"
-          >
-            {isAnalyzing ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Analyserar...
-              </>
-            ) : (
-              <>
-                <Brain className="h-4 w-4 mr-2" />
-                Kör ny analys
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
+      <PageHeader icon={Sparkles} title="AI Planeringsassistent" description="Intelligent analys och optimering av din veckoplanering">
+        <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+          <SelectTrigger className="w-[180px]" data-testid="select-week">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="current">Denna vecka</SelectItem>
+            <SelectItem value="next">Nästa vecka</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          onClick={() => runAnalysisMutation.mutate()}
+          disabled={isAnalyzing}
+          data-testid="button-run-analysis"
+        >
+          {isAnalyzing ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Analyserar...
+            </>
+          ) : (
+            <>
+              <Brain className="h-4 w-4 mr-2" />
+              Kör ny analys
+            </>
+          )}
+        </Button>
+      </PageHeader>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>

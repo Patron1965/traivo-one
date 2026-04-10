@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, TrendingUp, TrendingDown, DollarSign, Users, MapPin, BarChart3, PieChart as PieChartIcon, AlertTriangle } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
   BarChart, Bar, Tooltip as RechartsTooltip, Legend, PieChart, Pie, Cell
@@ -183,18 +184,15 @@ export default function EconomicsDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">Ekonomisk översikt</h1>
-        <p className="text-muted-foreground">Analysera lönsamhet per kluster och kund</p>
-        {ordersWithoutEconomicData > 0 && (
-          <div className="flex items-center gap-2 mt-2 p-2 rounded bg-yellow-500/10 text-yellow-700 dark:text-yellow-300 text-sm">
-            <AlertTriangle className="h-4 w-4" />
-            <span>
-              {ordersWithoutEconomicData} av {workOrders.length} ordrar saknar ekonomisk data och exkluderas från beräkningarna.
-            </span>
-          </div>
-        )}
-      </div>
+      <PageHeader icon={TrendingUp} title="Ekonomisk översikt" description="Analysera lönsamhet per kluster och kund" testId="text-page-title" />
+      {ordersWithoutEconomicData > 0 && (
+        <div className="flex items-center gap-2 p-2 rounded bg-yellow-500/10 text-yellow-700 dark:text-yellow-300 text-sm">
+          <AlertTriangle className="h-4 w-4" />
+          <span>
+            {ordersWithoutEconomicData} av {workOrders.length} ordrar saknar ekonomisk data och exkluderas från beräkningarna.
+          </span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card data-testid="card-total-revenue">

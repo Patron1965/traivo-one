@@ -28,6 +28,7 @@ import {
   Calendar,
   AlertTriangle
 } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 interface TenantSettings {
   setupTimeTarget: number;
@@ -119,19 +120,12 @@ export default function SettingsPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <Settings className="h-6 w-6" />
-            {tl("page.settings.title")}
-          </h1>
-          <p className="text-sm text-muted-foreground">{tl("page.settings.description")}</p>
-        </div>
+      <PageHeader icon={Settings} title={tl("page.settings.title")} description={tl("page.settings.description")}>
         <Badge variant="outline" className="gap-1">
           <Building2 className="h-3 w-3" />
           Traivo
         </Badge>
-      </div>
+      </PageHeader>
 
       <Tabs defaultValue="company" className="space-y-4">
         <TabsList className="grid w-full grid-cols-4">

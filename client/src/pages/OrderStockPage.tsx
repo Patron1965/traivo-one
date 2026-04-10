@@ -64,6 +64,7 @@ import {
   ClipboardList,
   CalendarPlus
 } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuth } from "@/hooks/use-auth";
 import { AICard } from "@/components/AICard";
 import { EmptyState } from "@/components/EmptyState";
@@ -630,53 +631,46 @@ export default function OrderStockPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <PageHeader icon={FileText} title={tl("page.orderstock.title")}>
         <div className="flex items-center gap-2">
-          <Package className="h-6 w-6 text-muted-foreground" />
-          <h1 className="text-2xl font-semibold">{tl("page.orderstock.title")}</h1>
+          <TestTube2 className="h-4 w-4 text-muted-foreground" />
+          <Label htmlFor="sim-toggle" className="text-sm">{tl("page.orderstock.show-simulated")}</Label>
+          <Switch 
+            id="sim-toggle"
+            checked={includeSimulated} 
+            onCheckedChange={setIncludeSimulated}
+            data-testid="switch-include-simulated"
+          />
         </div>
         
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <TestTube2 className="h-4 w-4 text-muted-foreground" />
-            <Label htmlFor="sim-toggle" className="text-sm">{tl("page.orderstock.show-simulated")}</Label>
-            <Switch 
-              id="sim-toggle"
-              checked={includeSimulated} 
-              onCheckedChange={setIncludeSimulated}
-              data-testid="switch-include-simulated"
-            />
-          </div>
-          
-          {includeSimulated && scenarios.length > 0 && (
-            <Select value={selectedScenario || "all"} onValueChange={v => setSelectedScenario(v === "all" ? null : v)}>
-              <SelectTrigger className="w-48" data-testid="select-scenario">
-                <SelectValue placeholder={tl("page.orderstock.all-scenarios")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{tl("page.orderstock.all-scenarios")}</SelectItem>
-                {scenarios.map(s => (
-                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          
-          <Button variant="outline" onClick={handleExportCSV} className="gap-2" data-testid="button-export-csv">
-            <Download className="h-4 w-4" />
-            {tl("page.orderstock.export-csv")}
-          </Button>
-          
-          <Button 
-            onClick={() => { setSalesEmail(user?.email || ""); setSalesScope("all"); setShowSalesIntelDialog(true); }} 
-            className="gap-2 bg-gradient-to-r from-[#1B4B6B] to-[#4A9B9B] hover:from-[#2C3E50] hover:to-[#3d8585] text-white"
-            data-testid="button-sales-intelligence"
-          >
-            <Sparkles className="h-4 w-4" />
-            {tl("page.orderstock.ai-sales")}
-          </Button>
-        </div>
-      </div>
+        {includeSimulated && scenarios.length > 0 && (
+          <Select value={selectedScenario || "all"} onValueChange={v => setSelectedScenario(v === "all" ? null : v)}>
+            <SelectTrigger className="w-48" data-testid="select-scenario">
+              <SelectValue placeholder={tl("page.orderstock.all-scenarios")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{tl("page.orderstock.all-scenarios")}</SelectItem>
+              {scenarios.map(s => (
+                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        
+        <Button variant="outline" onClick={handleExportCSV} className="gap-2" data-testid="button-export-csv">
+          <Download className="h-4 w-4" />
+          {tl("page.orderstock.export-csv")}
+        </Button>
+        
+        <Button 
+          onClick={() => { setSalesEmail(user?.email || ""); setSalesScope("all"); setShowSalesIntelDialog(true); }} 
+          className="gap-2 bg-gradient-to-r from-[#1B4B6B] to-[#4A9B9B] hover:from-[#2C3E50] hover:to-[#3d8585] text-white"
+          data-testid="button-sales-intelligence"
+        >
+          <Sparkles className="h-4 w-4" />
+          {tl("page.orderstock.ai-sales")}
+        </Button>
+      </PageHeader>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>

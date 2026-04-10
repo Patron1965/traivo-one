@@ -58,6 +58,7 @@ import {
   Image,
   Package,
 } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -303,46 +304,38 @@ export default function SubscriptionsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold">Abonnemang</h1>
-          <p className="text-muted-foreground">
-            Återkommande tjänster som genererar ordrar automatiskt
-          </p>
+      <PageHeader icon={RefreshCw} title="Abonnemang" description="Återkommande tjänster som genererar ordrar automatiskt" testId="text-page-title">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Sök..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 w-[200px]"
+            data-testid="input-search"
+          />
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Sök..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 w-[200px]"
-              data-testid="input-search"
-            />
-          </div>
-          <Button
-            variant="outline"
-            onClick={() => setGenerateDialogOpen(true)}
-            data-testid="button-generate-orders"
-          >
-            <Play className="h-4 w-4 mr-2" />
-            Generera ordrar
-          </Button>
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setSelectedCustomerId("");
-              form.reset();
-              setDialogOpen(true);
-            }}
-            data-testid="button-add-subscription"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Nytt abonnemang
-          </Button>
-        </div>
-      </div>
+        <Button
+          variant="outline"
+          onClick={() => setGenerateDialogOpen(true)}
+          data-testid="button-generate-orders"
+        >
+          <Play className="h-4 w-4 mr-2" />
+          Generera ordrar
+        </Button>
+        <Button
+          onClick={() => {
+            setEditing(null);
+            setSelectedCustomerId("");
+            form.reset();
+            setDialogOpen(true);
+          }}
+          data-testid="button-add-subscription"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Nytt abonnemang
+        </Button>
+      </PageHeader>
 
       <PageHelp
         title="Vad är ett abonnemang?"

@@ -61,6 +61,8 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Assignment, Resource, Cluster, ServiceObject, Article, AssignmentArticle } from "@shared/schema";
 import { ASSIGNMENT_STATUS_LABELS, type AssignmentStatus } from "@shared/schema";
 import { PageHelp } from "@/components/ui/help-tooltip";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { ClipboardList } from "lucide-react";
 
 function formatCurrency(value: number | null | undefined): string {
   if (!value) return "0 kr";
@@ -247,32 +249,24 @@ export default function AssignmentsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold">Uppgifter</h1>
-          <div className="flex items-center gap-3 mt-1 flex-wrap">
-            <span className="text-sm text-muted-foreground">
-              Hantera och följ upp genererade arbetsuppgifter
-            </span>
-            {assignments.length > 0 && (
-              <>
-                <Badge variant="secondary" className="text-xs font-normal">
-                  {filteredAssignments.length} av {assignments.length} visas
-                </Badge>
-                {assignments.filter(a => a.status === "not_planned").length > 0 && (
-                  <Badge variant="outline" className="text-xs font-normal text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700">
-                    {assignments.filter(a => a.status === "not_planned").length} ej planerade
-                  </Badge>
-                )}
-              </>
+      <PageHeader icon={ClipboardList} title="Uppgifter" description="Hantera och följ upp genererade arbetsuppgifter">
+        {assignments.length > 0 && (
+          <>
+            <Badge variant="secondary" className="text-xs font-normal">
+              {filteredAssignments.length} av {assignments.length} visas
+            </Badge>
+            {assignments.filter(a => a.status === "not_planned").length > 0 && (
+              <Badge variant="outline" className="text-xs font-normal text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700">
+                {assignments.filter(a => a.status === "not_planned").length} ej planerade
+              </Badge>
             )}
-          </div>
-        </div>
+          </>
+        )}
         <PageHelp
           title="Uppgifter (Assignments)"
           description="Uppgifter genereras automatiskt från orderkoncept eller skapas manuellt. De följer ett 8-stegs arbetsflöde från 'Ej planerad' till 'Fakturerad'."
         />
-      </div>
+      </PageHeader>
 
       {/* Economic Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

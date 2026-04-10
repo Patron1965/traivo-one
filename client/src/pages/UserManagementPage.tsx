@@ -67,6 +67,7 @@ import {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/hooks/use-language";
+import { PageHeader } from "@/components/layout/PageHeader";
 import type { Resource, Team, TeamMember, ResourceProfile, Invitation } from "@shared/schema";
 
 interface UserData {
@@ -526,12 +527,7 @@ export default function UserManagementPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">{tl("page.user-management.title")}</h1>
-          <p className="text-sm text-muted-foreground">{tl("page.user-management.description")}</p>
-        </div>
-      </div>
+      <PageHeader icon={Users} title={tl("page.user-management.title")} description={tl("page.user-management.description")} testId="text-page-title" />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>

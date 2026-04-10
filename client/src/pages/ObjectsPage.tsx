@@ -22,6 +22,7 @@ import {
   Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, Layers
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { AICard } from "@/components/AICard";
 import { ObjectMetadataPanel } from "@/components/ObjectMetadataPanel";
 import { ObjectPayersPanel } from "@/components/ObjectPayersPanel";
@@ -960,62 +961,30 @@ export default function ObjectsPage() {
           </Button>
         </div>
       )}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold">{t("object_plural")}</h1>
-          <div className="flex items-center gap-3 mt-1 flex-wrap">
-            <span className="text-sm text-muted-foreground">
-              {filteredObjects.length} av {totalObjects.toLocaleString("sv")} objekt visas
-            </span>
-            {quickStats.topTypes.map(([label, count]) => (
-              <Badge key={label} variant="secondary" className="text-xs font-normal">{count} {label}</Badge>
-            ))}
-            {quickStats.avgSetup > 0 && (
-              <Badge variant="outline" className="text-xs font-normal">Snitt ställtid: {quickStats.avgSetup} min</Badge>
-            )}
-            {(missingCityData?.totalMissingCity || 0) > 0 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant="outline"
-                    className="text-xs font-normal text-amber-600 border-amber-300 gap-1 cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-950/30"
-                    onClick={() => setBatchFillCityOpen(true)}
-                    data-testid="badge-missing-city"
-                  >
-                    <AlertTriangle className="h-3 w-3" />
-                    {missingCityData!.totalMissingCity.toLocaleString("sv")} utan stad
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>Klicka för att fylla i stad automatiskt</TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Link href="/objects/duplicates">
-            <Button variant="outline" data-testid="button-duplicates">
-              <Copy className="h-4 w-4 mr-2" />
-              Dubbletter
-            </Button>
-          </Link>
-          <Button variant="outline" onClick={() => { setBatchGeoOpen(true); setBatchGeoResult(null); }} data-testid="button-batch-geocode">
-            <Globe className="h-4 w-4 mr-2" />
-            Batch-geocodning
+      <PageHeader icon={Building2} title={t("object_plural")} description={`${filteredObjects.length} av ${totalObjects.toLocaleString("sv")} objekt visas`}>
+        <Link href="/objects/duplicates">
+          <Button variant="outline" data-testid="button-duplicates">
+            <Copy className="h-4 w-4 mr-2" />
+            Dubbletter
           </Button>
-          <Button variant="outline" onClick={() => setImportDialogOpen(true)} data-testid="button-import">
-            <Upload className="h-4 w-4 mr-2" />
-            Importera CSV
-          </Button>
-          <Button variant="outline" onClick={exportCSV} data-testid="button-export">
-            <Download className="h-4 w-4 mr-2" />
-            Exportera
-          </Button>
-          <Button size="lg" onClick={() => setCreateDialogOpen(true)} data-testid="button-add-object">
-            <Plus className="h-4 w-4 mr-2" />
-            Skapa {t("object_singular").toLowerCase()}
-          </Button>
-        </div>
-      </div>
+        </Link>
+        <Button variant="outline" onClick={() => { setBatchGeoOpen(true); setBatchGeoResult(null); }} data-testid="button-batch-geocode">
+          <Globe className="h-4 w-4 mr-2" />
+          Batch-geocodning
+        </Button>
+        <Button variant="outline" onClick={() => setImportDialogOpen(true)} data-testid="button-import">
+          <Upload className="h-4 w-4 mr-2" />
+          Importera CSV
+        </Button>
+        <Button variant="outline" onClick={exportCSV} data-testid="button-export">
+          <Download className="h-4 w-4 mr-2" />
+          Exportera
+        </Button>
+        <Button size="lg" onClick={() => setCreateDialogOpen(true)} data-testid="button-add-object">
+          <Plus className="h-4 w-4 mr-2" />
+          Skapa {t("object_singular").toLowerCase()}
+        </Button>
+      </PageHeader>
 
       <AICard
         title="AI Objektanalys"

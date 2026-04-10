@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 interface InsightCard {
   id: string;
@@ -459,19 +460,12 @@ export default function AICommandCenterPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-[1400px] mx-auto">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
-            <Brain className="h-7 w-7 text-purple-600" />
-            AI Command Center
-          </h1>
-          <p className="text-muted-foreground mt-1">Samlade AI-funktioner för intelligent fältservice</p>
-        </div>
+      <PageHeader icon={Brain} title="AI Command Center" description="Samlade AI-funktioner för intelligent fältservice" testId="text-page-title">
         <Button variant="outline" onClick={() => refetchInsights()} data-testid="button-refresh-insights">
           <RefreshCw className="h-4 w-4 mr-2" />
           Uppdatera
         </Button>
-      </div>
+      </PageHeader>
 
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList data-testid="ai-tabs">

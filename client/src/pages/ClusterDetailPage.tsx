@@ -61,6 +61,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { ObjectContactsPanel } from "@/components/ObjectContactsPanel";
 import { ObjectImagesGallery } from "@/components/ObjectImagesGallery";
 import { Eye, Phone, Image } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import type { Cluster, ServiceObject, WorkOrder, Subscription, ObjectContact } from "@shared/schema";
 
 interface ClusterWithStats extends Cluster {
@@ -411,7 +412,7 @@ export default function ClusterDetailPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex items-center gap-2 mb-2">
         <Button
           variant="ghost"
           size="icon"
@@ -420,17 +421,15 @@ export default function ClusterDetailPage() {
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-semibold">{cluster.name}</h1>
-            <Badge className={sla.color} variant="secondary">
-              {sla.label}
-            </Badge>
-          </div>
-          {cluster.description && (
-            <p className="text-muted-foreground mt-1">{cluster.description}</p>
-          )}
-        </div>
+      </div>
+      <PageHeader
+        icon={Target}
+        title={cluster.name}
+        description={cluster.description || undefined}
+      >
+        <Badge className={sla.color} variant="secondary">
+          {sla.label}
+        </Badge>
         <Button
           variant="outline"
           size="sm"
@@ -445,7 +444,7 @@ export default function ClusterDetailPage() {
           )}
           Räkna om arv
         </Button>
-      </div>
+      </PageHeader>
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>

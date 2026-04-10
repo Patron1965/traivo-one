@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, TrendingUp, TrendingDown, Minus, AlertTriangle, Users, Calendar, BarChart3, Brain } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { useState } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar } from "recharts";
 
@@ -121,11 +122,7 @@ export default function PredictivePlanningPage() {
 
   return (
     <div className="p-6 space-y-6 overflow-auto h-full">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Prediktiv Planering</h1>
-          <p className="text-muted-foreground">AI-drivna volymprognoser och resursförslag</p>
-        </div>
+      <PageHeader icon={TrendingUp} title="Prediktiv Planering" description="AI-drivna volymprognoser och resursförslag" testId="text-page-title">
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Prognos:</span>
           <Select value={weeksAhead} onValueChange={setWeeksAhead}>
@@ -140,7 +137,7 @@ export default function PredictivePlanningPage() {
             </SelectContent>
           </Select>
         </div>
-      </div>
+      </PageHeader>
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>

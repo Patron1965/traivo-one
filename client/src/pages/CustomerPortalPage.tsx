@@ -18,6 +18,7 @@ import { sv } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
+import { PageHeader } from "@/components/layout/PageHeader";
 import type { WorkOrder, Customer, ServiceObject, Subscription } from "@shared/schema";
 
 function PickupMapFitBounds({ positions }: { positions: [number, number][] }) {
@@ -201,15 +202,11 @@ export default function CustomerPortalPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Building className="h-6 w-6 text-primary" />
-          Kundportal
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Visa planerade hämtningar och gör extrabokningar
-        </p>
-      </div>
+      <PageHeader
+        icon={Building}
+        title="Kundportal"
+        description="Visa planerade hämtningar och gör extrabokningar"
+      />
 
       {!selectedCustomerId ? (
         <Card>

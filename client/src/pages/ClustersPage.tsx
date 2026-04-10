@@ -77,6 +77,7 @@ import { QueryErrorState } from "@/components/ErrorBoundary";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { AddressSearch } from "@/components/AddressSearch";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { AICard } from "@/components/AICard";
 import { MapContainer, TileLayer, Circle, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -396,45 +397,34 @@ export default function ClustersPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">{t("cluster_plural")}</h1>
-          <div className="flex items-center gap-3 mt-1 flex-wrap">
-            <span className="text-sm text-muted-foreground">
-              Arbetsområden — skapas automatiskt per kund
-              <HelpTooltip content="Kluster skapas automatiskt när objekt importeras eller läggs till. Varje kluster representerar en kunds objekt och kan konfigureras med team, SLA-nivå och servicefrekvens." />
-            </span>
-            {quickStats.total > 0 && (
-              <Badge variant="secondary" className="text-xs font-normal gap-1">
-                <Layers className="h-3 w-3" />
-                {quickStats.total} kluster
-              </Badge>
-            )}
-            {quickStats.totalObjects > 0 && (
-              <Badge variant="outline" className="text-xs font-normal gap-1">
-                <Package className="h-3 w-3" />
-                {quickStats.totalObjects.toLocaleString("sv")} objekt totalt
-              </Badge>
-            )}
-            {quickStats.totalOrders > 0 && (
-              <Badge variant="outline" className="text-xs font-normal gap-1">
-                <FileText className="h-3 w-3" />
-                {quickStats.totalOrders} aktiva ordrar
-              </Badge>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => navigate("/auto-cluster")} data-testid="button-auto-cluster">
-            <Sparkles className="mr-2 h-4 w-4" />
-            Auto-klustring
-          </Button>
-          <Button variant="outline" onClick={handleOpenCreate} data-testid="button-create-cluster">
-            <Plus className="mr-2 h-4 w-4" />
-            Manuellt kluster
-          </Button>
-        </div>
-      </div>
+      <PageHeader icon={Target} title={t("cluster_plural")} description="Arbetsområden — skapas automatiskt per kund">
+        {quickStats.total > 0 && (
+          <Badge variant="secondary" className="text-xs font-normal gap-1">
+            <Layers className="h-3 w-3" />
+            {quickStats.total} kluster
+          </Badge>
+        )}
+        {quickStats.totalObjects > 0 && (
+          <Badge variant="outline" className="text-xs font-normal gap-1">
+            <Package className="h-3 w-3" />
+            {quickStats.totalObjects.toLocaleString("sv")} objekt totalt
+          </Badge>
+        )}
+        {quickStats.totalOrders > 0 && (
+          <Badge variant="outline" className="text-xs font-normal gap-1">
+            <FileText className="h-3 w-3" />
+            {quickStats.totalOrders} aktiva ordrar
+          </Badge>
+        )}
+        <Button variant="outline" onClick={() => navigate("/auto-cluster")} data-testid="button-auto-cluster">
+          <Sparkles className="mr-2 h-4 w-4" />
+          Auto-klustring
+        </Button>
+        <Button variant="outline" onClick={handleOpenCreate} data-testid="button-create-cluster">
+          <Plus className="mr-2 h-4 w-4" />
+          Manuellt kluster
+        </Button>
+      </PageHeader>
 
       <AICard
         title="AI Klusteranalys"

@@ -13,6 +13,7 @@ import {
   AlertTriangle, Activity, Zap, FileText, Download, Building2,
   Timer, Gauge, ShieldAlert, CircleSlash, Award, Star, MessageSquare
 } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
   BarChart, Bar, Tooltip as RechartsTooltip, Legend, PieChart, Pie, Cell, 
@@ -916,28 +917,22 @@ export default function ReportingDashboardPage() {
 
   return (
     <div className="space-y-6 p-6" data-testid="reporting-dashboard">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold" data-testid="text-page-title">Rapportering & Analys</h1>
-          <p className="text-muted-foreground">Nyckeltal, produktivitet och avvikelsestatistik</p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <Select value={timeRange} onValueChange={(v) => setTimeRange(v as typeof timeRange)}>
-            <SelectTrigger className="w-[140px]" data-testid="select-time-range">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="week">Denna vecka</SelectItem>
-              <SelectItem value="month">Denna månad</SelectItem>
-              <SelectItem value="quarter">Kvartal</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="sm" data-testid="button-export-report">
-            <Download className="h-4 w-4 mr-2" />
-            Exportera
-          </Button>
-        </div>
-      </div>
+      <PageHeader icon={BarChart3} title="Rapportering & Analys" description="Nyckeltal, produktivitet och avvikelsestatistik" testId="text-page-title">
+        <Select value={timeRange} onValueChange={(v) => setTimeRange(v as typeof timeRange)}>
+          <SelectTrigger className="w-[140px]" data-testid="select-time-range">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="week">Denna vecka</SelectItem>
+            <SelectItem value="month">Denna månad</SelectItem>
+            <SelectItem value="quarter">Kvartal</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="outline" size="sm" data-testid="button-export-report">
+          <Download className="h-4 w-4 mr-2" />
+          Exportera
+        </Button>
+      </PageHeader>
 
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
         <KPICard

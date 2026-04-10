@@ -21,6 +21,7 @@ import {
   Plus, Clock, Play, Square, Loader2, Trash2, Pencil, Download,
   AlertTriangle, CheckCircle, Coffee, Truck, Wrench, Moon, ChevronLeft, ChevronRight,
 } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
@@ -264,17 +265,11 @@ export default function WorkSessionsPage() {
 
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Arbetspass & Tidloggning</h1>
-          <p className="text-muted-foreground">Snöret — Hantera arbetspass, tidsposter och löneunderlag</p>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={handleCreateSession} data-testid="button-create-session">
-            <Plus className="h-4 w-4 mr-2" />Nytt arbetspass
-          </Button>
-        </div>
-      </div>
+      <PageHeader icon={Clock} title="Arbetspass & Tidloggning" description="Snöret — Hantera arbetspass, tidsposter och löneunderlag" testId="text-page-title">
+        <Button onClick={handleCreateSession} data-testid="button-create-session">
+          <Plus className="h-4 w-4 mr-2" />Nytt arbetspass
+        </Button>
+      </PageHeader>
 
       <div className="flex flex-wrap items-center gap-3">
         <Select value={filterResourceId} onValueChange={setFilterResourceId}>

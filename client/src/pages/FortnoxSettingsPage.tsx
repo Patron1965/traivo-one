@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
@@ -425,12 +426,11 @@ export default function FortnoxSettingsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Fortnox-integration</h1>
-        <p className="text-muted-foreground">
-          Anslut till Fortnox för att synkronisera fakturor och kunddata
-        </p>
-      </div>
+      <PageHeader
+        icon={Link2}
+        title="Fortnox-integration"
+        description="Anslut till Fortnox för att synkronisera fakturor och kunddata"
+      />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">

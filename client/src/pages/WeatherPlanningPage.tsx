@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Cloud, CloudRain, Sun, Wind, Snowflake, AlertTriangle, Thermometer, Droplets, Zap } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { sv } from "date-fns/locale";
+import { PageHeader } from "@/components/layout/PageHeader";
 import type { Cluster } from "@shared/schema";
 
 interface WeatherForecast {
@@ -76,16 +77,11 @@ export default function WeatherPlanningPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Cloud className="h-6 w-6 text-primary" />
-            Väderplanering
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Väderprognos med kapacitetsjusteringar för fältservice
-          </p>
-        </div>
+      <PageHeader
+        icon={Cloud}
+        title="Väderplanering"
+        description="Väderprognos med kapacitetsjusteringar för fältservice"
+      >
         <Select value={selectedClusterId} onValueChange={setSelectedClusterId}>
           <SelectTrigger className="w-[220px]" data-testid="select-cluster">
             <SelectValue placeholder="Välj kluster" />
@@ -97,7 +93,7 @@ export default function WeatherPlanningPage() {
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </PageHeader>
 
       {isLoading && (
         <Card>

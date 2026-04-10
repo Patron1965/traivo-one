@@ -35,6 +35,7 @@ import {
   Building2, DollarSign, AlertTriangle,
   RefreshCw, BarChart3, Plus, Trash2, CreditCard, Undo2
 } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { format, subDays, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Customer, Article } from "@shared/schema";
@@ -395,23 +396,17 @@ export default function InvoicingPage() {
 
   return (
     <div className="p-6 space-y-6" data-testid="invoicing-page">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-semibold" data-testid="text-page-title">Fakturering</h1>
-            <p className="text-muted-foreground">Förhandsgranska, hantera och exportera fakturor till Fortnox</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {fortnoxStatus?.connected ? (
-              <Badge variant="outline" className="border-green-500 text-green-600 dark:text-green-400" data-testid="badge-fortnox-connected">
-                <CheckCircle2 className="h-3 w-3 mr-1" /> Fortnox ansluten
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="border-yellow-500 dark:border-yellow-700 text-yellow-600 dark:text-yellow-400" data-testid="badge-fortnox-disconnected">
-                <AlertTriangle className="h-3 w-3 mr-1" /> Fortnox ej ansluten
-              </Badge>
-            )}
-          </div>
-        </div>
+        <PageHeader icon={Receipt} title="Fakturering" description="Förhandsgranska, hantera och exportera fakturor till Fortnox" testId="text-page-title">
+          {fortnoxStatus?.connected ? (
+            <Badge variant="outline" className="border-green-500 text-green-600 dark:text-green-400" data-testid="badge-fortnox-connected">
+              <CheckCircle2 className="h-3 w-3 mr-1" /> Fortnox ansluten
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="border-yellow-500 dark:border-yellow-700 text-yellow-600 dark:text-yellow-400" data-testid="badge-fortnox-disconnected">
+              <AlertTriangle className="h-3 w-3 mr-1" /> Fortnox ej ansluten
+            </Badge>
+          )}
+        </PageHeader>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card data-testid="card-kpi-invoices">

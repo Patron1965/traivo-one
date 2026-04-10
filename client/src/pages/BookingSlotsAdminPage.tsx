@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalendarPlus, Clock, Repeat, Trash2, Loader2, Calendar, Plus, Settings, CheckCircle2, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient as qc } from "@/lib/queryClient";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 
@@ -93,15 +94,11 @@ export default function BookingSlotsAdminPage() {
 
   return (
     <div className="container py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <CalendarPlus className="h-8 w-8 text-primary" />
-          <div>
-            <h1 className="text-2xl font-bold">Bokningshantering</h1>
-            <p className="text-muted-foreground">Hantera självbokningsslots och återkommande mönster</p>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        icon={CalendarPlus}
+        title="Bokningshantering"
+        description="Hantera självbokningsslots och återkommande mönster"
+      />
 
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <Card>

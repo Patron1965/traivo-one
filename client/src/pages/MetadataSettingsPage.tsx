@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
+import { PageHeader } from "@/components/layout/PageHeader";
 import {
   Plus,
   Edit2,
@@ -220,32 +221,26 @@ export default function MetadataSettingsPage() {
 
   return (
     <div className="container py-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Settings className="h-6 w-6" />
-            Metadatainställningar
-          </h1>
-          <p className="text-muted-foreground">
-            Hantera metadatakatalogen - vilka typer av data som kan lagras på objekt
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {(!metadataTypes || metadataTypes.length === 0) && (
-            <Button
-              variant="outline"
-              onClick={() => seedMutation.mutate()}
-              disabled={seedMutation.isPending}
-              data-testid="button-seed-types"
-            >
-              <Sparkles className="h-4 w-4 mr-2" />
-              Lägg till standardtyper
-            </Button>
-          )}
-          <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-add-type">
-                <Plus className="h-4 w-4 mr-2" />
+      <PageHeader
+        icon={Database}
+        title="Metadatainställningar"
+        description="Hantera metadatakatalogen - vilka typer av data som kan lagras på objekt"
+      >
+        {(!metadataTypes || metadataTypes.length === 0) && (
+          <Button
+            variant="outline"
+            onClick={() => seedMutation.mutate()}
+            disabled={seedMutation.isPending}
+            data-testid="button-seed-types"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            Lägg till standardtyper
+          </Button>
+        )}
+        <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+          <DialogTrigger asChild>
+            <Button data-testid="button-add-type">
+              <Plus className="h-4 w-4 mr-2" />
                 Ny metadatatyp
               </Button>
             </DialogTrigger>
@@ -259,8 +254,7 @@ export default function MetadataSettingsPage() {
               />
             </DialogContent>
           </Dialog>
-        </div>
-      </div>
+      </PageHeader>
 
       {isLoading ? (
         <div className="space-y-4">

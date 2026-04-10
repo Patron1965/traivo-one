@@ -35,6 +35,8 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { MessageCircle as MessageCircleIcon } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
 import { sv } from "date-fns/locale";
 
@@ -232,30 +234,19 @@ export default function AIAssistantPage() {
 
   return (
     <div className="container py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Brain className="h-6 w-6 text-purple-500" />
-            AI-Assistent
-          </h1>
-          <p className="text-muted-foreground">
-            Intelligent planering och rekommendationer för din verksamhet
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              queryClient.invalidateQueries({ queryKey: ["/api/ai"] });
-              toast({ title: "Uppdaterar AI-data..." });
-            }}
-            data-testid="button-refresh-ai"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Uppdatera
-          </Button>
-        </div>
-      </div>
+      <PageHeader icon={MessageCircleIcon} title="AI-Assistent" description="Intelligent planering och rekommendationer för din verksamhet">
+        <Button
+          variant="outline"
+          onClick={() => {
+            queryClient.invalidateQueries({ queryKey: ["/api/ai"] });
+            toast({ title: "Uppdaterar AI-data..." });
+          }}
+          data-testid="button-refresh-ai"
+        >
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Uppdatera
+        </Button>
+      </PageHeader>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-5">

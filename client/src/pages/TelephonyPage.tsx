@@ -58,6 +58,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { Link } from "wouter";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 interface CustomerResult {
   customer: {
@@ -793,15 +794,12 @@ function TemplateEditorSection() {
 export default function TelephonyPage() {
   return (
     <div className="container mx-auto py-6 px-4 max-w-6xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
-          <Phone className="h-6 w-6" />
-          Växel & Tillgänglighet
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Sök kunder via telefonnummer, se resurstillgänglighet och hantera statusmeddelanden.
-        </p>
-      </div>
+      <PageHeader
+        icon={Phone}
+        title="Växel & Tillgänglighet"
+        description="Sök kunder via telefonnummer, se resurstillgänglighet och hantera statusmeddelanden."
+        testId="text-page-title"
+      />
 
       <Tabs defaultValue="lookup" className="w-full">
         <TabsList className="grid w-full grid-cols-3" data-testid="tabs-telephony">

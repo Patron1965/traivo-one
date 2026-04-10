@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 interface Forecast {
   objectId: string;
@@ -156,16 +157,7 @@ export default function PredictiveMaintenancePage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-predictive-title">
-            <Activity className="h-6 w-6 text-primary" />
-            Prediktivt underh\u00e5ll
-          </h1>
-          <p className="text-muted-foreground">
-            AI-driven prognos f\u00f6r n\u00e4sta servicebehov baserat p\u00e5 IoT-signalhistorik
-          </p>
-        </div>
+      <PageHeader icon={Wrench} title="Prediktivt underh\u00e5ll" description="AI-driven prognos f\u00f6r n\u00e4sta servicebehov baserat p\u00e5 IoT-signalhistorik" testId="text-predictive-title">
         <Button
           onClick={() => analyzeMutation.mutate({ monthsBack: 12, useAI: true })}
           disabled={analyzeMutation.isPending}
@@ -178,7 +170,7 @@ export default function PredictiveMaintenancePage() {
           )}
           K\u00f6r analys
         </Button>
-      </div>
+      </PageHeader>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card>
