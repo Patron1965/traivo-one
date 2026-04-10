@@ -437,7 +437,7 @@ OSRM-klient (server/osrm-client.ts, 283 rader):
   ├── osrmRoute()      — Enstaka par med geometri
   ├── osrmRouteMulti() — Multi-waypoint med GeoJSON
   ├── Chunking         — Automatisk uppdelning vid > 100 koordinater
-  ├── Health check     — Exponentiell backoff vid fel
+  ├── Health check     — Backoff vid upprepade fel (max 5 consecutive failures)
   └── Konfigurerbar    — OSRM_BASE_URL, OSRM_TIMEOUT, OSRM_PROFILE
 ```
 
@@ -485,7 +485,7 @@ ASYNC_THRESHOLD = 30 ordrar
 | 50 ordrar, 10 resurser | ~10–30 sek (asynkron) | < 500 ms |
 | 100 ordrar, 15 resurser | ~30–60 sek (asynkron) | < 1 sek |
 
-**Lösningskvalitet:** OR-Tools + ALNS ger ~95% av optimalt. Nearest-Neighbor-fallback ger ~85%.
+**Lösningskvalitet (indikativt):** OR-Tools + ALNS ger typiskt nära optimal lösning. Nearest-Neighbor-fallback ger god men enklare lösningskvalitet.
 
 ---
 
@@ -913,7 +913,7 @@ Majoriteten av de ursprungliga 40 roadmap-features har implementerats, och syste
 | Drag-and-drop | dnd-kit | WeekPlanner, sorterbara listor |
 | State | TanStack Query v5 | Server-state, cache-invalidering |
 | Backend | Express.js + TypeScript | 26 routefiler, 30k rader |
-| ORM | Drizzle ORM | 132 tabeller, PostgreSQL |
+| ORM | Drizzle ORM | 131 tabeller, PostgreSQL |
 | Databas | PostgreSQL (Replit) | Full tenant-isolering |
 | Validering | Zod + drizzle-zod | End-to-end typsäkerhet |
 | AI | OpenAI (via Replit AI Integration) | GPT-4 för planering/analys |
@@ -964,7 +964,7 @@ traivo-one/
 │   └── alns.py                 # 729 rader — ALNS
 │
 ├── shared/
-│   └── schema.ts               # 4879 rader — 132 tabeller
+│   └── schema.ts               # 4879 rader — 131 tabeller
 │
 ├── tests/
 │   └── e2e/                    # Playwright-tester
@@ -1018,7 +1018,7 @@ Den ursprungliga utvecklingsplanen (Sprint 1–5+) är till största delen genom
 |--------|-----------|---------------------|
 | **Systemtyp** | Enterprise-fältsystem | Specialiserad ruttoptimeringsplattform |
 | **Ruttoptimering — algoritm** | OR-Tools CVRPTW + ALNS | ALNS med fler operatorer + AI/ML |
-| **Ruttoptimering — kvalitet** | ~95% optimal (OR-Tools + ALNS) | ~97% optimal (specialiserad) |
+| **Ruttoptimering — kvalitet** | Hög (OR-Tools + ALNS) | Mycket hög (specialiserad + AI/ML) |
 | **Constraints** | Tidsfönster, kompetens, kapacitet, beroenden | Utökade (EV, hållbarhet, multi-objektiv) |
 | **Fältpersonalhantering** | ✅ Komplett | Begränsad |
 | **Arbetsordrar** | ✅ Komplett (50+ fält per order) | Ej fokus |
