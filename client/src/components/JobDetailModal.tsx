@@ -719,7 +719,7 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                       Lägg till metadata
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[350px]" align="end">
+                  <PopoverContent className="w-[350px]" align="end" onOpenAutoFocus={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
                     <div className="space-y-4">
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Metadatatyp</label>
