@@ -171,14 +171,22 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
 
   const addMetadataMutation = useMutation({
     mutationFn: async ({ metadataTypNamn, varde }: { metadataTypNamn: string; varde: string }) => {
-      return apiRequest("POST", `/api/metadata/work-orders/${workOrderId}`, { metadataTypNamn, varde });
+      await apiRequest("POST", `/api/metadata/work-orders/${workOrderId}`, { metadataTypNamn, varde });
+      if (hasBulkTargets) {
+        await Promise.all(otherBulkIds.map(targetId =>
+          apiRequest("POST", `/api/metadata/work-orders/${targetId}`, { metadataTypNamn, varde })
+        ));
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/metadata/work-orders", workOrderId] });
+      for (const targetId of otherBulkIds) {
+        queryClient.invalidateQueries({ queryKey: ["/api/metadata/work-orders", targetId] });
+      }
       setSelectedMetadataType("");
       setMetadataValue("");
       setMetadataPopoverOpen(false);
-      toast({ title: "Metadata tillagd", description: "Metadata har lagts till på jobbet." });
+      toast({ title: "Metadata tillagd", description: hasBulkTargets ? `Metadata tillagd på alla ${otherBulkIds.length + 1} markerade jobb.` : "Metadata har lagts till på jobbet." });
     },
     onError: (error: any) => {
       toast({ title: "Kunde inte lägga till metadata", description: error.message || "Försök igen senare.", variant: "destructive" });
@@ -333,15 +341,23 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
 
   const addArticleMutation = useMutation({
     mutationFn: async ({ articleId, quantity }: { articleId: string; quantity: number }) => {
-      return apiRequest("POST", `/api/work-orders/${workOrderId}/lines`, { articleId, quantity });
+      await apiRequest("POST", `/api/work-orders/${workOrderId}/lines`, { articleId, quantity });
+      if (hasBulkTargets) {
+        await Promise.all(otherBulkIds.map(targetId =>
+          apiRequest("POST", `/api/work-orders/${targetId}/lines`, { articleId, quantity })
+        ));
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId, "lines"] });
+      for (const targetId of otherBulkIds) {
+        queryClient.invalidateQueries({ queryKey: ["/api/work-orders", targetId, "lines"] });
+      }
       setShowAddArticleDialog(false);
       setSelectedArticleId("");
       setArticleQuantity(1);
       setArticleSearch("");
-      toast({ title: "Artikel tillagd", description: "Artikeln har lagts till på jobbet." });
+      toast({ title: "Artikel tillagd", description: hasBulkTargets ? `Artikeln tillagd på alla ${otherBulkIds.length + 1} markerade jobb.` : "Artikeln har lagts till på jobbet." });
     },
     onError: (error: any) => {
       toast({ title: "Kunde inte lägga till artikeln", description: error.message || "Försök igen senare.", variant: "destructive" });
@@ -434,7 +450,7 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
             <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-md bg-primary/10 border border-primary/20" data-testid="banner-bulk-selection">
               <Copy className="h-4 w-4 text-primary shrink-0" />
               <span className="text-sm text-primary font-medium">
-                {otherBulkIds.length + 1} jobb markerade — du kan tillämpa artiklar och metadata på alla markerade
+                {otherBulkIds.length + 1} jobb markerade — artiklar och metadata du lägger till tillämpas på alla
               </span>
             </div>
           )}
