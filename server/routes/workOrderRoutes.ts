@@ -792,6 +792,66 @@ app.patch("/api/procurements/:id", asyncHandler(async (req, res) => {
   res.json(procurement);
 }));
 
+app.post("/api/work-orders/bulk-apply-lines", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const { sourceWorkOrderId, targetWorkOrderIds } = req.body;
+
+  if (!sourceWorkOrderId || !Array.isArray(targetWorkOrderIds) || targetWorkOrderIds.length === 0) {
+    throw new ValidationError("sourceWorkOrderId och targetWorkOrderIds (array) krävs");
+  }
+
+  const sourceOrder = await storage.getWorkOrder(sourceWorkOrderId);
+  if (!verifyTenantOwnership(sourceOrder, tenantId)) {
+    throw new NotFoundError("Käll-arbetsorder");
+  }
+
+  const sourceLines = await storage.getWorkOrderLines(sourceWorkOrderId);
+  if (sourceLines.length === 0) {
+    return res.json({ applied: 0, targets: targetWorkOrderIds.length, message: "Inga artiklar att tillämpa" });
+  }
+
+  let applied = 0;
+  for (const targetId of targetWorkOrderIds) {
+    if (targetId === sourceWorkOrderId) continue;
+    const targetOrder = await storage.getWorkOrder(targetId);
+    if (!verifyTenantOwnership(targetOrder, tenantId)) continue;
+
+    const existingLines = await storage.getWorkOrderLines(targetId);
+    for (const existing of existingLines) {
+      await storage.deleteWorkOrderLine(existing.id);
+    }
+
+    for (const line of sourceLines) {
+      let priceInfo: { price: number; cost: number; productionMinutes: number; priceListId: string | null; source: string };
+      if (line.priceListIdUsed) {
+        priceInfo = await storage.resolveArticlePriceFromList(tenantId, line.articleId!, line.priceListIdUsed);
+      } else {
+        priceInfo = await storage.resolveArticlePrice(tenantId, line.articleId!, targetOrder!.customerId);
+      }
+
+      const lineData = insertWorkOrderLineSchema.parse({
+        tenantId,
+        workOrderId: targetId,
+        articleId: line.articleId,
+        quantity: line.quantity,
+        resolvedPrice: priceInfo.price,
+        resolvedCost: priceInfo.cost,
+        resolvedProductionMinutes: priceInfo.productionMinutes,
+        priceListIdUsed: priceInfo.priceListId,
+        priceSource: priceInfo.source,
+        isOptional: line.isOptional,
+        notes: line.notes,
+      });
+      await storage.createWorkOrderLine(lineData);
+    }
+
+    await storage.recalculateWorkOrderTotals(targetId);
+    applied++;
+  }
+
+  res.json({ applied, targets: targetWorkOrderIds.length, linesPerOrder: sourceLines.length });
+}));
+
 app.delete("/api/procurements/:id", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const existing = await storage.getProcurement(req.params.id);

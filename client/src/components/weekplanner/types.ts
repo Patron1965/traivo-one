@@ -32,6 +32,7 @@ export interface PlannerAction {
 export interface WeekPlannerProps {
   onAddJob?: () => void;
   onSelectJob?: (jobId: string) => void;
+  onSelectedJobIdsChange?: (ids: Set<string>) => void;
   showAIPanel?: boolean;
   onToggleAIPanel?: () => void;
 }

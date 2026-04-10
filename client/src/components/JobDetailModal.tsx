@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, MapPin, User, Calendar, Clock, Package, Check, ChevronsUpDown, Tag, ShoppingCart, DollarSign, MessageSquare, Send, CheckCircle2, XCircle, AlertCircle, Search } from "lucide-react";
+import { Loader2, Plus, Trash2, MapPin, User, Calendar, Clock, Package, Check, ChevronsUpDown, Tag, ShoppingCart, DollarSign, MessageSquare, Send, CheckCircle2, XCircle, AlertCircle, Search, Copy } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,7 @@ interface JobDetailModalProps {
   open: boolean;
   onClose: () => void;
   workOrderId: string | null;
+  bulkWorkOrderIds?: string[];
 }
 
 interface WorkOrderWithDetails extends WorkOrder {
@@ -63,8 +64,10 @@ interface WorkOrderLineWithDetails extends WorkOrderLine {
   articleDescription?: string;
 }
 
-export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalProps) {
+export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = [] }: JobDetailModalProps) {
   const { toast } = useToast();
+  const otherBulkIds = useMemo(() => bulkWorkOrderIds.filter(id => id !== workOrderId), [bulkWorkOrderIds, workOrderId]);
+  const hasBulkTargets = otherBulkIds.length > 0;
   const [objectSearch, setObjectSearch] = useState("");
   const [objectPopoverOpen, setObjectPopoverOpen] = useState(false);
   const [metadataPopoverOpen, setMetadataPopoverOpen] = useState(false);
@@ -353,6 +356,41 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
     addArticleMutation.mutate({ articleId: selectedArticleId, quantity: articleQuantity });
   };
 
+  const bulkApplyLinesMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/work-orders/bulk-apply-lines", {
+        sourceWorkOrderId: workOrderId,
+        targetWorkOrderIds: otherBulkIds,
+      });
+    },
+    onSuccess: async (res) => {
+      const data = await res.json();
+      toast({ title: "Artiklar tillämpade", description: `Artiklar kopierade till ${data.applied} jobb.` });
+      for (const targetId of otherBulkIds) {
+        queryClient.invalidateQueries({ queryKey: ["/api/work-orders", targetId, "lines"] });
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: "Kunde inte tillämpa artiklar", description: error.message || "Försök igen senare.", variant: "destructive" });
+    },
+  });
+
+  const bulkApplyMetadataMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/metadata/work-orders/bulk-apply", {
+        sourceWorkOrderId: workOrderId,
+        targetWorkOrderIds: otherBulkIds,
+      });
+    },
+    onSuccess: async (res) => {
+      const data = await res.json();
+      toast({ title: "Metadata tillämpade", description: `Metadata kopierade till ${data.applied} jobb.` });
+    },
+    onError: (error: any) => {
+      toast({ title: "Kunde inte tillämpa metadata", description: error.message || "Försök igen senare.", variant: "destructive" });
+    },
+  });
+
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
       draft: "Utkast",
@@ -392,6 +430,14 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
           <DialogDescription>
             Visa och hantera objekt kopplade till detta jobb.
           </DialogDescription>
+          {hasBulkTargets && (
+            <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-md bg-primary/10 border border-primary/20" data-testid="banner-bulk-selection">
+              <Copy className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-sm text-primary font-medium">
+                {otherBulkIds.length + 1} jobb markerade — du kan tillämpa artiklar och metadata på alla markerade
+              </span>
+            </div>
+          )}
         </DialogHeader>
 
         {workOrderLoading ? (
@@ -504,6 +550,24 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
                         {workOrderLines.reduce((sum, l) => sum + (l.resolvedProductionMinutes || 0) * (l.quantity || 1), 0)} min
                       </span>
                     </div>
+                  )}
+
+                  {hasBulkTargets && workOrderLines.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full mt-2 border-primary/30 text-primary hover:bg-primary/10"
+                      onClick={() => bulkApplyLinesMutation.mutate()}
+                      disabled={bulkApplyLinesMutation.isPending}
+                      data-testid="button-bulk-apply-articles"
+                    >
+                      {bulkApplyLinesMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Copy className="h-4 w-4 mr-2" />
+                      )}
+                      Tillämpa artiklar på alla {otherBulkIds.length} markerade jobb
+                    </Button>
                   )}
                 </div>
               )}
@@ -769,6 +833,24 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
                     ))}
                   </div>
                 </ScrollArea>
+              )}
+
+              {hasBulkTargets && workOrderMetadata.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full mt-2 border-primary/30 text-primary hover:bg-primary/10"
+                  onClick={() => bulkApplyMetadataMutation.mutate()}
+                  disabled={bulkApplyMetadataMutation.isPending}
+                  data-testid="button-bulk-apply-metadata"
+                >
+                  {bulkApplyMetadataMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Copy className="h-4 w-4 mr-2" />
+                  )}
+                  Tillämpa metadata på alla {otherBulkIds.length} markerade jobb
+                </Button>
               )}
             </div>
 

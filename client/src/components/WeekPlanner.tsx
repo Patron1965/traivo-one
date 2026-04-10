@@ -24,12 +24,16 @@ import { usePlannerDnd } from "./weekplanner/usePlannerDnd";
 import { UrgentJobDialog } from "./UrgentJobDialog";
 import type { WorkOrderWithObject } from "@shared/schema";
 
-export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPanel }: WeekPlannerProps) {
+export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, showAIPanel, onToggleAIPanel }: WeekPlannerProps) {
   const d = usePlannerData();
   const zoom = zoomLevels[d.zoomLevel];
   const [urgentDialogOpen, setUrgentDialogOpen] = useState(false);
   const [conflictListOpen, setConflictListOpen] = useState(false);
   const [urgentPreselectedOrder, setUrgentPreselectedOrder] = useState<WorkOrderWithObject | null>(null);
+
+  useEffect(() => {
+    onSelectedJobIdsChange?.(d.selectedJobIds);
+  }, [d.selectedJobIds, onSelectedJobIdsChange]);
 
   const handleEscalateUrgent = useCallback((job: WorkOrderWithObject) => {
     setUrgentPreselectedOrder(job);

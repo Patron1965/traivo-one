@@ -13,6 +13,7 @@ import { format, startOfWeek, addDays } from "date-fns";
 export default function WeekPlannerPage() {
   const [showJobModal, setShowJobModal] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
   const [filterParam] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("filter");
@@ -54,6 +55,7 @@ export default function WeekPlannerPage() {
         <WeekPlanner 
           onAddJob={() => setShowJobModal(true)}
           onSelectJob={(id) => setSelectedJobId(id)}
+          onSelectedJobIdsChange={setSelectedJobIds}
           showAIPanel={showAIPanel}
           onToggleAIPanel={() => setShowAIPanel(!showAIPanel)}
         />
@@ -120,6 +122,7 @@ export default function WeekPlannerPage() {
         open={selectedJobId !== null}
         onClose={() => setSelectedJobId(null)}
         workOrderId={selectedJobId}
+        bulkWorkOrderIds={selectedJobIds.size > 1 ? Array.from(selectedJobIds) : undefined}
       />
       </div>
     </div>

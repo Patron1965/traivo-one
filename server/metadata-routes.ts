@@ -550,6 +550,80 @@ metadataRouter.delete("/work-orders/metadata/:id", async (req: Request, res: Res
   }
 });
 
+metadataRouter.post("/work-orders/bulk-apply", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const { sourceWorkOrderId, targetWorkOrderIds } = req.body;
+    if (!sourceWorkOrderId || !Array.isArray(targetWorkOrderIds) || targetWorkOrderIds.length === 0) {
+      return res.status(400).json({ error: "sourceWorkOrderId och targetWorkOrderIds krävs" });
+    }
+
+    const { storage } = await import("./storage");
+    const { verifyTenantOwnership } = await import("./routes/helpers");
+
+    const sourceOrder = await storage.getWorkOrder(sourceWorkOrderId);
+    if (!verifyTenantOwnership(sourceOrder, tenantId)) {
+      return res.status(404).json({ error: "Käll-arbetsorder hittades inte" });
+    }
+
+    const sourceMetadata = await getWorkOrderMetadata(sourceWorkOrderId, tenantId);
+    if (sourceMetadata.length === 0) {
+      return res.json({ applied: 0, targets: targetWorkOrderIds.length, message: "Ingen metadata att tillämpa" });
+    }
+
+    let applied = 0;
+    for (const targetId of targetWorkOrderIds) {
+      if (targetId === sourceWorkOrderId) continue;
+
+      const targetOrder = await storage.getWorkOrder(targetId);
+      if (!verifyTenantOwnership(targetOrder, tenantId)) continue;
+
+      const existingMetadata = await getWorkOrderMetadata(targetId, tenantId);
+      for (const existing of existingMetadata) {
+        await deleteWorkOrderMetadata(existing.id, tenantId);
+      }
+
+      for (const meta of sourceMetadata) {
+        let value: string;
+        if (meta.vardeString !== null && meta.vardeString !== undefined) {
+          value = meta.vardeString;
+        } else if (meta.vardeInteger !== null && meta.vardeInteger !== undefined) {
+          value = String(meta.vardeInteger);
+        } else if (meta.vardeDecimal !== null && meta.vardeDecimal !== undefined) {
+          value = String(meta.vardeDecimal);
+        } else if (meta.vardeBoolean !== null && meta.vardeBoolean !== undefined) {
+          value = String(meta.vardeBoolean);
+        } else if (meta.vardeDatetime !== null && meta.vardeDatetime !== undefined) {
+          value = meta.vardeDatetime;
+        } else if (meta.vardeJson !== null && meta.vardeJson !== undefined) {
+          value = JSON.stringify(meta.vardeJson);
+        } else if (meta.vardeReferens !== null && meta.vardeReferens !== undefined) {
+          value = meta.vardeReferens;
+        } else {
+          value = "";
+        }
+
+        await createWorkOrderMetadata({
+          tenantId,
+          workOrderId: targetId,
+          metadataTypNamn: meta.katalog.namn,
+          varde: value,
+        });
+      }
+      applied++;
+    }
+
+    res.json({ applied, targets: targetWorkOrderIds.length, metadataPerOrder: sourceMetadata.length });
+  } catch (error: any) {
+    console.error("Error bulk applying work order metadata:", error);
+    res.status(500).json({ error: "Kunde inte tillämpa metadata" });
+  }
+});
+
 // ============================================================================
 // PROPAGERING NEDÅT
 // ============================================================================
