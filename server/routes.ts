@@ -348,10 +348,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/dashboard/capacity", async (req, res) => {
+  app.get("/api/dashboard/capacity/:dateParam?", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
-      const dateParam = req.query.date as string;
+      const dateParam = (req.params.dateParam || req.query.date) as string;
       const date = dateParam ? new Date(dateParam) : new Date();
       const dateStr = date.toISOString().split("T")[0];
       const startOfDay = new Date(dateStr + "T00:00:00.000Z");
