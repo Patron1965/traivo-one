@@ -57,8 +57,6 @@ const translations: Record<string, Record<Language, string>> = {
   "nav.week-planner.desc": { sv: "Planera veckans arbete", en: "Plan the week's work" },
   "nav.route-planning": { sv: "Ruttplanering", en: "Route Planning" },
   "nav.route-planning.desc": { sv: "Optimera körvägar", en: "Optimize routes" },
-  "nav.weather": { sv: "Väderplanering", en: "Weather Planning" },
-  "nav.weather.desc": { sv: "Planera efter väder", en: "Plan by weather" },
   "nav.annual-planning": { sv: "Årsplanering", en: "Annual Planning" },
   "nav.annual-planning.desc": { sv: "Årsmål & uppföljning", en: "Annual goals & follow-up" },
   "nav.planner-map": { sv: "Planerarvy Karta", en: "Planner Map" },

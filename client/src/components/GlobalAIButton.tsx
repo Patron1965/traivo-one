@@ -49,15 +49,6 @@ const moduleInfo: Record<string, ModuleInfo> = {
       "Analysera bränslekostnader",
     ],
   },
-  "/weather": {
-    name: "Väder",
-    description: "Väderbaserad planering",
-    capabilities: [
-      "Anpassa kapacitet efter väder",
-      "Prognostisera arbetsförhållanden",
-      "Optimera schemaläggning",
-    ],
-  },
   "/optimization": {
     name: "Optimering",
     description: "Ruttoptimering och effektivisering",

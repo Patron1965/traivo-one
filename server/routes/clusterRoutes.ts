@@ -395,8 +395,6 @@ app.post("/api/ai/chat", asyncHandler(async (req, res) => {
       } else if (modulePath.startsWith("/vehicles")) {
         const vehicles = await storage.getVehicles(tenantId);
         moduleData = `Fordonsflotta: ${vehicles.length} fordon registrerade`;
-      } else if (modulePath.startsWith("/weather")) {
-        moduleData = "Väderplanering: AI-stöd för att anpassa schemaläggning baserat på väderförhållanden";
       } else if (modulePath.startsWith("/subscriptions")) {
         const subscriptions = await storage.getSubscriptions(tenantId);
         const active = subscriptions.filter(s => s.status === "active").length;

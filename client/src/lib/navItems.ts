@@ -17,7 +17,6 @@ import {
   TrendingUp,
   Smartphone,
   Layers,
-  Cloud,
   Building,
   Database,
   BarChart3,
@@ -87,7 +86,6 @@ export function getPlaneringItems(tl?: (key: string) => string): NavItem[] {
   return [
     { title: l("nav.week-planner"), url: "/planner", icon: Calendar, description: l("nav.week-planner.desc") },
     { title: l("nav.route-planning"), url: "/routes", icon: Map, description: l("nav.route-planning.desc") },
-    { title: l("nav.weather"), url: "/weather", icon: Cloud, description: l("nav.weather.desc") },
     { title: l("nav.annual-planning"), url: "/annual-planning", icon: Target, description: l("nav.annual-planning.desc") },
   ];
 }
