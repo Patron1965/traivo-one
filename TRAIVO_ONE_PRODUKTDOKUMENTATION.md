@@ -2,10 +2,12 @@
 
 > **Version:** 3.0  
 > **Datum:** 2026-04-10  
+> **Senast verifierad mot kodbasen:** 2026-04-10  
 > **Status:** Faktisk implementation (speglar kodbasen)  
 > **Plattform:** Replit (initial deployment)  
 > **Typ:** Enterprise-fältsystem  
-> **Målgrupp:** Små, medelstora och stora bolag
+> **Målgrupp:** Små, medelstora och stora bolag  
+> **Not:** Radantal, endpoint-antal och prestandasiffror är uppskattningar baserade på kodanalys vid verifieringsdatum. Dessa kan förändras vid vidareutveckling.
 
 ---
 
