@@ -332,7 +332,7 @@ function ImportHistorySection() {
                       <div className="text-right text-xs">
                         <span className="text-green-600 font-medium">{batch.created || 0} nya</span>
                         <span className="text-muted-foreground mx-1">|</span>
-                        <span className="text-amber-600">{batch.updated || 0} uppdaterade</span>
+                        <span className="text-orange-500 dark:text-orange-400">{batch.updated || 0} uppdaterade</span>
                         <span className="text-muted-foreground mx-1">|</span>
                         <span className={batch.errors > 0 ? "text-destructive font-medium" : "text-muted-foreground"}>{batch.errors || 0} fel</span>
                       </div>
@@ -1527,7 +1527,7 @@ export default function ImportPage() {
                       <div className="text-xs text-muted-foreground">Nya kunder</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-lg font-bold text-amber-600" data-testid="text-customer-duplicates">{customerValidation.duplicateCount}</div>
+                      <div className="text-lg font-bold text-orange-500 dark:text-orange-400" data-testid="text-customer-duplicates">{customerValidation.duplicateCount}</div>
                       <div className="text-xs text-muted-foreground">Dubbletter</div>
                     </div>
                     <div className="text-center">
@@ -1539,7 +1539,7 @@ export default function ImportPage() {
                   {customerValidation.duplicateCount > 0 && (
                     <div className="bg-amber-50 dark:bg-amber-950/20 p-3 rounded-md text-sm">
                       <div className="flex items-center gap-2 mb-2">
-                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                        <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
                         <span className="font-medium text-amber-700 dark:text-amber-300">
                           {customerValidation.duplicateCount} dubbletter hittade
                         </span>
@@ -1581,7 +1581,7 @@ export default function ImportPage() {
                               <TableCell className="text-xs">
                                 {p.duplicate ? (
                                   <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800">
-                                    <AlertTriangle className="h-3 w-3 mr-1" /> Dubblett
+                                    <AlertTriangle className="h-3 w-3 mr-1 text-orange-500 dark:text-orange-400" /> Dubblett
                                   </Badge>
                                 ) : p.errors.length > 0 ? (
                                   <Badge variant="outline" className="text-xs bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800">
@@ -2257,11 +2257,11 @@ export default function ImportPage() {
               {modusResults["invoice-lines"] && (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-3 border rounded-lg bg-muted/30">
                   <div className="text-center">
-                    <div className="text-lg font-bold text-amber-600">{modusResults["invoice-lines"].imported}</div>
+                    <div className="text-lg font-bold text-orange-500 dark:text-orange-400">{modusResults["invoice-lines"].imported}</div>
                     <div className="text-xs text-muted-foreground">Fakturarader importerade</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-lg font-bold text-amber-600">{(modusResults["invoice-lines"] as any).articlesAutoCreated || 0}</div>
+                    <div className="text-lg font-bold text-orange-500 dark:text-orange-400">{(modusResults["invoice-lines"] as any).articlesAutoCreated || 0}</div>
                     <div className="text-xs text-muted-foreground">Artiklar skapade</div>
                   </div>
                   <div className="text-center">

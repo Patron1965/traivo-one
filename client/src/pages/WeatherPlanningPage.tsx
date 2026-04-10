@@ -127,7 +127,7 @@ export default function WeatherPlanningPage() {
               {severeImpacts.length > 0 && (
                 <div className="mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                   <div className="flex items-center gap-2 text-destructive font-medium mb-2">
-                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
                     Varning: {severeImpacts.length} dagar med stor väderpåverkan
                   </div>
                   <ul className="text-sm text-destructive/80 space-y-1">

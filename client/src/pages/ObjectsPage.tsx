@@ -773,8 +773,8 @@ export default function ObjectsPage() {
               {obj.address && (!obj.city || obj.city.trim() === "") && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="flex items-center gap-1 text-amber-500 dark:text-amber-400 cursor-help">
-                      <AlertTriangle className="h-3 w-3" />
+                    <span className="flex items-center gap-1 text-orange-500 dark:text-orange-400 cursor-help">
+                      <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>Stad saknas</TooltipContent>
@@ -952,7 +952,7 @@ export default function ObjectsPage() {
     <div className="p-6 space-y-6">
       {issueFilter && (
         <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800" data-testid="banner-issue-filter">
-          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+          <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0" />
           <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
             Filtrerat: {issueFilterLabels[issueFilter] || issueFilter}
           </span>
@@ -1540,7 +1540,7 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
             <TabsContent value="geocode" className="space-y-4 mt-4">
               {batchGeoPreview && !batchGeoPreview.googleAvailable && (
                 <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-orange-500 dark:text-orange-400" />
                   Geoapify API-nyckel saknas. Kontrollera att GEOAPIFY_API_KEY är konfigurerad.
                 </div>
               )}
@@ -2005,7 +2005,7 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
               {servicePatternDialog.data.anomalies.length > 0 && (
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
+                    <AlertTriangle className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />
                     Avvikande objekt ({servicePatternDialog.data.anomalies.length})
                   </p>
                   {servicePatternDialog.data.anomalies.map((a, i) => (
@@ -2096,7 +2096,7 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
               {maintenanceDialog.data.overdue.length > 0 && (
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-red-500 dark:text-red-400 uppercase tracking-wide flex items-center gap-1">
-                    <AlertTriangle className="h-3.5 w-3.5" />
+                    <AlertTriangle className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />
                     Försenade ({maintenanceDialog.data.overdue.length})
                   </p>
                   {maintenanceDialog.data.overdue.map((item, i) => (

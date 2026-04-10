@@ -171,7 +171,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
 
           {d.activeDragJob && d.activeDragJob.clusterId && d.clusterMatchedResourceIds.size === 0 && d.visibleResources.some(r => r.serviceArea && r.serviceArea.length > 0) && (
             <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 animate-in fade-in slide-in-from-top-1 duration-200" data-testid="drag-no-cluster-match-warning">
-              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0" />
               <span className="text-xs text-amber-700 dark:text-amber-300">
                 Ingen synlig resurs matchar klustret för detta jobb. Kontrollera resursernas serviceområden.
               </span>

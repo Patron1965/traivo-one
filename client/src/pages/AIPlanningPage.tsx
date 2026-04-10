@@ -206,7 +206,7 @@ export default function AIPlanningPage() {
         <Card>
           <CardContent className="p-8">
             <div className="flex items-center gap-3">
-              <AlertTriangle className="h-6 w-6 text-yellow-500 flex-shrink-0" />
+              <AlertTriangle className="h-6 w-6 text-orange-500 dark:text-orange-400 flex-shrink-0" />
               <div>
                 <p className="font-medium">Kunde inte hämta analysdata</p>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -277,7 +277,7 @@ export default function AIPlanningPage() {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div className="text-sm text-muted-foreground">Oplanerade</div>
-              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
             </div>
             <div className="text-2xl font-bold mt-1">{analysis.summary.unplannedOrders}</div>
             <div className="text-xs text-amber-600">

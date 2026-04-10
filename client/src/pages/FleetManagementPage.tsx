@@ -312,13 +312,13 @@ export default function FleetManagementPage() {
           )}
           {kpis.overdueService > 0 && (
             <Badge variant="outline" className="text-xs font-normal text-red-600 border-red-300 gap-1">
-              <AlertTriangle className="h-3 w-3" />
+              <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />
               {kpis.overdueService} försenad service
             </Badge>
           )}
           {kpis.overdueInspection > 0 && (
             <Badge variant="outline" className="text-xs font-normal text-amber-600 border-amber-300 gap-1">
-              <AlertTriangle className="h-3 w-3" />
+              <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />
               {kpis.overdueInspection} utgången besiktning
             </Badge>
           )}
@@ -359,7 +359,7 @@ export default function FleetManagementPage() {
               <Card className="hover-elevate cursor-help" data-testid="card-kpi-service-alerts">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                    <AlertTriangle className="h-4 w-4" /> Servicevarningar
+                    <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" /> Servicevarningar
                   </div>
                   <div className="text-2xl font-bold text-red-600" data-testid="text-kpi-overdue">{kpis.overdueService}</div>
                   <p className="text-xs text-muted-foreground">{kpis.upcomingService} kommande (30 dagar)</p>

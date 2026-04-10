@@ -81,7 +81,7 @@ export const AssignDialog = memo(function AssignDialog(props: AssignDialogProps)
           </div>
           {matchData?.noMatch && matchData?.clusterName && (
             <div className="flex items-center gap-2 p-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800" data-testid="no-cluster-match-warning">
-              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0" />
               <span className="text-xs text-amber-700 dark:text-amber-300">Ingen resurs matchar klustret <strong>{matchData.clusterName}</strong>. Kontrollera resursernas serviceområden.</span>
             </div>
           )}
@@ -210,7 +210,7 @@ export const ConflictDialog = memo(function ConflictDialog(props: ConflictDialog
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
-            <AlertTriangle className="h-5 w-5" />
+            <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
             {hasHardBlock ? "Tilldelning blockerad" : "Konflikt upptäckt"}
           </DialogTitle>
           <DialogDescription>
@@ -235,7 +235,7 @@ export const ConflictDialog = memo(function ConflictDialog(props: ConflictDialog
                 const displayText = isHardBlock ? conflict.replace("[BLOCK] ", "") : conflict;
                 return (
                 <div key={i} className={`flex items-start gap-2 p-2 rounded border ${isHardBlock ? "bg-red-100 dark:bg-red-950/50 border-red-300 dark:border-red-700" : isClusterWarning ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800" : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"}`}>
-                  <AlertTriangle className={`h-4 w-4 shrink-0 mt-0.5 ${isHardBlock ? "text-red-700 dark:text-red-300" : isClusterWarning ? "text-amber-500" : "text-red-500"}`} />
+                  <AlertTriangle className={`h-4 w-4 shrink-0 mt-0.5 ${isHardBlock ? "text-red-700 dark:text-red-300" : isClusterWarning ? "text-orange-500 dark:text-orange-400" : "text-red-500"}`} />
                   <span className="text-sm">{displayText}</span>
                 </div>
                 );
@@ -249,7 +249,7 @@ export const ConflictDialog = memo(function ConflictDialog(props: ConflictDialog
           </Button>
           {!hasHardBlock && (
             <Button variant="destructive" onClick={onAccept} data-testid="button-accept-conflict">
-              <AlertTriangle className="h-4 w-4 mr-2" />
+              <AlertTriangle className="h-4 w-4 mr-2 text-orange-500 dark:text-orange-400" />
               Schemalägg ändå
             </Button>
           )}
@@ -617,7 +617,7 @@ export const ConflictListDialog = memo(function ConflictListDialog({ open, onOpe
                     <div className="mt-1.5 space-y-0.5">
                       {reasons.map((reason, i) => (
                         <div key={i} className="flex items-start gap-1.5 text-xs text-red-600 dark:text-red-400">
-                          <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                          <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5 text-orange-500 dark:text-orange-400" />
                           <span>{reason}</span>
                         </div>
                       ))}

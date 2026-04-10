@@ -365,7 +365,7 @@ export function PredictionAccuracyTab() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4" />
+              <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
               Carry-over-analys
             </CardTitle>
             <CardDescription>Vanligaste orsaker till oavslutade jobb</CardDescription>

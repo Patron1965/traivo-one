@@ -382,14 +382,14 @@ export default function PortalFieldPage() {
 
             {scanError && (
               <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/20 rounded-lg text-sm text-red-600" data-testid="text-scan-error">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <AlertTriangle className="h-4 w-4 shrink-0 text-orange-500 dark:text-orange-400" />
                 {scanError}
               </div>
             )}
 
             {errorMessage && (
               <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/20 rounded-lg text-sm text-red-600" data-testid="text-error-message">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <AlertTriangle className="h-4 w-4 shrink-0 text-orange-500 dark:text-orange-400" />
                 {errorMessage}
                 <button className="ml-auto" onClick={() => setErrorMessage(null)}><X className="h-4 w-4" /></button>
               </div>
@@ -468,7 +468,7 @@ export default function PortalFieldPage() {
             )}
             {scanError && (
               <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/20 rounded-lg text-sm text-red-600" data-testid="text-scanner-error">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <AlertTriangle className="h-4 w-4 shrink-0 text-orange-500 dark:text-orange-400" />
                 {scanError}
               </div>
             )}
@@ -573,7 +573,7 @@ export default function PortalFieldPage() {
                   <Card data-testid="card-previous-reports">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
                         Tidigare rapporter
                       </CardTitle>
                     </CardHeader>
@@ -707,7 +707,7 @@ export default function PortalFieldPage() {
 
             {errorMessage && (
               <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/20 rounded-lg text-sm text-red-600" data-testid="text-report-error">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <AlertTriangle className="h-4 w-4 shrink-0 text-orange-500 dark:text-orange-400" />
                 {errorMessage}
                 <button className="ml-auto" onClick={() => setErrorMessage(null)}><X className="h-4 w-4" /></button>
               </div>

@@ -343,7 +343,7 @@ export default function AIAssistantPage() {
             <Card className="bg-gradient-to-br from-amber-500/10 to-transparent">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
                   Förseningar
                 </CardTitle>
               </CardHeader>

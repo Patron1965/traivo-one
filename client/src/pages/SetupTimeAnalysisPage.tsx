@@ -111,7 +111,7 @@ export default function SetupTimeAnalysisPage() {
   }
 
   const accuracy = analysis?.overallAccuracy ?? 100;
-  const accuracyColor = accuracy >= 80 ? "text-green-600" : accuracy >= 50 ? "text-yellow-600" : "text-red-600";
+  const accuracyColor = accuracy >= 80 ? "text-green-600" : accuracy >= 50 ? "text-orange-500 dark:text-orange-400" : "text-red-600";
 
   return (
     <div className="space-y-6">
@@ -288,7 +288,7 @@ export default function SetupTimeAnalysisPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-600" />
+              <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
               Avvikande mätningar
             </CardTitle>
             <CardDescription>
@@ -304,7 +304,7 @@ export default function SetupTimeAnalysisPage() {
                   data-testid={`insight-${insight.id}`}
                 >
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="h-4 w-4 mt-0.5" />
+                    <AlertTriangle className="h-4 w-4 mt-0.5 text-orange-500 dark:text-orange-400" />
                     <div>
                       <span className="font-medium text-sm">{insight.title}</span>
                       <p className="text-xs opacity-80 mt-1">{insight.description}</p>

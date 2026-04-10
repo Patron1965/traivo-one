@@ -29,7 +29,7 @@ export function SigningValidationModal({
       <DialogContent data-testid="dialog-signing-validation">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-amber-600">
-            <AlertTriangle className="h-5 w-5" />
+            <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
             Obligatoriska fält saknas
           </DialogTitle>
         </DialogHeader>

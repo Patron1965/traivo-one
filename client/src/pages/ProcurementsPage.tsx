@@ -296,7 +296,7 @@ export default function ProcurementsPage() {
         <Card className="border-amber-500/50 bg-amber-500/5">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
+              <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400 mt-0.5" />
               <div className="space-y-1">
                 <p className="font-medium text-amber-700 dark:text-amber-400">Deadline-varningar</p>
                 {overdueDeadlines.length > 0 && (

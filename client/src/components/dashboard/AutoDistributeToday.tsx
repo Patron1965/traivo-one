@@ -119,7 +119,7 @@ export function AutoDistributeToday() {
                         </div>
                         {a.constraintWarnings && a.constraintWarnings.length > 0 && (
                           <div className="flex items-start gap-1 mt-1 text-xs text-amber-600 dark:text-amber-400">
-                            <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                            <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0 text-orange-500 dark:text-orange-400" />
                             <span>{a.constraintWarnings.join("; ")}</span>
                           </div>
                         )}
@@ -133,7 +133,7 @@ export function AutoDistributeToday() {
 
           {result && result.totalUnplanned > result.totalAssigned && (
             <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
-              <AlertTriangle className="h-4 w-4" />
+              <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
               {result.totalUnplanned - result.totalAssigned} order(s) kunde inte fördelas (otillräcklig kapacitet).
             </div>
           )}

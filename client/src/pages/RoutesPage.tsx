@@ -291,7 +291,7 @@ export default function RoutesPage() {
           <AlertTriangle className={`h-4 w-4 shrink-0 ${
             recommendations.weather.impact === "severe" || recommendations.weather.impact === "high"
               ? "text-red-500 dark:text-red-400"
-              : "text-yellow-500 dark:text-yellow-400"
+              : "text-orange-500 dark:text-orange-400"
           }`} />
           <span className="text-sm">
             {Math.round(recommendations.weather.temperature)}°C, {recommendations.weather.precipitation} mm, {Math.round(recommendations.weather.windSpeed)} m/s — {recommendations.weather.description}

@@ -376,7 +376,7 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
                 </Select>
                 {solver === "ortools" && ortoolsAvailable === false && (
                   <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3" />
+                    <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />
                     OR-Tools-tjänsten är offline — fallback till Geoapify
                   </p>
                 )}

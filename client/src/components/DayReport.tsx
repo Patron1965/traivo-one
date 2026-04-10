@@ -167,7 +167,7 @@ export function DayReport({ workOrders, resourceId, onBack }: DayReportProps) {
               )}
               {impossibleOrders.length > 0 && (
                 <span className="flex items-center gap-1 text-red-600 dark:text-red-400">
-                  <AlertTriangle className="h-3.5 w-3.5" />
+                  <AlertTriangle className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />
                   {impossibleOrders.length} omöjliga
                 </span>
               )}

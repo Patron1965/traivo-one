@@ -410,7 +410,7 @@ export default function VehiclesPage() {
         )}
         {fleetStats.serviceSoon > 0 && (
           <Badge variant="outline" className="text-xs font-normal gap-1 text-amber-600 border-amber-300">
-            <AlertTriangle className="h-3 w-3" />
+            <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />
             {fleetStats.serviceSoon} service snart
           </Badge>
         )}
@@ -570,9 +570,9 @@ export default function VehiclesPage() {
                           </span>
                           <span className="flex items-center gap-1">
                             {serviceStatus.status === "overdue" && <AlertTriangle className="h-3 w-3 text-red-500" />}
-                            {serviceStatus.status === "soon" && <AlertTriangle className="h-3 w-3 text-amber-500" />}
+                            {serviceStatus.status === "soon" && <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />}
                             {serviceStatus.status === "ok" && <CheckCircle className="h-3 w-3 text-green-500" />}
-                            <span className={serviceStatus.status === "overdue" ? "text-red-500 font-medium" : serviceStatus.status === "soon" ? "text-amber-500" : ""}>
+                            <span className={serviceStatus.status === "overdue" ? "text-red-500 font-medium" : serviceStatus.status === "soon" ? "text-orange-500 dark:text-orange-400" : ""}>
                               {serviceStatus.status === "unknown" ? "Ej planerad" : serviceStatus.label}
                             </span>
                           </span>

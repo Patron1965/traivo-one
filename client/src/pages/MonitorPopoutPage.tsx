@@ -522,7 +522,7 @@ export default function MonitorPopoutPage() {
           className="bg-red-600 text-white rounded-lg shadow-lg px-3 py-2 hover:bg-red-700 transition-colors flex items-center gap-1.5 text-xs font-medium"
           data-testid="button-open-urgent-job"
         >
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
           Akut jobb
         </button>
         <button

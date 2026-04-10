@@ -187,7 +187,7 @@ export default function EconomicsDashboardPage() {
       <PageHeader icon={TrendingUp} title="Ekonomisk översikt" description="Analysera lönsamhet per kluster och kund" testId="text-page-title" />
       {ordersWithoutEconomicData > 0 && (
         <div className="flex items-center gap-2 p-2 rounded bg-yellow-500/10 text-yellow-700 dark:text-yellow-300 text-sm">
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
           <span>
             {ordersWithoutEconomicData} av {workOrders.length} ordrar saknar ekonomisk data och exkluderas från beräkningarna.
           </span>

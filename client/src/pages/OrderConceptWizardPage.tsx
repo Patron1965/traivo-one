@@ -608,7 +608,7 @@ export default function OrderConceptWizardPage() {
                       : status === "complete"
                         ? <Check className="h-2.5 w-2.5" />
                         : status === "warning"
-                          ? <AlertTriangle className="h-2.5 w-2.5" />
+                          ? <AlertTriangle className="h-2.5 w-2.5 text-orange-500 dark:text-orange-400" />
                           : step.num}
                   </span>
                   <span className="hidden md:inline">{step.label}</span>

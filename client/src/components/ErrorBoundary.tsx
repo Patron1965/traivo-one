@@ -46,7 +46,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <Card className="max-w-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-destructive">
-                <AlertTriangle className="h-5 w-5" />
+                <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
                 Något gick fel
               </CardTitle>
             </CardHeader>
@@ -89,7 +89,7 @@ export function QueryErrorState({
   return (
     <div className="flex flex-col items-center justify-center min-h-[200px] p-4 gap-4">
       <div className="flex items-center gap-2 text-destructive">
-        <AlertTriangle className="h-5 w-5" />
+        <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
         <span className="font-medium">{message}</span>
       </div>
       {onRetry && (

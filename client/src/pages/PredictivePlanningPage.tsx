@@ -190,7 +190,7 @@ export default function PredictivePlanningPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5" />
+              <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
               Rekommendationer
             </CardTitle>
             <CardDescription>AI-genererade förslag baserat på historiska mönster</CardDescription>

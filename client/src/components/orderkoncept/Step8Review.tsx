@@ -88,7 +88,7 @@ export default function Step8Review({
           ))}
           {validation.warnings.map((warn, i) => (
             <Alert key={i} className="py-2 border-amber-200 bg-amber-50 dark:bg-amber-950/20">
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+              <AlertTriangle className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />
               <AlertDescription className="text-sm text-amber-800 dark:text-amber-200">{warn.message}</AlertDescription>
             </Alert>
           ))}

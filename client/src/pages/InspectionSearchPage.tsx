@@ -172,7 +172,7 @@ export default function InspectionSearchPage() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "ok": return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-      case "warning": return <AlertTriangle className="h-4 w-4 text-amber-500" />;
+      case "warning": return <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />;
       case "error": return <AlertCircle className="h-4 w-4 text-red-500" />;
       default: return null;
     }
@@ -239,7 +239,7 @@ export default function InspectionSearchPage() {
           <CardContent className="p-4 text-center">
             <p className="text-3xl font-bold text-amber-600">{stats.warnings}</p>
             <p className="text-sm text-muted-foreground flex items-center justify-center gap-1">
-              <AlertTriangle className="h-3 w-3" /> Varning
+              <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" /> Varning
             </p>
           </CardContent>
         </Card>

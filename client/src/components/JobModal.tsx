@@ -773,7 +773,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
 
           {competencyWarning?.hasWarning && (
             <Alert variant="destructive" data-testid="alert-competency-warning">
-              <AlertTriangle className="h-4 w-4" />
+              <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
               <AlertDescription className="text-sm">
                 {competencyWarning.message}
               </AlertDescription>

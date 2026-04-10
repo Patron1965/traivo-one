@@ -170,14 +170,14 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                       </div>
                       {isOverbooked && (
                         <div className="flex items-center gap-1 text-[10px] text-red-600 dark:text-red-400 mb-1 font-medium">
-                          <AlertTriangle className="h-3 w-3" /><span>+{(dayHours - HOURS_IN_DAY).toFixed(1)}h över</span>
+                          <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" /><span>+{(dayHours - HOURS_IN_DAY).toFixed(1)}h över</span>
                         </div>
                       )}
                       {restrictedJobs.length > 0 && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <div className="flex items-center gap-1 text-[10px] text-red-600 dark:text-red-400 mb-1 cursor-help" data-testid={`cell-restriction-${resource.id}-${dayStr}`}>
-                              <AlertTriangle className="h-3 w-3 shrink-0" /><span>{restrictedJobs.length} begränsad</span>
+                              <AlertTriangle className="h-3 w-3 shrink-0 text-orange-500 dark:text-orange-400" /><span>{restrictedJobs.length} begränsad</span>
                             </div>
                           </TooltipTrigger>
                           <TooltipContent>

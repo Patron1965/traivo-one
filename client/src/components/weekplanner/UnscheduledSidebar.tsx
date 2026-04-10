@@ -163,14 +163,14 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
           </div>
           {showDragNoMatch && (
             <div className="flex items-center gap-1.5 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800" data-testid="sidebar-no-cluster-match-warning">
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+              <AlertTriangle className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400 shrink-0" />
               <span className="text-[10px] text-amber-700 dark:text-amber-300">Ingen resurs matchar klustret</span>
             </div>
           )}
           <div className="flex items-center gap-1.5 flex-wrap" data-testid="sidebar-quick-stats">
             {sidebarQuickStats.urgentCount > 0 && (
               <Badge variant="destructive" className="text-[10px] h-5 gap-1">
-                <AlertTriangle className="h-2.5 w-2.5" />
+                <AlertTriangle className="h-2.5 w-2.5 text-orange-500 dark:text-orange-400" />
                 {sidebarQuickStats.urgentCount} akut
               </Badge>
             )}
@@ -376,7 +376,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                         {(job.objectAccessCode || job.objectKeyNumber) && (
                           <div className="flex items-center gap-2 mt-1">
                             {job.objectAccessCode && (
-                              <span className="flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400">
+                              <span className="flex items-center gap-0.5 text-[10px] text-orange-500 dark:text-orange-400">
                                 <DoorOpen className="h-2.5 w-2.5" />
                                 {job.objectAccessCode}
                               </span>

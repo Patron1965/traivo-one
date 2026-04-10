@@ -142,7 +142,7 @@ export function PhotoCapture({
     switch (category) {
       case "before": return <Eye className="h-2.5 w-2.5" />;
       case "after": return <CheckCircle className="h-2.5 w-2.5" />;
-      case "problem": return <AlertTriangle className="h-2.5 w-2.5" />;
+      case "problem": return <AlertTriangle className="h-2.5 w-2.5 text-orange-500 dark:text-orange-400" />;
       default: return <Image className="h-2.5 w-2.5" />;
     }
   };

@@ -336,7 +336,7 @@ export default function WorkSessionsPage() {
             <Card className="border-red-300 bg-red-50 dark:bg-red-950/20">
               <CardHeader className="pb-2">
                 <CardTitle className="text-red-700 dark:text-red-400 flex items-center gap-2 text-base">
-                  <AlertTriangle className="h-5 w-5" />Nattvila-avvikelser (&lt;11h)
+                  <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />Nattvila-avvikelser (&lt;11h)
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -355,7 +355,7 @@ export default function WorkSessionsPage() {
             <Card className="border-orange-300 bg-orange-50 dark:bg-orange-950/20">
               <CardHeader className="pb-2">
                 <CardTitle className="text-orange-700 dark:text-orange-400 flex items-center gap-2 text-base">
-                  <AlertTriangle className="h-5 w-5" />Veckovila-avvikelser (&lt;36h)
+                  <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />Veckovila-avvikelser (&lt;36h)
                 </CardTitle>
               </CardHeader>
               <CardContent>

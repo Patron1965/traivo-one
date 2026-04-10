@@ -171,7 +171,7 @@ export function ImportHealthOverview() {
   const severityIcon = (severity: string) => {
     switch (severity) {
       case "critical": return <XCircle className="h-4 w-4 text-red-500" />;
-      case "warning": return <AlertTriangle className="h-4 w-4 text-amber-500" />;
+      case "warning": return <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />;
       default: return <Activity className="h-4 w-4 text-blue-500" />;
     }
   };
@@ -188,7 +188,7 @@ export function ImportHealthOverview() {
               activeIssues.some(i => i.severity === "warning") ? "bg-amber-600" :
               allAccepted ? "bg-green-600" : "bg-blue-600"
             }`}>
-              {allAccepted ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+              {allAccepted ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />}
             </div>
             <div>
               <CardTitle className="text-base flex items-center gap-2">

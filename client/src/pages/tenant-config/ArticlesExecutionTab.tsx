@@ -75,7 +75,7 @@ export function ArticlesExecutionTab() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900">
-                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{withoutCode.length}</p>

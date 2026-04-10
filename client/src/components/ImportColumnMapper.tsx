@@ -71,7 +71,7 @@ function TreeNodeView({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
         <span className="text-xs text-muted-foreground">#{node.id}</span>
         {!node.hasParentMatch && (
           <Badge variant="destructive" className="text-[10px] h-4">
-            <AlertTriangle className="h-2.5 w-2.5 mr-0.5" />
+            <AlertTriangle className="h-2.5 w-2.5 mr-0.5 text-orange-500 dark:text-orange-400" />
             Förälder saknas
           </Badge>
         )}

@@ -62,7 +62,7 @@ export function PredictiveInsights() {
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-3 p-4 rounded-md bg-yellow-500/10 border border-yellow-500/20" data-testid="status-prediction-error">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0" />
+            <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400 flex-shrink-0" />
             <div>
               <p className="text-sm font-medium text-yellow-700 dark:text-yellow-400">Analysen är inte tillgänglig</p>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -130,7 +130,7 @@ export function PredictiveInsights() {
         {data.overdue.length > 0 && (
           <div>
             <h4 className="text-sm font-medium text-destructive mb-2 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4" />
+              <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
               Passerat förväntat servicedatum
             </h4>
             <div className="space-y-2">

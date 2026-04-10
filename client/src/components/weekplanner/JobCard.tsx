@@ -176,7 +176,7 @@ export const JobCard = memo(function JobCard({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div className="flex items-center gap-1 text-[10px] text-red-600 dark:text-red-400 mt-0.5 cursor-help" data-testid={`conflict-warning-${job.id}`}>
-                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                    <AlertTriangle className="h-3 w-3 shrink-0 text-orange-500 dark:text-orange-400" />
                     <span className="truncate">{jobConflicts[job.id][0]}</span>
                   </div>
                 </TooltipTrigger>

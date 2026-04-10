@@ -1302,7 +1302,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                                 </SelectItem>
                                 <SelectItem value="EJ_OK">
                                   <span className="flex items-center gap-2 text-red-600 font-medium">
-                                    <AlertTriangle className="h-4 w-4" /> EJ OK
+                                    <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" /> EJ OK
                                   </span>
                                 </SelectItem>
                               </SelectContent>
@@ -2016,7 +2016,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                   {markImpossibleMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin mr-1" />
                   ) : (
-                    <AlertTriangle className="h-4 w-4 mr-1" />
+                    <AlertTriangle className="h-4 w-4 mr-1 text-orange-500 dark:text-orange-400" />
                   )}
                   Markera som omöjlig
                 </Button>

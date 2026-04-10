@@ -556,7 +556,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
             className="text-xs whitespace-nowrap"
             data-testid="tab-varningar"
           >
-            <AlertTriangle className="h-3 w-3 mr-1" />
+            <AlertTriangle className="h-3 w-3 mr-1 text-orange-500 dark:text-orange-400" />
             Varningar
             {workloadAnalysis && workloadAnalysis.warnings.length > 0 && (
               <Badge variant="destructive" className="ml-1 h-4 px-1 text-xs">
@@ -948,7 +948,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
               {workloadMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : (
-                <AlertTriangle className="h-4 w-4 mr-2" />
+                <AlertTriangle className="h-4 w-4 mr-2 text-orange-500 dark:text-orange-400" />
               )}
               Analysera arbetsbelastning
             </Button>
@@ -962,7 +962,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
 
             {!workloadMutation.isPending && !workloadAnalysis && (
               <div className="text-center py-6 text-muted-foreground">
-                <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50 text-orange-500 dark:text-orange-400" />
                 <p className="text-sm">Klicka för att hitta obalanser i planeringen</p>
               </div>
             )}

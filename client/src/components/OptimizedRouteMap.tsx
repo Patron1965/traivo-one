@@ -235,7 +235,7 @@ export function OptimizedRouteMap({
                 className="text-xs border-yellow-500/50 text-yellow-600 bg-background/90"
                 data-testid="badge-skipped-stops"
               >
-                <AlertTriangle className="h-3 w-3 mr-1" />
+                <AlertTriangle className="h-3 w-3 mr-1 text-orange-500 dark:text-orange-400" />
                 {skippedCount} saknar koordinater
               </Badge>
             )}

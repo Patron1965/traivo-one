@@ -63,7 +63,7 @@ export const MonthView = memo(function MonthView(props: MonthViewProps) {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="flex items-center gap-0.5 text-red-500" data-testid={`month-conflict-${d}`}>
-                        <AlertTriangle className="h-3 w-3" /><span className="text-[9px]">{dayConflictCount}</span>
+                        <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" /><span className="text-[9px]">{dayConflictCount}</span>
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>{dayConflictCount} jobb med konflikter</TooltipContent>
@@ -100,14 +100,14 @@ export const MonthView = memo(function MonthView(props: MonthViewProps) {
                   </div>
                   {dayRestrictionCount > 0 && (
                     <div className="text-[9px] text-red-500 flex items-center gap-0.5" data-testid={`month-restriction-${d}`}>
-                      <AlertTriangle className="h-2.5 w-2.5 shrink-0" />{dayRestrictionCount} begr.
+                      <AlertTriangle className="h-2.5 w-2.5 shrink-0 text-orange-500 dark:text-orange-400" />{dayRestrictionCount} begr.
                     </div>
                   )}
                 </div>
               )}
               {dayJobs.length === 0 && dayRestrictionCount > 0 && (
                 <div className="text-[9px] text-red-500 flex items-center gap-0.5 mt-1" data-testid={`month-restriction-${d}`}>
-                  <AlertTriangle className="h-2.5 w-2.5 shrink-0" />{dayRestrictionCount} begr.
+                  <AlertTriangle className="h-2.5 w-2.5 shrink-0 text-orange-500 dark:text-orange-400" />{dayRestrictionCount} begr.
                 </div>
               )}
             </div>

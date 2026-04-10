@@ -145,7 +145,7 @@ interface AIProposal {
 
 function ForecastIcon({ forecast }: { forecast: string }) {
   if (forecast === "on_track") return <CheckCircle2 className="h-5 w-5 text-green-500" data-testid="icon-forecast-on-track" />;
-  if (forecast === "at_risk") return <AlertTriangle className="h-5 w-5 text-yellow-500" data-testid="icon-forecast-at-risk" />;
+  if (forecast === "at_risk") return <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" data-testid="icon-forecast-at-risk" />;
   return <XCircle className="h-5 w-5 text-red-500" data-testid="icon-forecast-behind" />;
 }
 
@@ -487,7 +487,7 @@ export default function AnnualPlanningPage() {
             Alla mål ({goals.length})
           </TabsTrigger>
           <TabsTrigger value="warnings" data-testid="tab-warnings">
-            <AlertTriangle className="h-4 w-4 mr-2" />
+            <AlertTriangle className="h-4 w-4 mr-2 text-orange-500 dark:text-orange-400" />
             Varningar ({behindGoals.length})
           </TabsTrigger>
           <TabsTrigger value="ai-distribute" data-testid="tab-ai-distribute">
@@ -682,7 +682,7 @@ export default function AnnualPlanningPage() {
               {atRiskGoals.length > 0 && (
                 <div className="space-y-3">
                   <h3 className="font-semibold flex items-center gap-2 text-yellow-600">
-                    <AlertTriangle className="h-5 w-5" />
+                    <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
                     Risk — takten räcker knappt ({atRiskGoals.length})
                   </h3>
                   <div className="grid gap-3">

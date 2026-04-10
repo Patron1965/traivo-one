@@ -293,7 +293,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30" onClick={onUrgentJob} data-testid="button-urgent-job">
-                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Akut jobb</TooltipContent>
@@ -465,7 +465,7 @@ export const PlannerFooter = memo(function PlannerFooter({
               className="flex items-center gap-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:underline cursor-pointer transition-colors"
               data-testid="button-show-conflicts"
             >
-              <AlertTriangle className="h-3 w-3" />
+              <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />
               <span>{jobConflictCount} konflikter</span>
             </button>
           </>

@@ -81,7 +81,7 @@ function getCategoryIcon(cat: string) {
     case "antal_karl_andrat": return <Package className="h-4 w-4" />;
     case "skadat_material": return <Wrench className="h-4 w-4" />;
     case "tillganglighet":
-    case "skador": return <AlertTriangle className="h-4 w-4" />;
+    case "skador": return <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />;
     case "rengorings_behov": return <Trash2 className="h-4 w-4" />;
     default: return <HelpCircle className="h-4 w-4" />;
   }
@@ -392,7 +392,7 @@ export default function CustomerReportsPage() {
                       {getSeverityBadge(report.severity)}
                       {report.linkedDeviationId && (
                         <Badge variant="outline" className="text-[10px] px-1.5 border-orange-300 text-orange-600 dark:text-orange-400" data-testid={`badge-deviation-link-${report.id}`}>
-                          <AlertTriangle className="h-3 w-3 mr-1" />
+                          <AlertTriangle className="h-3 w-3 mr-1 text-orange-500 dark:text-orange-400" />
                           Avvikelse
                         </Badge>
                       )}

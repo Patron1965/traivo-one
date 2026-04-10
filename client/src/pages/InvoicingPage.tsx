@@ -403,7 +403,7 @@ export default function InvoicingPage() {
             </Badge>
           ) : (
             <Badge variant="outline" className="border-yellow-500 dark:border-yellow-700 text-yellow-600 dark:text-yellow-400" data-testid="badge-fortnox-disconnected">
-              <AlertTriangle className="h-3 w-3 mr-1" /> Fortnox ej ansluten
+              <AlertTriangle className="h-3 w-3 mr-1 text-orange-500 dark:text-orange-400" /> Fortnox ej ansluten
             </Badge>
           )}
         </PageHeader>
@@ -989,7 +989,7 @@ export default function InvoicingPage() {
           </div>
           {!fortnoxStatus?.connected && (
             <div className="flex items-center gap-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-md text-sm">
-              <AlertTriangle className="h-4 w-4 text-yellow-600 shrink-0" />
+              <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0" />
               <span>Fortnox är inte ansluten. Fakturorna sparas som väntande och kan skickas senare.</span>
             </div>
           )}

@@ -158,7 +158,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
       <div className="bg-background border rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-auto" data-testid="dialog-urgent-job">
         <div className="flex items-center gap-3 p-4 border-b bg-red-50 dark:bg-red-950/30">
           <div className="bg-red-500 text-white p-2 rounded-full animate-pulse">
-            <AlertTriangle className="h-5 w-5" />
+            <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
           </div>
           <div>
             <h2 className="font-semibold text-lg">Akut Jobbhantering</h2>
@@ -262,7 +262,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
               </button>
               <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
                 <h3 className="font-medium text-red-600 flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
                   Bekräfta akut tilldelning
                 </h3>
                 <div className="space-y-2 text-sm">
@@ -310,7 +310,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
                 {assignMutation.isPending ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Skickar...</>
                 ) : (
-                  <><AlertTriangle className="h-4 w-4 mr-2" /> Skicka akut uppdrag nu</>
+                  <><AlertTriangle className="h-4 w-4 mr-2 text-orange-500 dark:text-orange-400" /> Skicka akut uppdrag nu</>
                 )}
               </Button>
             </>

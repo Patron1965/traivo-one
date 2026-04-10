@@ -76,7 +76,7 @@ export function DroppableCell({ id, children, className = "", dropFitInfo, style
     >
       {hasConflict && (
         <div className={`text-[10px] font-bold mb-1 flex items-center gap-1 ${hasHardBlock ? "text-red-700 dark:text-red-300" : isClusterOnly ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`} data-testid={`drag-conflict-${id}`}>
-          {hasHardBlock ? <Ban className="h-3 w-3 shrink-0" /> : <AlertTriangle className="h-3 w-3 shrink-0" />}
+          {hasHardBlock ? <Ban className="h-3 w-3 shrink-0" /> : <AlertTriangle className="h-3 w-3 shrink-0 text-orange-500 dark:text-orange-400" />}
           <span className="truncate">{(dragOverConflicts![0] || "").replace("[BLOCK] ", "")}</span>
         </div>
       )}

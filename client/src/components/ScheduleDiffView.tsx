@@ -125,7 +125,7 @@ function KPIDiffTable({ trace }: { trace: DecisionTrace }) {
     },
     {
       label: "Övertid",
-      icon: <AlertTriangle className="h-3.5 w-3.5" />,
+      icon: <AlertTriangle className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />,
       before: `${s.baselineOvertimeMinutes} min`,
       after: `${s.proposedOvertimeMinutes} min`,
       delta: overtimeDelta,
@@ -164,7 +164,7 @@ function KPIDiffTable({ trace }: { trace: DecisionTrace }) {
         {rows.map((row) => {
           const deltaColor = row.good
             ? "text-green-600 dark:text-green-400"
-            : "text-amber-600 dark:text-amber-400";
+            : "text-orange-500 dark:text-orange-400";
 
           return (
             <div key={row.label} className="grid grid-cols-[1fr_55px_55px_40px] gap-1 items-center text-xs" data-testid={`kpi-row-${row.label}`}>
@@ -213,7 +213,7 @@ function RiskBadge({ score, factors }: { score: number; factors: string[] }) {
           {factors.length > 0 ? factors.map((factor, i) => {
             const lf = factor.toLowerCase();
             let FactorIcon = Info;
-            let iconColor = "text-amber-500";
+            let iconColor = "text-orange-500 dark:text-orange-400";
             if (lf.includes("väder") || lf.includes("prognos")) {
               FactorIcon = CloudRain;
               iconColor = "text-blue-500";
@@ -256,11 +256,11 @@ function ConstraintViolationsAlert({ violations }: { violations: ConstraintViola
         onClick={() => setExpanded(!expanded)}
         data-testid="button-toggle-violations"
       >
-        <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+        <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0" />
         <span className="text-xs font-medium flex-1">
           {violations.length} constraint-{violations.length === 1 ? "varning" : "varningar"}
           {hard.length > 0 && <span className="text-red-600 dark:text-red-400 ml-1">({hard.length} hårda)</span>}
-          {soft.length > 0 && <span className="text-amber-600 dark:text-amber-400 ml-1">({soft.length} mjuka)</span>}
+          {soft.length > 0 && <span className="text-orange-500 dark:text-orange-400 ml-1">({soft.length} mjuka)</span>}
         </span>
         {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
       </button>
@@ -279,7 +279,7 @@ function ConstraintViolationsAlert({ violations }: { violations: ConstraintViola
               {v.type === "hard" ? (
                 <ShieldAlert className="h-3 w-3 mt-0.5 shrink-0" />
               ) : (
-                <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0 text-orange-500 dark:text-orange-400" />
               )}
               <span>{v.description}</span>
             </div>
@@ -304,7 +304,7 @@ function MoveCard({
   const statusIcon = move.constraintStatus === "valid"
     ? <ShieldCheck className="h-3.5 w-3.5 text-green-500" />
     : move.constraintStatus === "warning"
-    ? <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+    ? <AlertTriangle className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />
     : <ShieldAlert className="h-3.5 w-3.5 text-red-500" />;
 
   const confidenceColor = move.confidence >= 80
