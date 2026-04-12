@@ -117,17 +117,16 @@ export function FocusCTA({ jobStarted, hasAddress, onStart, onNavigate, onReport
         <Play className={`h-6 w-6 ${jobStarted ? "text-muted-foreground" : ""}`} />
         <span className="text-xs font-medium">{jobStarted ? "Startad" : "Starta"}</span>
       </Button>
-      {hasAddress && (
-        <Button
-          variant="outline"
-          className="h-auto py-4 flex-col gap-2"
-          onClick={onNavigate}
-          data-testid="focus-button-navigate"
-        >
-          <Navigation className="h-6 w-6 text-blue-500" />
-          <span className="text-xs font-medium">Navigera</span>
-        </Button>
-      )}
+      <Button
+        variant="outline"
+        className="h-auto py-4 flex-col gap-2"
+        onClick={onNavigate}
+        disabled={!hasAddress}
+        data-testid="focus-button-navigate"
+      >
+        <Navigation className={`h-6 w-6 ${hasAddress ? "text-blue-500" : "text-muted-foreground"}`} />
+        <span className="text-xs font-medium">Navigera</span>
+      </Button>
       <Button
         variant="outline"
         className="h-auto py-4 flex-col gap-2"

@@ -2322,7 +2322,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         />
 
         <div className="p-4 border-t bg-card">
-          {!jobStarted ? (
+          {focusMode && !jobStarted ? null : !jobStarted ? (
             <Button
               size="mobile"
               className="w-full gap-2"
@@ -2430,6 +2430,15 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 )}
               </Button>
             )}
+            <Button 
+              variant="ghost" 
+              size="sm"
+              className="h-8 px-2 gap-1"
+              onClick={() => setFocusMode(!focusMode)}
+              data-testid="button-settings-focus-mode"
+            >
+              {focusMode ? <Eye className="h-4 w-4 text-primary" /> : <EyeOff className="h-4 w-4 text-muted-foreground" />}
+            </Button>
             <Button 
               variant="ghost" 
               size="sm"
