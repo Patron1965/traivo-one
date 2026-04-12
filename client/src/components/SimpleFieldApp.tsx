@@ -10,7 +10,7 @@ import {
   HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X,
   Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
   User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share,
-  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText, ListTodo
+  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText, ListTodo, Eye, EyeOff
 } from "lucide-react";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -39,6 +39,7 @@ import { DailyProgressCard } from "@/components/DailyProgressCard";
 import { DayReport } from "@/components/DayReport";
 import { FieldTodoList, getUncompletedTodoCount } from "@/components/FieldTodoList";
 import { VoiceInput } from "@/components/VoiceInput";
+import { FocusTimeline, FocusCTA, ExpandableDetail, OrderStatusBadge, getTimelineStep, useFocusMode } from "@/components/FocusMode";
 import {
   Dialog,
   DialogContent,
@@ -178,6 +179,7 @@ interface SimpleFieldAppProps {
 
 export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const { toast } = useToast();
+  const { focusMode, setFocusMode } = useFocusMode();
   const [view, setView] = useState<View>("jobs");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [jobStarted, setJobStarted] = useState(false);
@@ -1164,6 +1166,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             <div className="flex items-center gap-2">
               <h1 className="text-lg font-semibold truncate">{selectedJob.title}</h1>
               {getPriorityBadge(selectedJob.priority)}
+              <OrderStatusBadge status={selectedJob.orderStatus} />
             </div>
             <p className="text-sm text-muted-foreground truncate">{selectedJob.objectName}</p>
           </div>
@@ -1180,50 +1183,54 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 {formatTime(elapsedSeconds)}
               </Badge>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setFocusMode(!focusMode)}
+              title={focusMode ? "Visa detaljvy" : "Aktivera fokusläge"}
+              data-testid="button-toggle-focus-mode"
+            >
+              {focusMode ? <Eye className="h-4 w-4 text-blue-500" /> : <EyeOff className="h-4 w-4 text-muted-foreground" />}
+            </Button>
           </div>
         </div>
 
         <div className="flex-1 overflow-auto p-4 space-y-4">
-          {/* Arbetsflödesindikator */}
-          <Card className="bg-muted/30">
-            <CardContent className="py-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <ListChecks className="h-3.5 w-3.5" />
-                  Arbetsflöde
-                </span>
-                <Badge variant={jobStarted ? "default" : "outline"} className="text-[10px]">
-                  {!jobStarted ? "Väntar på start" : "Pågår"}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                {[
-                  { label: "Åka dit", done: true },
-                  { label: "Starta", done: jobStarted },
-                  { label: "Utför", done: jobStarted && elapsedSeconds > 60 },
-                  { label: "Slutför", done: false }
-                ].map((step, idx, arr) => (
-                  <div key={step.label} className="flex items-center gap-1">
-                    <div className="flex flex-col items-center">
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                        step.done ? "bg-green-500 text-white" : "bg-muted border-2 border-muted-foreground/30"
-                      }`}>
-                        {step.done ? (
-                          <CheckCircle className="h-4 w-4" />
-                        ) : (
-                          <Circle className="h-4 w-4" />
-                        )}
-                      </div>
-                      <span className="text-[10px] mt-1 text-muted-foreground">{step.label}</span>
-                    </div>
-                    {idx < arr.length - 1 && (
-                      <div className={`w-8 h-0.5 -mt-4 ${step.done ? "bg-green-500" : "bg-muted-foreground/30"}`} />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <FocusTimeline currentStep={getTimelineStep(jobStarted, elapsedSeconds, selectedJob.orderStatus)} />
+
+          {focusMode && (
+            <FocusCTA
+              jobStarted={jobStarted}
+              hasAddress={!!selectedJob.objectAddress}
+              onStart={handleStartJob}
+              onNavigate={() => {
+                if (selectedJob.objectAddress) {
+                  window.open(`https://maps.google.com?q=${encodeURIComponent(selectedJob.objectAddress + ", " + (selectedObject?.city || ""))}`);
+                  if (selectedJobId) {
+                    const pos = lastPositionRef.current;
+                    fetch(`/api/work-orders/${selectedJobId}/auto-eta-sms`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        technicianLat: pos?.lat || null,
+                        technicianLng: pos?.lng || null,
+                      }),
+                    }).then(r => r.json()).then(data => {
+                      if (data.success && !data.skipped) {
+                        toast({ title: "Kund-SMS skickat", description: `ETA: ca ${data.etaMinutes} min` });
+                      }
+                    }).catch(() => {});
+                  }
+                }
+              }}
+              onReport={() => {
+                setShowProblemPanel(!showProblemPanel);
+                setShowAiPanel(false);
+                setShowNotesPanel(false);
+              }}
+            />
+          )}
 
           {selectedJob.plannedNotes && (
             <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30" data-testid="card-planned-notes">
@@ -1237,7 +1244,82 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </Card>
           )}
 
-          {metadataContext && metadataContext.articles.length > 0 && (
+          {focusMode && <ExpandableDetail>
+            {/* Access info shown early in focus mode if present */}
+            {(selectedJob.objectAccessCode || selectedJob.objectKeyNumber || accessInfo.gateCode) && (
+              <Card className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
+                <CardContent className="py-3">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <DoorOpen className="h-4 w-4 text-amber-600" />
+                    <span className="text-xs font-medium text-amber-800 dark:text-amber-400">Åtkomstinformation</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(selectedJob.objectAccessCode || accessInfo.gateCode) && (
+                      <div className="text-center p-2 bg-white dark:bg-background rounded border">
+                        <p className="text-[10px] text-muted-foreground uppercase">Portkod</p>
+                        <p className="text-2xl font-mono font-bold">{selectedJob.objectAccessCode || accessInfo.gateCode}</p>
+                      </div>
+                    )}
+                    {selectedJob.objectKeyNumber && (
+                      <div className="text-center p-2 bg-white dark:bg-background rounded border">
+                        <p className="text-[10px] text-muted-foreground uppercase flex items-center justify-center gap-1">
+                          <Key className="h-3 w-3" />
+                          Nyckel
+                        </p>
+                        <p className="text-2xl font-mono font-bold">{selectedJob.objectKeyNumber}</p>
+                      </div>
+                    )}
+                  </div>
+                  {accessInfo.keyLocation && (
+                    <p className="text-xs text-muted-foreground mt-2">Nyckelplats: {accessInfo.keyLocation}</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {selectedCustomer && (
+              <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
+                <CardContent className="py-3">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <User className="h-4 w-4 text-blue-600" />
+                    <span className="text-xs font-medium text-blue-800 dark:text-blue-400">Kontaktperson</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{selectedCustomer.name}</p>
+                      {selectedCustomer.phone && (
+                        <p className="text-sm text-muted-foreground">{selectedCustomer.phone}</p>
+                      )}
+                    </div>
+                    {selectedCustomer.phone && (
+                      <Button size="icon" variant="outline" onClick={() => window.open(`tel:${selectedCustomer.phone}`)} data-testid="focus-button-call-contact">
+                        <Phone className="h-4 w-4 text-green-500" />
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {selectedJob.objectAddress && (
+              <Card>
+                <CardContent className="py-4">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Adress</p>
+                  <p className="text-sm">{selectedJob.objectAddress}</p>
+                  {selectedObject?.city && (
+                    <p className="text-sm text-muted-foreground">{selectedObject.city}</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {metadataContext && metadataContext.articles.length > 0 && (
+              <p className="text-xs text-muted-foreground">Metadata-artiklar finns — växla till detaljvy för redigering.</p>
+            )}
+          </ExpandableDetail>}
+
+          {!focusMode && metadataContext && metadataContext.articles.length > 0 && (
+            /* Detail view metadata - only shown when focus mode is off */
             <div className="space-y-2" data-testid="panel-metadata-context">
               {metadataContext.articles.filter(a => a.isInfoCarrier).map(article => (
                 <Card key={article.articleId} className="border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30" data-testid={`card-info-carrier-${article.articleId}`}>
@@ -1443,8 +1525,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </div>
           )}
 
-          {/* Åtkomstinformation - stort och tydligt */}
-          {(selectedJob.objectAccessCode || selectedJob.objectKeyNumber || accessInfo.gateCode) && (
+          {!focusMode && (selectedJob.objectAccessCode || selectedJob.objectKeyNumber || accessInfo.gateCode) && (
             <Card className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
               <CardContent className="py-3">
                 <div className="flex items-center gap-1.5 mb-2">
@@ -1475,7 +1556,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </Card>
           )}
 
-          {selectedCustomer && (
+          {!focusMode && selectedCustomer && (
             <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
               <CardContent className="py-3">
                 <div className="flex items-center gap-1.5 mb-2">
@@ -1504,7 +1585,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </Card>
           )}
 
-          <div className="grid grid-cols-3 gap-2">
+          {!focusMode && <div className="grid grid-cols-3 gap-2">
             {selectedJob.objectAddress && (
               <Button
                 variant="outline"
@@ -1566,9 +1647,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               <HelpCircle className="h-5 w-5 text-purple-500" />
               <span className="text-xs">AI-hjälp</span>
             </Button>
-          </div>
+          </div>}
 
-          <div className="grid grid-cols-3 gap-2">
+          {!focusMode && <div className="grid grid-cols-3 gap-2">
             <Button
               variant="outline"
               className="h-auto py-3 flex-col gap-1"
@@ -1615,9 +1696,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 )}
               </Button>
             )}
-          </div>
+          </div>}
 
-          {jobStarted && selectedJobId && (
+          {!focusMode && jobStarted && selectedJobId && (
             <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -1674,7 +1755,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </Card>
           )}
 
-          {showNotesPanel && (
+          {!focusMode && showNotesPanel && (
             <Card className="border-indigo-200 dark:border-indigo-800">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -2084,8 +2165,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             }}
           />
 
-          {/* Besiktning */}
-          <Card className="border-teal-200 dark:border-teal-800">
+          {!focusMode && <Card className="border-teal-200 dark:border-teal-800">
             <CardHeader className="pb-2 cursor-pointer" onClick={() => setShowInspectionPanel(!showInspectionPanel)}>
               <CardTitle className="text-base flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -2182,23 +2262,23 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 </Button>
               </CardContent>
             )}
-          </Card>
+          </Card>}
 
-          {jobStarted && (
+          {!focusMode && jobStarted && (
             <OrderChecklist
               workOrderId={selectedJob.id}
               orderType={selectedJob.orderType}
             />
           )}
 
-          {jobStarted && (
+          {!focusMode && jobStarted && (
             <MaterialLog
               materials={materials}
               onMaterialsChange={setMaterials}
             />
           )}
 
-          {accessInfo.specialInstructions && (
+          {!focusMode && accessInfo.specialInstructions && (
             <Card className="border-yellow-200 dark:border-yellow-800">
               <CardContent className="py-4">
                 <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Viktig info</p>
@@ -2207,7 +2287,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </Card>
           )}
 
-          {selectedJob.objectAddress && (
+          {!focusMode && selectedJob.objectAddress && (
             <Card>
               <CardContent className="py-4">
                 <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Adress</p>
