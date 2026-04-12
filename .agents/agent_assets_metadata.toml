@@ -54,3 +54,9 @@ id = "25vTIOFPNpo43GBgL_Ro0"
 uri = "file://TRAIVO_ON_INTEGRATION_GUIDE.md"
 type = "text"
 title = "Traivo On — Integrationsinstruktioner"
+
+[[outputs]]
+id = "2PsN_KN6LiJ-sfeNjrxsW"
+uri = "file://attached_assets/DEMO_MANUS_1776011749994.md"
+type = "text"
+title = "Traivo One - Demo-manus (uppdaterat)"
