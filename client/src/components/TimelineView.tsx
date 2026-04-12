@@ -80,14 +80,15 @@ export function TimelineView({ onBack, mobileApiCall }: TimelineViewProps) {
   const { data: entries = [], isLoading: entriesLoading } = useQuery<TimeEntry[]>({
     queryKey: ["/api/mobile/time-entries", today],
     queryFn: async () => {
-      const res = await mobileApiCall("GET", `/api/mobile/time-entries?date=${today}`);
-      if (res.status === 401) {
-        setAuthError(true);
+      try {
+        const res = await mobileApiCall("GET", `/api/mobile/time-entries?date=${today}`);
+        setAuthError(false);
+        return res.json();
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "";
+        if (msg.includes("401")) setAuthError(true);
         return [];
       }
-      if (!res.ok) return [];
-      setAuthError(false);
-      return res.json();
     },
     refetchInterval: 30000,
   });
@@ -95,9 +96,12 @@ export function TimelineView({ onBack, mobileApiCall }: TimelineViewProps) {
   const { data: summary } = useQuery<TimeSummary>({
     queryKey: ["/api/mobile/time-summary", today],
     queryFn: async () => {
-      const res = await mobileApiCall("GET", `/api/mobile/time-summary?date=${today}`);
-      if (!res.ok) return { totalWork: 0, totalTravel: 0, totalBreak: 0, totalHours: 0, date: today };
-      return res.json();
+      try {
+        const res = await mobileApiCall("GET", `/api/mobile/time-summary?date=${today}`);
+        return res.json();
+      } catch {
+        return { totalWork: 0, totalTravel: 0, totalBreak: 0, totalHours: 0, date: today };
+      }
     },
     refetchInterval: 30000,
   });
@@ -105,10 +109,6 @@ export function TimelineView({ onBack, mobileApiCall }: TimelineViewProps) {
   const correctionMutation = useMutation({
     mutationFn: async ({ id, startTime, endTime }: { id: string; startTime?: string; endTime?: string }) => {
       const res = await mobileApiCall("PATCH", `/api/mobile/time-entries/${id}`, { startTime, endTime });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Okänt fel" }));
-        throw new Error(err.error || "Kunde inte uppdatera");
-      }
       return res.json();
     },
     onSuccess: () => {
@@ -229,9 +229,10 @@ export function TimelineView({ onBack, mobileApiCall }: TimelineViewProps) {
                   return (
                     <div
                       key={seg.id}
-                      className={`${colors.bg} ${i > 0 ? "border-l border-background" : ""} relative group cursor-pointer`}
+                      className={`${colors.bg} ${i > 0 ? "border-l border-background" : ""} relative group cursor-pointer hover:brightness-90 transition-all`}
                       style={{ width: `${seg.pct}%` }}
                       title={`${ENTRY_LABELS[seg.type] || seg.type}: ${formatMinutes(seg.duration || 0)}${seg.orderTitle ? ` — ${seg.orderTitle}` : ""}`}
+                      onClick={() => handleEditOpen(seg)}
                       data-testid={`timeline-segment-${seg.id}`}
                     >
                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
