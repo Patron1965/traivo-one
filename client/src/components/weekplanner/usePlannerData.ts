@@ -400,6 +400,49 @@ export function usePlannerData() {
   const goToDay = (day: Date) => { setCurrentDate(day); setCurrentWeekStart(startOfWeek(day, { weekStartsOn: 1 })); setViewMode("day"); };
   const getHeaderLabel = () => { if (viewMode === "day" || viewMode === "route") return format(currentDate, "EEEE d MMMM yyyy", { locale: sv }); if (viewMode === "week") return `Vecka ${format(currentWeekStart, "w", { locale: sv })} - ${format(currentWeekStart, "MMMM yyyy", { locale: sv })}`; return format(currentDate, "MMMM yyyy", { locale: sv }); };
 
+  const [whatIfOpen, setWhatIfOpen] = useState(false);
+  const [whatIfLoading, setWhatIfLoading] = useState(false);
+  const [whatIfResult, setWhatIfResult] = useState<WhatIfResult | null>(null);
+  const [whatIfPending, setWhatIfPending] = useState<{
+    jobId: string;
+    jobTitle: string;
+    resourceId: string;
+    scheduledDate: string;
+    scheduledStartTime?: string;
+    clusterOverride?: boolean;
+    bulkJobs?: Array<{ jobId: string; startTime: string }>;
+  } | null>(null);
+  const whatIfRequestIdRef = useRef(0);
+
+  const fetchWhatIf = useCallback(async (workOrderId: string, toResourceId: string, scheduledDate: string, scheduledStartTime?: string, fromResourceId?: string | null, fromDate?: string | null) => {
+    const requestId = ++whatIfRequestIdRef.current;
+    setWhatIfLoading(true);
+    setWhatIfResult(null);
+    try {
+      const res = await apiRequest("POST", "/api/planning/what-if", {
+        workOrderId,
+        toResourceId,
+        scheduledDate,
+        scheduledStartTime,
+        fromResourceId,
+        fromDate,
+      });
+      const data: WhatIfResult = await res.json();
+      if (whatIfRequestIdRef.current === requestId) {
+        setWhatIfResult(data);
+      }
+    } catch (err) {
+      if (whatIfRequestIdRef.current === requestId) {
+        setWhatIfResult(null);
+        toast({ title: "Konsekvensanalys misslyckades", description: (err as Error).message, variant: "destructive" });
+      }
+    } finally {
+      if (whatIfRequestIdRef.current === requestId) {
+        setWhatIfLoading(false);
+      }
+    }
+  }, [toast]);
+
   const handleJobClick = useCallback((jobId: string) => { setSelectedJob(jobId); }, []);
   const handleOpenAssignDialog = useCallback((job: WorkOrderWithObject, e: React.MouseEvent) => { e.stopPropagation(); setJobToAssign(job); setAssignDate(format(currentDate, "yyyy-MM-dd")); setAssignResourceId(null); setAssignDialogOpen(true); }, [currentDate]);
   const handleQuickAssign = useCallback(() => {
@@ -494,49 +537,6 @@ export function usePlannerData() {
 
   const handleOpenDepChain = useCallback((jobId: string) => { setDepChainJobId(jobId); setDepChainDialogOpen(true); }, []);
   const handleToggleSubStep = useCallback((jobId: string) => setExpandedSubSteps(prev => ({ ...prev, [jobId]: !prev[jobId] })), []);
-
-  const [whatIfOpen, setWhatIfOpen] = useState(false);
-  const [whatIfLoading, setWhatIfLoading] = useState(false);
-  const [whatIfResult, setWhatIfResult] = useState<WhatIfResult | null>(null);
-  const [whatIfPending, setWhatIfPending] = useState<{
-    jobId: string;
-    jobTitle: string;
-    resourceId: string;
-    scheduledDate: string;
-    scheduledStartTime?: string;
-    clusterOverride?: boolean;
-    bulkJobs?: Array<{ jobId: string; startTime: string }>;
-  } | null>(null);
-  const whatIfRequestIdRef = useRef(0);
-
-  const fetchWhatIf = useCallback(async (workOrderId: string, toResourceId: string, scheduledDate: string, scheduledStartTime?: string, fromResourceId?: string | null, fromDate?: string | null) => {
-    const requestId = ++whatIfRequestIdRef.current;
-    setWhatIfLoading(true);
-    setWhatIfResult(null);
-    try {
-      const res = await apiRequest("POST", "/api/planning/what-if", {
-        workOrderId,
-        toResourceId,
-        scheduledDate,
-        scheduledStartTime,
-        fromResourceId,
-        fromDate,
-      });
-      const data: WhatIfResult = await res.json();
-      if (whatIfRequestIdRef.current === requestId) {
-        setWhatIfResult(data);
-      }
-    } catch (err) {
-      if (whatIfRequestIdRef.current === requestId) {
-        setWhatIfResult(null);
-        toast({ title: "Konsekvensanalys misslyckades", description: (err as Error).message, variant: "destructive" });
-      }
-    } finally {
-      if (whatIfRequestIdRef.current === requestId) {
-        setWhatIfLoading(false);
-      }
-    }
-  }, [toast]);
 
   const handleWhatIfConfirm = useCallback(() => {
     if (!whatIfPending) return;
