@@ -1607,6 +1607,15 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
       orderIndex.get(key)!.push(o);
     }
 
+    type CellOrder = {
+      id: string;
+      title: string;
+      status: string;
+      estimatedDuration: number;
+      plannedWindowEnd: string | null;
+      slaAtRisk: boolean;
+    };
+
     type HeatmapCell = {
       date: string;
       orderCount: number;
@@ -1616,6 +1625,7 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
       deviationCount: number;
       completedCount: number;
       level: "empty" | "low" | "medium" | "high" | "overloaded";
+      orders: CellOrder[];
     };
 
     type HeatmapRow = {
@@ -1683,14 +1693,24 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
           o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed"
         ).length;
 
-        const assignedSlaRisk = dayOrders.filter(o => {
-          if (!o.plannedWindowEnd || o.completedAt) return false;
-          const windowEnd = new Date(o.plannedWindowEnd);
-          const orderDate = new Date(dateStr);
-          orderDate.setHours(23, 59, 59, 999);
-          return windowEnd <= orderDate;
-        }).length;
-        const slaAtRisk = assignedSlaRisk;
+        const cellOrders: CellOrder[] = dayOrders.map(o => {
+          const isSlaRisk = !!(o.plannedWindowEnd && !o.completedAt && (() => {
+            const windowEnd = new Date(o.plannedWindowEnd);
+            const orderDate = new Date(dateStr);
+            orderDate.setHours(23, 59, 59, 999);
+            return windowEnd <= orderDate;
+          })());
+          return {
+            id: o.id,
+            title: o.title || `WO-${o.id.substring(0, 8)}`,
+            status: o.orderStatus || "ny",
+            estimatedDuration: o.estimatedDuration || 60,
+            plannedWindowEnd: o.plannedWindowEnd ? new Date(o.plannedWindowEnd).toISOString() : null,
+            slaAtRisk: isSlaRisk,
+          };
+        });
+
+        const slaAtRisk = cellOrders.filter(o => o.slaAtRisk).length;
 
         const deviationCount = devIndex.get(`${resource.id}|${dateStr}`) || 0;
 
@@ -1710,6 +1730,7 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
           deviationCount,
           completedCount,
           level,
+          orders: cellOrders,
         });
       }
 
@@ -1747,7 +1768,12 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
     const teams = await storage.getTeams(tenantId);
     const teamOptions = teams.filter(t => t.status === "active").map(t => ({ id: t.id, name: t.name }));
 
-    res.json({ dates, rows: heatmapRows, summary, weeks, teamOptions });
+    const unassignedSlaByDate: Record<string, number> = {};
+    for (const [dateStr, count] of slaUnassignedByDate) {
+      unassignedSlaByDate[dateStr] = count;
+    }
+
+    res.json({ dates, rows: heatmapRows, summary, weeks, teamOptions, unassignedSlaByDate });
 }));
 
 

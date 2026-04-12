@@ -10,6 +10,15 @@ import { Gauge, AlertTriangle, Users, ClipboardList, TrendingUp, ChevronLeft, Ch
 import { format, parseISO } from "date-fns";
 import { sv } from "date-fns/locale";
 
+type CellOrder = {
+  id: string;
+  title: string;
+  status: string;
+  estimatedDuration: number;
+  plannedWindowEnd: string | null;
+  slaAtRisk: boolean;
+};
+
 type HeatmapCell = {
   date: string;
   orderCount: number;
@@ -19,6 +28,7 @@ type HeatmapCell = {
   deviationCount: number;
   completedCount: number;
   level: "empty" | "low" | "medium" | "high" | "overloaded";
+  orders: CellOrder[];
 };
 
 type HeatmapRow = {
@@ -45,6 +55,7 @@ type HeatmapData = {
   };
   weeks: number;
   teamOptions: TeamOption[];
+  unassignedSlaByDate: Record<string, number>;
 };
 
 const LEVEL_COLORS: Record<HeatmapCell["level"], string> = {
@@ -92,6 +103,12 @@ function SummaryCard({ icon: Icon, label, value, color }: {
   );
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  ny: "Ny", planerad: "Planerad", planerad_resurs: "Planerad", paborjad: "Påbörjad",
+  utford: "Utförd", avslutad: "Avslutad", completed: "Klar", cancelled: "Avbruten",
+  in_progress: "Pågår", draft: "Utkast",
+};
+
 function CellDetailDialog({ cell, resourceName, open, onClose }: {
   cell: HeatmapCell;
   resourceName: string;
@@ -100,7 +117,7 @@ function CellDetailDialog({ cell, resourceName, open, onClose }: {
 }) {
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-sm" data-testid="dialog-cell-detail">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" data-testid="dialog-cell-detail">
         <DialogHeader>
           <DialogTitle className="text-base">
             {resourceName} — {format(parseISO(cell.date), "EEEE d MMMM", { locale: sv })}
@@ -109,14 +126,14 @@ function CellDetailDialog({ cell, resourceName, open, onClose }: {
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-lg border p-3 dark:border-gray-700">
-              <p className="text-[10px] uppercase text-muted-foreground">Ordrar</p>
-              <p className="text-xl font-bold">{cell.orderCount}</p>
-              <p className="text-xs text-muted-foreground">{cell.completedCount} klara</p>
-            </div>
-            <div className="rounded-lg border p-3 dark:border-gray-700">
               <p className="text-[10px] uppercase text-muted-foreground">Beläggning</p>
               <p className="text-xl font-bold">{cell.capacityPercent}%</p>
               <p className="text-xs text-muted-foreground">{cell.totalMinutes} min</p>
+            </div>
+            <div className="rounded-lg border p-3 dark:border-gray-700">
+              <p className="text-[10px] uppercase text-muted-foreground">Ordrar</p>
+              <p className="text-xl font-bold">{cell.orderCount}</p>
+              <p className="text-xs text-muted-foreground">{cell.completedCount} klara</p>
             </div>
           </div>
           {cell.slaAtRisk > 0 && (
@@ -134,6 +151,28 @@ function CellDetailDialog({ cell, resourceName, open, onClose }: {
               <div>
                 <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Avvikelser</p>
                 <p className="text-xs text-amber-600 dark:text-amber-300">{cell.deviationCount} rapporterade avvikelser</p>
+              </div>
+            </div>
+          )}
+          {cell.orders.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] uppercase text-muted-foreground font-semibold">Schemalagda ordrar</p>
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {cell.orders.map(order => (
+                  <div
+                    key={order.id}
+                    className={`flex items-center justify-between rounded border p-2 text-xs dark:border-gray-700 ${order.slaAtRisk ? "border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-900/10" : ""}`}
+                    data-testid={`order-row-${order.id}`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{order.title}</p>
+                      <p className="text-muted-foreground">{order.estimatedDuration} min · {STATUS_LABELS[order.status] || order.status}</p>
+                    </div>
+                    {order.slaAtRisk && (
+                      <AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0 ml-2" />
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -158,7 +197,7 @@ function HeatmapCellComponent({ cell, onClick }: { cell: HeatmapCell; onClick: (
         >
           <div className="flex items-center justify-center h-full">
             {cell.orderCount > 0 && (
-              <span className="text-xs font-medium text-foreground/80">{cell.orderCount}</span>
+              <span className="text-xs font-medium text-foreground/80">{cell.capacityPercent}%</span>
             )}
           </div>
           {cell.slaAtRisk > 0 && (
@@ -361,15 +400,30 @@ export default function ControlTowerPage() {
                   </tr>
                   <tr className="border-b dark:border-gray-700">
                     <th className="sticky left-0 z-10 bg-background" />
-                    {dayHeaders.map(dh => (
-                      <th
-                        key={dh.date}
-                        className={`p-1 text-center text-[10px] font-normal ${dh.isWeekend ? "text-red-400 dark:text-red-500" : "text-muted-foreground"}`}
-                      >
-                        <div>{dh.dayName}</div>
-                        <div className="font-medium">{dh.dayNum}</div>
-                      </th>
-                    ))}
+                    {dayHeaders.map(dh => {
+                      const unassignedSla = data?.unassignedSlaByDate?.[dh.date] || 0;
+                      return (
+                        <th
+                          key={dh.date}
+                          className={`p-1 text-center text-[10px] font-normal ${dh.isWeekend ? "text-red-400 dark:text-red-500" : "text-muted-foreground"}`}
+                        >
+                          <div>{dh.dayName}</div>
+                          <div className="font-medium">{dh.dayNum}</div>
+                          {unassignedSla > 0 && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="mx-auto mt-0.5 w-4 h-4 rounded-full bg-red-500/80 flex items-center justify-center cursor-help" data-testid={`unassigned-sla-${dh.date}`}>
+                                  <span className="text-[8px] text-white font-bold">{unassignedSla}</span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="bottom">
+                                <p className="text-xs">{unassignedSla} ej tilldelade ordrar med SLA-risk</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody>
