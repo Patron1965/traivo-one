@@ -151,6 +151,7 @@ export function OutboxCenter({ onBack }: OutboxCenterProps) {
   const pendingItems = items.filter((i) => getItemStatus(i) === "pending");
   const retryingItems = items.filter((i) => getItemStatus(i) === "retrying");
   const failedItems = items.filter((i) => getItemStatus(i) === "failed");
+  const hasRetryableItems = pendingItems.length > 0 || retryingItems.length > 0;
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="outbox-center">
@@ -181,7 +182,7 @@ export function OutboxCenter({ onBack }: OutboxCenterProps) {
           <Button
             size="sm"
             onClick={handleSyncNow}
-            disabled={syncing || items.length === 0}
+            disabled={syncing || !hasRetryableItems}
             data-testid="button-sync-now"
           >
             {syncing ? (
