@@ -111,7 +111,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                 <ChevronLeft className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Föregående</TooltipContent>
+            <TooltipContent side="top">Föregående</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -119,7 +119,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                 <Crosshair className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Idag</TooltipContent>
+            <TooltipContent side="top">Idag</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -127,7 +127,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Nästa</TooltipContent>
+            <TooltipContent side="top">Nästa</TooltipContent>
           </Tooltip>
         </div>
 
@@ -140,7 +140,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                 <Undo2 className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Ångra (Ctrl+Z)</TooltipContent>
+            <TooltipContent side="top">Ångra (Ctrl+Z)</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -148,7 +148,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                 <Redo2 className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Gör om (Ctrl+Y)</TooltipContent>
+            <TooltipContent side="top">Gör om (Ctrl+Y)</TooltipContent>
           </Tooltip>
         </div>
 
@@ -163,7 +163,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                     <ZoomOut className="h-3 w-3" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Zooma ut</TooltipContent>
+                <TooltipContent side="top">Zooma ut</TooltipContent>
               </Tooltip>
               <span className="text-[10px] text-muted-foreground w-10 text-center cursor-pointer select-none" onClick={() => setZoomLevel(1)} data-testid="text-zoom-level">
                 {zoom.label}
@@ -174,7 +174,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                     <ZoomIn className="h-3 w-3" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Zooma in</TooltipContent>
+                <TooltipContent side="top">Zooma in</TooltipContent>
               </Tooltip>
             </div>
           )}
@@ -191,7 +191,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                   </Button>
                 </PopoverTrigger>
               </TooltipTrigger>
-              <TooltipContent>Filtrera resurser</TooltipContent>
+              <TooltipContent side="top">Filtrera resurser</TooltipContent>
             </Tooltip>
             <PopoverContent className="w-64 p-3" align="end" data-testid="popover-resource-filter">
               <div className="flex items-center justify-between mb-2">
@@ -242,18 +242,38 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
           </Popover>
 
           <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && onViewModeChange(v as ViewMode)} className="h-8" data-testid="toggle-view-mode">
-            <ToggleGroupItem value="day" aria-label="Dagvy (1)" title="Dagvy (1)" className="h-7 w-7 p-0" data-testid="toggle-day">
-              <CalendarDays className="h-3.5 w-3.5" />
-            </ToggleGroupItem>
-            <ToggleGroupItem value="week" aria-label="Veckovy (2)" title="Veckovy (2)" className="h-7 w-7 p-0" data-testid="toggle-week">
-              <CalendarRange className="h-3.5 w-3.5" />
-            </ToggleGroupItem>
-            <ToggleGroupItem value="month" aria-label="Månadsvy (3)" title="Månadsvy (3)" className="h-7 w-7 p-0" data-testid="toggle-month">
-              <Calendar className="h-3.5 w-3.5" />
-            </ToggleGroupItem>
-            <ToggleGroupItem value="route" aria-label="Ruttvy" title="Ruttvy" className="h-7 w-7 p-0" data-testid="toggle-route">
-              <MapPin className="h-3.5 w-3.5" />
-            </ToggleGroupItem>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ToggleGroupItem value="day" aria-label="Dagvy (1)" className="h-7 w-7 p-0" data-testid="toggle-day">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                </ToggleGroupItem>
+              </TooltipTrigger>
+              <TooltipContent side="top">Dagvy (1)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ToggleGroupItem value="week" aria-label="Veckovy (2)" className="h-7 w-7 p-0" data-testid="toggle-week">
+                  <CalendarRange className="h-3.5 w-3.5" />
+                </ToggleGroupItem>
+              </TooltipTrigger>
+              <TooltipContent side="top">Veckovy (2)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ToggleGroupItem value="month" aria-label="Månadsvy (3)" className="h-7 w-7 p-0" data-testid="toggle-month">
+                  <Calendar className="h-3.5 w-3.5" />
+                </ToggleGroupItem>
+              </TooltipTrigger>
+              <TooltipContent side="top">Månadsvy (3)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ToggleGroupItem value="route" aria-label="Ruttvy" className="h-7 w-7 p-0" data-testid="toggle-route">
+                  <MapPin className="h-3.5 w-3.5" />
+                </ToggleGroupItem>
+              </TooltipTrigger>
+              <TooltipContent side="top">Ruttvy</TooltipContent>
+            </Tooltip>
           </ToggleGroup>
 
           <Separator orientation="vertical" className="h-6 mx-0.5" />
@@ -264,7 +284,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                 <Plus className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Nytt jobb (N)</TooltipContent>
+            <TooltipContent side="top">Nytt jobb (N)</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -272,7 +292,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                 <Wand2 className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Fyll veckan (F)</TooltipContent>
+            <TooltipContent side="top">Fyll veckan (F)</TooltipContent>
           </Tooltip>
           {onCarryOver && (
             <Tooltip>
@@ -281,7 +301,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Flytta oavslutade</TooltipContent>
+              <TooltipContent side="top">Flytta oavslutade</TooltipContent>
             </Tooltip>
           )}
           <Tooltip>
@@ -290,7 +310,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                 <Trash2 className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Rensa all planering</TooltipContent>
+            <TooltipContent side="top">Rensa all planering</TooltipContent>
           </Tooltip>
           {onUrgentJob && (
             <Tooltip>
@@ -299,7 +319,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                   <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Akut jobb</TooltipContent>
+              <TooltipContent side="top">Akut jobb</TooltipContent>
             </Tooltip>
           )}
 
@@ -312,7 +332,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                   <ShieldCheck className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Visa/dölj begränsningar</TooltipContent>
+              <TooltipContent side="top">Visa/dölj begränsningar</TooltipContent>
             </Tooltip>
           )}
           {viewMode === "week" && (
@@ -323,7 +343,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                     <Activity className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Visa/dölj kapacitet</TooltipContent>
+                <TooltipContent side="top">Visa/dölj kapacitet</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -331,7 +351,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                     <TrendingUp className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Visa/dölj veckomål</TooltipContent>
+                <TooltipContent side="top">Visa/dölj veckomål</TooltipContent>
               </Tooltip>
             </>
           )}
@@ -342,7 +362,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                 <ExternalLink className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Öppna i eget fönster</TooltipContent>
+            <TooltipContent side="top">Öppna i eget fönster</TooltipContent>
           </Tooltip>
 
           {onToggleAIPanel && (
@@ -352,7 +372,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                   <Sparkles className="h-4 w-4 text-purple-500" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>AI-stöd</TooltipContent>
+              <TooltipContent side="top">AI-stöd</TooltipContent>
             </Tooltip>
           )}
         </div>
@@ -404,7 +424,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                   <span className={`font-semibold tabular-nums ${getGoalTextColor(weekGoals.time.pct)}`}>{weekGoals.time.pct}%</span>
                 </div>
               </TooltipTrigger>
-              <TooltipContent><p>{weekGoals.time.current.toFixed(1)}h av {weekGoals.time.target}h planerat</p></TooltipContent>
+              <TooltipContent side="top"><p>{weekGoals.time.current.toFixed(1)}h av {weekGoals.time.target}h planerat</p></TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -417,7 +437,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                   <span className={`font-semibold tabular-nums ${getGoalTextColor(weekGoals.economy.pct)}`}>{weekGoals.economy.pct}%</span>
                 </div>
               </TooltipTrigger>
-              <TooltipContent><p>{(weekGoals.economy.current / 100).toLocaleString("sv-SE")} kr av {(weekGoals.economy.target / 100).toLocaleString("sv-SE")} kr budget</p></TooltipContent>
+              <TooltipContent side="top"><p>{(weekGoals.economy.current / 100).toLocaleString("sv-SE")} kr av {(weekGoals.economy.target / 100).toLocaleString("sv-SE")} kr budget</p></TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -430,7 +450,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                   <span className={`font-semibold tabular-nums ${getGoalTextColor(weekGoals.count.pct)}`}>{weekGoals.count.pct}%</span>
                 </div>
               </TooltipTrigger>
-              <TooltipContent><p>{weekGoals.count.current} av {weekGoals.count.target} stopp planerade</p></TooltipContent>
+              <TooltipContent side="top"><p>{weekGoals.count.current} av {weekGoals.count.target} stopp planerade</p></TooltipContent>
             </Tooltip>
             {weekTravelTotal.minutes > 0 && (
               <Tooltip>
@@ -441,7 +461,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                     <span className="text-yellow-500">({weekTravelTotal.km} km)</span>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent><p>Total restid veckan: {weekTravelTotal.minutes} min, {weekTravelTotal.km} km</p></TooltipContent>
+                <TooltipContent side="top"><p>Total restid veckan: {weekTravelTotal.minutes} min, {weekTravelTotal.km} km</p></TooltipContent>
               </Tooltip>
             )}
           </div>
