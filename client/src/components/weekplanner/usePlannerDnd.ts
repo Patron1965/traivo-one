@@ -239,6 +239,13 @@ export function usePlannerDnd({
 
     const scheduledStartTime = computeStartTime(resourceId, dateStr, hour);
 
+    const conflicts = detectConflictsForJob(job, resourceId, dateStr, scheduledStartTime || null);
+    const hasHardBlock = conflicts.some(c => c.startsWith("[BLOCK]"));
+    if (hasHardBlock) {
+      toast({ title: "Blockerad", description: conflicts.find(c => c.startsWith("[BLOCK]"))?.replace("[BLOCK] ", "") || "Tilldelning blockerad av verksamhetsområdesregel" });
+      return;
+    }
+
     if (setWhatIfPending && setWhatIfOpen && fetchWhatIf) {
       const fromResourceId = job.resourceId || null;
       const fromDate = job.scheduledDate
@@ -257,13 +264,7 @@ export function usePlannerDnd({
       setWhatIfOpen(true);
       fetchWhatIf(jobId, resourceId, dateStr, scheduledStartTime, fromResourceId, fromDate);
     } else {
-      const conflicts = detectConflictsForJob(job, resourceId, dateStr, scheduledStartTime || null);
       if (conflicts.length > 0) {
-        const hasHardBlock = conflicts.some(c => c.startsWith("[BLOCK]"));
-        if (hasHardBlock) {
-          toast({ title: "Blockerad", description: conflicts.find(c => c.startsWith("[BLOCK]"))?.replace("[BLOCK] ", "") || "Tilldelning blockerad av verksamhetsområdesregel" });
-          return;
-        }
         setPendingSchedule({ jobId, resourceId, scheduledDate: dateStr, scheduledStartTime, conflicts }); setConflictDialogOpen(true); return;
       }
       executeSchedule(jobId, resourceId, dateStr, scheduledStartTime);

@@ -1198,21 +1198,20 @@ app.post("/api/planning/what-if", requireTenantWithFallback, asyncHandler(async 
     const resources = await storage.getResources(tenantId);
     const resourceAvailability = await storage.getResourceAvailabilityByTenant(tenantId);
     const vehicleSchedules = await storage.getVehicleSchedulesByTenant(tenantId);
-    const resourceIds = resources.map((r: any) => r.id);
+    const resourceIds = resources.map(r => r.id);
     const resourceVehicles = await storage.getResourceVehiclesByResourceIds(resourceIds);
     const dependencyInstances = await storage.getTaskDependencyInstances(tenantId);
 
-    let timeRestrictions: any[] = [];
-    if (workOrder.objectId) {
-      timeRestrictions = await storage.getObjectTimeRestrictions(workOrder.objectId);
-    }
+    const timeRestrictions = workOrder.objectId
+      ? await storage.getObjectTimeRestrictions(workOrder.objectId)
+      : [];
 
     const resourceArticles = await storage.getResourceArticlesByResourceIds(resourceIds);
     const workOrderLines = await storage.getWorkOrderLines(workOrderId);
     const teamMembers = await storage.getAllTeamMembers(tenantId);
     const clusters = await storage.getClusters(tenantId);
     const tenant = await storage.getTenant(tenantId);
-    const tenantSettings = ((tenant as any)?.settings as Record<string, any>) || {};
+    const tenantSettings = (tenant?.settings as Record<string, unknown>) || {};
     const hardClusterBlocking = tenantSettings.hardClusterBlocking !== false;
 
     const move: ScheduleMove = {
@@ -1222,17 +1221,17 @@ app.post("/api/planning/what-if", requireTenantWithFallback, asyncHandler(async 
     };
 
     const ctx: ConstraintContext = {
-      allOrders: allOrders as any[],
-      resources: resources as any[],
-      resourceAvailability: resourceAvailability as any[],
-      vehicleSchedules: vehicleSchedules as any[],
-      resourceVehicles: resourceVehicles as any[],
-      dependencyInstances: dependencyInstances as any[],
-      timeRestrictions: timeRestrictions as any[],
-      resourceArticles: resourceArticles as any[],
-      workOrderLines: workOrderLines as any[],
-      teamMembers: teamMembers as any[],
-      clusters: clusters as any[],
+      allOrders,
+      resources,
+      resourceAvailability,
+      vehicleSchedules,
+      resourceVehicles,
+      dependencyInstances,
+      timeRestrictions,
+      resourceArticles,
+      workOrderLines,
+      teamMembers,
+      clusters,
       hardClusterBlocking,
     };
 
@@ -1240,16 +1239,15 @@ app.post("/api/planning/what-if", requireTenantWithFallback, asyncHandler(async 
 
     const MAX_HOURS = 8;
     const completedStatuses = new Set(["fakturerad", "utford", "avbruten"]);
-    const targetResourceHours = (allOrders as any[])
-      .filter((o: any) => o.resourceId === toResourceId && o.scheduledDate && o.id !== workOrderId)
-      .filter((o: any) => !completedStatuses.has(o.orderStatus))
-      .filter((o: any) => {
-        const oDate = o.scheduledDate instanceof Date
-          ? o.scheduledDate.toISOString().split("T")[0]
-          : String(o.scheduledDate).split("T")[0];
-        return oDate === scheduledDate;
-      })
-      .reduce((sum: number, o: any) => sum + (o.estimatedDuration || 60) / 60, 0);
+    const getDateStr = (d: unknown): string => {
+      if (d instanceof Date) return d.toISOString().split("T")[0];
+      return String(d).split("T")[0];
+    };
+    const targetResourceHours = allOrders
+      .filter(o => o.resourceId === toResourceId && o.scheduledDate && o.id !== workOrderId)
+      .filter(o => !completedStatuses.has(o.orderStatus || ""))
+      .filter(o => getDateStr(o.scheduledDate) === scheduledDate)
+      .reduce((sum, o) => sum + (o.estimatedDuration || 60) / 60, 0);
 
     const jobDuration = (workOrder.estimatedDuration || 60) / 60;
     const targetNewHours = targetResourceHours + jobDuration;
@@ -1264,28 +1262,18 @@ app.post("/api/planning/what-if", requireTenantWithFallback, asyncHandler(async 
       : null);
 
     if (actualFromResourceId && actualFromDate) {
-      sourceResourceHours = (allOrders as any[])
-        .filter((o: any) => o.resourceId === actualFromResourceId && o.scheduledDate)
-        .filter((o: any) => !completedStatuses.has(o.orderStatus))
-        .filter((o: any) => {
-          const oDate = o.scheduledDate instanceof Date
-            ? o.scheduledDate.toISOString().split("T")[0]
-            : String(o.scheduledDate).split("T")[0];
-          return oDate === actualFromDate;
-        })
-        .reduce((sum: number, o: any) => sum + (o.estimatedDuration || 60) / 60, 0);
+      sourceResourceHours = allOrders
+        .filter(o => o.resourceId === actualFromResourceId && o.scheduledDate)
+        .filter(o => !completedStatuses.has(o.orderStatus || ""))
+        .filter(o => getDateStr(o.scheduledDate) === actualFromDate)
+        .reduce((sum, o) => sum + (o.estimatedDuration || 60) / 60, 0);
       sourceNewHours = sourceResourceHours - jobDuration;
     }
 
-    const targetDayOrders = (allOrders as any[])
-      .filter((o: any) => o.resourceId === toResourceId && o.scheduledDate && o.id !== workOrderId)
-      .filter((o: any) => !completedStatuses.has(o.orderStatus))
-      .filter((o: any) => {
-        const oDate = o.scheduledDate instanceof Date
-          ? o.scheduledDate.toISOString().split("T")[0]
-          : String(o.scheduledDate).split("T")[0];
-        return oDate === scheduledDate;
-      });
+    const targetDayOrders = allOrders
+      .filter(o => o.resourceId === toResourceId && o.scheduledDate && o.id !== workOrderId)
+      .filter(o => !completedStatuses.has(o.orderStatus || ""))
+      .filter(o => getDateStr(o.scheduledDate) === scheduledDate);
 
     const movedJobMinutes = workOrder.estimatedDuration || 60;
     const movedStartMinutes = scheduledStartTime
@@ -1293,8 +1281,8 @@ app.post("/api/planning/what-if", requireTenantWithFallback, asyncHandler(async 
       : null;
 
     const affectedOrders = targetDayOrders
-      .sort((a: any, b: any) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""))
-      .map((o: any) => {
+      .sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""))
+      .map(o => {
         let etaDeltaMinutes: number | null = null;
         if (movedStartMinutes !== null && o.scheduledStartTime) {
           const oStart = parseInt(o.scheduledStartTime.split(":")[0]) * 60 + parseInt(o.scheduledStartTime.split(":")[1]);
@@ -1315,9 +1303,7 @@ app.post("/api/planning/what-if", requireTenantWithFallback, asyncHandler(async 
       });
 
     const slaRisks: Array<{ workOrderId: string; title: string; deadline: string; daysRemaining: number; risk: "high" | "medium" | "low" }> = [];
-    const movedOrder = workOrder as any;
-    const ordersToCheck = [movedOrder, ...targetDayOrders];
-    const now = new Date();
+    const ordersToCheck = [workOrder, ...targetDayOrders];
     for (const o of ordersToCheck) {
       if (o.plannedWindowEnd) {
         const deadline = new Date(o.plannedWindowEnd);
@@ -1336,7 +1322,7 @@ app.post("/api/planning/what-if", requireTenantWithFallback, asyncHandler(async 
       }
     }
 
-    const sourceResource = actualFromResourceId ? resources.find((r: any) => r.id === actualFromResourceId) : null;
+    const sourceResource = actualFromResourceId ? resources.find(r => r.id === actualFromResourceId) : null;
 
     res.json({
       violations,
@@ -1352,7 +1338,7 @@ app.post("/api/planning/what-if", requireTenantWithFallback, asyncHandler(async 
         },
         source: actualFromResourceId && actualFromDate ? {
           resourceId: actualFromResourceId,
-          resourceName: (sourceResource as any)?.name || "Okänd",
+          resourceName: sourceResource?.name || "Okänd",
           date: actualFromDate,
           currentHours: sourceResourceHours,
           newHours: Math.max(0, sourceNewHours),

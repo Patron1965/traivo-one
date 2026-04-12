@@ -404,23 +404,18 @@ export function usePlannerData() {
   const handleOpenAssignDialog = useCallback((job: WorkOrderWithObject, e: React.MouseEvent) => { e.stopPropagation(); setJobToAssign(job); setAssignDate(format(currentDate, "yyyy-MM-dd")); setAssignResourceId(null); setAssignDialogOpen(true); }, [currentDate]);
   const handleQuickAssign = useCallback(() => {
     if (!jobToAssign || !assignResourceId || !assignDate) return;
-    const conflicts = detectConflictsForJob(jobToAssign, assignResourceId, assignDate, null);
-    if (conflicts.length > 0) {
-      const hasHardBlock = conflicts.some(c => c.startsWith("[BLOCK]"));
-      if (hasHardBlock) {
-        toast({ title: "Blockerad", description: conflicts.find(c => c.startsWith("[BLOCK]"))?.replace("[BLOCK] ", "") || "Tilldelning blockerad av verksamhetsområdesregel" });
-        return;
-      }
-      setPendingSchedule({ jobId: jobToAssign.id, resourceId: assignResourceId, scheduledDate: assignDate, conflicts });
-      setConflictDialogOpen(true);
-      setAssignDialogOpen(false);
-      setJobToAssign(null);
-      setAssignResourceId(null);
-      return;
-    }
-    executeSchedule(jobToAssign.id, assignResourceId, assignDate);
-    setAssignDialogOpen(false); setJobToAssign(null); setAssignResourceId(null);
-  }, [jobToAssign, assignResourceId, assignDate, detectConflictsForJob, executeSchedule, toast]);
+    setWhatIfPending({
+      jobId: jobToAssign.id,
+      jobTitle: jobToAssign.title || jobToAssign.id.slice(0, 8),
+      resourceId: assignResourceId,
+      scheduledDate: assignDate,
+    });
+    setWhatIfOpen(true);
+    fetchWhatIf(jobToAssign.id, assignResourceId, assignDate, undefined, jobToAssign.resourceId || null, jobToAssign.scheduledDate ? (typeof jobToAssign.scheduledDate === "string" ? jobToAssign.scheduledDate.split("T")[0] : new Date(jobToAssign.scheduledDate).toISOString().split("T")[0]) : null);
+    setAssignDialogOpen(false);
+    setJobToAssign(null);
+    setAssignResourceId(null);
+  }, [jobToAssign, assignResourceId, assignDate, fetchWhatIf]);
 
   const handleAcceptConflict = useCallback(() => {
     if (!pendingSchedule) return;
