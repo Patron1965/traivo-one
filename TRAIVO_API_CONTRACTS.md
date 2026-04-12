@@ -20,6 +20,8 @@
 Alla ID:n är `string` (UUID v4). Alla tidsstämplar är ISO 8601-strängar i JSON-svar.
 Alla entiteter har `tenantId: string` för fullständig dataisolering.
 
+> **Notera:** Enum-värden (t.ex. `orderType`, `priority`, `status`) lagras som `text` i databasen och saknar databasconstraints. Värdena listade nedan är **förväntade/rekommenderade** värden som applikationen hanterar korrekt.
+
 ### 1.1 WorkOrder
 
 Huvudentitet — en planerad eller utförd arbetsuppgift.
@@ -584,7 +586,7 @@ Mobilappen skickar förenklade statusvärden som mappas till orderStatus + execu
 
 ### 5.6 Idempotens
 
-Varje action loggas med `clientId` i `offline_sync_log`-tabellen. Klienten bör generera ett unikt `clientId` per åtgärd och kan kontrollera status via:
+Varje action loggas med `clientId` i `offline_sync_log`-tabellen. `clientId` används för spårbarhet — servern utför ingen deduplicering (varje POST infogar en ny rad). Klienten ansvarar för att inte skicka samma action två gånger. Status kan kontrolleras via:
 
 ```
 GET /api/mobile/sync/status
