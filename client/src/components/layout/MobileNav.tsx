@@ -45,6 +45,7 @@ import {
   Fuel,
   MessageSquare,
   Activity,
+  Gauge,
 } from "lucide-react";
 
 function getNavigationGroups(tl: (key: string) => string) {
@@ -84,6 +85,7 @@ function getNavigationGroups(tl: (key: string) => string) {
         { title: tl("nav.route-planning"), url: "/routes", icon: Map },
         { title: tl("nav.planner-map"), url: "/planner-map", icon: MapPin },
         { title: tl("nav.historical-map"), url: "/historical-map", icon: History },
+        { title: "Kontrollpanel", url: "/control-tower", icon: Gauge },
       ],
     },
     {

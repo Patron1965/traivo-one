@@ -1,0 +1,348 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Gauge, AlertTriangle, Users, ClipboardList, TrendingUp, ChevronLeft, ChevronRight } from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { sv } from "date-fns/locale";
+
+type HeatmapCell = {
+  date: string;
+  orderCount: number;
+  totalMinutes: number;
+  capacityPercent: number;
+  slaAtRisk: number;
+  deviationCount: number;
+  completedCount: number;
+  level: "empty" | "low" | "medium" | "high" | "overloaded";
+};
+
+type HeatmapRow = {
+  resourceId: string;
+  resourceName: string;
+  resourceType: string;
+  weeklyHours: number;
+  cells: HeatmapCell[];
+};
+
+type HeatmapData = {
+  dates: string[];
+  rows: HeatmapRow[];
+  summary: {
+    totalResources: number;
+    totalOrders: number;
+    avgCapacity: number;
+    overloadedCells: number;
+    slaRiskTotal: number;
+  };
+  weeks: number;
+};
+
+const LEVEL_COLORS: Record<HeatmapCell["level"], string> = {
+  empty: "bg-gray-100 dark:bg-gray-800",
+  low: "bg-emerald-100 dark:bg-emerald-900/40",
+  medium: "bg-amber-100 dark:bg-amber-900/40",
+  high: "bg-orange-200 dark:bg-orange-900/50",
+  overloaded: "bg-red-300 dark:bg-red-900/60",
+};
+
+const LEVEL_BORDERS: Record<HeatmapCell["level"], string> = {
+  empty: "border-gray-200 dark:border-gray-700",
+  low: "border-emerald-300 dark:border-emerald-700",
+  medium: "border-amber-300 dark:border-amber-700",
+  high: "border-orange-400 dark:border-orange-700",
+  overloaded: "border-red-500 dark:border-red-600",
+};
+
+const LEVEL_LABELS: Record<HeatmapCell["level"], string> = {
+  empty: "Ledig",
+  low: "Låg (≤50%)",
+  medium: "Normal (51-80%)",
+  high: "Hög (81-100%)",
+  overloaded: "Överbelastad (>100%)",
+};
+
+function SummaryCard({ icon: Icon, label, value, color }: {
+  icon: typeof Gauge;
+  label: string;
+  value: string | number;
+  color: string;
+}) {
+  return (
+    <Card data-testid={`stat-${label.toLowerCase().replace(/\s/g, "-")}`}>
+      <CardContent className="p-4 flex items-center gap-3">
+        <div className={`p-2 rounded-lg ${color}`}>
+          <Icon className="h-5 w-5 text-white" />
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className="text-lg font-semibold">{value}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function HeatmapCellComponent({ cell }: { cell: HeatmapCell }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          className={`relative w-full h-10 rounded border cursor-default transition-colors ${LEVEL_COLORS[cell.level]} ${LEVEL_BORDERS[cell.level]}`}
+          data-testid={`heatmap-cell-${cell.date}`}
+        >
+          <div className="flex items-center justify-center h-full">
+            {cell.orderCount > 0 && (
+              <span className="text-xs font-medium text-foreground/80">{cell.orderCount}</span>
+            )}
+          </div>
+          {cell.slaAtRisk > 0 && (
+            <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-red-500 flex items-center justify-center">
+              <span className="text-[8px] text-white font-bold">{cell.slaAtRisk}</span>
+            </div>
+          )}
+          {cell.deviationCount > 0 && (
+            <div className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-amber-500 flex items-center justify-center">
+              <span className="text-[8px] text-white font-bold">{cell.deviationCount}</span>
+            </div>
+          )}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs">
+        <div className="space-y-1">
+          <p className="font-medium">{format(parseISO(cell.date), "EEEE d MMM", { locale: sv })}</p>
+          <p className="text-xs">Ordrar: {cell.orderCount} ({cell.completedCount} klara)</p>
+          <p className="text-xs">Beläggning: {cell.capacityPercent}% ({cell.totalMinutes} min)</p>
+          {cell.slaAtRisk > 0 && (
+            <p className="text-xs text-red-400">SLA-risk: {cell.slaAtRisk} ordrar</p>
+          )}
+          {cell.deviationCount > 0 && (
+              <p className="text-xs text-amber-400">Avvikelser: {cell.deviationCount}</p>
+            )}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+  );
+}
+
+export default function ControlTowerPage() {
+  const [weeks, setWeeks] = useState<number>(2);
+  const [filterType, setFilterType] = useState<string>("all");
+
+  const { data, isLoading, isError } = useQuery<HeatmapData>({
+    queryKey: ["/api/planning/heatmap", weeks],
+    queryFn: async () => {
+      const res = await fetch(`/api/planning/heatmap?weeks=${weeks}`);
+      if (!res.ok) throw new Error("Kunde inte hämta heatmap-data");
+      return res.json();
+    },
+    refetchInterval: 60000,
+  });
+
+  const filteredRows = data?.rows.filter(r => {
+    if (filterType === "all") return true;
+    return r.resourceType === filterType;
+  }) || [];
+
+  const weekGroups: { weekLabel: string; dates: string[] }[] = [];
+  if (data?.dates) {
+    let currentWeek: string[] = [];
+    let currentWeekNum = -1;
+    for (const dateStr of data.dates) {
+      const d = parseISO(dateStr);
+      const weekNum = getISOWeek(d);
+      if (weekNum !== currentWeekNum) {
+        if (currentWeek.length > 0) {
+          weekGroups.push({ weekLabel: `V${currentWeekNum}`, dates: currentWeek });
+        }
+        currentWeek = [dateStr];
+        currentWeekNum = weekNum;
+      } else {
+        currentWeek.push(dateStr);
+      }
+    }
+    if (currentWeek.length > 0) {
+      weekGroups.push({ weekLabel: `V${currentWeekNum}`, dates: currentWeek });
+    }
+  }
+
+  const dayHeaders = data?.dates.map(dateStr => {
+    const d = parseISO(dateStr);
+    return {
+      date: dateStr,
+      dayName: format(d, "EEE", { locale: sv }),
+      dayNum: format(d, "d"),
+      isWeekend: d.getDay() === 0 || d.getDay() === 6,
+    };
+  }) || [];
+
+  return (
+    <TooltipProvider delayDuration={200}>
+    <div className="p-6 space-y-6">
+      <PageHeader
+        icon={Gauge}
+        title="Kontrollpanel"
+        description="Beläggning, SLA-risk och avvikelser per resurs och dag"
+        testId="text-control-tower-title"
+      >
+        <div className="flex items-center gap-2">
+          <Select value={filterType} onValueChange={setFilterType}>
+            <SelectTrigger className="w-[140px]" data-testid="select-resource-type">
+              <SelectValue placeholder="Resurstyp" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alla resurser</SelectItem>
+              <SelectItem value="person">Personal</SelectItem>
+              <SelectItem value="vehicle">Fordon</SelectItem>
+              <SelectItem value="team">Team</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-1 bg-muted rounded-md px-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setWeeks(w => Math.max(1, w - 1))}
+              disabled={weeks <= 1}
+              data-testid="button-fewer-weeks"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium px-2" data-testid="text-weeks-count">{weeks}v</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setWeeks(w => Math.min(8, w + 1))}
+              disabled={weeks >= 8}
+              data-testid="button-more-weeks"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </PageHeader>
+
+      {data?.summary && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3" data-testid="summary-cards">
+          <SummaryCard icon={Users} label="Resurser" value={data.summary.totalResources} color="bg-[#1B4B6B]" />
+          <SummaryCard icon={ClipboardList} label="Ordrar" value={data.summary.totalOrders} color="bg-[#4A9B9B]" />
+          <SummaryCard icon={TrendingUp} label="Snittbeläggning" value={`${data.summary.avgCapacity}%`} color="bg-[#7DBFB0]" />
+          <SummaryCard icon={AlertTriangle} label="Överbelastade" value={data.summary.overloadedCells} color="bg-orange-500" />
+          <SummaryCard icon={AlertTriangle} label="SLA-risk" value={data.summary.slaRiskTotal} color="bg-red-500" />
+        </div>
+      )}
+
+      <Card>
+        <CardContent className="p-0">
+          {isError ? (
+            <div className="flex items-center justify-center h-48" data-testid="error-heatmap">
+              <div className="flex flex-col items-center gap-2 text-center">
+                <AlertTriangle className="h-6 w-6 text-red-500" />
+                <p className="text-sm text-muted-foreground">Kunde inte ladda heatmap-data</p>
+              </div>
+            </div>
+          ) : isLoading ? (
+            <div className="flex items-center justify-center h-48" data-testid="loading-heatmap">
+              <div className="flex flex-col items-center gap-2">
+                <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm text-muted-foreground">Laddar heatmap...</p>
+              </div>
+            </div>
+          ) : filteredRows.length === 0 ? (
+            <div className="flex items-center justify-center h-48" data-testid="empty-heatmap">
+              <p className="text-sm text-muted-foreground">Inga resurser att visa</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse min-w-[700px]">
+                <thead>
+                  <tr className="border-b dark:border-gray-700">
+                    <th className="sticky left-0 z-10 bg-background p-2 text-left text-xs font-medium text-muted-foreground w-[160px] min-w-[160px]">
+                      Resurs
+                    </th>
+                    {weekGroups.map(wg => (
+                      <th
+                        key={wg.weekLabel}
+                        colSpan={wg.dates.length}
+                        className="p-1 text-center text-xs font-semibold text-muted-foreground border-l dark:border-gray-700"
+                      >
+                        {wg.weekLabel}
+                      </th>
+                    ))}
+                  </tr>
+                  <tr className="border-b dark:border-gray-700">
+                    <th className="sticky left-0 z-10 bg-background" />
+                    {dayHeaders.map(dh => (
+                      <th
+                        key={dh.date}
+                        className={`p-1 text-center text-[10px] font-normal ${dh.isWeekend ? "text-red-400 dark:text-red-500" : "text-muted-foreground"}`}
+                      >
+                        <div>{dh.dayName}</div>
+                        <div className="font-medium">{dh.dayNum}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.map(row => (
+                    <tr key={row.resourceId} className="border-b dark:border-gray-800 hover:bg-muted/30" data-testid={`heatmap-row-${row.resourceId}`}>
+                      <td className="sticky left-0 z-10 bg-background p-2">
+                        <div className="flex items-center gap-2 min-w-[140px]">
+                          <div className="w-7 h-7 rounded-full bg-[#1B4B6B] dark:bg-[#4A9B9B] flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+                            {row.resourceName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium truncate" data-testid={`text-resource-name-${row.resourceId}`}>{row.resourceName}</p>
+                            <p className="text-[10px] text-muted-foreground">{row.weeklyHours}h/v</p>
+                          </div>
+                        </div>
+                      </td>
+                      {row.cells.map(cell => (
+                        <td key={cell.date} className="p-0.5">
+                          <HeatmapCellComponent cell={cell} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground" data-testid="heatmap-legend">
+        <span className="font-medium">Beläggning:</span>
+        {(Object.keys(LEVEL_COLORS) as HeatmapCell["level"][]).map(level => (
+          <div key={level} className="flex items-center gap-1.5">
+            <div className={`w-4 h-4 rounded border ${LEVEL_COLORS[level]} ${LEVEL_BORDERS[level]}`} />
+            <span>{LEVEL_LABELS[level]}</span>
+          </div>
+        ))}
+        <span className="ml-2">|</span>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-full bg-red-500" />
+          <span>SLA-risk</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-full bg-amber-500" />
+          <span>Avvikelser</span>
+        </div>
+      </div>
+    </div>
+    </TooltipProvider>
+  );
+}
+
+function getISOWeek(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}

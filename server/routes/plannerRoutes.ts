@@ -1549,5 +1549,159 @@ app.get("/api/planning/constraints", requireTenantWithFallback, asyncHandler(asy
     res.json({ cells, weekStart, dates });
 }));
 
+app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const weeksParam = parseInt(req.query.weeks as string) || 2;
+    const weeks = Math.min(Math.max(weeksParam, 1), 8);
+
+    const now = new Date();
+    const startDate = new Date(now);
+    const dayOfWeek = startDate.getDay();
+    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    startDate.setDate(startDate.getDate() + diff);
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + weeks * 7 - 1);
+    endDate.setHours(23, 59, 59, 999);
+
+    const dates: string[] = [];
+    const d = new Date(startDate);
+    while (d <= endDate) {
+      dates.push(d.toISOString().split("T")[0]);
+      d.setDate(d.getDate() + 1);
+    }
+
+    const resources = await storage.getResources(tenantId);
+    const activeResources = resources.filter(r => r.status === "active" && !r.deletedAt);
+    const allOrders = await storage.getWorkOrders(tenantId, startDate, endDate, false);
+
+    const getDateStr = (date: Date | string) => {
+      const dt = typeof date === "string" ? new Date(date) : date;
+      return dt.toISOString().split("T")[0];
+    };
+
+    const orderIndex = new Map<string, typeof allOrders>();
+    for (const o of allOrders) {
+      if (!o.scheduledDate || !o.resourceId) continue;
+      const key = `${o.resourceId}|${getDateStr(o.scheduledDate)}`;
+      if (!orderIndex.has(key)) orderIndex.set(key, []);
+      orderIndex.get(key)!.push(o);
+    }
+
+    const heatmapRows: Array<{
+      resourceId: string;
+      resourceName: string;
+      resourceType: string;
+      weeklyHours: number;
+      cells: Array<{
+        date: string;
+        orderCount: number;
+        totalMinutes: number;
+        capacityPercent: number;
+        slaAtRisk: number;
+        deviationCount: number;
+        completedCount: number;
+        level: "empty" | "low" | "medium" | "high" | "overloaded";
+      }>;
+    }> = [];
+
+    let changeRequests: any[] = [];
+    try {
+      const { customerChangeRequests } = await import("@shared/schema");
+      const { lte: lteOp } = await import("drizzle-orm");
+      const crResult = await db.select().from(customerChangeRequests).where(
+        and(
+          eq(customerChangeRequests.tenantId, tenantId),
+          gte(customerChangeRequests.createdAt, startDate),
+          lteOp(customerChangeRequests.createdAt, endDate)
+        )
+      );
+      changeRequests = Array.isArray(crResult) ? crResult : (crResult as any)?.rows || [];
+    } catch {
+      changeRequests = [];
+    }
+
+    const crIndex = new Map<string, number>();
+    for (const cr of changeRequests) {
+      if (!cr.createdByResourceId || !cr.createdAt) continue;
+      const key = `${cr.createdByResourceId}|${getDateStr(cr.createdAt)}`;
+      crIndex.set(key, (crIndex.get(key) || 0) + 1);
+    }
+
+    for (const resource of activeResources) {
+      const dailyCapacityMinutes = ((resource.weeklyHours || 40) / 5) * 60;
+      const cells: typeof heatmapRows[0]["cells"] = [];
+
+      for (const dateStr of dates) {
+        const dayOrders = orderIndex.get(`${resource.id}|${dateStr}`) || [];
+
+        const totalMinutes = dayOrders.reduce((sum, o) => sum + (o.estimatedDuration || 60), 0);
+        const capacityPercent = dailyCapacityMinutes > 0
+          ? Math.round((totalMinutes / dailyCapacityMinutes) * 100)
+          : 0;
+
+        const completedCount = dayOrders.filter(o =>
+          o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed"
+        ).length;
+
+        const slaAtRisk = dayOrders.filter(o => {
+          if (!o.plannedWindowEnd || o.completedAt) return false;
+          const windowEnd = new Date(o.plannedWindowEnd);
+          const orderDate = new Date(dateStr);
+          orderDate.setHours(23, 59, 59, 999);
+          return windowEnd <= orderDate && !o.completedAt;
+        }).length;
+
+        const deviationCount = crIndex.get(`${resource.id}|${dateStr}`) || 0;
+
+        let level: "empty" | "low" | "medium" | "high" | "overloaded" = "empty";
+        if (dayOrders.length === 0) level = "empty";
+        else if (capacityPercent <= 50) level = "low";
+        else if (capacityPercent <= 80) level = "medium";
+        else if (capacityPercent <= 100) level = "high";
+        else level = "overloaded";
+
+        cells.push({
+          date: dateStr,
+          orderCount: dayOrders.length,
+          totalMinutes,
+          capacityPercent,
+          slaAtRisk,
+          deviationCount,
+          completedCount,
+          level,
+        });
+      }
+
+      heatmapRows.push({
+        resourceId: resource.id,
+        resourceName: resource.name,
+        resourceType: resource.resourceType || "person",
+        weeklyHours: resource.weeklyHours || 40,
+        cells,
+      });
+    }
+
+    const summary = {
+      totalResources: activeResources.length,
+      totalOrders: allOrders.length,
+      avgCapacity: heatmapRows.length > 0
+        ? Math.round(
+            heatmapRows.reduce((sum, r) =>
+              sum + r.cells.reduce((s, c) => s + c.capacityPercent, 0) / r.cells.length,
+              0
+            ) / heatmapRows.length
+          )
+        : 0,
+      overloadedCells: heatmapRows.reduce((sum, r) =>
+        sum + r.cells.filter(c => c.level === "overloaded").length, 0),
+      slaRiskTotal: heatmapRows.reduce((sum, r) =>
+        sum + r.cells.reduce((s, c) => s + c.slaAtRisk, 0), 0),
+    };
+
+    res.json({ dates, rows: heatmapRows, summary, weeks });
+}));
+
 
 }
