@@ -238,9 +238,10 @@ export default function ControlTowerPage() {
 
   const queryParams = new URLSearchParams({ weeks: String(weeks) });
   if (teamFilter !== "all") queryParams.set("teamId", teamFilter);
+  if (filterType !== "all") queryParams.set("resourceType", filterType);
 
   const { data, isLoading, isError } = useQuery<HeatmapData>({
-    queryKey: ["/api/planning/heatmap", weeks, teamFilter],
+    queryKey: ["/api/planning/heatmap", weeks, teamFilter, filterType],
     queryFn: async () => {
       const res = await fetch(`/api/planning/heatmap?${queryParams.toString()}`);
       if (!res.ok) throw new Error("Kunde inte hämta heatmap-data");
@@ -249,10 +250,7 @@ export default function ControlTowerPage() {
     refetchInterval: 60000,
   });
 
-  const filteredRows = data?.rows.filter(r => {
-    if (filterType === "all") return true;
-    return r.resourceType === filterType;
-  }) || [];
+  const filteredRows = data?.rows || [];
 
   const weekGroups: { weekLabel: string; dates: string[] }[] = [];
   if (data?.dates) {

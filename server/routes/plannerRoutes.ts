@@ -1573,11 +1573,21 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
     }
 
     const teamFilter = req.query.teamId as string | undefined;
+    const resourceTypeFilter = req.query.resourceType as string | undefined;
 
     const resources = await storage.getResources(tenantId);
     let activeResources = resources.filter(r => r.status === "active" && !r.deletedAt);
 
+    if (resourceTypeFilter) {
+      activeResources = activeResources.filter(r => (r.resourceType || "person") === resourceTypeFilter);
+    }
+
     if (teamFilter) {
+      const team = (await storage.getTeams(tenantId)).find(t => t.id === teamFilter);
+      if (!team) {
+        res.json({ dates, rows: [], summary: { totalResources: 0, totalOrders: 0, avgCapacity: 0, overloadedCells: 0, slaRiskTotal: 0, slaUnassigned: 0 }, weeks, teamOptions: [], unassignedSlaByDate: {} });
+        return;
+      }
       const members = await db.select({ resourceId: teamMembers.resourceId })
         .from(teamMembers)
         .where(eq(teamMembers.teamId, teamFilter));
@@ -1744,12 +1754,13 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
       });
     }
 
-    const scheduledOrders = allOrders.filter(o => o.scheduledDate);
+    const filteredOrderCount = heatmapRows.reduce((sum, r) =>
+      sum + r.cells.reduce((s, c) => s + c.orderCount, 0), 0);
     const totalSlaUnassigned = Array.from(slaUnassignedByDate.values()).reduce((s, v) => s + v, 0);
 
     const summary = {
       totalResources: activeResources.length,
-      totalOrders: scheduledOrders.length,
+      totalOrders: filteredOrderCount,
       avgCapacity: heatmapRows.length > 0
         ? Math.round(
             heatmapRows.reduce((sum, r) =>
