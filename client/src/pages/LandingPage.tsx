@@ -35,7 +35,7 @@ export default function LandingPage() {
             <img
               src={traivoLogo}
               alt="Traivo"
-              className="h-9 w-auto object-contain dark:brightness-[1.8] dark:contrast-[0.85]"
+              className="h-14 w-auto object-contain dark:brightness-[1.8] dark:contrast-[0.85]"
               data-testid="img-landing-logo"
             />
           </div>
