@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import traivoLogo from "@assets/traivo_logo_transparent.png";
+import traivoLogo from "@assets/traivo_logo_dark_mode.png";
 import {
   Truck,
   MapPin,
@@ -31,16 +31,13 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white dark:bg-slate-900">
       <header className="border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur z-50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center">
             <img
               src={traivoLogo}
               alt="Traivo"
-              className="h-10 w-auto object-contain"
+              className="h-9 w-auto object-contain dark:brightness-[1.8] dark:contrast-[0.85]"
               data-testid="img-landing-logo"
             />
-            <span className="text-lg font-semibold text-slate-800 dark:text-slate-100 hidden sm:inline">
-              Traivo
-            </span>
           </div>
           <Button asChild data-testid="button-login">
             <a href="/api/login">Logga in</a>
@@ -426,16 +423,13 @@ export default function LandingPage() {
       <footer className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
         <div className="container mx-auto px-4 py-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center">
               <img
                 src={traivoLogo}
                 alt="Traivo"
-                className="h-8 w-auto object-contain"
+                className="h-7 w-auto object-contain dark:brightness-[1.8] dark:contrast-[0.85]"
                 data-testid="img-landing-footer-logo"
               />
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                Traivo
-              </span>
             </div>
             <p className="text-sm text-slate-400 dark:text-slate-500">
               Flerföretagsstöd — fältserviceplattform för nordiska företag
