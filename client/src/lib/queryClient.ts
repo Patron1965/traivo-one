@@ -1,5 +1,17 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+export const API_VERSION_PREFIX = "/api/v1";
+
+export function versionedUrl(url: string): string {
+  if (url.startsWith("/api/") && !url.startsWith("/api/v1/")) {
+    return url.replace("/api/", `${API_VERSION_PREFIX}/`);
+  }
+  if (url === "/api") {
+    return API_VERSION_PREFIX;
+  }
+  return url;
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = await res.text();
@@ -25,7 +37,7 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const res = await fetch(url, {
+  const res = await fetch(versionedUrl(url), {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
@@ -42,7 +54,8 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    const rawUrl = queryKey.join("/") as string;
+    const res = await fetch(versionedUrl(rawUrl), {
       credentials: "include",
     });
 

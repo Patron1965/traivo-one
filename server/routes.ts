@@ -53,6 +53,9 @@ async function ensureDefaultTenant() {
   });
 }
 
+export const API_VERSION = "v1";
+export const API_VERSION_PREFIX = `/api/${API_VERSION}`;
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -62,7 +65,45 @@ export async function registerRoutes(
   anomalyMonitor.start();
   startWeeklyReportScheduler();
   predictiveScheduler.start();
-  
+
+  app.use((req: ExpressRequest, _res: ExpressResponse, next) => {
+    if (req.url.startsWith(`/api/${API_VERSION}/`) || req.url === `/api/${API_VERSION}`) {
+      req.url = "/api" + req.url.slice(`/api/${API_VERSION}`.length);
+      (req as any).__apiVersioned = true;
+    }
+    next();
+  });
+
+  const DEPRECATION_SKIP_PREFIXES = ["/auth", "/version"];
+
+  app.use("/api", (req: ExpressRequest, res: ExpressResponse, next) => {
+    if ((req as any).__apiVersioned) {
+      return next();
+    }
+    if (req.path === "/" || req.path === "") {
+      return next();
+    }
+    if (DEPRECATION_SKIP_PREFIXES.some(p => req.path.startsWith(p))) {
+      return next();
+    }
+    res.setHeader("Deprecation", "true");
+    res.setHeader("Sunset", "2027-06-01");
+    res.setHeader("Link", `</api/${API_VERSION}${req.path}>; rel="successor-version"`);
+    if (process.env.NODE_ENV !== "test") {
+      console.warn(`[api-deprecation] Unversioned call: ${req.method} /api${req.path}`);
+    }
+    next();
+  });
+
+  app.get("/api/version", (_req: ExpressRequest, res: ExpressResponse) => {
+    res.json({
+      current: API_VERSION,
+      supported: [API_VERSION],
+      deprecatedUnversioned: true,
+      sunset: "2027-06-01",
+    });
+  });
+
   await setupAuth(app);
   registerAuthRoutes(app);
   
