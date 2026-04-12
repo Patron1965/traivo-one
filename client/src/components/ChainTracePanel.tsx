@@ -24,7 +24,7 @@ interface ChainTraceData {
     customerId: string | null;
     customerName: string | null;
     articleId: string | null;
-    matchType: "article" | "customer" | null;
+    matchType: "article" | null;
   } | null;
   artiklar: Array<{
     id: string;

@@ -948,7 +948,7 @@ app.get("/api/chain-trace/:workOrderId", asyncHandler(async (req, res) => {
   ]);
 
   let concept: OrderConcept | null = null;
-  let conceptMatchType: "article" | "customer" | null = null;
+  let conceptMatchType: "article" | null = null;
   if (wo.customerId) {
     const conceptRows = await db.select()
       .from(orderConcepts)
