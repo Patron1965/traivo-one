@@ -10,6 +10,7 @@ import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { workSessions, workEntries, equipmentBookings } from "@shared/schema";
 import { notificationService } from "../notifications";
+import { validateSchedule, type ConstraintContext, type ScheduleMove } from "../planning/constraintEngine";
 
 export async function registerPlannerRoutes(app: Express) {
 // ============================================
@@ -1169,6 +1170,157 @@ app.get("/api/resources/:id/positions", asyncHandler(async (req, res) => {
     
     const positions = await storage.getResourcePositions(resourceId, startDate, endDate);
     res.json(positions);
+}));
+
+app.post("/api/planning/what-if", asyncHandler(async (req: any, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+
+    const schema = z.object({
+      workOrderId: z.string(),
+      toResourceId: z.string(),
+      scheduledDate: z.string(),
+      scheduledStartTime: z.string().optional(),
+      fromResourceId: z.string().optional().nullable(),
+      fromDate: z.string().optional().nullable(),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+    const { workOrderId, toResourceId, scheduledDate, scheduledStartTime, fromResourceId, fromDate } = parsed.data;
+
+    const workOrder = await storage.getWorkOrder(workOrderId);
+    if (!workOrder || workOrder.tenantId !== tenantId) throw new NotFoundError("Arbetsorder hittades inte");
+
+    const resource = await storage.getResource(toResourceId);
+    if (!resource || resource.tenantId !== tenantId) throw new NotFoundError("Resurs hittades inte");
+
+    const allOrders = await storage.getWorkOrders(tenantId);
+    const resources = await storage.getResources(tenantId);
+    const resourceAvailability = await storage.getResourceAvailabilityByTenant(tenantId);
+    const vehicleSchedules = await storage.getVehicleSchedulesByTenant(tenantId);
+    const resourceIds = resources.map((r: any) => r.id);
+    const resourceVehicles = await storage.getResourceVehiclesByResourceIds(resourceIds);
+    const dependencyInstances = await storage.getTaskDependencyInstances(tenantId);
+
+    let timeRestrictions: any[] = [];
+    if (workOrder.objectId) {
+      timeRestrictions = await storage.getObjectTimeRestrictions(workOrder.objectId);
+    }
+
+    const resourceArticles = await storage.getResourceArticlesByResourceIds(resourceIds);
+    const workOrderLines = await storage.getWorkOrderLines(workOrderId);
+    const teamMembers = await storage.getAllTeamMembers(tenantId);
+    const clusters = await storage.getClusters(tenantId);
+    const tenant = await storage.getTenant(tenantId);
+    const tenantSettings = ((tenant as any)?.settings as Record<string, any>) || {};
+    const hardClusterBlocking = tenantSettings.hardClusterBlocking !== false;
+
+    const move: ScheduleMove = {
+      workOrderId,
+      resourceId: toResourceId,
+      scheduledDate,
+    };
+
+    const ctx: ConstraintContext = {
+      allOrders: allOrders as any[],
+      resources: resources as any[],
+      resourceAvailability: resourceAvailability as any[],
+      vehicleSchedules: vehicleSchedules as any[],
+      resourceVehicles: resourceVehicles as any[],
+      dependencyInstances: dependencyInstances as any[],
+      timeRestrictions: timeRestrictions as any[],
+      resourceArticles: resourceArticles as any[],
+      workOrderLines: workOrderLines as any[],
+      teamMembers: teamMembers as any[],
+      clusters: clusters as any[],
+      hardClusterBlocking,
+    };
+
+    const violations = validateSchedule([move], ctx);
+
+    const MAX_HOURS = 8;
+    const completedStatuses = new Set(["fakturerad", "utford", "avbruten"]);
+    const targetResourceHours = (allOrders as any[])
+      .filter((o: any) => o.resourceId === toResourceId && o.scheduledDate && o.id !== workOrderId)
+      .filter((o: any) => !completedStatuses.has(o.orderStatus))
+      .filter((o: any) => {
+        const oDate = o.scheduledDate instanceof Date
+          ? o.scheduledDate.toISOString().split("T")[0]
+          : String(o.scheduledDate).split("T")[0];
+        return oDate === scheduledDate;
+      })
+      .reduce((sum: number, o: any) => sum + (o.estimatedDuration || 60) / 60, 0);
+
+    const jobDuration = (workOrder.estimatedDuration || 60) / 60;
+    const targetNewHours = targetResourceHours + jobDuration;
+
+    let sourceResourceHours = 0;
+    let sourceNewHours = 0;
+    const actualFromResourceId = fromResourceId || workOrder.resourceId;
+    const actualFromDate = fromDate || (workOrder.scheduledDate
+      ? (workOrder.scheduledDate instanceof Date
+        ? workOrder.scheduledDate.toISOString().split("T")[0]
+        : String(workOrder.scheduledDate).split("T")[0])
+      : null);
+
+    if (actualFromResourceId && actualFromDate) {
+      sourceResourceHours = (allOrders as any[])
+        .filter((o: any) => o.resourceId === actualFromResourceId && o.scheduledDate)
+        .filter((o: any) => !completedStatuses.has(o.orderStatus))
+        .filter((o: any) => {
+          const oDate = o.scheduledDate instanceof Date
+            ? o.scheduledDate.toISOString().split("T")[0]
+            : String(o.scheduledDate).split("T")[0];
+          return oDate === actualFromDate;
+        })
+        .reduce((sum: number, o: any) => sum + (o.estimatedDuration || 60) / 60, 0);
+      sourceNewHours = sourceResourceHours - jobDuration;
+    }
+
+    const affectedOrders = (allOrders as any[])
+      .filter((o: any) => o.resourceId === toResourceId && o.scheduledDate && o.id !== workOrderId)
+      .filter((o: any) => !completedStatuses.has(o.orderStatus))
+      .filter((o: any) => {
+        const oDate = o.scheduledDate instanceof Date
+          ? o.scheduledDate.toISOString().split("T")[0]
+          : String(o.scheduledDate).split("T")[0];
+        return oDate === scheduledDate;
+      })
+      .map((o: any) => ({
+        id: o.id,
+        title: o.title || o.id.slice(0, 8),
+        scheduledStartTime: o.scheduledStartTime || null,
+        estimatedDuration: o.estimatedDuration || 60,
+      }));
+
+    const sourceResource = actualFromResourceId ? resources.find((r: any) => r.id === actualFromResourceId) : null;
+
+    res.json({
+      violations,
+      capacityImpact: {
+        target: {
+          resourceId: toResourceId,
+          resourceName: resource.name,
+          date: scheduledDate,
+          currentHours: targetResourceHours,
+          newHours: targetNewHours,
+          maxHours: MAX_HOURS,
+          overbooked: targetNewHours > MAX_HOURS,
+        },
+        source: actualFromResourceId && actualFromDate ? {
+          resourceId: actualFromResourceId,
+          resourceName: (sourceResource as any)?.name || "Okänd",
+          date: actualFromDate,
+          currentHours: sourceResourceHours,
+          newHours: Math.max(0, sourceNewHours),
+          maxHours: MAX_HOURS,
+          freed: jobDuration,
+        } : null,
+      },
+      affectedOrders,
+      jobDuration,
+      scheduledStartTime: scheduledStartTime || null,
+    });
 }));
 
 

@@ -22,6 +22,9 @@ interface UsePlannerDndOptions {
   toast: (opts: { title: string; description?: string }) => void;
   selectedJobIds?: Set<string>;
   clearSelection?: () => void;
+  setWhatIfPending?: (pending: { jobId: string; jobTitle: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; clusterOverride?: boolean; bulkJobs?: Array<{ jobId: string; startTime: string }> } | null) => void;
+  setWhatIfOpen?: (open: boolean) => void;
+  fetchWhatIf?: (workOrderId: string, toResourceId: string, scheduledDate: string, scheduledStartTime?: string, fromResourceId?: string | null, fromDate?: string | null) => void;
 }
 
 export function usePlannerDnd({
@@ -29,6 +32,7 @@ export function usePlannerDnd({
   resourceDayJobMap, setActiveDragJob, setRouteJobOrder, updateWorkOrderMutation,
   detectConflictsForJob, setPendingSchedule, setConflictDialogOpen, executeSchedule, toast,
   selectedJobIds, clearSelection,
+  setWhatIfPending, setWhatIfOpen, fetchWhatIf,
 }: UsePlannerDndOptions) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -234,18 +238,38 @@ export function usePlannerDnd({
     }
 
     const scheduledStartTime = computeStartTime(resourceId, dateStr, hour);
-    const conflicts = detectConflictsForJob(job, resourceId, dateStr, scheduledStartTime || null);
-    if (conflicts.length > 0) {
-      const hasHardBlock = conflicts.some(c => c.startsWith("[BLOCK]"));
-      if (hasHardBlock) {
-        toast({ title: "Blockerad", description: conflicts.find(c => c.startsWith("[BLOCK]"))?.replace("[BLOCK] ", "") || "Tilldelning blockerad av verksamhetsområdesregel" });
-        return;
+
+    if (setWhatIfPending && setWhatIfOpen && fetchWhatIf) {
+      const fromResourceId = job.resourceId || null;
+      const fromDate = job.scheduledDate
+        ? (typeof job.scheduledDate === "string"
+          ? job.scheduledDate.split("T")[0]
+          : (job.scheduledDate as Date).toISOString().split("T")[0])
+        : null;
+
+      setWhatIfPending({
+        jobId,
+        jobTitle: job.title || job.objectName || jobId.slice(0, 8),
+        resourceId,
+        scheduledDate: dateStr,
+        scheduledStartTime,
+      });
+      setWhatIfOpen(true);
+      fetchWhatIf(jobId, resourceId, dateStr, scheduledStartTime, fromResourceId, fromDate);
+    } else {
+      const conflicts = detectConflictsForJob(job, resourceId, dateStr, scheduledStartTime || null);
+      if (conflicts.length > 0) {
+        const hasHardBlock = conflicts.some(c => c.startsWith("[BLOCK]"));
+        if (hasHardBlock) {
+          toast({ title: "Blockerad", description: conflicts.find(c => c.startsWith("[BLOCK]"))?.replace("[BLOCK] ", "") || "Tilldelning blockerad av verksamhetsområdesregel" });
+          return;
+        }
+        setPendingSchedule({ jobId, resourceId, scheduledDate: dateStr, scheduledStartTime, conflicts }); setConflictDialogOpen(true); return;
       }
-      setPendingSchedule({ jobId, resourceId, scheduledDate: dateStr, scheduledStartTime, conflicts }); setConflictDialogOpen(true); return;
+      executeSchedule(jobId, resourceId, dateStr, scheduledStartTime);
+      if (scheduledStartTime) toast({ title: "Schemalagt", description: `Starttid ${scheduledStartTime} tilldelad automatiskt` });
     }
-    executeSchedule(jobId, resourceId, dateStr, scheduledStartTime);
-    if (scheduledStartTime) toast({ title: "Schemalagt", description: `Starttid ${scheduledStartTime} tilldelad automatiskt` });
-  }, [workOrders, viewMode, currentDate, routeJobsForView, resourceDayJobMap, setActiveDragJob, setRouteJobOrder, updateWorkOrderMutation, detectConflictsForJob, setPendingSchedule, setConflictDialogOpen, executeSchedule, toast, selectedJobIds, clearSelection, computeStartTime, resolveDropTarget]);
+  }, [workOrders, viewMode, currentDate, routeJobsForView, resourceDayJobMap, setActiveDragJob, setRouteJobOrder, updateWorkOrderMutation, detectConflictsForJob, setPendingSchedule, setConflictDialogOpen, executeSchedule, toast, selectedJobIds, clearSelection, computeStartTime, resolveDropTarget, setWhatIfPending, setWhatIfOpen, fetchWhatIf]);
 
   return {
     sensors,

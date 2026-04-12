@@ -22,6 +22,7 @@ import { RouteMapView } from "./weekplanner/RouteMapView";
 import { usePlannerData } from "./weekplanner/usePlannerData";
 import { usePlannerDnd } from "./weekplanner/usePlannerDnd";
 import { UrgentJobDialog } from "./UrgentJobDialog";
+import { WhatIfPreview } from "./weekplanner/WhatIfPreview";
 import type { WorkOrderWithObject } from "@shared/schema";
 
 export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, showAIPanel, onToggleAIPanel }: WeekPlannerProps) {
@@ -62,6 +63,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     toast: d.toast,
     selectedJobIds: d.selectedJobIds,
     clearSelection: d.clearSelection,
+    setWhatIfPending: d.setWhatIfPending,
+    setWhatIfOpen: d.setWhatIfOpen,
+    fetchWhatIf: d.fetchWhatIf,
   });
 
   const handleJobClickWithCallback = useCallback((jobId: string) => {
@@ -306,6 +310,15 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
       <AutoFillDialog open={d.autoFillDialogOpen} onOpenChange={d.setAutoFillDialogOpen} overbooking={d.autoFillOverbooking} setOverbooking={d.setAutoFillOverbooking} geoClustering={d.autoFillGeoClustering} setGeoClustering={d.setAutoFillGeoClustering} geoSpread={d.autoFillGeoSpread} loading={d.autoFillLoading} applying={d.autoFillApplying} preview={d.autoFillPreview} skipped={d.autoFillSkipped} diag={d.autoFillDiag} resources={d.resources} viewMode={d.viewMode} currentWeekStart={d.currentWeekStart} currentDate={d.currentDate} onPreview={d.handleAutoFillPreview} onApply={d.handleAutoFillApply} />
       <DepChainDialog open={d.depChainDialogOpen} onOpenChange={(o) => { if (!o) { d.setDepChainDialogOpen(false); } }} depChainJobId={d.depChainJobId} workOrders={d.workOrders} depChainData={d.depChainData} />
       <ConflictListDialog open={conflictListOpen} onOpenChange={setConflictListOpen} jobConflicts={d.jobConflicts} workOrders={d.workOrders} resources={d.resources} onNavigateToJob={handleNavigateToConflictJob} />
+      <WhatIfPreview
+        open={d.whatIfOpen}
+        onOpenChange={d.setWhatIfOpen}
+        result={d.whatIfResult}
+        loading={d.whatIfLoading}
+        jobTitle={d.whatIfPending?.jobTitle || ""}
+        onConfirm={d.handleWhatIfConfirm}
+        onCancel={d.handleWhatIfCancel}
+      />
       <UrgentJobDialog open={urgentDialogOpen} onClose={() => setUrgentDialogOpen(false)} preselectedOrder={urgentPreselectedOrder} />
     </DndContext>
   );

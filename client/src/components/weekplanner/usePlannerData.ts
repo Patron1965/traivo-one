@@ -8,6 +8,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { ViewMode, PlannerAction, WeatherForecastData, WeatherImpactDay } from "./types";
 import { HOURS_IN_DAY, DAY_START_HOUR, DAY_END_HOUR } from "./types";
+import type { WhatIfResult } from "./WhatIfPreview";
 
 const UNSCHEDULED_PAGE_SIZE = 50;
 
@@ -499,6 +500,71 @@ export function usePlannerData() {
   const handleOpenDepChain = useCallback((jobId: string) => { setDepChainJobId(jobId); setDepChainDialogOpen(true); }, []);
   const handleToggleSubStep = useCallback((jobId: string) => setExpandedSubSteps(prev => ({ ...prev, [jobId]: !prev[jobId] })), []);
 
+  const [whatIfOpen, setWhatIfOpen] = useState(false);
+  const [whatIfLoading, setWhatIfLoading] = useState(false);
+  const [whatIfResult, setWhatIfResult] = useState<WhatIfResult | null>(null);
+  const [whatIfPending, setWhatIfPending] = useState<{
+    jobId: string;
+    jobTitle: string;
+    resourceId: string;
+    scheduledDate: string;
+    scheduledStartTime?: string;
+    clusterOverride?: boolean;
+    bulkJobs?: Array<{ jobId: string; startTime: string }>;
+  } | null>(null);
+  const whatIfRequestIdRef = useRef(0);
+
+  const fetchWhatIf = useCallback(async (workOrderId: string, toResourceId: string, scheduledDate: string, scheduledStartTime?: string, fromResourceId?: string | null, fromDate?: string | null) => {
+    const requestId = ++whatIfRequestIdRef.current;
+    setWhatIfLoading(true);
+    setWhatIfResult(null);
+    try {
+      const res = await apiRequest("POST", "/api/planning/what-if", {
+        workOrderId,
+        toResourceId,
+        scheduledDate,
+        scheduledStartTime,
+        fromResourceId,
+        fromDate,
+      });
+      const data: WhatIfResult = await res.json();
+      if (whatIfRequestIdRef.current === requestId) {
+        setWhatIfResult(data);
+      }
+    } catch (err) {
+      if (whatIfRequestIdRef.current === requestId) {
+        setWhatIfResult(null);
+        toast({ title: "Konsekvensanalys misslyckades", description: (err as Error).message, variant: "destructive" });
+      }
+    } finally {
+      if (whatIfRequestIdRef.current === requestId) {
+        setWhatIfLoading(false);
+      }
+    }
+  }, [toast]);
+
+  const handleWhatIfConfirm = useCallback(() => {
+    if (!whatIfPending) return;
+    if (whatIfPending.bulkJobs && whatIfPending.bulkJobs.length > 0) {
+      for (const bj of whatIfPending.bulkJobs) {
+        executeSchedule(bj.jobId, whatIfPending.resourceId, whatIfPending.scheduledDate, bj.startTime, whatIfPending.clusterOverride);
+      }
+      toast({ title: "Bulk-flytt klar", description: `${whatIfPending.bulkJobs.length} order flyttade till ${whatIfPending.scheduledDate}` });
+    } else {
+      executeSchedule(whatIfPending.jobId, whatIfPending.resourceId, whatIfPending.scheduledDate, whatIfPending.scheduledStartTime, whatIfPending.clusterOverride);
+      if (whatIfPending.scheduledStartTime) toast({ title: "Schemalagt", description: `Starttid ${whatIfPending.scheduledStartTime} tilldelad automatiskt` });
+    }
+    setWhatIfOpen(false);
+    setWhatIfPending(null);
+    setWhatIfResult(null);
+  }, [whatIfPending, executeSchedule, toast]);
+
+  const handleWhatIfCancel = useCallback(() => {
+    setWhatIfOpen(false);
+    setWhatIfPending(null);
+    setWhatIfResult(null);
+  }, []);
+
   const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
   const lastSelectedRef = useRef<string | null>(null);
 
@@ -576,6 +642,8 @@ export function usePlannerData() {
     handleOpenDepChain, handleToggleSubStep,
     executeSchedule, detectConflictsForJob,
     selectedJobIds, toggleJobSelection, clearSelection, selectAllVisible,
+    whatIfOpen, setWhatIfOpen, whatIfLoading, whatIfResult, whatIfPending, setWhatIfPending,
+    fetchWhatIf, handleWhatIfConfirm, handleWhatIfCancel,
     toast,
   };
 }
