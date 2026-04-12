@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Gauge, AlertTriangle, Users, ClipboardList, TrendingUp, ChevronLeft, ChevronRight } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -26,8 +26,11 @@ type HeatmapRow = {
   resourceName: string;
   resourceType: string;
   weeklyHours: number;
+  teamId: string | null;
   cells: HeatmapCell[];
 };
+
+type TeamOption = { id: string; name: string };
 
 type HeatmapData = {
   dates: string[];
@@ -38,8 +41,10 @@ type HeatmapData = {
     avgCapacity: number;
     overloadedCells: number;
     slaRiskTotal: number;
+    slaUnassigned: number;
   };
   weeks: number;
+  teamOptions: TeamOption[];
 };
 
 const LEVEL_COLORS: Record<HeatmapCell["level"], string> = {
@@ -87,12 +92,68 @@ function SummaryCard({ icon: Icon, label, value, color }: {
   );
 }
 
-function HeatmapCellComponent({ cell }: { cell: HeatmapCell }) {
+function CellDetailDialog({ cell, resourceName, open, onClose }: {
+  cell: HeatmapCell;
+  resourceName: string;
+  open: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-sm" data-testid="dialog-cell-detail">
+        <DialogHeader>
+          <DialogTitle className="text-base">
+            {resourceName} — {format(parseISO(cell.date), "EEEE d MMMM", { locale: sv })}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg border p-3 dark:border-gray-700">
+              <p className="text-[10px] uppercase text-muted-foreground">Ordrar</p>
+              <p className="text-xl font-bold">{cell.orderCount}</p>
+              <p className="text-xs text-muted-foreground">{cell.completedCount} klara</p>
+            </div>
+            <div className="rounded-lg border p-3 dark:border-gray-700">
+              <p className="text-[10px] uppercase text-muted-foreground">Beläggning</p>
+              <p className="text-xl font-bold">{cell.capacityPercent}%</p>
+              <p className="text-xs text-muted-foreground">{cell.totalMinutes} min</p>
+            </div>
+          </div>
+          {cell.slaAtRisk > 0 && (
+            <div className="flex items-center gap-2 rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 p-3">
+              <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-red-700 dark:text-red-400">SLA-risk</p>
+                <p className="text-xs text-red-600 dark:text-red-300">{cell.slaAtRisk} ordrar nära deadline</p>
+              </div>
+            </div>
+          )}
+          {cell.deviationCount > 0 && (
+            <div className="flex items-center gap-2 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3">
+              <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Avvikelser</p>
+                <p className="text-xs text-amber-600 dark:text-amber-300">{cell.deviationCount} rapporterade avvikelser</p>
+              </div>
+            </div>
+          )}
+          <div className={`rounded-lg border p-3 ${LEVEL_COLORS[cell.level]} ${LEVEL_BORDERS[cell.level]}`}>
+            <p className="text-xs font-medium">Nivå: {LEVEL_LABELS[cell.level]}</p>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function HeatmapCellComponent({ cell, onClick }: { cell: HeatmapCell; onClick: () => void }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div
-          className={`relative w-full h-10 rounded border cursor-default transition-colors ${LEVEL_COLORS[cell.level]} ${LEVEL_BORDERS[cell.level]}`}
+        <button
+          type="button"
+          onClick={onClick}
+          className={`relative w-full h-10 rounded border cursor-pointer transition-colors hover:ring-2 hover:ring-primary/40 ${LEVEL_COLORS[cell.level]} ${LEVEL_BORDERS[cell.level]}`}
           data-testid={`heatmap-cell-${cell.date}`}
         >
           <div className="flex items-center justify-center h-full">
@@ -110,7 +171,7 @@ function HeatmapCellComponent({ cell }: { cell: HeatmapCell }) {
               <span className="text-[8px] text-white font-bold">{cell.deviationCount}</span>
             </div>
           )}
-        </div>
+        </button>
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-xs">
         <div className="space-y-1">
@@ -121,22 +182,28 @@ function HeatmapCellComponent({ cell }: { cell: HeatmapCell }) {
             <p className="text-xs text-red-400">SLA-risk: {cell.slaAtRisk} ordrar</p>
           )}
           {cell.deviationCount > 0 && (
-              <p className="text-xs text-amber-400">Avvikelser: {cell.deviationCount}</p>
-            )}
-          </div>
-        </TooltipContent>
-      </Tooltip>
+            <p className="text-xs text-amber-400">Avvikelser: {cell.deviationCount}</p>
+          )}
+          <p className="text-[10px] text-muted-foreground italic">Klicka för detaljer</p>
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
 export default function ControlTowerPage() {
   const [weeks, setWeeks] = useState<number>(2);
   const [filterType, setFilterType] = useState<string>("all");
+  const [teamFilter, setTeamFilter] = useState<string>("all");
+  const [selectedCell, setSelectedCell] = useState<{ cell: HeatmapCell; resourceName: string } | null>(null);
+
+  const queryParams = new URLSearchParams({ weeks: String(weeks) });
+  if (teamFilter !== "all") queryParams.set("teamId", teamFilter);
 
   const { data, isLoading, isError } = useQuery<HeatmapData>({
-    queryKey: ["/api/planning/heatmap", weeks],
+    queryKey: ["/api/planning/heatmap", weeks, teamFilter],
     queryFn: async () => {
-      const res = await fetch(`/api/planning/heatmap?weeks=${weeks}`);
+      const res = await fetch(`/api/planning/heatmap?${queryParams.toString()}`);
       if (!res.ok) throw new Error("Kunde inte hämta heatmap-data");
       return res.json();
     },
@@ -180,6 +247,10 @@ export default function ControlTowerPage() {
     };
   }) || [];
 
+  const handleCellClick = useCallback((cell: HeatmapCell, resourceName: string) => {
+    setSelectedCell({ cell, resourceName });
+  }, []);
+
   return (
     <TooltipProvider delayDuration={200}>
     <div className="p-6 space-y-6">
@@ -189,7 +260,20 @@ export default function ControlTowerPage() {
         description="Beläggning, SLA-risk och avvikelser per resurs och dag"
         testId="text-control-tower-title"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {data?.teamOptions && data.teamOptions.length > 0 && (
+            <Select value={teamFilter} onValueChange={setTeamFilter}>
+              <SelectTrigger className="w-[140px]" data-testid="select-team-filter">
+                <SelectValue placeholder="Team" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alla team</SelectItem>
+                {data.teamOptions.map(t => (
+                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Select value={filterType} onValueChange={setFilterType}>
             <SelectTrigger className="w-[140px]" data-testid="select-resource-type">
               <SelectValue placeholder="Resurstyp" />
@@ -304,7 +388,10 @@ export default function ControlTowerPage() {
                       </td>
                       {row.cells.map(cell => (
                         <td key={cell.date} className="p-0.5">
-                          <HeatmapCellComponent cell={cell} />
+                          <HeatmapCellComponent
+                            cell={cell}
+                            onClick={() => handleCellClick(cell, row.resourceName)}
+                          />
                         </td>
                       ))}
                     </tr>
@@ -335,6 +422,16 @@ export default function ControlTowerPage() {
         </div>
       </div>
     </div>
+
+    {selectedCell && (
+      <CellDetailDialog
+        cell={selectedCell.cell}
+        resourceName={selectedCell.resourceName}
+        open={!!selectedCell}
+        onClose={() => setSelectedCell(null)}
+      />
+    )}
+
     </TooltipProvider>
   );
 }

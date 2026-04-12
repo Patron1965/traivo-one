@@ -1,14 +1,14 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
-import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
+import { eq, sql, desc, and, gte, lte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, isMobileAuthenticated } from "./helpers";
 import { getTenantIdWithFallback, requireTenantWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
-import { workSessions, workEntries, equipmentBookings } from "@shared/schema";
+import { workSessions, workEntries, equipmentBookings, deviationReports, teamMembers } from "@shared/schema";
 import { notificationService } from "../notifications";
 import { validateSchedule, type ConstraintContext, type ScheduleMove } from "../planning/constraintEngine";
 
@@ -1572,8 +1572,19 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
       d.setDate(d.getDate() + 1);
     }
 
+    const teamFilter = req.query.teamId as string | undefined;
+
     const resources = await storage.getResources(tenantId);
-    const activeResources = resources.filter(r => r.status === "active" && !r.deletedAt);
+    let activeResources = resources.filter(r => r.status === "active" && !r.deletedAt);
+
+    if (teamFilter) {
+      const members = await db.select({ resourceId: teamMembers.resourceId })
+        .from(teamMembers)
+        .where(eq(teamMembers.teamId, teamFilter));
+      const memberIds = new Set(members.map(m => m.resourceId));
+      activeResources = activeResources.filter(r => memberIds.has(r.id));
+    }
+
     const allOrders = await storage.getWorkOrders(tenantId, startDate, endDate, false);
 
     const getDateStr = (date: Date | string) => {
@@ -1582,56 +1593,83 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
     };
 
     const orderIndex = new Map<string, typeof allOrders>();
+    const unassignedByDate = new Map<string, typeof allOrders>();
     for (const o of allOrders) {
-      if (!o.scheduledDate || !o.resourceId) continue;
-      const key = `${o.resourceId}|${getDateStr(o.scheduledDate)}`;
+      if (!o.scheduledDate) continue;
+      const dateStr = getDateStr(o.scheduledDate);
+      if (!o.resourceId) {
+        if (!unassignedByDate.has(dateStr)) unassignedByDate.set(dateStr, []);
+        unassignedByDate.get(dateStr)!.push(o);
+        continue;
+      }
+      const key = `${o.resourceId}|${dateStr}`;
       if (!orderIndex.has(key)) orderIndex.set(key, []);
       orderIndex.get(key)!.push(o);
     }
 
-    const heatmapRows: Array<{
+    type HeatmapCell = {
+      date: string;
+      orderCount: number;
+      totalMinutes: number;
+      capacityPercent: number;
+      slaAtRisk: number;
+      deviationCount: number;
+      completedCount: number;
+      level: "empty" | "low" | "medium" | "high" | "overloaded";
+    };
+
+    type HeatmapRow = {
       resourceId: string;
       resourceName: string;
       resourceType: string;
       weeklyHours: number;
-      cells: Array<{
-        date: string;
-        orderCount: number;
-        totalMinutes: number;
-        capacityPercent: number;
-        slaAtRisk: number;
-        deviationCount: number;
-        completedCount: number;
-        level: "empty" | "low" | "medium" | "high" | "overloaded";
-      }>;
-    }> = [];
+      teamId: string | null;
+      cells: HeatmapCell[];
+    };
 
-    let changeRequests: any[] = [];
-    try {
-      const { customerChangeRequests } = await import("@shared/schema");
-      const { lte: lteOp } = await import("drizzle-orm");
-      const crResult = await db.select().from(customerChangeRequests).where(
-        and(
-          eq(customerChangeRequests.tenantId, tenantId),
-          gte(customerChangeRequests.createdAt, startDate),
-          lteOp(customerChangeRequests.createdAt, endDate)
-        )
-      );
-      changeRequests = Array.isArray(crResult) ? crResult : (crResult as any)?.rows || [];
-    } catch {
-      changeRequests = [];
+    const heatmapRows: HeatmapRow[] = [];
+
+    const deviations = await db.select({
+      id: deviationReports.id,
+      workOrderId: deviationReports.workOrderId,
+      reportedAt: deviationReports.reportedAt,
+    }).from(deviationReports).where(
+      and(
+        eq(deviationReports.tenantId, tenantId),
+        gte(deviationReports.reportedAt, startDate),
+        lte(deviationReports.reportedAt, endDate)
+      )
+    );
+
+    const orderResourceMap = new Map<string, string>();
+    for (const o of allOrders) {
+      if (o.resourceId) orderResourceMap.set(o.id, o.resourceId);
     }
 
-    const crIndex = new Map<string, number>();
-    for (const cr of changeRequests) {
-      if (!cr.createdByResourceId || !cr.createdAt) continue;
-      const key = `${cr.createdByResourceId}|${getDateStr(cr.createdAt)}`;
-      crIndex.set(key, (crIndex.get(key) || 0) + 1);
+    const devIndex = new Map<string, number>();
+    for (const dev of deviations) {
+      if (!dev.workOrderId) continue;
+      const resourceId = orderResourceMap.get(dev.workOrderId);
+      if (!resourceId) continue;
+      const key = `${resourceId}|${getDateStr(dev.reportedAt)}`;
+      devIndex.set(key, (devIndex.get(key) || 0) + 1);
+    }
+
+    const slaUnassignedByDate = new Map<string, number>();
+    for (const [dateStr, orders] of unassignedByDate) {
+      const atRisk = orders.filter(o => {
+        if (!o.plannedWindowEnd || o.completedAt) return false;
+        const windowEnd = new Date(o.plannedWindowEnd);
+        const orderDate = new Date(dateStr);
+        orderDate.setHours(23, 59, 59, 999);
+        return windowEnd <= orderDate;
+      }).length;
+      if (atRisk > 0) slaUnassignedByDate.set(dateStr, atRisk);
     }
 
     for (const resource of activeResources) {
       const dailyCapacityMinutes = ((resource.weeklyHours || 40) / 5) * 60;
-      const cells: typeof heatmapRows[0]["cells"] = [];
+      const cells: HeatmapCell[] = [];
 
       for (const dateStr of dates) {
         const dayOrders = orderIndex.get(`${resource.id}|${dateStr}`) || [];
@@ -1645,15 +1683,16 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
           o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed"
         ).length;
 
-        const slaAtRisk = dayOrders.filter(o => {
+        const assignedSlaRisk = dayOrders.filter(o => {
           if (!o.plannedWindowEnd || o.completedAt) return false;
           const windowEnd = new Date(o.plannedWindowEnd);
           const orderDate = new Date(dateStr);
           orderDate.setHours(23, 59, 59, 999);
-          return windowEnd <= orderDate && !o.completedAt;
+          return windowEnd <= orderDate;
         }).length;
+        const slaAtRisk = assignedSlaRisk;
 
-        const deviationCount = crIndex.get(`${resource.id}|${dateStr}`) || 0;
+        const deviationCount = devIndex.get(`${resource.id}|${dateStr}`) || 0;
 
         let level: "empty" | "low" | "medium" | "high" | "overloaded" = "empty";
         if (dayOrders.length === 0) level = "empty";
@@ -1679,13 +1718,17 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
         resourceName: resource.name,
         resourceType: resource.resourceType || "person",
         weeklyHours: resource.weeklyHours || 40,
+        teamId: null,
         cells,
       });
     }
 
+    const scheduledOrders = allOrders.filter(o => o.scheduledDate);
+    const totalSlaUnassigned = Array.from(slaUnassignedByDate.values()).reduce((s, v) => s + v, 0);
+
     const summary = {
       totalResources: activeResources.length,
-      totalOrders: allOrders.length,
+      totalOrders: scheduledOrders.length,
       avgCapacity: heatmapRows.length > 0
         ? Math.round(
             heatmapRows.reduce((sum, r) =>
@@ -1697,10 +1740,14 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
       overloadedCells: heatmapRows.reduce((sum, r) =>
         sum + r.cells.filter(c => c.level === "overloaded").length, 0),
       slaRiskTotal: heatmapRows.reduce((sum, r) =>
-        sum + r.cells.reduce((s, c) => s + c.slaAtRisk, 0), 0),
+        sum + r.cells.reduce((s, c) => s + c.slaAtRisk, 0), 0) + totalSlaUnassigned,
+      slaUnassigned: totalSlaUnassigned,
     };
 
-    res.json({ dates, rows: heatmapRows, summary, weeks });
+    const teams = await storage.getTeams(tenantId);
+    const teamOptions = teams.filter(t => t.status === "active").map(t => ({ id: t.id, name: t.name }));
+
+    res.json({ dates, rows: heatmapRows, summary, weeks, teamOptions });
 }));
 
 

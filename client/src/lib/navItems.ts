@@ -34,6 +34,7 @@ import {
   Phone,
   CalendarDays,
   MessageCircle,
+  Gauge,
   type LucideIcon,
 } from "lucide-react";
 import { translate } from "./i18n";
@@ -87,6 +88,7 @@ export function getPlaneringItems(tl?: (key: string) => string): NavItem[] {
     { title: l("nav.week-planner"), url: "/planner", icon: Calendar, description: l("nav.week-planner.desc") },
     { title: l("nav.route-planning"), url: "/routes", icon: Map, description: l("nav.route-planning.desc") },
     { title: l("nav.annual-planning"), url: "/annual-planning", icon: Target, description: l("nav.annual-planning.desc") },
+    { title: "Kontrollpanel", url: "/control-tower", icon: Gauge, description: "Heatmap med beläggning och SLA-risk" },
   ];
 }
 
