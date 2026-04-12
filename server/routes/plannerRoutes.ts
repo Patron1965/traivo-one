@@ -1172,7 +1172,7 @@ app.get("/api/resources/:id/positions", asyncHandler(async (req, res) => {
     res.json(positions);
 }));
 
-app.post("/api/planning/what-if", asyncHandler(async (req: any, res) => {
+app.post("/api/planning/what-if", requireTenantWithFallback, asyncHandler(async (req: any, res) => {
     const tenantId = getTenantIdWithFallback(req);
 
     const schema = z.object({
@@ -1277,7 +1277,7 @@ app.post("/api/planning/what-if", asyncHandler(async (req: any, res) => {
       sourceNewHours = sourceResourceHours - jobDuration;
     }
 
-    const affectedOrders = (allOrders as any[])
+    const targetDayOrders = (allOrders as any[])
       .filter((o: any) => o.resourceId === toResourceId && o.scheduledDate && o.id !== workOrderId)
       .filter((o: any) => !completedStatuses.has(o.orderStatus))
       .filter((o: any) => {
@@ -1285,13 +1285,56 @@ app.post("/api/planning/what-if", asyncHandler(async (req: any, res) => {
           ? o.scheduledDate.toISOString().split("T")[0]
           : String(o.scheduledDate).split("T")[0];
         return oDate === scheduledDate;
-      })
-      .map((o: any) => ({
-        id: o.id,
-        title: o.title || o.id.slice(0, 8),
-        scheduledStartTime: o.scheduledStartTime || null,
-        estimatedDuration: o.estimatedDuration || 60,
-      }));
+      });
+
+    const movedJobMinutes = workOrder.estimatedDuration || 60;
+    const movedStartMinutes = scheduledStartTime
+      ? parseInt(scheduledStartTime.split(":")[0]) * 60 + parseInt(scheduledStartTime.split(":")[1])
+      : null;
+
+    const affectedOrders = targetDayOrders
+      .sort((a: any, b: any) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""))
+      .map((o: any) => {
+        let etaDeltaMinutes: number | null = null;
+        if (movedStartMinutes !== null && o.scheduledStartTime) {
+          const oStart = parseInt(o.scheduledStartTime.split(":")[0]) * 60 + parseInt(o.scheduledStartTime.split(":")[1]);
+          if (movedStartMinutes <= oStart) {
+            const movedEndMinutes = movedStartMinutes + movedJobMinutes;
+            if (movedEndMinutes > oStart) {
+              etaDeltaMinutes = movedEndMinutes - oStart;
+            }
+          }
+        }
+        return {
+          id: o.id,
+          title: o.title || o.id.slice(0, 8),
+          scheduledStartTime: o.scheduledStartTime || null,
+          estimatedDuration: o.estimatedDuration || 60,
+          etaDeltaMinutes,
+        };
+      });
+
+    const slaRisks: Array<{ workOrderId: string; title: string; deadline: string; daysRemaining: number; risk: "high" | "medium" | "low" }> = [];
+    const movedOrder = workOrder as any;
+    const ordersToCheck = [movedOrder, ...targetDayOrders];
+    const now = new Date();
+    for (const o of ordersToCheck) {
+      if (o.plannedWindowEnd) {
+        const deadline = new Date(o.plannedWindowEnd);
+        const scheduledMs = new Date(scheduledDate + "T12:00:00Z").getTime();
+        const daysRemaining = Math.ceil((deadline.getTime() - scheduledMs) / (1000 * 60 * 60 * 24));
+        const risk = daysRemaining < 0 ? "high" : daysRemaining <= 2 ? "medium" : "low";
+        if (risk !== "low") {
+          slaRisks.push({
+            workOrderId: o.id,
+            title: o.title || o.id.slice(0, 8),
+            deadline: deadline.toISOString().split("T")[0],
+            daysRemaining,
+            risk,
+          });
+        }
+      }
+    }
 
     const sourceResource = actualFromResourceId ? resources.find((r: any) => r.id === actualFromResourceId) : null;
 
@@ -1318,6 +1361,7 @@ app.post("/api/planning/what-if", asyncHandler(async (req: any, res) => {
         } : null,
       },
       affectedOrders,
+      slaRisks,
       jobDuration,
       scheduledStartTime: scheduledStartTime || null,
     });

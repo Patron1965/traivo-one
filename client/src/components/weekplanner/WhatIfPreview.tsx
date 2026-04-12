@@ -33,6 +33,14 @@ export interface WhatIfCapacitySource {
   freed: number;
 }
 
+export interface WhatIfSlaRisk {
+  workOrderId: string;
+  title: string;
+  deadline: string;
+  daysRemaining: number;
+  risk: "high" | "medium" | "low";
+}
+
 export interface WhatIfResult {
   violations: WhatIfViolation[];
   capacityImpact: {
@@ -44,7 +52,9 @@ export interface WhatIfResult {
     title: string;
     scheduledStartTime: string | null;
     estimatedDuration: number;
+    etaDeltaMinutes: number | null;
   }>;
+  slaRisks: WhatIfSlaRisk[];
   jobDuration: number;
   scheduledStartTime: string | null;
 }
@@ -201,9 +211,44 @@ export function WhatIfPreview({ open, onOpenChange, result, loading, jobTitle, o
                   {result.affectedOrders.map((o) => (
                     <div key={o.id} className="flex items-center justify-between text-xs p-1.5 rounded bg-background border" data-testid={`what-if-affected-${o.id}`}>
                       <span className="truncate mr-2">{o.title}</span>
-                      <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
-                        {o.scheduledStartTime && <span>{o.scheduledStartTime}</span>}
-                        <span>{(o.estimatedDuration / 60).toFixed(1)}h</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {o.scheduledStartTime && <span className="text-muted-foreground">{o.scheduledStartTime}</span>}
+                        <span className="text-muted-foreground">{(o.estimatedDuration / 60).toFixed(1)}h</span>
+                        {o.etaDeltaMinutes !== null && o.etaDeltaMinutes > 0 && (
+                          <Badge variant="outline" className="text-[10px] px-1 py-0 bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300" data-testid={`what-if-eta-delta-${o.id}`}>
+                            +{o.etaDeltaMinutes}min
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {result.slaRisks && result.slaRisks.length > 0 && (
+              <div className="space-y-2" data-testid="what-if-sla-risks">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-orange-500" />
+                  <span className="text-sm font-medium text-orange-700 dark:text-orange-400">SLA-risker ({result.slaRisks.length})</span>
+                </div>
+                <div className="space-y-1.5">
+                  {result.slaRisks.map((r) => (
+                    <div key={r.workOrderId} className={`flex items-center justify-between text-xs p-2 rounded border ${
+                      r.risk === "high"
+                        ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
+                        : "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"
+                    }`} data-testid={`what-if-sla-risk-${r.workOrderId}`}>
+                      <span className="truncate mr-2">{r.title}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-muted-foreground">Deadline: {r.deadline}</span>
+                        <Badge variant="outline" className={`text-[10px] px-1 py-0 ${
+                          r.risk === "high"
+                            ? "bg-red-100 dark:bg-red-900/30 border-red-400 dark:border-red-600 text-red-700 dark:text-red-300"
+                            : "bg-amber-100 dark:bg-amber-900/30 border-amber-400 dark:border-amber-600 text-amber-700 dark:text-amber-300"
+                        }`}>
+                          {r.daysRemaining < 0 ? `${Math.abs(r.daysRemaining)}d försenad` : `${r.daysRemaining}d kvar`}
+                        </Badge>
                       </div>
                     </div>
                   ))}
