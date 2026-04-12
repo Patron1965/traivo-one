@@ -67,7 +67,7 @@ const FIELD_DRIVER_SEQUENCE: OrderStatus[] = [
   'planerad_resurs',
   'planerad_las',
   'dispatched',
-  'on_site',
+  'en_route',
   'in_progress',
   'utford',
 ];
@@ -81,8 +81,16 @@ const DRIVER_STATUS_SEQUENCE: OrderStatus[] = [
   'completed',
 ];
 
+const ON_SITE_TO_EN_ROUTE: Record<string, OrderStatus> = {
+  on_site: 'en_route',
+};
+
+function normalizeStatus(status: OrderStatus): OrderStatus {
+  return ON_SITE_TO_EN_ROUTE[status] || status;
+}
+
 function isFieldDriverFlow(status: OrderStatus): boolean {
-  return FIELD_DRIVER_SEQUENCE.includes(status);
+  return FIELD_DRIVER_SEQUENCE.includes(normalizeStatus(status));
 }
 
 function isDriverFlow(status: OrderStatus): boolean {
@@ -388,8 +396,9 @@ export function OrderDetailScreen({ route, navigation }: any) {
   });
 
   function getNextStatus(current: OrderStatus): OrderStatus | null {
-    if (isFieldDriverFlow(current)) {
-      const idx = FIELD_DRIVER_SEQUENCE.indexOf(current);
+    const normalized = normalizeStatus(current);
+    if (isFieldDriverFlow(normalized)) {
+      const idx = FIELD_DRIVER_SEQUENCE.indexOf(normalized);
       if (idx === -1 || idx >= FIELD_DRIVER_SEQUENCE.length - 1) return null;
       return FIELD_DRIVER_SEQUENCE[idx + 1];
     }
@@ -406,11 +415,10 @@ export function OrderDetailScreen({ route, navigation }: any) {
       planerad_resurs: 'Starta resa',
       planerad_las: 'Starta resa',
       dispatched: 'På plats',
+      en_route: 'Starta arbete',
       on_site: 'Starta arbete',
       in_progress: 'Slutför arbete',
       planned: 'Starta resa',
-      en_route: 'På plats',
-      completed: 'Slutförd',
     };
     return labels[status] || 'Nästa steg';
   }
@@ -420,10 +428,10 @@ export function OrderDetailScreen({ route, navigation }: any) {
       planerad_resurs: 'Påbörja körning till kund',
       planerad_las: 'Påbörja körning till kund',
       dispatched: 'Jag har anlänt till platsen',
+      en_route: 'Börja utföra uppdraget',
       on_site: 'Börja utföra uppdraget',
       in_progress: 'Markera uppdraget som klart',
       planned: 'Påbörja körning till kund',
-      en_route: 'Jag har anlänt till platsen',
     };
     return subLabels[status] || null;
   }
@@ -433,10 +441,10 @@ export function OrderDetailScreen({ route, navigation }: any) {
       planerad_resurs: 'navigation',
       planerad_las: 'navigation',
       dispatched: 'map-pin',
+      en_route: 'play',
       on_site: 'play',
       in_progress: 'check-circle',
       planned: 'navigation',
-      en_route: 'map-pin',
     };
     return icons[status] || 'arrow-right';
   }

@@ -10,6 +10,7 @@ import { mobileRoutes } from './routes/mobile';
 import { aiRoutes } from './routes/ai';
 import { plannerRoutes } from './routes/planner';
 import { startWebSocketBridge, stopWebSocketBridge, getBridgeStatus } from './websocketBridge';
+import { wsTokens } from './routes/mobile/notifications';
 
 const app = express();
 const server = http.createServer(app);
@@ -21,10 +22,28 @@ const io = new SocketIOServer(server, {
 
 (global as any).__socketIO = io;
 
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+  if (token) {
+    const entry = wsTokens.get(token as string);
+    if (entry) {
+      (socket as any).authenticatedResourceId = entry.resourceId;
+      wsTokens.delete(token as string);
+      return next();
+    }
+  }
+  next();
+});
+
 io.on('connection', (socket) => {
-  console.log(`WebSocket client connected: ${socket.id}`);
+  const authenticatedResourceId = (socket as any).authenticatedResourceId;
+  console.log(`WebSocket client connected: ${socket.id}${authenticatedResourceId ? ` (resource: ${authenticatedResourceId})` : ' (unauthenticated)'}`);
 
   socket.on('join', (data: { resourceId?: string; tenantId?: string; teamId?: string }) => {
+    if (authenticatedResourceId && data.resourceId && String(data.resourceId) !== String(authenticatedResourceId)) {
+      console.warn(`[WS] Blocked room join: socket ${socket.id} tried resource:${data.resourceId} but authenticated as ${authenticatedResourceId}`);
+      return;
+    }
     if (data.resourceId) {
       socket.join(`resource:${data.resourceId}`);
     }
@@ -36,8 +55,15 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.emit('connected', {
+    type: 'connected',
+    message: 'Anslutning etablerad',
+    timestamp: new Date().toISOString(),
+    v: 1,
+  });
+
   socket.on('ping', () => {
-    socket.emit('pong');
+    socket.emit('pong', { type: 'pong', timestamp: new Date().toISOString(), v: 1 });
   });
 
   socket.on('position_update', (data: any) => {
@@ -82,13 +108,68 @@ io.on('connection', (socket) => {
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-app.use('/api/mobile', mobileRoutes);
-app.use('/api/mobile/ai', aiRoutes);
-app.use('/api/planner', plannerRoutes);
+function deprecationHeaders(_req: express.Request, res: express.Response, next: express.NextFunction) {
+  res.set('Deprecation', 'true');
+  res.set('Sunset', '2027-06-01');
+  const v1Path = _req.originalUrl.replace('/api/', '/api/v1/');
+  res.set('Link', `<${v1Path}>; rel="successor-version"`);
+  next();
+}
 
-app.get('/api/health', (_req, res) => {
+app.use('/api/v1/mobile/ai', aiRoutes);
+app.use('/api/v1/mobile', mobileRoutes);
+app.use('/api/v1/planner', plannerRoutes);
+
+app.use('/api/mobile/ai', deprecationHeaders, aiRoutes);
+app.use('/api/mobile', deprecationHeaders, mobileRoutes);
+app.use('/api/planner', deprecationHeaders, plannerRoutes);
+
+app.get('/api/version', (_req, res) => {
+  res.json({ current: 'v1', supported: ['v1'], deprecatedUnversioned: true, sunset: '2027-06-01' });
+});
+
+app.get('/api/v1/mobile/app-config', (_req, res) => {
+  res.json({
+    maintenance: { enabled: false, message: null },
+    versions: { minimum: '1.0.0', recommended: '1.2.0' },
+    features: {
+      offlineMode: true,
+      aiAssistant: true,
+      gpsTracking: true,
+      pushNotifications: true,
+      etaNotifications: true,
+      checklists: true,
+      photoUpload: true,
+      signatures: true,
+      breakReminders: true,
+      customerChangeRequests: true,
+      teamView: true,
+      statistics: true,
+      darkMode: false,
+    },
+    navigation: {
+      tabs: ['home', 'orders', 'todo', 'map', 'report'],
+      hamburgerMenu: ['settings', 'team', 'statistics', 'notifications', 'deviations'],
+    },
+    tenant: { name: 'Traivo Demo', industry: 'waste_management' },
+  });
+});
+
+app.get(['/api/v1/mobile/version-check', '/api/mobile/version-check'], (req, res) => {
+  const version = (req.query.version as string) || '1.0.0';
+  const [major] = version.split('.').map(Number);
+  res.json({
+    currentVersion: version,
+    minimumVersion: '1.0.0',
+    recommendedVersion: '1.2.0',
+    forceUpdate: major < 1,
+    recommendUpdate: version < '1.2.0',
+  });
+});
+
+app.get(['/api/v1/health', '/api/health'], (_req, res) => {
   const bridge = getBridgeStatus();
-  res.json({ status: 'ok', service: 'traivo-go-api', wsBridge: bridge });
+  res.json({ status: 'ok', service: 'traivo-go-api', wsBridge: bridge, apiVersion: 'v1' });
 });
 
 const projectRoot = process.cwd();

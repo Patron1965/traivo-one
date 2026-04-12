@@ -3,6 +3,14 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+function toV1Path(path: string): string {
+  if (path.startsWith('/api/v1/')) return path;
+  if (path.startsWith('/api/mobile/')) return path.replace('/api/mobile/', '/api/v1/mobile/');
+  if (path.startsWith('/api/planner/')) return path.replace('/api/planner/', '/api/v1/planner/');
+  if (path.startsWith('/api/')) return path.replace('/api/', '/api/v1/');
+  return path;
+}
+
 export function getApiUrl(): string {
   const manifestHost = Constants.expoConfig?.hostUri
     || (Constants as any).manifest?.debuggerHost
@@ -57,7 +65,7 @@ export async function apiRequest(
   body?: any,
   token?: string | null,
 ): Promise<any> {
-  const url = new URL(path, getApiUrl()).toString();
+  const url = new URL(toV1Path(path), getApiUrl()).toString();
   const authToken = token ?? await getStoredToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -92,7 +100,7 @@ export async function apiRequest(
 
 async function defaultQueryFn({ queryKey }: { queryKey: readonly unknown[] }) {
   const path = queryKey[0] as string;
-  const url = new URL(path, getApiUrl()).toString();
+  const url = new URL(toV1Path(path), getApiUrl()).toString();
   const authToken = await getStoredToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (authToken) {

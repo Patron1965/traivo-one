@@ -1,0 +1,260 @@
+Traivo On (Mobilapp) — Integrationsinstruktioner
+Senast uppdaterad: 2026-04-12 Avser backend-version: API v1
+
+1. API-versionering — KRITISK ÄNDRING
+Vad som ändrats
+Alla REST-API-endpoints har nu ett versionsprefix: /api/v1/.
+
+Vad Traivo On måste göra
+Ändra alla API-anrop från /api/... till /api/v1/...
+Exempel: /api/mobile/login → /api/v1/mobile/login
+Exempel: /api/mobile/my-orders → /api/v1/mobile/orders/:id
+Alla endpoints under /api/mobile/, /api/portal/, /api/notifications/ berörs
+Bakåtkompatibilitet
+Gamla /api/...-anrop fungerar fortfarande, men returnerar deprecation-headers:
+Deprecation: true
+Sunset: 2027-06-01
+Link: </api/v1/...>; rel="successor-version"
+Deadline: Unversioned endpoints fasas ut 2027-06-01
+Versionsdiscovery-endpoint
+GET /api/version
+→ { "current": "v1", "supported": ["v1"], "deprecatedUnversioned": true, "sunset": "2027-06-01" }
+
+Appen kan använda detta vid start för att verifiera kompatibilitet.
+
+2. WebSocket Eventkatalog — Typat protokoll (v1)
+Vad som ändrats
+Alla WebSocket-events har nu formella Zod-validerade schemas med versionsfält (v: 1). Definitionen finns i shared/ws-events.ts och kan användas som kontrakt.
+
+Anslutningsflöde
+Steg 1 — Token Exchange:
+
+POST /api/v1/notifications/token
+Body: { "resourceId": "<resource-uuid>" }
+→ { "token": "<ws-token>" }
+
+Steg 2 — WebSocket-anslutning:
+
+wss://<host>/ws/notifications?token=<ws-token>
+
+Steg 3 — Heartbeat:
+
+Skicka { "type": "ping" } var 30:e sekund
+Servern svarar med { "type": "pong", "timestamp": "..." }
+Steg 4 — Reconnect:
+
+Vid disconnect: exponentiell backoff (10s → 20s → 40s, max 5 min)
+Begär ny token för varje reconnect-försök
+Server → App events (inkommande)
+Alla notifieringsevents har denna basstruktur:
+
+{
+  "type": "<event-type>",
+  "id": "uuid",
+  "title": "Rubrik",
+  "message": "Beskrivning",
+  "orderId": "uuid (optional)",
+  "resourceId": "uuid (optional)",
+  "timestamp": "ISO-8601",
+  "v": 1,
+  "data": { ... }
+}
+
+Event-typ	Syfte	data-fält
+connected	Handshake OK	message, timestamp
+pong	Heartbeat-svar	timestamp
+job_assigned	Nytt uppdrag tilldelat	scheduledDate, scheduledStartTime, objectName, objectAddress, priority
+job_updated	Uppdrag ändrat	scheduledDate, scheduledStartTime, status
+job_cancelled	Uppdrag borttaget	—
+schedule_changed	Datum/tid ändrad	oldDate, newDate, scheduledStartTime
+priority_changed	Prioritet ändrad	oldPriority, newPriority
+position_update	GPS från annan resurs	latitude, longitude, speed, heading, status, workOrderId
+route_update	Ruttändringar	—
+order:updated	Generisk orderstatus	status, executionStatus, source
+anomaly_alert	Systemvarning	—
+route_optimized	Ruttoptimering klar	jobId
+optimization_complete	Optimering slutförd (ny)	jobId
+optimization_failed	Optimering misslyckades (ny)	jobId
+notification	Generisk notis	valfria fält
+App → Server events (utgående via WebSocket)
+Event-typ	Syfte	Fält
+ping	Heartbeat	—
+position_update	GPS-telemetri	latitude, longitude, speed, heading, accuracy, status (traveling/on_site/idle), workOrderId
+Rekommenderad hantering i appen
+connected — Uppdatera UI till "online"-status
+job_assigned — Visa push-notis + lägg till i uppdragslistan
+job_updated / schedule_changed — Uppdatera lokal orderdata + notifiera användaren
+job_cancelled — Ta bort från lokal lista + visa notis
+optimization_complete — Ladda om uppdragslistan (schemat kan ha ändrats)
+optimization_failed — Logga internt, ingen användaråtgärd krävs
+order:updated — Synka lokal order-status
+3. Komplett endpoint-referens (Mobil-API)
+Alla prefix nedan ska föregås av /api/v1.
+
+3.1 Autentisering
+Metod	Path	Auth	Beskrivning
+POST	/mobile/login	—	Logga in med PIN/email+PIN/username+password
+POST	/mobile/logout	Bearer	Logga ut, invalidera token
+GET	/mobile/me	Bearer	Hämta resurs-profil
+GET	/mobile/app-config	Bearer	Hämta app-konfiguration (features, nav, tenant, version)
+GET	/mobile/version-check?version=x.y.z	Bearer	Kontrollera om appen behöver uppdateras
+3.2 Ordrar / Uppdrag
+Metod	Path	Auth	Beskrivning
+GET	/mobile/my-orders?date=YYYY-MM-DD	Bearer	Dagens uppdrag (default: idag)
+GET	/mobile/orders/:id	Bearer	Orderdetaljer
+PATCH	/mobile/orders/:id/status	Bearer	Uppdatera exekveringsstatus
+POST	/mobile/orders/:id/notes	Bearer	Lägg till anteckning
+POST	/mobile/orders/:id/photos	Bearer	Ladda upp foto (base64)
+POST	/mobile/orders/:id/checklist	Bearer	Skicka checklista
+PATCH	/mobile/orders/:id/substeps/:stepId	Bearer	Toggla artikelsteg
+POST	/mobile/orders/:id/deviations	Bearer	Rapportera avvikelse
+3.3 Exekveringsstatus-flöde
+Statusövergångar via PATCH /mobile/orders/:id/status:
+
+planned → dispatched → en_route → in_progress → completed
+                                              → impossible
+                                              → deferred
+
+Status (skicka)	Effekt på servern
+dispatched	executionStatus=dispatched, triggar ETA-notis till kund
+en_route	executionStatus=on_way, sätter onWayAt, triggar ETA-notis
+paborjad / in_progress	executionStatus=on_site, sätter onSiteAt
+utford / completed	orderStatus=utford, executionStatus=completed, beräknar actualDuration
+impossible	orderStatus=avbruten, kräver impossibleReason
+ej_utford / deferred	Återställer till skapad, bifogar anteckning
+3.4 Synkronisering (offline-first)
+Metod	Path	Auth	Beskrivning
+POST	/mobile/sync	Bearer	Batch-synk av offline-åtgärder
+GET	/mobile/sync/status	Bearer	Status för synkjobb
+Sync-payload:
+
+{
+  "actions": [
+    {
+      "clientId": "uuid",
+      "actionType": "status_update",
+      "payload": { "orderId": "...", "status": "completed" }
+    }
+  ]
+}
+
+3.5 Position & GPS
+Metod	Path	Auth	Beskrivning
+POST	/mobile/position	Bearer	Skicka GPS-koordinater
+POST	/mobile/gps	Bearer	Alternativ GPS-endpoint
+3.6 Arbetssession (Snöret)
+Metod	Path	Auth	Beskrivning
+POST	/mobile/work-sessions/start	Bearer	Starta arbetspass
+POST	/mobile/work-sessions/stop	Bearer	Avsluta arbetspass
+POST	/mobile/work-sessions/pause	Bearer	Pausa/återuppta
+3.7 AI-tjänster
+Metod	Path	Auth	Beskrivning
+POST	/mobile/ai/chat	Bearer	Fråga AI-assistenten (svenska)
+POST	/mobile/ai/transcribe	Bearer	Tal-till-text (base64 WebM)
+POST	/mobile/ai/analyze-image	Bearer	Bildanalys med kategori/severity
+3.8 Team & Statistik
+Metod	Path	Auth	Beskrivning
+GET	/mobile/summary	Bearer	Daglig statistik
+GET	/mobile/travel-times	Bearer	Restider mellan stopp
+4. App-konfiguration & Feature Flags
+GET /api/v1/mobile/app-config returnerar server-styrd konfiguration:
+
+{
+  "maintenance": { "enabled": false, "message": null },
+  "versions": { "minimum": "1.0.0", "recommended": "1.2.0" },
+  "features": {
+    "offlineMode": true,
+    "aiAssistant": true,
+    "gpsTracking": true,
+    "pushNotifications": true,
+    "etaNotifications": true,
+    "checklists": true,
+    "photoUpload": true,
+    "signatures": true,
+    "breakReminders": true,
+    "customerChangeRequests": true,
+    "teamView": true,
+    "statistics": true,
+    "darkMode": true
+  },
+  "navigation": {
+    "tabs": [...],
+    "hamburgerMenu": [...]
+  },
+  "tenant": { "name": "Företagsnamn", "industry": "waste_management" }
+}
+
+Appen ska:
+
+Dölja/visa funktioner baserat på features-flaggor
+Kontrollera versions.minimum mot aktuell app-version vid start — visa "tvingad uppdatering" om under minimum
+Visa "rekommenderad uppdatering" om under versions.recommended
+Visa underhållsmeddelande om maintenance.enabled är true
+5. Autentisering — tokenformat
+Alla autentiserade endpoints kräver Authorization: Bearer <token> header
+Token fås via POST /api/v1/mobile/login
+Tokens är giltiga i 24 timmar
+Vid 401-svar: logga ut användaren och visa inloggningsskärmen
+Rate-limit: max 10 loginförsök per IP per 15 minuter (429-svar)
+6. ETA-notifieringar till kunder
+När appen sätter status till dispatched eller en_route triggar servern automatiskt ett ETA-SMS till kunden (om aktiverat för tenanten).
+
+Appen behöver:
+
+Skicka GPS-position regelbundet under körning (POST /api/v1/mobile/position)
+Visa customerNotified: true i ordersvaret när SMS har skickats
+Inget manuellt SMS-utskick behövs
+7. Felhantering
+Alla error-svar följer formatet:
+
+{ "error": "Beskrivning av felet" }
+
+Valideringsfel inkluderar detaljer:
+
+{
+  "error": "Valideringsfel: ...",
+  "details": [{ "field": "namn", "message": "Fält krävs" }]
+}
+
+HTTP-statuskoder att hantera:
+
+Kod	Betydelse	Åtgärd
+200	OK	Bearbeta svaret
+400	Valideringsfel	Visa felmeddelande
+401	Ej autentiserad	Logga ut → inloggningsskärm
+403	Ej behörig	Visa "Åtkomst nekad"
+404	Ej hittad	Visa "Resursen finns inte"
+429	Rate limit	Visa "Försök igen om X minuter"
+500	Serverfel	Visa "Ett fel uppstod, försök igen"
+8. Checklista — Åtgärder för Traivo On-teamet
+Högt prioritet (måste göras)
+ Migrera alla API-anrop till /api/v1/-prefix
+ Implementera WebSocket-anslutning med token exchange och heartbeat
+ Hantera alla 15 server→client event-typer (se tabell ovan)
+ Skicka GPS-position via WebSocket position_update event
+ Hantera optimization_complete / optimization_failed events
+ Anropa GET /api/v1/mobile/app-config vid start och respektera feature flags
+ Visa tvingad/rekommenderad uppdatering baserat på versions-check
+ Hantera Deprecation-headers — logga varning om detekterade
+Medium prioritet (bör göras)
+ Implementera exponentiell backoff vid WebSocket-reconnect
+ Anropa GET /api/version vid app-start för kompatibilitetskontroll
+ Validera inkommande WebSocket-events mot schema (v-fält = 1)
+ Ignorera okända event-typer gracefully (framtidssäkring)
+ Cacha app-config lokalt och uppdatera i bakgrunden
+Låg prioritet (framtida)
+ Migrera offline-sync till v1-prefix
+ Förbered för v2-stöd (version negotiation)
+ Implementera lokal event-logg för debugging
+9. Testscenarier
+Följande scenarier bör testas mot staging-miljön:
+
+Login → hämta ordrar → utför order (hela flödet)
+WebSocket-anslutning — verifiera connected event mottags
+GPS-sändning via WebSocket → verifiera att planeraren ser positionen
+Offline-sync — sätt telefon i flygplansläge, utför order, återanslut → verifiera sync
+Schema-ändring under körning — trigga optimering → verifiera optimization_complete → uppdaterade ordrar
+Token-expiry — vänta 24h (eller manipulera) → verifiera 401 → auto-logout
+Versionskontroll — returnera lägre version → verifiera tvingad uppdatering
+Rate-limit — 11 misslyckade login → verifiera 429-svar
+Dokumentet genererat utifrån Traivo One backend Tasks #144–149 (OutboxCenter, TimeThread, ControlTower, ChainTrace, WS-eventkatalog, API-versionering).

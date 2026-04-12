@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { MOCK_NOTIFICATIONS_LEGACY, MOCK_NOTIFICATIONS } from './mockData';
 import { IS_MOCK_MODE, traivoFetch, getAuthHeader } from './proxyHelper';
 
@@ -84,4 +85,17 @@ router.post('/notifications/read-all', async (req, res) => {
   }
 });
 
-export { router as notificationsRouter };
+const wsTokens = new Map<string, { resourceId: string; createdAt: number }>();
+
+router.post('/notifications/token', (req, res) => {
+  const { resourceId } = req.body;
+  if (!resourceId) {
+    return res.status(400).json({ error: 'resourceId krävs' });
+  }
+  const token = crypto.randomUUID();
+  wsTokens.set(token, { resourceId: String(resourceId), createdAt: Date.now() });
+  setTimeout(() => wsTokens.delete(token), 60000);
+  res.json({ token });
+});
+
+export { router as notificationsRouter, wsTokens };

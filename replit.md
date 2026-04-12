@@ -67,6 +67,15 @@ Traivo GO är en React Native/Expo-mobilapp för fältpersonal (förare/tekniker
 - **urgent/**: UrgentJobModal, UrgentJobBanner
 - **UI**: Card, ThemedText, ThemedView, StatusBadge, HamburgerMenu, OfflineIndicator, MockIndicator, ScreenErrorBoundary, ErrorBoundary
 
+### API-versionering
+- **v1-prefix:** Alla endpoints använder `/api/v1/` prefix (t.ex. `/api/v1/mobile/login`)
+- **Bakåtkompatibilitet:** Gamla `/api/mobile/` fungerar fortfarande men skickar deprecation-headers
+- **Sunset:** Unversioned endpoints fasas ut 2027-06-01
+- **Discovery:** `GET /api/version` → `{ "current": "v1", "supported": ["v1"] }`
+- **App-config:** `GET /api/v1/mobile/app-config` → feature flags, version check, tenant info
+- **Version-check:** `GET /api/v1/mobile/version-check?version=x.y.z`
+- **Client auto-migration:** `toV1Path()` i `query-client.ts` migrerar alla `/api/mobile/` → `/api/v1/mobile/` automatiskt
+
 ### API-endpoints (server/routes/mobile/)
 | Modul | Fil | Endpoints |
 |-------|-----|-----------|
@@ -76,28 +85,35 @@ Traivo GO är en React Native/Expo-mobilapp för fältpersonal (förare/tekniker
 | Arbetspass | workSessions.ts | /work-sessions/* |
 | Team | teams.ts | /my-team |
 | GPS | misc.ts | /gps, /summary, /weather |
-| Notiser | notifications.ts | /notifications |
+| Notiser | notifications.ts | /notifications, /notifications/token (WS token exchange) |
 | Routing | routing.ts | Ruttberäkning |
 | Akutjobb | urgentJobs.ts | /urgent-jobs/* |
 | AI | ../ai.ts | /ai/chat, /transcribe, /analyze-image |
+| Config | app.ts | /app-config, /version-check |
 
 ### Statusflöde (Order)
-**Traivo-flöde (förarens perspektiv):**
+**Fältförar-flöde (4 steg):**
 ```
-Tilldelad (planerad_resurs/planerad_las) → Starta → Påbörjad (paborjad) → Utförd (utford) → Avslutad → Fakturerad
-```
-
-**Driver Core-flöde:**
-```
-planned → dispatched → en_route → on_site → in_progress → completed
+Tilldelad (planerad_resurs/planerad_las) → Starta resa (dispatched) → På plats (en_route) → Starta arbete (in_progress) → Slutför arbete (utford)
 ```
 
-**Execution Status (granulär):**
-```
-not_started → travel_started → arrived → work_started → work_paused → work_resumed → work_completed → signed_off
-```
+**Server-mappning:**
+| Status skickad | executionStatus | Effekt |
+|---|---|---|
+| dispatched | dispatched | Startar travel-timer, ETA-notis till kund |
+| en_route | on_way | Sätter onWayAt, startar on_site-timer |
+| in_progress/paborjad | on_site | Sätter onSiteAt, startar working-timer |
+| utford/completed | completed | Beräknar actualDuration, stänger alla timers |
+| impossible | avbruten | Kräver impossibleReason |
 
 **Avslutade statusar i "Klar"-filtret:** utford, completed, avslutad, fakturerad
+
+### WebSocket (v1)
+- **Anslutning:** Token exchange via `POST /api/v1/notifications/token` → `wss://<host>/ws/notifications?token=<ws-token>`
+- **Heartbeat:** Skicka `{ type: "ping" }` var 30:e sekund, svar: `{ type: "pong", timestamp }`
+- **Events (server→app):** connected, pong, job_assigned, job_updated, job_cancelled, schedule_changed, priority_changed, position_update, route_update, order:updated, anomaly_alert, route_optimized, optimization_complete, optimization_failed, notification
+- **Events (app→server):** ping, position_update
+- **Reconnect:** Exponentiell backoff (10s → 20s → 40s, max 5 min)
 
 ### Nyckeltyper (client/types/index.ts)
 - **Order:** Fullständig ordermodell med cachedValue/cachedCost (öre), artiklar med resolvedPrice

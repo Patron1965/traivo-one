@@ -220,8 +220,14 @@ router.patch('/orders/:id/status', async (req, res) => {
         return;
       }
       order.status = newStatus;
-      if (newStatus === 'on_site' || newStatus === 'in_progress' || newStatus === 'paborjad' || newStatus === 'planerad_las') {
+      if (newStatus === 'on_site' || newStatus === 'in_progress' || newStatus === 'paborjad' || newStatus === 'planerad_las' || newStatus === 'en_route') {
         order.actualStartTime = order.actualStartTime || new Date().toISOString();
+      }
+      if (newStatus === 'en_route') {
+        (order as any).onWayAt = new Date().toISOString();
+      }
+      if (newStatus === 'in_progress' || newStatus === 'paborjad') {
+        (order as any).onSiteAt = new Date().toISOString();
       }
       if (newStatus === 'completed' || newStatus === 'utford') {
         order.completedAt = new Date().toISOString();

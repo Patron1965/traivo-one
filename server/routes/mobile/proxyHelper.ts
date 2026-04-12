@@ -239,14 +239,14 @@ async function closeOpenEntries(orderId: string, driverId: string, now: Date, st
 async function handleTimeEntries(orderId: string, driverId: string, newStatus: string) {
   const now = new Date();
   try {
-    if (newStatus === 'dispatched' || newStatus === 'en_route') {
+    if (newStatus === 'dispatched') {
       await closeOpenEntries(orderId, driverId, now);
       await pool.query(
         `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'travel', $3)`,
         [orderId, driverId, now]
       );
-    } else if (newStatus === 'on_site') {
-      await closeOpenEntries(orderId, driverId, now, 'travel');
+    } else if (newStatus === 'en_route' || newStatus === 'on_site') {
+      await closeOpenEntries(orderId, driverId, now);
       await pool.query(
         `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'on_site', $3)`,
         [orderId, driverId, now]
