@@ -41,6 +41,7 @@ import { FieldTodoList, getUncompletedTodoCount } from "@/components/FieldTodoLi
 import { VoiceInput } from "@/components/VoiceInput";
 import { FocusTimeline, FocusCTA, ExpandableDetail, OrderStatusBadge, getTimelineStep, useFocusMode } from "@/components/FocusMode";
 import { OutboxCenter } from "@/components/OutboxCenter";
+import { TimelineView } from "@/components/TimelineView";
 import {
   Dialog,
   DialogContent,
@@ -49,7 +50,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-type View = "jobs" | "job" | "report" | "todo" | "outbox";
+type View = "jobs" | "job" | "report" | "todo" | "outbox" | "timeline";
 
 interface MyReportItem {
   id: string;
@@ -1136,6 +1137,12 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   if (view === "outbox") {
     return (
       <OutboxCenter onBack={() => setView("jobs")} />
+    );
+  }
+
+  if (view === "timeline") {
+    return (
+      <TimelineView onBack={() => setView("jobs")} mobileApiCall={mobileApiCall} />
     );
   }
 
@@ -2770,6 +2777,15 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               </span>
             ) : null;
           })()}
+        </Button>
+        <Button
+          variant="outline"
+          className="h-12 gap-2 px-4"
+          onClick={() => setView("timeline")}
+          data-testid="button-open-timeline"
+        >
+          <Clock className="h-5 w-5 text-teal-500" />
+          Tid
         </Button>
         <Button
           variant="outline"

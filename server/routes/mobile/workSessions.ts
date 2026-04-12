@@ -299,6 +299,78 @@ app.get("/api/mobile/time-summary", isMobileAuthenticated, asyncHandler(async (r
     });
 }));
 
+app.get("/api/mobile/time-entries", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+    const resourceId = req.mobileResourceId;
+    const dateStr = req.query.date as string || new Date().toISOString().slice(0, 10);
+    const dayStart = new Date(`${dateStr}T00:00:00`);
+    const dayEnd = new Date(`${dateStr}T23:59:59`);
+
+    const entries = await db.select().from(workEntries)
+      .where(and(
+        eq(workEntries.resourceId, resourceId),
+        gte(workEntries.startTime, dayStart),
+      ))
+      .orderBy(workEntries.startTime);
+
+    const filtered = entries.filter(e => e.startTime && e.startTime <= dayEnd);
+
+    const enriched = await Promise.all(filtered.map(async (e) => {
+      let orderTitle: string | null = null;
+      if (e.workOrderId) {
+        const wo = await storage.getWorkOrder(e.workOrderId).catch(() => null);
+        if (wo) orderTitle = wo.title;
+      }
+      return {
+        id: e.id,
+        type: e.entryType,
+        startTime: e.startTime?.toISOString(),
+        endTime: e.endTime?.toISOString() || null,
+        duration: e.durationMinutes,
+        note: e.notes,
+        workOrderId: e.workOrderId,
+        orderTitle,
+      };
+    }));
+
+    res.json(enriched);
+}));
+
+app.patch("/api/mobile/time-entries/:id", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+    const entryId = req.params.id;
+    const resourceId = req.mobileResourceId;
+
+    const [entry] = await db.select().from(workEntries)
+      .where(and(eq(workEntries.id, entryId), eq(workEntries.resourceId, resourceId)));
+
+    if (!entry) throw new NotFoundError("Tidspost hittades inte");
+
+    const schema = z.object({
+      startTime: z.string().optional(),
+      endTime: z.string().optional(),
+      note: z.string().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+
+    const updates: Record<string, unknown> = {};
+    if (parsed.data.startTime) updates.startTime = new Date(parsed.data.startTime);
+    if (parsed.data.endTime) updates.endTime = new Date(parsed.data.endTime);
+    if (parsed.data.note !== undefined) updates.notes = parsed.data.note;
+
+    const newStart = updates.startTime ? new Date(parsed.data.startTime!) : entry.startTime;
+    const newEnd = updates.endTime ? new Date(parsed.data.endTime!) : entry.endTime;
+    if (newStart && newEnd) {
+      if (newEnd.getTime() <= newStart.getTime()) {
+        throw new ValidationError("Sluttid måste vara efter starttid");
+      }
+      updates.durationMinutes = Math.round((newEnd.getTime() - newStart.getTime()) / 60000);
+    }
+
+    await db.update(workEntries).set(updates).where(eq(workEntries.id, entryId));
+
+    res.json({ success: true });
+}));
+
 app.get("/api/mobile/statistics", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
