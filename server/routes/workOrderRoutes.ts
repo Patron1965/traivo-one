@@ -873,21 +873,37 @@ app.get("/api/chain-trace/by-concept/:conceptId", asyncHandler(async (req, res) 
     throw new NotFoundError("Orderkoncept hittades inte");
   }
 
-  const conditions = [eq(workOrders.tenantId, tenantId)];
-  if (concept.customerId) {
-    conditions.push(eq(workOrders.customerId, concept.customerId));
+  if (!concept.customerId) {
+    return res.json({ workOrderId: null });
   }
 
-  const recentOrders = await db.select({ id: workOrders.id })
+  if (concept.articleId) {
+    const matched = await db.select({ workOrderId: workOrderLines.workOrderId })
+      .from(workOrderLines)
+      .innerJoin(workOrders, and(eq(workOrderLines.workOrderId, workOrders.id), eq(workOrders.tenantId, tenantId)))
+      .where(and(
+        eq(workOrderLines.tenantId, tenantId),
+        eq(workOrderLines.articleId, concept.articleId),
+        eq(workOrders.customerId, concept.customerId),
+      ))
+      .orderBy(desc(workOrders.createdAt))
+      .limit(1);
+
+    if (matched.length > 0) {
+      return res.json({ workOrderId: matched[0].workOrderId });
+    }
+  }
+
+  const fallback = await db.select({ id: workOrders.id })
     .from(workOrders)
-    .where(and(...conditions))
+    .where(and(
+      eq(workOrders.tenantId, tenantId),
+      eq(workOrders.customerId, concept.customerId),
+    ))
     .orderBy(desc(workOrders.createdAt))
     .limit(1);
 
-  if (recentOrders.length === 0) {
-    return res.json({ workOrderId: null });
-  }
-  res.json({ workOrderId: recentOrders[0].id });
+  res.json({ workOrderId: fallback.length > 0 ? fallback[0].id : null });
 }));
 
 app.get("/api/chain-trace/:workOrderId", asyncHandler(async (req, res) => {
@@ -932,6 +948,7 @@ app.get("/api/chain-trace/:workOrderId", asyncHandler(async (req, res) => {
   ]);
 
   let concept: OrderConcept | null = null;
+  let conceptMatchType: "article" | "customer" | null = null;
   if (wo.customerId) {
     const conceptRows = await db.select()
       .from(orderConcepts)
@@ -943,7 +960,10 @@ app.get("/api/chain-trace/:workOrderId", asyncHandler(async (req, res) => {
     if (conceptRows.length > 0) {
       const lineArticleIds = lines.map(l => l.articleId);
       const matchedConcept = conceptRows.find(c => c.articleId && lineArticleIds.includes(c.articleId));
-      concept = matchedConcept || null;
+      if (matchedConcept) {
+        concept = matchedConcept;
+        conceptMatchType = "article";
+      }
     }
   }
 
@@ -956,6 +976,7 @@ app.get("/api/chain-trace/:workOrderId", asyncHandler(async (req, res) => {
       customerId: concept.customerId,
       customerName: customer?.name || null,
       articleId: concept.articleId,
+      matchType: conceptMatchType,
     } : customer ? {
       id: null,
       name: null,
@@ -964,6 +985,7 @@ app.get("/api/chain-trace/:workOrderId", asyncHandler(async (req, res) => {
       customerId: customer.id,
       customerName: customer.name,
       articleId: null,
+      matchType: null,
     } : null,
     artiklar: lines.map(l => ({
       id: l.id,
