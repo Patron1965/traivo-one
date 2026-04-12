@@ -369,11 +369,22 @@ not_planned → planned_rough → planned_fine → on_way → on_site → comple
 | Token-livslängd | 5 minuter, engångs |
 | Heartbeat | Client skickar `{ type: "ping" }`, server svarar `{ type: "pong" }` |
 
-Token erhålls via REST: `POST /api/ws/auth` → `{ token: string }`.
+Token erhålls via REST:
+
+```
+POST /api/notifications/token
+Authorization: session cookie (isAuthenticated)
+Body: { "resourceId": "<resource-uuid>" }
+Response: { "token": "<hex-string>", "expiresIn": 300, "resourceId": "<resource-uuid>" }
+```
+
+Servern validerar att resursen tillhör samma tenant som den autentiserade användaren.
 
 ### 3.2 Server → Client events
 
-Alla events har formen:
+Events har två distinkta payload-format beroende på typ:
+
+**A) Notification-events** (skickas via `sendToResource` eller `broadcastToAll`):
 
 ```typescript
 {
@@ -390,17 +401,42 @@ Alla events har formen:
 
 | Event-typ | Routing | Beskrivning | data-payload |
 |-----------|---------|-------------|--------------|
-| `connected` | Broadcast till ansluten client | Bekräftelse vid anslutning | — |
-| `job_assigned` | `sendToResource(resourceId)` | Order tilldelad resursen | `{ orderId, orderTitle, scheduledDate, priority }` |
-| `job_updated` | `sendToResource(resourceId)` | Order uppdaterad (anteckningar, beskrivning, status) | `{ orderId, changeDescription }` |
-| `job_cancelled` | `sendToResource(resourceId)` | Order borttagen/ändrad resurs | `{ orderId }` |
-| `schedule_changed` | `sendToResource(resourceId)` | Datum ändrat | `{ orderId, oldDate, newDate }` |
-| `priority_changed` | `sendToResource(resourceId)` | Prioritet ändrad | `{ orderId, oldPriority, newPriority }` |
-| `position_update` | `broadcastToAll` | Resursposition uppdaterad | `{ resourceId, latitude, longitude, speed, heading, status }` |
-| `route_update` | `broadcastToAll` | Ruttinformation | `{ resourceId, routeData }` |
+| `job_assigned` | `sendToResource(resourceId)` | Order tilldelad resursen | `{ scheduledDate, scheduledStartTime, objectName, objectAddress, priority }` |
+| `job_updated` | `sendToResource(resourceId)` | Order uppdaterad | `{ scheduledDate, scheduledStartTime, status }` |
+| `job_cancelled` | `sendToResource(resourceId)` | Order borttagen/ändrad resurs | `{}` |
+| `schedule_changed` | `sendToResource(resourceId)` eller `broadcastToAll` | Datum ändrat | `{ oldDate, newDate, scheduledStartTime }` |
+| `priority_changed` | `sendToResource(resourceId)` | Prioritet ändrad | `{ oldPriority, newPriority }` |
 | `anomaly_alert` | `broadcastToAll` | Anomali upptäckt | `{ anomalyType, severity, details }` |
 | `order:updated` | `sendToResource(resourceId)` | Synkbekräftelse | `{ status, executionStatus, source: "sync" }` |
 | `notification` | `sendToResource(resourceId)` | Generell notifikation | Fritt |
+
+**B) System-events** (egna wire-format, ej Notification-envelope):
+
+**`connected`** — skickas direkt till ny klient vid anslutning:
+```typescript
+{ type: "connected", message: "Ansluten till notifikationstjänsten", timestamp: string }
+```
+
+**`position_update`** — broadcastas till alla klienter *utom* avsändaren:
+```typescript
+{
+  type: "position_update",
+  resourceId: string,
+  latitude: number,
+  longitude: number,
+  speed: number,
+  heading: number,
+  status: "traveling" | "on_site" | "idle",
+  workOrderId?: string,
+  timestamp: string
+}
+```
+Throttlas: max 1 broadcast per 30 sekunder per resurs.
+
+**`route_update`** — broadcastas till alla:
+```typescript
+{ type: "route_update", resourceId: string, routeData: object, timestamp: string }
+```
 
 ### 3.3 Client → Server events
 
@@ -413,7 +449,7 @@ Alla events har formen:
 
 - Varje event har unikt `id` (`notif_<timestamp>_<random9>`).
 - Klienter bör deduplera baserat på `id` vid reconnect.
-- Position-broadcast throttlas till max 1 per 30 sekunder per resurs.
+- Position-broadcast (`position_update`) throttlas till max 1 per 30 sekunder per resurs och exkluderar avsändaren.
 
 ---
 
@@ -548,7 +584,7 @@ Mobilappen skickar förenklade statusvärden som mappas till orderStatus + execu
 
 ### 5.6 Idempotens
 
-Varje action loggas med `clientId` i `offline_sync_logs`-tabellen. Klienten bör generera ett unikt `clientId` per åtgärd och kan kontrollera status via:
+Varje action loggas med `clientId` i `offline_sync_log`-tabellen. Klienten bör generera ett unikt `clientId` per åtgärd och kan kontrollera status via:
 
 ```
 GET /api/mobile/sync/status
