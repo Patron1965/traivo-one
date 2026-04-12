@@ -47,6 +47,7 @@ interface TimelineViewProps {
 const ENTRY_COLORS: Record<string, { bg: string; border: string; text: string; icon: typeof Clock }> = {
   travel: { bg: "bg-blue-100 dark:bg-blue-900/30", border: "border-blue-400", text: "text-blue-600 dark:text-blue-400", icon: Truck },
   work: { bg: "bg-green-100 dark:bg-green-900/30", border: "border-green-400", text: "text-green-600 dark:text-green-400", icon: Wrench },
+  on_site: { bg: "bg-emerald-100 dark:bg-emerald-900/30", border: "border-emerald-400", text: "text-emerald-600 dark:text-emerald-400", icon: Wrench },
   break: { bg: "bg-amber-100 dark:bg-amber-900/30", border: "border-amber-400", text: "text-amber-600 dark:text-amber-400", icon: Coffee },
   rest: { bg: "bg-amber-100 dark:bg-amber-900/30", border: "border-amber-400", text: "text-amber-600 dark:text-amber-400", icon: Coffee },
 };
@@ -54,6 +55,7 @@ const ENTRY_COLORS: Record<string, { bg: string; border: string; text: string; i
 const ENTRY_LABELS: Record<string, string> = {
   travel: "Resa",
   work: "Arbete",
+  on_site: "P\u00e5 plats",
   break: "Rast",
   rest: "Vila",
 };

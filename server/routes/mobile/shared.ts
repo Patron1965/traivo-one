@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { storage } from "../../storage";
 import { db } from "../../db";
-import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
+import { eq, sql, desc, and, gte, lte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, mobileTokens, generateMobileToken, validateMobileToken, isMobileAuthenticated } from "../helpers";
 import { getTenantIdWithFallback } from "../../tenant-middleware";
@@ -254,7 +254,7 @@ export function getFallbackChecklist(orderType: string): string[] {
 }
 
 export {
-  storage, db, eq, sql, desc, and, gte, isNull, inArray, z,
+  storage, db, eq, sql, desc, and, gte, lte, isNull, inArray, z,
   formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, mobileTokens, generateMobileToken, validateMobileToken, isMobileAuthenticated,
   getTenantIdWithFallback, asyncHandler,
   NotFoundError, ValidationError, ForbiddenError,

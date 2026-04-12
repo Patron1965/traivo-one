@@ -1,7 +1,7 @@
 import type { Express } from "express";
   import {
     MobileAuthenticatedRequest,
-    storage, db, eq, and, gte, sql, desc, z,
+    storage, db, eq, and, gte, lte, sql, desc, z,
     formatZodError, isMobileAuthenticated, isAuthenticated,
     getTenantIdWithFallback, asyncHandler,
     NotFoundError, ValidationError, ForbiddenError,
@@ -277,13 +277,13 @@ app.get("/api/mobile/time-summary", isMobileAuthenticated, asyncHandler(async (r
     const dayStart = new Date(`${dateStr}T00:00:00`);
     const dayEnd = new Date(`${dateStr}T23:59:59`);
 
-    const entries = await db.select().from(workEntries)
+    const filtered = await db.select().from(workEntries)
       .where(and(
         eq(workEntries.resourceId, resourceId),
         gte(workEntries.startTime, dayStart),
+        lte(workEntries.startTime, dayEnd),
       ));
 
-    const filtered = entries.filter(e => e.startTime && e.startTime <= dayEnd);
     let totalWork = 0, totalTravel = 0, totalBreak = 0;
     for (const e of filtered) {
       const mins = e.durationMinutes || 0;
@@ -305,14 +305,13 @@ app.get("/api/mobile/time-entries", isMobileAuthenticated, asyncHandler(async (r
     const dayStart = new Date(`${dateStr}T00:00:00`);
     const dayEnd = new Date(`${dateStr}T23:59:59`);
 
-    const entries = await db.select().from(workEntries)
+    const filtered = await db.select().from(workEntries)
       .where(and(
         eq(workEntries.resourceId, resourceId),
         gte(workEntries.startTime, dayStart),
+        lte(workEntries.startTime, dayEnd),
       ))
       .orderBy(workEntries.startTime);
-
-    const filtered = entries.filter(e => e.startTime && e.startTime <= dayEnd);
 
     const enriched = await Promise.all(filtered.map(async (e) => {
       let orderTitle: string | null = null;
