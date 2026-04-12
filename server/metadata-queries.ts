@@ -246,7 +246,7 @@ export async function createMetadata(data: {
   tenantId: string;
   objektId: string;
   metadataTypNamn: string;
-  varde: any;
+  varde: string | number | boolean | Date | Record<string, unknown> | null;
   arvsNedat?: boolean;
   nivaLas?: boolean;
   koppladTillMetadataId?: string | null;
@@ -279,7 +279,7 @@ export async function createMetadata(data: {
     throw new Error(`Metadata type "${data.metadataTypNamn}" not found for this tenant`);
   }
 
-  const vardeFields: any = {
+  const vardeFields: Record<string, string | number | boolean | Date | Record<string, unknown> | null> = {
     vardeString: null,
     vardeInteger: null,
     vardeDecimal: null,
@@ -379,7 +379,7 @@ export async function createMetadata(data: {
 
 export async function updateMetadata(
   metadataId: string,
-  varde: any,
+  varde: string | number | boolean | Date | Record<string, unknown> | null,
   tenantId: string,
   uppdateradAv?: string,
   metod?: string
@@ -406,7 +406,7 @@ export async function updateMetadata(
     throw new Error(`Metadata type not found for this tenant`);
   }
 
-  const vardeFields: any = {
+  const vardeFields: Record<string, string | number | boolean | Date | Record<string, unknown> | null> = {
     vardeString: null,
     vardeInteger: null,
     vardeDecimal: null,
@@ -1364,7 +1364,7 @@ export async function createWorkOrderMetadata(data: {
   tenantId: string;
   workOrderId: string;
   metadataTypNamn: string;
-  varde: any;
+  varde: string | number | boolean | Date | Record<string, unknown> | null;
   skapadAv?: string;
 }): Promise<MetadataVarden> {
   // Verify metadata type exists for this tenant
@@ -1380,7 +1380,7 @@ export async function createWorkOrderMetadata(data: {
     throw new Error(`Metadata type "${data.metadataTypNamn}" not found for this tenant`);
   }
 
-  const vardeFields: any = {
+  const vardeFields: Record<string, string | number | boolean | Date | Record<string, unknown> | null> = {
     vardeString: null,
     vardeInteger: null,
     vardeDecimal: null,

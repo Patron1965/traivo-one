@@ -25,7 +25,7 @@ export interface NotificationOptions {
   recipients: NotificationRecipient[];
   notificationType: NotificationType;
   channel: NotificationChannel;
-  data: Record<string, any>;
+  data: Record<string, string | number | boolean | null | undefined>;
   customMessage?: string;
 }
 

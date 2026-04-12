@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
@@ -853,9 +853,9 @@ app.get("/api/system/api-costs/recent", requireAdmin, asyncHandler(async (req, r
     });
 }));
 
-const requireSystemAdmin = async (req: any, res: any, next: any) => {
-  const replitUser = req.user as any;
-  const sessionUserId = (req.session as any)?.userId;
+const requireSystemAdmin = async (req: Request, res: Response, next: NextFunction) => {
+  const replitUser = req.user;
+  const sessionUserId = (req.session as Record<string, string>)?.userId;
   const userId = replitUser?.claims?.sub || sessionUserId;
   if (!userId) {
     return res.status(401).json({ error: "Ej autentiserad" });
@@ -1497,7 +1497,7 @@ app.post("/api/ai/communications/send-manual", asyncHandler(async (req, res) => 
 // ============================================
 
 const requireAdminAuth = async (req: any, res: any, next: any) => {
-  const replitUser = req.user as any;
+  const replitUser = req.user;
   const sessionUserId = (req.session as any)?.userId;
   const userId = replitUser?.claims?.sub || sessionUserId;
   if (!userId) {

@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./seed";
 import { fixInitialOwnerRole } from "./startup-fixes";
+import { AppError } from "./errors";
 
 const app = express();
 const httpServer = createServer(app);
@@ -148,13 +149,12 @@ process.on('exit', (code) => {
     await registerRoutes(httpServer, app);
     console.log('[startup] Routes registered');
 
-    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-      const status = err.status || err.statusCode || 500;
-      const message = err.message || "Internal Server Error";
-      console.error(`[error] ${status} ${message}`, err.stack || '');
-      if (!res.headersSent) {
-        res.status(status).json({ message });
-      }
+    app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+      if (res.headersSent) return;
+      const status = err instanceof AppError ? err.statusCode : (err as Record<string, number>)?.status || (err as Record<string, number>)?.statusCode || 500;
+      const message = err instanceof Error ? err.message : "Ett oväntat serverfel uppstod";
+      console.error(`[error] ${status} ${message}`, err instanceof Error ? err.stack : '');
+      res.status(status).json({ error: message });
     });
 
     // importantly only setup vite in development and after

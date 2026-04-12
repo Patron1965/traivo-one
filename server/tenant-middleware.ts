@@ -48,7 +48,7 @@ async function getUserTenantRole(userId: string): Promise<TenantContext | null> 
 }
 
 export const requireTenant: RequestHandler = async (req, res, next) => {
-  const user = req.user as any;
+  const user = req.user;
   
   if (!user || !user.claims?.sub) {
     return res.status(401).json({ error: "Ej autentiserad" });
@@ -153,7 +153,7 @@ export async function getUserTenants(userId: string): Promise<TenantContext[]> {
  * NOTE: Unauthenticated fallback removed for security (2026-01-05)
  */
 export const requireTenantWithFallback: RequestHandler = async (req, res, next) => {
-  const user = req.user as any;
+  const user = req.user;
   
   if (!user || !user.claims?.sub) {
     return res.status(401).json({ 

@@ -70,7 +70,7 @@ export async function registerRoutes(
 
   app.get("/api/me/tenant", async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user;
       if (!user?.claims?.sub) {
         return res.json({ tenantId: "default-tenant", role: "user", tenants: [] });
       }
@@ -490,7 +490,9 @@ export async function registerRoutes(
     }
   });
 
-  app.use((err: any, _req: ExpressRequest, res: ExpressResponse, _next: any) => {
+  app.use((err: unknown, _req: ExpressRequest, res: ExpressResponse, _next: unknown) => {
+    if (res.headersSent) return;
+
     if (err instanceof z.ZodError) {
       return res.status(400).json(formatZodError(err));
     }
@@ -500,8 +502,9 @@ export async function registerRoutes(
     }
 
     console.error("[global-error]", err);
-    const message = err.message || "Ett oväntat serverfel uppstod";
-    res.status(err.status || 500).json({ error: message });
+    const message = err instanceof Error ? err.message : "Ett oväntat serverfel uppstod";
+    const status = (err as Record<string, number>)?.status || 500;
+    res.status(status).json({ error: message });
   });
 
   return httpServer;

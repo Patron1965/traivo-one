@@ -13,6 +13,12 @@ declare global {
 
 export const DEFAULT_TENANT_ID = "default-tenant";
 
+export function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  return "Ett oväntat fel uppstod";
+}
+
 export function formatZodError(error: z.ZodError): { error: string; details: Array<{ field: string; message: string }> } {
   const details = error.errors.map(e => ({
     field: e.path.join('.') || 'unknown',

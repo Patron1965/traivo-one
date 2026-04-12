@@ -329,11 +329,11 @@ app.post("/api/system/scrape-branding", requireAdmin, asyncHandler(async (req, r
         colors,
         sourceUrl: targetUrl,
       });
-    } catch (err: any) {
-      if (err.name === "AbortError") {
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
         throw new ValidationError("Timeout: Sidan svarade inte inom 10 sekunder");
       }
-      throw new ValidationError(err.message || "Kunde inte analysera webbplatsen");
+      throw new ValidationError(err instanceof Error ? err.message : "Kunde inte analysera webbplatsen");
     }
 }));
 
@@ -721,7 +721,7 @@ app.get("/api/system/industry-packages/installations", requireAdmin, asyncHandle
 app.post("/api/system/industry-packages/:id/install", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const packageId = req.params.id;
-    const userId = (req.user as any)?.id;
+    const userId = req.user?.claims?.sub;
     
     const pkg = await storage.getIndustryPackage(packageId);
     if (!pkg) throw new NotFoundError("Paket hittades inte");
@@ -845,7 +845,7 @@ app.post("/api/system/industry-packages/:id/install", requireAdmin, asyncHandler
 // Tenant Onboarding - Create new tenant with package and admin user
 app.post("/api/system/onboard-tenant", requireAdmin, asyncHandler(async (req, res) => {
     const { company, industryPackageId, adminUser } = req.body;
-    const currentUserId = (req.user as any)?.id;
+    const currentUserId = req.user?.claims?.sub;
 
     if (!company?.name) {
       throw new ValidationError("Företagsnamn krävs");
@@ -1636,7 +1636,7 @@ app.get("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
 
 app.post("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const user = req.user as any;
+    const user = req.user;
     const userId = user?.claims?.sub;
 
     const { email, role } = req.body;

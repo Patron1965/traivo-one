@@ -25,6 +25,46 @@ async function getPRetry() {
   return pRetryFn;
 }
 
+interface FortnoxCustomer {
+  CustomerNumber: string;
+  Name: string;
+  Email?: string;
+  Phone1?: string;
+  Address1?: string;
+  ZipCode?: string;
+  City?: string;
+  OrganisationNumber?: string;
+  [key: string]: string | number | boolean | null | undefined;
+}
+
+interface FortnoxArticle {
+  ArticleNumber: string;
+  Description: string;
+  SalesPrice?: number;
+  Unit?: string;
+  Active?: boolean;
+  [key: string]: string | number | boolean | null | undefined;
+}
+
+interface FortnoxCostCenter {
+  Code: string;
+  Description: string;
+  Active?: boolean;
+  [key: string]: string | number | boolean | null | undefined;
+}
+
+interface FortnoxProject {
+  ProjectNumber: string;
+  Description: string;
+  Status?: string;
+  [key: string]: string | number | boolean | null | undefined;
+}
+
+interface FortnoxPaginatedResponse<T> {
+  MetaInformation?: { "@TotalPages": number; "@CurrentPage": number };
+  [key: string]: T[] | { "@TotalPages": number; "@CurrentPage": number } | undefined;
+}
+
 interface FortnoxTokenResponse {
   access_token: string;
   refresh_token: string;
@@ -228,62 +268,62 @@ export class FortnoxClient {
     return this.apiRequest<FortnoxInvoiceResponse>("PUT", `/invoices/${invoiceNumber}/credit`);
   }
 
-  async getCustomer(customerNumber: string): Promise<any> {
-    return this.apiRequest("GET", `/customers/${customerNumber}`);
+  async getCustomer(customerNumber: string): Promise<{ Customer: FortnoxCustomer }> {
+    return this.apiRequest<{ Customer: FortnoxCustomer }>("GET", `/customers/${customerNumber}`);
   }
 
-  async getArticle(articleNumber: string): Promise<any> {
-    return this.apiRequest("GET", `/articles/${articleNumber}`);
+  async getArticle(articleNumber: string): Promise<{ Article: FortnoxArticle }> {
+    return this.apiRequest<{ Article: FortnoxArticle }>("GET", `/articles/${articleNumber}`);
   }
 
-  async getCostCenters(): Promise<any[]> {
-    const all: any[] = [];
+  async getCostCenters(): Promise<FortnoxCostCenter[]> {
+    const all: FortnoxCostCenter[] = [];
     let currentPage = 1;
     let totalPages = 1;
     while (currentPage <= totalPages) {
-      const response: any = await this.apiRequest("GET", `/costcenters?limit=500&page=${currentPage}`);
-      if (response?.CostCenters) all.push(...response.CostCenters);
+      const response = await this.apiRequest<FortnoxPaginatedResponse<FortnoxCostCenter>>("GET", `/costcenters?limit=500&page=${currentPage}`);
+      if (response?.CostCenters) all.push(...(response.CostCenters as FortnoxCostCenter[]));
       if (response?.MetaInformation) totalPages = response.MetaInformation["@TotalPages"] || 1;
       currentPage++;
     }
     return all;
   }
 
-  async getProjects(): Promise<any[]> {
-    const all: any[] = [];
+  async getProjects(): Promise<FortnoxProject[]> {
+    const all: FortnoxProject[] = [];
     let currentPage = 1;
     let totalPages = 1;
     while (currentPage <= totalPages) {
-      const response: any = await this.apiRequest("GET", `/projects?limit=500&page=${currentPage}`);
-      if (response?.Projects) all.push(...response.Projects);
+      const response = await this.apiRequest<FortnoxPaginatedResponse<FortnoxProject>>("GET", `/projects?limit=500&page=${currentPage}`);
+      if (response?.Projects) all.push(...(response.Projects as FortnoxProject[]));
       if (response?.MetaInformation) totalPages = response.MetaInformation["@TotalPages"] || 1;
       currentPage++;
     }
     return all;
   }
 
-  async getArticles(): Promise<any[]> {
-    const all: any[] = [];
+  async getArticles(): Promise<FortnoxArticle[]> {
+    const all: FortnoxArticle[] = [];
     let currentPage = 1;
     let totalPages = 1;
     while (currentPage <= totalPages) {
-      const response: any = await this.apiRequest("GET", `/articles?limit=500&page=${currentPage}`);
-      if (response?.Articles) all.push(...response.Articles);
+      const response = await this.apiRequest<FortnoxPaginatedResponse<FortnoxArticle>>("GET", `/articles?limit=500&page=${currentPage}`);
+      if (response?.Articles) all.push(...(response.Articles as FortnoxArticle[]));
       if (response?.MetaInformation) totalPages = response.MetaInformation["@TotalPages"] || 1;
       currentPage++;
     }
     return all;
   }
 
-  async getCustomers(): Promise<any[]> {
-    const allCustomers: any[] = [];
+  async getCustomers(): Promise<FortnoxCustomer[]> {
+    const allCustomers: FortnoxCustomer[] = [];
     let currentPage = 1;
     let totalPages = 1;
 
     while (currentPage <= totalPages) {
-      const response: any = await this.apiRequest("GET", `/customers?limit=500&page=${currentPage}`);
+      const response = await this.apiRequest<FortnoxPaginatedResponse<FortnoxCustomer>>("GET", `/customers?limit=500&page=${currentPage}`);
       if (response?.Customers) {
-        allCustomers.push(...response.Customers);
+        allCustomers.push(...(response.Customers as FortnoxCustomer[]));
       }
       if (response?.MetaInformation) {
         totalPages = response.MetaInformation["@TotalPages"] || 1;
@@ -294,8 +334,8 @@ export class FortnoxClient {
     return allCustomers;
   }
 
-  async getCustomerDetails(customerNumber: string): Promise<any> {
-    const response: any = await this.apiRequest("GET", `/customers/${customerNumber}`);
+  async getCustomerDetails(customerNumber: string): Promise<FortnoxCustomer | null> {
+    const response = await this.apiRequest<{ Customer: FortnoxCustomer }>("GET", `/customers/${customerNumber}`);
     return response?.Customer || null;
   }
 
@@ -445,10 +485,18 @@ export async function exportWorkOrderToFortnox(
   }
 }
 
+interface InvoiceExportRecord {
+  sourceId?: string | null;
+  customerId?: string | null;
+  costCenter?: string | null;
+  project?: string | null;
+  [key: string]: string | number | boolean | null | undefined;
+}
+
 async function exportManualLineToFortnox(
   tenantId: string,
   exportId: string,
-  invoiceExport: any
+  invoiceExport: InvoiceExportRecord
 ): Promise<{ success: boolean; invoiceNumber?: string; error?: string }> {
   try {
     const manualLine = invoiceExport.sourceId ? await storage.getManualInvoiceLine(invoiceExport.sourceId) : null;
@@ -531,10 +579,10 @@ async function exportManualLineToFortnox(
 async function exportCreditInvoiceToFortnox(
   tenantId: string,
   exportId: string,
-  invoiceExport: any
+  invoiceExport: InvoiceExportRecord & { originalExportId?: string }
 ): Promise<{ success: boolean; invoiceNumber?: string; error?: string }> {
   try {
-    const originalExport = await storage.getFortnoxInvoiceExport(invoiceExport.originalExportId);
+    const originalExport = await storage.getFortnoxInvoiceExport(invoiceExport.originalExportId as string);
     if (!originalExport) {
       return { success: false, error: "Original export not found for credit" };
     }

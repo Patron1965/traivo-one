@@ -3,6 +3,7 @@ import { z, ZodError } from "zod";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 import { metadataKatalog, metadataVarden, articles } from "@shared/schema";
+import { getErrorMessage } from "./routes/helpers";
 import {
   getObjectWithAllMetadata,
   getMetadataValue,
@@ -103,7 +104,7 @@ metadataRouter.post("/types", async (req: Request, res: Response) => {
     }).returning();
 
     res.status(201).json(newType);
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error creating metadata type:", error);
     if (error instanceof ZodError) {
       return res.status(400).json({ 
@@ -136,7 +137,7 @@ metadataRouter.put("/types/:id", async (req: Request, res: Response) => {
     }
 
     res.json(updated);
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error updating metadata type:", error);
     // Handle Zod validation errors
     if (error instanceof ZodError) {
@@ -304,7 +305,7 @@ metadataRouter.post("/", async (req: Request, res: Response) => {
     });
 
     res.status(201).json(newMetadata);
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error creating metadata:", error);
     // Handle Zod validation errors
     if (error instanceof ZodError) {
@@ -343,7 +344,7 @@ metadataRouter.put("/:id", async (req: Request, res: Response) => {
     const updated = await updateMetadata(id, validated.varde, tenantId, validated.uppdateradAv, validated.metod);
 
     res.json(updated);
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error updating metadata:", error);
     // Handle Zod validation errors
     if (error instanceof ZodError) {
@@ -514,7 +515,7 @@ metadataRouter.post("/work-orders/:workOrderId", async (req: Request, res: Respo
     });
 
     res.status(201).json(newMetadata);
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error creating work order metadata:", error);
     if (error instanceof ZodError) {
       return res.status(400).json({ 
@@ -541,7 +542,7 @@ metadataRouter.delete("/work-orders/metadata/:id", async (req: Request, res: Res
     const { id } = req.params;
     await deleteWorkOrderMetadata(id, tenantId);
     res.status(204).send();
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error deleting work order metadata:", error);
     if (error.message?.includes('not found')) {
       return res.status(404).json({ error: error.message });
@@ -618,7 +619,7 @@ metadataRouter.post("/work-orders/bulk-apply", async (req: Request, res: Respons
     }
 
     res.json({ applied, targets: targetWorkOrderIds.length, metadataPerOrder: sourceMetadata.length });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error bulk applying work order metadata:", error);
     res.status(500).json({ error: "Kunde inte tillämpa metadata" });
   }
@@ -641,7 +642,7 @@ metadataRouter.get("/propagate-preview/:objectId", async (req: Request, res: Res
     }
     const preview = await getPropagationPreview(objectId, metadataKatalogId, tenantId);
     res.json(preview);
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error getting propagation preview:", error);
     res.status(500).json({ error: "Kunde inte hämta förhandsvisning" });
   }
@@ -669,7 +670,7 @@ metadataRouter.post("/propagate/:objectId", async (req: Request, res: Response) 
     );
 
     res.json(result);
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error propagating metadata:", error);
     res.status(500).json({ error: "Kunde inte propagera metadata" });
   }
@@ -695,7 +696,7 @@ metadataRouter.get("/inheritance-tree/:objectId", async (req: Request, res: Resp
 
     const tree = await getInheritanceTree(objectId, metadataKatalogId, tenantId);
     res.json(tree);
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error fetching inheritance tree:", error);
     res.status(500).json({ error: "Kunde inte hämta arvsträd" });
   }
@@ -754,7 +755,7 @@ metadataRouter.get("/article-preview/:objectId/:articleId", async (req: Request,
       leave: leaveData,
       leaveFormat: article.leaveMetadataFormat || "value",
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error fetching article metadata preview:", error);
     res.status(500).json({ error: "Kunde inte hämta artikelmetadata-förhandsvisning" });
   }
@@ -797,7 +798,7 @@ metadataRouter.post("/article-writeback/:objectId/:articleId", async (req: Reque
     );
 
     res.json(result);
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error writing article metadata:", error);
     res.status(500).json({ error: "Kunde inte skriva artikelmetadata" });
   }
@@ -818,7 +819,7 @@ metadataRouter.get("/article-fetch/:objectId/:fetchCode", async (req: Request, r
     }
 
     res.json(result);
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error fetching article metadata:", error);
     res.status(500).json({ error: "Kunde inte hämta artikelmetadata" });
   }
@@ -849,7 +850,7 @@ metadataRouter.post("/article-write/:objectId", async (req: Request, res: Respon
     );
 
     res.json(result);
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error writing article metadata:", error);
     if (error.message?.includes('not found')) {
       return res.status(404).json({ error: error.message });

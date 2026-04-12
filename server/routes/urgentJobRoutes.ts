@@ -6,6 +6,7 @@ import { urgentJobAssignments } from "@shared/schema";
 import { db } from "../db";
 import { eq, and, not, inArray } from "drizzle-orm";
 import { z } from "zod";
+import { getErrorMessage } from "./helpers";
 
 const router = Router();
 
@@ -34,7 +35,7 @@ router.post("/urgent-jobs/assign", async (req: Request, res: Response) => {
       deadline: z.string().optional(),
     });
     const data = schema.parse(req.body);
-    const user = req.user as any;
+    const user = req.user;
     const assignedBy = user?.claims?.first_name
       ? `${user.claims.first_name} ${user.claims.last_name || ""}`.trim()
       : "Planerare";
@@ -126,9 +127,9 @@ router.post("/urgent-jobs/assign", async (req: Request, res: Response) => {
     }, 60000);
 
     res.json({ success: true, assignment });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[urgent-jobs] assign error:", error);
-    res.status(error instanceof z.ZodError ? 400 : 500).json({ error: error.message || "Kunde inte tilldela akut jobb" });
+    res.status(error instanceof z.ZodError ? 400 : 500).json({ error: getErrorMessage(error) });
   }
 });
 
@@ -143,7 +144,7 @@ router.get("/urgent-jobs", async (req: Request, res: Response) => {
       orderBy: (t, { desc }) => [desc(t.createdAt)],
     });
     res.json(assignments);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[urgent-jobs] list error:", error);
     res.status(500).json({ error: "Kunde inte hämta akuta jobb" });
   }
@@ -156,7 +157,7 @@ router.get("/urgent-jobs/:id", async (req: Request, res: Response) => {
     });
     if (!assignment) return res.status(404).json({ error: "Hittades inte" });
     res.json(assignment);
-  } catch (error: any) {
+  } catch (error: unknown) {
     res.status(500).json({ error: "Kunde inte hämta akut jobb" });
   }
 });
@@ -175,7 +176,7 @@ router.post("/urgent-jobs/:id/reassign", async (req: Request, res: Response) => 
       .set({ status: "reassigned", updatedAt: new Date() })
       .where(eq(urgentJobAssignments.id, req.params.id));
 
-    const user = req.user as any;
+    const user = req.user;
     const assignedBy = user?.claims?.first_name
       ? `${user.claims.first_name} ${user.claims.last_name || ""}`.trim()
       : "Planerare";
@@ -221,7 +222,7 @@ router.post("/urgent-jobs/:id/reassign", async (req: Request, res: Response) => 
     });
 
     res.json({ success: true, assignment: newAssignment });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[urgent-jobs] reassign error:", error);
     res.status(500).json({ error: "Kunde inte omtilldela" });
   }
@@ -256,7 +257,7 @@ router.post("/urgent-jobs/find-nearest", async (req: Request, res: Response) => 
       distanceKm: c.distance,
       estimatedMinutes: c.estimatedMinutes,
     })));
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[urgent-jobs] find-nearest error:", error);
     res.status(500).json({ error: "Kunde inte söka resurser" });
   }
@@ -283,7 +284,7 @@ router.post("/mobile/jobs/urgent/accept", async (req: Request, res: Response) =>
     });
 
     res.json({ success: true, status: "accepted", jobId });
-  } catch (error: any) {
+  } catch (error: unknown) {
     res.status(500).json({ error: "Kunde inte acceptera" });
   }
 });
@@ -309,7 +310,7 @@ router.post("/mobile/jobs/urgent/decline", async (req: Request, res: Response) =
     });
 
     res.json({ success: true, status: "declined", jobId });
-  } catch (error: any) {
+  } catch (error: unknown) {
     res.status(500).json({ error: "Kunde inte avböja" });
   }
 });
@@ -340,7 +341,7 @@ router.post("/mobile/jobs/urgent/:id/status", async (req: Request, res: Response
     });
 
     res.json({ success: true, jobId: req.params.id, status });
-  } catch (error: any) {
+  } catch (error: unknown) {
     res.status(500).json({ error: "Kunde inte uppdatera status" });
   }
 });
@@ -359,7 +360,7 @@ router.get("/mobile/jobs/urgent/active", async (req: Request, res: Response) => 
     });
 
     res.json({ success: true, activeJob: activeJob || null });
-  } catch (error: any) {
+  } catch (error: unknown) {
     res.status(500).json({ error: "Kunde inte hämta aktivt jobb" });
   }
 });

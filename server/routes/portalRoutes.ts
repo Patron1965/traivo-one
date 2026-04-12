@@ -730,6 +730,9 @@ app.get("/api/portal/visit-protocols", asyncHandler(async (req, res) => {
 }));
 
 app.post("/api/portal/auth/demo-login", asyncHandler(async (req, res) => {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(404).json({ error: "Demo-inloggning är inte tillgänglig i produktion" });
+    }
     const demoEmail = "demo@traivo.se";
     const tenantId = "default-tenant";
     
@@ -1472,7 +1475,7 @@ app.delete("/api/qr-code-links/:id", asyncHandler(async (req, res) => {
 
 app.get("/api/my-reports", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const userId = (req.user as any)?.claims?.sub;
+    const userId = req.user?.claims?.sub;
     if (!userId) {
       return res.status(401).json({ error: "Ej autentiserad" });
     }
@@ -1491,7 +1494,7 @@ app.get("/api/my-reports", asyncHandler(async (req, res) => {
 
 app.get("/api/my-objects", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const userId = (req.user as any)?.claims?.sub;
+    const userId = req.user?.claims?.sub;
     if (!userId) {
       return res.status(401).json({ error: "Ej autentiserad" });
     }
