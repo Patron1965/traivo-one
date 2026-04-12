@@ -48,3 +48,9 @@ id = "z54ip1M2VSRiBJO_MysLi"
 uri = "file://.local/traivo-go-impact-report.md"
 type = "text"
 title = "Traivo Go — Påverkansrapport"
+
+[[outputs]]
+id = "25vTIOFPNpo43GBgL_Ro0"
+uri = "file://TRAIVO_ON_INTEGRATION_GUIDE.md"
+type = "text"
+title = "Traivo On — Integrationsinstruktioner"
