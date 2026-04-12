@@ -1,10 +1,12 @@
 import { memo } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertTriangle, Navigation } from "lucide-react";
+import { AlertTriangle, Navigation, ShieldAlert, ShieldX } from "lucide-react";
 import { format } from "date-fns";
 import type { Resource, WorkOrderWithObject, ObjectTimeRestriction } from "@shared/schema";
 import { DAY_START_HOUR, DAY_END_HOUR, HOURS_IN_DAY, getJobCategory } from "./types";
+import type { ConstraintCell } from "./types";
+import { constraintCategoryLabels } from "./types";
 import { DroppableCell, DraggableJobCard } from "./DndComponents";
 import { JobCard } from "./JobCard";
 
@@ -22,6 +24,8 @@ interface DayTimelineViewProps {
   jobCardProps: Omit<React.ComponentProps<typeof JobCard>, 'job' | 'compact'>;
   dragOverConflicts?: Record<string, string[]>;
   clusterMatchedResourceIds?: Set<string>;
+  showConstraintLayer?: boolean;
+  constraintMap?: Map<string, ConstraintCell>;
 }
 
 export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineViewProps) {
@@ -30,6 +34,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
     getJobsForResourceAndDay, getResourceDayHours, getCapacityPercentage,
     getDropFitClass, activeDragJob, travelTimesForDay, zoom, jobCardProps,
     dragOverConflicts, clusterMatchedResourceIds,
+    showConstraintLayer, constraintMap,
   } = props;
 
   const hours = Array.from({ length: DAY_END_HOUR - DAY_START_HOUR + 1 }, (_, i) => DAY_START_HOUR + i);
@@ -56,22 +61,51 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
             const dayHours = getResourceDayHours(resource.id, day);
             const capacityPct = getCapacityPercentage(dayHours);
             return (
-              <div key={resource.id} className={`p-2 border-r last:border-r-0 flex items-center justify-center gap-1.5 min-w-0 transition-colors ${activeDragJob && clusterMatchedResourceIds?.has(resource.id) ? "bg-emerald-50 dark:bg-emerald-950/30 ring-1 ring-inset ring-emerald-400/50" : ""}`}>
-                <Avatar className="h-5 w-5 shrink-0">
-                  <AvatarFallback className="text-[10px]">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
-                </Avatar>
-                <span className="text-xs font-medium truncate">{resource.name}</span>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className={`text-[10px] whitespace-nowrap cursor-help shrink-0 ${capacityPct >= 100 ? "text-red-600 dark:text-red-400 font-semibold" : capacityPct >= 85 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
-                      {dayHours.toFixed(1)}h
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{dayHours.toFixed(1)}h av {HOURS_IN_DAY}h</p>
-                    <p>{Math.max(0, HOURS_IN_DAY - dayHours).toFixed(1)}h kvar</p>
-                  </TooltipContent>
-                </Tooltip>
+              <div key={resource.id} className={`p-2 border-r last:border-r-0 flex flex-col items-center justify-center gap-0.5 min-w-0 transition-colors ${activeDragJob && clusterMatchedResourceIds?.has(resource.id) ? "bg-emerald-50 dark:bg-emerald-950/30 ring-1 ring-inset ring-emerald-400/50" : ""}`}>
+                <div className="flex items-center gap-1.5">
+                  <Avatar className="h-5 w-5 shrink-0">
+                    <AvatarFallback className="text-[10px]">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-xs font-medium truncate">{resource.name}</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className={`text-[10px] whitespace-nowrap cursor-help shrink-0 ${capacityPct >= 100 ? "text-red-600 dark:text-red-400 font-semibold" : capacityPct >= 85 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
+                        {dayHours.toFixed(1)}h
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{dayHours.toFixed(1)}h av {HOURS_IN_DAY}h</p>
+                      <p>{Math.max(0, HOURS_IN_DAY - dayHours).toFixed(1)}h kvar</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                {showConstraintLayer && constraintMap && (() => {
+                  const dayStr = format(day, "yyyy-MM-dd");
+                  const cellConstraint = constraintMap.get(`${resource.id}|${dayStr}`);
+                  if (!cellConstraint) return null;
+                  const isBlocked = cellConstraint.status === "blocked";
+                  const Icon = isBlocked ? ShieldX : ShieldAlert;
+                  return (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className={`flex items-center gap-0.5 text-[9px] cursor-help px-1 py-0.5 rounded ${isBlocked ? "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20" : "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20"}`} data-testid={`constraint-day-${resource.id}`}>
+                          <Icon className="h-2.5 w-2.5 shrink-0" />
+                          <span>{isBlocked ? "Blockerad" : "Varning"}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <div className="text-xs space-y-1">
+                          {cellConstraint.constraints.map((c, i) => (
+                            <div key={i} className="flex items-start gap-1.5">
+                              <span className={`mt-0.5 h-1.5 w-1.5 rounded-full shrink-0 ${c.severity === "critical" ? "bg-red-500" : "bg-amber-500"}`} />
+                              <span><strong>{constraintCategoryLabels[c.category] || c.category}:</strong> {c.description}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })()}
               </div>
             );
           })}

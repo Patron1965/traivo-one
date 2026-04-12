@@ -1353,5 +1353,197 @@ app.post("/api/planning/what-if", requireTenantWithFallback, asyncHandler(async 
     });
 }));
 
+app.get("/api/planning/constraints", requireTenantWithFallback, asyncHandler(async (req: any, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const weekStart = req.query.weekStart as string;
+    if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
+      throw new ValidationError("weekStart krävs i format YYYY-MM-DD");
+    }
+    const startDate = new Date(weekStart + "T00:00:00Z");
+    if (isNaN(startDate.getTime())) throw new ValidationError("Ogiltigt datum");
+
+    const numDays = req.query.days ? Math.min(parseInt(req.query.days as string, 10) || 5, 7) : 5;
+    const dates: string[] = [];
+    for (let i = 0; i < numDays; i++) {
+      const d = new Date(startDate);
+      d.setDate(d.getDate() + i);
+      dates.push(d.toISOString().split("T")[0]);
+    }
+
+    const resources = await storage.getResources(tenantId);
+    const resourceIds = resources.map(r => r.id);
+    const resourceAvailability = await storage.getResourceAvailabilityByTenant(tenantId);
+    const vehicleSchedules = await storage.getVehicleSchedulesByTenant(tenantId);
+    const resourceVehicles = await storage.getResourceVehiclesByResourceIds(resourceIds);
+    const allOrders = await storage.getWorkOrders(tenantId);
+    const resourceArticles = await storage.getResourceArticlesByResourceIds(resourceIds);
+    const teamMembers = await storage.getAllTeamMembers(tenantId);
+    const clusters = await storage.getClusters(tenantId);
+    const tenant = await storage.getTenant(tenantId);
+    const tenantSettings = (tenant?.settings as Record<string, unknown>) || {};
+    const hardClusterBlocking = tenantSettings.hardClusterBlocking !== false;
+    const allTimeRestrictions = await storage.getObjectTimeRestrictionsByTenant?.(tenantId) || [];
+    const allWorkOrderLines = await storage.getWorkOrderLinesByTenant?.(tenantId) || [];
+    const dependencyInstances = await storage.getTaskDependencyInstances(tenantId);
+
+    const MAX_HOURS = 8;
+    const completedStatuses = new Set(["fakturerad", "utford", "avbruten"]);
+    const getDateStr = (d: unknown): string => {
+      if (d instanceof Date) return d.toISOString().split("T")[0];
+      return String(d).split("T")[0];
+    };
+
+    const cells: Array<{
+      resourceId: string;
+      date: string;
+      status: "available" | "warning" | "blocked";
+      constraints: Array<{ category: string; severity: "critical" | "warning"; description: string }>;
+    }> = [];
+
+    for (const resource of resources) {
+      if (resource.resourceType === "vehicle") continue;
+
+      const resourceCompetencyArticleIds = new Set(
+        resourceArticles.filter(ra => ra.resourceId === resource.id).map(ra => ra.articleId)
+      );
+      const hasCompetencies = resourceCompetencyArticleIds.size > 0;
+      const serviceArea = (resource.serviceArea || []).map((s: string) => s.replace(/\s/g, "").trim()).filter(Boolean);
+      const serviceAreaSet = new Set(serviceArea);
+
+      for (const dateStr of dates) {
+        const constraints: Array<{ category: string; severity: "critical" | "warning"; description: string }> = [];
+        const moveDate = new Date(dateStr + "T00:00:00Z");
+
+        const unavailable = resourceAvailability.filter(ra => {
+          if (ra.resourceId !== resource.id || ra.isAvailable) return false;
+          const raDate = new Date(ra.date);
+          raDate.setHours(0, 0, 0, 0);
+          moveDate.setHours(0, 0, 0, 0);
+          if (ra.recurrence === "once") return raDate.getTime() === moveDate.getTime();
+          if (ra.recurrence === "weekly") return raDate.getDay() === moveDate.getDay();
+          if (ra.recurrence === "daily") return true;
+          return raDate.getTime() === moveDate.getTime();
+        });
+
+        if (unavailable.length > 0) {
+          const ra = unavailable[0];
+          const reason = ra.availabilityType === "semester" ? "semester"
+            : ra.availabilityType === "sjuk" ? "sjukfrånvaro"
+            : ra.availabilityType === "utbildning" ? "utbildning"
+            : "ej tillgänglig";
+          constraints.push({ category: "resource_availability", severity: "critical", description: `${resource.name} är ${reason}` });
+        }
+
+        const resourceVehicleLinks = resourceVehicles.filter(rv => rv.resourceId === resource.id);
+        if (resourceVehicleLinks.length > 0) {
+          const vehicleIds = resourceVehicleLinks.map(rv => rv.vehicleId);
+          const vConflicts = vehicleSchedules.filter(vs => {
+            if (!vehicleIds.includes(vs.vehicleId) || vs.scheduleType === "tillganglig") return false;
+            const vsDate = new Date(vs.date);
+            vsDate.setHours(0, 0, 0, 0);
+            moveDate.setHours(0, 0, 0, 0);
+            return vsDate.getTime() === moveDate.getTime();
+          });
+          if (vConflicts.length > 0) {
+            const vs = vConflicts[0];
+            const reason = vs.scheduleType === "service" ? "service" : vs.scheduleType === "reparation" ? "reparation" : vs.scheduleType === "besiktning" ? "besiktning" : "ej tillgängligt";
+            constraints.push({ category: "vehicle_schedule", severity: "critical", description: `Fordon har ${reason}` });
+          }
+        }
+
+        const dayOrders = allOrders
+          .filter(o => o.resourceId === resource.id && o.scheduledDate && !completedStatuses.has(o.orderStatus || ""))
+          .filter(o => getDateStr(o.scheduledDate) === dateStr);
+
+        const dayHours = dayOrders.reduce((sum, o) => sum + (o.estimatedDuration || 60) / 60, 0);
+
+        if (dayHours > MAX_HOURS) {
+          constraints.push({ category: "capacity", severity: "warning", description: `${dayHours.toFixed(1)}h planerat (max ${MAX_HOURS}h)` });
+        }
+
+        for (const order of dayOrders) {
+          if (order.teamId) {
+            const isMember = (teamMembers || []).some(tm => tm.teamId === order.teamId && tm.resourceId === resource.id);
+            if (!isMember) {
+              constraints.push({ category: "team_membership", severity: "critical", description: `Ej medlem i teamet för "${order.title || order.id.slice(0, 8)}"` });
+            }
+          }
+
+          if (hasCompetencies) {
+            const orderLines = allWorkOrderLines.filter(wol => wol.workOrderId === order.id && wol.articleId);
+            const unmatchedCount = orderLines.filter(line => !resourceCompetencyArticleIds.has(line.articleId)).length;
+            if (unmatchedCount > 0) {
+              constraints.push({ category: "competency", severity: "critical", description: `Saknar kompetens för ${unmatchedCount} artikel(ar) på "${order.title || order.id.slice(0, 8)}"` });
+            }
+          }
+
+          if (order.lockedAt) {
+            constraints.push({ category: "locked_order", severity: "critical", description: `"${order.title || order.id.slice(0, 8)}" är låst` });
+          }
+
+          if (order.clusterId && serviceAreaSet.size > 0 && clusters.length > 0) {
+            const cluster = clusters.find(c => c.id === order.clusterId);
+            if (cluster) {
+              const clusterPCs = (cluster.postalCodes || []).map((pc: string) => pc.replace(/\s/g, "").trim()).filter(Boolean);
+              if (clusterPCs.length > 0 && !clusterPCs.some((pc: string) => serviceAreaSet.has(pc))) {
+                const sev = hardClusterBlocking ? "critical" : "warning";
+                constraints.push({ category: "cluster_geographic", severity: sev as "critical" | "warning", description: `Arbetar inte i kluster "${cluster.name}"` });
+              }
+            }
+          }
+
+          if (order.objectId) {
+            const objRestrictions = allTimeRestrictions.filter(tr => tr.objectId === order.objectId && tr.isActive);
+            const dayOfWeek = moveDate.getDay() === 0 ? 7 : moveDate.getDay();
+            for (const tr of objRestrictions) {
+              if (tr.validFromDate && new Date(tr.validFromDate) > moveDate) continue;
+              if (tr.validToDate && new Date(tr.validToDate) < moveDate) continue;
+              const weekdays = tr.weekdays || [];
+              if (weekdays.length > 0 && !weekdays.includes(dayOfWeek)) continue;
+              if (tr.isBlockingAllDay) {
+                const severity = tr.preference === "blocked" ? "critical" : "warning";
+                constraints.push({ category: "time_window", severity: severity as "critical" | "warning", description: `Tidsbegränsning: ${tr.description || tr.reason || "blockerat"}` });
+              }
+            }
+          }
+
+          if (order.plannedWindowEnd) {
+            const windowEnd = new Date(order.plannedWindowEnd);
+            windowEnd.setHours(0, 0, 0, 0);
+            if (moveDate > windowEnd) {
+              constraints.push({ category: "planned_window", severity: "critical", description: `"${order.title || order.id.slice(0, 8)}" passerat planfönster (${windowEnd.toISOString().split("T")[0]})` });
+            }
+          }
+        }
+
+        const resourceDepViolations = dependencyInstances.filter(dep => {
+          const parent = allOrders.find(o => o.id === dep.parentWorkOrderId);
+          const child = allOrders.find(o => o.id === dep.childWorkOrderId);
+          if (!parent?.scheduledDate || !child?.scheduledDate) return false;
+          if (parent.resourceId !== resource.id && child.resourceId !== resource.id) return false;
+          const pDate = getDateStr(parent.scheduledDate);
+          const cDate = getDateStr(child.scheduledDate);
+          if (pDate !== dateStr && cDate !== dateStr) return false;
+          if (dep.dependencyType === "before" && pDate > cDate) return true;
+          if (dep.dependencyType === "after" && pDate < cDate) return true;
+          return false;
+        });
+        if (resourceDepViolations.length > 0) {
+          constraints.push({ category: "dependency_chain", severity: "critical", description: `${resourceDepViolations.length} beroendekedja(or) bruten` });
+        }
+
+        let status: "available" | "warning" | "blocked" = "available";
+        if (constraints.some(c => c.severity === "critical")) status = "blocked";
+        else if (constraints.length > 0) status = "warning";
+
+        if (constraints.length > 0) {
+          cells.push({ resourceId: resource.id, date: dateStr, status, constraints });
+        }
+      }
+    }
+
+    res.json({ cells, weekStart, dates });
+}));
+
 
 }

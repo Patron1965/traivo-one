@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight, ChevronDown, ChevronUp, Crosshair, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight, ChevronDown, ChevronUp, Crosshair, ExternalLink, ShieldCheck } from "lucide-react";
 import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
 import type { ViewMode } from "./types";
 import { zoomLevels } from "./types";
@@ -49,6 +49,8 @@ interface PlannerToolbarProps {
   jobConflictCount: number;
   filteredScheduledCount: number;
   unscheduledCount: number;
+  showConstraintLayer?: boolean;
+  onToggleConstraintLayer?: () => void;
 }
 
 const getGoalColor = (pct: number) => {
@@ -73,6 +75,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
     weekGoals, weekTravelTotal,
     visibleDates, getResourceDayHours,
     jobConflictCount, filteredScheduledCount, unscheduledCount,
+    showConstraintLayer, onToggleConstraintLayer,
   } = props;
 
   const [showCapacity, setShowCapacity] = useState(false);
@@ -302,6 +305,16 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
 
           <Separator orientation="vertical" className="h-6 mx-0.5" />
 
+          {(viewMode === "week" || viewMode === "day") && onToggleConstraintLayer && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className={`h-7 w-7 ${showConstraintLayer ? "bg-accent text-primary" : ""}`} onClick={onToggleConstraintLayer} data-testid="button-toggle-constraints">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Visa/dölj begränsningar</TooltipContent>
+            </Tooltip>
+          )}
           {viewMode === "week" && (
             <>
               <Tooltip>

@@ -1,11 +1,12 @@
 import { memo, useMemo } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertTriangle, Plus, Navigation, Cloud, Sun, CloudRain, Snowflake } from "lucide-react";
+import { AlertTriangle, Plus, Navigation, Cloud, Sun, CloudRain, Snowflake, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react";
 import { format, isSameDay } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject, ObjectTimeRestriction } from "@shared/schema";
 import { HOURS_IN_DAY, getJobCategory, haversineDistance } from "./types";
-import type { WeatherImpactDay, WeatherForecastData } from "./types";
+import type { WeatherImpactDay, WeatherForecastData, ConstraintCell } from "./types";
+import { constraintCategoryLabels } from "./types";
 import { DroppableCell, DraggableJobCard } from "./DndComponents";
 import { JobCard } from "./JobCard";
 import { ResourceColumn } from "./ResourceColumn";
@@ -29,6 +30,8 @@ interface WeekGridViewProps {
   jobCardProps: Omit<React.ComponentProps<typeof JobCard>, 'job' | 'compact'>;
   dragOverConflicts?: Record<string, string[]>;
   clusterMatchedResourceIds?: Set<string>;
+  showConstraintLayer?: boolean;
+  constraintMap?: Map<string, ConstraintCell>;
 }
 
 function getWeatherIcon(code: number) {
@@ -51,6 +54,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
     getCapacityPercentage, getCapacityColor, getCapacityBgColor, getDropFitClass,
     activeDragJob, restrictionsByObject, resourceWeekSummary, zoom, weatherByDate,
     onResourceClick, onSendSchedule, jobCardProps, dragOverConflicts, clusterMatchedResourceIds,
+    showConstraintLayer, constraintMap,
   } = props;
 
   const zoomPadClass = zoom.scale <= 0.5 ? "p-0.5" : zoom.scale >= 2 ? "p-4" : "p-2";
@@ -188,6 +192,45 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                           </TooltipContent>
                         </Tooltip>
                       )}
+                      {showConstraintLayer && constraintMap && (() => {
+                        const cellConstraint = constraintMap.get(`${resource.id}|${dayStr}`);
+                        if (!cellConstraint) return null;
+                        const isBlocked = cellConstraint.status === "blocked";
+                        const Icon = isBlocked ? ShieldX : ShieldAlert;
+                        const colorCls = isBlocked
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-amber-600 dark:text-amber-400";
+                        const bgCls = isBlocked
+                          ? "bg-red-50 dark:bg-red-950/20"
+                          : "bg-amber-50 dark:bg-amber-950/20";
+                        return (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className={`flex items-center gap-1 text-[10px] ${colorCls} mb-1 cursor-help px-1 py-0.5 rounded ${bgCls}`} data-testid={`constraint-${resource.id}-${dayStr}`}>
+                                <Icon className="h-3 w-3 shrink-0" />
+                                <span>{isBlocked ? "Blockerad" : "Varning"}</span>
+                                <span className="text-muted-foreground">({cellConstraint.constraints.length})</span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="max-w-xs">
+                              <div className="text-xs space-y-1.5">
+                                <p className={`font-semibold ${isBlocked ? "text-red-500" : "text-amber-500"}`}>
+                                  {isBlocked ? "Hårda begränsningar" : "Mjuka begränsningar"}
+                                </p>
+                                {cellConstraint.constraints.map((c, i) => (
+                                  <div key={i} className="flex items-start gap-1.5">
+                                    <span className={`mt-0.5 h-1.5 w-1.5 rounded-full shrink-0 ${c.severity === "critical" ? "bg-red-500" : "bg-amber-500"}`} />
+                                    <div>
+                                      <span className="font-medium">{constraintCategoryLabels[c.category] || c.category}: </span>
+                                      <span>{c.description}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })()}
                       <div className={zoomGapClass}>
                         {jobs.length === 0 && (
                           <div className="flex items-center justify-center py-4 text-muted-foreground/40">

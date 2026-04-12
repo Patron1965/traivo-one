@@ -173,6 +173,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             jobConflictCount={Object.keys(d.jobConflicts).length}
             filteredScheduledCount={d.filteredScheduledJobs.length}
             unscheduledCount={d.unscheduledJobs.length}
+            showConstraintLayer={d.showConstraintLayer}
+            onToggleConstraintLayer={() => d.setShowConstraintLayer(!d.showConstraintLayer)}
           />
 
           <DisruptionPanel />
@@ -197,6 +199,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
               jobCardProps={jobCardProps}
               dragOverConflicts={dnd.dragOverConflicts}
               clusterMatchedResourceIds={d.clusterMatchedResourceIds}
+              showConstraintLayer={d.showConstraintLayer}
+              constraintMap={d.constraintMap}
             />
           )}
           {d.viewMode === "week" && (
@@ -212,6 +216,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
               jobCardProps={jobCardProps}
               dragOverConflicts={dnd.dragOverConflicts}
               clusterMatchedResourceIds={d.clusterMatchedResourceIds}
+              showConstraintLayer={d.showConstraintLayer}
+              constraintMap={d.constraintMap}
             />
           )}
           {d.viewMode === "month" && (

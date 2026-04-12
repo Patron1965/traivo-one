@@ -146,6 +146,32 @@ export const zoomLevels = [
   { label: "XL", dayH: 140, weekH: 320, monthH: 240, scale: 2 },
 ];
 
+export interface ConstraintCell {
+  resourceId: string;
+  date: string;
+  status: "available" | "warning" | "blocked";
+  constraints: Array<{ category: string; severity: "critical" | "warning"; description: string }>;
+}
+
+export interface ConstraintData {
+  cells: ConstraintCell[];
+  weekStart: string;
+  dates: string[];
+}
+
+export const constraintCategoryLabels: Record<string, string> = {
+  resource_availability: "Tillgänglighet",
+  vehicle_schedule: "Fordon",
+  capacity: "Kapacitet",
+  competency: "Kompetens",
+  team_membership: "Team",
+  time_window: "Tidsfönster",
+  cluster_geographic: "Kluster",
+  locked_order: "Låst order",
+  dependency_chain: "Beroende",
+  planned_window: "Planfönster",
+};
+
 export function getJobCategory(job: WorkOrderWithObject): TimeBlockCategory {
   const title = (job.title || "").toLowerCase();
   if (title.includes("restid") || title.includes("körning") || title.includes("transport")) return "travel";

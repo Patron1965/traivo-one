@@ -6,7 +6,7 @@ import type { Resource, WorkOrderWithObject, Customer, TaskDependency, Cluster, 
 import { RESTRICTION_TYPE_LABELS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { ViewMode, PlannerAction, WeatherForecastData, WeatherImpactDay } from "./types";
+import type { ViewMode, PlannerAction, WeatherForecastData, WeatherImpactDay, ConstraintData, ConstraintCell } from "./types";
 import { HOURS_IN_DAY, DAY_START_HOUR, DAY_END_HOUR } from "./types";
 import type { WhatIfResult } from "./WhatIfPreview";
 
@@ -596,6 +596,28 @@ export function usePlannerData() {
     setSelectedJobIds(ids);
   }, [filteredScheduledJobs]);
 
+  const [showConstraintLayer, setShowConstraintLayer] = useState(false);
+  const constraintWeekStart = useMemo(() => format(currentWeekStart, "yyyy-MM-dd"), [currentWeekStart]);
+  const { data: constraintData } = useQuery<ConstraintData>({
+    queryKey: ["/api/planning/constraints", constraintWeekStart],
+    queryFn: async () => {
+      const res = await fetch(`/api/planning/constraints?weekStart=${constraintWeekStart}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch constraints");
+      return res.json();
+    },
+    enabled: showConstraintLayer,
+    staleTime: 120000,
+  });
+
+  const constraintMap = useMemo(() => {
+    const map = new Map<string, ConstraintCell>();
+    if (!constraintData?.cells) return map;
+    for (const cell of constraintData.cells) {
+      map.set(`${cell.resourceId}|${cell.date}`, cell);
+    }
+    return map;
+  }, [constraintData]);
+
   return {
     viewMode, currentDate, currentWeekStart, selectedJob, showUnscheduled, setShowUnscheduled,
     filterCustomer, setFilterCustomer, filterPriority, setFilterPriority,
@@ -639,6 +661,7 @@ export function usePlannerData() {
     selectedJobIds, toggleJobSelection, clearSelection, selectAllVisible,
     whatIfOpen, setWhatIfOpen, whatIfLoading, whatIfResult, whatIfPending, setWhatIfPending,
     fetchWhatIf, handleWhatIfConfirm, handleWhatIfCancel,
+    showConstraintLayer, setShowConstraintLayer, constraintMap,
     toast,
   };
 }
