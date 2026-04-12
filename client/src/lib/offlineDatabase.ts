@@ -1,6 +1,6 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 
-interface OutboxItem {
+export interface OutboxItem {
   id: string;
   type: 'status_update' | 'photo_upload' | 'deviation' | 'material_log' | 'signature' | 'note';
   endpoint: string;
@@ -9,6 +9,8 @@ interface OutboxItem {
   createdAt: string;
   retryCount: number;
   workOrderId?: string;
+  lastError?: string;
+  lastAttemptAt?: string;
 }
 
 interface CachedWorkOrder {
@@ -311,11 +313,16 @@ export async function removeFromOutbox(id: string): Promise<void> {
   await db.delete('outbox', id);
 }
 
-export async function incrementRetryCount(id: string): Promise<void> {
+export async function incrementRetryCount(id: string, errorMessage?: string): Promise<void> {
   const db = await getOfflineDB();
   const item = await db.get('outbox', id);
   if (item) {
-    await db.put('outbox', { ...item, retryCount: item.retryCount + 1 });
+    await db.put('outbox', { 
+      ...item, 
+      retryCount: item.retryCount + 1,
+      lastError: errorMessage || item.lastError,
+      lastAttemptAt: new Date().toISOString(),
+    });
   }
 }
 

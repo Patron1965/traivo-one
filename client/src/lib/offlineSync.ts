@@ -94,9 +94,10 @@ export async function processOutbox(): Promise<SyncResult> {
           }
         }
       } catch (error) {
-        await incrementRetryCount(item.id);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        await incrementRetryCount(item.id, errorMsg);
         result.failed++;
-        result.errors.push(`Failed to sync ${item.type}: ${error}`);
+        result.errors.push(`Failed to sync ${item.type}: ${errorMsg}`);
         
         const delay = calculateBackoffDelay(item.retryCount + 1);
         console.log(`Will retry ${item.id} after ${delay}ms backoff`);

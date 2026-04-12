@@ -40,6 +40,7 @@ import { DayReport } from "@/components/DayReport";
 import { FieldTodoList, getUncompletedTodoCount } from "@/components/FieldTodoList";
 import { VoiceInput } from "@/components/VoiceInput";
 import { FocusTimeline, FocusCTA, ExpandableDetail, OrderStatusBadge, getTimelineStep, useFocusMode } from "@/components/FocusMode";
+import { OutboxCenter } from "@/components/OutboxCenter";
 import {
   Dialog,
   DialogContent,
@@ -48,7 +49,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-type View = "jobs" | "job" | "report" | "todo";
+type View = "jobs" | "job" | "report" | "todo" | "outbox";
 
 interface MyReportItem {
   id: string;
@@ -1129,6 +1130,12 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   if (view === "todo") {
     return (
       <FieldTodoList onBack={() => setView("jobs")} />
+    );
+  }
+
+  if (view === "outbox") {
+    return (
+      <OutboxCenter onBack={() => setView("jobs")} />
     );
   }
 
@@ -2763,6 +2770,20 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               </span>
             ) : null;
           })()}
+        </Button>
+        <Button
+          variant="outline"
+          className="h-12 gap-2 px-4 relative"
+          onClick={() => setView("outbox")}
+          data-testid="button-open-outbox"
+        >
+          <Database className="h-5 w-5 text-blue-500" />
+          Synk
+          {pendingChanges > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 bg-blue-500 text-white text-[10px] font-bold rounded-full h-5 min-w-5 flex items-center justify-center px-1" data-testid="badge-outbox-count">
+              {pendingChanges}
+            </span>
+          )}
         </Button>
         <Button
           variant="outline"
