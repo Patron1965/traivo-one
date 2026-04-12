@@ -69,7 +69,7 @@ export async function registerRoutes(
   app.use((req: ExpressRequest, _res: ExpressResponse, next) => {
     if (req.url.startsWith(`/api/${API_VERSION}/`) || req.url === `/api/${API_VERSION}`) {
       req.url = "/api" + req.url.slice(`/api/${API_VERSION}`.length);
-      (req as any).__apiVersioned = true;
+      req.__apiVersioned = true;
     }
     next();
   });
@@ -77,7 +77,7 @@ export async function registerRoutes(
   const DEPRECATION_SKIP_PREFIXES = ["/auth", "/version"];
 
   app.use("/api", (req: ExpressRequest, res: ExpressResponse, next) => {
-    if ((req as any).__apiVersioned) {
+    if (req.__apiVersioned) {
       return next();
     }
     if (req.path === "/" || req.path === "") {

@@ -7,6 +7,7 @@ declare global {
     interface Request {
       mobileResourceId?: string;
       mobileTenantId?: string;
+      __apiVersioned?: boolean;
     }
   }
 }
