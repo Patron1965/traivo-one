@@ -1,11 +1,11 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
-import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources } from "@shared/schema";
+import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects } from "@shared/schema";
 import { handleWorkOrderStatusChange } from "../ai-communication";
 import { notificationService } from "../notifications";
 import { asyncHandler } from "../asyncHandler";
@@ -860,6 +860,133 @@ app.delete("/api/procurements/:id", asyncHandler(async (req, res) => {
   }
   await storage.deleteProcurement(req.params.id);
   res.status(204).send();
+}));
+
+app.get("/api/chain-trace/:workOrderId", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const { workOrderId } = req.params;
+
+  const wo = await storage.getWorkOrder(workOrderId);
+  if (!wo || !verifyTenantOwnership(wo, tenantId)) {
+    throw new NotFoundError("Arbetsorder hittades inte");
+  }
+
+  const [customerRaw, objectRaw, resourceRaw] = await Promise.all([
+    wo.customerId ? storage.getCustomer(wo.customerId) : Promise.resolve(undefined),
+    wo.objectId ? storage.getObject(wo.objectId) : Promise.resolve(undefined),
+    wo.resourceId ? storage.getResource(wo.resourceId) : Promise.resolve(undefined),
+  ]);
+  const customer = customerRaw && verifyTenantOwnership(customerRaw, tenantId) ? customerRaw : undefined;
+  const object = objectRaw && verifyTenantOwnership(objectRaw, tenantId) ? objectRaw : undefined;
+  const resource = resourceRaw && verifyTenantOwnership(resourceRaw, tenantId) ? resourceRaw : undefined;
+
+  const [lines, invoiceExports, protocolRows] = await Promise.all([
+    db.select({
+      id: workOrderLines.id,
+      articleId: workOrderLines.articleId,
+      quantity: workOrderLines.quantity,
+      resolvedPrice: workOrderLines.resolvedPrice,
+      priceSource: workOrderLines.priceSource,
+      articleName: articles.name,
+      articleNumber: articles.articleNumber,
+    })
+      .from(workOrderLines)
+      .leftJoin(articles, and(eq(workOrderLines.articleId, articles.id), eq(articles.tenantId, tenantId)))
+      .where(and(eq(workOrderLines.workOrderId, workOrderId), eq(workOrderLines.tenantId, tenantId))),
+    db.select()
+      .from(fortnoxInvoiceExports)
+      .where(and(eq(fortnoxInvoiceExports.workOrderId, workOrderId), eq(fortnoxInvoiceExports.tenantId, tenantId)))
+      .orderBy(desc(fortnoxInvoiceExports.createdAt)),
+    db.select()
+      .from(protocols)
+      .where(and(eq(protocols.workOrderId, workOrderId), eq(protocols.tenantId, tenantId)))
+      .orderBy(desc(protocols.executedAt)),
+  ]);
+
+  let concept: any = null;
+  if (wo.customerId) {
+    const conceptRows = await db.select()
+      .from(orderConcepts)
+      .where(and(
+        eq(orderConcepts.tenantId, tenantId),
+        eq(orderConcepts.customerId, wo.customerId),
+      ))
+      .orderBy(desc(orderConcepts.createdAt));
+    if (conceptRows.length > 0) {
+      const lineArticleIds = lines.map(l => l.articleId);
+      const matchedConcept = conceptRows.find(c => c.articleId && lineArticleIds.includes(c.articleId));
+      concept = matchedConcept || null;
+    }
+  }
+
+  const trace = {
+    avtal: concept ? {
+      id: concept.id,
+      name: concept.name,
+      scenario: concept.scenario,
+      status: concept.status,
+      customerId: concept.customerId,
+      customerName: customer?.name || null,
+      articleId: concept.articleId,
+    } : customer ? {
+      id: null,
+      name: null,
+      scenario: null,
+      status: null,
+      customerId: customer.id,
+      customerName: customer.name,
+      articleId: null,
+    } : null,
+    artiklar: lines.map(l => ({
+      id: l.id,
+      articleId: l.articleId,
+      articleNumber: l.articleNumber,
+      name: l.articleName,
+      quantity: l.quantity,
+      resolvedPrice: l.resolvedPrice,
+      priceSource: l.priceSource,
+    })),
+    uppgift: {
+      id: wo.id,
+      title: wo.title,
+      status: wo.status,
+      orderStatus: wo.orderStatus,
+      scheduledDate: wo.scheduledDate,
+      completedAt: wo.completedAt,
+      objectId: wo.objectId,
+      objectName: object?.name || null,
+      objectAddress: object?.address || null,
+    },
+    resurs: resource ? {
+      id: resource.id,
+      name: resource.name,
+      resourceType: resource.resourceType,
+      phone: resource.phone,
+    } : null,
+    utfall: {
+      completedAt: wo.completedAt,
+      actualDuration: wo.actualDuration,
+      protocols: protocolRows.map(p => ({
+        id: p.id,
+        protocolType: p.protocolType,
+        protocolNumber: p.protocolNumber,
+        executedAt: p.executedAt,
+        executedByName: p.executedByName,
+        assessmentRating: p.assessmentRating,
+        status: p.status,
+      })),
+    },
+    faktura: invoiceExports.map(inv => ({
+      id: inv.id,
+      fortnoxInvoiceNumber: inv.fortnoxInvoiceNumber,
+      status: inv.status,
+      totalAmount: inv.totalAmount,
+      exportedAt: inv.exportedAt,
+      isCreditInvoice: inv.isCreditInvoice,
+    })),
+  };
+
+  res.json(trace);
 }));
 
 }

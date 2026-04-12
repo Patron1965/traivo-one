@@ -33,13 +33,14 @@ import {
   Loader2, FileText, Receipt, Send, CheckCircle2, XCircle, Clock,
   ChevronDown, ChevronRight, Search, Eye,
   Building2, DollarSign, AlertTriangle,
-  RefreshCw, BarChart3, Plus, Trash2, CreditCard, Undo2
+  RefreshCw, BarChart3, Plus, Trash2, CreditCard, Undo2, Link2
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { format, subDays, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Customer, Article } from "@shared/schema";
 import { EmptyState } from "@/components/EmptyState";
+import { ChainTracePanel } from "@/components/ChainTracePanel";
 
 interface InvoiceLine {
   workOrderId: string;
@@ -166,6 +167,7 @@ export default function InvoicingPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [manualLineDialogOpen, setManualLineDialogOpen] = useState(false);
   const [creditDialogExport, setCreditDialogExport] = useState<FortnoxExport | null>(null);
+  const [chainTraceWorkOrderId, setChainTraceWorkOrderId] = useState<string | null>(null);
   const [manualLineForm, setManualLineForm] = useState({
     customerId: "",
     articleId: "",
@@ -628,6 +630,7 @@ export default function InvoicingPage() {
                                     <TableHead className="text-right hidden md:table-cell">À-pris</TableHead>
                                     <TableHead className="text-right">Belopp</TableHead>
                                     <TableHead className="hidden lg:table-cell">Datum</TableHead>
+                                    <TableHead className="w-10 hidden lg:table-cell"></TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -651,22 +654,39 @@ export default function InvoicingPage() {
                                       <TableCell className="text-sm text-muted-foreground hidden lg:table-cell">
                                         {line.completedAt ? format(new Date(line.completedAt), "d MMM", { locale: sv }) : "-"}
                                       </TableCell>
+                                      <TableCell className="hidden lg:table-cell">
+                                        {!line.workOrderId.startsWith("manual:") && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 w-7 p-0"
+                                            title="Spåra kedja"
+                                            onClick={() => setChainTraceWorkOrderId(line.workOrderId)}
+                                            data-testid={`button-chain-trace-${idx}`}
+                                          >
+                                            <Link2 className="w-4 h-4 text-[#4A9B9B]" />
+                                          </Button>
+                                        )}
+                                      </TableCell>
                                     </TableRow>
                                   ))}
                                   <TableRow className="border-t-2">
                                     <TableCell colSpan={4} className="text-right font-medium">Summa ex. moms:</TableCell>
                                     <TableCell className="text-right font-bold">{formatCurrency(invoice.summary.totalExVat)}</TableCell>
-                                    <TableCell />
+                                    <TableCell className="hidden lg:table-cell" />
+                                    <TableCell className="hidden lg:table-cell" />
                                   </TableRow>
                                   <TableRow>
                                     <TableCell colSpan={4} className="text-right text-muted-foreground">Moms 25%:</TableCell>
                                     <TableCell className="text-right text-muted-foreground">{formatCurrency(invoice.summary.vat)}</TableCell>
-                                    <TableCell />
+                                    <TableCell className="hidden lg:table-cell" />
+                                    <TableCell className="hidden lg:table-cell" />
                                   </TableRow>
                                   <TableRow>
                                     <TableCell colSpan={4} className="text-right font-bold">Att betala:</TableCell>
                                     <TableCell className="text-right font-bold text-lg">{formatCurrency(invoice.summary.totalInclVat)}</TableCell>
-                                    <TableCell />
+                                    <TableCell className="hidden lg:table-cell" />
+                                    <TableCell className="hidden lg:table-cell" />
                                   </TableRow>
                                 </TableBody>
                               </Table>
@@ -1316,6 +1336,12 @@ export default function InvoicingPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ChainTracePanel
+        workOrderId={chainTraceWorkOrderId}
+        open={!!chainTraceWorkOrderId}
+        onClose={() => setChainTraceWorkOrderId(null)}
+      />
     </div>
   );
 }
