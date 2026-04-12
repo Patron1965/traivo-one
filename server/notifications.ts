@@ -4,6 +4,14 @@ import type { WorkOrder, InsertResourcePosition } from "@shared/schema";
 import { storage } from "./storage";
 import { sendNotification, NotificationType as UnifiedNotificationType } from "./unified-notifications";
 import crypto from "crypto";
+import {
+  validateServerEvent,
+  validateClientEvent,
+  type WsEventType,
+  type ServerEvent,
+  type ClientEvent,
+  type PositionUpdateEvent,
+} from "@shared/ws-events";
 
 interface WorkOrderWithDetails extends WorkOrder {
   objectName?: string;
@@ -21,17 +29,7 @@ export interface PositionUpdate {
   workOrderId?: string;
 }
 
-export type NotificationType = 
-  | "job_assigned" 
-  | "job_updated" 
-  | "job_cancelled"
-  | "anomaly_alert" 
-  | "schedule_changed"
-  | "priority_changed"
-  | "position_update"
-  | "route_update"
-  | "notification"
-  | "order:updated";
+export type NotificationType = WsEventType;
 
 export interface Notification {
   id: string;
@@ -145,20 +143,26 @@ class NotificationService {
 
       ws.on("message", async (data) => {
         try {
-          const message = JSON.parse(data.toString());
-          if (message.type === "ping") {
+          const raw = JSON.parse(data.toString());
+          const parsed = validateClientEvent(raw);
+          if (!parsed) {
+            if (raw?.type === "ping") {
+              ws.send(JSON.stringify({ type: "pong", timestamp: new Date().toISOString() }));
+            }
+            return;
+          }
+          if (parsed.type === "ping") {
             ws.send(JSON.stringify({ type: "pong", timestamp: new Date().toISOString() }));
-          } else if (message.type === "position_update") {
-            // Handle position update from mobile app
+          } else if (parsed.type === "position_update") {
             const positionData: PositionUpdate = {
               resourceId,
-              latitude: message.latitude,
-              longitude: message.longitude,
-              speed: message.speed,
-              heading: message.heading,
-              accuracy: message.accuracy,
-              status: message.status || "traveling",
-              workOrderId: message.workOrderId
+              latitude: parsed.latitude,
+              longitude: parsed.longitude,
+              speed: parsed.speed,
+              heading: parsed.heading,
+              accuracy: parsed.accuracy,
+              status: parsed.status || "traveling",
+              workOrderId: parsed.workOrderId
             };
             await this.handlePositionUpdate(positionData);
           }
@@ -205,6 +209,11 @@ class NotificationService {
       resourceId
     };
 
+    const validated = validateServerEvent(fullNotification);
+    if (!validated) {
+      console.warn(`[ws] Event validation failed for type="${notification.type}", sending anyway for backward compatibility`);
+    }
+
     try {
       const resource = await storage.getResource(resourceId);
       if (resource) {
@@ -245,6 +254,11 @@ class NotificationService {
       id: this.generateId(),
       timestamp: new Date().toISOString()
     };
+
+    const validated = validateServerEvent(fullNotification);
+    if (!validated) {
+      console.warn(`[ws] Broadcast validation failed for type="${notification.type}", sending anyway for backward compatibility`);
+    }
 
     const message = JSON.stringify(fullNotification);
     
@@ -466,6 +480,11 @@ class NotificationService {
       id: this.generateId(),
       timestamp: new Date().toISOString()
     };
+
+    const validated = validateServerEvent(fullNotification);
+    if (!validated) {
+      console.warn(`[ws] System alert validation failed for type="${notification.type}", sending anyway for backward compatibility`);
+    }
 
     const message = JSON.stringify(fullNotification);
     let sentCount = 0;

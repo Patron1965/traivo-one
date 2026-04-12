@@ -1,14 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { apiRequest } from "@/lib/queryClient";
+import type { ServerEvent, WsEventType } from "@shared/ws-events";
+import { validateServerEvent, WS_EVENT_TYPES } from "@shared/ws-events";
 
 export interface Notification {
   id: string;
-  type: "job_assigned" | "job_updated" | "job_cancelled" | "schedule_changed" | "priority_changed";
+  type: WsEventType;
   title: string;
   message: string;
   workOrderId?: string;
   timestamp: Date;
   read: boolean;
+  data?: Record<string, unknown>;
 }
 
 interface UseNotificationsOptions {
@@ -26,6 +29,19 @@ interface UseNotificationsResult {
   markAsRead: (notificationId: string) => void;
   clearAll: () => void;
 }
+
+const NOTIFICATION_TYPES_WITH_UI: ReadonlySet<string> = new Set([
+  "job_assigned",
+  "job_updated",
+  "job_cancelled",
+  "schedule_changed",
+  "priority_changed",
+  "order:updated",
+  "anomaly_alert",
+  "route_update",
+  "route_optimized",
+  "notification",
+]);
 
 export function useNotifications({
   resourceId,
@@ -72,23 +88,33 @@ export function useNotifications({
 
       ws.onmessage = (event) => {
         try {
-          const data = JSON.parse(event.data);
-          if (data.type === "notification") {
+          const raw = JSON.parse(event.data);
+          const validated = validateServerEvent(raw);
+          const eventData = validated || raw;
+          const eventType: string = eventData.type;
+
+          if (eventType === "connected" || eventType === "pong" || eventType === "position_update") {
+            return;
+          }
+
+          if (NOTIFICATION_TYPES_WITH_UI.has(eventType)) {
             const notification: Notification = {
-              id: crypto.randomUUID(),
-              type: data.notificationType,
-              title: data.title,
-              message: data.message,
-              workOrderId: data.workOrderId,
+              id: eventData.id || crypto.randomUUID(),
+              type: eventType as WsEventType,
+              title: eventData.title || "",
+              message: eventData.message || "",
+              workOrderId: eventData.orderId,
               timestamp: new Date(),
               read: false,
+              data: eventData.data as Record<string, unknown> | undefined,
             };
             setNotifications((prev) => [notification, ...prev].slice(0, 50));
             onNotification?.(notification);
 
-            if (data.notificationType === "optimization_complete" || data.notificationType === "route_optimized") {
+            if (eventType === "route_optimized") {
+              const jobId = (eventData.data as Record<string, unknown>)?.jobId;
               window.dispatchEvent(new CustomEvent("traivo:optimization_complete", {
-                detail: { jobId: data.data?.jobId },
+                detail: { jobId },
               }));
             }
           }

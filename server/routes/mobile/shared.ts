@@ -15,6 +15,7 @@ import { triggerETANotification } from "../../eta-notification-service";
 import OpenAI from "openai";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "../../metadata-queries";
 import { handleWorkOrderStatusChange } from "../../ai-communication";
+import { validatePlannerEvent, type PlannerEvent } from "@shared/ws-events";
 
 export interface MobileAuthenticatedRequest extends Request {
   mobileResourceId: string;
@@ -22,6 +23,11 @@ export interface MobileAuthenticatedRequest extends Request {
 }
 
 export function broadcastPlannerEvent(event: { type: string; data: Record<string, unknown> }) {
+  const validated = validatePlannerEvent(event);
+  if (!validated) {
+    console.warn(`[sse] Planner event validation failed for type="${event.type}", sending anyway for backward compatibility`);
+  }
+
   const clients: Map<string, Response> = (global as Record<string, unknown>).__plannerEventClients as Map<string, Response> || new Map();
   const msg = `data: ${JSON.stringify(event)}\n\n`;
   const eventTenantId = event.data?.tenantId;
