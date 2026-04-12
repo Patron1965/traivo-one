@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertTriangle, Navigation, ShieldAlert, ShieldX } from "lucide-react";
+import { AlertTriangle, Navigation, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react";
 import { format } from "date-fns";
 import type { Resource, WorkOrderWithObject, ObjectTimeRestriction } from "@shared/schema";
 import { DAY_START_HOUR, DAY_END_HOUR, HOURS_IN_DAY, getJobCategory } from "./types";
@@ -79,33 +79,6 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                {showConstraintLayer && constraintMap && (() => {
-                  const dayStr = format(day, "yyyy-MM-dd");
-                  const cellConstraint = constraintMap.get(`${resource.id}|${dayStr}`);
-                  if (!cellConstraint) return null;
-                  const isBlocked = cellConstraint.status === "blocked";
-                  const Icon = isBlocked ? ShieldX : ShieldAlert;
-                  return (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className={`flex items-center gap-0.5 text-[9px] cursor-help px-1 py-0.5 rounded ${isBlocked ? "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20" : "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20"}`} data-testid={`constraint-day-${resource.id}`}>
-                          <Icon className="h-2.5 w-2.5 shrink-0" />
-                          <span>{isBlocked ? "Blockerad" : "Varning"}</span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <div className="text-xs space-y-1">
-                          {cellConstraint.constraints.map((c, i) => (
-                            <div key={i} className="flex items-start gap-1.5">
-                              <span className={`mt-0.5 h-1.5 w-1.5 rounded-full shrink-0 ${c.severity === "critical" ? "bg-red-500" : "bg-amber-500"}`} />
-                              <span><strong>{constraintCategoryLabels[c.category] || c.category}:</strong> {c.description}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                })()}
               </div>
             );
           })}
@@ -133,7 +106,10 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
               const cellHasProduction = jobs.some(j => getJobCategory(j) === "production");
               const cellHasTravel = jobs.some(j => getJobCategory(j) === "travel");
               const cellHasBreak = jobs.some(j => getJobCategory(j) === "break");
-              const cellBg = cellHasProduction ? "bg-green-50/50 dark:bg-green-950/10" : cellHasTravel ? "bg-yellow-50/50 dark:bg-yellow-950/10" : cellHasBreak ? "bg-blue-50/50 dark:bg-blue-950/10" : "bg-muted/20";
+              const constraintCellKey = `${resource.id}|${dayStr}`;
+              const slotConstraint = showConstraintLayer && constraintMap ? constraintMap.get(constraintCellKey) : undefined;
+              const constraintBg = slotConstraint?.status === "blocked" ? "bg-red-50/30 dark:bg-red-950/10" : slotConstraint?.status === "warning" ? "bg-amber-50/30 dark:bg-amber-950/10" : "";
+              const cellBg = constraintBg || (cellHasProduction ? "bg-green-50/50 dark:bg-green-950/10" : cellHasTravel ? "bg-yellow-50/50 dark:bg-yellow-950/10" : cellHasBreak ? "bg-blue-50/50 dark:bg-blue-950/10" : "bg-muted/20");
 
               const dayCellDropFit = activeDragJob ? getDropFitClass(resource.id, format(day, "yyyy-MM-dd"), activeDragJob.estimatedDuration || 60) : null;
 
@@ -147,6 +123,39 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
                   dragOverConflicts={dragOverConflicts?.[droppableId]}
                 >
                   <div className={zoomGapClass} data-testid={`drop-zone-${resource.id}-${hour}`}>
+                    {showConstraintLayer && constraintMap && hour === DAY_START_HOUR && (() => {
+                      const cellConstraint = constraintMap.get(`${resource.id}|${dayStr}`);
+                      if (!cellConstraint) {
+                        return (
+                          <div className="flex items-center gap-1 text-[9px] text-green-600 dark:text-green-400 px-1 py-0.5 rounded bg-green-50 dark:bg-green-950/20 mb-1" data-testid={`constraint-ok-day-${resource.id}`}>
+                            <ShieldCheck className="h-2.5 w-2.5 shrink-0" />
+                            <span>Tillgänglig</span>
+                          </div>
+                        );
+                      }
+                      const isBlocked = cellConstraint.status === "blocked";
+                      const Icon = isBlocked ? ShieldX : ShieldAlert;
+                      return (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className={`flex items-center gap-1 text-[9px] cursor-help px-1 py-0.5 rounded mb-1 ${isBlocked ? "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20" : "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20"}`} data-testid={`constraint-day-${resource.id}`}>
+                              <Icon className="h-2.5 w-2.5 shrink-0" />
+                              <span>{isBlocked ? "Blockerad" : "Varning"} ({cellConstraint.constraints.length})</span>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <div className="text-xs space-y-1">
+                              {cellConstraint.constraints.map((c, i) => (
+                                <div key={i} className="flex items-start gap-1.5">
+                                  <span className={`mt-0.5 h-1.5 w-1.5 rounded-full shrink-0 ${c.severity === "critical" ? "bg-red-500" : "bg-amber-500"}`} />
+                                  <span><strong>{constraintCategoryLabels[c.category] || c.category}:</strong> {c.description}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })()}
                     {jobs.map((job) => {
                       const travelAfter = resourceTravels.find(t => t.fromJobId === job.id);
                       return (

@@ -1469,11 +1469,15 @@ app.get("/api/planning/constraints", requireTenantWithFallback, asyncHandler(asy
             }
           }
 
-          if (hasCompetencies) {
-            const orderLines = allWorkOrderLines.filter(wol => wol.workOrderId === order.id && wol.articleId);
-            const unmatchedCount = orderLines.filter(line => !resourceCompetencyArticleIds.has(line.articleId)).length;
-            if (unmatchedCount > 0) {
-              constraints.push({ category: "competency", severity: "critical", description: `Saknar kompetens för ${unmatchedCount} artikel(ar) på "${order.title || order.id.slice(0, 8)}"` });
+          const orderLines = allWorkOrderLines.filter(wol => wol.workOrderId === order.id && wol.articleId);
+          if (orderLines.length > 0) {
+            if (!hasCompetencies) {
+              constraints.push({ category: "competency", severity: "critical", description: `Saknar registrerad kompetens, men "${order.title || order.id.slice(0, 8)}" kräver ${orderLines.length} artikel(ar)` });
+            } else {
+              const unmatchedCount = orderLines.filter(line => !resourceCompetencyArticleIds.has(line.articleId)).length;
+              if (unmatchedCount > 0) {
+                constraints.push({ category: "competency", severity: "critical", description: `Saknar kompetens för ${unmatchedCount} artikel(ar) på "${order.title || order.id.slice(0, 8)}"` });
+              }
             }
           }
 

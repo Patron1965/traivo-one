@@ -194,7 +194,14 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                       )}
                       {showConstraintLayer && constraintMap && (() => {
                         const cellConstraint = constraintMap.get(`${resource.id}|${dayStr}`);
-                        if (!cellConstraint) return null;
+                        if (!cellConstraint) {
+                          return (
+                            <div className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 mb-1 px-1 py-0.5 rounded bg-green-50 dark:bg-green-950/20" data-testid={`constraint-ok-${resource.id}-${dayStr}`}>
+                              <ShieldCheck className="h-3 w-3 shrink-0" />
+                              <span>Tillgänglig</span>
+                            </div>
+                          );
+                        }
                         const isBlocked = cellConstraint.status === "blocked";
                         const Icon = isBlocked ? ShieldX : ShieldAlert;
                         const colorCls = isBlocked
