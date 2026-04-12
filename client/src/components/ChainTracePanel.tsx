@@ -3,10 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, FileText, Package, ClipboardList, User, CheckCircle2, Receipt, ChevronRight, AlertCircle, X } from "lucide-react";
+import { Loader2, FileText, Package, ClipboardList, User, CheckCircle2, Receipt, AlertCircle, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
+import { useLocation } from "wouter";
 
 interface ChainTracePanelProps {
   workOrderId: string | null;
@@ -87,6 +88,12 @@ const STATUS_COLORS: Record<string, string> = {
   exported: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
   failed: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
   cancelled: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
+  skapad: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
+  planerad_pre: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+  planerad_resurs: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  planerad_las: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
+  utford: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  fakturerad: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
 };
 
 function formatCurrency(amount: number | null): string {
@@ -94,44 +101,108 @@ function formatCurrency(amount: number | null): string {
   return new Intl.NumberFormat("sv-SE", { style: "currency", currency: "SEK", minimumFractionDigits: 0 }).format(amount / 100);
 }
 
-function StepNode({ icon: Icon, label, active, completed, last }: {
+interface StepConfig {
+  key: string;
   icon: typeof FileText;
   label: string;
   active: boolean;
   completed: boolean;
-  last?: boolean;
+  navigateTo?: string;
+}
+
+function VerticalStep({ step, isLast, expanded, onToggle, children }: {
+  step: StepConfig;
+  isLast: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
 }) {
+  const [, setLocation] = useLocation();
+  const Icon = step.icon;
+
   return (
-    <div className="flex items-center gap-2">
-      <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 transition-colors ${
-        completed
-          ? "bg-[#4A9B9B] border-[#4A9B9B] text-white"
-          : active
-            ? "border-[#1B4B6B] text-[#1B4B6B] dark:border-[#7DBFB0] dark:text-[#7DBFB0]"
-            : "border-gray-300 text-gray-400 dark:border-gray-600 dark:text-gray-500"
-      }`}>
-        <Icon className="w-4 h-4" />
+    <div className="relative flex gap-3" data-testid={`chain-step-${step.key}`}>
+      <div className="flex flex-col items-center">
+        <button
+          onClick={onToggle}
+          className={`flex items-center justify-center w-9 h-9 rounded-full border-2 transition-all cursor-pointer hover:scale-110 ${
+            step.completed
+              ? "bg-[#4A9B9B] border-[#4A9B9B] text-white"
+              : step.active
+                ? "border-[#1B4B6B] text-[#1B4B6B] dark:border-[#7DBFB0] dark:text-[#7DBFB0] bg-[#E8F4F8] dark:bg-[#1B4B6B]/30"
+                : "border-gray-300 text-gray-400 dark:border-gray-600 dark:text-gray-500"
+          }`}
+          data-testid={`button-step-${step.key}`}
+        >
+          <Icon className="w-4 h-4" />
+        </button>
+        {!isLast && (
+          <div className={`w-0.5 flex-1 min-h-[16px] ${
+            step.completed ? "bg-[#4A9B9B]" : "bg-gray-200 dark:bg-gray-700"
+          }`} />
+        )}
       </div>
-      <span className={`text-sm font-medium ${
-        completed || active
-          ? "text-foreground"
-          : "text-muted-foreground"
-      }`}>{label}</span>
-      {!last && <ChevronRight className="w-4 h-4 text-muted-foreground mx-1" />}
+
+      <div className="flex-1 pb-4 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <button
+            onClick={onToggle}
+            className="flex items-center gap-1 cursor-pointer hover:underline"
+          >
+            <span className={`text-sm font-semibold ${
+              step.completed || step.active ? "text-foreground" : "text-muted-foreground"
+            }`}>{step.label}</span>
+            {expanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+          </button>
+          {step.navigateTo && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
+              title="Gå till detalj"
+              onClick={(e) => {
+                e.stopPropagation();
+                setLocation(step.navigateTo!);
+              }}
+              data-testid={`button-navigate-${step.key}`}
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+            </Button>
+          )}
+        </div>
+        {expanded && (
+          <div className="mt-1">
+            {children}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 export function ChainTracePanel({ workOrderId, open, onClose }: ChainTracePanelProps) {
+  const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set(["avtal", "artiklar", "uppgift", "resurs", "utfall", "faktura"]));
+
   const { data: trace, isLoading, error } = useQuery<ChainTraceData>({
     queryKey: ["/api/chain-trace", workOrderId],
     queryFn: async () => {
       const res = await fetch(`/api/chain-trace/${workOrderId}`);
-      if (!res.ok) throw new Error("Kunde inte hämta kedjedata");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Fel ${res.status}`);
+      }
       return res.json();
     },
     enabled: open && !!workOrderId,
   });
+
+  const toggleStep = (key: string) => {
+    setExpandedSteps(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
 
   const hasAvtal = !!trace?.avtal?.id;
   const hasArtiklar = (trace?.artiklar?.length ?? 0) > 0;
@@ -139,9 +210,18 @@ export function ChainTracePanel({ workOrderId, open, onClose }: ChainTracePanelP
   const hasUtfall = !!trace?.utfall?.completedAt || (trace?.utfall?.protocols?.length ?? 0) > 0;
   const hasFaktura = (trace?.faktura?.length ?? 0) > 0;
 
+  const steps: StepConfig[] = [
+    { key: "avtal", icon: FileText, label: "Avtal / Orderkoncept", active: hasAvtal, completed: hasAvtal, navigateTo: trace?.avtal?.id ? `/order-concepts` : undefined },
+    { key: "artiklar", icon: Package, label: `Artiklar (${trace?.artiklar?.length ?? 0})`, active: hasArtiklar, completed: hasArtiklar, navigateTo: hasArtiklar ? `/articles` : undefined },
+    { key: "uppgift", icon: ClipboardList, label: "Uppgift", active: true, completed: true, navigateTo: trace?.uppgift?.id ? `/week-planner` : undefined },
+    { key: "resurs", icon: User, label: "Resurs", active: hasResurs, completed: hasResurs, navigateTo: trace?.resurs?.id ? `/resources` : undefined },
+    { key: "utfall", icon: CheckCircle2, label: "Utfall", active: hasUtfall, completed: hasUtfall },
+    { key: "faktura", icon: Receipt, label: "Faktura", active: hasFaktura, completed: hasFaktura, navigateTo: hasFaktura ? `/invoicing` : undefined },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-chain-trace">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" data-testid="dialog-chain-trace">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
             <ClipboardList className="w-5 h-5 text-[#1B4B6B] dark:text-[#7DBFB0]" />
@@ -158,46 +238,30 @@ export function ChainTracePanel({ workOrderId, open, onClose }: ChainTracePanelP
         {error && (
           <div className="flex items-center gap-2 p-4 text-red-600 dark:text-red-400" data-testid="chain-trace-error">
             <AlertCircle className="w-5 h-5" />
-            <span>Kunde inte ladda kedjedata</span>
+            <span>{(error as Error).message || "Kunde inte ladda kedjedata"}</span>
           </div>
         )}
 
         {trace && (
-          <div className="space-y-4" data-testid="chain-trace-content">
-            <div className="flex flex-wrap items-center gap-1 py-2 px-1" data-testid="chain-trace-stepper">
-              <StepNode icon={FileText} label="Avtal" active={hasAvtal} completed={hasAvtal} />
-              <StepNode icon={Package} label="Artikel" active={hasArtiklar} completed={hasArtiklar} />
-              <StepNode icon={ClipboardList} label="Uppgift" active={true} completed={true} />
-              <StepNode icon={User} label="Resurs" active={hasResurs} completed={hasResurs} />
-              <StepNode icon={CheckCircle2} label="Utfall" active={hasUtfall} completed={hasUtfall} />
-              <StepNode icon={Receipt} label="Faktura" active={hasFaktura} completed={hasFaktura} last />
-            </div>
-
-            <Separator />
-
-            <div className="space-y-4">
-              <section data-testid="chain-section-avtal">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-2">
-                  <FileText className="w-4 h-4" /> Avtal / Orderkoncept
-                </h3>
+          <div className="pt-2" data-testid="chain-trace-content">
+            <VerticalStep step={steps[0]} isLast={false} expanded={expandedSteps.has("avtal")} onToggle={() => toggleStep("avtal")}>
+              <div data-testid="chain-section-avtal">
                 {trace.avtal ? (
                   <div className="bg-muted/40 rounded-lg p-3 space-y-1">
                     {trace.avtal.id ? (
-                      <>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium" data-testid="text-avtal-name">{trace.avtal.name}</span>
-                          {trace.avtal.status && (
-                            <Badge className={STATUS_COLORS[trace.avtal.status] || "bg-gray-100"} data-testid="badge-avtal-status">
-                              {trace.avtal.status}
-                            </Badge>
-                          )}
-                          {trace.avtal.scenario && (
-                            <Badge variant="outline" data-testid="badge-avtal-scenario">
-                              {SCENARIO_LABELS[trace.avtal.scenario] || trace.avtal.scenario}
-                            </Badge>
-                          )}
-                        </div>
-                      </>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-sm" data-testid="text-avtal-name">{trace.avtal.name}</span>
+                        {trace.avtal.status && (
+                          <Badge className={STATUS_COLORS[trace.avtal.status] || "bg-gray-100"} data-testid="badge-avtal-status">
+                            {trace.avtal.status}
+                          </Badge>
+                        )}
+                        {trace.avtal.scenario && (
+                          <Badge variant="outline" data-testid="badge-avtal-scenario">
+                            {SCENARIO_LABELS[trace.avtal.scenario] || trace.avtal.scenario}
+                          </Badge>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-sm text-muted-foreground italic">Inget orderkoncept kopplat</span>
                     )}
@@ -210,27 +274,26 @@ export function ChainTracePanel({ workOrderId, open, onClose }: ChainTracePanelP
                 ) : (
                   <p className="text-sm text-muted-foreground italic">Ingen avtals- eller kundinformation</p>
                 )}
-              </section>
+              </div>
+            </VerticalStep>
 
-              <section data-testid="chain-section-artiklar">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-2">
-                  <Package className="w-4 h-4" /> Artiklar ({trace.artiklar.length})
-                </h3>
+            <VerticalStep step={steps[1]} isLast={false} expanded={expandedSteps.has("artiklar")} onToggle={() => toggleStep("artiklar")}>
+              <div data-testid="chain-section-artiklar">
                 {trace.artiklar.length > 0 ? (
                   <div className="space-y-1">
                     {trace.artiklar.map((art) => (
-                      <div key={art.id} className="bg-muted/40 rounded-lg p-3 flex items-center justify-between" data-testid={`row-artikel-${art.id}`}>
-                        <div>
+                      <div key={art.id} className="bg-muted/40 rounded-lg p-2.5 flex items-center justify-between gap-2" data-testid={`row-artikel-${art.id}`}>
+                        <div className="min-w-0">
                           <span className="font-medium text-sm">{art.name || "Okänd artikel"}</span>
                           {art.articleNumber && (
-                            <span className="text-xs text-muted-foreground ml-2">#{art.articleNumber}</span>
+                            <span className="text-xs text-muted-foreground ml-1.5">#{art.articleNumber}</span>
                           )}
-                          <span className="text-xs text-muted-foreground ml-2">× {art.quantity}</span>
+                          <span className="text-xs text-muted-foreground ml-1.5">× {art.quantity}</span>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right shrink-0">
                           <span className="text-sm font-medium">{formatCurrency(art.resolvedPrice)}</span>
                           {art.priceSource && (
-                            <Badge variant="outline" className="ml-2 text-xs">{art.priceSource}</Badge>
+                            <Badge variant="outline" className="ml-1.5 text-xs">{art.priceSource}</Badge>
                           )}
                         </div>
                       </div>
@@ -239,15 +302,14 @@ export function ChainTracePanel({ workOrderId, open, onClose }: ChainTracePanelP
                 ) : (
                   <p className="text-sm text-muted-foreground italic">Inga artiklar kopplade</p>
                 )}
-              </section>
+              </div>
+            </VerticalStep>
 
-              <section data-testid="chain-section-uppgift">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-2">
-                  <ClipboardList className="w-4 h-4" /> Uppgift
-                </h3>
+            <VerticalStep step={steps[2]} isLast={false} expanded={expandedSteps.has("uppgift")} onToggle={() => toggleStep("uppgift")}>
+              <div data-testid="chain-section-uppgift">
                 <div className="bg-muted/40 rounded-lg p-3 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium" data-testid="text-uppgift-title">{trace.uppgift.title}</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-sm" data-testid="text-uppgift-title">{trace.uppgift.title}</span>
                     <Badge className={STATUS_COLORS[trace.uppgift.orderStatus] || STATUS_COLORS[trace.uppgift.status] || "bg-gray-100"} data-testid="badge-uppgift-status">
                       {trace.uppgift.orderStatus}
                     </Badge>
@@ -269,15 +331,14 @@ export function ChainTracePanel({ workOrderId, open, onClose }: ChainTracePanelP
                     </p>
                   )}
                 </div>
-              </section>
+              </div>
+            </VerticalStep>
 
-              <section data-testid="chain-section-resurs">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-2">
-                  <User className="w-4 h-4" /> Resurs
-                </h3>
+            <VerticalStep step={steps[3]} isLast={false} expanded={expandedSteps.has("resurs")} onToggle={() => toggleStep("resurs")}>
+              <div data-testid="chain-section-resurs">
                 {trace.resurs ? (
                   <div className="bg-muted/40 rounded-lg p-3 space-y-1">
-                    <span className="font-medium" data-testid="text-resurs-name">{trace.resurs.name}</span>
+                    <span className="font-medium text-sm" data-testid="text-resurs-name">{trace.resurs.name}</span>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline" className="text-xs">{trace.resurs.resourceType}</Badge>
                       {trace.resurs.phone && (
@@ -288,16 +349,15 @@ export function ChainTracePanel({ workOrderId, open, onClose }: ChainTracePanelP
                 ) : (
                   <p className="text-sm text-muted-foreground italic">Ingen resurs tilldelad</p>
                 )}
-              </section>
+              </div>
+            </VerticalStep>
 
-              <section data-testid="chain-section-utfall">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" /> Utfall
-                </h3>
+            <VerticalStep step={steps[4]} isLast={false} expanded={expandedSteps.has("utfall")} onToggle={() => toggleStep("utfall")}>
+              <div data-testid="chain-section-utfall">
                 {hasUtfall ? (
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     {trace.utfall.completedAt && (
-                      <div className="bg-muted/40 rounded-lg p-3 space-y-1">
+                      <div className="bg-muted/40 rounded-lg p-2.5 space-y-1">
                         <p className="text-sm">
                           Slutförd: <span className="font-medium">{format(new Date(trace.utfall.completedAt), "d MMM yyyy HH:mm", { locale: sv })}</span>
                         </p>
@@ -309,10 +369,10 @@ export function ChainTracePanel({ workOrderId, open, onClose }: ChainTracePanelP
                       </div>
                     )}
                     {trace.utfall.protocols.map((p) => (
-                      <div key={p.id} className="bg-muted/40 rounded-lg p-3 flex items-center justify-between" data-testid={`row-protocol-${p.id}`}>
+                      <div key={p.id} className="bg-muted/40 rounded-lg p-2.5 flex items-center justify-between" data-testid={`row-protocol-${p.id}`}>
                         <div>
                           <span className="text-sm font-medium">{p.protocolType}</span>
-                          {p.protocolNumber && <span className="text-xs text-muted-foreground ml-2">#{p.protocolNumber}</span>}
+                          {p.protocolNumber && <span className="text-xs text-muted-foreground ml-1.5">#{p.protocolNumber}</span>}
                           <p className="text-xs text-muted-foreground">
                             {format(new Date(p.executedAt), "d MMM yyyy HH:mm", { locale: sv })}
                             {p.executedByName && ` — ${p.executedByName}`}
@@ -325,21 +385,20 @@ export function ChainTracePanel({ workOrderId, open, onClose }: ChainTracePanelP
                 ) : (
                   <p className="text-sm text-muted-foreground italic">Inga utfallsdata ännu</p>
                 )}
-              </section>
+              </div>
+            </VerticalStep>
 
-              <section data-testid="chain-section-faktura">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-2">
-                  <Receipt className="w-4 h-4" /> Faktura
-                </h3>
+            <VerticalStep step={steps[5]} isLast={true} expanded={expandedSteps.has("faktura")} onToggle={() => toggleStep("faktura")}>
+              <div data-testid="chain-section-faktura">
                 {trace.faktura.length > 0 ? (
                   <div className="space-y-1">
                     {trace.faktura.map((inv) => (
-                      <div key={inv.id} className="bg-muted/40 rounded-lg p-3 flex items-center justify-between" data-testid={`row-faktura-${inv.id}`}>
+                      <div key={inv.id} className="bg-muted/40 rounded-lg p-2.5 flex items-center justify-between" data-testid={`row-faktura-${inv.id}`}>
                         <div>
                           <span className="text-sm font-medium">
                             {inv.fortnoxInvoiceNumber ? `Faktura #${inv.fortnoxInvoiceNumber}` : "Ej exporterad"}
                           </span>
-                          {inv.isCreditInvoice && <Badge variant="outline" className="ml-2 text-xs border-red-300 text-red-600 dark:border-red-700 dark:text-red-400">Kreditfaktura</Badge>}
+                          {inv.isCreditInvoice && <Badge variant="outline" className="ml-1.5 text-xs border-red-300 text-red-600 dark:border-red-700 dark:text-red-400">Kredit</Badge>}
                           {inv.exportedAt && (
                             <p className="text-xs text-muted-foreground">
                               {format(new Date(inv.exportedAt), "d MMM yyyy", { locale: sv })}
@@ -348,7 +407,7 @@ export function ChainTracePanel({ workOrderId, open, onClose }: ChainTracePanelP
                         </div>
                         <div className="text-right">
                           <span className="text-sm font-medium">{formatCurrency(inv.totalAmount)}</span>
-                          <Badge className={`ml-2 ${STATUS_COLORS[inv.status] || "bg-gray-100"}`} data-testid={`badge-faktura-status-${inv.id}`}>{inv.status}</Badge>
+                          <Badge className={`ml-1.5 ${STATUS_COLORS[inv.status] || "bg-gray-100"}`} data-testid={`badge-faktura-status-${inv.id}`}>{inv.status}</Badge>
                         </div>
                       </div>
                     ))}
@@ -356,8 +415,8 @@ export function ChainTracePanel({ workOrderId, open, onClose }: ChainTracePanelP
                 ) : (
                   <p className="text-sm text-muted-foreground italic">Ej fakturerad</p>
                 )}
-              </section>
-            </div>
+              </div>
+            </VerticalStep>
           </div>
         )}
       </DialogContent>

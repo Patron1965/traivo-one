@@ -5,7 +5,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
-import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects } from "@shared/schema";
+import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, type OrderConcept } from "@shared/schema";
 import { handleWorkOrderStatusChange } from "../ai-communication";
 import { notificationService } from "../notifications";
 import { asyncHandler } from "../asyncHandler";
@@ -903,7 +903,7 @@ app.get("/api/chain-trace/:workOrderId", asyncHandler(async (req, res) => {
       .orderBy(desc(protocols.executedAt)),
   ]);
 
-  let concept: any = null;
+  let concept: OrderConcept | null = null;
   if (wo.customerId) {
     const conceptRows = await db.select()
       .from(orderConcepts)

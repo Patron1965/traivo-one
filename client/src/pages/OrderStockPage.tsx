@@ -62,7 +62,8 @@ import {
   Send,
   Mail,
   ClipboardList,
-  CalendarPlus
+  CalendarPlus,
+  Link2
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuth } from "@/hooks/use-auth";
@@ -71,6 +72,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ExecutionStatusTracker } from "@/components/ExecutionStatusTracker";
 import { TaskTimewindowsEditor } from "@/components/TaskTimewindowsEditor";
 import { TaskDependenciesView } from "@/components/TaskDependenciesView";
+import { ChainTracePanel } from "@/components/ChainTracePanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { IMPOSSIBLE_REASON_LABELS } from "@shared/schema";
@@ -256,6 +258,7 @@ export default function OrderStockPage() {
   const [showPlanningDialog, setShowPlanningDialog] = useState(false);
   const [planningOrder, setPlanningOrder] = useState<WorkOrder | null>(null);
   const [showBatchPlanningDialog, setShowBatchPlanningDialog] = useState(false);
+  const [chainTraceWorkOrderId, setChainTraceWorkOrderId] = useState<string | null>(null);
 
   const planningForm = useForm<PlanningFormData>({
     resolver: zodResolver(planningFormSchema),
@@ -1011,6 +1014,15 @@ export default function OrderStockPage() {
                       >
                         <FileText className="h-4 w-4" />
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setChainTraceWorkOrderId(order.id)}
+                        title="Spåra kedja"
+                        data-testid={`button-chain-trace-${order.id}`}
+                      >
+                        <Link2 className="h-4 w-4 text-[#4A9B9B]" />
+                      </Button>
                       
                       {(status === "skapad" || status === "planerad_pre" || status === "planerad_resurs") && (
                         <Button
@@ -1608,6 +1620,12 @@ export default function OrderStockPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ChainTracePanel
+        workOrderId={chainTraceWorkOrderId}
+        open={!!chainTraceWorkOrderId}
+        onClose={() => setChainTraceWorkOrderId(null)}
+      />
     </div>
   );
 }
