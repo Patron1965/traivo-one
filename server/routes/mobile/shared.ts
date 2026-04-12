@@ -15,7 +15,7 @@ import { triggerETANotification } from "../../eta-notification-service";
 import OpenAI from "openai";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "../../metadata-queries";
 import { handleWorkOrderStatusChange } from "../../ai-communication";
-import { validatePlannerEvent, type PlannerEvent } from "@shared/ws-events";
+import { validatePlannerEvent } from "@shared/ws-events";
 
 export interface MobileAuthenticatedRequest extends Request {
   mobileResourceId: string;

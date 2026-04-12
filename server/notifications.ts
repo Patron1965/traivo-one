@@ -8,9 +8,6 @@ import {
   validateServerEvent,
   validateClientEvent,
   type WsEventType,
-  type ServerEvent,
-  type ClientEvent,
-  type PositionUpdateEvent,
 } from "@shared/ws-events";
 
 interface WorkOrderWithDetails extends WorkOrder {
@@ -445,8 +442,8 @@ class NotificationService {
   }
 
   private doBroadcastPosition(position: PositionUpdate) {
-    const message = JSON.stringify({
-      type: "position_update",
+    const payload = {
+      type: "position_update" as const,
       resourceId: position.resourceId,
       latitude: position.latitude,
       longitude: position.longitude,
@@ -455,7 +452,14 @@ class NotificationService {
       status: position.status,
       workOrderId: position.workOrderId,
       timestamp: new Date().toISOString()
-    });
+    };
+
+    const validated = validateServerEvent(payload);
+    if (!validated) {
+      console.warn(`[ws] Position broadcast validation failed, sending anyway`);
+    }
+
+    const message = JSON.stringify(payload);
 
     this.clients.forEach((clients, resourceId) => {
       if (resourceId !== position.resourceId) {
