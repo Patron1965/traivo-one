@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { apiRequest } from "@/lib/queryClient";
-import type { ServerEvent, WsEventType } from "@shared/ws-events";
-import { validateServerEvent, WS_EVENT_TYPES } from "@shared/ws-events";
+import {
+  validateServerEvent,
+  type ServerEvent,
+  type WsEventType,
+} from "@shared/ws-events";
 
 export interface Notification {
   id: string;
@@ -30,18 +33,33 @@ interface UseNotificationsResult {
   clearAll: () => void;
 }
 
-const NOTIFICATION_TYPES_WITH_UI: ReadonlySet<string> = new Set([
-  "job_assigned",
-  "job_updated",
-  "job_cancelled",
-  "schedule_changed",
-  "priority_changed",
-  "order:updated",
-  "anomaly_alert",
-  "route_update",
-  "route_optimized",
-  "notification",
-]);
+function isNotifiableEvent(event: ServerEvent): event is Exclude<ServerEvent, { type: "connected" | "pong" | "position_update" }> {
+  return event.type !== "connected" && event.type !== "pong" && event.type !== "position_update";
+}
+
+function extractNotification(event: ServerEvent): Notification | null {
+  if (!isNotifiableEvent(event)) return null;
+
+  return {
+    id: "id" in event ? event.id : crypto.randomUUID(),
+    type: event.type,
+    title: "title" in event ? event.title : "",
+    message: "message" in event ? event.message : "",
+    workOrderId: "orderId" in event ? event.orderId : undefined,
+    timestamp: new Date(),
+    read: false,
+    data: "data" in event && event.data ? event.data as Record<string, unknown> : undefined,
+  };
+}
+
+function handleOptimizationEvent(event: ServerEvent) {
+  if (event.type === "optimization_complete" || event.type === "route_optimized") {
+    const jobId = event.data?.jobId;
+    window.dispatchEvent(new CustomEvent("traivo:optimization_complete", {
+      detail: { jobId },
+    }));
+  }
+}
 
 export function useNotifications({
   resourceId,
@@ -90,32 +108,33 @@ export function useNotifications({
         try {
           const raw = JSON.parse(event.data);
           const validated = validateServerEvent(raw);
-          const eventData = validated || raw;
-          const eventType: string = eventData.type;
 
-          if (eventType === "connected" || eventType === "pong" || eventType === "position_update") {
-            return;
-          }
-
-          if (NOTIFICATION_TYPES_WITH_UI.has(eventType)) {
-            const notification: Notification = {
-              id: eventData.id || crypto.randomUUID(),
-              type: eventType as WsEventType,
-              title: eventData.title || "",
-              message: eventData.message || "",
-              workOrderId: eventData.orderId,
-              timestamp: new Date(),
-              read: false,
-              data: eventData.data as Record<string, unknown> | undefined,
-            };
-            setNotifications((prev) => [notification, ...prev].slice(0, 50));
-            onNotification?.(notification);
-
-            if (eventType === "route_optimized") {
-              const jobId = (eventData.data as Record<string, unknown>)?.jobId;
+          if (validated) {
+            handleOptimizationEvent(validated);
+            const notification = extractNotification(validated);
+            if (notification) {
+              setNotifications((prev) => [notification, ...prev].slice(0, 50));
+              onNotification?.(notification);
+            }
+          } else {
+            if (raw?.type === "optimization_complete" || raw?.type === "route_optimized") {
               window.dispatchEvent(new CustomEvent("traivo:optimization_complete", {
-                detail: { jobId },
+                detail: { jobId: raw?.data?.jobId },
               }));
+            }
+            if (raw?.type && raw?.title) {
+              const fallbackNotification: Notification = {
+                id: raw.id || crypto.randomUUID(),
+                type: raw.type,
+                title: raw.title,
+                message: raw.message || "",
+                workOrderId: raw.orderId,
+                timestamp: new Date(),
+                read: false,
+                data: raw.data,
+              };
+              setNotifications((prev) => [fallbackNotification, ...prev].slice(0, 50));
+              onNotification?.(fallbackNotification);
             }
           }
         } catch (err) {

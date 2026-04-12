@@ -3,10 +3,20 @@ import { z } from "zod";
 // ============================================================
 // WebSocket Event Catalog v1
 // Typed Zod schemas for all WebSocket events in Traivo.
-// Each event has: type, version, payload schema, and inferred TS type.
+// Each event has: type, version (v), payload schema, and inferred TS type.
 // ============================================================
 
 export const WS_EVENT_VERSION = 1;
+
+const baseNotificationFields = {
+  id: z.string(),
+  title: z.string(),
+  message: z.string(),
+  orderId: z.string().optional(),
+  resourceId: z.string().optional(),
+  timestamp: z.string(),
+  v: z.number().default(WS_EVENT_VERSION),
+};
 
 // --- Server → Client events ---
 
@@ -15,6 +25,7 @@ export const connectedEventSchema = z.object({
   type: z.literal("connected"),
   message: z.string(),
   timestamp: z.string(),
+  v: z.number().default(WS_EVENT_VERSION),
 });
 export type ConnectedEvent = z.infer<typeof connectedEventSchema>;
 
@@ -22,18 +33,14 @@ export type ConnectedEvent = z.infer<typeof connectedEventSchema>;
 export const pongEventSchema = z.object({
   type: z.literal("pong"),
   timestamp: z.string(),
+  v: z.number().default(WS_EVENT_VERSION),
 });
 export type PongEvent = z.infer<typeof pongEventSchema>;
 
 /** New job assigned to a resource */
 export const jobAssignedEventSchema = z.object({
   type: z.literal("job_assigned"),
-  id: z.string(),
-  title: z.string(),
-  message: z.string(),
-  orderId: z.string().optional(),
-  resourceId: z.string().optional(),
-  timestamp: z.string(),
+  ...baseNotificationFields,
   data: z.object({
     scheduledDate: z.unknown().optional(),
     scheduledStartTime: z.string().nullable().optional(),
@@ -47,12 +54,7 @@ export type JobAssignedEvent = z.infer<typeof jobAssignedEventSchema>;
 /** Job details updated */
 export const jobUpdatedEventSchema = z.object({
   type: z.literal("job_updated"),
-  id: z.string(),
-  title: z.string(),
-  message: z.string(),
-  orderId: z.string().optional(),
-  resourceId: z.string().optional(),
-  timestamp: z.string(),
+  ...baseNotificationFields,
   data: z.object({
     scheduledDate: z.unknown().optional(),
     scheduledStartTime: z.string().nullable().optional(),
@@ -64,12 +66,7 @@ export type JobUpdatedEvent = z.infer<typeof jobUpdatedEventSchema>;
 /** Job cancelled */
 export const jobCancelledEventSchema = z.object({
   type: z.literal("job_cancelled"),
-  id: z.string(),
-  title: z.string(),
-  message: z.string(),
-  orderId: z.string().optional(),
-  resourceId: z.string().optional(),
-  timestamp: z.string(),
+  ...baseNotificationFields,
   data: z.record(z.unknown()).optional(),
 });
 export type JobCancelledEvent = z.infer<typeof jobCancelledEventSchema>;
@@ -77,12 +74,7 @@ export type JobCancelledEvent = z.infer<typeof jobCancelledEventSchema>;
 /** Schedule/date changed for a job */
 export const scheduleChangedEventSchema = z.object({
   type: z.literal("schedule_changed"),
-  id: z.string(),
-  title: z.string(),
-  message: z.string(),
-  orderId: z.string().optional(),
-  resourceId: z.string().optional(),
-  timestamp: z.string(),
+  ...baseNotificationFields,
   data: z.object({
     oldDate: z.string().optional(),
     newDate: z.string().optional(),
@@ -94,12 +86,7 @@ export type ScheduleChangedEvent = z.infer<typeof scheduleChangedEventSchema>;
 /** Priority changed on a job */
 export const priorityChangedEventSchema = z.object({
   type: z.literal("priority_changed"),
-  id: z.string(),
-  title: z.string(),
-  message: z.string(),
-  orderId: z.string().optional(),
-  resourceId: z.string().optional(),
-  timestamp: z.string(),
+  ...baseNotificationFields,
   data: z.object({
     oldPriority: z.string().optional(),
     newPriority: z.string().optional(),
@@ -118,18 +105,14 @@ export const positionUpdateEventSchema = z.object({
   status: z.string().optional(),
   workOrderId: z.string().optional(),
   timestamp: z.string(),
+  v: z.number().default(WS_EVENT_VERSION),
 });
 export type PositionUpdateEvent = z.infer<typeof positionUpdateEventSchema>;
 
 /** Route/navigation update */
 export const routeUpdateEventSchema = z.object({
   type: z.literal("route_update"),
-  id: z.string(),
-  title: z.string(),
-  message: z.string(),
-  orderId: z.string().optional(),
-  resourceId: z.string().optional(),
-  timestamp: z.string(),
+  ...baseNotificationFields,
   data: z.record(z.unknown()).optional(),
 });
 export type RouteUpdateEvent = z.infer<typeof routeUpdateEventSchema>;
@@ -137,12 +120,7 @@ export type RouteUpdateEvent = z.infer<typeof routeUpdateEventSchema>;
 /** Generic order update */
 export const orderUpdatedEventSchema = z.object({
   type: z.literal("order:updated"),
-  id: z.string(),
-  title: z.string(),
-  message: z.string(),
-  orderId: z.string().optional(),
-  resourceId: z.string().optional(),
-  timestamp: z.string(),
+  ...baseNotificationFields,
   data: z.object({
     status: z.string().optional(),
     executionStatus: z.string().optional(),
@@ -154,40 +132,45 @@ export type OrderUpdatedEvent = z.infer<typeof orderUpdatedEventSchema>;
 /** System anomaly alert */
 export const anomalyAlertEventSchema = z.object({
   type: z.literal("anomaly_alert"),
-  id: z.string(),
-  title: z.string(),
-  message: z.string(),
-  orderId: z.string().optional(),
-  resourceId: z.string().optional(),
-  timestamp: z.string(),
+  ...baseNotificationFields,
   data: z.record(z.unknown()).optional(),
 });
 export type AnomalyAlertEvent = z.infer<typeof anomalyAlertEventSchema>;
 
-/** Route optimization completed */
+/** Route optimization completed (via optimizationRoutes) */
 export const routeOptimizedEventSchema = z.object({
   type: z.literal("route_optimized"),
-  id: z.string(),
-  title: z.string(),
-  message: z.string(),
-  orderId: z.string().optional(),
-  resourceId: z.string().optional(),
-  timestamp: z.string(),
+  ...baseNotificationFields,
   data: z.object({
     jobId: z.string().optional(),
   }).passthrough().optional(),
 });
 export type RouteOptimizedEvent = z.infer<typeof routeOptimizedEventSchema>;
 
+/** Optimization job completed (via optimization-job-runner) */
+export const optimizationCompleteEventSchema = z.object({
+  type: z.literal("optimization_complete"),
+  ...baseNotificationFields,
+  data: z.object({
+    jobId: z.string().optional(),
+  }).passthrough().optional(),
+});
+export type OptimizationCompleteEvent = z.infer<typeof optimizationCompleteEventSchema>;
+
+/** Optimization job failed (via optimization-job-runner) */
+export const optimizationFailedEventSchema = z.object({
+  type: z.literal("optimization_failed"),
+  ...baseNotificationFields,
+  data: z.object({
+    jobId: z.string().optional(),
+  }).passthrough().optional(),
+});
+export type OptimizationFailedEvent = z.infer<typeof optimizationFailedEventSchema>;
+
 /** Generic notification wrapper */
 export const notificationEventSchema = z.object({
   type: z.literal("notification"),
-  id: z.string(),
-  title: z.string(),
-  message: z.string(),
-  orderId: z.string().optional(),
-  resourceId: z.string().optional(),
-  timestamp: z.string(),
+  ...baseNotificationFields,
   data: z.record(z.unknown()).optional(),
 });
 export type NotificationEvent = z.infer<typeof notificationEventSchema>;
@@ -207,6 +190,8 @@ export const serverEventSchema = z.discriminatedUnion("type", [
   orderUpdatedEventSchema,
   anomalyAlertEventSchema,
   routeOptimizedEventSchema,
+  optimizationCompleteEventSchema,
+  optimizationFailedEventSchema,
   notificationEventSchema,
 ]);
 export type ServerEvent = z.infer<typeof serverEventSchema>;
@@ -316,6 +301,8 @@ export const WS_EVENT_TYPES = [
   "order:updated",
   "anomaly_alert",
   "route_optimized",
+  "optimization_complete",
+  "optimization_failed",
   "notification",
 ] as const;
 export type WsEventType = typeof WS_EVENT_TYPES[number];
