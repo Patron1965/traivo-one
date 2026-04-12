@@ -72,6 +72,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { OrderConcept, Cluster, Article, ConceptFilter, DeliveryScheduleEntry } from "@shared/schema";
 import { ORDER_CONCEPT_SCENARIO_LABELS, BILLING_FREQUENCY_LABELS } from "@shared/schema";
 import { PageHelp, HelpTooltip } from "@/components/ui/help-tooltip";
+import { ChainTracePanel } from "@/components/ChainTracePanel";
 
 const scenarioOptions = [
   { value: "avrop", label: "Avrop (engång)", desc: "Manuellt eller vid behov", help: "Genererar en enskild order direkt eller vid behov — används för ad hoc-tjänster som inte är schemalagda." },
@@ -190,6 +191,7 @@ export default function OrderConceptsPage() {
   const [depTemplateDialogOpen, setDepTemplateDialogOpen] = useState(false);
   const [invoiceRuleDialogOpen, setInvoiceRuleDialogOpen] = useState(false);
   const [runLogsDialogOpen, setRunLogsDialogOpen] = useState(false);
+  const [chainTraceWorkOrderId, setChainTraceWorkOrderId] = useState<string | null>(null);
   const [selectedConceptForPhase2, setSelectedConceptForPhase2] = useState<string | null>(null);
   const [depTemplateForm, setDepTemplateForm] = useState({
     sourceArticleId: "",
@@ -798,6 +800,33 @@ export default function OrderConceptsPage() {
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>Körhistorik</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(`/api/chain-trace/by-concept/${concept.id}`);
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    if (data.workOrderId) {
+                                      setChainTraceWorkOrderId(data.workOrderId);
+                                    } else {
+                                      toast({ title: "Ingen arbetsorder", description: "Inga ordrar har genererats från detta koncept ännu." });
+                                    }
+                                  }
+                                } catch {
+                                  toast({ title: "Fel", description: "Kunde inte hämta kedjedata", variant: "destructive" });
+                                }
+                              }}
+                              data-testid={`button-chain-trace-${concept.id}`}
+                            >
+                              <Link2 className="h-4 w-4 text-[#4A9B9B]" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Spåra kedja</TooltipContent>
                         </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -1766,6 +1795,12 @@ export default function OrderConceptsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ChainTracePanel
+        workOrderId={chainTraceWorkOrderId}
+        open={!!chainTraceWorkOrderId}
+        onClose={() => setChainTraceWorkOrderId(null)}
+      />
     </div>
   );
 }

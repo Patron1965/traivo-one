@@ -211,9 +211,9 @@ export function ChainTracePanel({ workOrderId, open, onClose }: ChainTracePanelP
   const hasFaktura = (trace?.faktura?.length ?? 0) > 0;
 
   const steps: StepConfig[] = [
-    { key: "avtal", icon: FileText, label: "Avtal / Orderkoncept", active: hasAvtal, completed: hasAvtal, navigateTo: trace?.avtal?.id ? `/order-concepts` : undefined },
+    { key: "avtal", icon: FileText, label: "Avtal / Orderkoncept", active: hasAvtal, completed: hasAvtal, navigateTo: trace?.avtal?.id ? `/order-concepts/${trace.avtal.id}/edit` : undefined },
     { key: "artiklar", icon: Package, label: `Artiklar (${trace?.artiklar?.length ?? 0})`, active: hasArtiklar, completed: hasArtiklar, navigateTo: hasArtiklar ? `/articles` : undefined },
-    { key: "uppgift", icon: ClipboardList, label: "Uppgift", active: true, completed: true, navigateTo: trace?.uppgift?.id ? `/week-planner` : undefined },
+    { key: "uppgift", icon: ClipboardList, label: "Uppgift", active: true, completed: true, navigateTo: trace?.uppgift?.objectId ? `/objects/${trace.uppgift.objectId}` : undefined },
     { key: "resurs", icon: User, label: "Resurs", active: hasResurs, completed: hasResurs, navigateTo: trace?.resurs?.id ? `/resources` : undefined },
     { key: "utfall", icon: CheckCircle2, label: "Utfall", active: hasUtfall, completed: hasUtfall },
     { key: "faktura", icon: Receipt, label: "Faktura", active: hasFaktura, completed: hasFaktura, navigateTo: hasFaktura ? `/invoicing` : undefined },

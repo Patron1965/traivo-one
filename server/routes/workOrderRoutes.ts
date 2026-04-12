@@ -862,6 +862,34 @@ app.delete("/api/procurements/:id", asyncHandler(async (req, res) => {
   res.status(204).send();
 }));
 
+app.get("/api/chain-trace/by-concept/:conceptId", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const { conceptId } = req.params;
+
+  const [concept] = await db.select()
+    .from(orderConcepts)
+    .where(and(eq(orderConcepts.id, conceptId), eq(orderConcepts.tenantId, tenantId)));
+  if (!concept) {
+    throw new NotFoundError("Orderkoncept hittades inte");
+  }
+
+  const conditions = [eq(workOrders.tenantId, tenantId)];
+  if (concept.customerId) {
+    conditions.push(eq(workOrders.customerId, concept.customerId));
+  }
+
+  const recentOrders = await db.select({ id: workOrders.id })
+    .from(workOrders)
+    .where(and(...conditions))
+    .orderBy(desc(workOrders.createdAt))
+    .limit(1);
+
+  if (recentOrders.length === 0) {
+    return res.json({ workOrderId: null });
+  }
+  res.json({ workOrderId: recentOrders[0].id });
+}));
+
 app.get("/api/chain-trace/:workOrderId", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const { workOrderId } = req.params;
