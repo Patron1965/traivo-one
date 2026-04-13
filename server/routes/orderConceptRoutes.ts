@@ -288,7 +288,6 @@ app.post("/api/order-concepts/:id/validate", asyncHandler(async (req, res) => {
     if (conceptObjects.length === 0) errors.push({ code: "NO_OBJECTS", message: "Inga objekt valda" });
     if (conceptArticles.length === 0) errors.push({ code: "NO_ARTICLES", message: "Inga artiklar valda" });
     if (!concept.invoiceLevel) warnings.push({ code: "NO_INVOICE_LEVEL", message: "Faktureringsnivå ej vald" });
-    if (!concept.deliveryModel) warnings.push({ code: "NO_DELIVERY_MODEL", message: "Leveransmodell ej vald" });
 
     if (concept.deliveryModel === "schedule") {
       const schedules = await storage.getDeliverySchedules(concept.id);
