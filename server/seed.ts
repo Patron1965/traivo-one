@@ -856,7 +856,17 @@ async function refreshDemoWorkOrderDates() {
     console.log("Created 4 demo work orders for Anna");
   }
 
-  console.log("Refreshed demo work order dates across current week (Mon-Fri)");
+  const scheduled = await db.select({ id: workOrders.id, date: workOrders.scheduledDate }).from(workOrders).where(sql`tenant_id = ${DEFAULT_TENANT_ID} AND scheduled_date IS NOT NULL`);
+  const unscheduled = await db.select({ id: workOrders.id }).from(workOrders).where(sql`tenant_id = ${DEFAULT_TENANT_ID} AND scheduled_date IS NULL`);
+  const dayCounts: Record<string, number> = {};
+  for (const wo of scheduled) {
+    if (wo.date) {
+      const day = new Date(wo.date).toLocaleDateString("sv-SE", { weekday: "short" });
+      dayCounts[day] = (dayCounts[day] || 0) + 1;
+    }
+  }
+  const dayStr = Object.entries(dayCounts).map(([d, c]) => `${d}:${c}`).join(", ");
+  console.log(`Refreshed demo work order dates across current week (Mon-Fri) — ${scheduled.length} scheduled [${dayStr}], ${unscheduled.length} unscheduled`);
 }
 
 async function seedFieldAppDemoData(tomasResourceId: string) {
