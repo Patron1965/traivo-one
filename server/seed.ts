@@ -1,15 +1,31 @@
 import { db } from "./db";
-import { tenants, customers, objects, resources, workOrders, brandingTemplates, tenantBranding, userTenantRoles, users, metadataKatalog } from "@shared/schema";
+import { tenants, customers, objects, resources, workOrders, brandingTemplates, tenantBranding, userTenantRoles, users, metadataKatalog, clusters } from "@shared/schema";
 import { sql, eq, and } from "drizzle-orm";
 
 const DEFAULT_TENANT_ID = "default-tenant";
+
+function getCurrentWeekDates() {
+  const now = new Date();
+  const day = now.getDay();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+  monday.setHours(0, 0, 0, 0);
+  const days: Date[] = [];
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    days.push(d);
+  }
+  return days;
+}
 
 export async function seedDatabase() {
   console.log("Starting database seed...");
 
   const existingTenant = await db.select().from(tenants).where(sql`id = ${DEFAULT_TENANT_ID}`);
   if (existingTenant.length > 0) {
-    console.log("Database already seeded, skipping demo data creation.");
+    console.log("Database already seeded, refreshing demo dates...");
+    await refreshDemoWorkOrderDates();
     await seedSystemMetadataLabels();
     return;
   }
@@ -368,7 +384,10 @@ export async function seedDatabase() {
     homeLocation: "Södertälje",
     weeklyHours: 40,
     competencies: ["hamtning", "uj_service", "matavfall"],
+    serviceArea: ["15138", "15145", "15189"],
     status: "active",
+    homeLatitude: 59.1940,
+    homeLongitude: 17.6230,
   }).returning();
 
   const [resource2] = await db.insert(resources).values({
@@ -381,7 +400,10 @@ export async function seedDatabase() {
     homeLocation: "Södertälje",
     weeklyHours: 40,
     competencies: ["hamtning", "atervinning", "serviceboende"],
+    serviceArea: ["15171", "15172", "15146"],
     status: "active",
+    homeLatitude: 59.1965,
+    homeLongitude: 17.6275,
   }).returning();
 
   const [resource3] = await db.insert(resources).values({
@@ -394,7 +416,10 @@ export async function seedDatabase() {
     homeLocation: "Nykvarn",
     weeklyHours: 40,
     competencies: ["hamtning", "uj_service"],
+    serviceArea: ["15145", "15146", "15152"],
     status: "active",
+    homeLatitude: 59.1820,
+    homeLongitude: 17.6150,
   }).returning();
 
   const [tomasResource] = await db.insert(resources).values({
@@ -408,6 +433,7 @@ export async function seedDatabase() {
     homeLocation: "Södertälje",
     weeklyHours: 40,
     competencies: ["tvatt", "besiktning", "hamtning", "kontroll", "service", "etablering"],
+    serviceArea: ["15138", "15171", "15172", "15189"],
     status: "active",
     homeLatitude: 59.1955,
     homeLongitude: 17.6253,
@@ -424,6 +450,7 @@ export async function seedDatabase() {
     homeLocation: "Huddinge",
     weeklyHours: 40,
     competencies: ["tvatt", "besiktning", "hamtning"],
+    serviceArea: ["15138", "15145", "15152"],
     status: "active",
     homeLatitude: 59.2369,
     homeLongitude: 17.9812,
@@ -437,105 +464,108 @@ export async function seedDatabase() {
     console.log("Linked user Tomas to resource res-tomas");
   }
 
-  const today = new Date();
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - today.getDay() + 1);
+  await db.insert(clusters).values([
+    {
+      id: "cluster-telge-syd",
+      tenantId: DEFAULT_TENANT_ID,
+      rootCustomerId: telgebostader.id,
+      name: "Telgebostäder Syd",
+      description: "Södra Södertälje — Stensätra, Hovsjö",
+      color: "#3B82F6",
+      centerLatitude: 59.1956,
+      centerLongitude: 17.6254,
+      radiusKm: 3,
+      postalCodes: ["15138", "15189"],
+      cachedObjectCount: 4,
+      status: "active",
+    },
+    {
+      id: "cluster-telge-nord",
+      tenantId: DEFAULT_TENANT_ID,
+      rootCustomerId: telgebostader.id,
+      name: "Telgebostäder Nord",
+      description: "Norra Södertälje — Centrum, Brinken",
+      color: "#EF4444",
+      centerLatitude: 59.1966,
+      centerLongitude: 17.6285,
+      radiusKm: 2,
+      postalCodes: ["15171", "15172"],
+      cachedObjectCount: 2,
+      status: "active",
+    },
+    {
+      id: "cluster-kommun",
+      tenantId: DEFAULT_TENANT_ID,
+      rootCustomerId: serviceboenden.id,
+      name: "Kommun Serviceboenden",
+      description: "Kommunala serviceboenden i Södertälje",
+      color: "#22C55E",
+      centerLatitude: 59.1985,
+      centerLongitude: 17.6315,
+      radiusKm: 2,
+      postalCodes: ["15145", "15146", "15152"],
+      cachedObjectCount: 2,
+      status: "active",
+    },
+  ]).onConflictDoNothing();
+
+  console.log("Created clusters");
+
+  await db.update(objects).set({ clusterId: "cluster-telge-syd" }).where(sql`id = ${stensatravagen2.id}`);
+  await db.update(objects).set({ clusterId: "cluster-telge-syd" }).where(sql`id = ${stensatravagen4.id}`);
+  await db.update(objects).set({ clusterId: "cluster-telge-nord" }).where(sql`id = ${kungsgatan3.id}`);
+  await db.update(objects).set({ clusterId: "cluster-telge-nord" }).where(sql`id = ${brinken4.id}`);
+  await db.update(objects).set({ clusterId: "cluster-kommun" }).where(sql`id = ${aldregardenSolstralen.id}`);
+  await db.update(objects).set({ clusterId: "cluster-kommun" }).where(sql`id = ${servicehusetGoken.id}`);
+
+  const [mon, tue, wed, thu, fri] = getCurrentWeekDates();
 
   await db.insert(workOrders).values([
-    {
-      tenantId: DEFAULT_TENANT_ID,
-      customerId: telgebostader.id,
-      objectId: stensatravagen2.id,
-      resourceId: resource1.id,
-      title: "Hämtning hushållsavfall",
-      description: "Tömning av kärl i samtliga soprum",
-      orderType: "hamtning",
-      priority: "normal",
-      orderStatus: "planerad_resurs",
-      scheduledDate: monday,
-      scheduledStartTime: "07:00",
-      estimatedDuration: 30,
-    },
-    {
-      tenantId: DEFAULT_TENANT_ID,
-      customerId: telgebostader.id,
-      objectId: stensatravagen4.id,
-      resourceId: resource1.id,
-      title: "Hämtning hushållsavfall",
-      description: "Tömning av kärl",
-      orderType: "hamtning",
-      priority: "normal",
-      orderStatus: "planerad_resurs",
-      scheduledDate: monday,
-      scheduledStartTime: "07:30",
-      estimatedDuration: 25,
-    },
-    {
-      tenantId: DEFAULT_TENANT_ID,
-      customerId: telgebostader.id,
-      objectId: kungsgatan3.id,
-      resourceId: resource2.id,
-      title: "Hämtning + UJ service",
-      description: "Tömning och rengöring av UJ-behållare",
-      orderType: "uj_service",
-      priority: "high",
-      orderStatus: "planerad_resurs",
-      scheduledDate: monday,
-      scheduledStartTime: "08:00",
-      estimatedDuration: 45,
-    },
-    {
-      tenantId: DEFAULT_TENANT_ID,
-      customerId: telgebostader.id,
-      objectId: brinken4.id,
-      resourceId: resource2.id,
-      title: "Matavfall + Återvinning",
-      description: "Hämtning av matavfall och återvinning",
-      orderType: "hamtning",
-      priority: "normal",
-      orderStatus: "planerad_resurs",
-      scheduledDate: new Date(monday.getTime() + 24 * 60 * 60 * 1000),
-      scheduledStartTime: "07:00",
-      estimatedDuration: 40,
-    },
-    {
-      tenantId: DEFAULT_TENANT_ID,
-      customerId: serviceboenden.id,
-      objectId: aldregardenSolstralen.id,
-      resourceId: resource3.id,
-      title: "Serviceboende - Alla kärl",
-      description: "Tömning av kök och soprum",
-      orderType: "hamtning",
-      priority: "normal",
-      orderStatus: "planerad_resurs",
-      scheduledDate: monday,
-      scheduledStartTime: "09:00",
-      estimatedDuration: 35,
-    },
-    {
-      tenantId: DEFAULT_TENANT_ID,
-      customerId: serviceboenden.id,
-      objectId: servicehusetGoken.id,
-      resourceId: resource3.id,
-      title: "Serviceboende - Alla kärl",
-      description: "Tömning av kök och soprum",
-      orderType: "hamtning",
-      priority: "normal",
-      orderStatus: "planerad_resurs",
-      scheduledDate: monday,
-      scheduledStartTime: "10:00",
-      estimatedDuration: 40,
-    },
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: stensatravagen2.id, clusterId: "cluster-telge-syd", resourceId: resource1.id, title: "Hämtning hushållsavfall", description: "Tömning av kärl i samtliga soprum", orderType: "hamtning", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: mon, scheduledStartTime: "07:00", estimatedDuration: 30 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: stensatravagen4.id, clusterId: "cluster-telge-syd", resourceId: resource1.id, title: "Hämtning hushållsavfall", description: "Tömning av kärl", orderType: "hamtning", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: mon, scheduledStartTime: "07:45", estimatedDuration: 25 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: kungsgatan3.id, clusterId: "cluster-telge-nord", resourceId: resource2.id, title: "Hämtning + UJ service", description: "Tömning och rengöring av UJ-behållare", orderType: "uj_service", priority: "high", orderStatus: "planerad_resurs", scheduledDate: mon, scheduledStartTime: "08:00", estimatedDuration: 45 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: serviceboenden.id, objectId: aldregardenSolstralen.id, clusterId: "cluster-kommun", resourceId: resource3.id, title: "Serviceboende — Alla kärl", description: "Tömning av kök och soprum", orderType: "hamtning", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: mon, scheduledStartTime: "09:00", estimatedDuration: 35 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: serviceboenden.id, objectId: servicehusetGoken.id, clusterId: "cluster-kommun", resourceId: resource3.id, title: "Serviceboende — Alla kärl", description: "Tömning av kök och soprum", orderType: "hamtning", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: mon, scheduledStartTime: "10:00", estimatedDuration: 40 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: stensatravagen2.id, clusterId: "cluster-telge-syd", resourceId: tomasResource.id, title: "Tvätt soprum A", description: "Storstädning och tvätt av soprum inkl. väggar och golv", orderType: "tvatt", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: mon, scheduledStartTime: "07:30", estimatedDuration: 45 },
+
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: brinken4.id, clusterId: "cluster-telge-nord", resourceId: resource2.id, title: "Matavfall + Återvinning", description: "Hämtning av matavfall och återvinning", orderType: "hamtning", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: tue, scheduledStartTime: "07:00", estimatedDuration: 40 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: kungsgatan3.id, clusterId: "cluster-telge-nord", resourceId: resource1.id, title: "UJ Service Kungsgatan", description: "Rengöring och kontroll av UJ-behållare", orderType: "uj_service", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: tue, scheduledStartTime: "08:30", estimatedDuration: 50 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: serviceboenden.id, objectId: aldregardenSolstralen.id, clusterId: "cluster-kommun", resourceId: resource3.id, title: "Kontroll brandskydd", description: "Kontroll av brandskyltning och utrymningsvägar", orderType: "kontroll", priority: "high", orderStatus: "planerad_resurs", scheduledDate: tue, scheduledStartTime: "09:00", estimatedDuration: 60 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: stensatravagen4.id, clusterId: "cluster-telge-syd", resourceId: tomasResource.id, title: "Besiktning fastighet", description: "Årlig besiktning av avfallsutrymmen", orderType: "besiktning", priority: "high", orderStatus: "planerad_resurs", scheduledDate: tue, scheduledStartTime: "08:00", estimatedDuration: 60 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: stensatravagen2.id, clusterId: "cluster-telge-syd", resourceId: "res-anna", title: "Tvätt kärl 240L", description: "Högtryckstvätt av brunt kärl", orderType: "tvatt", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: tue, scheduledStartTime: "08:00", estimatedDuration: 30 },
+
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: stensatravagen2.id, clusterId: "cluster-telge-syd", resourceId: resource1.id, title: "Hämtning hushållsavfall", description: "Veckovis hämtning", orderType: "hamtning", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: wed, scheduledStartTime: "07:00", estimatedDuration: 30 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: brinken4.id, clusterId: "cluster-telge-nord", resourceId: resource2.id, title: "Kontroll soprum", description: "Kontroll av brandsäkerhet och skyltning", orderType: "kontroll", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: wed, scheduledStartTime: "08:00", estimatedDuration: 40 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: serviceboenden.id, objectId: servicehusetGoken.id, clusterId: "cluster-kommun", resourceId: resource3.id, title: "Service ventilation", description: "Ventilationsservice och filterbyte", orderType: "service", priority: "high", orderStatus: "planerad_resurs", scheduledDate: wed, scheduledStartTime: "09:00", estimatedDuration: 90 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: kungsgatan3.id, clusterId: "cluster-telge-nord", resourceId: tomasResource.id, title: "Tvätt container", description: "Invändig tvätt av container", orderType: "tvatt", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: wed, scheduledStartTime: "10:00", estimatedDuration: 35 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: stensatravagen4.id, clusterId: "cluster-telge-syd", resourceId: "res-anna", title: "Besiktning soprum", description: "Statusbesiktning av avfallsutrymme", orderType: "besiktning", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: wed, scheduledStartTime: "09:00", estimatedDuration: 45 },
+
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: stensatravagen4.id, clusterId: "cluster-telge-syd", resourceId: resource1.id, title: "Hämtning matavfall", description: "Specialhämtning matavfall", orderType: "hamtning", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: thu, scheduledStartTime: "07:00", estimatedDuration: 25 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: serviceboenden.id, objectId: aldregardenSolstralen.id, clusterId: "cluster-kommun", resourceId: resource3.id, title: "Hämtning serviceende", description: "Tömning alla kärl på serviceboendet", orderType: "hamtning", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: thu, scheduledStartTime: "08:00", estimatedDuration: 45 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: brinken4.id, clusterId: "cluster-telge-nord", resourceId: resource2.id, title: "Återvinning sortering", description: "Extra tömning och sorteringskontroll", orderType: "atervinning", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: thu, scheduledStartTime: "09:00", estimatedDuration: 35 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: kungsgatan3.id, clusterId: "cluster-telge-nord", resourceId: tomasResource.id, title: "Etablering ny container", description: "Installation av ny 660L container", orderType: "etablering", priority: "high", orderStatus: "planerad_resurs", scheduledDate: thu, scheduledStartTime: "08:00", estimatedDuration: 75 },
+
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: stensatravagen2.id, clusterId: "cluster-telge-syd", resourceId: resource1.id, title: "Hämtning hushållsavfall", description: "Fredags-hämtning", orderType: "hamtning", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: fri, scheduledStartTime: "07:00", estimatedDuration: 30 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: serviceboenden.id, objectId: servicehusetGoken.id, clusterId: "cluster-kommun", resourceId: resource3.id, title: "Fredagskontroll", description: "Veckokontroll av soprum", orderType: "kontroll", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: fri, scheduledStartTime: "08:00", estimatedDuration: 30 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: brinken4.id, clusterId: "cluster-telge-nord", resourceId: "res-anna", title: "Tvätt soprum", description: "Högtryckstvätt soprum", orderType: "tvatt", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: fri, scheduledStartTime: "09:00", estimatedDuration: 40 },
   ]);
 
-  console.log("Created work orders");
+  await db.insert(workOrders).values([
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: stensatravagen2.id, clusterId: "cluster-telge-syd", title: "Extra tömning matavfall", description: "Fullständig tömning efter helg", orderType: "hamtning", priority: "urgent", orderStatus: "skapad", estimatedDuration: 35 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: kungsgatan3.id, clusterId: "cluster-telge-nord", title: "Reparation containerlock", description: "Locket på 660L-containern är trasigt", orderType: "service", priority: "high", orderStatus: "skapad", estimatedDuration: 45 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: serviceboenden.id, objectId: aldregardenSolstralen.id, clusterId: "cluster-kommun", title: "Storstädning kök", description: "Storstädning av köket efter renovering", orderType: "tvatt", priority: "normal", orderStatus: "skapad", estimatedDuration: 90 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: brinken4.id, clusterId: "cluster-telge-nord", title: "UJ rengöring", description: "Djuprengöring av underjordisk behållare", orderType: "uj_service", priority: "high", orderStatus: "skapad", estimatedDuration: 60 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: serviceboenden.id, objectId: servicehusetGoken.id, clusterId: "cluster-kommun", title: "Byte ventilfilter", description: "Filterbyte i soprummets ventilation", orderType: "service", priority: "normal", orderStatus: "skapad", estimatedDuration: 40 },
+    { tenantId: DEFAULT_TENANT_ID, customerId: telgebostader.id, objectId: stensatravagen4.id, clusterId: "cluster-telge-syd", title: "Avloppsrensning", description: "Avloppsrensning i soprum efter vattenläcka", orderType: "service", priority: "urgent", orderStatus: "skapad", estimatedDuration: 50 },
+  ]);
+
+  console.log("Created 23 scheduled + 6 unscheduled work orders across Mon-Fri");
 
   const demoCust1 = await db.select().from(customers).where(sql`id = 'cust-telge'`);
   if (demoCust1.length === 0) {
     await seedFieldAppDemoData(tomasResource.id);
   }
 
-  // Seed branding templates (8 industry templates)
   const existingTemplates = await db.select().from(brandingTemplates).limit(1);
   if (existingTemplates.length === 0) {
     await db.insert(brandingTemplates).values([
@@ -671,7 +701,6 @@ export async function seedDatabase() {
     console.log("Created 8 industry branding templates");
   }
 
-  // Create default branding for tenant
   const existingBranding = await db.select().from(tenantBranding).where(sql`tenant_id = ${DEFAULT_TENANT_ID}`);
   if (existingBranding.length === 0) {
     await db.insert(tenantBranding).values({
@@ -689,7 +718,6 @@ export async function seedDatabase() {
 
   const tomasResCheck = await db.select().from(resources).where(sql`email = 'tomas@nordicrouting.se'`);
   if (tomasResCheck.length > 0) {
-    // Check if user exists in users table
     const existingUser = await db.select().from(users).where(sql`email = 'tomas@nordicrouting.se'`);
     let userId: string;
     
@@ -705,7 +733,6 @@ export async function seedDatabase() {
       userId = existingUser[0].id;
     }
     
-    // Create owner role
     const existingRole = await db.select().from(userTenantRoles).where(sql`user_id = ${userId} AND tenant_id = ${DEFAULT_TENANT_ID}`);
     if (existingRole.length === 0) {
       await db.insert(userTenantRoles).values({
@@ -736,6 +763,7 @@ async function refreshDemoWorkOrderDates() {
       homeLocation: "Södertälje",
       weeklyHours: 40,
       competencies: ["tvatt", "besiktning", "hamtning", "kontroll", "service", "etablering"],
+      serviceArea: ["15138", "15171", "15172", "15189"],
       status: "active",
       homeLatitude: 59.1955,
       homeLongitude: 17.6253,
@@ -756,6 +784,7 @@ async function refreshDemoWorkOrderDates() {
       homeLocation: "Huddinge",
       weeklyHours: 40,
       competencies: ["tvatt", "besiktning", "hamtning"],
+      serviceArea: ["15138", "15145", "15152"],
       status: "active",
       homeLatitude: 59.2369,
       homeLongitude: 17.9812,
@@ -788,35 +817,50 @@ async function refreshDemoWorkOrderDates() {
   await db.update(objects).set({ latitude: 59.2045, longitude: 17.6150, address: "Järnagatan 4", city: "Södertälje", postalCode: "151 04", name: "Järnagatan 4 - Tvättstuga" }).where(sql`id = 'obj-7'`);
   await db.update(objects).set({ latitude: 59.1912, longitude: 17.6380, address: "Turingegatan 10", city: "Södertälje", postalCode: "151 72", name: "Turingegatan 10 - Källare" }).where(sql`id = 'obj-8'`);
 
+  const existingClusters = await db.select({ id: clusters.id }).from(clusters).where(sql`id = 'cluster-telge-syd'`);
+  if (existingClusters.length === 0) {
+    const telgeCust = await db.select({ id: customers.id }).from(customers).where(sql`customer_number = 'KUND-001' AND tenant_id = ${DEFAULT_TENANT_ID}`).limit(1);
+    const kommunCust = await db.select({ id: customers.id }).from(customers).where(sql`customer_number = 'KUND-002' AND tenant_id = ${DEFAULT_TENANT_ID}`).limit(1);
+    if (telgeCust.length > 0 && kommunCust.length > 0) {
+      await db.insert(clusters).values([
+        { id: "cluster-telge-syd", tenantId: DEFAULT_TENANT_ID, rootCustomerId: telgeCust[0].id, name: "Telgebostäder Syd", color: "#3B82F6", centerLatitude: 59.1956, centerLongitude: 17.6254, radiusKm: 3, postalCodes: ["15138", "15189"], cachedObjectCount: 4, status: "active" },
+        { id: "cluster-telge-nord", tenantId: DEFAULT_TENANT_ID, rootCustomerId: telgeCust[0].id, name: "Telgebostäder Nord", color: "#EF4444", centerLatitude: 59.1966, centerLongitude: 17.6285, radiusKm: 2, postalCodes: ["15171", "15172"], cachedObjectCount: 2, status: "active" },
+        { id: "cluster-kommun", tenantId: DEFAULT_TENANT_ID, rootCustomerId: kommunCust[0].id, name: "Kommun Serviceboenden", color: "#22C55E", centerLatitude: 59.1985, centerLongitude: 17.6315, radiusKm: 2, postalCodes: ["15145", "15146", "15152"], cachedObjectCount: 2, status: "active" },
+      ]).onConflictDoNothing();
+      console.log("Created clusters in refresh");
+    }
+  }
+
+  const [mon, tue, wed, thu, fri] = getCurrentWeekDates();
+
+  const dayAssignments: Record<string, Date> = {
+    "wo-1": mon, "wo-2": tue, "wo-3": wed, "wo-4": thu,
+    "wo-5": mon, "wo-6": wed, "wo-7": thu, "wo-8": fri,
+    "wo-anna-1": mon, "wo-anna-2": tue, "wo-anna-3": wed, "wo-anna-4": fri,
+  };
+
+  for (const [woId, date] of Object.entries(dayAssignments)) {
+    await db.update(workOrders)
+      .set({ scheduledDate: date })
+      .where(sql`id = ${woId} AND (scheduled_date IS NULL OR scheduled_date != ${date})`);
+  }
+
   const annaOrders = await db.select().from(workOrders).where(sql`id = 'wo-anna-1'`);
   if (annaOrders.length === 0) {
-    const today2 = new Date();
-    today2.setHours(0, 0, 0, 0);
     await db.insert(workOrders).values([
-      { id: "wo-anna-1", tenantId: DEFAULT_TENANT_ID, customerId: "cust-telge", objectId: "obj-1", resourceId: "res-anna", title: "Tvätt soprum B", description: "Tvätt av soprum B, Stensätravägen", orderType: "tvatt", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: today2, scheduledStartTime: "08:00", estimatedDuration: 40 },
-      { id: "wo-anna-2", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", objectId: "obj-5", resourceId: "res-anna", title: "Kontroll skola", description: "Kontroll av avfallshantering", orderType: "kontroll", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: today2, scheduledStartTime: "09:00", estimatedDuration: 50 },
-      { id: "wo-anna-3", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", objectId: "obj-6", resourceId: "res-anna", title: "Tvätt container park", description: "Högtryckstvätt av container", orderType: "tvatt", priority: "high", orderStatus: "planerad_resurs", scheduledDate: today2, scheduledStartTime: "10:30", estimatedDuration: 35 },
-      { id: "wo-anna-4", tenantId: DEFAULT_TENANT_ID, customerId: "cust-brf", objectId: "obj-4", resourceId: "res-anna", title: "Service soprum", description: "Service och underhåll", orderType: "service", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: today2, scheduledStartTime: "12:00", estimatedDuration: 60 },
+      { id: "wo-anna-1", tenantId: DEFAULT_TENANT_ID, customerId: "cust-telge", objectId: "obj-1", resourceId: "res-anna", title: "Tvätt soprum B", description: "Tvätt av soprum B, Stensätravägen", orderType: "tvatt", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: mon, scheduledStartTime: "08:00", estimatedDuration: 40 },
+      { id: "wo-anna-2", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", objectId: "obj-5", resourceId: "res-anna", title: "Kontroll skola", description: "Kontroll av avfallshantering", orderType: "kontroll", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: tue, scheduledStartTime: "09:00", estimatedDuration: 50 },
+      { id: "wo-anna-3", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", objectId: "obj-6", resourceId: "res-anna", title: "Tvätt container park", description: "Högtryckstvätt av container", orderType: "tvatt", priority: "high", orderStatus: "planerad_resurs", scheduledDate: wed, scheduledStartTime: "10:30", estimatedDuration: 35 },
+      { id: "wo-anna-4", tenantId: DEFAULT_TENANT_ID, customerId: "cust-brf", objectId: "obj-4", resourceId: "res-anna", title: "Service soprum", description: "Service och underhåll", orderType: "service", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: fri, scheduledStartTime: "12:00", estimatedDuration: 60 },
     ]).onConflictDoNothing();
     console.log("Created 4 demo work orders for Anna");
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  const result = await db.update(workOrders)
-    .set({ scheduledDate: today })
-    .where(sql`id IN ('wo-1','wo-2','wo-3','wo-4','wo-5','wo-6','wo-7','wo-8','wo-anna-1','wo-anna-2','wo-anna-3','wo-anna-4') AND (scheduled_date IS NULL OR scheduled_date != ${today})`)
-    .returning({ id: workOrders.id });
-  
-  if (result.length > 0) {
-    console.log(`Updated ${result.length} demo work orders to today's date`);
-  }
+  console.log("Refreshed demo work order dates across current week (Mon-Fri)");
 }
 
 async function seedFieldAppDemoData(tomasResourceId: string) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const [mon, tue, wed, thu, fri] = getCurrentWeekDates();
 
   await db.insert(customers).values([
     { id: "cust-telge", tenantId: DEFAULT_TENANT_ID, name: "Telgebostäder AB", customerNumber: "K001", contactPerson: "Erik Svensson", email: "erik@telgebostader.se", phone: "08-550 123 00", address: "Storgatan 1", city: "Södertälje", postalCode: "151 72" },
@@ -837,17 +881,17 @@ async function seedFieldAppDemoData(tomasResourceId: string) {
   ]);
 
   await db.insert(workOrders).values([
-    { id: "wo-1", tenantId: DEFAULT_TENANT_ID, customerId: "cust-telge", objectId: "obj-1", resourceId: tomasResourceId, title: "Tvätt soprum A", description: "Storstädning och tvätt av soprum inkl. väggar och golv", orderType: "tvatt", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: today, scheduledStartTime: "07:30", estimatedDuration: 45 },
-    { id: "wo-2", tenantId: DEFAULT_TENANT_ID, customerId: "cust-telge", objectId: "obj-2", resourceId: tomasResourceId, title: "Besiktning fastighet", description: "Årlig besiktning av avfallsutrymmen och behållare", orderType: "besiktning", priority: "high", orderStatus: "planerad_resurs", scheduledDate: today, scheduledStartTime: "08:30", estimatedDuration: 60 },
-    { id: "wo-3", tenantId: DEFAULT_TENANT_ID, customerId: "cust-brf", objectId: "obj-3", resourceId: tomasResourceId, title: "Tvätt kärl 240L", description: "Högtryckstvätt av brunt kärl vid Strandvägen 15", orderType: "tvatt", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: today, scheduledStartTime: "09:45", estimatedDuration: 30 },
-    { id: "wo-4", tenantId: DEFAULT_TENANT_ID, customerId: "cust-brf", objectId: "obj-4", resourceId: tomasResourceId, title: "Kontroll soprum", description: "Kontroll av brandsäkerhet och skyltning i soprum", orderType: "kontroll", priority: "normal", orderStatus: "paborjad", scheduledDate: today, scheduledStartTime: "10:30", estimatedDuration: 40 },
-    { id: "wo-5", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", objectId: "obj-5", resourceId: tomasResourceId, title: "Service ventilation skola", description: "Ventilationsservice och filterbyte i soprummet", orderType: "service", priority: "high", orderStatus: "planerad_resurs", scheduledDate: today, scheduledStartTime: "11:30", estimatedDuration: 90 },
-    { id: "wo-6", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", objectId: "obj-6", resourceId: tomasResourceId, title: "Tvätt container", description: "Invändig tvätt av 660L container vid Brunnsängsparken", orderType: "tvatt", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: today, scheduledStartTime: "13:30", estimatedDuration: 35 },
-    { id: "wo-7", tenantId: DEFAULT_TENANT_ID, customerId: "cust-fastighet", objectId: "obj-7", resourceId: tomasResourceId, title: "Etablering tvättstuga", description: "Ny etablering av avfallshantering i tvättstuga", orderType: "etablering", priority: "high", orderStatus: "planerad_resurs", scheduledDate: today, scheduledStartTime: "14:30", estimatedDuration: 75 },
-    { id: "wo-8", tenantId: DEFAULT_TENANT_ID, customerId: "cust-fastighet", objectId: "obj-8", resourceId: tomasResourceId, title: "Besiktning källare", description: "Statusbesiktning av avfallsutrymme i källare", orderType: "besiktning", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: today, scheduledStartTime: "16:00", estimatedDuration: 45 },
+    { id: "wo-1", tenantId: DEFAULT_TENANT_ID, customerId: "cust-telge", objectId: "obj-1", resourceId: tomasResourceId, title: "Tvätt soprum A", description: "Storstädning och tvätt av soprum inkl. väggar och golv", orderType: "tvatt", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: mon, scheduledStartTime: "07:30", estimatedDuration: 45 },
+    { id: "wo-2", tenantId: DEFAULT_TENANT_ID, customerId: "cust-telge", objectId: "obj-2", resourceId: tomasResourceId, title: "Besiktning fastighet", description: "Årlig besiktning av avfallsutrymmen och behållare", orderType: "besiktning", priority: "high", orderStatus: "planerad_resurs", scheduledDate: tue, scheduledStartTime: "08:30", estimatedDuration: 60 },
+    { id: "wo-3", tenantId: DEFAULT_TENANT_ID, customerId: "cust-brf", objectId: "obj-3", resourceId: tomasResourceId, title: "Tvätt kärl 240L", description: "Högtryckstvätt av brunt kärl vid Strandvägen 15", orderType: "tvatt", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: wed, scheduledStartTime: "09:45", estimatedDuration: 30 },
+    { id: "wo-4", tenantId: DEFAULT_TENANT_ID, customerId: "cust-brf", objectId: "obj-4", resourceId: tomasResourceId, title: "Kontroll soprum", description: "Kontroll av brandsäkerhet och skyltning i soprum", orderType: "kontroll", priority: "normal", orderStatus: "paborjad", scheduledDate: thu, scheduledStartTime: "10:30", estimatedDuration: 40 },
+    { id: "wo-5", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", objectId: "obj-5", resourceId: tomasResourceId, title: "Service ventilation skola", description: "Ventilationsservice och filterbyte i soprummet", orderType: "service", priority: "high", orderStatus: "planerad_resurs", scheduledDate: mon, scheduledStartTime: "11:30", estimatedDuration: 90 },
+    { id: "wo-6", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", objectId: "obj-6", resourceId: tomasResourceId, title: "Tvätt container", description: "Invändig tvätt av 660L container vid Brunnsängsparken", orderType: "tvatt", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: wed, scheduledStartTime: "13:30", estimatedDuration: 35 },
+    { id: "wo-7", tenantId: DEFAULT_TENANT_ID, customerId: "cust-fastighet", objectId: "obj-7", resourceId: tomasResourceId, title: "Etablering tvättstuga", description: "Ny etablering av avfallshantering i tvättstuga", orderType: "etablering", priority: "high", orderStatus: "planerad_resurs", scheduledDate: thu, scheduledStartTime: "14:30", estimatedDuration: 75 },
+    { id: "wo-8", tenantId: DEFAULT_TENANT_ID, customerId: "cust-fastighet", objectId: "obj-8", resourceId: tomasResourceId, title: "Besiktning källare", description: "Statusbesiktning av avfallsutrymme i källare", orderType: "besiktning", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: fri, scheduledStartTime: "16:00", estimatedDuration: 45 },
   ]);
 
-  console.log("Created SimpleFieldApp demo data: 4 customers, 8 objects, 8 work orders for today");
+  console.log("Created SimpleFieldApp demo data: 4 customers, 8 objects, 8 work orders across week");
 }
 
 async function seedSystemMetadataLabels() {
