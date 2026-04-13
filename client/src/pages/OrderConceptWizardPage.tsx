@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { z } from "zod";
@@ -83,6 +83,7 @@ export default function OrderConceptWizardPage() {
   const [hasUnsavedWork, setHasUnsavedWork] = useState(false);
   useUnsavedChanges(hasUnsavedWork);
   const [currentStep, setCurrentStep] = useState(1);
+  const processingNextRef = useRef(false);
   const [resumeStep, setResumeStep] = useState<number | null>(null);
   const [showResumeBanner, setShowResumeBanner] = useState(false);
   const [conceptId, setConceptId] = useState<string | null>(params.id || null);
@@ -383,29 +384,43 @@ export default function OrderConceptWizardPage() {
   });
 
   const handleNext = useCallback(async () => {
+    if (processingNextRef.current) return;
+    processingNextRef.current = true;
+
     const validationError = await validateCurrentStep();
     if (validationError) {
       toast({ title: "Ofullständigt steg", description: validationError, variant: "destructive" });
+      processingNextRef.current = false;
       return;
     }
 
-    let activeConceptId = conceptId;
+    try {
+      let activeConceptId = conceptId;
 
-    if (!activeConceptId && currentStep === 1) {
-      const created = await createConceptMutation.mutateAsync();
-      activeConceptId = created.id;
-    }
+      if (!activeConceptId && currentStep === 1) {
+        const created = await createConceptMutation.mutateAsync();
+        if (!created || !created.id) {
+          throw new Error("Kunde inte skapa orderkoncept — inget id returnerades.");
+        }
+        activeConceptId = created.id;
+      }
 
-    const newStep = currentStep < 9 ? currentStep + 1 : currentStep;
+      const newStep = currentStep < 9 ? currentStep + 1 : currentStep;
 
-    if (activeConceptId) {
-      await saveStepMutation.mutateAsync({ step: currentStep, nextStep: newStep, overrideConceptId: activeConceptId });
-    }
+      if (activeConceptId) {
+        await saveStepMutation.mutateAsync({ step: currentStep, nextStep: newStep, overrideConceptId: activeConceptId });
+      }
 
-    if (currentStep < 9) {
-      setShowResumeBanner(false);
-      setCurrentStep(newStep);
-      setHasUnsavedWork(false);
+      if (currentStep < 9) {
+        setShowResumeBanner(false);
+        setCurrentStep(newStep);
+        setHasUnsavedWork(false);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Okänt fel";
+      toast({ title: "Kunde inte spara steget", description: message, variant: "destructive" });
+    } finally {
+      processingNextRef.current = false;
     }
   }, [conceptId, currentStep, conceptName, createConceptMutation, saveStepMutation, validateCurrentStep]);
 
@@ -421,26 +436,36 @@ export default function OrderConceptWizardPage() {
   }, [currentStep, conceptId]);
 
   const handleSaveDraft = useCallback(async () => {
-    let activeId = conceptId;
-    if (!activeId && conceptName) {
-      const created = await createConceptMutation.mutateAsync();
-      activeId = created.id;
-    }
-    if (activeId) {
-      await saveStepMutation.mutateAsync({ step: currentStep, overrideConceptId: activeId });
-      setHasUnsavedWork(false);
-      toast({ title: "Utkast sparat" });
+    try {
+      let activeId = conceptId;
+      if (!activeId && conceptName) {
+        const created = await createConceptMutation.mutateAsync();
+        activeId = created?.id;
+      }
+      if (activeId) {
+        await saveStepMutation.mutateAsync({ step: currentStep, overrideConceptId: activeId });
+        setHasUnsavedWork(false);
+        toast({ title: "Utkast sparat" });
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Okänt fel";
+      toast({ title: "Kunde inte spara utkast", description: message, variant: "destructive" });
     }
   }, [conceptId, currentStep, conceptName]);
 
   const handleActivate = useCallback(async () => {
     if (!conceptId) return;
-    await saveStepMutation.mutateAsync({ step: 9 });
-    await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { status: "active" });
-    queryClient.invalidateQueries({ queryKey: ["/api/order-concepts"] });
-    setHasUnsavedWork(false);
-    toast({ title: "Orderkoncept aktiverat!" });
-    navigate("/order-concepts");
+    try {
+      await saveStepMutation.mutateAsync({ step: 9 });
+      await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { status: "active" });
+      queryClient.invalidateQueries({ queryKey: ["/api/order-concepts"] });
+      setHasUnsavedWork(false);
+      toast({ title: "Orderkoncept aktiverat!" });
+      navigate("/order-concepts");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Okänt fel";
+      toast({ title: "Kunde inte aktivera", description: message, variant: "destructive" });
+    }
   }, [conceptId, navigate]);
 
   const toggleObject = useCallback((id: string) => {
