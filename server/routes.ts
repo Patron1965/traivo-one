@@ -465,7 +465,7 @@ export async function registerRoutes(
   registerMobileRoutes(app);
   registerPlannerRoutes(app);
   registerKPIRoutes(app);
-  registerFortnoxRoutes(app);
+  await registerFortnoxRoutes(app);
   registerOrderConceptRoutes(app);
   registerPortalRoutes(app);
   registerExtendedRoutes(app);
