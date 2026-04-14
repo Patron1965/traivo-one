@@ -64,6 +64,24 @@ function formatRouteDuration(seconds: number): string {
   return m > 0 ? `${h}h ${m}min` : `${h}h`;
 }
 
+function shiftDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T12:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
+function formatMapDateLabel(dateStr: string): string {
+  const today = new Date().toISOString().split('T')[0];
+  const yesterday = shiftDate(today, -1);
+  if (dateStr === today) return 'Idag';
+  if (dateStr === yesterday) return 'Igår';
+  const d = new Date(dateStr + 'T12:00:00');
+  const weekday = d.toLocaleDateString('sv-SE', { weekday: 'short' });
+  const day = d.getDate();
+  const month = d.toLocaleDateString('sv-SE', { month: 'short' });
+  return `${weekday} ${day} ${month}`;
+}
+
 function getMarkerColor(order: Order): string {
   if (order.status === 'completed' || order.status === 'utford' || order.status === 'avslutad') return Colors.success;
   if (order.status === 'in_progress' || order.status === 'on_site' || order.status === 'paborjad') return Colors.secondary;
@@ -135,6 +153,10 @@ export function MapScreen({ navigation }: any) {
   const [usingCachedData, setUsingCachedData] = useState(false);
   const [cachedRouteData, setCachedRouteData] = useState<RouteData | null>(null);
   const [cachedOrders, setCachedOrders] = useState<Order[] | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const todayStr = new Date().toISOString().split('T')[0];
+  const maxDate = shiftDate(todayStr, 7);
+  const isAtMaxDate = selectedDate >= maxDate;
   const { currentPosition } = useGpsTracking();
   const { partner } = useTeam();
   const { startPosition } = useAuth();
@@ -168,7 +190,8 @@ export function MapScreen({ navigation }: any) {
   }, [startPosition, currentPosition?.latitude, currentPosition?.longitude]);
 
   const { data: orders } = useQuery<Order[]>({
-    queryKey: ['/api/mobile/my-orders'],
+    queryKey: ['/api/mobile/my-orders', selectedDate],
+    queryFn: () => apiRequest('GET', `/api/mobile/my-orders?date=${selectedDate}`),
   });
 
   const liveActiveOrders = useMemo(
@@ -484,8 +507,26 @@ export function MapScreen({ navigation }: any) {
         ) : null}
       </MapView>
 
+      <View style={[styles.dateNavBar, { top: headerHeight + Spacing.sm }]}>
+        <Pressable onPress={() => setSelectedDate(shiftDate(selectedDate, -1))} style={styles.dateNavBtn} testID="button-map-prev-date">
+          <Feather name="chevron-left" size={20} color={Colors.primary} />
+        </Pressable>
+        <Pressable onPress={() => setSelectedDate(new Date().toISOString().split('T')[0])} style={styles.dateNavLabel}>
+          <ThemedText variant="subheading" color={Colors.text} style={styles.dateNavText}>
+            {formatMapDateLabel(selectedDate)}
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          onPress={() => { if (!isAtMaxDate) setSelectedDate(shiftDate(selectedDate, 1)); }}
+          style={[styles.dateNavBtn, isAtMaxDate ? styles.dateNavBtnDisabled : null]}
+          testID="button-map-next-date"
+        >
+          <Feather name="chevron-right" size={20} color={isAtMaxDate ? Colors.textMuted : Colors.primary} />
+        </Pressable>
+      </View>
+
       {usingCachedData ? (
-        <View style={[styles.offlineBadge, { top: headerHeight + Spacing.md }]}>
+        <View style={[styles.offlineBadge, { top: headerHeight + Spacing.md + 48 }]}>
           <Feather name="wifi-off" size={12} color={Colors.textInverse} />
           <Text style={styles.offlineBadgeText}>Offline - visar cachad data</Text>
         </View>
@@ -988,6 +1029,39 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
     color: '#92400E',
+  },
+  dateNavBar: {
+    position: 'absolute',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: BorderRadius.round,
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: Spacing.xs,
+    zIndex: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  dateNavBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dateNavBtnDisabled: {
+    opacity: 0.3,
+  },
+  dateNavLabel: {
+    paddingHorizontal: Spacing.md,
+  },
+  dateNavText: {
+    fontSize: FontSize.sm,
+    textAlign: 'center',
   },
   offlineBadge: {
     position: 'absolute',
