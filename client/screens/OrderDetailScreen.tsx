@@ -946,17 +946,19 @@ export function OrderDetailScreen({ route, navigation }: any) {
                     </View>
                     <View style={styles.timelineContent}>
                       <View style={styles.timelineHeader}>
-                        <ThemedText variant="body" style={{ fontFamily: 'Inter_600SemiBold' }}>
+                        <ThemedText variant="caption" style={{ fontFamily: 'Inter_600SemiBold', flex: 1 }}>
                           {TIME_STATUS_LABELS[entry.status] || entry.status}
+                          {isActive ? (
+                            <ThemedText variant="caption" color={color}> (pågår)</ThemedText>
+                          ) : null}
                         </ThemedText>
-                        <ThemedText variant="caption" color={Colors.textMuted}>
-                          {startTime}{endTime ? ` - ${endTime}` : ''}
+                        <ThemedText variant="caption" color={Colors.textMuted} style={{ marginHorizontal: Spacing.xs }}>
+                          {startTime}{endTime ? ` – ${endTime}` : ''}
+                        </ThemedText>
+                        <ThemedText variant="caption" color={isActive ? color : Colors.textSecondary} style={{ fontFamily: 'Inter_600SemiBold', minWidth: 44, textAlign: 'right' }}>
+                          {isActive ? formatDuration(duration) : formatDurationShort(duration)}
                         </ThemedText>
                       </View>
-                      <ThemedText variant="caption" color={isActive ? color : Colors.textSecondary}>
-                        {isActive ? formatDuration(duration) : formatDurationShort(duration)}
-                        {isActive ? ' (pågår)' : ''}
-                      </ThemedText>
                     </View>
                   </View>
                 );
@@ -1715,58 +1717,57 @@ const styles = StyleSheet.create({
   timeBreakdownRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginBottom: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.sm,
+    paddingVertical: Spacing.xs,
     backgroundColor: Colors.background,
     borderRadius: BorderRadius.md,
   },
   timeBreakdownItem: {
     alignItems: 'center',
-    gap: Spacing.xs,
+    gap: 2,
   },
   timeBreakdownDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   timelineContainer: {
     gap: 0,
   },
   timelineRow: {
     flexDirection: 'row',
-    minHeight: 48,
+    minHeight: 28,
   },
   timelineLeft: {
-    width: 24,
+    width: 20,
     alignItems: 'center',
   },
   timelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 5,
+  },
+  timelineDotActive: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    marginTop: 4,
-  },
-  timelineDotActive: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
     borderWidth: 2,
     borderColor: Colors.surface,
   },
   timelineLine: {
     width: 2,
     flex: 1,
-    opacity: 0.3,
-    marginVertical: 2,
+    opacity: 0.25,
+    marginVertical: 1,
   },
   timelineContent: {
     flex: 1,
-    paddingLeft: Spacing.sm,
-    paddingBottom: Spacing.md,
+    paddingLeft: Spacing.xs,
+    paddingBottom: Spacing.xs,
   },
   timelineHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
   },
 });
