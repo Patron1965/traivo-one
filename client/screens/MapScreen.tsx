@@ -300,12 +300,19 @@ export function MapScreen({ navigation }: any) {
   }, [effectiveRouteData]);
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!mapReady) setMapReady(true);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [mapReady]);
+
+  useEffect(() => {
     if (mapReady && roadPolyline && roadPolyline.length > 1) {
       const timer = setTimeout(() => {
         setDisplayPolyline(roadPolyline);
-      }, 500);
+      }, 300);
       return () => clearTimeout(timer);
-    } else {
+    } else if (mapReady) {
       setDisplayPolyline(null);
     }
   }, [mapReady, roadPolyline]);
