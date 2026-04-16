@@ -324,7 +324,7 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
     productionMinutes?: number;
   }
 
-  const { data: articles = [] } = useQuery<Article[]>({
+  const { data: articles = [], isLoading: isArticlesLoading } = useQuery<Article[]>({
     queryKey: ["/api/articles"],
     enabled: showAddArticleDialog,
   });
@@ -1045,7 +1045,7 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                 <div className="p-2 space-y-1">
                   {filteredArticles.length === 0 ? (
                     <div className="text-sm text-muted-foreground text-center py-4">
-                      {articles.length === 0 ? "Laddar artiklar..." : "Inga artiklar hittades."}
+                      {isArticlesLoading ? "Laddar artiklar..." : articles.length === 0 ? "Inga artiklar finns registrerade ännu." : "Inga artiklar hittades."}
                     </div>
                   ) : (
                     filteredArticles.map((article) => (
