@@ -189,6 +189,23 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             </div>
           )}
 
+          {(d.viewMode === "day" || d.viewMode === "week") && (
+            <ResourceFilterBar
+              resourceNameFilter={d.resourceNameFilter}
+              setResourceNameFilter={d.setResourceNameFilter}
+              resourceExecutionCodeFilter={d.resourceExecutionCodeFilter}
+              setResourceExecutionCodeFilter={d.setResourceExecutionCodeFilter}
+              resourceOccupancyFilter={d.resourceOccupancyFilter}
+              setResourceOccupancyFilter={d.setResourceOccupancyFilter}
+              filterTeam={d.filterTeam}
+              setFilterTeam={d.setFilterTeam}
+              teamsData={d.teamsData}
+              allExecutionCodes={d.allExecutionCodes}
+              resourceActiveFilterCount={d.resourceActiveFilterCount}
+              clearResourceFilters={d.clearResourceFilters}
+            />
+          )}
+
           {d.viewMode === "day" && (
             <DayTimelineView
               currentDate={d.currentDate} visibleResources={d.visibleResources}
@@ -207,22 +224,6 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
           {d.viewMode === "week" && (
             <WeekGridView
               visibleDates={d.visibleDates} visibleResources={d.visibleResources}
-              filterBar={
-                <ResourceFilterBar
-                  resourceNameFilter={d.resourceNameFilter}
-                  setResourceNameFilter={d.setResourceNameFilter}
-                  resourceExecutionCodeFilter={d.resourceExecutionCodeFilter}
-                  setResourceExecutionCodeFilter={d.setResourceExecutionCodeFilter}
-                  resourceOccupancyFilter={d.resourceOccupancyFilter}
-                  setResourceOccupancyFilter={d.setResourceOccupancyFilter}
-                  filterTeam={d.filterTeam}
-                  setFilterTeam={d.setFilterTeam}
-                  teamsData={d.teamsData}
-                  allExecutionCodes={d.allExecutionCodes}
-                  resourceActiveFilterCount={d.resourceActiveFilterCount}
-                  clearResourceFilters={d.clearResourceFilters}
-                />
-              }
               getJobsForResourceAndDay={d.getJobsForResourceAndDay}
               getResourceDayHours={d.getResourceDayHours} getCapacityPercentage={d.getCapacityPercentage}
               getCapacityColor={d.getCapacityColor} getCapacityBgColor={d.getCapacityBgColor}
