@@ -230,14 +230,14 @@ export function usePlannerData() {
       return { previousData: prev };
     },
     onSuccess: (updated, vars) => { queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === vars.id ? { ...j, ...updated } : j)); queryClient.invalidateQueries({ queryKey: ["/api/work-orders", "unscheduled-paginated"] }); setUnscheduledPage(0); },
-    onError: (_err, _vars, ctx) => { if (ctx?.previousData) queryClient.setQueryData(workOrdersQueryKey, ctx.previousData); toast({ title: "Kunde inte uppdatera jobbet", description: error.message, variant: "destructive" }); },
+    onError: (err, _vars, ctx) => { if (ctx?.previousData) queryClient.setQueryData(workOrdersQueryKey, ctx.previousData); toast({ title: "Kunde inte uppdatera jobbet", description: err instanceof Error ? err.message : "Försök igen", variant: "destructive" }); },
   });
 
   const unscheduleWorkOrderMutation = useMutation({
     mutationFn: async (id: string) => (await apiRequest("PATCH", `/api/work-orders/${id}`, { resourceId: null, scheduledDate: null, scheduledStartTime: null, orderStatus: "skapad" })).json() as Promise<WorkOrderWithObject>,
     onMutate: async (id) => { await queryClient.cancelQueries({ queryKey: workOrdersQueryKey }); const prev = queryClient.getQueryData<WorkOrderWithObject[]>(workOrdersQueryKey); queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === id ? { ...j, resourceId: null, scheduledDate: null, scheduledStartTime: null, orderStatus: "skapad" as const } : j)); return { previousData: prev }; },
     onSuccess: (updated, id) => { queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === id ? { ...j, ...updated } : j)); queryClient.invalidateQueries({ queryKey: ["/api/work-orders", "unscheduled-paginated"] }); setUnscheduledPage(0); toast({ title: "Avschemalagt", description: "Jobbet flyttades tillbaka till oschemalagda." }); },
-    onError: (_err, _id, ctx) => { if (ctx?.previousData) queryClient.setQueryData(workOrdersQueryKey, ctx.previousData); toast({ title: "Kunde inte avschemalägg jobbet", description: error.message, variant: "destructive" }); },
+    onError: (err, _id, ctx) => { if (ctx?.previousData) queryClient.setQueryData(workOrdersQueryKey, ctx.previousData); toast({ title: "Kunde inte avschemalägg jobbet", description: err instanceof Error ? err.message : "Försök igen", variant: "destructive" }); },
   });
 
   const applyActionMutation = useMutation({
