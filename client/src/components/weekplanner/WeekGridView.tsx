@@ -14,6 +14,7 @@ import { ResourceColumn } from "./ResourceColumn";
 interface WeekGridViewProps {
   visibleDates: Date[];
   visibleResources: Resource[];
+  filterBar?: React.ReactNode;
   getJobsForResourceAndDay: (resourceId: string, day: Date) => WorkOrderWithObject[];
   getResourceDayHours: (resourceId: string, day: Date) => number;
   getCapacityPercentage: (hours: number) => number;
@@ -50,7 +51,7 @@ function getWeatherMultiplierLabel(multiplier: number) {
 
 export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps) {
   const {
-    visibleDates, visibleResources, getJobsForResourceAndDay, getResourceDayHours,
+    visibleDates, visibleResources, filterBar, getJobsForResourceAndDay, getResourceDayHours,
     getCapacityPercentage, getCapacityColor, getCapacityBgColor, getDropFitClass,
     activeDragJob, restrictionsByObject, resourceWeekSummary, zoom, weatherByDate,
     onResourceClick, onSendSchedule, jobCardProps, dragOverConflicts, clusterMatchedResourceIds,
@@ -61,6 +62,8 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
   const zoomGapClass = zoom.scale <= 0.5 ? "space-y-0" : zoom.scale >= 2 ? "space-y-3" : "space-y-1";
 
   return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {filterBar}
     <div className="flex-1 overflow-y-auto overflow-x-auto">
       <div className="w-full min-w-[700px]">
         <div className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] border-b sticky top-0 bg-background z-20">
@@ -270,6 +273,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
           );
         })}
       </div>
+    </div>
     </div>
   );
 });

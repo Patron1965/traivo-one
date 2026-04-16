@@ -62,6 +62,9 @@ export function usePlannerData() {
   const [filterTeam, setFilterTeam] = useState<string>(saved?.filterTeam ?? "all");
   const [filterExecutionCode, setFilterExecutionCode] = useState<string>(saved?.filterExecutionCode ?? "all");
   const [hiddenResourceIds, setHiddenResourceIds] = useState<Set<string>>(new Set(saved?.hiddenResourceIds ?? []));
+  const [resourceNameFilter, setResourceNameFilter] = useState("");
+  const [resourceExecutionCodeFilter, setResourceExecutionCodeFilter] = useState<string[]>([]);
+  const [resourceOccupancyFilter, setResourceOccupancyFilter] = useState<"all" | "free" | "loaded" | "overloaded">("all");
   const [orderstockSearch, setOrderstockSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sidebarFiltersOpen, setSidebarFiltersOpen] = useState(false);
@@ -121,7 +124,19 @@ export function usePlannerData() {
   const { data: resources = [], isLoading: resourcesLoading } = useQuery<Resource[]>({ queryKey: ["/api/resources"] });
   const { data: weatherData } = useQuery<WeatherForecastData>({ queryKey: ["/api/weather/forecast"], staleTime: 30 * 60 * 1000 });
   const weatherByDate = useMemo(() => { const map = new Map<string, { forecast: WeatherForecastData["forecasts"][0]; impact: WeatherImpactDay }>(); if (!weatherData?.forecasts || !weatherData?.impacts) return map; weatherData.forecasts.forEach((f, i) => { const impact = weatherData.impacts[i]; if (impact) map.set(f.date, { forecast: f, impact }); }); return map; }, [weatherData]);
-  const visibleResources = useMemo(() => hiddenResourceIds.size === 0 ? resources : resources.filter(r => !hiddenResourceIds.has(r.id)), [resources, hiddenResourceIds]);
+  const baseVisibleResources = useMemo(() => {
+    return resources.filter(r => {
+      if (hiddenResourceIds.has(r.id)) return false;
+      if (teamResourceIds && !teamResourceIds.has(r.id)) return false;
+      if (resourceNameFilter.trim()) {
+        if (!r.name.toLowerCase().includes(resourceNameFilter.toLowerCase().trim())) return false;
+      }
+      if (resourceExecutionCodeFilter.length > 0) {
+        if (!resourceExecutionCodeFilter.some(ec => (r.executionCodes || []).includes(ec))) return false;
+      }
+      return true;
+    });
+  }, [resources, hiddenResourceIds, teamResourceIds, resourceNameFilter, resourceExecutionCodeFilter]);
 
   const dateRange = useMemo(() => { const ms = startOfMonth(currentDate); return { startDate: format(addDays(ms, -14), "yyyy-MM-dd"), endDate: format(addDays(ms, 45), "yyyy-MM-dd") }; }, [currentDate.getFullYear(), currentDate.getMonth()]);
 
@@ -338,6 +353,43 @@ export function usePlannerData() {
     for (const r of resources) { let th = 0; for (const d of wd) th += resourceDayJobMap.hours[r.id]?.[format(d, "yyyy-MM-dd")] || 0; const cap = r.weeklyHours || 40; s[r.id] = { totalHours: th, weeklyCapacity: cap, pct: cap > 0 ? Math.round((th / cap) * 100) : 0 }; }
     return s;
   }, [resources, visibleDates, viewMode, resourceDayJobMap]);
+
+  const visibleResources = useMemo(() => {
+    if (resourceOccupancyFilter === "all") return baseVisibleResources;
+    return baseVisibleResources.filter(r => {
+      const summary = resourceWeekSummary[r.id];
+      if (!summary) return true;
+      const pct = summary.pct;
+      if (resourceOccupancyFilter === "free") return pct < 60;
+      if (resourceOccupancyFilter === "loaded") return pct >= 60 && pct <= 90;
+      if (resourceOccupancyFilter === "overloaded") return pct > 90;
+      return true;
+    });
+  }, [baseVisibleResources, resourceWeekSummary, resourceOccupancyFilter]);
+
+  const allExecutionCodes = useMemo(() => {
+    const codes = new Set<string>();
+    for (const r of resources) {
+      for (const ec of (r.executionCodes || [])) {
+        if (ec) codes.add(ec);
+      }
+    }
+    return Array.from(codes).sort();
+  }, [resources]);
+
+  const resourceActiveFilterCount = [
+    resourceNameFilter.trim() !== "",
+    resourceExecutionCodeFilter.length > 0,
+    resourceOccupancyFilter !== "all",
+    filterTeam !== "all",
+  ].filter(Boolean).length;
+
+  const clearResourceFilters = useCallback(() => {
+    setResourceNameFilter("");
+    setResourceExecutionCodeFilter([]);
+    setResourceOccupancyFilter("all");
+    setFilterTeam("all");
+  }, []);
 
   const detectConflictsForJob = useCallback((job: WorkOrderWithObject, resourceId: string, dateStr: string, startTime?: string | null): string[] => {
     const reasons: string[] = [];
@@ -568,6 +620,19 @@ export function usePlannerData() {
     lastSelectedRef.current = null;
   }, [viewMode, currentDate, currentWeekStart]);
 
+  useEffect(() => {
+    setResourceNameFilter("");
+    setResourceExecutionCodeFilter([]);
+    setResourceOccupancyFilter("all");
+    setFilterTeam("all");
+  }, [currentWeekStart, currentDate]);
+
+  useEffect(() => {
+    if (viewMode !== "week") {
+      setResourceOccupancyFilter("all");
+    }
+  }, [viewMode]);
+
   const toggleJobSelection = useCallback((jobId: string, shiftKey = false) => {
     setSelectedJobIds(prev => {
       const next = new Set(prev);
@@ -638,6 +703,10 @@ export function usePlannerData() {
     clearDialogOpen, setClearDialogOpen, clearLoading,
     depChainDialogOpen, setDepChainDialogOpen, depChainJobId, depChainData,
     resources, resourcesLoading, visibleResources, visibleDates,
+    resourceNameFilter, setResourceNameFilter,
+    resourceExecutionCodeFilter, setResourceExecutionCodeFilter,
+    resourceOccupancyFilter, setResourceOccupancyFilter,
+    allExecutionCodes, resourceActiveFilterCount, clearResourceFilters,
     customers, clusters, clusterMap, customerMap, teamsData,
     workOrders, workOrdersLoading,
     dependenciesData, timeRestrictions, restrictionsByObject, timewindowMap,
