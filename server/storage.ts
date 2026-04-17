@@ -1697,7 +1697,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   /**
-   * Hämta artiklar som är applicerbara för ett specifikt objekt baserat på hookLevel (Traivo fasthakning)
+   * Hämta artiklar som är applicerbara för ett specifikt objekt baserat på hookLevel (Plannix fasthakning)
    * 
    * Fasthakning-logik:
    * - Artikeln matchar om objektets nivå/typ EXAKT motsvarar artikelns hookLevel

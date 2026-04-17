@@ -34,7 +34,7 @@ const slides = [
   {
     id: "cover",
     type: "cover",
-    title: "Traivo",
+    title: "Plannix",
     subtitle: "AI-driven fältserviceplanering för Norden",
     tagline: "Från manuell kaos till intelligent automation"
   },
@@ -53,12 +53,12 @@ const slides = [
   {
     id: "solution",
     type: "solution",
-    title: "Lösningen: Traivo",
+    title: "Lösningen: Plannix",
     subtitle: "AI-first plattform för intelligent fältserviceplanering",
     features: [
       { icon: Brain, title: "AI-optimering", desc: "Automatisk ruttplanering med maskininlärning" },
       { icon: MapPin, title: "Realtidsspårning", desc: "GPS-positioner och statusuppdateringar live" },
-      { icon: Smartphone, title: "Traivo Go", desc: "Komplett mobilapp för chaufförer" },
+      { icon: Smartphone, title: "Plannix Go", desc: "Komplett mobilapp för chaufförer" },
       { icon: Shield, title: "Kundportal", desc: "Self-service för kunder med magic link-inloggning" },
     ]
   },
@@ -83,7 +83,7 @@ const slides = [
     modules: [
       { name: "Planeringsmodul", desc: "AI-driven vecko- och dagsplanering med Conversational AI", status: "Live" },
       { name: "Ruttoptimering", desc: "VRP-algoritmer med väderbaserad kapacitet", status: "Live" },
-      { name: "Traivo Go", desc: "Komplett offline-arkitektur med IndexedDB", status: "Live" },
+      { name: "Plannix Go", desc: "Komplett offline-arkitektur med IndexedDB", status: "Live" },
       { name: "Kundportal 2.0", desc: "Magic link, betyg, chatt, självbokning", status: "Live" },
       { name: "White-label", desc: "Flerföretagsstöd med varumärkesanpassning", status: "Live" },
       { name: "Branschpaket", desc: "Färdiga mallar för avfall, städ, fastighet", status: "Live" },
@@ -102,7 +102,7 @@ const slides = [
       { value: "103", label: "Funktioner live" },
       { value: "20", label: "Modulkategorier" },
     ],
-    testimonial: "Traivo har potential att revolutionera hur vi planerar våra rutter och kommunicerar med kunder.",
+    testimonial: "Plannix har potential att revolutionera hur vi planerar våra rutter och kommunicerar med kunder.",
     company: "Designpartner, Sundsvall"
   },
   {
@@ -116,7 +116,7 @@ const slides = [
       { icon: PiggyBank, title: "CO2-besparing", desc: "Uppskattning av klimatnytta från avfallshantering" },
       { icon: BarChart3, title: "Hållbarhetsrating", desc: "Klimatpositiv → Utmärkt → Bra → Medel-skala" },
     ],
-    bottomLine: "Traivo hjälper kunder att dokumentera sin miljöpåverkan och kommunicera hållbarhetsarbete till intressenter"
+    bottomLine: "Plannix hjälper kunder att dokumentera sin miljöpåverkan och kommunicera hållbarhetsarbete till intressenter"
   },
   {
     id: "business-model",
@@ -141,7 +141,7 @@ const slides = [
       { icon: Brain, title: "Conversational AI", desc: "Naturligt språk i planeraren - unikt för branschen" },
       { icon: Globe, title: "Nordiskt fokus", desc: "Svensk UI, svenska adresser, lokal marknad" },
       { icon: Leaf, title: "Hållbarhetsspårning", desc: "CO2-certifikat och miljörapporter - ESG-ready" },
-      { icon: Smartphone, title: "Offline-first", desc: "Traivo Go fungerar utan uppkoppling" },
+      { icon: Smartphone, title: "Offline-first", desc: "Plannix Go fungerar utan uppkoppling" },
       { icon: Shield, title: "White-label SaaS", desc: "Varumärkesanpassning per kund" },
       { icon: Zap, title: "Branschpaket", desc: "Snabb onboarding med färdiga mallar" },
     ],
@@ -217,9 +217,9 @@ const slides = [
   {
     id: "closing",
     type: "closing",
-    title: "Traivo",
+    title: "Plannix",
     subtitle: "Framtidens fältserviceplanering",
-    cta: "Låt oss prata om hur Traivo kan förändra branschen",
+    cta: "Låt oss prata om hur Plannix kan förändra branschen",
     contact: "kontakt@traivo.se"
   }
 ];
@@ -1229,10 +1229,10 @@ export default function InvestorPitchPage() {
       addPageNumber(index);
     });
 
-    doc.save("Traivo_Investor_Pitch.pdf");
+    doc.save("Plannix_Investor_Pitch.pdf");
     toast({
       title: "PDF nedladdad",
-      description: "Filen 'Traivo_Investor_Pitch.pdf' har sparats och är redo att mailas."
+      description: "Filen 'Plannix_Investor_Pitch.pdf' har sparats och är redo att mailas."
     });
   };
 
@@ -1245,7 +1245,7 @@ export default function InvestorPitchPage() {
       <div className="flex items-center justify-between p-4 border-b">
         <div className="flex items-center gap-2">
           <Presentation className="h-5 w-5 text-primary" />
-          <span className="font-semibold">Traivo Investerarpresentation</span>
+          <span className="font-semibold">Plannix Investerarpresentation</span>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-muted-foreground">

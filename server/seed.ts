@@ -32,7 +32,7 @@ export async function seedDatabase() {
 
   const [tenant] = await db.insert(tenants).values({
     id: DEFAULT_TENANT_ID,
-    name: "Traivo",
+    name: "Plannix",
     orgNumber: "556789-1234",
     contactEmail: "info@traivo.se",
     contactPhone: "+46701234567",
@@ -708,8 +708,8 @@ export async function seedDatabase() {
       primaryColor: "#3B82F6",
       secondaryColor: "#6366F1",
       accentColor: "#F59E0B",
-      companyName: "Traivo",
-      headingText: "Traivo Field Service",
+      companyName: "Plannix",
+      headingText: "Plannix Field Service",
       subheadingText: "Planering som funkar",
       isPublished: true,
     });

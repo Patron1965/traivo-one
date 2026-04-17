@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // ============================================================
 // WebSocket Event Catalog v1
-// Typed Zod schemas for all WebSocket events in Traivo.
+// Typed Zod schemas for all WebSocket events in Plannix.
 // Each event has: type, version (v), payload schema, and inferred TS type.
 // ============================================================
 

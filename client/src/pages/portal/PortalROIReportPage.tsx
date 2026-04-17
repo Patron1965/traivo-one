@@ -91,7 +91,7 @@ export default function PortalROIReportPage() {
       <div className="max-w-2xl mx-auto space-y-6">
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#1B4B6B] text-white rounded-full text-xs font-medium">
-            Traivo ROI-rapport
+            Plannix ROI-rapport
           </div>
           <h1 className="text-2xl font-bold" data-testid="text-customer-name">{data.customer.name}</h1>
           <p className="text-muted-foreground text-sm">\u00d6versikt av serviceprestanda</p>
@@ -157,7 +157,7 @@ export default function PortalROIReportPage() {
         </div>
 
         <p className="text-center text-xs text-muted-foreground">
-          Genererad av Traivo &mdash; {new Date().toLocaleDateString("sv-SE")}
+          Genererad av Plannix &mdash; {new Date().toLocaleDateString("sv-SE")}
         </p>
       </div>
     </div>

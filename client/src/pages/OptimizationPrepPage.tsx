@@ -501,7 +501,7 @@ export default function OptimizationPrepPage() {
             Skicka till optimering
           </CardTitle>
           <CardDescription>
-            Skicka veckodata till Traivo optimeringstjänst
+            Skicka veckodata till Plannix optimeringstjänst
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

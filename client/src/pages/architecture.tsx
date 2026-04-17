@@ -151,7 +151,7 @@ export default function ArchitecturePage() {
 
       <div ref={contentRef} className="bg-background space-y-6 p-4">
         <div className="text-center space-y-2 mb-8">
-          <h1 className="text-3xl font-bold">Traivo Systemarkitektur</h1>
+          <h1 className="text-3xl font-bold">Plannix Systemarkitektur</h1>
           <p className="text-muted-foreground">AI-driven fältserviceplattform för nordisk avfallshantering</p>
         </div>
 
@@ -174,7 +174,7 @@ export default function ArchitecturePage() {
                 <FeatureItem>Artikelhantering på jobb</FeatureItem>
               </ArchitectureBox>
               
-              <ArchitectureBox title="Traivo Go" icon={Smartphone} color="bg-green-50 dark:bg-green-950/30" borderColor="border-green-200 dark:border-green-800">
+              <ArchitectureBox title="Plannix Go" icon={Smartphone} color="bg-green-50 dark:bg-green-950/30" borderColor="border-green-200 dark:border-green-800">
                 <FeatureItem>Touch-optimerat gränssnitt</FeatureItem>
                 <FeatureItem>Digital signaturinsamling</FeatureItem>
                 <FeatureItem>Kategoriserad fotodokumentation</FeatureItem>
@@ -220,7 +220,7 @@ export default function ArchitecturePage() {
                 <FeatureItem>RESTful API (200+ endpoints)</FeatureItem>
                 <FeatureItem>WebSocket realtidsnotiser</FeatureItem>
                 <FeatureItem>MCP Server för AI-assistenter</FeatureItem>
-                <FeatureItem>Mobil API för Traivo Go</FeatureItem>
+                <FeatureItem>Mobil API för Plannix Go</FeatureItem>
               </ArchitectureBox>
               
               <ArchitectureBox title="Säkerhetslager" icon={Shield} color="bg-red-50 dark:bg-red-950/30" borderColor="border-red-200 dark:border-red-800">

@@ -280,7 +280,7 @@ export function ImportPreviewPanel({
                   <TableHead className="text-xs">Kundnamn från CSV</TableHead>
                   <TableHead className="text-xs">
                     Nytt namn
-                    <HelpTooltip content="Ändra kundnamnet här om det är felaktigt eller om ni vill använda ett annat namn i Traivo." />
+                    <HelpTooltip content="Ändra kundnamnet här om det är felaktigt eller om ni vill använda ett annat namn i Plannix." />
                   </TableHead>
                   <TableHead className="w-[80px] text-xs">Status</TableHead>
                 </TableRow>
@@ -326,7 +326,7 @@ export function ImportPreviewPanel({
                       CSV-kolumnnamn
                       <HelpTooltip content="Kolumner som börjar med 'Metadata - ' i CSV:en importeras som metadata-fält. Döp om dem till något mer beskrivande om ni vill." />
                     </TableHead>
-                    <TableHead className="text-xs">Nytt namn i Traivo</TableHead>
+                    <TableHead className="text-xs">Nytt namn i Plannix</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -490,7 +490,7 @@ export function ResourcePreviewPanel({
           <TableHeader>
             <TableRow>
               <TableHead className="text-xs">Team/resurs från CSV</TableHead>
-              <TableHead className="text-xs">Nytt namn i Traivo</TableHead>
+              <TableHead className="text-xs">Nytt namn i Plannix</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

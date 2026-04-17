@@ -551,7 +551,7 @@ export function Dashboard() {
       };
 
       // SIDA 1 - Sammanfattning
-      yPos = addHeader("Traivo - Månadsrapport");
+      yPos = addHeader("Plannix - Månadsrapport");
       
       yPos = addSectionTitle("Nyckeltal", yPos);
       
@@ -786,10 +786,10 @@ export function Dashboard() {
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(128, 128, 128);
-        doc.text(`Traivo - Sida ${i} av ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: "center" });
+        doc.text(`Plannix - Sida ${i} av ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: "center" });
       }
 
-      doc.save(`traivo-rapport-${format(new Date(), "yyyy-MM-dd")}.pdf`);
+      doc.save(`plannix-rapport-${format(new Date(), "yyyy-MM-dd")}.pdf`);
       
       toast({
         title: "Rapport exporterad",
@@ -813,7 +813,7 @@ export function Dashboard() {
   const handleExportExcel = useCallback(() => {
     try {
       const today = format(new Date(), "yyyy-MM-dd");
-      let csv = "Traivo Dashboard Export - " + today + "\n\n";
+      let csv = "Plannix Dashboard Export - " + today + "\n\n";
       
       csv += "NYCKELTAL\n";
       csv += "Mått;Värde;Detaljer\n";

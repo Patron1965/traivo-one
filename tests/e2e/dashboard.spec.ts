@@ -4,12 +4,12 @@ import { navigateTo } from "./helpers";
 test.use({ serviceWorkers: "block" });
 
 test.describe("Dashboard - Layout", () => {
-  test("renders dashboard page with Traivo branding", async ({ page }) => {
+  test("renders dashboard page with Plannix branding", async ({ page }) => {
     await navigateTo(page, "/dashboard");
     await expect(page.locator("body")).toBeVisible({ timeout: 10000 });
     const hasAppError = await page.locator("text=Application Error").isVisible().catch(() => false);
     expect(hasAppError).toBe(false);
-    await expect(page.getByText("Traivo One").first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Plannix One").first()).toBeVisible({ timeout: 5000 });
   });
 
   test("main content area is present", async ({ page }) => {

@@ -1,5 +1,7 @@
 export type Language = "sv" | "en";
 
+// Behåll nyckelnamnet "traivo-language" trots rebranding till Plannix — att byta nyckel
+// skulle återställa alla befintliga användares språkval till default.
 const STORAGE_KEY = "traivo-language";
 
 export function getStoredLanguage(): Language {

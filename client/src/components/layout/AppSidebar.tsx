@@ -279,7 +279,7 @@ export function AppSidebar() {
         <div className="flex items-center gap-3">
           <img 
             src={traivoLogo} 
-            alt="Traivo" 
+            alt="Plannix" 
             className="h-14 w-auto object-contain mix-blend-multiply dark:mix-blend-screen dark:brightness-150 dark:contrast-200"
             data-testid="img-traivo-logo"
           />

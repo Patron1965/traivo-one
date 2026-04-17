@@ -1,18 +1,18 @@
-# Traivo - AI-Driven Field Service Planning Platform
+# Plannix - AI-Driven Field Service Planning Platform
 
 ## Overview
-Traivo is an AI-driven platform optimizing field service operations for Nordic waste management companies. It transforms manual processes into AI-driven solutions for route planning, resource allocation, economic control, productivity, and predictive analytics. The platform aims to be the leading commercial SaaS platform in Nordic field service with comprehensive multi-tenant capabilities, offering AI-driven optimization and real-time decision support.
+Plannix is an AI-driven platform optimizing field service operations for Nordic waste management companies. It transforms manual processes into AI-driven solutions for route planning, resource allocation, economic control, productivity, and predictive analytics. The platform aims to be the leading commercial SaaS platform in Nordic field service with comprehensive multi-tenant capabilities, offering AI-driven optimization and real-time decision support.
 
 ## User Preferences
 - **Language:** Swedish (sv) for UI
-- **Design:** Clean, professional Nordic aesthetic — Traivo Color Palette: Deep Ocean Blue (#1B4B6B), Arctic Ice (#E8F4F8), Mountain Gray (#6B7C8C), Northern Teal (#4A9B9B), Midnight Navy (#2C3E50), Aurora Green (#7DBFB0)
+- **Design:** Clean, professional Nordic aesthetic — Plannix Color Palette: Deep Ocean Blue (#1B4B6B), Arctic Ice (#E8F4F8), Mountain Gray (#6B7C8C), Northern Teal (#4A9B9B), Midnight Navy (#2C3E50), Aurora Green (#7DBFB0)
 - **Logo:** `@assets/traivo_logo_transparent.png` (transparent bakgrund, processad från original)
 - **Theme:** Dark/light mode support
 - **Font:** Inter for UI
 - **Development:** Alla nya funktioner ska alltid läggas till i frontend med navigeringslänkar - användaren vill se helheten och vad som byggs under skalet
 
 ## System Architecture
-Traivo is a functional prototype built with a modern web stack, emphasizing a Nordic aesthetic and deep AI integration.
+Plannix is a functional prototype built with a modern web stack, emphasizing a Nordic aesthetic and deep AI integration.
 
 ### UI/UX Decisions
 The user interface includes a sticky TopNav with smart navigation, global search, mobile-friendly hamburger menu, Floating Action Button, QuickStats, and a drag-and-drop WeekPlanner with What-If consequence analysis and a Constraint Layer overlay. It features a RouteMap visualization, ObjectCards, and a comprehensive Dashboard. Mobile interfaces include a MobileFieldApp with Focus Mode for simplified order views, SignatureCapture, MaterialLog, JobProtocolGenerator, DayReport, FieldTodoList, and a TimeThread Visual Timeline. A Chain Trace Panel provides end-to-end traceability for work orders. The UI supports contextual help, progressive loading, white-label multi-tenancy, an AI Command Center, interactive Tour Guide, role-based navigation filtering, and pop-out views for map monitoring and planning. A Planner Control Tower Heatmap visualizes resource occupancy and risk.
@@ -30,7 +30,7 @@ Clusters are automatically generated based on customer ownership when objects ar
 All REST API endpoints support versioned access via `/api/v1/` prefix. A URL-rewrite middleware strips the prefix internally. Unversioned `/api/` calls are backward compatible but receive deprecation headers and server-side logging. The frontend automatically prefixes API calls with `/api/v1/`. A version discovery endpoint `GET /api/version` is available.
 
 ### System Design Choices
-An AI-first approach guides all functionalities. Route optimization is offloaded to a separate Traivo optimization service, and external DataClean service handles data validation and geocoding. A complete REST API supports the Driver Core mobile field app. The system includes configurable status message templates, a resource availability service, portal chat auto-responses, and mobile API endpoints for team functions and statistics. A server-driven mobile app configuration and version check system are in place, alongside an AI Sales Intelligence Report.
+An AI-first approach guides all functionalities. Route optimization is offloaded to a separate Plannix optimization service, and external DataClean service handles data validation and geocoding. A complete REST API supports the Driver Core mobile field app. The system includes configurable status message templates, a resource availability service, portal chat auto-responses, and mobile API endpoints for team functions and statistics. A server-driven mobile app configuration and version check system are in place, alongside an AI Sales Intelligence Report.
 
 ## External Dependencies
 - **PostgreSQL:** Primary database.
@@ -39,7 +39,7 @@ An AI-first approach guides all functionalities. Route optimization is offloaded
 - **Geoapify:** Route calculation (Routing API) and VRP optimization (Route Planner API).
 - **OSRM (Open Source Routing Machine):** Real road-network distances via Table API and Route API.
 - **OpenStreetMap Nominatim:** Geocoding fallback.
-- **External Traivo Optimization Service:** Dedicated route optimization.
+- **External Plannix Optimization Service:** Dedicated route optimization.
 - **DataClean Service:** External service for data validation and geocoding.
 - **Modus 2.0:** Source for CSV data imports.
 - **react-leaflet:** Interactive map visualizations.

@@ -136,7 +136,7 @@ function generatePDF(data: ROIData) {
   doc.rect(0, 0, pageWidth, 40, "F");
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(22);
-  doc.text("Traivo ROI-rapport", 20, 22);
+  doc.text("Plannix ROI-rapport", 20, 22);
   doc.setFontSize(11);
   doc.text(data.customer.name, 20, 32);
 
@@ -207,7 +207,7 @@ function generatePDF(data: ROIData) {
 
   doc.setFontSize(7);
   doc.setTextColor(150, 150, 150);
-  doc.text(`Genererad av Traivo ${new Date().toLocaleDateString("sv-SE")}`, 20, 290);
+  doc.text(`Genererad av Plannix ${new Date().toLocaleDateString("sv-SE")}`, 20, 290);
 
   doc.save(`ROI-${data.customer.name.replace(/\s+/g, "_")}.pdf`);
 }

@@ -34,7 +34,7 @@ export default function LandingPage() {
           <div className="flex items-center">
             <img
               src={traivoLogo}
-              alt="Traivo"
+              alt="Plannix"
               className="h-14 w-auto object-contain dark:brightness-[1.8] dark:contrast-[0.85]"
               data-testid="img-landing-logo"
             />
@@ -205,7 +205,7 @@ export default function LandingPage() {
                     },
                     {
                       icon: Smartphone,
-                      title: "Traivo Go",
+                      title: "Plannix Go",
                       desc: "Dedikerade API:er för mobil inloggning, statusuppdatering och anteckningar.",
                       iconBg: "bg-violet-50 dark:bg-violet-900/20",
                       iconColor: "text-violet-600 dark:text-violet-300",
@@ -357,10 +357,10 @@ export default function LandingPage() {
                     Designpartner
                   </div>
                   <h2 className="text-3xl font-bold mb-4 text-slate-900 dark:text-white">
-                    Utvecklat tillsammans med Traivo
+                    Utvecklat tillsammans med Plannix
                   </h2>
                   <p className="text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
-                    Traivo utvecklas i nära samarbete med branschledande aktörer
+                    Plannix utvecklas i nära samarbete med branschledande aktörer
                     inom avfallshantering i Norden. En plattform byggd för att
                     lösa verkliga utmaningar.
                   </p>
@@ -389,7 +389,7 @@ export default function LandingPage() {
                     funktion bör övervägas för AI-förbättring.&rdquo;
                   </blockquote>
                   <cite className="text-sm text-slate-300">
-                    — Traivo designprincip
+                    — Plannix designprincip
                   </cite>
                 </div>
               </div>
@@ -400,7 +400,7 @@ export default function LandingPage() {
         <section className="py-16 md:py-20 bg-gradient-to-b from-slate-50 to-white dark:from-slate-800/50 dark:to-slate-900">
           <div className="container mx-auto px-4 text-center">
             <h2 className="text-3xl font-bold mb-4 text-slate-900 dark:text-white">
-              Redo att testa Traivo?
+              Redo att testa Plannix?
             </h2>
             <p className="text-lg text-slate-500 dark:text-slate-400 mb-8 max-w-xl mx-auto">
               Logga in för att utforska plattformens alla funktioner.
@@ -426,7 +426,7 @@ export default function LandingPage() {
             <div className="flex items-center">
               <img
                 src={traivoLogo}
-                alt="Traivo"
+                alt="Plannix"
                 className="h-12 w-auto object-contain dark:brightness-[1.8] dark:contrast-[0.85]"
                 data-testid="img-landing-footer-logo"
               />

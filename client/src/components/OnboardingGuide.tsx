@@ -126,7 +126,7 @@ export function OnboardingGuide() {
               <Rocket className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <CardTitle className="text-lg">Kom igång med Traivo One</CardTitle>
+              <CardTitle className="text-lg">Kom igång med Plannix One</CardTitle>
               <p className="text-sm text-muted-foreground mt-0.5" data-testid="text-onboarding-progress">
                 {allDone
                   ? "Alla steg klara — du är redo att köra!"

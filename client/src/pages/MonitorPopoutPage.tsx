@@ -340,7 +340,7 @@ export default function MonitorPopoutPage() {
     : [59.196, 17.626];
 
   useEffect(() => {
-    document.title = "Traivo - Kartövervakning";
+    document.title = "Plannix - Kartövervakning";
   }, []);
 
   return (
@@ -541,7 +541,7 @@ export default function MonitorPopoutPage() {
           data-testid="link-back-to-app"
         >
           <ExternalLink className="h-3 w-3" />
-          Tillbaka till Traivo
+          Tillbaka till Plannix
         </a>
         <button
           onClick={() => window.close()}

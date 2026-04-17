@@ -45,7 +45,7 @@ import { registerUrgentJobRoutes } from "./routes/urgentJobRoutes";
 
 async function ensureDefaultTenant() {
   return storage.ensureTenant(DEFAULT_TENANT_ID, {
-    name: "Traivo",
+    name: "Plannix",
     orgNumber: "556789-1234",
     contactEmail: "info@traivo.se",
     contactPhone: "+46701234567",

@@ -92,6 +92,9 @@ interface OfflineDBSchema extends DBSchema {
   };
 }
 
+// Behåll DB-namnet "traivo-offline-db" trots rebranding till Plannix — att byta namn
+// skulle skapa en ny tom IndexedDB och orsaka dataförlust av offline-cache, foton och
+// outbox (osynkade statusuppdateringar från fält) för alla befintliga användare.
 const DB_NAME = 'traivo-offline-db';
 const DB_VERSION = 1;
 

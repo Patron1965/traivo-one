@@ -221,7 +221,7 @@ app.post("/api/system/scrape-branding", requireAdmin, asyncHandler(async (req, r
       const response = await fetch(targetUrl, {
         signal: controller.signal,
         headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; TraivoBrandBot/1.0)",
+          "User-Agent": "Mozilla/5.0 (compatible; PlannixBrandBot/1.0)",
           "Accept": "text/html,application/xhtml+xml",
         },
       });
@@ -1086,7 +1086,7 @@ app.get("/api/system/audit-logs", asyncHandler(async (req, res) => {
 app.get("/api/system/project-stats", asyncHandler(async (req, res) => {
     // Project code statistics (based on actual code count)
     const stats = {
-      projectName: "Traivo - AI-Driven Field Service Planning Platform",
+      projectName: "Plannix - AI-Driven Field Service Planning Platform",
       generatedDate: new Date().toISOString(),
       codeStats: {
         totalLines: 43628,
@@ -1164,10 +1164,10 @@ app.post("/api/system/send-project-report", requireAdmin, asyncHandler(async (re
     
     const result = await sendEmail({
       to,
-      subject: "Traivo Projektrapport - Kodstatistik och Kostnadsjämförelse",
+      subject: "Plannix Projektrapport - Kodstatistik och Kostnadsjämförelse",
       html: `
-        <h1>Traivo Projektrapport</h1>
-        <p>Bifogat finner du projektrapporten med kodstatistik och kostnadsjämförelse för Traivo-plattformen.</p>
+        <h1>Plannix Projektrapport</h1>
+        <p>Bifogat finner du projektrapporten med kodstatistik och kostnadsjämförelse för Plannix-plattformen.</p>
         <h2>Sammanfattning</h2>
         <ul>
           <li><strong>Totalt antal kodrader:</strong> ~43 600</li>
@@ -1176,11 +1176,11 @@ app.post("/api/system/send-project-report", requireAdmin, asyncHandler(async (re
         </ul>
         <p>Se bifogad PDF för detaljerad information.</p>
         <hr>
-        <p><em>Genererad av Traivo - AI-Driven Field Service Planning Platform</em></p>
+        <p><em>Genererad av Plannix - AI-Driven Field Service Planning Platform</em></p>
       `,
       attachments: [
         {
-          filename: "Traivo_Projektrapport_Kostnadsjamforelse.pdf",
+          filename: "Plannix_Projektrapport_Kostnadsjamforelse.pdf",
           content: pdfBuffer,
         }
       ],
@@ -1685,13 +1685,13 @@ app.post("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
       };
       await sendEmail({
         to: email.toLowerCase(),
-        subject: "Du har bjudits in till Traivo",
+        subject: "Du har bjudits in till Plannix",
         html: `
           <div style="font-family: Inter, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px;">
-            <h2 style="color: #1B4B6B;">Välkommen till Traivo!</h2>
+            <h2 style="color: #1B4B6B;">Välkommen till Plannix!</h2>
             <p>Du har bjudits in med rollen <strong>${roleLabel[role] || role || "Användare"}</strong>.</p>
             <p>Klicka på knappen nedan för att komma igång:</p>
-            <a href="${appUrl}" style="display: inline-block; padding: 12px 24px; background: #1B4B6B; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 16px 0;">Logga in på Traivo</a>
+            <a href="${appUrl}" style="display: inline-block; padding: 12px 24px; background: #1B4B6B; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 16px 0;">Logga in på Plannix</a>
             <p style="color: #6B7C8C; font-size: 13px; margin-top: 24px;">Om du inte förväntat dig denna inbjudan kan du ignorera detta meddelande.</p>
           </div>
         `,
@@ -2129,7 +2129,7 @@ Svara ENBART med valid JSON, ingen annan text.`;
         </div>
 
         <p style="text-align: center; color: #9ca3af; font-size: 11px; margin-top: 16px;">
-          Genererad av Traivo AI · ${new Date().toLocaleString("sv-SE")}
+          Genererad av Plannix AI · ${new Date().toLocaleString("sv-SE")}
         </p>
       </body>
       </html>

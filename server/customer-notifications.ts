@@ -333,7 +333,7 @@ export async function sendScheduleToResource(
 ): Promise<NotificationResult> {
   try {
     const tenant = await storage.getTenant(tenantId);
-    const companyName = tenant?.name || "Traivo";
+    const companyName = tenant?.name || "Plannix";
     
     const jobsByDate: Record<string, ScheduleJob[]> = {};
     for (const job of jobs) {

@@ -21,7 +21,7 @@ const CONTENT_W = PAGE_W - MARGIN_L - MARGIN_R;
 function addFooter(doc, pageNum) {
   doc.setFontSize(8);
   doc.setTextColor(...COLORS.mountainGray);
-  doc.text("Traivo Field Service Platform", MARGIN_L, PAGE_H - 12);
+  doc.text("Plannix Field Service Platform", MARGIN_L, PAGE_H - 12);
   doc.text(`Sida ${pageNum}`, PAGE_W - MARGIN_R, PAGE_H - 12, { align: "right" });
   doc.setDrawColor(...COLORS.mountainGray);
   doc.setLineWidth(0.3);
@@ -106,7 +106,7 @@ doc.text("Funktions\xF6versikt", PAGE_W / 2, 122, { align: "center" });
 doc.setFontSize(14);
 doc.setFont("helvetica", "normal");
 doc.setTextColor(...COLORS.mountainGray);
-doc.text("Traivo Field Service Platform", PAGE_W / 2, 140, { align: "center" });
+doc.text("Plannix Field Service Platform", PAGE_W / 2, 140, { align: "center" });
 
 doc.setFontSize(11);
 doc.setTextColor(...COLORS.midnightNavy);
@@ -115,7 +115,7 @@ doc.text("Datum: 2026-03-19", PAGE_W / 2, 166, { align: "center" });
 
 doc.setFontSize(9);
 doc.setTextColor(...COLORS.white);
-doc.text("Konfidentiellt  |  Traivo AB", PAGE_W / 2, PAGE_H - 20, { align: "center" });
+doc.text("Konfidentiellt  |  Plannix AB", PAGE_W / 2, PAGE_H - 20, { align: "center" });
 
 doc.addPage();
 pageNum.val++;
@@ -134,7 +134,7 @@ doc.setTextColor(...COLORS.black);
 doc.setFont("helvetica", "normal");
 doc.setFontSize(10);
 const summaryText = doc.splitTextToSize(
-  "\xC5rsplaneringsmodulen i Traivo ger planeraren full kontroll \xF6ver \xE5rliga bes\xF6ksm\xE5l. " +
+  "\xC5rsplaneringsmodulen i Plannix ger planeraren full kontroll \xF6ver \xE5rliga bes\xF6ksm\xE5l. " +
   "Fr\xE5n automatisk generering av m\xE5l baserat p\xE5 abonnemang, till AI-driven f\xF6rdelning av bes\xF6k " +
   "\xF6ver \xE5ret med h\xE4nsyn till frekvens, s\xE4song, kapacitet och restriktioner. Modulen visar " +
   "realtidsframsteg med KPI-kort, varnar f\xF6r eftersatta m\xE5l, och l\xE5ter planeraren godk\xE4nna " +

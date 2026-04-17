@@ -64,7 +64,7 @@ export function registerAppConfigRoutes(app: Express) {
         ],
       },
       tenant: {
-        name: tenant?.name || "Traivo",
+        name: tenant?.name || "Plannix",
         industry: tenant?.industry || "waste_management",
       },
     });

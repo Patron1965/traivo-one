@@ -162,7 +162,7 @@ export default function DashboardPage() {
       <PageHeader
         icon={BarChart3}
         title={`${getGreeting()}!`}
-        description={`${format(today, "EEEE d MMMM yyyy", { locale: dateLocale })} - Traivo Dashboard`}
+        description={`${format(today, "EEEE d MMMM yyyy", { locale: dateLocale })} - Plannix Dashboard`}
         testId="text-dashboard-greeting"
       >
         <TooltipProvider>
