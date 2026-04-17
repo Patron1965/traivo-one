@@ -64,7 +64,7 @@ function UrgentJobSocketBridge() {
   const { user } = useAuth();
   const { addHandler } = useWebSocket(
     user?.id,
-    user?.tenantId || 'traivo-demo',
+    user?.tenantId || 'plannix-demo',
     undefined
   );
   useUrgentJobSocket(addHandler);
@@ -190,7 +190,7 @@ export function RootNavigator() {
             <Stack.Screen
               name="AIAssistant"
               options={{
-                headerTitle: 'Traivo Assist',
+                headerTitle: 'Plannix Assist',
                 headerStyle: { backgroundColor: Colors.surface },
                 headerShadowVisible: true,
               }}

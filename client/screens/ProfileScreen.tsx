@@ -372,7 +372,7 @@ export function ProfileScreen() {
             <View style={[styles.menuIcon, { backgroundColor: Colors.infoLight }]}>
               <Feather name="info" size={16} color={Colors.info} />
             </View>
-            <ThemedText variant="body">Om Traivo Go</ThemedText>
+            <ThemedText variant="body">Om Plannix Go</ThemedText>
           </View>
           <Feather name="chevron-right" size={18} color={Colors.textMuted} />
         </Pressable>
@@ -390,7 +390,7 @@ export function ProfileScreen() {
       </Pressable>
 
       <ThemedText variant="caption" color={Colors.textMuted} style={styles.versionText}>
-        Nordnav Go v1.0.0
+        Plannix GO v1.0.0
       </ThemedText>
 
       <Modal

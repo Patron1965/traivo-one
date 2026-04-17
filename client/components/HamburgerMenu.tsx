@@ -157,7 +157,7 @@ function HamburgerMenuModal({ visible, onClose }: { visible: boolean; onClose: (
     { id: 'sep2', label: '', icon: 'minus', color: '', bgColor: '', separator: true },
     { id: 'profile', label: 'Min profil', icon: 'user', screen: 'Profile', color: Colors.info, bgColor: Colors.infoLight },
     { id: 'settings', label: 'Inställningar', icon: 'settings', screen: 'Settings', color: '#7B1FA2', bgColor: '#F3E5F5' },
-    { id: 'about', label: 'Om Traivo Go', icon: 'info', screen: 'Settings', color: Colors.info, bgColor: Colors.infoLight },
+    { id: 'about', label: 'Om Plannix Go', icon: 'info', screen: 'Settings', color: Colors.info, bgColor: Colors.infoLight },
   ];
 
   if (!isRendered) return null;
@@ -253,7 +253,7 @@ function HamburgerMenuModal({ visible, onClose }: { visible: boolean; onClose: (
             </Pressable>
 
             <ThemedText variant="caption" color={Colors.textMuted} style={styles.versionText}>
-              Traivo Go v2.0
+              Plannix Go v2.0
             </ThemedText>
           </ScrollView>
         </Animated.View>

@@ -15,9 +15,9 @@ function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
       <View style={styles.iconContainer}>
         <Feather name="alert-triangle" size={48} color={Colors.warning} />
       </View>
-      <Text style={styles.title}>Traivo Go stannade</Text>
+      <Text style={styles.title}>Plannix Go stannade</Text>
       <Text style={styles.message}>
-        Något oväntat inträffade. Starta om Traivo Go för att fortsätta.
+        Något oväntat inträffade. Starta om Plannix Go för att fortsätta.
       </Text>
       <Pressable
         style={styles.button}

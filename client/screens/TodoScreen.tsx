@@ -14,7 +14,7 @@ import { Colors, Spacing, BorderRadius, FontSize } from '../constants/theme';
 import { hapticLight, hapticSuccess } from '../utils/haptics';
 import { apiRequest } from '../lib/query-client';
 
-const STORAGE_KEY = 'traivo_go_personal_todos';
+const STORAGE_KEY = 'plannix_go_personal_todos';
 
 interface TodoItem {
   id: string;

@@ -35,7 +35,7 @@ export function UnauthorizedScreen() {
           <View style={styles.infoCard}>
             <Feather name="info" size={18} color={Colors.primary} />
             <ThemedText variant="caption" color={Colors.text} style={styles.infoText}>
-              Nordnav Go är avsedd för tekniker, planerare och administratörer. Kontakta support om du anser att detta är fel.
+              Plannix GO är avsedd för tekniker, planerare och administratörer. Kontakta support om du anser att detta är fel.
             </ThemedText>
           </View>
         </View>

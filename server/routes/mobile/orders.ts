@@ -6,8 +6,8 @@ import {
   findMockOrder,
 } from './mockData';
 import {
-  IS_MOCK_MODE, traivoFetch, getAuthHeader, haversineDistance,
-  transformTraivoOrder, handleTimeEntries,
+  IS_MOCK_MODE, plannixFetch, getAuthHeader, haversineDistance,
+  transformPlannixOrder, handleTimeEntries,
 } from './proxyHelper';
 
 const router = Router();
@@ -30,13 +30,13 @@ router.get('/my-orders', async (req, res) => {
 
   try {
     const queryString = req.query.date ? `?date=${req.query.date}` : '';
-    const { status, data } = await traivoFetch(`/api/mobile/my-orders${queryString}`, {
+    const { status, data } = await plannixFetch(`/api/mobile/my-orders${queryString}`, {
       method: 'GET',
       headers: getAuthHeader(req),
     });
     if (status === 200) {
       const rawOrders = Array.isArray(data) ? data : (data.orders || []);
-      const transformed = rawOrders.map(transformTraivoOrder);
+      const transformed = rawOrders.map(transformPlannixOrder);
       res.json(transformed);
     } else {
       res.status(status).json(data);
@@ -59,12 +59,12 @@ router.get('/orders/:id', async (req, res) => {
   }
 
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}`, {
+    const { status, data } = await plannixFetch(`/api/mobile/orders/${req.params.id}`, {
       method: 'GET',
       headers: getAuthHeader(req),
     });
     if (status === 200 && data) {
-      res.json(transformTraivoOrder(data));
+      res.json(transformPlannixOrder(data));
     } else {
       res.status(status).json(data);
     }
@@ -89,7 +89,7 @@ router.get('/orders/:id/checklist', async (req, res) => {
   }
 
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/checklist`, {
+    const { status, data } = await plannixFetch(`/api/mobile/orders/${req.params.id}/checklist`, {
       method: 'GET',
       headers: getAuthHeader(req),
     });
@@ -137,7 +137,7 @@ router.post('/quick-action', async (req, res) => {
   }
 
   try {
-    const { status, data } = await traivoFetch('/api/mobile/quick-action', {
+    const { status, data } = await plannixFetch('/api/mobile/quick-action', {
       method: 'POST',
       headers: getAuthHeader(req),
       body: JSON.stringify({ orderId, actionType }),
@@ -291,7 +291,7 @@ router.patch('/orders/:id/status', async (req, res) => {
   }
 
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/status`, {
+    const { status, data } = await plannixFetch(`/api/mobile/orders/${req.params.id}/status`, {
       method: 'PATCH',
       headers: getAuthHeader(req),
       body: JSON.stringify(req.body),
@@ -525,7 +525,7 @@ router.post('/orders/:id/deviations', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/deviations`, {
+    const { status, data } = await plannixFetch(`/api/mobile/orders/${req.params.id}/deviations`, {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
@@ -540,7 +540,7 @@ router.get('/orders/:id/materials', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/materials`, {
+    const { status, data } = await plannixFetch(`/api/mobile/orders/${req.params.id}/materials`, {
       method: 'GET', headers: getAuthHeader(req),
     });
     res.status(status).json(data);
@@ -567,7 +567,7 @@ router.post('/orders/:id/materials', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/materials`, {
+    const { status, data } = await plannixFetch(`/api/mobile/orders/${req.params.id}/materials`, {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
@@ -582,7 +582,7 @@ router.post('/orders/:id/signature', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/signature`, {
+    const { status, data } = await plannixFetch(`/api/mobile/orders/${req.params.id}/signature`, {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
@@ -602,7 +602,7 @@ router.post('/orders/:id/notes', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/notes`, {
+    const { status, data } = await plannixFetch(`/api/mobile/orders/${req.params.id}/notes`, {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
@@ -620,7 +620,7 @@ router.patch('/orders/:id/substeps/:stepId', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/substeps/${req.params.stepId}`, {
+    const { status, data } = await plannixFetch(`/api/mobile/orders/${req.params.id}/substeps/${req.params.stepId}`, {
       method: 'PATCH', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
@@ -635,7 +635,7 @@ router.post('/orders/:id/inspections', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/inspections`, {
+    const { status, data } = await plannixFetch(`/api/mobile/orders/${req.params.id}/inspections`, {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
@@ -723,7 +723,7 @@ router.post('/orders/:id/upload-photo', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/upload-photo`, {
+    const { status, data } = await plannixFetch(`/api/mobile/orders/${req.params.id}/upload-photo`, {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
@@ -738,7 +738,7 @@ router.post('/orders/:id/confirm-photo', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/confirm-photo`, {
+    const { status, data } = await plannixFetch(`/api/mobile/orders/${req.params.id}/confirm-photo`, {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
@@ -767,7 +767,7 @@ router.post('/orders/:id/customer-signoff', async (req, res) => {
   }
 
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/orders/${id}/customer-signoff`, {
+    const { status, data } = await plannixFetch(`/api/mobile/orders/${id}/customer-signoff`, {
       method: 'POST',
       headers: getAuthHeader(req),
       body: JSON.stringify({ customerName, signatureData, signedAt }),

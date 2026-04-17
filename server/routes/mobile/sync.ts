@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-  IS_MOCK_MODE, traivoFetch, getAuthHeader,
+  IS_MOCK_MODE, plannixFetch, getAuthHeader,
 } from './proxyHelper';
 
 interface SyncAction {
@@ -20,7 +20,7 @@ router.post('/sync', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/mobile/sync', {
+    const { status, data } = await plannixFetch('/api/mobile/sync', {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);

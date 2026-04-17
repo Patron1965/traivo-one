@@ -300,7 +300,7 @@ export function SettingsScreen({ navigation }: { navigation: unknown }) {
       </Card>
 
       <ThemedText variant="caption" color={Colors.textMuted} style={styles.versionText}>
-        Traivo Go v2.0 | Field Service
+        Plannix Go v2.0 | Field Service
       </ThemedText>
 
       <Modal

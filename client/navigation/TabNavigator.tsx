@@ -19,7 +19,7 @@ const Tab = createBottomTabNavigator();
 function HeaderTitle() {
   return (
     <Image
-      source={require('../../assets/traivo-logo.png')}
+      source={require('../../assets/plannix-logo.png')}
       style={{ width: 120, height: 32 }}
       resizeMode="contain"
     />

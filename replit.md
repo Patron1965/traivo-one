@@ -1,12 +1,12 @@
-# Traivo GO — Mobilapp för fältpersonal
+# Plannix GO — Mobilapp för fältpersonal
 
 ## Översikt
-Traivo GO är en React Native/Expo-mobilapp för fältpersonal (förare/tekniker) inom nordisk avfallshantering. Appen är byggd för att fungera med Traivo One-backenden och erbjuder offline-first-funktionalitet, GPS-spårning, materialloggning, avvikelserapportering, realtidsuppdateringar via WebSocket, AI-assistent och komplett akut jobbhantering.
+Plannix GO är en React Native/Expo-mobilapp för fältpersonal (förare/tekniker) inom nordisk avfallshantering. Appen är byggd för att fungera med Plannix One-backenden och erbjuder offline-first-funktionalitet, GPS-spårning, materialloggning, avvikelserapportering, realtidsuppdateringar via WebSocket, AI-assistent och komplett akut jobbhantering.
 
 ## Användarpreferenser
 - **Språk:** Svenska (sv) i hela UI:t
-- **Design:** Ren nordisk estetik med Traivo-paletten: Deep Ocean Blue (#1B4B6B), Arctic Ice (#E8F4F8), Mountain Gray (#6B7C8C), Northern Teal (#4A9B9B), Midnight Navy (#2C3E50), Aurora Green (#7DBFB0)
-- **Logo:** `@assets/traivo_logo_transparent.png`
+- **Design:** Ren nordisk estetik med Plannix-paletten: Deep Ocean Blue (#1B4B6B), Arctic Ice (#E8F4F8), Mountain Gray (#6B7C8C), Northern Teal (#4A9B9B), Midnight Navy (#2C3E50), Aurora Green (#7DBFB0)
+- **Logo:** `@assets/plannix_logo_transparent.png`
 - **Tema:** Ljust tema, nordisk stil
 - **Font:** Inter
 - **Målgrupp:** Förare och tekniker i fält — stort, lättläst, tummvänligt
@@ -15,7 +15,7 @@ Traivo GO är en React Native/Expo-mobilapp för fältpersonal (förare/tekniker
 
 ### Tech Stack
 - **Frontend:** React Native 0.79.7, Expo SDK 54.0.33, TypeScript
-- **Backend:** Express.js (port 5000) — proxy/mock-server för Traivo One API
+- **Backend:** Express.js (port 5000) — proxy/mock-server för Plannix One API
 - **Navigation:** React Navigation 7+ (Native Stack + Bottom Tabs)
 - **State/Data:** TanStack React Query, AsyncStorage för offline
 - **Kartor:** react-native-maps 1.18.0 (pinnad version för Expo Go)
@@ -31,8 +31,8 @@ Traivo GO är en React Native/Expo-mobilapp för fältpersonal (förare/tekniker
 - **OBS:** Servern har no-cache headers på bundlar för att förhindra att telefoner cachelagrar gamla versioner
 
 ### Autentisering & RBAC
-- **Mock-läge:** Token `mock-driver-token-001`, driverId=101, tenantId: `traivo-demo`
-- **Live-läge:** Proxy mot Traivo One `/api/mobile/login`
+- **Mock-läge:** Token `mock-driver-token-001`, driverId=101, tenantId: `plannix-demo`
+- **Live-läge:** Proxy mot Plannix One `/api/mobile/login`
 - **8 roller:** owner, admin, planner, technician, user, viewer, customer, reporter
 - **Fältapp-roller:** technician, planner, admin, owner, user (övriga blockeras)
 - **24h auto-logout**
@@ -143,7 +143,7 @@ Tilldelad (planerad_resurs/planerad_las) → Starta resa (dispatched) → På pl
 - Synk-endpoint: `/api/mobile/sync`
 
 ### WebSocket
-- Bridge till Traivo One för realtidsuppdateringar
+- Bridge till Plannix One för realtidsuppdateringar
 - Akut jobb-event: `job:urgent:assigned`
 - Statusuppdateringar och notifikationer i realtid
 
@@ -160,6 +160,6 @@ Tilldelad (planerad_resurs/planerad_las) → Starta resa (dispatched) → På pl
 
 ## Viktiga noteringar
 - **Port-konflikter:** Port 5000 kan kräva `fuser -k 5000/tcp`
-- **GitHub:** `git push github main --force` → `Patron1965/traivo-one.git`
+- **GitHub:** `git push github main --force` → `Patron1965/plannix-one.git`
 - **Bundle-cache:** Servern skickar no-cache headers — stäng appen helt på telefonen för att få ny version
 - **Felhantering:** Matchar mot HTTP-statuskoder (401, 403, 404, 500), inte felmeddelande-strängar

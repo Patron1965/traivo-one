@@ -89,7 +89,7 @@ export function LoginScreen() {
       >
         <View style={styles.header}>
           <Image
-            source={require('../../assets/traivo-logo.png')}
+            source={require('../../assets/plannix-logo.png')}
             style={styles.logoImage}
             resizeMode="contain"
           />
@@ -276,7 +276,7 @@ export function LoginScreen() {
           color="rgba(255,255,255,0.5)"
           style={styles.version}
         >
-          Nordnav Go v2.0
+          Plannix GO v2.0
         </ThemedText>
       </KeyboardAvoidingView>
     </LinearGradient>

@@ -88,7 +88,7 @@ async function connectUpstream(localIo: SocketIOServer, upstreamUrl: string) {
     }
 
     const wsUrl = upstreamUrl.replace(/\/+$/, '');
-    logBridge(`Ansluter till Traivo One: ${wsUrl}`);
+    logBridge(`Ansluter till Plannix One: ${wsUrl}`);
 
     upstreamSocket = ioClient(wsUrl, {
       path: '/ws',
@@ -98,18 +98,18 @@ async function connectUpstream(localIo: SocketIOServer, upstreamUrl: string) {
     });
 
     upstreamSocket.on('connect', () => {
-      logBridge(`Ansluten till Traivo One (socket: ${upstreamSocket?.id})`);
+      logBridge(`Ansluten till Plannix One (socket: ${upstreamSocket?.id})`);
       backoffMs = INITIAL_BACKOFF_MS;
       eventCounts = {};
 
       upstreamSocket?.emit('join', {
-        tenantId: process.env.TRAIVO_TENANT_ID || 'traivo-demo',
+        tenantId: process.env.PLANNIX_TENANT_ID || 'plannix-demo',
         role: 'bridge',
       });
     });
 
     upstreamSocket.on('disconnect', (reason: string) => {
-      logBridge(`Frankopplad fran Traivo One: ${reason}`);
+      logBridge(`Frankopplad fran Plannix One: ${reason}`);
       if (bridgeActive && reason !== 'io client disconnect') {
         scheduleReconnect(localIo, upstreamUrl);
       }
@@ -138,7 +138,7 @@ async function connectUpstream(localIo: SocketIOServer, upstreamUrl: string) {
           }
         } else if (data?.resourceId) {
           localIo.to(`resource:${data.resourceId}`).emit(eventName, data);
-          localIo.to(`tenant:${data.tenantId || 'traivo-demo'}`).emit(eventName, data);
+          localIo.to(`tenant:${data.tenantId || 'plannix-demo'}`).emit(eventName, data);
         } else if (data?.tenantId) {
           localIo.to(`tenant:${data.tenantId}`).emit(eventName, data);
         } else {
@@ -158,7 +158,7 @@ async function connectUpstream(localIo: SocketIOServer, upstreamUrl: string) {
 
 export function startWebSocketBridge(localIo: SocketIOServer, upstreamUrl: string) {
   if (!upstreamUrl) {
-    logBridge('Ingen TRAIVO_API_URL — bridge inaktiv (mock-lage)');
+    logBridge('Ingen PLANNIX_API_URL — bridge inaktiv (mock-lage)');
     return;
   }
 
@@ -171,7 +171,7 @@ export function startWebSocketBridge(localIo: SocketIOServer, upstreamUrl: strin
   backoffMs = INITIAL_BACKOFF_MS;
   eventCounts = {};
 
-  logBridge('Startar WebSocket-bridge mot Traivo One...');
+  logBridge('Startar WebSocket-bridge mot Plannix One...');
   connectUpstream(localIo, upstreamUrl);
 
   const positionHandler = (socket: LocalSocket) => {

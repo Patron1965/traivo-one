@@ -25,7 +25,7 @@ interface Message {
 const WELCOME_MESSAGE: Message = {
   id: 'welcome',
   role: 'assistant',
-  content: 'Hej! Jag är Nordnav Assist, din AI-assistent. Vad kan jag hjälpa dig med?',
+  content: 'Hej! Jag är Plannix Assist, din AI-assistent. Vad kan jag hjälpa dig med?',
   timestamp: new Date(),
 };
 
@@ -89,7 +89,7 @@ function SuggestionCards({ onSend }: { onSend: (text: string) => void }) {
         <Pressable style={styles.suggestionCard} onPress={() => onSend('Vad kan du hjälpa mig med?')}>
           <Feather name="zap" size={20} color={Colors.primary} />
           <ThemedText variant="caption" style={styles.suggestionTitle}>Visa funktioner</ThemedText>
-          <ThemedText variant="caption" color={Colors.textMuted} style={styles.suggestionDesc}>Vad kan Nordnav Assist?</ThemedText>
+          <ThemedText variant="caption" color={Colors.textMuted} style={styles.suggestionDesc}>Vad kan Plannix Assist?</ThemedText>
         </Pressable>
       </View>
     </View>

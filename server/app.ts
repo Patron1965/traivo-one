@@ -151,7 +151,7 @@ app.get('/api/v1/mobile/app-config', (_req, res) => {
       tabs: ['home', 'orders', 'todo', 'map', 'report'],
       hamburgerMenu: ['settings', 'team', 'statistics', 'notifications', 'deviations'],
     },
-    tenant: { name: 'Traivo Demo', industry: 'waste_management' },
+    tenant: { name: 'Plannix Demo', industry: 'waste_management' },
   });
 });
 
@@ -169,7 +169,7 @@ app.get(['/api/v1/mobile/version-check', '/api/mobile/version-check'], (req, res
 
 app.get(['/api/v1/health', '/api/health'], (_req, res) => {
   const bridge = getBridgeStatus();
-  res.json({ status: 'ok', service: 'traivo-go-api', wsBridge: bridge, apiVersion: 'v1' });
+  res.json({ status: 'ok', service: 'plannix-go-api', wsBridge: bridge, apiVersion: 'v1' });
 });
 
 const projectRoot = process.cwd();
@@ -185,7 +185,7 @@ function loadAppJson() {
     cachedAppJson = JSON.parse(fs.readFileSync(path.join(projectRoot, 'app.json'), 'utf-8'));
   } catch (e) {
     console.error('Failed to load app.json:', e);
-    cachedAppJson = { expo: { name: 'Nordnav Go', slug: 'fltapp', splash: {} } };
+    cachedAppJson = { expo: { name: 'Plannix GO', slug: 'fltapp', splash: {} } };
   }
 }
 
@@ -415,12 +415,12 @@ app.get('/', (req, res) => {
     const landingPath = path.join(templatesDir, 'landing-page.html');
     res.sendFile(landingPath, (err) => {
       if (err && !res.headersSent) {
-        res.status(200).send(`<!DOCTYPE html><html><head><title>Nordnav Go</title></head><body><h1>Nordnav Go API</h1><p>Server is running.</p></body></html>`);
+        res.status(200).send(`<!DOCTYPE html><html><head><title>Plannix GO</title></head><body><h1>Plannix GO API</h1><p>Server is running.</p></body></html>`);
       }
     });
   } catch (e) {
     if (!res.headersSent) {
-      res.status(200).send(`<!DOCTYPE html><html><head><title>Nordnav Go</title></head><body><h1>Nordnav Go API</h1><p>Server is running.</p></body></html>`);
+      res.status(200).send(`<!DOCTYPE html><html><head><title>Plannix GO</title></head><body><h1>Plannix GO API</h1><p>Server is running.</p></body></html>`);
     }
   }
 });
@@ -454,20 +454,20 @@ process.on('SIGINT', () => {
 
 const PORT = 5000;
 server.listen(PORT, '0.0.0.0', () => {
-  const traivoUrl = process.env.TRAIVO_API_URL || process.env.KINAB_API_URL;
-  const mockMode = !traivoUrl || process.env.TRAIVO_MOCK_MODE === 'true' || process.env.KINAB_MOCK_MODE === 'true';
+  const plannixUrl = process.env.PLANNIX_API_URL || process.env.KINAB_API_URL;
+  const mockMode = !plannixUrl || process.env.PLANNIX_MOCK_MODE === 'true' || process.env.KINAB_MOCK_MODE === 'true';
 
   console.log('');
   console.log('=============================================');
-  console.log(`  TRAIVO GO SERVER — ${mockMode ? 'MOCK-LAGE' : 'LIVE-LAGE'}`);
+  console.log(`  PLANNIX GO SERVER — ${mockMode ? 'MOCK-LAGE' : 'LIVE-LAGE'}`);
   console.log('=============================================');
   console.log(`  Port: ${PORT}`);
   if (mockMode) {
     console.log('  Lage: MOCK (returnerar testdata)');
-    console.log('  Tips: Satt TRAIVO_API_URL for att ansluta till Traivo One');
+    console.log('  Tips: Satt PLANNIX_API_URL for att ansluta till Plannix One');
   } else {
     console.log(`  Lage: LIVE`);
-    console.log(`  Backend: ${traivoUrl}`);
+    console.log(`  Backend: ${plannixUrl}`);
   }
   console.log('=============================================');
   console.log('');
@@ -483,10 +483,10 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log('Warning: Bundles missing. Run: bash scripts/build.sh');
   }
 
-  if (!mockMode && traivoUrl) {
-    startWebSocketBridge(io, traivoUrl);
+  if (!mockMode && plannixUrl) {
+    startWebSocketBridge(io, plannixUrl);
   } else {
-    console.log('[WS-BRIDGE] Ingen TRAIVO_API_URL — bridge inaktiv (mock-lage)');
+    console.log('[WS-BRIDGE] Ingen PLANNIX_API_URL — bridge inaktiv (mock-lage)');
   }
 });
 

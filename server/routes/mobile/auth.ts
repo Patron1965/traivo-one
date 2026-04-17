@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { MOCK_RESOURCE, MOCK_TOKEN, MOCK_PROFILES } from './mockData';
-import { IS_MOCK_MODE, traivoFetch, getAuthHeader } from './proxyHelper';
+import { IS_MOCK_MODE, plannixFetch, getAuthHeader } from './proxyHelper';
 
 const router = Router();
 
@@ -28,7 +28,7 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    const { status, data } = await traivoFetch('/api/mobile/login', {
+    const { status, data } = await plannixFetch('/api/mobile/login', {
       method: 'POST',
       body: JSON.stringify(req.body),
     });
@@ -62,7 +62,7 @@ router.post('/logout', async (req, res) => {
   }
 
   try {
-    const { status, data } = await traivoFetch('/api/mobile/logout', {
+    const { status, data } = await plannixFetch('/api/mobile/logout', {
       method: 'POST',
       headers: getAuthHeader(req),
     });
@@ -85,7 +85,7 @@ router.get('/me', async (req, res) => {
   }
 
   try {
-    const { status, data } = await traivoFetch('/api/mobile/me', {
+    const { status, data } = await plannixFetch('/api/mobile/me', {
       method: 'GET',
       headers: getAuthHeader(req),
     });
@@ -123,7 +123,7 @@ router.get('/my-profiles', async (req, res) => {
   }
 
   try {
-    const meResponse = await traivoFetch('/api/mobile/me', {
+    const meResponse = await plannixFetch('/api/mobile/me', {
       method: 'GET',
       headers: getAuthHeader(req),
     });
@@ -133,7 +133,7 @@ router.get('/my-profiles', async (req, res) => {
       return;
     }
 
-    const { status, data } = await traivoFetch(`/resource_profile_assignments?resourceId=${resourceId}`, {
+    const { status, data } = await plannixFetch(`/resource_profile_assignments?resourceId=${resourceId}`, {
       method: 'GET',
       headers: getAuthHeader(req),
     });

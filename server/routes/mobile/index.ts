@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { IS_MOCK_MODE, TRAIVO_API_URL } from './proxyHelper';
+import { IS_MOCK_MODE, PLANNIX_API_URL } from './proxyHelper';
 import { MOCK_ORDERS } from './mockData';
 import { authRouter } from './auth';
 import { teamsRouter } from './teams';
@@ -21,7 +21,7 @@ router.use((req, _res, next) => {
 
 router.use((_req, res, next) => {
   if (IS_MOCK_MODE) {
-    res.setHeader('X-Traivo-Mock', 'true');
+    res.setHeader('X-Plannix-Mock', 'true');
     const originalJson = res.json.bind(res);
     res.json = function (body: unknown) {
       if (body && typeof body === 'object' && !Array.isArray(body)) {
@@ -36,7 +36,7 @@ router.use((_req, res, next) => {
 router.get('/server-mode', (_req, res) => {
   res.json({
     mode: IS_MOCK_MODE ? 'mock' : 'live',
-    backendUrl: IS_MOCK_MODE ? null : TRAIVO_API_URL,
+    backendUrl: IS_MOCK_MODE ? null : PLANNIX_API_URL,
   });
 });
 

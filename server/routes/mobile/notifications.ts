@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { MOCK_NOTIFICATIONS_LEGACY, MOCK_NOTIFICATIONS } from './mockData';
-import { IS_MOCK_MODE, traivoFetch, getAuthHeader } from './proxyHelper';
+import { IS_MOCK_MODE, plannixFetch, getAuthHeader } from './proxyHelper';
 
 const router = Router();
 
@@ -12,7 +12,7 @@ router.get('/notifications/count', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/mobile/notifications/count', { method: 'GET', headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch('/api/mobile/notifications/count', { method: 'GET', headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'unknown';
@@ -28,7 +28,7 @@ router.get('/notifications', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/mobile/notifications', { headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch('/api/mobile/notifications', { headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'unknown';
@@ -46,7 +46,7 @@ router.post('/notifications/:id/read', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/notifications/${req.params.id}/read`, {
+    const { status, data } = await plannixFetch(`/api/mobile/notifications/${req.params.id}/read`, {
       method: 'POST', headers: getAuthHeader(req),
     });
     res.status(status).json(data);
@@ -62,7 +62,7 @@ router.get('/notifications/unread-count', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/mobile/notifications/unread-count', { headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch('/api/mobile/notifications/unread-count', { headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error: unknown) {
     res.status(503).json({ error: 'Kunde inte hamta antal olasta.' });
@@ -76,7 +76,7 @@ router.post('/notifications/read-all', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/mobile/notifications/read-all', {
+    const { status, data } = await plannixFetch('/api/mobile/notifications/read-all', {
       method: 'POST', headers: getAuthHeader(req),
     });
     res.status(status).json(data);

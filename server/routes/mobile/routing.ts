@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { pool } from '../../db';
 import { MOCK_RESOURCE } from './mockData';
 import {
-  IS_MOCK_MODE, traivoFetch, getAuthHeader,
+  IS_MOCK_MODE, plannixFetch, getAuthHeader,
   haversineDistance, parseCoordPoints, simplifyCoordinates, buildFallbackResponse,
 } from './proxyHelper';
 
@@ -339,7 +339,7 @@ router.post('/optimize-route', async (req: Request, res: Response) => {
     return res.json({ success: true, jobId, estimatedTime: 15 });
   }
   try {
-    const { status, data } = await traivoFetch('/api/optimization/submit', {
+    const { status, data } = await plannixFetch('/api/optimization/submit', {
       method: 'POST',
       headers: getAuthHeader(req),
       body: JSON.stringify(req.body),
@@ -356,7 +356,7 @@ router.get('/optimize-route/:jobId/status', async (req: Request, res: Response) 
     return res.json(job || { status: 'completed', progress: 100 });
   }
   try {
-    const { status, data } = await traivoFetch(
+    const { status, data } = await plannixFetch(
       `/api/optimization/jobs/${req.params.jobId}/status`,
       { method: 'GET', headers: getAuthHeader(req) }
     );
@@ -371,7 +371,7 @@ router.get('/optimize-route/:jobId/result', async (req: Request, res: Response) 
     return res.json({ success: true, optimizedRoute: null });
   }
   try {
-    const { status, data } = await traivoFetch(
+    const { status, data } = await plannixFetch(
       `/api/optimization/jobs/${req.params.jobId}/result`,
       { method: 'GET', headers: getAuthHeader(req) }
     );
@@ -449,7 +449,7 @@ router.post('/distance', async (req: Request, res: Response) => {
     return res.json({ distanceKm: Math.round(distKm * 10) / 10, durationMin: Math.max(1, durationMin), source: 'haversine' as const });
   }
   try {
-    const { status, data } = await traivoFetch('/api/distance', {
+    const { status, data } = await plannixFetch('/api/distance', {
       method: 'POST',
       headers: getAuthHeader(req),
       body: JSON.stringify({ fromLat, fromLng, toLat, toLng }),

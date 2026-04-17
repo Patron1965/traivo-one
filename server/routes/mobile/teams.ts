@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { MOCK_RESOURCE, MOCK_TOKEN, MOCK_TEAM, MOCK_RESOURCES, MOCK_TEAM_INVITES, MOCK_ORDERS } from './mockData';
-import { IS_MOCK_MODE, traivoFetch, getAuthHeader } from './proxyHelper';
+import { IS_MOCK_MODE, plannixFetch, getAuthHeader } from './proxyHelper';
 
 const router = Router();
 
@@ -16,7 +16,7 @@ router.get('/my-team', async (req, res) => {
   }
 
   try {
-    const meResponse = await traivoFetch('/api/mobile/me', {
+    const meResponse = await plannixFetch('/api/mobile/me', {
       method: 'GET',
       headers: getAuthHeader(req),
     });
@@ -26,7 +26,7 @@ router.get('/my-team', async (req, res) => {
       return;
     }
 
-    const { status, data } = await traivoFetch(`/api/teams?memberId=${resourceId}&status=active`, {
+    const { status, data } = await plannixFetch(`/api/teams?memberId=${resourceId}&status=active`, {
       method: 'GET',
       headers: getAuthHeader(req),
     });
@@ -68,7 +68,7 @@ router.post('/teams', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/teams', { method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body) });
+    const { status, data } = await plannixFetch('/api/teams', { method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body) });
     res.status(status).json(data);
   } catch (error: any) { res.status(503).json({ error: 'Kunde inte skapa team.' }); }
 });
@@ -86,7 +86,7 @@ router.post('/teams/:id/invite', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/teams/${req.params.id}/invite`, { method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body) });
+    const { status, data } = await plannixFetch(`/api/teams/${req.params.id}/invite`, { method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body) });
     res.status(status).json(data);
   } catch (error: any) { res.status(503).json({ error: 'Kunde inte skicka inbjudan.' }); }
 });
@@ -105,7 +105,7 @@ router.post('/teams/:id/accept', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/teams/${req.params.id}/accept`, { method: 'POST', headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch(`/api/teams/${req.params.id}/accept`, { method: 'POST', headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error: any) { res.status(503).json({ error: 'Kunde inte acceptera inbjudan.' }); }
 });
@@ -120,7 +120,7 @@ router.post('/teams/:id/leave', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/teams/${req.params.id}/leave`, { method: 'POST', headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch(`/api/teams/${req.params.id}/leave`, { method: 'POST', headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error: any) { res.status(503).json({ error: 'Kunde inte lämna teamet.' }); }
 });
@@ -133,7 +133,7 @@ router.delete('/teams/:id', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/teams/${req.params.id}`, { method: 'DELETE', headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch(`/api/teams/${req.params.id}`, { method: 'DELETE', headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error: any) { res.status(503).json({ error: 'Kunde inte ta bort teamet.' }); }
 });
@@ -146,7 +146,7 @@ router.get('/resources/search', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/resources/search?q=${encodeURIComponent(req.query.q as string || '')}`, { method: 'GET', headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch(`/api/resources/search?q=${encodeURIComponent(req.query.q as string || '')}`, { method: 'GET', headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error: any) { res.status(503).json({ error: 'Kunde inte söka resurser.' }); }
 });
@@ -158,7 +158,7 @@ router.get('/team-invites', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/mobile/team-invites', { method: 'GET', headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch('/api/mobile/team-invites', { method: 'GET', headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error: any) { res.status(503).json({ error: 'Kunde inte hämta inbjudningar.' }); }
 });
@@ -185,7 +185,7 @@ router.get('/team-orders', async (req, res) => {
   }
   try {
     const queryString = req.query.date ? `?date=${req.query.date}` : '';
-    const { status, data } = await traivoFetch(`/api/mobile/team-orders${queryString}`, {
+    const { status, data } = await plannixFetch(`/api/mobile/team-orders${queryString}`, {
       method: 'GET',
       headers: getAuthHeader(req),
     });

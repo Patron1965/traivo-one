@@ -1,10 +1,10 @@
 import { pool } from '../../db';
 
-const TRAIVO_API_URL = process.env.TRAIVO_API_URL || process.env.KINAB_API_URL || '';
-const IS_MOCK_MODE = !TRAIVO_API_URL || process.env.TRAIVO_MOCK_MODE === 'true' || process.env.KINAB_MOCK_MODE === 'true';
+const PLANNIX_API_URL = process.env.PLANNIX_API_URL || process.env.KINAB_API_URL || '';
+const IS_MOCK_MODE = !PLANNIX_API_URL || process.env.PLANNIX_MOCK_MODE === 'true' || process.env.KINAB_MOCK_MODE === 'true';
 
-async function traivoFetch(path: string, options: RequestInit = {}): Promise<{ status: number; data: any }> {
-  const url = `${TRAIVO_API_URL}${path}`;
+async function plannixFetch(path: string, options: RequestInit = {}): Promise<{ status: number; data: any }> {
+  const url = `${PLANNIX_API_URL}${path}`;
   const method = (options.method || 'GET').toUpperCase();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
@@ -23,8 +23,8 @@ async function traivoFetch(path: string, options: RequestInit = {}): Promise<{ s
     console.log(`  [PROXY] ${method} ${path} → ${response.status}`);
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
-      console.error(`  [PROXY] Traivo API svarade med ${contentType} istället för JSON: ${path}`);
-      throw new Error('Traivo-servern svarade inte med JSON (kan vara nere)');
+      console.error(`  [PROXY] Plannix API svarade med ${contentType} istället för JSON: ${path}`);
+      throw new Error('Plannix-servern svarade inte med JSON (kan vara nere)');
     }
     const data = await response.json().catch(() => ({}));
     return { status: response.status, data };
@@ -34,9 +34,9 @@ async function traivoFetch(path: string, options: RequestInit = {}): Promise<{ s
     const reason = isTimeout ? 'timeout (8s)' : error.message;
     console.error(`  [PROXY] FEL ${method} ${path}: ${reason}`);
     if (isTimeout) {
-      throw new Error('Traivo-servern svarade inte i tid. Försök igen.');
+      throw new Error('Plannix-servern svarade inte i tid. Försök igen.');
     }
-    throw new Error(`Kunde inte nå Traivo-servern: ${error.message}`);
+    throw new Error(`Kunde inte nå Plannix-servern: ${error.message}`);
   }
 }
 
@@ -55,7 +55,7 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function mapTraivoStatus(traivoStatus: string, orderStatus?: string): string {
+function mapPlannixStatus(plannixStatus: string, orderStatus?: string): string {
   const statusMap: Record<string, string> = {
     'draft': 'planned',
     'scheduled': 'planned',
@@ -67,7 +67,7 @@ function mapTraivoStatus(traivoStatus: string, orderStatus?: string): string {
     'cancelled': 'cancelled',
     'impossible': 'failed',
   };
-  return statusMap[traivoStatus] || statusMap[orderStatus || ''] || 'planned';
+  return statusMap[plannixStatus] || statusMap[orderStatus || ''] || 'planned';
 }
 
 function parseAddressParts(fullAddress: string): { address: string; city: string; postalCode: string } {
@@ -80,12 +80,12 @@ function parseAddressParts(fullAddress: string): { address: string; city: string
   };
 }
 
-function transformTraivoOrder(raw: any): any {
+function transformPlannixOrder(raw: any): any {
   const addrParts = parseAddressParts(raw.objectAddress || '');
   return {
     id: raw.id,
     orderNumber: raw.title || raw.externalReference || `ORD-${(raw.id || '').toString().slice(0, 8)}`,
-    status: mapTraivoStatus(raw.status, raw.orderStatus),
+    status: mapPlannixStatus(raw.status, raw.orderStatus),
     customerName: raw.customerName || 'Okänd kund',
     address: addrParts.address,
     city: addrParts.city,
@@ -270,14 +270,14 @@ async function handleTimeEntries(orderId: string, driverId: string, newStatus: s
 }
 
 export {
-  TRAIVO_API_URL,
+  PLANNIX_API_URL,
   IS_MOCK_MODE,
-  traivoFetch,
+  plannixFetch,
   getAuthHeader,
   haversineDistance,
-  mapTraivoStatus,
+  mapPlannixStatus,
   parseAddressParts,
-  transformTraivoOrder,
+  transformPlannixOrder,
   parseCoordPoints,
   perpendicularDistance,
   rdpSimplify,

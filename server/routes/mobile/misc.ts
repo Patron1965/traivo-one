@@ -6,7 +6,7 @@ import {
   CHANGE_REQUEST_CATEGORIES, findMockOrder,
 } from './mockData';
 import {
-  IS_MOCK_MODE, traivoFetch, getAuthHeader, haversineDistance,
+  IS_MOCK_MODE, plannixFetch, getAuthHeader, haversineDistance,
 } from './proxyHelper';
 
 interface WeatherCurrent {
@@ -58,7 +58,7 @@ router.get('/map-config', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/mobile/map-config', { method: 'GET', headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch('/api/mobile/map-config', { method: 'GET', headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'unknown';
@@ -163,7 +163,7 @@ router.get('/summary', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const { status: summaryStatus, data: summaryData } = await traivoFetch('/api/mobile/summary', {
+    const { status: summaryStatus, data: summaryData } = await plannixFetch('/api/mobile/summary', {
       method: 'GET', headers: getAuthHeader(req),
     });
     if (summaryStatus === 200 && summaryData && summaryData.totalOrders !== undefined) {
@@ -172,7 +172,7 @@ router.get('/summary', async (req: Request, res: Response) => {
     }
   } catch { /* fall through to orders-based summary */ }
   try {
-    const { status: ordersStatus, data: ordersData } = await traivoFetch('/api/mobile/my-orders', {
+    const { status: ordersStatus, data: ordersData } = await plannixFetch('/api/mobile/my-orders', {
       method: 'GET', headers: getAuthHeader(req),
     });
     if (ordersStatus === 200) {
@@ -212,7 +212,7 @@ router.post('/position', async (req: Request, res: Response) => {
 
   if (!IS_MOCK_MODE) {
     try {
-      await traivoFetch('/api/mobile/position', {
+      await plannixFetch('/api/mobile/position', {
         method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
       });
     } catch (e: unknown) {
@@ -398,7 +398,7 @@ router.post('/route-feedback', async (req: Request, res: Response) => {
       ]
     );
     if (!IS_MOCK_MODE) {
-      traivoFetch('/api/optimization/feedback', {
+      plannixFetch('/api/optimization/feedback', {
         method: 'POST',
         headers: getAuthHeader(req),
         body: JSON.stringify({ ...req.body, driverId }),
@@ -431,7 +431,7 @@ router.get('/terminology', async (req: Request, res: Response) => {
 
   if (!IS_MOCK_MODE) {
     try {
-      const { status, data } = await traivoFetch('/api/mobile/terminology', {
+      const { status, data } = await plannixFetch('/api/mobile/terminology', {
         headers: getAuthHeader(req),
       });
       if (status === 200 && data && typeof data === 'object') {
@@ -460,7 +460,7 @@ router.get('/customer-change-requests/mine', async (req: Request, res: Response)
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/mobile/customer-change-requests/mine', {
+    const { status, data } = await plannixFetch('/api/mobile/customer-change-requests/mine', {
       headers: getAuthHeader(req),
     });
     res.status(status).json(data);
@@ -487,7 +487,7 @@ router.post('/customer-change-requests', async (req: Request, res: Response) => 
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/mobile/customer-change-requests', {
+    const { status, data } = await plannixFetch('/api/mobile/customer-change-requests', {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
@@ -518,7 +518,7 @@ router.get('/deviations/mine', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/mobile/deviations/mine', {
+    const { status, data } = await plannixFetch('/api/mobile/deviations/mine', {
       headers: getAuthHeader(req),
     });
     res.status(status).json(data);
@@ -547,7 +547,7 @@ router.post('/work-orders/carry-over', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/work-orders/carry-over', {
+    const { status, data } = await plannixFetch('/api/work-orders/carry-over', {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
@@ -570,7 +570,7 @@ router.post('/work-orders/:id/auto-eta-sms', async (req: Request, res: Response)
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/work-orders/${req.params.id}/auto-eta-sms`, {
+    const { status, data } = await plannixFetch(`/api/work-orders/${req.params.id}/auto-eta-sms`, {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
@@ -608,7 +608,7 @@ router.post('/disruptions/trigger/delay', async (req: Request, res: Response) =>
   if (IS_MOCK_MODE) {
     const event: DisruptionEvent = {
       id: `disr-${Date.now()}`,
-      tenantId: 'traivo-demo',
+      tenantId: 'plannix-demo',
       type: 'significant_delay',
       severity: ratio > 2.5 ? 'critical' : ratio > 2 ? 'high' : 'medium',
       title: `Betydande försening: ${workOrderTitle || workOrderId}`,
@@ -624,7 +624,7 @@ router.post('/disruptions/trigger/delay', async (req: Request, res: Response) =>
     return res.json(event);
   }
   try {
-    const { status, data } = await traivoFetch('/api/disruptions/trigger/delay', {
+    const { status, data } = await plannixFetch('/api/disruptions/trigger/delay', {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
@@ -642,7 +642,7 @@ router.post('/disruptions/trigger/early-completion', async (req: Request, res: R
   if (IS_MOCK_MODE) {
     const event: DisruptionEvent = {
       id: `disr-${Date.now()}`,
-      tenantId: 'traivo-demo',
+      tenantId: 'plannix-demo',
       type: 'early_completion',
       severity: 'low',
       title: `Tidigt klart: ${resourceName || resourceId}`,
@@ -658,7 +658,7 @@ router.post('/disruptions/trigger/early-completion', async (req: Request, res: R
     return res.json(event);
   }
   try {
-    const { status, data } = await traivoFetch('/api/disruptions/trigger/early-completion', {
+    const { status, data } = await plannixFetch('/api/disruptions/trigger/early-completion', {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
@@ -673,7 +673,7 @@ router.post('/disruptions/trigger/resource-unavailable', async (req: Request, re
   if (IS_MOCK_MODE) {
     const event: DisruptionEvent = {
       id: `disr-${Date.now()}`,
-      tenantId: 'traivo-demo',
+      tenantId: 'plannix-demo',
       type: 'resource_unavailable',
       severity: 'high',
       title: `Resurs ej tillgänglig: ${resourceName || resourceId}`,
@@ -689,7 +689,7 @@ router.post('/disruptions/trigger/resource-unavailable', async (req: Request, re
     return res.json(event);
   }
   try {
-    const { status, data } = await traivoFetch('/api/disruptions/trigger/resource-unavailable', {
+    const { status, data } = await plannixFetch('/api/disruptions/trigger/resource-unavailable', {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
@@ -706,7 +706,7 @@ router.get('/break-config', async (req: Request, res: Response) => {
     });
   }
   try {
-    const { status, data } = await traivoFetch('/api/break-config', { headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch('/api/break-config', { headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch { res.status(503).json({ error: 'Kunde inte hämta rastkonfiguration.' }); }
 });
@@ -749,7 +749,7 @@ router.get('/eta-notification/history', async (req: Request, res: Response) => {
   }
   try {
     const qs = customerId ? `?customerId=${customerId}` : workOrderId ? `?workOrderId=${workOrderId}` : '';
-    const { status, data } = await traivoFetch(`/api/eta-notification/history${qs}`, { headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch(`/api/eta-notification/history${qs}`, { headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch { res.status(503).json({ error: 'Kunde inte hämta notifieringshistorik.' }); }
 });
@@ -759,7 +759,7 @@ router.get('/eta-notification/config', async (req: Request, res: Response) => {
     return res.json({ enabled: true, marginMinutes: 15, channel: 'email', triggerOnEnRoute: true });
   }
   try {
-    const { status, data } = await traivoFetch('/api/eta-notification/config', { headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch('/api/eta-notification/config', { headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch { res.status(503).json({ error: 'Kunde inte hämta konfiguration.' }); }
 });
@@ -786,7 +786,7 @@ router.get('/user/preferences', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/mobile/user/preferences', { headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch('/api/mobile/user/preferences', { headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch { res.status(503).json({ error: 'Kunde inte hamta preferenser.' }); }
 });
@@ -800,7 +800,7 @@ router.patch('/user/preferences', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/mobile/user/preferences', {
+    const { status, data } = await plannixFetch('/api/mobile/user/preferences', {
       method: 'PATCH', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
@@ -837,8 +837,8 @@ router.get('/app/version-check', async (req: Request, res: Response) => {
     needsUpdate: currentVersion < latestVersion,
     forceUpdate: false,
     updateUrl: {
-      ios: 'https://apps.apple.com/app/traivo-go',
-      android: 'https://play.google.com/store/apps/details?id=com.traivo.go',
+      ios: 'https://apps.apple.com/app/plannix-go',
+      android: 'https://play.google.com/store/apps/details?id=com.plannix.go',
     },
   });
 });
@@ -874,7 +874,7 @@ router.get('/statistics/summary', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/mobile/statistics/summary', { headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch('/api/mobile/statistics/summary', { headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch { res.status(503).json({ error: 'Kunde inte hamta statistik.' }); }
 });

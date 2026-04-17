@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { MOCK_RESOURCE, getMockWorkSession, getMockWorkSessionEntries, setMockWorkSession, setMockWorkSessionEntries } from './mockData';
-import { IS_MOCK_MODE, traivoFetch, getAuthHeader } from './proxyHelper';
+import { IS_MOCK_MODE, plannixFetch, getAuthHeader } from './proxyHelper';
 
 const router = Router();
 
@@ -24,7 +24,7 @@ router.post('/work-sessions/start', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/mobile/work-sessions/start', { method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body) });
+    const { status, data } = await plannixFetch('/api/mobile/work-sessions/start', { method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body) });
     res.status(status).json(data);
   } catch (error: any) { res.status(503).json({ error: 'Kunde inte starta arbetspass.' }); }
 });
@@ -35,7 +35,7 @@ router.get('/work-sessions/active', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch('/api/mobile/work-sessions/active', { method: 'GET', headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch('/api/mobile/work-sessions/active', { method: 'GET', headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error: any) { res.status(503).json({ error: 'Kunde inte hämta aktivt arbetspass.' }); }
 });
@@ -52,7 +52,7 @@ router.post('/work-sessions/:id/stop', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/work-sessions/${req.params.id}/stop`, { method: 'POST', headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch(`/api/mobile/work-sessions/${req.params.id}/stop`, { method: 'POST', headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error: any) { res.status(503).json({ error: 'Kunde inte avsluta arbetspass.' }); }
 });
@@ -69,7 +69,7 @@ router.post('/work-sessions/:id/pause', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/work-sessions/${req.params.id}/pause`, { method: 'POST', headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch(`/api/mobile/work-sessions/${req.params.id}/pause`, { method: 'POST', headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error: any) { res.status(503).json({ error: 'Kunde inte pausa arbetspass.' }); }
 });
@@ -86,7 +86,7 @@ router.post('/work-sessions/:id/resume', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/work-sessions/${req.params.id}/resume`, { method: 'POST', headers: getAuthHeader(req) });
+    const { status, data } = await plannixFetch(`/api/mobile/work-sessions/${req.params.id}/resume`, { method: 'POST', headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error: any) { res.status(503).json({ error: 'Kunde inte återuppta arbetspass.' }); }
 });
@@ -101,7 +101,7 @@ router.post('/work-sessions/:id/entries', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/work-sessions/${req.params.id}/entries`, { method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body) });
+    const { status, data } = await plannixFetch(`/api/mobile/work-sessions/${req.params.id}/entries`, { method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body) });
     res.status(status).json(data);
   } catch (error: any) { res.status(503).json({ error: 'Kunde inte logga tidspost.' }); }
 });
