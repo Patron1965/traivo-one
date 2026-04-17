@@ -99,7 +99,6 @@
     "papaparse": "^5.5.3",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
-    "path-to-regexp": "^8.4.0",
     "pg": "^8.16.3",
     "picomatch": "^4.0.4",
     "pm2": "^6.0.14",
