@@ -12,6 +12,7 @@ import { handleMcpSse, handleMcpMessage } from "./mcp";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { anomalyMonitor } from "./anomaly-monitor";
 import { predictiveScheduler } from "./routes/predictiveRoutes";
+import { geocodeScheduler } from "./services/geocode-scheduler";
 import { startWeeklyReportScheduler } from "./weekly-report";
 import { metadataRouter } from "./metadata-routes";
 import { formatZodError, DEFAULT_TENANT_ID } from "./routes/helpers";
@@ -65,6 +66,7 @@ export async function registerRoutes(
   anomalyMonitor.start();
   startWeeklyReportScheduler();
   predictiveScheduler.start();
+  geocodeScheduler.start();
 
   app.use((req: ExpressRequest, _res: ExpressResponse, next) => {
     if (req.url.startsWith(`/api/${API_VERSION}/`) || req.url === `/api/${API_VERSION}`) {
