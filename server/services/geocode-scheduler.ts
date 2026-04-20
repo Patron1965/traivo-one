@@ -1,6 +1,7 @@
 import { storage } from "../storage";
 import { trackApiUsage } from "../api-usage-tracker";
 import { geocodeMissingForTenant, type GeocodeBatchSummary } from "./geocoding";
+import { evaluateAndNotifyMissingCoordinates } from "./missing-coordinates-notifier";
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
@@ -168,6 +169,15 @@ class GeocodeScheduler {
             statusCode: 500,
             metadata: { error: message },
           }).catch(() => {});
+        }
+
+        try {
+          await evaluateAndNotifyMissingCoordinates(tenant.id);
+        } catch (notifyErr) {
+          const message = notifyErr instanceof Error ? notifyErr.message : String(notifyErr);
+          console.error(
+            `[geocode-scheduler] Missing-coords notification failed for tenant ${tenant.id}: ${message}`,
+          );
         }
 
         if (i < tenants.length - 1 && tenantDelayMs > 0) {

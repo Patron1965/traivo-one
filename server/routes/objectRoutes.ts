@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { storage } from "../storage";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
-import { getTenantIdWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { geocodeAddress, searchDestinations, batchGeocode, isGoogleGeocodingAvailable, reverseGeocode, lookupCityFromPostalCode } from "../google-geocoding";
 import { createInheritanceProcessor } from "../inheritance-processor";
 import { insertObjectParentSchema, objects, workOrders, workOrderObjects, objectArticles, objectContacts, objectImages, objectMetadata, objectParents, objectPayers, objectTimeRestrictions, geocodingMissingSnapshots } from "@shared/schema";
@@ -11,6 +11,7 @@ import { NotFoundError, ValidationError } from "../errors";
 import { db } from "../db";
 import { sql, eq, and, isNull, inArray, desc } from "drizzle-orm";
 import { geocodeObjectById } from "../services/geocoding";
+import { evaluateAndNotifyMissingCoordinates } from "../services/missing-coordinates-notifier";
 
 type ServiceObject = Awaited<ReturnType<typeof storage.getObjects>>[number];
 
@@ -812,6 +813,12 @@ app.get("/api/objects/missing-coordinates/trend", asyncHandler(async (req, res) 
     console.warn("[missing-coordinates/trend] Failed to read snapshots, returning empty list:", err);
     res.json({ days, snapshots: [] });
   }
+}));
+
+app.post("/api/objects/missing-coordinates/notify", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const result = await evaluateAndNotifyMissingCoordinates(tenantId);
+  res.json(result);
 }));
 
 app.post("/api/objects/:id/geocode", asyncHandler(async (req, res) => {
