@@ -4916,6 +4916,20 @@ export const geocodingMissingSnapshots = pgTable("geocoding_missing_snapshots", 
 
 export type GeocodingMissingSnapshot = typeof geocodingMissingSnapshots.$inferSelect;
 
+export const weatherForecastCache = pgTable("weather_forecast_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cacheKey: text("cache_key").notNull(),
+  latitude: real("latitude").notNull(),
+  longitude: real("longitude").notNull(),
+  days: integer("days").notNull(),
+  payload: jsonb("payload").notNull(),
+  fetchedAt: timestamp("fetched_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_weather_cache_key").on(table.cacheKey),
+]);
+
+export type WeatherForecastCache = typeof weatherForecastCache.$inferSelect;
+
 export const missingCoordinatesNotificationConfigSchema = z.object({
   enabled: z.boolean().default(true),
   recipients: z

@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import type { WorkOrder, Resource, Cluster, SetupTimeLog, ServiceObject, TaskDesiredTimewindow, StructuralArticle, Article, InsertWorkOrder, InsertTaskDependency } from "@shared/schema";
 import { fetchWeatherForecast, type WeatherImpact } from "./weather-service";
+import { storage } from "./storage";
 import { buildSystemPrompt, PLANNING_PERSONA_ADDITIONS } from "./ai/persona";
 import { trackOpenAIResponse } from "./api-usage-tracker";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -1018,25 +1019,49 @@ export function analyzeWorkloadImbalances(context: PlanningContext): WorkloadAna
 export async function aiEnhancedSchedule(
   context: PlanningContext
 ): Promise<EnhancedAutoScheduleResult> {
-  const UMEA_LAT = 63.82;
-  const UMEA_LON = 20.26;
   let weatherInfo = "";
   let weatherImpacts: WeatherImpact[] = [];
-  
+
+  let weatherEnabled = true;
+  let plannerLat = 59.3293;
+  let plannerLon = 18.0686;
   try {
-    const weatherResult = await fetchWeatherForecast(UMEA_LAT, UMEA_LON, 7);
-    weatherImpacts = weatherResult.impacts;
-    
-    if (weatherResult.impacts.length > 0) {
-      const impactDays = weatherResult.impacts.filter(i => i.impactLevel !== "none");
-      if (impactDays.length > 0) {
-        weatherInfo = `\nVÄDERPROGNOS:\n${impactDays.map(i => 
-          `- ${i.date}: ${i.reason} (kapacitet: ${Math.round(i.capacityMultiplier * 100)}%)`
-        ).join("\n")}`;
+    const tenantId = getContextTenantId();
+    if (tenantId) {
+      const tenant = await storage.getTenant(tenantId);
+      const tenantSettings = (tenant?.settings ?? {}) as Record<string, unknown>;
+      if (tenantSettings.weatherPlanningEnabled === false) weatherEnabled = false;
+    }
+
+    if (weatherEnabled) {
+      const withCenter = context.clusters.find(c => c.centerLatitude != null && c.centerLongitude != null);
+      if (withCenter && withCenter.centerLatitude != null && withCenter.centerLongitude != null) {
+        plannerLat = withCenter.centerLatitude;
+        plannerLon = withCenter.centerLongitude;
       }
     }
-  } catch (e) {
-    console.error("Weather fetch failed:", e);
+  } catch (err) {
+    console.warn("[ai-planner] Failed to resolve weather settings/centroid, using defaults:", err);
+  }
+
+  if (weatherEnabled) {
+    try {
+      const weatherResult = await fetchWeatherForecast(plannerLat, plannerLon, 7);
+      weatherImpacts = weatherResult.impacts;
+
+      if (weatherResult.impacts.length > 0) {
+        const impactDays = weatherResult.impacts.filter(i => i.impactLevel !== "none");
+        if (impactDays.length > 0) {
+          weatherInfo = `\nVÄDERPROGNOS (väderdriven kapacitetsjustering aktiv):\n${impactDays.map(i =>
+            `- ${i.date}: ${i.reason} (kapacitet: ${Math.round(i.capacityMultiplier * 100)}%)`
+          ).join("\n")}`;
+        }
+      }
+    } catch (e) {
+      console.error("Weather fetch failed:", e);
+    }
+  } else {
+    weatherInfo = "\nVÄDERPROGNOS: avstängd i tenant-inställningar (ingen kapacitetsjustering).";
   }
   
   const baseResult = await autoScheduleOrdersWithWeather(context, weatherImpacts);

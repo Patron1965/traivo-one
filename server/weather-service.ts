@@ -1,4 +1,7 @@
 import { trackApiUsage } from "./api-usage-tracker";
+import { db } from "./db";
+import { weatherForecastCache } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 export interface WeatherForecast {
   date: string;
@@ -15,14 +18,45 @@ interface WeatherCache {
 }
 
 const weatherCache = new Map<string, WeatherCache>();
-const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+const CACHE_TTL = 60 * 60 * 1000; // 1 hour (in-memory hot cache)
+const DB_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours (persistent DB cache)
 const ERROR_CACHE_TTL = 5 * 60 * 1000; // 5 minutes for failed requests
+
+async function readDbCache(cacheKey: string): Promise<WeatherForecastResult | null> {
+  try {
+    const [row] = await db.select().from(weatherForecastCache).where(eq(weatherForecastCache.cacheKey, cacheKey));
+    if (!row) return null;
+    const age = Date.now() - new Date(row.fetchedAt).getTime();
+    if (age >= DB_CACHE_TTL) return null;
+    const payload = row.payload as WeatherForecastResult;
+    if (!payload?.forecasts || payload.forecasts.length === 0) return null;
+    return payload;
+  } catch (e) {
+    console.warn("[weather] DB cache read failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+async function writeDbCache(cacheKey: string, latitude: number, longitude: number, days: number, payload: WeatherForecastResult): Promise<void> {
+  if (!payload.forecasts || payload.forecasts.length === 0) return;
+  try {
+    await db.insert(weatherForecastCache)
+      .values({ cacheKey, latitude, longitude, days, payload, fetchedAt: new Date() })
+      .onConflictDoUpdate({
+        target: weatherForecastCache.cacheKey,
+        set: { latitude, longitude, days, payload, fetchedAt: new Date() },
+      });
+  } catch (e) {
+    console.warn("[weather] DB cache write failed:", e instanceof Error ? e.message : e);
+  }
+}
 
 let lastRequestTime = 0;
 const MIN_REQUEST_INTERVAL = 1500; // 1.5 seconds between requests
 
 function getCacheKey(latitude: number, longitude: number, days: number): string {
-  return `${latitude.toFixed(2)}_${longitude.toFixed(2)}_${days}`;
+  const clampedDays = Math.max(1, Math.min(Math.floor(days), 16));
+  return `${latitude.toFixed(3)}_${longitude.toFixed(3)}_${clampedDays}`;
 }
 
 export interface WeatherImpact {
@@ -190,6 +224,12 @@ export async function fetchWeatherForecast(
     return cached.result;
   }
 
+  const dbCached = await readDbCache(cacheKey);
+  if (dbCached) {
+    weatherCache.set(cacheKey, { result: dbCached, timestamp: Date.now() });
+    return dbCached;
+  }
+
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,weather_code&timezone=Europe/Stockholm&forecast_days=${Math.min(days, 16)}`;
 
@@ -254,6 +294,7 @@ export async function fetchWeatherForecast(
     };
 
     weatherCache.set(cacheKey, { result, timestamp: Date.now() });
+    await writeDbCache(cacheKey, latitude, longitude, days, result);
 
     return result;
   } catch (error) {

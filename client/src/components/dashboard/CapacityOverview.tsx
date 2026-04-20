@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 
-import { BarChart3, User, RefreshCw } from "lucide-react";
+import { BarChart3, User, RefreshCw, CloudRain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -22,6 +22,12 @@ interface CapacityData {
   resources: ResourceCapacity[];
 }
 
+interface WeatherForecastResp {
+  forecasts?: Array<{ date: string; temperature: number; precipitation: number; windSpeed: number; weatherCode: number; weatherDescription: string }>;
+  impacts?: Array<{ date: string; impactLevel: "none" | "low" | "medium" | "high" | "severe"; capacityMultiplier: number; reason: string }>;
+  disabled?: boolean;
+}
+
 function getUtilizationColor(utilization: number) {
   if (utilization > 90) return { bar: "bg-red-500", text: "text-red-600 dark:text-red-400", bg: "bg-red-500/10" };
   if (utilization >= 60) return { bar: "bg-amber-500", text: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10" };
@@ -36,6 +42,15 @@ export function CapacityOverview() {
     queryKey: ["/api/dashboard/capacity", dateStr],
     staleTime: 60000,
   });
+
+  const { data: weather } = useQuery<WeatherForecastResp>({
+    queryKey: ["/api/weather/forecast"],
+    staleTime: 30 * 60 * 1000,
+  });
+
+  const todayImpact = weather?.impacts?.find(i => i.date === dateStr);
+  const weatherMultiplier = todayImpact?.capacityMultiplier ?? 1.0;
+  const weatherActive = !weather?.disabled && weatherMultiplier < 1.0;
 
   if (isError) {
     return (
@@ -104,7 +119,11 @@ export function CapacityOverview() {
   const avgUtilization = resources.length > 0
     ? Math.round(resources.reduce((sum, r) => sum + r.utilization, 0) / resources.length)
     : 0;
-  const avgColor = getUtilizationColor(avgUtilization);
+  const adjustedAvgUtilization = weatherActive
+    ? Math.min(999, Math.round(avgUtilization / weatherMultiplier))
+    : avgUtilization;
+  const avgColor = getUtilizationColor(adjustedAvgUtilization);
+  const weatherPctIncrease = weatherActive ? Math.round((1 / weatherMultiplier - 1) * 100) : 0;
 
   return (
     <Card data-testid="card-capacity-overview">
@@ -118,11 +137,20 @@ export function CapacityOverview() {
             {format(today, "EEEE d MMMM", { locale: sv })}
           </Badge>
         </div>
-        <div className="flex items-center gap-2 mt-1">
+        <div className="flex items-center gap-2 mt-1 flex-wrap">
           <span className="text-xs text-muted-foreground">Snittbeläggning:</span>
           <Badge className={`text-xs ${avgColor.bg} ${avgColor.text} border-0`} data-testid="badge-avg-utilization">
-            {avgUtilization}%
+            {weatherActive ? adjustedAvgUtilization : avgUtilization}%
           </Badge>
+          {weatherActive && (
+            <>
+              <span className="text-xs text-muted-foreground">(teoretiskt {avgUtilization}%)</span>
+              <Badge variant="outline" className="text-xs gap-1 border-amber-500/40 text-amber-700 dark:text-amber-400" data-testid="badge-weather-impact">
+                <CloudRain className="h-3 w-3" />
+                Väder +{weatherPctIncrease}% tid
+              </Badge>
+            </>
+          )}
         </div>
       </CardHeader>
       <CardContent className="pt-0">

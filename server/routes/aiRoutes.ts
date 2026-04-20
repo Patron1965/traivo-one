@@ -1777,14 +1777,48 @@ app.get("/api/weather/today", asyncHandler(async (_req, res) => {
 
 // Weather forecast for capacity planning
 app.get("/api/weather/forecast", asyncHandler(async (req, res) => {
-    const latitude = parseFloat(req.query.latitude as string) || 59.3293;
-    const longitude = parseFloat(req.query.longitude as string) || 18.0686;
+    const tenantId = getTenantIdWithFallback(req);
+    const tenant = await storage.getTenant(tenantId);
+    const tenantSettings = (tenant?.settings ?? {}) as Record<string, unknown>;
+    const weatherEnabled = tenantSettings.weatherPlanningEnabled !== false;
+
+    if (!weatherEnabled) {
+      return res.json({
+        location: { latitude: 0, longitude: 0 },
+        forecasts: [],
+        impacts: [],
+        summary: "Väderprognos avstängd i tenant-inställningar.",
+        disabled: true,
+      });
+    }
+
+    let latitude = parseFloat(req.query.latitude as string);
+    let longitude = parseFloat(req.query.longitude as string);
+    let locationName: string | undefined;
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      const clusters = await storage.getClusters(tenantId);
+      const withCenter = clusters.find(c => c.centerLatitude != null && c.centerLongitude != null);
+      if (withCenter && withCenter.centerLatitude != null && withCenter.centerLongitude != null) {
+        latitude = withCenter.centerLatitude;
+        longitude = withCenter.centerLongitude;
+        locationName = withCenter.name;
+      } else {
+        latitude = 59.3293;
+        longitude = 18.0686;
+        locationName = "Stockholm (standard)";
+      }
+    }
+
     const days = parseInt(req.query.days as string) || 7;
-    
+
     const { fetchWeatherForecast } = await import("../weather-service");
     const result = await fetchWeatherForecast(latitude, longitude, Math.min(days, 14));
-    
-    res.json(result);
+
+    res.json({
+      ...result,
+      location: { ...result.location, name: locationName ?? result.location.name },
+    });
 }));
 
 // Weather impact for specific cluster

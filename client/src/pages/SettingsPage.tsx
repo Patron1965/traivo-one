@@ -40,6 +40,7 @@ interface TenantSettings {
   emailNotifications: boolean;
   scheduleNotifications: boolean;
   urgentNotifications: boolean;
+  weatherPlanningEnabled: boolean;
 }
 
 const DEFAULT_SETTINGS: TenantSettings = {
@@ -52,6 +53,7 @@ const DEFAULT_SETTINGS: TenantSettings = {
   emailNotifications: true,
   scheduleNotifications: true,
   urgentNotifications: true,
+  weatherPlanningEnabled: true,
 };
 
 export default function SettingsPage() {
@@ -285,6 +287,20 @@ export default function SettingsPage() {
                   checked={settings.urgentNotifications}
                   onCheckedChange={(v) => updateSetting("urgentNotifications", v)}
                   data-testid="switch-urgent-notifications" 
+                />
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <Label>Väderprognos i planering</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Justera kapacitet automatiskt efter väder (regn, snö, kyla, vind). Påverkar veckoplanerare, dashboard och AI-planering.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.weatherPlanningEnabled}
+                  onCheckedChange={(v) => updateSetting("weatherPlanningEnabled", v)}
+                  data-testid="switch-weather-planning"
                 />
               </div>
             </CardContent>
