@@ -4895,3 +4895,14 @@ export const geocodingMissingSnapshots = pgTable("geocoding_missing_snapshots", 
 
 export type GeocodingMissingSnapshot = typeof geocodingMissingSnapshots.$inferSelect;
 
+export const missingCoordinatesNotificationConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  recipients: z
+    .array(z.string().trim().email("Ogiltig e-postadress"))
+    .max(50, "Max 50 mottagare")
+    .default([]),
+});
+export type MissingCoordinatesNotificationConfig = z.infer<
+  typeof missingCoordinatesNotificationConfigSchema
+>;
+

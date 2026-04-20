@@ -7,9 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { AlertTriangle, MapPin, Loader2, RefreshCw, Building2, Layers, ExternalLink, Save, X, Play } from "lucide-react";
+import { AlertTriangle, MapPin, Loader2, RefreshCw, Building2, Layers, ExternalLink, Save, X, Play, Bell, Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 
 interface MissingItem {
@@ -51,6 +53,12 @@ interface EditDraft {
   city: string;
 }
 
+interface NotificationSettings {
+  enabled: boolean;
+  recipients: string[];
+  defaultRecipients: string[];
+}
+
 export default function MissingCoordinatesPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
@@ -60,6 +68,7 @@ export default function MissingCoordinatesPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkRunning, setBulkRunning] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+  const [newRecipient, setNewRecipient] = useState("");
 
   const { data, isLoading } = useQuery<MissingResponse>({
     queryKey: ["/api/objects/missing-coordinates"],
@@ -68,6 +77,53 @@ export default function MissingCoordinatesPage() {
   const { data: trend } = useQuery<TrendResponse>({
     queryKey: ["/api/objects/missing-coordinates/trend"],
   });
+
+  const { data: notifSettings, isLoading: notifLoading } = useQuery<NotificationSettings>({
+    queryKey: ["/api/objects/missing-coordinates/notification-settings"],
+  });
+
+  const saveNotifMutation = useMutation({
+    mutationFn: async (next: { enabled: boolean; recipients: string[] }) => {
+      const res = await apiRequest("PUT", "/api/objects/missing-coordinates/notification-settings", next);
+      return (await res.json()) as NotificationSettings;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/objects/missing-coordinates/notification-settings"], data);
+      toast({ title: "Sparat", description: "Notisinställningar uppdaterade." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Kunde inte spara", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateNotif = (patch: Partial<{ enabled: boolean; recipients: string[] }>) => {
+    if (!notifSettings) return;
+    saveNotifMutation.mutate({
+      enabled: patch.enabled ?? notifSettings.enabled,
+      recipients: patch.recipients ?? notifSettings.recipients,
+    });
+  };
+
+  const addRecipient = () => {
+    const email = newRecipient.trim().toLowerCase();
+    if (!email || !notifSettings) return;
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!re.test(email)) {
+      toast({ title: "Ogiltig e-post", description: email, variant: "destructive" });
+      return;
+    }
+    if (notifSettings.recipients.includes(email)) {
+      setNewRecipient("");
+      return;
+    }
+    updateNotif({ recipients: [...notifSettings.recipients, email] });
+    setNewRecipient("");
+  };
+
+  const removeRecipient = (email: string) => {
+    if (!notifSettings) return;
+    updateNotif({ recipients: notifSettings.recipients.filter((r) => r !== email) });
+  };
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/objects/missing-coordinates"] });
@@ -350,6 +406,9 @@ export default function MissingCoordinatesPage() {
           <TabsTrigger value="list" data-testid="tab-list">Lista ({items.length})</TabsTrigger>
           <TabsTrigger value="byCustomer" data-testid="tab-by-customer">Per kund ({data?.byCustomer.length ?? 0})</TabsTrigger>
           <TabsTrigger value="byCluster" data-testid="tab-by-cluster">Per kluster ({data?.byCluster.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="notifications" data-testid="tab-notifications">
+            <Bell className="h-4 w-4 mr-1" />Notiser
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="list" className="space-y-3">
@@ -520,6 +579,127 @@ export default function MissingCoordinatesPage() {
               ))}
               {(data?.byCustomer || []).length === 0 && (
                 <div className="p-8 text-center text-muted-foreground">Inga objekt utan koordinater.</div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="notifications" className="space-y-4">
+          <Card data-testid="card-notification-settings">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-5 w-5" />
+                E-postnotiser för saknade koordinater
+              </CardTitle>
+              <CardDescription>
+                Välj vilka som ska få e-post när antalet objekt utan koordinater ökar. Lämnar du listan tom skickas notisen automatiskt till alla owners/admins (eller tenantens kontakt-e-post).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {notifLoading || !notifSettings ? (
+                <div className="flex items-center justify-center p-6">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-4 p-3 rounded-md border">
+                    <div className="space-y-1">
+                      <Label htmlFor="notif-enabled" className="text-base">
+                        Skicka notiser
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Stäng av om du inte vill att Plannix skickar e-post om koordinatkvalitet för denna tenant.
+                      </p>
+                    </div>
+                    <Switch
+                      id="notif-enabled"
+                      checked={notifSettings.enabled}
+                      onCheckedChange={(v) => updateNotif({ enabled: v })}
+                      disabled={saveNotifMutation.isPending}
+                      data-testid="switch-notif-enabled"
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="text-base">Mottagare</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Lägg till specifika e-postadresser som ska få notiserna. Är listan tom används standardmottagarna nedan.
+                      </p>
+                    </div>
+
+                    {notifSettings.recipients.length === 0 ? (
+                      <div className="text-sm text-muted-foreground italic" data-testid="text-no-custom-recipients">
+                        Inga specifika mottagare valda – standardmottagare används.
+                      </div>
+                    ) : (
+                      <ul className="space-y-2" data-testid="list-recipients">
+                        {notifSettings.recipients.map((email) => (
+                          <li
+                            key={email}
+                            className="flex items-center justify-between gap-2 p-2 rounded-md border bg-muted/30"
+                            data-testid={`row-recipient-${email}`}
+                          >
+                            <span className="text-sm font-mono truncate">{email}</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => removeRecipient(email)}
+                              disabled={saveNotifMutation.isPending}
+                              data-testid={`button-remove-recipient-${email}`}
+                              aria-label={`Ta bort ${email}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Input
+                        type="email"
+                        placeholder="namn@foretag.se"
+                        value={newRecipient}
+                        onChange={(e) => setNewRecipient(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addRecipient();
+                          }
+                        }}
+                        disabled={saveNotifMutation.isPending}
+                        data-testid="input-new-recipient"
+                      />
+                      <Button
+                        onClick={addRecipient}
+                        disabled={saveNotifMutation.isPending || !newRecipient.trim()}
+                        data-testid="button-add-recipient"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />Lägg till
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">
+                      Standardmottagare (owners/admins)
+                    </Label>
+                    {notifSettings.defaultRecipients.length === 0 ? (
+                      <p className="text-sm text-amber-600" data-testid="text-no-default-recipients">
+                        Inga owners/admins eller kontakt-e-post hittades. Lägg till minst en mottagare ovan, annars skickas inga notiser.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2" data-testid="list-default-recipients">
+                        {notifSettings.defaultRecipients.map((email) => (
+                          <Badge key={email} variant="outline" data-testid={`badge-default-${email}`}>
+                            {email}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>

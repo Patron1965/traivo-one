@@ -5,6 +5,8 @@ import {
   geocodingMissingSnapshots,
   userTenantRoles,
   users,
+  missingCoordinatesNotificationConfigSchema,
+  type MissingCoordinatesNotificationConfig,
   type Tenant,
 } from "@shared/schema";
 import { sendEmail } from "../replit_integrations/resend";
@@ -54,6 +56,34 @@ async function writeNotificationState(
   const settings = { ...((tenant.settings ?? {}) as Record<string, unknown>) };
   settings.missingCoordinatesNotification = state;
   await storage.updateTenantSettings(tenant.id, settings);
+}
+
+export function readNotificationConfig(
+  tenant: Tenant,
+): MissingCoordinatesNotificationConfig {
+  const settings = (tenant.settings ?? {}) as Record<string, unknown>;
+  const raw = settings.missingCoordinatesNotificationConfig;
+  const parsed = missingCoordinatesNotificationConfigSchema.safeParse(raw);
+  if (parsed.success) return parsed.data;
+  return { enabled: true, recipients: [] };
+}
+
+export async function writeNotificationConfig(
+  tenant: Tenant,
+  config: MissingCoordinatesNotificationConfig,
+): Promise<void> {
+  const settings = { ...((tenant.settings ?? {}) as Record<string, unknown>) };
+  settings.missingCoordinatesNotificationConfig = config;
+  await storage.updateTenantSettings(tenant.id, settings);
+}
+
+export async function getDefaultRecipients(
+  tenant: Tenant,
+): Promise<string[]> {
+  const admins = await getAdminRecipients(tenant.id);
+  const emails = new Set(admins);
+  if (emails.size === 0 && tenant.contactEmail) emails.add(tenant.contactEmail);
+  return Array.from(emails);
 }
 
 async function getAdminRecipients(tenantId: string): Promise<string[]> {
@@ -129,6 +159,17 @@ export async function evaluateAndNotifyMissingCoordinates(
   }
 
   if (!isEnabled()) {
+    return {
+      tenantId,
+      status: "skipped-disabled",
+      currentMissing: 0,
+      previousMissing: null,
+      delta: 0,
+    };
+  }
+
+  const config = readNotificationConfig(tenant);
+  if (!config.enabled) {
     return {
       tenantId,
       status: "skipped-disabled",
@@ -228,9 +269,14 @@ export async function evaluateAndNotifyMissingCoordinates(
     };
   }
 
-  const recipients = await getAdminRecipients(tenantId);
-  if (recipients.length === 0 && tenant.contactEmail) {
-    recipients.push(tenant.contactEmail);
+  let recipients: string[];
+  if (config.recipients.length > 0) {
+    recipients = Array.from(new Set(config.recipients));
+  } else {
+    recipients = await getAdminRecipients(tenantId);
+    if (recipients.length === 0 && tenant.contactEmail) {
+      recipients.push(tenant.contactEmail);
+    }
   }
   if (recipients.length === 0) {
     return {

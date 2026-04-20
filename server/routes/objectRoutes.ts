@@ -11,7 +11,13 @@ import { NotFoundError, ValidationError } from "../errors";
 import { db } from "../db";
 import { sql, eq, and, isNull, inArray, desc } from "drizzle-orm";
 import { geocodeObjectById } from "../services/geocoding";
-import { evaluateAndNotifyMissingCoordinates } from "../services/missing-coordinates-notifier";
+import {
+  evaluateAndNotifyMissingCoordinates,
+  readNotificationConfig,
+  writeNotificationConfig,
+  getDefaultRecipients,
+} from "../services/missing-coordinates-notifier";
+import { missingCoordinatesNotificationConfigSchema } from "@shared/schema";
 
 type ServiceObject = Awaited<ReturnType<typeof storage.getObjects>>[number];
 
@@ -819,6 +825,32 @@ app.post("/api/objects/missing-coordinates/notify", requireAdmin, asyncHandler(a
   const tenantId = getTenantIdWithFallback(req);
   const result = await evaluateAndNotifyMissingCoordinates(tenantId);
   res.json(result);
+}));
+
+app.get("/api/objects/missing-coordinates/notification-settings", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const tenant = await storage.getTenant(tenantId);
+  if (!tenant) throw new NotFoundError("Tenant");
+  const config = readNotificationConfig(tenant);
+  const defaultRecipients = await getDefaultRecipients(tenant);
+  res.json({ ...config, defaultRecipients });
+}));
+
+app.put("/api/objects/missing-coordinates/notification-settings", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const tenant = await storage.getTenant(tenantId);
+  if (!tenant) throw new NotFoundError("Tenant");
+  const parsed = missingCoordinatesNotificationConfigSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ValidationError(formatZodError(parsed.error));
+  }
+  const normalized = {
+    enabled: parsed.data.enabled,
+    recipients: Array.from(new Set(parsed.data.recipients.map((e) => e.trim().toLowerCase()))).filter(Boolean),
+  };
+  await writeNotificationConfig(tenant, normalized);
+  const defaultRecipients = await getDefaultRecipients(tenant);
+  res.json({ ...normalized, defaultRecipients });
 }));
 
 app.post("/api/objects/:id/geocode", asyncHandler(async (req, res) => {
