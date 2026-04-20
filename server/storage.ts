@@ -85,6 +85,7 @@ import {
   type InspectionMetadata, type InsertInspectionMetadata,
   type ChecklistTemplate, type InsertChecklistTemplate,
   type DriverNotification, type InsertDriverNotification,
+  userNotifications, type UserNotification, type InsertUserNotification,
   type OfflineSyncLog, type InsertOfflineSyncLog,
   type FuelLog, type InsertFuelLog,
   type MaintenanceLog, type InsertMaintenanceLog,
@@ -681,6 +682,13 @@ export interface IStorage {
   markDriverNotificationRead(id: string, resourceId: string): Promise<DriverNotification | undefined>;
   markAllDriverNotificationsRead(resourceId: string): Promise<number>;
   getUnreadNotificationCount(resourceId: string): Promise<number>;
+
+  // User Notifications (in-app for planners/admins)
+  getUserNotifications(userId: string, tenantId: string, options?: { unreadOnly?: boolean; limit?: number }): Promise<UserNotification[]>;
+  createUserNotification(notification: InsertUserNotification): Promise<UserNotification>;
+  markUserNotificationRead(id: string, userId: string): Promise<UserNotification | undefined>;
+  markAllUserNotificationsRead(userId: string, tenantId: string): Promise<number>;
+  getUnreadUserNotificationCount(userId: string, tenantId: string): Promise<number>;
 
   // Offline Sync Log
   createOfflineSyncLog(log: InsertOfflineSyncLog): Promise<OfflineSyncLog>;
@@ -5235,6 +5243,34 @@ export class DatabaseStorage implements IStorage {
 
   async getUnreadNotificationCount(resourceId: string): Promise<number> {
     const result = await db.select({ count: sql<number>`count(*)` }).from(driverNotifications).where(and(eq(driverNotifications.resourceId, resourceId), eq(driverNotifications.isRead, false)));
+    return Number(result[0]?.count || 0);
+  }
+
+  async getUserNotifications(userId: string, tenantId: string, options?: { unreadOnly?: boolean; limit?: number }): Promise<UserNotification[]> {
+    const conditions = [eq(userNotifications.userId, userId), eq(userNotifications.tenantId, tenantId)];
+    if (options?.unreadOnly) conditions.push(eq(userNotifications.isRead, false));
+    let query = db.select().from(userNotifications).where(and(...conditions)).orderBy(desc(userNotifications.createdAt));
+    if (options?.limit) query = query.limit(options.limit) as any;
+    return query;
+  }
+
+  async createUserNotification(notification: InsertUserNotification): Promise<UserNotification> {
+    const [result] = await db.insert(userNotifications).values(notification).returning();
+    return result;
+  }
+
+  async markUserNotificationRead(id: string, userId: string): Promise<UserNotification | undefined> {
+    const [result] = await db.update(userNotifications).set({ isRead: true }).where(and(eq(userNotifications.id, id), eq(userNotifications.userId, userId))).returning();
+    return result;
+  }
+
+  async markAllUserNotificationsRead(userId: string, tenantId: string): Promise<number> {
+    const result = await db.update(userNotifications).set({ isRead: true }).where(and(eq(userNotifications.userId, userId), eq(userNotifications.tenantId, tenantId), eq(userNotifications.isRead, false))).returning();
+    return result.length;
+  }
+
+  async getUnreadUserNotificationCount(userId: string, tenantId: string): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` }).from(userNotifications).where(and(eq(userNotifications.userId, userId), eq(userNotifications.tenantId, tenantId), eq(userNotifications.isRead, false)));
     return Number(result[0]?.count || 0);
   }
 

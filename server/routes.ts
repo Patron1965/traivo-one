@@ -232,6 +232,49 @@ export async function registerRoutes(
     }
   });
 
+  // In-app user notifications (planners/admins) — bell in header
+  app.get("/api/notifications", async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
+      const tenantId = getTenantIdWithFallback(req);
+      const limit = Math.min(Number(req.query.limit) || 20, 100);
+      const unreadOnly = req.query.unreadOnly === "true";
+      const items = await storage.getUserNotifications(userId, tenantId, { limit, unreadOnly });
+      const unreadCount = await storage.getUnreadUserNotificationCount(userId, tenantId);
+      res.json({ notifications: items, unreadCount });
+    } catch (error) {
+      console.error("Failed to fetch user notifications:", error);
+      res.status(500).json({ error: "Kunde inte hämta notiser" });
+    }
+  });
+
+  app.patch("/api/notifications/:id/read", async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
+      const updated = await storage.markUserNotificationRead(req.params.id, userId);
+      if (!updated) return res.status(404).json({ error: "Notis hittades inte" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to mark notification read:", error);
+      res.status(500).json({ error: "Kunde inte uppdatera notis" });
+    }
+  });
+
+  app.patch("/api/notifications/read-all", async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
+      const tenantId = getTenantIdWithFallback(req);
+      const count = await storage.markAllUserNotificationsRead(userId, tenantId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Failed to mark all notifications read:", error);
+      res.status(500).json({ error: "Kunde inte uppdatera notiser" });
+    }
+  });
+
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);

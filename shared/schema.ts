@@ -4090,6 +4090,26 @@ export const insertDriverNotificationSchema = createInsertSchema(driverNotificat
 export type InsertDriverNotification = z.infer<typeof insertDriverNotificationSchema>;
 export type DriverNotification = typeof driverNotifications.$inferSelect;
 
+export const userNotifications = pgTable("user_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  userId: varchar("user_id").notNull(),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  link: text("link"),
+  data: jsonb("data").default({}),
+  isRead: boolean("is_read").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_user_notif_user").on(table.userId, table.isRead),
+  index("idx_user_notif_tenant").on(table.tenantId),
+]);
+
+export const insertUserNotificationSchema = createInsertSchema(userNotifications).omit({ id: true, createdAt: true });
+export type InsertUserNotification = z.infer<typeof insertUserNotificationSchema>;
+export type UserNotification = typeof userNotifications.$inferSelect;
+
 export const offlineSyncLog = pgTable("offline_sync_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),

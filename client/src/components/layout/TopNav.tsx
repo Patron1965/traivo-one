@@ -22,7 +22,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TourMenu } from "@/components/TourMenu";
 import { getNavGroups, type NavItem } from "@/lib/navItems";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Settings,
   LogOut,
@@ -376,6 +383,156 @@ function TenantLogo() {
   );
 }
 
+interface UserNotificationItem {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  link: string | null;
+  isRead: boolean;
+  createdAt: string;
+  data?: Record<string, unknown>;
+}
+
+interface NotificationsResponse {
+  notifications: UserNotificationItem[];
+  unreadCount: number;
+}
+
+function formatRelativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  const diff = Date.now() - then;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "nu";
+  if (m < 60) return `${m} min sedan`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} h sedan`;
+  const d = Math.floor(h / 24);
+  return `${d} d sedan`;
+}
+
+function NotificationsBell() {
+  const { user } = useAuth();
+  const [open, setOpen] = useState(false);
+  const enabled = !!user;
+
+  const { data } = useQuery<NotificationsResponse>({
+    queryKey: ["/api/notifications"],
+    enabled,
+    refetchInterval: 30000,
+  });
+
+  const markRead = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("PATCH", `/api/notifications/${id}/read`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+  });
+
+  const markAllRead = useMutation({
+    mutationFn: async () => {
+      await apiRequest("PATCH", "/api/notifications/read-all", {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+  });
+
+  const items = data?.notifications ?? [];
+  const unread = data?.unreadCount ?? 0;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative h-8 w-8"
+          data-testid="button-notifications"
+          aria-label={`Notiser${unread > 0 ? ` (${unread} olästa)` : ""}`}
+        >
+          <Bell className="h-4 w-4" />
+          {unread > 0 && (
+            <span
+              className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none"
+              data-testid="badge-notifications-unread"
+            >
+              {unread > 99 ? "99+" : unread}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0" data-testid="popover-notifications">
+        <div className="flex items-center justify-between px-3 py-2 border-b">
+          <span className="text-sm font-semibold">Notiser</span>
+          {unread > 0 && (
+            <button
+              onClick={() => markAllRead.mutate()}
+              disabled={markAllRead.isPending}
+              className="text-xs text-muted-foreground hover:text-foreground"
+              data-testid="button-mark-all-read"
+            >
+              Markera alla som lästa
+            </button>
+          )}
+        </div>
+        <ScrollArea className="max-h-80">
+          {items.length === 0 ? (
+            <div className="px-4 py-6 text-center text-sm text-muted-foreground" data-testid="text-no-notifications">
+              Inga notiser
+            </div>
+          ) : (
+            <ul className="divide-y">
+              {items.map((n) => {
+                const content = (
+                  <div
+                    className={`flex items-start gap-2 px-3 py-2 cursor-pointer hover:bg-accent ${
+                      n.isRead ? "" : "bg-accent/40"
+                    }`}
+                    onClick={() => {
+                      if (!n.isRead) markRead.mutate(n.id);
+                      if (n.link) setOpen(false);
+                    }}
+                    data-testid={`notification-item-${n.id}`}
+                  >
+                    {!n.isRead && (
+                      <span className="mt-1.5 h-2 w-2 rounded-full bg-red-500 flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate" data-testid={`text-notification-title-${n.id}`}>
+                        {n.title}
+                      </div>
+                      <div className="text-xs text-muted-foreground line-clamp-2">
+                        {n.message}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                        {formatRelativeTime(n.createdAt)}
+                      </div>
+                    </div>
+                  </div>
+                );
+                return (
+                  <li key={n.id}>
+                    {n.link ? (
+                      <Link href={n.link} data-testid={`link-notification-${n.id}`}>
+                        {content}
+                      </Link>
+                    ) : (
+                      content
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </ScrollArea>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function TopNav() {
   const { user } = useAuth();
   const userRole = user?.role || "user";
@@ -485,15 +642,8 @@ export function TopNav() {
             <Search className="h-4 w-4" />
           </Button>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="relative h-8 w-8"
-            data-testid="button-notifications"
-          >
-            <Bell className="h-4 w-4" />
-            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive" />
-          </Button>
+          <NotificationsBell />
+
 
           <TourMenu />
 
