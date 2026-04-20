@@ -190,6 +190,13 @@
       "when": 1776710038855,
       "tag": "0026_wakeful_anita_blake",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1776719599757,
+      "tag": "0027_striped_sleeper",
+      "breakpoints": true
     }
   ]
 }

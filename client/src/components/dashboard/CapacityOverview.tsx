@@ -215,6 +215,57 @@ export function CapacityOverview() {
             <span className="text-xs text-muted-foreground">&gt;90%</span>
           </div>
         </div>
+
+        {!weather?.disabled && (weather?.impacts?.length ?? 0) > 0 && (
+          <div className="mt-4 pt-3 border-t" data-testid="capacity-horizon">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-muted-foreground">Kapacitet kommande dagar</span>
+              <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <span className="inline-block h-2 w-3 rounded-sm border border-muted-foreground/40" />
+                  Teoretisk
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="inline-block h-2 w-3 rounded-sm bg-amber-500/70" />
+                  Väderjusterad
+                </span>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              {(weather?.impacts ?? []).slice(0, 7).map((imp) => {
+                const adj = Math.round(imp.capacityMultiplier * 100);
+                const theo = 100;
+                const dayLabel = (() => {
+                  try { return format(new Date(imp.date), "EEE d/M", { locale: sv }); }
+                  catch { return imp.date; }
+                })();
+                const adjColor = imp.impactLevel === "severe" || imp.impactLevel === "high"
+                  ? "bg-red-500/70"
+                  : imp.impactLevel === "medium"
+                    ? "bg-amber-500/70"
+                    : imp.impactLevel === "low"
+                      ? "bg-yellow-500/60"
+                      : "bg-green-500/60";
+                return (
+                  <div key={imp.date} className="flex items-center gap-2" data-testid={`horizon-day-${imp.date}`}>
+                    <span className="text-[11px] w-14 text-muted-foreground capitalize">{dayLabel}</span>
+                    <div className="flex-1 space-y-0.5">
+                      <div className="h-1.5 rounded-sm bg-muted overflow-hidden" title={`Teoretisk ${theo}%`}>
+                        <div className="h-full bg-muted-foreground/40" style={{ width: `${theo}%` }} />
+                      </div>
+                      <div className="h-1.5 rounded-sm bg-muted overflow-hidden" title={`Väderjusterad ${adj}% – ${imp.reason}`}>
+                        <div className={`h-full ${adjColor}`} style={{ width: `${adj}%` }} data-testid={`horizon-bar-adjusted-${imp.date}`} />
+                      </div>
+                    </div>
+                    <span className="text-[10px] tabular-nums text-muted-foreground w-20 text-right" data-testid={`horizon-values-${imp.date}`}>
+                      {theo}% / {adj}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

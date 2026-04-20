@@ -1815,11 +1815,33 @@ app.get("/api/weather/forecast", asyncHandler(async (req, res) => {
     const rawDays = parseInt(req.query.days as string);
     const days = Math.max(1, Math.min(Number.isFinite(rawDays) ? rawDays : 7, 14));
 
+    const weekStartStr = req.query.weekStart as string | undefined;
+    const dateStr = req.query.date as string | undefined;
+    let filterStart: Date | undefined;
+    let filterEnd: Date | undefined;
+    if (weekStartStr && /^\d{4}-\d{2}-\d{2}$/.test(weekStartStr)) {
+      filterStart = new Date(`${weekStartStr}T00:00:00Z`);
+      filterEnd = new Date(filterStart.getTime() + days * 86400000);
+    } else if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      filterStart = new Date(`${dateStr}T00:00:00Z`);
+      filterEnd = new Date(filterStart.getTime() + 86400000);
+    }
+
     const { fetchWeatherForecast } = await import("../weather-service");
     const result = await fetchWeatherForecast(latitude, longitude, days, tenantId);
 
+    let { forecasts, impacts } = result;
+    if (filterStart && filterEnd) {
+      const startIso = filterStart.toISOString().slice(0, 10);
+      const endIso = filterEnd.toISOString().slice(0, 10);
+      forecasts = forecasts.filter(f => f.date >= startIso && f.date < endIso);
+      impacts = impacts.filter(i => i.date >= startIso && i.date < endIso);
+    }
+
     res.json({
       ...result,
+      forecasts,
+      impacts,
       location: { ...result.location, name: locationName ?? result.location.name },
     });
 }));
