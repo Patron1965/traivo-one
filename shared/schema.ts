@@ -4880,3 +4880,18 @@ export type UrgentJobAssignment = typeof urgentJobAssignments.$inferSelect;
 export type InsertUrgentJobAssignment = z.infer<typeof insertUrgentJobAssignmentSchema>;
 
 export type UrgentJobStatus = "pending" | "accepted" | "en_route" | "arrived" | "in_progress" | "completed" | "declined" | "reassigned" | "issue_reported";
+
+export const geocodingMissingSnapshots = pgTable("geocoding_missing_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  date: text("date").notNull(),
+  missingCount: integer("missing_count").notNull(),
+  totalWithAddress: integer("total_with_address").notNull(),
+  totalObjects: integer("total_objects").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_geocoding_missing_snap_tenant_date").on(table.tenantId, table.date),
+]);
+
+export type GeocodingMissingSnapshot = typeof geocodingMissingSnapshots.$inferSelect;
+

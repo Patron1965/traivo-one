@@ -147,6 +147,7 @@ export function getAdminItems(tl?: (key: string) => string): NavItem[] {
     { title: l("nav.fortnox"), url: "/fortnox", icon: Receipt, description: l("nav.fortnox.desc") },
     { title: l("nav.import"), url: "/import", icon: Upload, description: l("nav.import.desc") },
     { title: l("nav.metadata-settings"), url: "/metadata-settings", icon: Database, description: l("nav.metadata-settings.desc") },
+    { title: "Objekt utan koordinater", url: "/objects/missing-coordinates", icon: Building2, description: "Lista över objekt som saknar lat/lng och kan geokodas på nytt" },
     { title: l("nav.api-costs"), url: "/api-costs", icon: Activity, description: l("nav.api-costs.desc") },
     { title: l("nav.system-overview"), url: "/system-overview", icon: FileText, description: l("nav.system-overview.desc") },
     { title: l("nav.settings"), url: "/settings", icon: Settings, description: l("nav.settings.desc") },

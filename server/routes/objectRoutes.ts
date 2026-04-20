@@ -5,11 +5,12 @@ import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { geocodeAddress, searchDestinations, batchGeocode, isGoogleGeocodingAvailable, reverseGeocode, lookupCityFromPostalCode } from "../google-geocoding";
 import { createInheritanceProcessor } from "../inheritance-processor";
-import { insertObjectParentSchema, objects, workOrders, workOrderObjects, objectArticles, objectContacts, objectImages, objectMetadata, objectParents, objectPayers, objectTimeRestrictions } from "@shared/schema";
+import { insertObjectParentSchema, objects, workOrders, workOrderObjects, objectArticles, objectContacts, objectImages, objectMetadata, objectParents, objectPayers, objectTimeRestrictions, geocodingMissingSnapshots } from "@shared/schema";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { db } from "../db";
-import { sql, eq, and, isNull, inArray } from "drizzle-orm";
+import { sql, eq, and, isNull, inArray, desc } from "drizzle-orm";
+import { geocodeObjectById } from "../services/geocoding";
 
 type ServiceObject = Awaited<ReturnType<typeof storage.getObjects>>[number];
 
@@ -711,6 +712,117 @@ app.post("/api/objects/:id/recalculate-inheritance", asyncHandler(async (req, re
     success: true,
     message: `Uppdaterade ärvning för objektet och ${descendantsUpdated} ättlingar`
   });
+}));
+
+// === Missing coordinates admin: list, retry, trend ===
+app.get("/api/objects/missing-coordinates", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const allObjects = await storage.getObjects(tenantId);
+  const customers = await storage.getCustomers(tenantId);
+  const clusters = await storage.getClusters(tenantId);
+  const customerById = new Map(customers.map(c => [c.id, c]));
+  const clusterById = new Map(clusters.map(c => [c.id, c]));
+
+  const withAddress = allObjects.filter(o => o.address && o.address.trim() !== "");
+  const missing = withAddress.filter(o => o.latitude == null || o.longitude == null);
+
+  const items = missing.map(o => ({
+    id: o.id,
+    name: o.name,
+    objectNumber: o.objectNumber,
+    address: o.address,
+    city: o.city,
+    postalCode: o.postalCode,
+    customerId: o.customerId,
+    customerName: customerById.get(o.customerId)?.name || null,
+    clusterId: o.clusterId,
+    clusterName: o.clusterId ? clusterById.get(o.clusterId)?.name || null : null,
+  }));
+
+  const byCustomer = new Map<string, { customerId: string; customerName: string; count: number }>();
+  for (const it of items) {
+    const key = it.customerId || "(okänd)";
+    const existing = byCustomer.get(key);
+    if (existing) existing.count++;
+    else byCustomer.set(key, { customerId: key, customerName: it.customerName || "(okänd kund)", count: 1 });
+  }
+  const byCluster = new Map<string, { clusterId: string; clusterName: string; count: number }>();
+  for (const it of items) {
+    const key = it.clusterId || "(inget kluster)";
+    const existing = byCluster.get(key);
+    if (existing) existing.count++;
+    else byCluster.set(key, { clusterId: key, clusterName: it.clusterName || "(inget kluster)", count: 1 });
+  }
+
+  // Snapshot today's count (idempotent per day per tenant)
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    await db.insert(geocodingMissingSnapshots)
+      .values({
+        tenantId,
+        date: today,
+        missingCount: missing.length,
+        totalWithAddress: withAddress.length,
+        totalObjects: allObjects.length,
+      })
+      .onConflictDoUpdate({
+        target: [geocodingMissingSnapshots.tenantId, geocodingMissingSnapshots.date],
+        set: {
+          missingCount: missing.length,
+          totalWithAddress: withAddress.length,
+          totalObjects: allObjects.length,
+        },
+      });
+  } catch (err) {
+    console.error("[missing-coordinates] Failed to record snapshot:", err);
+  }
+
+  res.json({
+    summary: {
+      missingCount: missing.length,
+      totalWithAddress: withAddress.length,
+      totalObjects: allObjects.length,
+    },
+    items,
+    byCustomer: Array.from(byCustomer.values()).sort((a, b) => b.count - a.count),
+    byCluster: Array.from(byCluster.values()).sort((a, b) => b.count - a.count),
+  });
+}));
+
+app.get("/api/objects/missing-coordinates/trend", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const days = Math.min(Math.max(parseInt(String(req.query.days ?? "30"), 10) || 30, 1), 365);
+  try {
+    const rows = await db.select()
+      .from(geocodingMissingSnapshots)
+      .where(eq(geocodingMissingSnapshots.tenantId, tenantId))
+      .orderBy(desc(geocodingMissingSnapshots.date))
+      .limit(days);
+    res.json({
+      days,
+      snapshots: rows.reverse().map(r => ({
+        date: r.date,
+        missingCount: r.missingCount,
+        totalWithAddress: r.totalWithAddress,
+        totalObjects: r.totalObjects,
+      })),
+    });
+  } catch (err) {
+    // Tabellen kan saknas under första migrationsfönstret — degrade gracefully.
+    console.warn("[missing-coordinates/trend] Failed to read snapshots, returning empty list:", err);
+    res.json({ days, snapshots: [] });
+  }
+}));
+
+app.post("/api/objects/:id/geocode", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const force = req.body?.force === true;
+  const result = await geocodeObjectById(req.params.id, { force, useSearchDestinations: true });
+  res.json(result);
 }));
 
 app.post("/api/clusters/:id/process-inheritance", asyncHandler(async (req, res) => {
