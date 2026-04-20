@@ -454,19 +454,36 @@ export default function OrderStockPage() {
 
   const batchPlanningMutation = useMutation({
     mutationFn: async ({ orderIds, data }: { orderIds: string[]; data: PlanningFormData }) => {
-      const updates: Record<string, any> = {};
-      if (data.teamId) updates.teamId = data.teamId;
-      if (data.resourceId) updates.resourceId = data.resourceId;
-      if (data.scheduledDate) updates.scheduledDate = new Date(data.scheduledDate);
-      if (data.resourceId) {
-        updates.orderStatus = "planerad_resurs";
-      } else if (data.teamId) {
-        updates.orderStatus = "planerad_pre";
-      }
+      const baseUpdates: Record<string, any> = {};
+      if (data.teamId) baseUpdates.teamId = data.teamId;
+      if (data.resourceId) baseUpdates.resourceId = data.resourceId;
+      if (data.scheduledDate) baseUpdates.scheduledDate = new Date(data.scheduledDate);
+
+      const ordersById = new Map(displayOrders.map(o => [o.id, o]));
+      const lockedStatuses: OrderStatus[] = ["planerad_las", "utford", "fakturerad", "omojlig"];
+
       let success = 0;
       let failed = 0;
       for (const id of orderIds) {
         try {
+          const existing = ordersById.get(id);
+          const updates: Record<string, any> = { ...baseUpdates };
+
+          // Compute final state by combining new values with existing ones,
+          // so batch planning advances status the same way single planning does
+          // (where the dialog pre-fills with existing values).
+          const finalResourceId = data.resourceId || existing?.resourceId;
+          const finalTeamId = data.teamId || existing?.teamId;
+          const currentStatus = (existing?.orderStatus || "skapad") as OrderStatus;
+
+          if (!lockedStatuses.includes(currentStatus)) {
+            if (finalResourceId) {
+              updates.orderStatus = "planerad_resurs";
+            } else if (finalTeamId) {
+              updates.orderStatus = "planerad_pre";
+            }
+          }
+
           await apiRequest("PATCH", `/api/work-orders/${id}`, updates);
           success++;
         } catch {
