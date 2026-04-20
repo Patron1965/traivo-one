@@ -60,3 +60,9 @@ id = "2PsN_KN6LiJ-sfeNjrxsW"
 uri = "file://attached_assets/DEMO_MANUS_1776011749994.md"
 type = "text"
 title = "Traivo One - Demo-manus (uppdaterat)"
+
+[[outputs]]
+id = "E-rzvKLoYFJHN8vaf0JMO"
+uri = "file://docs/PROJEKTSAMMANFATTNING.md"
+type = "text"
+title = "Plannix – Sammanställning av alla projekttasks"
