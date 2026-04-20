@@ -9,6 +9,7 @@ import { NotFoundError, ValidationError } from "../errors";
 import { db } from "../db";
 import { eq, and, isNull, sql, ilike, or, inArray } from "drizzle-orm";
 import { ensureClusterAndAssign } from "../auto-cluster";
+import { triggerGeocodeIfMissing } from "../services/geocoding";
 
 export async function registerCustomerRoutes(app: Express) {
 
@@ -524,7 +525,9 @@ app.post("/api/objects", asyncHandler(async (req, res) => {
       console.error("Auto-cluster error on object create:", err);
     }
   }
-  
+
+  triggerGeocodeIfMissing(object.id);
+
   const updated = await storage.getObject(object.id);
   res.status(201).json(updated || object);
 }));
@@ -543,6 +546,15 @@ app.patch("/api/objects/:id", asyncHandler(async (req, res) => {
   const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as Record<string, unknown>;
   const object = await storage.updateObject(req.params.id, updateData);
   if (!object) throw new NotFoundError("Objekt");
+
+  const addressChanged = "address" in updateData && updateData.address !== existing!.address;
+  const coordsExplicitlyProvided = "latitude" in updateData || "longitude" in updateData;
+  if (addressChanged && !coordsExplicitlyProvided && object.address) {
+    triggerGeocodeIfMissing(object.id, { force: true });
+  } else if (object.address && (object.latitude == null || object.longitude == null)) {
+    triggerGeocodeIfMissing(object.id);
+  }
+
   res.json(object);
 }));
 

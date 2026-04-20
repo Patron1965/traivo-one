@@ -11,6 +11,7 @@ import multer from "multer";
 import Papa from "papaparse";
 import { importJobs, notifyImportProgress } from "./helpers";
 import { geocodeAddress } from "../google-geocoding";
+import { triggerGeocodeIfMissing } from "../services/geocoding";
 import { objects, workOrders, customers, objectMetadata, workOrderLines, metadataKatalog } from "@shared/schema";
 import { createMetadata, getAllMetadataTypes } from "../metadata-queries";
 import { ensureClusterForCustomer, updateClusterCache } from "../auto-cluster";
@@ -193,7 +194,7 @@ app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, 
         }
         
         const createdObject = await storage.createObject(objectData);
-        
+
         try {
           const clusterId = await ensureClusterForCustomer(tenantId, customerId);
           await storage.updateObject(createdObject.id, { clusterId });
@@ -201,6 +202,8 @@ app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, 
         } catch (clusterErr) {
           console.error("Auto-cluster error:", clusterErr);
         }
+
+        triggerGeocodeIfMissing(createdObject.id);
         
         if (objectData.objectNumber) {
           objectNumberMap.set(objectData.objectNumber, createdObject.id);
@@ -1041,6 +1044,9 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
             modusIdMap.set(modusId, updatedObject.id);
             updated.push(name);
             job.updated++;
+            if (updatedObject.address && (updatedObject.latitude == null || updatedObject.longitude == null)) {
+              triggerGeocodeIfMissing(updatedObject.id);
+            }
           }
         } else {
           const createdObject = await storage.createObject({
@@ -1052,6 +1058,7 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
           modusIdMap.set(modusId, createdObject.id);
           created.push(name);
           job.created++;
+          triggerGeocodeIfMissing(createdObject.id);
         }
       } catch (err) {
         console.error("Modus object import error:", err);

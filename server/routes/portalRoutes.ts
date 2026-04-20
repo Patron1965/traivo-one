@@ -13,6 +13,7 @@ import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
 import { isModuleEnabled } from "../feature-flags";
 import { ensureClusterAndAssign } from "../auto-cluster";
+import { triggerGeocodeIfMissing } from "../services/geocoding";
 
 export async function registerPortalRoutes(app: Express) {
 // ============================================
@@ -1645,7 +1646,9 @@ app.post("/api/public-issue-reports/:id/create-interim-object", asyncHandler(asy
         console.error("Auto-cluster error on interim object:", err);
       }
     }
-    
+
+    triggerGeocodeIfMissing(interimObject.id);
+
     await storage.updatePublicIssueReport(report.id, tenantId, {
       objectId: interimObject.id,
       status: "converted",
