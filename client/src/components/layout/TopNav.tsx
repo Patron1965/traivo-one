@@ -584,6 +584,16 @@ function NotificationsBell() {
             </ul>
           )}
         </ScrollArea>
+        <div className="border-t px-3 py-2">
+          <Link
+            href="/notifications"
+            onClick={() => setOpen(false)}
+            className="block w-full text-center text-xs font-medium text-primary hover:underline"
+            data-testid="link-all-notifications"
+          >
+            Visa alla notiser
+          </Link>
+        </div>
       </PopoverContent>
     </Popover>
   );

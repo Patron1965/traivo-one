@@ -684,7 +684,9 @@ export interface IStorage {
   getUnreadNotificationCount(resourceId: string): Promise<number>;
 
   // User Notifications (in-app for planners/admins)
-  getUserNotifications(userId: string, tenantId: string, options?: { unreadOnly?: boolean; limit?: number }): Promise<UserNotification[]>;
+  getUserNotifications(userId: string, tenantId: string, options?: { unreadOnly?: boolean; readOnly?: boolean; limit?: number; offset?: number; type?: string }): Promise<UserNotification[]>;
+  getUserNotificationsCount(userId: string, tenantId: string, options?: { unreadOnly?: boolean; readOnly?: boolean; type?: string }): Promise<number>;
+  getUserNotificationTypes(userId: string, tenantId: string): Promise<string[]>;
   createUserNotification(notification: InsertUserNotification): Promise<UserNotification>;
   markUserNotificationRead(id: string, userId: string): Promise<UserNotification | undefined>;
   markAllUserNotificationsRead(userId: string, tenantId: string): Promise<number>;
@@ -5246,12 +5248,32 @@ export class DatabaseStorage implements IStorage {
     return Number(result[0]?.count || 0);
   }
 
-  async getUserNotifications(userId: string, tenantId: string, options?: { unreadOnly?: boolean; limit?: number }): Promise<UserNotification[]> {
+  async getUserNotifications(userId: string, tenantId: string, options?: { unreadOnly?: boolean; readOnly?: boolean; limit?: number; offset?: number; type?: string }): Promise<UserNotification[]> {
     const conditions = [eq(userNotifications.userId, userId), eq(userNotifications.tenantId, tenantId)];
     if (options?.unreadOnly) conditions.push(eq(userNotifications.isRead, false));
-    let query = db.select().from(userNotifications).where(and(...conditions)).orderBy(desc(userNotifications.createdAt));
-    if (options?.limit) query = query.limit(options.limit) as any;
-    return query;
+    if (options?.readOnly) conditions.push(eq(userNotifications.isRead, true));
+    if (options?.type) conditions.push(eq(userNotifications.type, options.type));
+    return db
+      .select()
+      .from(userNotifications)
+      .where(and(...conditions))
+      .orderBy(desc(userNotifications.createdAt))
+      .limit(options?.limit ?? 1000)
+      .offset(options?.offset ?? 0);
+  }
+
+  async getUserNotificationsCount(userId: string, tenantId: string, options?: { unreadOnly?: boolean; readOnly?: boolean; type?: string }): Promise<number> {
+    const conditions = [eq(userNotifications.userId, userId), eq(userNotifications.tenantId, tenantId)];
+    if (options?.unreadOnly) conditions.push(eq(userNotifications.isRead, false));
+    if (options?.readOnly) conditions.push(eq(userNotifications.isRead, true));
+    if (options?.type) conditions.push(eq(userNotifications.type, options.type));
+    const result = await db.select({ count: sql<number>`count(*)` }).from(userNotifications).where(and(...conditions));
+    return Number(result[0]?.count || 0);
+  }
+
+  async getUserNotificationTypes(userId: string, tenantId: string): Promise<string[]> {
+    const result = await db.selectDistinct({ type: userNotifications.type }).from(userNotifications).where(and(eq(userNotifications.userId, userId), eq(userNotifications.tenantId, tenantId)));
+    return result.map((r: { type: string }) => r.type).sort();
   }
 
   async createUserNotification(notification: InsertUserNotification): Promise<UserNotification> {

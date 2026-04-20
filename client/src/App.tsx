@@ -110,6 +110,7 @@ const TelephonyPage = lazy(() => import("@/pages/TelephonyPage"));
 const MonitorPopoutPage = lazy(() => import("@/pages/MonitorPopoutPage"));
 const PlannerPopoutPage = lazy(() => import("@/pages/PlannerPopoutPage"));
 const ControlTowerPage = lazy(() => import("@/pages/ControlTowerPage"));
+const NotificationsPage = lazy(() => import("@/pages/NotificationsPage"));
 
 function PageLoader() {
   return (
@@ -201,6 +202,7 @@ function Router() {
         <Route path="/my-reports">{() => <ProtectedRoute component={MyReportsPage} path="/my-reports" />}</Route>
         <Route path="/tenant-config">{() => <ProtectedRoute component={TenantConfigPage} path="/tenant-config" />}</Route>
         <Route path="/onboarding">{() => <ProtectedRoute component={OnboardingWizardPage} path="/onboarding" />}</Route>
+        <Route path="/notifications">{() => <ProtectedRoute component={NotificationsPage} path="/notifications" />}</Route>
         <Route component={NotFound} />
       </Switch>
     </Suspense>

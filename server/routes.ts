@@ -239,13 +239,35 @@ export async function registerRoutes(
       if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
       const tenantId = getTenantIdWithFallback(req);
       const limit = Math.min(Number(req.query.limit) || 20, 100);
-      const unreadOnly = req.query.unreadOnly === "true";
-      const items = await storage.getUserNotifications(userId, tenantId, { limit, unreadOnly });
+      const offset = Math.max(Number(req.query.offset) || 0, 0);
+      const statusParam = typeof req.query.status === "string" ? req.query.status : undefined;
+      const unreadOnly = req.query.unreadOnly === "true" || statusParam === "unread";
+      const readOnly = statusParam === "read";
+      const type = typeof req.query.type === "string" && req.query.type ? req.query.type : undefined;
+      const includeTotal = req.query.includeTotal === "true";
+      const items = await storage.getUserNotifications(userId, tenantId, { limit, offset, unreadOnly, readOnly, type });
       const unreadCount = await storage.getUnreadUserNotificationCount(userId, tenantId);
-      res.json({ notifications: items, unreadCount });
+      const response: { notifications: typeof items; unreadCount: number; total?: number } = { notifications: items, unreadCount };
+      if (includeTotal) {
+        response.total = await storage.getUserNotificationsCount(userId, tenantId, { unreadOnly, readOnly, type });
+      }
+      res.json(response);
     } catch (error) {
       console.error("Failed to fetch user notifications:", error);
       res.status(500).json({ error: "Kunde inte hämta notiser" });
+    }
+  });
+
+  app.get("/api/notifications/types", async (req, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
+      const tenantId = getTenantIdWithFallback(req);
+      const types = await storage.getUserNotificationTypes(userId, tenantId);
+      res.json({ types });
+    } catch (error) {
+      console.error("Failed to fetch user notification types:", error);
+      res.status(500).json({ error: "Kunde inte hämta notistyper" });
     }
   });
 
