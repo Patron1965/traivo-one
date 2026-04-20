@@ -1040,24 +1040,27 @@ export async function aiEnhancedSchedule(
   let plannerLon = 18.0686;
   try {
     const tenantId = getContextTenantId();
-    if (tenantId) {
+    if (!tenantId) {
+      console.error("[aiEnhancedSchedule] No tenantId in context, skipping weather integration");
+      weatherEnabled = false;
+    } else {
       const tenant = await storage.getTenant(tenantId);
       const tenantSettings = (tenant?.settings ?? {}) as Record<string, unknown>;
-      if (tenantSettings.weatherPlanningEnabled === false) weatherEnabled = false;
-    }
+      if (tenantSettings.weatherPlanningEnabled === false) {
+        weatherEnabled = false;
+      }
 
-    if (weatherEnabled) {
-      const clusters = tenantId
-        ? await storage.getClusters(tenantId)
-        : context.clusters;
-      const withCenter = clusters.find(c => c.centerLatitude != null && c.centerLongitude != null);
-      if (withCenter && withCenter.centerLatitude != null && withCenter.centerLongitude != null) {
-        plannerLat = withCenter.centerLatitude;
-        plannerLon = withCenter.centerLongitude;
+      if (weatherEnabled) {
+        const withCenter = context.clusters.find(c => c.centerLatitude != null && c.centerLongitude != null);
+        if (withCenter && withCenter.centerLatitude != null && withCenter.centerLongitude != null) {
+          plannerLat = withCenter.centerLatitude;
+          plannerLon = withCenter.centerLongitude;
+        }
       }
     }
   } catch (err) {
-    console.warn("[ai-planner] Failed to resolve weather settings/centroid, using defaults:", err);
+    console.error("[aiEnhancedSchedule] Error resolving weather settings:", err);
+    weatherEnabled = false;
   }
 
   if (weatherEnabled) {

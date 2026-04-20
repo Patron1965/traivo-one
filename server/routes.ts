@@ -46,6 +46,7 @@ import { registerFeedbackLoopRoutes } from "./routes/feedbackLoopRoutes";
 import { registerETANotificationRoutes } from "./routes/etaNotificationRoutes";
 import { registerFeatureRoutes } from "./routes/featureRoutes";
 import { registerUrgentJobRoutes } from "./routes/urgentJobRoutes";
+import { registerCapacityForecastRoutes, capacityForecastScheduler } from "./routes/capacityForecastRoutes";
 
 async function ensureDefaultTenant() {
   return storage.ensureTenant(DEFAULT_TENANT_ID, {
@@ -72,6 +73,7 @@ export async function registerRoutes(
   slaRiskScheduler.start();
   geocodeScheduler.start();
   notificationCleanupScheduler.start();
+  capacityForecastScheduler.start();
 
   app.use((req: ExpressRequest, _res: ExpressResponse, next) => {
     if (req.url.startsWith(`/api/${API_VERSION}/`) || req.url === `/api/${API_VERSION}`) {
@@ -596,6 +598,7 @@ export async function registerRoutes(
   registerETANotificationRoutes(app);
   registerUrgentJobRoutes(app);
   registerSlaRiskRoutes(app);
+  registerCapacityForecastRoutes(app);
 
   app.post("/api/route-geometry", async (req: ExpressRequest, res: ExpressResponse) => {
     try {

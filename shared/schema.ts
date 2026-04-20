@@ -4620,6 +4620,27 @@ export const insertPredictiveForecastSchema = createInsertSchema(predictiveForec
 export type InsertPredictiveForecast = z.infer<typeof insertPredictiveForecastSchema>;
 export type PredictiveForecast = typeof predictiveForecasts.$inferSelect;
 
+// Kapacitetsprognos per kluster och vecka (#172)
+export const clusterCapacityForecast = pgTable("cluster_capacity_forecast", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  clusterId: varchar("cluster_id").references(() => clusters.id, { onDelete: 'cascade' }).notNull(),
+  weekStart: timestamp("week_start").notNull(),
+  demandHours: real("demand_hours").notNull().default(0),
+  capacityHours: real("capacity_hours").notNull().default(0),
+  gapHours: real("gap_hours").notNull().default(0),
+  weatherMultiplier: real("weather_multiplier").default(1.0),
+  computedAt: timestamp("computed_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_cluster_capacity_forecast_tenant_week").on(table.tenantId, table.weekStart),
+  index("idx_cluster_capacity_forecast_cluster").on(table.clusterId),
+  uniqueIndex("uq_cluster_capacity_forecast").on(table.tenantId, table.clusterId, table.weekStart),
+]);
+
+export const insertClusterCapacityForecastSchema = createInsertSchema(clusterCapacityForecast).omit({ id: true, computedAt: true });
+export type InsertClusterCapacityForecast = z.infer<typeof insertClusterCapacityForecastSchema>;
+export type ClusterCapacityForecast = typeof clusterCapacityForecast.$inferSelect;
+
 export type TimeSummaryResponse = {
   week: number;
   year: number;

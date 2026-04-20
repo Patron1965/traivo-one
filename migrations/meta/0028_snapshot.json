@@ -1,6 +1,6 @@
 {
-  "id": "17430a1f-6c25-4c90-9989-97b801500c08",
-  "prevId": "4931cf1b-107f-494f-921e-d847a3a058a1",
+  "id": "721bbd03-1c24-4f95-a924-516db38f375f",
+  "prevId": "17430a1f-6c25-4c90-9989-97b801500c08",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -20083,8 +20083,20 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
         "cache_key": {
           "name": "cache_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "forecast_date": {
+          "name": "forecast_date",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -20122,11 +20134,23 @@
         }
       },
       "indexes": {
-        "idx_weather_cache_key": {
-          "name": "idx_weather_cache_key",
+        "idx_weather_cache_tenant_key": {
+          "name": "idx_weather_cache_tenant_key",
           "columns": [
             {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
               "expression": "cache_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "forecast_date",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -20138,7 +20162,21 @@
           "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "weather_forecast_cache_tenant_id_tenants_id_fk": {
+          "name": "weather_forecast_cache_tenant_id_tenants_id_fk",
+          "tableFrom": "weather_forecast_cache",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

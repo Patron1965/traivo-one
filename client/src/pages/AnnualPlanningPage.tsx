@@ -75,6 +75,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Customer, Article } from "@shared/schema";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { CapacityForecastTab } from "@/components/dashboard/CapacityForecastTab";
 
 type AnnualGoalWithProgress = {
   id: string;
@@ -494,6 +495,10 @@ export default function AnnualPlanningPage() {
             <Sparkles className="h-4 w-4 mr-2" />
             AI-fördelning
           </TabsTrigger>
+          <TabsTrigger value="capacity-forecast" data-testid="tab-capacity-forecast">
+            <TrendingUp className="h-4 w-4 mr-2" />
+            Kapacitetsprognos
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="goals" className="space-y-4 mt-4">
@@ -884,6 +889,10 @@ export default function AnnualPlanningPage() {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="capacity-forecast" className="space-y-4 mt-4">
+          <CapacityForecastTab />
         </TabsContent>
       </Tabs>
 
