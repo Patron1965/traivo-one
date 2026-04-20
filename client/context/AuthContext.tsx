@@ -5,6 +5,9 @@ import { apiRequest } from '../lib/query-client';
 import type { Resource, GpsPosition } from '../types';
 import { FIELD_APP_ALLOWED_ROLES } from '../types';
 
+// OBS: AsyncStorage-nycklar nedan är medvetet varumärkesneutrala (ingen "plannix-"/"traivo-"-prefix).
+// Att byta dem skulle radera lagrad auth/aktivitet/online-status för befintliga fältanvändare vid uppgradering.
+// Se attached_assets/Pasted-Summering-till-Plannix-Go-...txt avsnitt 3 för bakgrund.
 const PROFILES_CACHE_KEY = '@resource_profiles';
 const LAST_ACTIVITY_KEY = '@last_activity_timestamp';
 const AUTO_LOGOUT_MS = 24 * 60 * 60 * 1000;

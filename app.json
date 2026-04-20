@@ -17,9 +17,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.fltapp.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "Driver Core behöver kameran för att ta bilder av objekt och avvikelser",
-        "NSLocationWhenInUseUsageDescription": "Driver Core behöver din position för GPS-tracking och navigering",
-        "NSPhotoLibraryUsageDescription": "Driver Core behöver åtkomst till dina foton för att bifoga bilder"
+        "NSCameraUsageDescription": "Plannix GO behöver kameran för att ta bilder av objekt och avvikelser",
+        "NSLocationWhenInUseUsageDescription": "Plannix GO behöver din position för GPS-tracking och navigering",
+        "NSPhotoLibraryUsageDescription": "Plannix GO behöver åtkomst till dina foton för att bifoga bilder"
       }
     },
     "android": {

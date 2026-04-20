@@ -6,6 +6,10 @@ import { apiRequest } from '../lib/query-client';
 import { useSettings } from '../lib/settings';
 import type { SyncAction } from '../types';
 
+// OBS: AsyncStorage-nycklar nedan är medvetet varumärkesneutrala — byt INTE till
+// "plannix-"/"traivo-"-prefix. Att byta dem vid uppgradering raderar osynkade outbox-
+// poster, ordrarcache och ruttcache för fältanvändare som arbetar offline.
+// Se attached_assets/Pasted-Summering-till-Plannix-Go-...txt avsnitt 3.
 const OUTBOX_KEY = '@offline_outbox';
 const CACHE_PREFIX = '@offline_cache_';
 const ROUTE_CACHE_PREFIX = '@route_cache_';

@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import { apiRequest } from '../lib/query-client';
 
+// OBS: Varumärkesneutral nyckel — byt INTE till "plannix-"/"traivo-"-prefix.
+// Att byta nyckeln vid uppgradering töms köade osynkade åtgärder för fältanvändaren.
 const QUEUE_KEY = '@offline_queue';
 
 interface QueuedAction {
