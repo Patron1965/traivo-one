@@ -236,40 +236,97 @@ async function loadClusterCapacity(
   return result;
 }
 
+interface ClusterCenter {
+  latitude: number;
+  longitude: number;
+}
+
+async function resolveClusterCenters(
+  tenantId: string,
+  clusterList: Cluster[],
+): Promise<Map<string, ClusterCenter>> {
+  const result = new Map<string, ClusterCenter>();
+  const missing: Cluster[] = [];
+
+  for (const c of clusterList) {
+    if (c.centerLatitude != null && c.centerLongitude != null) {
+      result.set(c.id, { latitude: c.centerLatitude, longitude: c.centerLongitude });
+    } else {
+      missing.push(c);
+    }
+  }
+
+  if (missing.length > 0) {
+    const missingIds = missing.map(c => c.id);
+    const rows = await db
+      .select({
+        clusterId: objects.clusterId,
+        latitude: objects.latitude,
+        longitude: objects.longitude,
+      })
+      .from(objects)
+      .where(and(
+        eq(objects.tenantId, tenantId),
+        inArray(objects.clusterId, missingIds),
+        isNull(objects.deletedAt),
+        sql`${objects.latitude} IS NOT NULL AND ${objects.longitude} IS NOT NULL`,
+      ));
+
+    const sums = new Map<string, { lat: number; lng: number; n: number }>();
+    for (const r of rows) {
+      if (!r.clusterId || r.latitude == null || r.longitude == null) continue;
+      const s = sums.get(r.clusterId) ?? { lat: 0, lng: 0, n: 0 };
+      s.lat += r.latitude;
+      s.lng += r.longitude;
+      s.n += 1;
+      sums.set(r.clusterId, s);
+    }
+    sums.forEach((s, cid) => {
+      if (s.n > 0) {
+        result.set(cid, { latitude: s.lat / s.n, longitude: s.lng / s.n });
+      }
+    });
+  }
+
+  return result;
+}
+
 async function getWeatherMultipliersForWeeks(
   weekStarts: Date[],
   clusterList: Cluster[],
-): Promise<Map<string, number>> {
-  const map = new Map<string, number>();
-  // Use first cluster with coords for a tenant-level proxy
-  const ref = clusterList.find(c => c.centerLatitude != null && c.centerLongitude != null);
-  if (!ref) return map;
+  centers: Map<string, ClusterCenter>,
+  tenantId: string,
+): Promise<Map<string, Map<string, number>>> {
+  const byCluster = new Map<string, Map<string, number>>();
 
-  let impacts: WeatherImpact[] = [];
-  try {
-    const result = await fetchWeatherForecast(ref.centerLatitude!, ref.centerLongitude!, 16);
-    impacts = result.impacts;
-  } catch {
-    return map;
-  }
+  await Promise.all(clusterList.map(async (cluster) => {
+    const weekMap = new Map<string, number>();
+    byCluster.set(cluster.id, weekMap);
 
-  for (const ws of weekStarts) {
-    let total = 0;
-    let count = 0;
-    for (let i = 0; i < 7; i++) {
-      const dateStr = addDays(ws, i).toISOString().slice(0, 10);
-      const m = getCapacityAdjustmentForDate(impacts, dateStr);
-      if (m !== 1.0) {
-        total += m;
-        count++;
-      } else {
-        total += 1.0;
-        count++;
+    const center = centers.get(cluster.id);
+    let impacts: WeatherImpact[] = [];
+    if (center) {
+      try {
+        const result = await fetchWeatherForecast(center.latitude, center.longitude, 16, tenantId);
+        impacts = result.impacts;
+      } catch {
+        impacts = [];
       }
     }
-    map.set(ws.toISOString(), count > 0 ? total / count : 1.0);
-  }
-  return map;
+
+    for (const ws of weekStarts) {
+      let total = 0;
+      let count = 0;
+      for (let i = 0; i < 7; i++) {
+        const dateStr = addDays(ws, i).toISOString().slice(0, 10);
+        total += getCapacityAdjustmentForDate(impacts, dateStr);
+        count += 1;
+      }
+      weekMap.set(ws.toISOString(), count > 0 ? total / count : 1.0);
+    }
+  }));
+
+  return byCluster;
 }
 
 export interface ComputedForecastResult {
@@ -299,10 +356,12 @@ export async function computeCapacityForecast(
     return { clusters: [], computedAt: new Date() };
   }
 
-  const [avgMinutesByType, capacityByCluster, weatherByWeek] = await Promise.all([
+  const centers = await resolveClusterCenters(tenantId, clusterList);
+
+  const [avgMinutesByType, capacityByCluster, weatherByCluster] = await Promise.all([
     loadAvgArticleMinutes(tenantId),
     loadClusterCapacity(tenantId, clusterList),
-    getWeatherMultipliersForWeeks(weekStarts, clusterList),
+    getWeatherMultipliersForWeeks(weekStarts, clusterList, centers, tenantId),
   ]);
 
   const yearsInWindow = new Set<number>();
@@ -337,8 +396,9 @@ export async function computeCapacityForecast(
     const goals = goalsByCluster.get(cluster.id) ?? [];
     const baseCapacity = capacityByCluster.get(cluster.id) ?? 0;
 
+    const clusterWeather = weatherByCluster.get(cluster.id);
     const weekRecords: ClusterWeekForecast[] = weekStarts.map(ws => {
-      const weatherMul = weatherByWeek.get(ws.toISOString()) ?? 1.0;
+      const weatherMul = clusterWeather?.get(ws.toISOString()) ?? 1.0;
       const capacityHours = baseCapacity * weatherMul;
 
       let demandHours = 0;
