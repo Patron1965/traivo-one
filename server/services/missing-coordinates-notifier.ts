@@ -10,6 +10,7 @@ import {
   type Tenant,
 } from "@shared/schema";
 import { sendEmail } from "../replit_integrations/resend";
+import { notificationService } from "../notifications";
 
 const ENABLED_FLAG = process.env.MISSING_COORDS_NOTIFICATIONS_ENABLED;
 
@@ -321,7 +322,7 @@ export async function evaluateAndNotifyMissingCoordinates(
       : `+${delta} nya objekt utan koordinater (totalt ${currentMissing}).`;
   for (const row of adminRows) {
     try {
-      await storage.createUserNotification({
+      const created = await storage.createUserNotification({
         tenantId,
         userId: row.userId,
         type: "missing_coordinates",
@@ -331,6 +332,26 @@ export async function evaluateAndNotifyMissingCoordinates(
         data: { currentMissing, previousMissing, delta },
         isRead: false,
       });
+      // Push live to any open browser sessions for this user so the bell
+      // updates without waiting for the 30s polling cycle.
+      try {
+        notificationService.sendUserNotification(row.userId, {
+          notificationId: created.id,
+          type: "missing_coordinates",
+          title: "Objekt saknar koordinater",
+          message: inAppMessage,
+          link: "/objects/missing-coordinates",
+          data: { currentMissing, previousMissing, delta },
+          createdAt: (created.createdAt instanceof Date
+            ? created.createdAt.toISOString()
+            : (created.createdAt as unknown as string | undefined)) || new Date().toISOString(),
+        });
+      } catch (wsErr) {
+        console.warn(
+          `[missing-coords-notifier] Failed to push live WS notification for user ${row.userId}:`,
+          wsErr,
+        );
+      }
     } catch (err) {
       console.warn(
         `[missing-coords-notifier] Failed to create in-app notification for user ${row.userId}:`,

@@ -422,6 +422,62 @@ function NotificationsBell() {
     refetchInterval: 30000,
   });
 
+  // Live push: subscribe to the WS notifications channel and refresh the
+  // bell immediately when a new in-app notification arrives, without waiting
+  // for the 30s polling tick.
+  useEffect(() => {
+    if (!enabled) return;
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+
+    const connect = async () => {
+      if (cancelled) return;
+      try {
+        const res = await apiRequest("POST", "/api/notifications/user-token", {});
+        if (!res.ok) return;
+        const { token } = await res.json();
+        if (cancelled || !token) return;
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const url = `${protocol}//${window.location.host}/ws/notifications?token=${token}`;
+        ws = new WebSocket(url);
+        ws.onmessage = (event) => {
+          try {
+            const raw = JSON.parse(event.data);
+            if (raw?.type && raw.type !== "connected" && raw.type !== "pong" && raw.type !== "position_update") {
+              queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+            }
+          } catch {
+            // ignore malformed messages
+          }
+        };
+        ws.onclose = () => {
+          if (!cancelled) {
+            reconnectTimer = setTimeout(connect, 10000);
+          }
+        };
+        ws.onerror = () => {
+          // close handler will schedule reconnect
+        };
+      } catch {
+        if (!cancelled) {
+          reconnectTimer = setTimeout(connect, 10000);
+        }
+      }
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+    };
+  }, [enabled, user?.id]);
+
   const markRead = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("PATCH", `/api/notifications/${id}/read`, {});

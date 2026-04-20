@@ -262,6 +262,20 @@ export async function registerRoutes(
     }
   });
 
+  // Issue a short-lived WS token bound to the authenticated user so the
+  // header bell can subscribe to live in-app notifications without polling.
+  app.post("/api/notifications/user-token", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
+      const token = notificationService.generateUserAuthToken(userId);
+      res.json({ token, expiresIn: 300, userId });
+    } catch (error) {
+      console.error("Failed to issue user notification token:", error);
+      res.status(500).json({ error: "Kunde inte skapa token" });
+    }
+  });
+
   app.patch("/api/notifications/read-all", async (req, res) => {
     try {
       const userId = req.user?.claims?.sub;

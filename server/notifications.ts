@@ -46,13 +46,21 @@ interface ConnectedClient {
 }
 
 interface AuthToken {
-  resourceId: string;
+  resourceId?: string;
+  userId?: string;
   expiresAt: number;
+}
+
+interface UserClient {
+  ws: WebSocket;
+  userId: string;
+  connectedAt: Date;
 }
 
 class NotificationService {
   private wss: WebSocketServer | null = null;
   private clients: Map<string, ConnectedClient[]> = new Map();
+  private userClients: Map<string, UserClient[]> = new Map();
   private validatedResources: Set<string> = new Set();
   private authTokens: Map<string, AuthToken> = new Map();
   private tokenExpiryMs = 5 * 60 * 1000; // 5 minutes
@@ -73,6 +81,16 @@ class NotificationService {
     return token;
   }
 
+  generateUserAuthToken(userId: string): string {
+    const token = crypto.randomBytes(32).toString("hex");
+    this.authTokens.set(token, {
+      userId,
+      expiresAt: Date.now() + this.tokenExpiryMs,
+    });
+    this.cleanupExpiredTokens();
+    return token;
+  }
+
   private cleanupExpiredTokens() {
     const now = Date.now();
     const entries = Array.from(this.authTokens.entries());
@@ -83,7 +101,7 @@ class NotificationService {
     }
   }
 
-  private validateAuthToken(token: string): string | null {
+  private validateAuthToken(token: string): { resourceId?: string; userId?: string } | null {
     const data = this.authTokens.get(token);
     if (!data) return null;
     if (data.expiresAt < Date.now()) {
@@ -92,7 +110,7 @@ class NotificationService {
     }
     // Token is single-use - remove after validation
     this.authTokens.delete(token);
-    return data.resourceId;
+    return { resourceId: data.resourceId, userId: data.userId };
   }
   
   initialize(server: Server) {
@@ -112,15 +130,23 @@ class NotificationService {
         return;
       }
       
-      const resourceId = this.validateAuthToken(token);
-      if (!resourceId) {
+      const binding = this.validateAuthToken(token);
+      if (!binding || (!binding.resourceId && !binding.userId)) {
         console.log(`[ws] Invalid or expired token rejected`);
         ws.close(4003, "Invalid or expired token");
         return;
       }
 
-      this.addClient(resourceId, ws);
-      console.log(`[ws] Resource ${resourceId} connected (token auth). Total clients: ${this.getTotalClients()}`);
+      const resourceId = binding.resourceId;
+      const userId = binding.userId;
+
+      if (resourceId) {
+        this.addClient(resourceId, ws);
+        console.log(`[ws] Resource ${resourceId} connected (token auth). Total clients: ${this.getTotalClients()}`);
+      } else if (userId) {
+        this.addUserClient(userId, ws);
+        console.log(`[ws] User ${userId} connected (token auth). Total user clients: ${this.getTotalUserClients()}`);
+      }
 
       ws.send(JSON.stringify({
         type: "connected",
@@ -129,13 +155,23 @@ class NotificationService {
       }));
 
       ws.on("close", () => {
-        this.removeClient(resourceId, ws);
-        console.log(`[ws] Resource ${resourceId} disconnected. Total clients: ${this.getTotalClients()}`);
+        if (resourceId) {
+          this.removeClient(resourceId, ws);
+          console.log(`[ws] Resource ${resourceId} disconnected. Total clients: ${this.getTotalClients()}`);
+        } else if (userId) {
+          this.removeUserClient(userId, ws);
+          console.log(`[ws] User ${userId} disconnected. Total user clients: ${this.getTotalUserClients()}`);
+        }
       });
 
       ws.on("error", (error) => {
-        console.error(`[ws] Error for resource ${resourceId}:`, error);
-        this.removeClient(resourceId, ws);
+        if (resourceId) {
+          console.error(`[ws] Error for resource ${resourceId}:`, error);
+          this.removeClient(resourceId, ws);
+        } else if (userId) {
+          console.error(`[ws] Error for user ${userId}:`, error);
+          this.removeUserClient(userId, ws);
+        }
       });
 
       ws.on("message", async (data) => {
@@ -150,7 +186,7 @@ class NotificationService {
           }
           if (parsed.type === "ping") {
             ws.send(JSON.stringify({ type: "pong", timestamp: new Date().toISOString() }));
-          } else if (parsed.type === "position_update") {
+          } else if (parsed.type === "position_update" && resourceId) {
             const positionData: PositionUpdate = {
               resourceId,
               latitude: parsed.latitude,
@@ -192,6 +228,85 @@ class NotificationService {
     let total = 0;
     this.clients.forEach(clients => total += clients.length);
     return total;
+  }
+
+  private addUserClient(userId: string, ws: WebSocket) {
+    const existing = this.userClients.get(userId) || [];
+    existing.push({ ws, userId, connectedAt: new Date() });
+    this.userClients.set(userId, existing);
+  }
+
+  private removeUserClient(userId: string, ws: WebSocket) {
+    const existing = this.userClients.get(userId) || [];
+    const filtered = existing.filter(c => c.ws !== ws);
+    if (filtered.length === 0) {
+      this.userClients.delete(userId);
+    } else {
+      this.userClients.set(userId, filtered);
+    }
+  }
+
+  private getTotalUserClients(): number {
+    let total = 0;
+    this.userClients.forEach(clients => total += clients.length);
+    return total;
+  }
+
+  isUserConnected(userId: string): boolean {
+    const clients = this.userClients.get(userId);
+    return clients !== undefined && clients.length > 0;
+  }
+
+  /**
+   * Push an in-app user notification (matching the user_notifications row that
+   * was just persisted) live to that user's connected browser sessions, so the
+   * header bell can update without waiting for the 30s polling cycle.
+   */
+  sendUserNotification(
+    userId: string,
+    notification: {
+      notificationId?: string;
+      type: string;
+      title: string;
+      message: string;
+      link?: string | null;
+      data?: Record<string, unknown>;
+      createdAt?: string;
+    },
+  ) {
+    const clients = this.userClients.get(userId);
+    if (!clients || clients.length === 0) return;
+
+    const payload = {
+      type: "notification" as const,
+      id: notification.notificationId || this.generateId(),
+      title: notification.title,
+      message: notification.message,
+      timestamp: notification.createdAt || new Date().toISOString(),
+      data: {
+        ...(notification.data || {}),
+        notificationType: notification.type,
+        link: notification.link ?? undefined,
+        userId,
+      },
+    };
+
+    const validated = validateServerEvent(payload);
+    if (!validated) {
+      console.warn(`[ws] User notification validation failed for type="${notification.type}", sending anyway`);
+    }
+
+    const message = JSON.stringify(payload);
+    let sent = 0;
+    clients.forEach(client => {
+      if (client.ws.readyState === WebSocket.OPEN) {
+        client.ws.send(message);
+        sent++;
+      }
+    });
+    if (sent > 0) {
+      console.log(`[ws] Live notification (${notification.type}) pushed to user ${userId} on ${sent} session(s)`);
+    }
   }
 
   private generateId(): string {
