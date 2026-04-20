@@ -1047,7 +1047,10 @@ export async function aiEnhancedSchedule(
     }
 
     if (weatherEnabled) {
-      const withCenter = context.clusters.find(c => c.centerLatitude != null && c.centerLongitude != null);
+      const clusters = tenantId
+        ? await storage.getClusters(tenantId)
+        : context.clusters;
+      const withCenter = clusters.find(c => c.centerLatitude != null && c.centerLongitude != null);
       if (withCenter && withCenter.centerLatitude != null && withCenter.centerLongitude != null) {
         plannerLat = withCenter.centerLatitude;
         plannerLon = withCenter.centerLongitude;

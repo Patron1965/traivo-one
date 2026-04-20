@@ -4132,6 +4132,49 @@ export type InsertOfflineSyncLog = z.infer<typeof insertOfflineSyncLogSchema>;
 export type OfflineSyncLog = typeof offlineSyncLog.$inferSelect;
 
 // ============================================
+// SLA RISK FORECASTING (Task #171)
+// ============================================
+export const SLA_RISK_LEVELS = ["ok", "warning", "critical"] as const;
+export type SlaRiskLevel = typeof SLA_RISK_LEVELS[number];
+
+export const slaRiskSnapshots = pgTable("sla_risk_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").notNull(),
+  clusterId: varchar("cluster_id"),
+  calculatedAt: timestamp("calculated_at").defaultNow().notNull(),
+  predictedCompletionDate: timestamp("predicted_completion_date"),
+  deadlineAt: timestamp("deadline_at"),
+  riskLevel: text("risk_level").default("ok").notNull(),
+  daysToBreach: real("days_to_breach"),
+  reason: text("reason"),
+  previousRiskLevel: text("previous_risk_level"),
+}, (table) => [
+  index("idx_sla_risk_tenant_level").on(table.tenantId, table.riskLevel),
+  index("idx_sla_risk_workorder").on(table.workOrderId),
+  index("idx_sla_risk_cluster").on(table.tenantId, table.clusterId),
+  index("idx_sla_risk_calculated").on(table.tenantId, table.calculatedAt),
+]);
+
+export const slaRiskSettings = pgTable("sla_risk_settings", {
+  tenantId: varchar("tenant_id").primaryKey().references(() => tenants.id),
+  warningDaysToBreach: integer("warning_days_to_breach").default(3).notNull(),
+  criticalDaysToBreach: integer("critical_days_to_breach").default(1).notNull(),
+  backlogOverloadFactor: real("backlog_overload_factor").default(1.0).notNull(),
+  defaultMaxDaysToComplete: integer("default_max_days_to_complete").default(14).notNull(),
+  notifyOnWarningToCritical: boolean("notify_on_warning_to_critical").default(true).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertSlaRiskSnapshotSchema = createInsertSchema(slaRiskSnapshots).omit({ id: true, calculatedAt: true });
+export type InsertSlaRiskSnapshot = z.infer<typeof insertSlaRiskSnapshotSchema>;
+export type SlaRiskSnapshot = typeof slaRiskSnapshots.$inferSelect;
+
+export const insertSlaRiskSettingsSchema = createInsertSchema(slaRiskSettings).omit({ updatedAt: true });
+export type InsertSlaRiskSettings = z.infer<typeof insertSlaRiskSettingsSchema>;
+export type SlaRiskSettings = typeof slaRiskSettings.$inferSelect;
+
+// ============================================
 // FLEET MANAGEMENT - Bränslelogg & Underhållslogg
 // ============================================
 

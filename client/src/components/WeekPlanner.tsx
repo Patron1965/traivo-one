@@ -4,7 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertTriangle, Loader2, User } from "lucide-react";
+import { AlertTriangle, Loader2, ShieldAlert, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { SlaRiskJobsList, SlaRiskSummaryBadge } from "@/components/SlaRiskPanel";
 import { format, isSameDay } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { WeekPlannerProps } from "./weekplanner/types";
@@ -31,6 +33,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
   const zoom = zoomLevels[d.zoomLevel];
   const [urgentDialogOpen, setUrgentDialogOpen] = useState(false);
   const [conflictListOpen, setConflictListOpen] = useState(false);
+  const [slaRiskOpen, setSlaRiskOpen] = useState(false);
   const [urgentPreselectedOrder, setUrgentPreselectedOrder] = useState<WorkOrderWithObject | null>(null);
 
   useEffect(() => {
@@ -179,6 +182,23 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
           />
 
           <DisruptionPanel />
+
+          <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b dark:border-gray-800 bg-muted/40">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">SLA-tidigvarning:</span>
+              <SlaRiskSummaryBadge />
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setSlaRiskOpen(true)}
+              data-testid="button-open-sla-risk-panel"
+            >
+              Visa risker
+            </Button>
+          </div>
 
           {d.activeDragJob && d.activeDragJob.clusterId && d.clusterMatchedResourceIds.size === 0 && d.visibleResources.some(r => r.serviceArea && r.serviceArea.length > 0) && (
             <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 animate-in fade-in slide-in-from-top-1 duration-200" data-testid="drag-no-cluster-match-warning">
@@ -344,6 +364,33 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
         onCancel={d.handleWhatIfCancel}
       />
       <UrgentJobDialog open={urgentDialogOpen} onClose={() => setUrgentDialogOpen(false)} preselectedOrder={urgentPreselectedOrder} />
+      <Sheet open={slaRiskOpen} onOpenChange={setSlaRiskOpen}>
+        <SheetContent side="right" className="w-[420px] sm:max-w-[420px] flex flex-col p-0">
+          <SheetHeader className="px-4 py-3 border-b">
+            <SheetTitle className="flex items-center gap-2 text-base">
+              <ShieldAlert className="h-4 w-4 text-red-500" />
+              SLA-tidigvarning
+            </SheetTitle>
+          </SheetHeader>
+          <div className="px-4 py-3 border-b bg-muted/30">
+            <SlaRiskSummaryBadge />
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Topp-25 jobb i risk för SLA-överträdelse, sorterade efter dagar till deadline.
+            </p>
+          </div>
+          <div className="flex-1 overflow-hidden p-3">
+            <SlaRiskJobsList
+              riskLevel="warning,critical"
+              limit={25}
+              onSelectJob={(jobId) => {
+                onSelectJob?.(jobId);
+                d.handleJobClick(jobId);
+                setSlaRiskOpen(false);
+              }}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     </DndContext>
   );
 }

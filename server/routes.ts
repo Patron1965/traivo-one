@@ -12,6 +12,8 @@ import { handleMcpSse, handleMcpMessage } from "./mcp";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { anomalyMonitor } from "./anomaly-monitor";
 import { predictiveScheduler } from "./routes/predictiveRoutes";
+import { slaRiskScheduler } from "./services/sla-risk-scheduler";
+import { registerSlaRiskRoutes } from "./routes/slaRiskRoutes";
 import { geocodeScheduler } from "./services/geocode-scheduler";
 import { notificationCleanupScheduler, getRetentionConfig } from "./services/notification-cleanup-scheduler";
 import { startWeeklyReportScheduler } from "./weekly-report";
@@ -67,6 +69,7 @@ export async function registerRoutes(
   anomalyMonitor.start();
   startWeeklyReportScheduler();
   predictiveScheduler.start();
+  slaRiskScheduler.start();
   geocodeScheduler.start();
   notificationCleanupScheduler.start();
 
@@ -592,6 +595,7 @@ export async function registerRoutes(
   registerFeedbackLoopRoutes(app);
   registerETANotificationRoutes(app);
   registerUrgentJobRoutes(app);
+  registerSlaRiskRoutes(app);
 
   app.post("/api/route-geometry", async (req: ExpressRequest, res: ExpressResponse) => {
     try {

@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Gauge, AlertTriangle, Users, ClipboardList, TrendingUp, ChevronLeft, ChevronRight } from "lucide-react";
+import { Gauge, AlertTriangle, Users, ClipboardList, TrendingUp, ChevronLeft, ChevronRight, ShieldAlert, Eye, EyeOff } from "lucide-react";
+import { SlaRiskClusterGrid, SlaRiskJobsList } from "@/components/SlaRiskPanel";
 import { format, parseISO } from "date-fns";
 import { sv } from "date-fns/locale";
 
@@ -235,6 +236,7 @@ export default function ControlTowerPage() {
   const [filterType, setFilterType] = useState<string>("all");
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [selectedCell, setSelectedCell] = useState<{ cell: HeatmapCell; resourceName: string } | null>(null);
+  const [showRiskLayer, setShowRiskLayer] = useState<boolean>(true);
 
   const queryParams = new URLSearchParams({ weeks: String(weeks) });
   if (teamFilter !== "all") queryParams.set("teamId", teamFilter);
@@ -322,6 +324,16 @@ export default function ControlTowerPage() {
               <SelectItem value="team">Team</SelectItem>
             </SelectContent>
           </Select>
+          <Button
+            variant={showRiskLayer ? "default" : "outline"}
+            size="sm"
+            className="h-8 gap-1.5"
+            onClick={() => setShowRiskLayer(v => !v)}
+            data-testid="button-toggle-risk-layer"
+          >
+            {showRiskLayer ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+            Risk-lager
+          </Button>
           <div className="flex items-center gap-1 bg-muted rounded-md px-1">
             <Button
               variant="ghost"
@@ -454,6 +466,27 @@ export default function ControlTowerPage() {
           )}
         </CardContent>
       </Card>
+
+      {showRiskLayer && (
+        <div className="space-y-3" data-testid="sla-risk-layer">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4 text-red-500" />
+            <h3 className="text-sm font-semibold">SLA-tidigvarning — kommande 7 dagar</h3>
+            <span className="text-xs text-muted-foreground">Aggregerad risk per kluster och topp-25 risker</span>
+          </div>
+          <Card>
+            <CardContent className="p-4">
+              <SlaRiskClusterGrid days={7} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-xs uppercase text-muted-foreground font-semibold mb-3">Topp-25 risker</p>
+              <SlaRiskJobsList riskLevel="warning,critical" limit={25} />
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground" data-testid="heatmap-legend">
         <span className="font-medium">Beläggning:</span>
