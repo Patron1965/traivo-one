@@ -4104,6 +4104,7 @@ export const userNotifications = pgTable("user_notifications", {
 }, (table) => [
   index("idx_user_notif_user").on(table.userId, table.isRead),
   index("idx_user_notif_tenant").on(table.tenantId),
+  index("idx_user_notif_created_read").on(table.createdAt, table.isRead),
 ]);
 
 export const insertUserNotificationSchema = createInsertSchema(userNotifications).omit({ id: true, createdAt: true });

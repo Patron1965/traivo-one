@@ -691,6 +691,7 @@ export interface IStorage {
   markUserNotificationRead(id: string, userId: string): Promise<UserNotification | undefined>;
   markAllUserNotificationsRead(userId: string, tenantId: string): Promise<number>;
   getUnreadUserNotificationCount(userId: string, tenantId: string): Promise<number>;
+  deleteOldUserNotifications(opts: { readOlderThanDays?: number; unreadOlderThanDays?: number; tenantId?: string }): Promise<{ readDeleted: number; unreadDeleted: number }>;
 
   // Offline Sync Log
   createOfflineSyncLog(log: InsertOfflineSyncLog): Promise<OfflineSyncLog>;
@@ -5294,6 +5295,26 @@ export class DatabaseStorage implements IStorage {
   async getUnreadUserNotificationCount(userId: string, tenantId: string): Promise<number> {
     const result = await db.select({ count: sql<number>`count(*)` }).from(userNotifications).where(and(eq(userNotifications.userId, userId), eq(userNotifications.tenantId, tenantId), eq(userNotifications.isRead, false)));
     return Number(result[0]?.count || 0);
+  }
+
+  async deleteOldUserNotifications(opts: { readOlderThanDays?: number; unreadOlderThanDays?: number; tenantId?: string }): Promise<{ readDeleted: number; unreadDeleted: number }> {
+    let readDeleted = 0;
+    let unreadDeleted = 0;
+    if (opts.readOlderThanDays && opts.readOlderThanDays > 0) {
+      const cutoff = new Date(Date.now() - opts.readOlderThanDays * 24 * 60 * 60 * 1000);
+      const conditions = [eq(userNotifications.isRead, true), lt(userNotifications.createdAt, cutoff)];
+      if (opts.tenantId) conditions.push(eq(userNotifications.tenantId, opts.tenantId));
+      const result = await db.delete(userNotifications).where(and(...conditions)).returning({ id: userNotifications.id });
+      readDeleted = result.length;
+    }
+    if (opts.unreadOlderThanDays && opts.unreadOlderThanDays > 0) {
+      const cutoff = new Date(Date.now() - opts.unreadOlderThanDays * 24 * 60 * 60 * 1000);
+      const conditions = [eq(userNotifications.isRead, false), lt(userNotifications.createdAt, cutoff)];
+      if (opts.tenantId) conditions.push(eq(userNotifications.tenantId, opts.tenantId));
+      const result = await db.delete(userNotifications).where(and(...conditions)).returning({ id: userNotifications.id });
+      unreadDeleted = result.length;
+    }
+    return { readDeleted, unreadDeleted };
   }
 
   async createOfflineSyncLog(log: InsertOfflineSyncLog): Promise<OfflineSyncLog> {

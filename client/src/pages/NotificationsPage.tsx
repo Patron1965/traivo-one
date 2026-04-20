@@ -30,6 +30,7 @@ interface NotificationsResponse {
   notifications: UserNotificationItem[];
   unreadCount: number;
   total?: number;
+  retention?: { readDays: number; unreadDays: number };
 }
 
 interface TypesResponse {
@@ -123,6 +124,15 @@ export default function NotificationsPage() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const unread = data?.unreadCount ?? 0;
   const types = typesData?.types ?? [];
+  const retention = data?.retention;
+  const isLastPage = items.length > 0 && offset + items.length >= total;
+  const retentionMessage = retention
+    ? readFilter === "read"
+      ? `Lästa notiser äldre än ${retention.readDays} dagar rensas automatiskt.`
+      : readFilter === "unread"
+        ? `Olästa notiser äldre än ${retention.unreadDays} dagar rensas automatiskt.`
+        : `Lästa notiser äldre än ${retention.readDays} dagar och olästa äldre än ${retention.unreadDays} dagar rensas automatiskt.`
+    : null;
 
   const handleFilterChange = (next: () => void) => {
     setPage(0);
@@ -280,6 +290,14 @@ export default function NotificationsPage() {
                 );
               })}
             </ul>
+          )}
+          {!isLoading && isLastPage && retentionMessage && (
+            <div
+              className="px-4 py-3 text-xs text-muted-foreground border-t bg-muted/30 text-center"
+              data-testid="text-retention-info"
+            >
+              {retentionMessage}
+            </div>
           )}
         </CardContent>
       </Card>

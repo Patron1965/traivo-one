@@ -13,6 +13,7 @@ import { registerObjectStorageRoutes } from "./replit_integrations/object_storag
 import { anomalyMonitor } from "./anomaly-monitor";
 import { predictiveScheduler } from "./routes/predictiveRoutes";
 import { geocodeScheduler } from "./services/geocode-scheduler";
+import { notificationCleanupScheduler, getRetentionConfig } from "./services/notification-cleanup-scheduler";
 import { startWeeklyReportScheduler } from "./weekly-report";
 import { metadataRouter } from "./metadata-routes";
 import { formatZodError, DEFAULT_TENANT_ID } from "./routes/helpers";
@@ -67,6 +68,7 @@ export async function registerRoutes(
   startWeeklyReportScheduler();
   predictiveScheduler.start();
   geocodeScheduler.start();
+  notificationCleanupScheduler.start();
 
   app.use((req: ExpressRequest, _res: ExpressResponse, next) => {
     if (req.url.startsWith(`/api/${API_VERSION}/`) || req.url === `/api/${API_VERSION}`) {
@@ -247,7 +249,8 @@ export async function registerRoutes(
       const includeTotal = req.query.includeTotal === "true";
       const items = await storage.getUserNotifications(userId, tenantId, { limit, offset, unreadOnly, readOnly, type });
       const unreadCount = await storage.getUnreadUserNotificationCount(userId, tenantId);
-      const response: { notifications: typeof items; unreadCount: number; total?: number } = { notifications: items, unreadCount };
+      const retention = getRetentionConfig();
+      const response: { notifications: typeof items; unreadCount: number; total?: number; retention: { readDays: number; unreadDays: number } } = { notifications: items, unreadCount, retention };
       if (includeTotal) {
         response.total = await storage.getUserNotificationsCount(userId, tenantId, { unreadOnly, readOnly, type });
       }
@@ -295,6 +298,36 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Failed to issue user notification token:", error);
       res.status(500).json({ error: "Kunde inte skapa token" });
+    }
+  });
+
+  // Manual trigger for the notification cleanup job. Registered under
+  // /api/admin/ so it bypasses tenant middleware and can be called by an
+  // external cron without a session, using NOTIFICATION_CLEANUP_TOKEN.
+  // When a session is used instead, the caller must be admin/owner.
+  app.post("/api/admin/notifications/cleanup", async (req: any, res) => {
+    try {
+      const token = process.env.NOTIFICATION_CLEANUP_TOKEN;
+      const provided = req.header("x-cleanup-token") || (typeof req.query.token === "string" ? req.query.token : undefined);
+      const tokenOk = !!token && provided === token;
+
+      if (!tokenOk) {
+        const userId = req.user?.claims?.sub;
+        if (!userId) {
+          return res.status(401).json({ error: "Ej autentiserad" });
+        }
+        const dbUser = await storage.getUser(userId);
+        const role = dbUser?.role || "user";
+        if (role !== "admin" && role !== "owner") {
+          return res.status(403).json({ error: "Ej behörig", message: "Administratörsrättigheter krävs." });
+        }
+      }
+
+      const result = await notificationCleanupScheduler.runOnce();
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to run notification cleanup:", error);
+      res.status(500).json({ error: "Kunde inte rensa notiser" });
     }
   });
 
