@@ -122,7 +122,17 @@ export function usePlannerData() {
   }, [viewMode, currentDate, currentWeekStart]);
 
   const { data: resources = [], isLoading: resourcesLoading } = useQuery<Resource[]>({ queryKey: ["/api/resources"] });
-  const { data: weatherData } = useQuery<WeatherForecastData>({ queryKey: ["/api/weather/forecast"], staleTime: 30 * 60 * 1000 });
+  const weatherWeekStart = useMemo(() => format(currentWeekStart, "yyyy-MM-dd"), [currentWeekStart]);
+  const weatherDays = useMemo(() => Math.max(1, Math.min(visibleDates.length || 7, 14)), [visibleDates.length]);
+  const { data: weatherData } = useQuery<WeatherForecastData>({
+    queryKey: ["/api/weather/forecast", weatherWeekStart, weatherDays],
+    queryFn: async () => {
+      const res = await fetch(`/api/weather/forecast?weekStart=${weatherWeekStart}&days=${weatherDays}`, { credentials: "include" });
+      if (!res.ok) throw new Error("weather fetch failed");
+      return res.json();
+    },
+    staleTime: 30 * 60 * 1000,
+  });
   const weatherByDate = useMemo(() => { const map = new Map<string, { forecast: WeatherForecastData["forecasts"][0]; impact: WeatherImpactDay }>(); if (!weatherData?.forecasts || !weatherData?.impacts) return map; weatherData.forecasts.forEach((f, i) => { const impact = weatherData.impacts[i]; if (impact) map.set(f.date, { forecast: f, impact }); }); return map; }, [weatherData]);
   const baseVisibleResources = useMemo(() => {
     return resources.filter(r => {
