@@ -137,19 +137,24 @@ export function CapacityOverview() {
             {format(today, "EEEE d MMMM", { locale: sv })}
           </Badge>
         </div>
-        <div className="flex items-center gap-2 mt-1 flex-wrap">
-          <span className="text-xs text-muted-foreground">Snittbeläggning:</span>
-          <Badge className={`text-xs ${avgColor.bg} ${avgColor.text} border-0`} data-testid="badge-avg-utilization">
-            {weatherActive ? adjustedAvgUtilization : avgUtilization}%
-          </Badge>
+        <div className="flex items-center gap-3 mt-2 flex-wrap">
+          <div className="flex items-center gap-1.5" data-testid="capacity-theoretical">
+            <span className="text-xs text-muted-foreground">Teoretisk:</span>
+            <Badge variant="outline" className="text-xs" data-testid="badge-theoretical-utilization">
+              {avgUtilization}%
+            </Badge>
+          </div>
+          <div className="flex items-center gap-1.5" data-testid="capacity-weather-adjusted">
+            <span className="text-xs text-muted-foreground">Väderjusterad:</span>
+            <Badge className={`text-xs ${avgColor.bg} ${avgColor.text} border-0`} data-testid="badge-avg-utilization">
+              {weatherActive ? adjustedAvgUtilization : avgUtilization}%
+            </Badge>
+          </div>
           {weatherActive && (
-            <>
-              <span className="text-xs text-muted-foreground">(teoretiskt {avgUtilization}%)</span>
-              <Badge variant="outline" className="text-xs gap-1 border-amber-500/40 text-amber-700 dark:text-amber-400" data-testid="badge-weather-impact">
-                <CloudRain className="h-3 w-3" />
-                Väder +{weatherPctIncrease}% tid
-              </Badge>
-            </>
+            <Badge variant="outline" className="text-xs gap-1 border-amber-500/40 text-amber-700 dark:text-amber-400" data-testid="badge-weather-impact">
+              <CloudRain className="h-3 w-3" />
+              Väder +{weatherPctIncrease}% tid
+            </Badge>
           )}
         </div>
       </CardHeader>

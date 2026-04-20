@@ -1241,7 +1241,7 @@ app.get("/api/ai/route-recommendations", asyncHandler(async (req, res) => {
     ]);
     
     // Get weather for default location (Umeå)
-    const weather = await fetchWeatherForecast(63.826, 20.263, 7);
+    const weather = await fetchWeatherForecast(63.826, 20.263, 7, tenantId);
     const todayWeather = weather.forecasts.find(f => f.date === date);
     const todayImpact = weather.impacts.find(i => i.date === date);
     
@@ -1798,11 +1798,13 @@ app.get("/api/weather/forecast", asyncHandler(async (req, res) => {
 
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       const clusters = await storage.getClusters(tenantId);
-      const withCenter = clusters.find(c => c.centerLatitude != null && c.centerLongitude != null);
-      if (withCenter && withCenter.centerLatitude != null && withCenter.centerLongitude != null) {
-        latitude = withCenter.centerLatitude;
-        longitude = withCenter.centerLongitude;
-        locationName = withCenter.name;
+      const active = clusters.filter(c => c.centerLatitude != null && c.centerLongitude != null);
+      if (active.length > 0) {
+        latitude = active.reduce((s, c) => s + (c.centerLatitude as number), 0) / active.length;
+        longitude = active.reduce((s, c) => s + (c.centerLongitude as number), 0) / active.length;
+        locationName = active.length === 1
+          ? active[0].name
+          : `Mittpunkt över ${active.length} kluster`;
       } else {
         latitude = 59.3293;
         longitude = 18.0686;
@@ -1810,10 +1812,11 @@ app.get("/api/weather/forecast", asyncHandler(async (req, res) => {
       }
     }
 
-    const days = parseInt(req.query.days as string) || 7;
+    const rawDays = parseInt(req.query.days as string);
+    const days = Math.max(1, Math.min(Number.isFinite(rawDays) ? rawDays : 7, 14));
 
     const { fetchWeatherForecast } = await import("../weather-service");
-    const result = await fetchWeatherForecast(latitude, longitude, Math.min(days, 14));
+    const result = await fetchWeatherForecast(latitude, longitude, days, tenantId);
 
     res.json({
       ...result,

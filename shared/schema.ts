@@ -4918,14 +4918,16 @@ export type GeocodingMissingSnapshot = typeof geocodingMissingSnapshots.$inferSe
 
 export const weatherForecastCache = pgTable("weather_forecast_cache", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
   cacheKey: text("cache_key").notNull(),
+  forecastDate: text("forecast_date").notNull(),
   latitude: real("latitude").notNull(),
   longitude: real("longitude").notNull(),
   days: integer("days").notNull(),
   payload: jsonb("payload").notNull(),
   fetchedAt: timestamp("fetched_at").defaultNow().notNull(),
 }, (table) => [
-  uniqueIndex("idx_weather_cache_key").on(table.cacheKey),
+  uniqueIndex("idx_weather_cache_tenant_key").on(table.tenantId, table.cacheKey, table.forecastDate),
 ]);
 
 export type WeatherForecastCache = typeof weatherForecastCache.$inferSelect;

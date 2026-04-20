@@ -1,7 +1,7 @@
 import { trackApiUsage } from "./api-usage-tracker";
 import { db } from "./db";
 import { weatherForecastCache } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 export interface WeatherForecast {
   date: string;
@@ -22,9 +22,20 @@ const CACHE_TTL = 60 * 60 * 1000; // 1 hour (in-memory hot cache)
 const DB_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours (persistent DB cache)
 const ERROR_CACHE_TTL = 5 * 60 * 1000; // 5 minutes for failed requests
 
-async function readDbCache(cacheKey: string): Promise<WeatherForecastResult | null> {
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+async function readDbCache(tenantId: string, cacheKey: string): Promise<WeatherForecastResult | null> {
   try {
-    const [row] = await db.select().from(weatherForecastCache).where(eq(weatherForecastCache.cacheKey, cacheKey));
+    const today = todayIsoDate();
+    const [row] = await db.select()
+      .from(weatherForecastCache)
+      .where(and(
+        eq(weatherForecastCache.tenantId, tenantId),
+        eq(weatherForecastCache.cacheKey, cacheKey),
+        eq(weatherForecastCache.forecastDate, today),
+      ));
     if (!row) return null;
     const age = Date.now() - new Date(row.fetchedAt).getTime();
     if (age >= DB_CACHE_TTL) return null;
@@ -37,13 +48,14 @@ async function readDbCache(cacheKey: string): Promise<WeatherForecastResult | nu
   }
 }
 
-async function writeDbCache(cacheKey: string, latitude: number, longitude: number, days: number, payload: WeatherForecastResult): Promise<void> {
+async function writeDbCache(tenantId: string, cacheKey: string, latitude: number, longitude: number, days: number, payload: WeatherForecastResult): Promise<void> {
   if (!payload.forecasts || payload.forecasts.length === 0) return;
   try {
+    const forecastDate = todayIsoDate();
     await db.insert(weatherForecastCache)
-      .values({ cacheKey, latitude, longitude, days, payload, fetchedAt: new Date() })
+      .values({ tenantId, cacheKey, forecastDate, latitude, longitude, days, payload, fetchedAt: new Date() })
       .onConflictDoUpdate({
-        target: weatherForecastCache.cacheKey,
+        target: [weatherForecastCache.tenantId, weatherForecastCache.cacheKey, weatherForecastCache.forecastDate],
         set: { latitude, longitude, days, payload, fetchedAt: new Date() },
       });
   } catch (e) {
@@ -211,11 +223,13 @@ async function fetchWithRateLimit(url: string): Promise<Response> {
 export async function fetchWeatherForecast(
   latitude: number,
   longitude: number,
-  days: number = 7
+  days: number = 7,
+  tenantId?: string
 ): Promise<WeatherForecastResult> {
   const cacheKey = getCacheKey(latitude, longitude, days);
-  const cached = weatherCache.get(cacheKey);
-  
+  const memKey = tenantId ? `${tenantId}::${cacheKey}` : cacheKey;
+  const cached = weatherCache.get(memKey);
+
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.result;
   }
@@ -224,10 +238,12 @@ export async function fetchWeatherForecast(
     return cached.result;
   }
 
-  const dbCached = await readDbCache(cacheKey);
-  if (dbCached) {
-    weatherCache.set(cacheKey, { result: dbCached, timestamp: Date.now() });
-    return dbCached;
+  if (tenantId) {
+    const dbCached = await readDbCache(tenantId, cacheKey);
+    if (dbCached) {
+      weatherCache.set(memKey, { result: dbCached, timestamp: Date.now() });
+      return dbCached;
+    }
   }
 
   try {
@@ -293,8 +309,10 @@ export async function fetchWeatherForecast(
       summary,
     };
 
-    weatherCache.set(cacheKey, { result, timestamp: Date.now() });
-    await writeDbCache(cacheKey, latitude, longitude, days, result);
+    weatherCache.set(memKey, { result, timestamp: Date.now() });
+    if (tenantId) {
+      await writeDbCache(tenantId, cacheKey, latitude, longitude, days, result);
+    }
 
     return result;
   } catch (error) {

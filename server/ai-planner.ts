@@ -558,6 +558,18 @@ export interface DecisionTraceMove {
   confidence: number;
 }
 
+export interface WeatherDrivenRecommendation {
+  workOrderId: string;
+  workOrderTitle: string;
+  fromDate: string;
+  reason: string;
+  capacityMultiplier: number;
+  impactLevel: "low" | "medium" | "high" | "severe";
+  priority: string;
+  suggestedAction: "move" | "warn";
+  source: "weather";
+}
+
 export interface EnhancedAutoScheduleResult extends AutoScheduleResult {
   decisionTrace: {
     summary: DecisionTraceSummary;
@@ -565,6 +577,7 @@ export interface EnhancedAutoScheduleResult extends AutoScheduleResult {
     constraintViolations: import("./planning/constraintEngine").ConstraintViolation[];
     riskFactors: string[];
   };
+  weatherRecommendations?: WeatherDrivenRecommendation[];
 }
 
 interface ResourceCapacity {
@@ -1046,7 +1059,8 @@ export async function aiEnhancedSchedule(
 
   if (weatherEnabled) {
     try {
-      const weatherResult = await fetchWeatherForecast(plannerLat, plannerLon, 7);
+      const weatherTenantId = getContextTenantId();
+      const weatherResult = await fetchWeatherForecast(plannerLat, plannerLon, 7, weatherTenantId ?? undefined);
       weatherImpacts = weatherResult.impacts;
 
       if (weatherResult.impacts.length > 0) {
@@ -1339,6 +1353,39 @@ Svara ENDAST med JSON:
     console.error("AI enhancement failed:", error);
   }
 
+  // Build explicit weather-driven recommendations: existing low-priority orders on impacted days
+  const weatherRecommendations: WeatherDrivenRecommendation[] = [];
+  if (weatherEnabled && weatherImpacts.length > 0) {
+    const impactByDate = new Map(weatherImpacts.map(i => [i.date, i] as const));
+    const lowPriorityValues = new Set(["low", "låg", "normal"]);
+    for (const order of context.workOrders) {
+      if (!order.scheduledDate || !order.resourceId) continue;
+      if (order.orderStatus === "utford" || order.orderStatus === "fakturerad") continue;
+      const dateStr = order.scheduledDate instanceof Date
+        ? order.scheduledDate.toISOString().slice(0, 10)
+        : String(order.scheduledDate).slice(0, 10);
+      const impact = impactByDate.get(dateStr);
+      if (!impact || impact.impactLevel === "none") continue;
+      const priority = (order.priority || "normal").toLowerCase();
+      const action: "move" | "warn" =
+        (impact.impactLevel === "high" || impact.impactLevel === "severe") &&
+        lowPriorityValues.has(priority)
+          ? "move"
+          : "warn";
+      weatherRecommendations.push({
+        workOrderId: order.id,
+        workOrderTitle: getOrderTitle(order),
+        fromDate: dateStr,
+        reason: impact.reason,
+        capacityMultiplier: impact.capacityMultiplier,
+        impactLevel: impact.impactLevel as "low" | "medium" | "high" | "severe",
+        priority,
+        suggestedAction: action,
+        source: "weather",
+      });
+    }
+  }
+
   return {
     ...baseResult,
     summary: enhancedSummary,
@@ -1349,6 +1396,7 @@ Svara ENDAST med JSON:
       constraintViolations,
       riskFactors,
     },
+    weatherRecommendations,
   };
 }
 
