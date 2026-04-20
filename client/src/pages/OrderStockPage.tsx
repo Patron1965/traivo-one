@@ -464,6 +464,7 @@ export default function OrderStockPage() {
 
       let success = 0;
       let failed = 0;
+      let locked = 0;
       for (const id of orderIds) {
         try {
           const existing = ordersById.get(id);
@@ -475,8 +476,9 @@ export default function OrderStockPage() {
           const finalResourceId = data.resourceId || existing?.resourceId;
           const finalTeamId = data.teamId || existing?.teamId;
           const currentStatus = (existing?.orderStatus || "skapad") as OrderStatus;
+          const isLocked = lockedStatuses.includes(currentStatus);
 
-          if (!lockedStatuses.includes(currentStatus)) {
+          if (!isLocked) {
             if (finalResourceId) {
               updates.orderStatus = "planerad_resurs";
             } else if (finalTeamId) {
@@ -486,16 +488,26 @@ export default function OrderStockPage() {
 
           await apiRequest("PATCH", `/api/work-orders/${id}`, updates);
           success++;
+          if (isLocked) locked++;
         } catch {
           failed++;
         }
       }
-      return { success, failed };
+      return { success, failed, locked };
     },
-    onSuccess: ({ success, failed }) => {
+    onSuccess: ({ success, failed, locked }) => {
+      const descriptionParts: string[] = [];
+      if (locked > 0) {
+        descriptionParts.push(
+          `${locked} låsta ordrar fick uppdaterade fält men behöll sin status`
+        );
+      }
+      if (failed > 0) {
+        descriptionParts.push(`${failed} kunde inte uppdateras`);
+      }
       toast({
         title: `${success} ordrar planerade`,
-        description: failed > 0 ? `${failed} kunde inte uppdateras` : undefined,
+        description: descriptionParts.length > 0 ? descriptionParts.join(". ") : undefined,
         variant: failed > 0 ? "destructive" : "default",
       });
       setShowBatchPlanningDialog(false);
