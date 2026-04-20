@@ -19,13 +19,15 @@ async function main() {
   const result = await db.execute(sql`
     WITH updated AS (
       UPDATE work_orders wo
-      SET task_latitude = o.latitude,
-          task_longitude = o.longitude
+      SET task_latitude = COALESCE(wo.task_latitude, o.latitude),
+          task_longitude = COALESCE(wo.task_longitude, o.longitude)
       FROM objects o
       WHERE wo.object_id = o.id
-        AND (wo.task_latitude IS NULL OR wo.task_longitude IS NULL)
-        AND o.latitude IS NOT NULL
-        AND o.longitude IS NOT NULL
+        AND wo.deleted_at IS NULL
+        AND (
+          (wo.task_latitude IS NULL AND o.latitude IS NOT NULL)
+          OR (wo.task_longitude IS NULL AND o.longitude IS NOT NULL)
+        )
       RETURNING wo.id
     )
     SELECT count(*)::int AS updated FROM updated;
