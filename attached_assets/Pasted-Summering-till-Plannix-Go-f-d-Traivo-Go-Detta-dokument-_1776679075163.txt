@@ -1,0 +1,72 @@
+Summering till Plannix Go (f.d. Traivo Go)
+Detta dokument är en hand-over till mobilapp-projektet efter rebranden av huvudplattformen från Traivo till Plannix (april 2026).
+
+1. Vad har hänt i huvudprojektet
+Hela huvudplattformen (admin, planering, kundportal, backend, e-post-mallar, AI-persona, PWA-manifest, databas-tenant) har bytt namn från Traivo till Plannix. Backend, API:er och datamodeller är oförändrade — bara användarsynliga strängar och varumärkesreferenser är utbytta.
+
+2. Vad Plannix Go bör göra
+2.1 Användarsynlig text
+Byt all UI-text "Traivo" → "Plannix" och "Traivo Go" → "Plannix Go".
+App-namn i app-store-listningar, splash screen, onboarding, om-skärmen.
+Push-notiser: avsändarnamn och body-text.
+Eventuella in-app-länkar till "Traivo support" → "Plannix support".
+2.2 PWA / app-manifest
+name, short_name, description i manifest.json.
+HTML <title> och meta-taggar.
+iOS apple-mobile-web-app-title.
+2.3 App-store
+App-store-namn, beskrivning, screenshots, metadata.
+Ny utgåva krävs efter ändringen (Apple/Google granskar).
+3. KRITISKT — identifierare som MÅSTE bevaras
+För att inte förstöra data för befintliga fält-användare ska följande inte bytas om Plannix Go delar dessa lagringsytor med användare som kommer från Traivo Go:
+
+Identifierare	Var	Varför bevara
+traivo-offline-db	IndexedDB-namn	Byter du namn skapas en ny tom DB → all offline-cache, osynkade foton och outbox-poster (osynkade statusuppdateringar från fält) försvinner
+traivo-language	localStorage-nyckel	Användarens språkval återställs annars till default
+traivo-tours-seen	localStorage-nyckel	Användare får annars se onboarding-turen igen
+traivo-focused-resource	localStorage-nyckel	Fokuserad resurs nollställs annars
+traivo-resource-focus	BroadcastChannel	Tab-synkning av fokus bryts annars
+traivo:optimization_complete	CustomEvent-namn	Lyssnare i koden bryts annars
+@assets/traivo_logo_*.png	Image import-paths	Filerna heter fortfarande så — ändra inte sökvägen, bara alt-texten
+Huvudprojektet har lagt kommentarer vid dessa i koden som förklarar varför de inte ska röras. Gör samma sak i Plannix Go.
+
+Tumregel: Versalt "Traivo"/"TRAIVO" är användarsynligt och ska bytas. Lowercase "traivo" är ofta en stabil identifierare och ska inspekteras innan byte.
+
+4. Backend-API — inga brytande ändringar
+Alla /api/*-endpoints är oförändrade.
+Auth-flöde (Replit Auth) oförändrat.
+WebSocket-events i shared/ws-events.ts har oförändrade event-namn.
+Databas-schemat är oförändrat.
+Tenant-isolering via tenant_id-middleware är oförändrad.
+E-post-mallar och SMS-mallar som backend skickar säger nu "Plannix" — det syns på deep-links och kvitton som öppnas i appen.
+
+5. Tenant-arkitektur (gott att veta)
+Plannix kör delad databas + delat schema med tenant_id-isolering. Det betyder för Plannix Go:
+
+En användare kan tillhöra flera tenants (user_tenant_roles-tabellen).
+Aktivt tenant_id måste skickas/hanteras vid varje API-anrop (sker idag via session).
+Branding (färger, logo, företagsnamn) hämtas per tenant via /api/tenant-branding — använd det istället för hårdkodade Plannix-färger om appen ska vara white-label.
+Offline-cachen är inte tenant-separerad i nuvarande design. Om en fält-användare byter tenant medan offline kan det ge förvirrad data — något att tänka på inför multi-tenant fält-användare.
+6. Skalbarhet — vad backend planerar
+Huvudprojektet har identifierat följande som kommer åtgärdas när vi närmar oss ~10 kunder:
+
+Explicit databas-connection-pool.
+Tenant-medvetna bakgrundsjobb (anomali-övervakning, veckorapporter).
+Självbetjänings-onboarding för nya tenants.
+Plannix Go behöver inte göra något inför detta, men håll koll på:
+
+WebSocket-anslutningar kan flyttas bakom Redis pub/sub vid horisontell skalning. Klient-koden behöver inte ändras, men reconnect-logik bör vara robust.
+Bakgrundsjobb kan flyttas till en jobbkö — eventuella latency-känsliga endpoints (t.ex. "skapa rapport") kan komma att returnera 202 Accepted med polling istället för synkront svar.
+7. Branding-tillgångar
+Logo-bilderna är inte utbytta än i huvudprojektet — befintliga traivo_logo_*.png används fortfarande som platshållare. Ny Plannix-logo levereras separat när designen är klar.
+Färgschema är oförändrat (Deep Ocean Blue #1B4B6B, Northern Teal #4A9B9B, Aurora Green #7DBFB0, Arctic Ice #E8F4F8, Mountain Gray #6B7C8C, Midnight Navy #2C3E50).
+Typsnitt: Inter.
+8. Checklista för Plannix Go-rebrand
+ Sök-och-ersätt versalt "Traivo" → "Plannix" och "TRAIVO" → "PLANNIX" i hela mobilkoden.
+ Granska lowercase traivo-träffar manuellt — bevara identifierare enligt avsnitt 3.
+ Uppdatera manifest.json, app-titel, splash, om-skärm.
+ Uppdatera app-store-metadata (Apple App Store + Google Play).
+ Verifiera att offline-cache och osynkade outbox-poster överlever en uppgradering (testa med en fält-användare som har osynkade jobb).
+ Uppdatera deep-links och universella länkar om domän ändras (ändras inte just nu — @traivo.se och traivo.replit.app är kvar tills vidare).
+ Byt ut splash-logo och app-ikon när nya Plannix-tillgångar är klara.
+Frågor? Huvudprojektets rebrand-task är task-152 — plan-filen finns under .local/tasks/task-152.md med detaljerad scope/whitelist.
