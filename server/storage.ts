@@ -1201,6 +1201,8 @@ export class DatabaseStorage implements IStorage {
       objectAddress: objects.address,
       objectAccessCode: objects.resolvedAccessCode,
       objectKeyNumber: objects.resolvedKeyNumber,
+      objectLatitude: objects.latitude,
+      objectLongitude: objects.longitude,
       customerName: customers.name,
     })
     .from(workOrders)
@@ -1273,6 +1275,8 @@ export class DatabaseStorage implements IStorage {
       objectAddress: objects.address,
       objectAccessCode: objects.resolvedAccessCode,
       objectKeyNumber: objects.resolvedKeyNumber,
+      objectLatitude: objects.latitude,
+      objectLongitude: objects.longitude,
       customerName: customers.name,
     })
     .from(workOrders)
@@ -1370,6 +1374,8 @@ export class DatabaseStorage implements IStorage {
       objectAddress: objects.address,
       objectAccessCode: objects.resolvedAccessCode,
       objectKeyNumber: objects.resolvedKeyNumber,
+      objectLatitude: objects.latitude,
+      objectLongitude: objects.longitude,
       customerName: customers.name,
     })
     .from(workOrders)
@@ -1494,6 +1500,8 @@ export class DatabaseStorage implements IStorage {
       objectAddress: objects.address,
       objectAccessCode: objects.resolvedAccessCode,
       objectKeyNumber: objects.resolvedKeyNumber,
+      objectLatitude: objects.latitude,
+      objectLongitude: objects.longitude,
       customerName: customers.name,
     })
     .from(workOrders)
@@ -1599,12 +1607,36 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createWorkOrder(insertWorkOrder: InsertWorkOrder): Promise<WorkOrder> {
-    const [workOrder] = await db.insert(workOrders).values(insertWorkOrder).returning();
+    const values = { ...insertWorkOrder };
+    if (values.objectId && (values.taskLatitude == null || values.taskLongitude == null)) {
+      const [obj] = await db.select({ latitude: objects.latitude, longitude: objects.longitude })
+        .from(objects).where(eq(objects.id, values.objectId)).limit(1);
+      if (obj) {
+        if (values.taskLatitude == null && obj.latitude != null) values.taskLatitude = obj.latitude;
+        if (values.taskLongitude == null && obj.longitude != null) values.taskLongitude = obj.longitude;
+      }
+    }
+    const [workOrder] = await db.insert(workOrders).values(values).returning();
     return workOrder;
   }
 
   async updateWorkOrder(id: string, data: Partial<InsertWorkOrder>): Promise<WorkOrder | undefined> {
-    const [workOrder] = await db.update(workOrders).set(data).where(eq(workOrders.id, id)).returning();
+    const updates: Partial<InsertWorkOrder> = { ...data };
+    // Auto-fill task_latitude/longitude from object ENDAST när objectId byts till nytt värde
+    // och anroparen inte själv anger koordinater. Detta respekterar avsiktliga
+    // null-värden ("ingen specifik punkt") och task-specifika overrides.
+    const objectIdChanging = Object.prototype.hasOwnProperty.call(updates, "objectId");
+    const taskLatProvided = Object.prototype.hasOwnProperty.call(updates, "taskLatitude");
+    const taskLngProvided = Object.prototype.hasOwnProperty.call(updates, "taskLongitude");
+    if (objectIdChanging && updates.objectId) {
+      const [obj] = await db.select({ latitude: objects.latitude, longitude: objects.longitude })
+        .from(objects).where(eq(objects.id, updates.objectId)).limit(1);
+      if (obj) {
+        if (!taskLatProvided && obj.latitude != null) updates.taskLatitude = obj.latitude;
+        if (!taskLngProvided && obj.longitude != null) updates.taskLongitude = obj.longitude;
+      }
+    }
+    const [workOrder] = await db.update(workOrders).set(updates).where(eq(workOrders.id, id)).returning();
     return workOrder || undefined;
   }
 

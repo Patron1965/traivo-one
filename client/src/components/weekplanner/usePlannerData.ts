@@ -307,7 +307,7 @@ export function usePlannerData() {
   const routeJobsForView = useMemo(() => {
     if (viewMode !== "route" || !routeViewResourceId) return [];
     const dk = format(currentDate, "yyyy-MM-dd");
-    const base = (resourceDayJobMap.jobs[routeViewResourceId]?.[dk] || []).filter(j => j.taskLatitude && j.taskLongitude).sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
+    const base = (resourceDayJobMap.jobs[routeViewResourceId]?.[dk] || []).filter(j => (j.taskLatitude ?? j.objectLatitude) != null && (j.taskLongitude ?? j.objectLongitude) != null).sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
     return routeJobOrder.length > 0 && routeJobOrder.every(id => base.some(j => j.id === id)) ? routeJobOrder.map(id => base.find(j => j.id === id)!).filter(Boolean) : base;
   }, [viewMode, routeViewResourceId, currentDate, resourceDayJobMap, routeJobOrder]);
 

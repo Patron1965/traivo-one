@@ -1065,6 +1065,9 @@ export type WorkOrderWithObject = WorkOrder & {
   objectKeyNumber: string | null;
   // Kundnamn för snabb referens
   customerName: string | null;
+  // Objektets koordinater - säkerhetsnät om task_latitude/longitude saknas
+  objectLatitude?: number | null;
+  objectLongitude?: number | null;
 };
 export type SetupTimeLog = typeof setupTimeLogs.$inferSelect;
 export type InsertSetupTimeLog = z.infer<typeof insertSetupTimeLogSchema>;

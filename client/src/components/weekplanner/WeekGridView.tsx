@@ -125,15 +125,16 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                 const droppableId = `${resource.id}|${dayStr}`;
 
                 const sortedDayJobs = [...jobs]
-                  .filter(j => j.scheduledStartTime && j.taskLatitude && j.taskLongitude)
-                  .sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
+                  .map(j => ({ job: j, lat: (j.taskLatitude ?? j.objectLatitude) as number | null | undefined, lng: (j.taskLongitude ?? j.objectLongitude) as number | null | undefined }))
+                  .filter(x => x.job.scheduledStartTime && x.lat != null && x.lng != null)
+                  .sort((a, b) => (a.job.scheduledStartTime || "").localeCompare(b.job.scheduledStartTime || ""));
                 let totalTravelMin = 0;
                 let totalTravelKm = 0;
                 for (let si = 0; si < sortedDayJobs.length - 1; si++) {
                   const sFrom = sortedDayJobs[si];
                   const sTo = sortedDayJobs[si + 1];
-                  if (sFrom.taskLatitude && sFrom.taskLongitude && sTo.taskLatitude && sTo.taskLongitude) {
-                    const d = haversineDistance(sFrom.taskLatitude, sFrom.taskLongitude, sTo.taskLatitude, sTo.taskLongitude);
+                  if (sFrom.lat != null && sFrom.lng != null && sTo.lat != null && sTo.lng != null) {
+                    const d = haversineDistance(sFrom.lat, sFrom.lng, sTo.lat, sTo.lng);
                     totalTravelKm += d;
                     totalTravelMin += Math.max(Math.round(d / 50 * 60), 5);
                   }

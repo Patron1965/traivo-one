@@ -17,6 +17,13 @@ import { useMapConfig } from "@/hooks/use-map-config";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
+// Hämta jobbets effektiva koordinater: task_latitude/longitude med fallback till objektets
+function jobCoords(j: WorkOrderWithObject): { lat: number; lng: number } | null {
+  const lat = j.taskLatitude ?? j.objectLatitude;
+  const lng = j.taskLongitude ?? j.objectLongitude;
+  return lat != null && lng != null ? { lat, lng } : null;
+}
+
 function MapInvalidateSize() {
   const map = useMap();
   useEffect(() => {
@@ -99,16 +106,18 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
 
   const mapBounds = useMemo(() => {
     const points = orderedJobs
-      .filter(j => j.taskLatitude && j.taskLongitude)
-      .map(j => [j.taskLatitude!, j.taskLongitude!] as [number, number]);
+      .map(jobCoords)
+      .filter((c): c is { lat: number; lng: number } => c !== null)
+      .map(c => [c.lat, c.lng] as [number, number]);
     if (points.length === 0) return null;
     return L.latLngBounds(points);
   }, [orderedJobs]);
 
   const fallbackPolyline = useMemo(() => {
     return orderedJobs
-      .filter(j => j.taskLatitude && j.taskLongitude)
-      .map(j => [j.taskLatitude!, j.taskLongitude!] as [number, number]);
+      .map(jobCoords)
+      .filter((c): c is { lat: number; lng: number } => c !== null)
+      .map(c => [c.lat, c.lng] as [number, number]);
   }, [orderedJobs]);
 
   const [roadGeometry, setRoadGeometry] = useState<[number, number][] | null>(null);
@@ -117,7 +126,7 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
   const cacheKey = useMemo(() => {
     const dateStr = format(currentDate, "yyyy-MM-dd");
     const jobIds = orderedJobs
-      .filter(j => j.taskLatitude && j.taskLongitude)
+      .filter(j => jobCoords(j) !== null)
       .map(j => j.id)
       .sort()
       .join(",");
@@ -133,8 +142,8 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
     }
 
     const positions = orderedJobs
-      .filter(j => j.taskLatitude && j.taskLongitude)
-      .map(j => ({ lat: j.taskLatitude!, lng: j.taskLongitude! }));
+      .map(jobCoords)
+      .filter((c): c is { lat: number; lng: number } => c !== null);
     if (positions.length < 2) {
       setRoadGeometry(null);
       return;
@@ -187,12 +196,12 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
     let totalMinutes = 0;
     let totalKm = 0;
     for (let i = 0; i < orderedJobs.length - 1; i++) {
-      const a = orderedJobs[i];
-      const b = orderedJobs[i + 1];
-      if (a.taskLatitude && a.taskLongitude && b.taskLatitude && b.taskLongitude) {
-        const dist = haversineDistance(a.taskLatitude, a.taskLongitude, b.taskLatitude, b.taskLongitude);
+      const a = jobCoords(orderedJobs[i]);
+      const b = jobCoords(orderedJobs[i + 1]);
+      if (a && b) {
+        const dist = haversineDistance(a.lat, a.lng, b.lat, b.lng);
         totalKm += dist;
-        totalMinutes += calculateTravelTime(a.taskLatitude, a.taskLongitude, b.taskLatitude, b.taskLongitude);
+        totalMinutes += calculateTravelTime(a.lat, a.lng, b.lat, b.lng);
       }
     }
     const totalWorkMinutes = orderedJobs.reduce((sum, j) => sum + (j.estimatedDuration || 0), 0);
@@ -287,9 +296,10 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
                 const customer = customerMap.get(job.customerId);
                 let travelToNext: number | undefined;
                 if (index < orderedJobs.length - 1) {
-                  const next = orderedJobs[index + 1];
-                  if (job.taskLatitude && job.taskLongitude && next.taskLatitude && next.taskLongitude) {
-                    travelToNext = calculateTravelTime(job.taskLatitude, job.taskLongitude, next.taskLatitude, next.taskLongitude);
+                  const a = jobCoords(job);
+                  const b = jobCoords(orderedJobs[index + 1]);
+                  if (a && b) {
+                    travelToNext = calculateTravelTime(a.lat, a.lng, b.lat, b.lng);
                   }
                 }
                 const breakAfter = (vrpBreaks || []).find(b => {
@@ -366,7 +376,8 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
             />
           )}
           {orderedJobs.map((job, index) => {
-            if (!job.taskLatitude || !job.taskLongitude) return null;
+            const c = jobCoords(job);
+            if (!c) return null;
             const isFirst = index === 0;
             const isLast = index === orderedJobs.length - 1;
             const color = isFirst ? "#22C55E" : isLast ? "#EF4444" : "#3B82F6";
@@ -377,7 +388,7 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
               iconAnchor: [12, 12],
             });
             return (
-              <Marker key={job.id} position={[job.taskLatitude, job.taskLongitude]} icon={icon}>
+              <Marker key={job.id} position={[c.lat, c.lng]} icon={icon}>
                 <Popup>
                   <div className="min-w-[200px]">
                     <div className="font-medium">{job.title}</div>
