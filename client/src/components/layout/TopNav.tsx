@@ -299,13 +299,13 @@ function GlobalSearch() {
     <Button
       variant="outline"
       size="sm"
-      className="w-48 justify-start text-muted-foreground gap-1.5 h-8 text-xs"
+      className="w-56 min-w-0 justify-start text-muted-foreground gap-1.5 h-8 text-xs"
       onClick={openCommandPalette}
       data-testid="button-global-search"
     >
-      <Search className="h-4 w-4" />
-      <span className="hidden sm:inline">{tl("common.search-in")} {companyName}...</span>
-      <kbd className="pointer-events-none ml-auto hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-xs font-medium opacity-100 sm:flex">
+      <Search className="h-4 w-4 flex-shrink-0" />
+      <span className="hidden sm:inline flex-1 min-w-0 truncate text-left">{tl("common.search-in")} {companyName}...</span>
+      <kbd className="pointer-events-none hidden h-5 flex-shrink-0 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-xs font-medium opacity-100 sm:flex">
         ⌘K
       </kbd>
     </Button>
