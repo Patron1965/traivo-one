@@ -694,16 +694,20 @@ export function TopNav() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-1">
-          <div className="hidden lg:block">
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="hidden 2xl:block">
             <GlobalSearch />
           </div>
 
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden h-8 w-8"
+            className="2xl:hidden h-8 w-8"
             data-testid="button-search-mobile"
+            onClick={() => {
+              const event = new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true });
+              document.dispatchEvent(event);
+            }}
           >
             <Search className="h-4 w-4" />
           </Button>
