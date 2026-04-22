@@ -1,4 +1,4 @@
-const CACHE_NAME = 'unicorn-field-v7';
+const CACHE_NAME = 'unicorn-field-v8';
 const API_CACHE_NAME = 'unicorn-api-v1';
 
 const STATIC_ASSETS = [
