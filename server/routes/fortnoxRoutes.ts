@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
-import { objects, workOrders, articles } from "@shared/schema";
+import { objects, workOrders, articles, customers, fortnoxMappings } from "@shared/schema";
 import { getISOWeek } from "./helpers";
 
 export async function registerFortnoxRoutes(app: Express) {
@@ -2502,6 +2502,190 @@ app.post("/api/fortnox/projects/import", asyncHandler(async (req, res) => {
     const skipped = results.filter(r => r.status === "skipped").length;
     const errors = results.filter(r => r.status === "error").length;
     res.json({ summary: { created, skipped, errors, total: results.length }, results });
+}));
+
+// ============================================
+// FULL INITIAL IMPORT - kunder + objekt + artiklar
+// ============================================
+app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const client = createFortnoxClient(tenantId);
+
+    if (!(await client.isConnected())) {
+      throw new ValidationError("Fortnox är inte anslutet. Anslut först under Fortnox-inställningar.");
+    }
+
+    const includeArticles = req.body?.includeArticles !== false;
+
+    const importBatchId = `fortnox-full-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`;
+
+    const customerSummary = { created: 0, skipped: 0, errors: 0 };
+    const objectSummary = { created: 0, skipped: 0, errors: 0 };
+    const articleSummary = { created: 0, skipped: 0, errors: 0 };
+    const errorMessages: string[] = [];
+
+    // === STEP 1: Customers ===
+    const fortnoxCustomers = await client.getCustomers();
+    const existingCustomerMappings = await storage.getFortnoxMappings(tenantId, "customer");
+    const customerFortnoxIdToUnicornId = new Map(existingCustomerMappings.map(m => [m.fortnoxId, m.unicornId]));
+
+    for (const fc of fortnoxCustomers) {
+      const customerNumber = (fc.CustomerNumber || "").toString();
+      if (!customerNumber || !fc.Name) {
+        customerSummary.errors++;
+        continue;
+      }
+
+      try {
+        let unicornCustomerId = customerFortnoxIdToUnicornId.get(customerNumber);
+
+        if (unicornCustomerId) {
+          customerSummary.skipped++;
+        } else {
+          const addressParts = [fc.Address1, fc.Address2].filter(Boolean) as string[];
+          const newCustomerId = await db.transaction(async (tx) => {
+            const [created] = await tx.insert(customers).values({
+              tenantId,
+              name: fc.Name,
+              customerNumber,
+              contactPerson: (fc.YourReference as string) || null,
+              email: fc.Email || null,
+              phone: (fc.Phone1 as string) || (fc.Phone2 as string) || null,
+              address: addressParts.join(", ") || null,
+              city: fc.City || null,
+              postalCode: fc.ZipCode || null,
+              notes: fc.OrganisationNumber ? `Org.nr: ${fc.OrganisationNumber}` : null,
+              importBatchId,
+            }).returning();
+            await tx.insert(fortnoxMappings).values({
+              tenantId,
+              entityType: "customer",
+              unicornId: created.id,
+              fortnoxId: customerNumber,
+            });
+            return created.id;
+          });
+
+          unicornCustomerId = newCustomerId;
+          customerFortnoxIdToUnicornId.set(customerNumber, unicornCustomerId);
+          customerSummary.created++;
+        }
+      } catch (err) {
+        customerSummary.errors++;
+        errorMessages.push(`Kund ${customerNumber}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    // === STEP 2: Objects (one default object per customer) ===
+    const existingObjectMappings = await storage.getFortnoxMappings(tenantId, "object");
+    const objectFortnoxIds = new Set(existingObjectMappings.map(m => m.fortnoxId));
+
+    for (const fc of fortnoxCustomers) {
+      const customerNumber = (fc.CustomerNumber || "").toString();
+      if (!customerNumber || !fc.Name) continue;
+
+      const unicornCustomerId = customerFortnoxIdToUnicornId.get(customerNumber);
+      if (!unicornCustomerId) continue;
+
+      try {
+        if (objectFortnoxIds.has(customerNumber)) {
+          objectSummary.skipped++;
+          continue;
+        }
+
+        const addressParts = [fc.Address1, fc.Address2].filter(Boolean) as string[];
+        const objectName = fc.City ? `${fc.Name} – ${fc.City}` : fc.Name;
+
+        await db.transaction(async (tx) => {
+          const [created] = await tx.insert(objects).values({
+            tenantId,
+            customerId: unicornCustomerId!,
+            name: objectName,
+            objectNumber: customerNumber,
+            objectType: "fastighet",
+            hierarchyLevel: "fastighet",
+            objectLevel: 1,
+            address: addressParts.join(", ") || null,
+            city: fc.City || null,
+            postalCode: fc.ZipCode || null,
+            status: "active",
+            notes: "Skapad automatiskt vid Fortnox-import",
+            importBatchId,
+          }).returning();
+          await tx.insert(fortnoxMappings).values({
+            tenantId,
+            entityType: "object",
+            unicornId: created.id,
+            fortnoxId: customerNumber,
+          });
+        });
+        objectFortnoxIds.add(customerNumber);
+        objectSummary.created++;
+      } catch (err) {
+        objectSummary.errors++;
+        errorMessages.push(`Objekt för kund ${customerNumber}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    // === STEP 3: Articles (optional) ===
+    if (includeArticles) {
+      try {
+        const fortnoxArticles = await client.getArticles();
+        const existingArticleMappings = await storage.getFortnoxMappings(tenantId, "article");
+        const articleFortnoxIds = new Set(existingArticleMappings.map(m => m.fortnoxId));
+
+        for (const fa of fortnoxArticles) {
+          const articleNumber = (fa.ArticleNumber || "").toString();
+          if (!articleNumber) {
+            articleSummary.errors++;
+            continue;
+          }
+
+          try {
+            if (articleFortnoxIds.has(articleNumber)) {
+              articleSummary.skipped++;
+              continue;
+            }
+
+            await db.transaction(async (tx) => {
+              const [created] = await tx.insert(articles).values({
+                tenantId,
+                articleNumber,
+                name: fa.Description || articleNumber,
+                description: fa.Description || "",
+                unit: fa.Unit || "st",
+                listPrice: Math.round((Number(fa.SalesPrice) || 0) * 100),
+                articleType: fa.Type === "STOCK" ? "vara" : "tjanst",
+              }).returning();
+              await tx.insert(fortnoxMappings).values({
+                tenantId,
+                entityType: "article",
+                unicornId: created.id,
+                fortnoxId: articleNumber,
+              });
+            });
+            articleFortnoxIds.add(articleNumber);
+            articleSummary.created++;
+          } catch (err) {
+            articleSummary.errors++;
+            errorMessages.push(`Artikel ${articleNumber}: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+      } catch (err) {
+        errorMessages.push(`Artikelhämtning misslyckades: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    res.json({
+      success: true,
+      importBatchId,
+      summary: {
+        customers: customerSummary,
+        objects: objectSummary,
+        articles: articleSummary,
+      },
+      errors: errorMessages.slice(0, 20),
+    });
 }));
 
 }

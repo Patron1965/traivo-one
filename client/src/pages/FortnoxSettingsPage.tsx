@@ -198,6 +198,12 @@ export default function FortnoxSettingsPage() {
   const [importSearch, setImportSearch] = useState("");
   const [importFilter, setImportFilter] = useState<"all" | "new" | "imported">("all");
   const [importComplete, setImportComplete] = useState<{ created: number; skipped: number; errors: number } | null>(null);
+  const [fullImportSummary, setFullImportSummary] = useState<{
+    customers: { created: number; skipped: number; errors: number };
+    objects: { created: number; skipped: number; errors: number };
+    articles: { created: number; skipped: number; errors: number };
+    errors?: string[];
+  } | null>(null);
 
   const { data: config, isLoading: configLoading } = useQuery<FortnoxConfig>({
     queryKey: ["/api/fortnox/config"],
@@ -328,6 +334,25 @@ export default function FortnoxSettingsPage() {
       toast({ title: `${data.summary.created} ${entityLabels[importEntityType]} importerade` });
     },
     onError: () => toast({ title: "Import misslyckades", variant: "destructive" }),
+  });
+
+  const fullImportMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/fortnox/full-import", { includeArticles: true });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setFullImportSummary(data.summary ? { ...data.summary, errors: data.errors } : null);
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fortnox/mappings"] });
+      const total = (data.summary?.customers?.created || 0) + (data.summary?.objects?.created || 0) + (data.summary?.articles?.created || 0);
+      toast({ title: `Initial import klar – ${total} nya poster skapade` });
+    },
+    onError: (err: any) => {
+      toast({ title: "Fullimport misslyckades", description: err?.message || String(err), variant: "destructive" });
+    },
   });
 
   const isConnected = config?.isActive && config?.accessToken;
@@ -700,7 +725,91 @@ export default function FortnoxSettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="import" className="mt-4">
+        <TabsContent value="import" className="mt-4 space-y-4">
+          <Card className="border-primary/30 bg-primary/5">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Download className="h-5 w-5 text-primary" />
+                    Initial fullimport från Fortnox
+                  </CardTitle>
+                  <CardDescription>
+                    Hämtar alla kunder, skapar ett objekt per kund och importerar artiklar i ett enda steg. Idempotent – körs säkert flera gånger.
+                  </CardDescription>
+                </div>
+                <Button
+                  onClick={() => fullImportMutation.mutate()}
+                  disabled={!isConnected || fullImportMutation.isPending}
+                  data-testid="button-full-import"
+                  size="lg"
+                >
+                  {fullImportMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  Starta fullimport
+                </Button>
+              </div>
+            </CardHeader>
+            {fullImportSummary && (
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="rounded-md border bg-background p-3" data-testid="summary-customers">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Users className="h-4 w-4" />
+                      Kunder
+                    </div>
+                    <p className="text-2xl font-semibold mt-1">{fullImportSummary.customers.created}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {fullImportSummary.customers.skipped} hoppade över
+                      {fullImportSummary.customers.errors > 0 && `, ${fullImportSummary.customers.errors} fel`}
+                    </p>
+                  </div>
+                  <div className="rounded-md border bg-background p-3" data-testid="summary-objects">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Building className="h-4 w-4" />
+                      Objekt
+                    </div>
+                    <p className="text-2xl font-semibold mt-1">{fullImportSummary.objects.created}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {fullImportSummary.objects.skipped} hoppade över
+                      {fullImportSummary.objects.errors > 0 && `, ${fullImportSummary.objects.errors} fel`}
+                    </p>
+                  </div>
+                  <div className="rounded-md border bg-background p-3" data-testid="summary-articles">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Package className="h-4 w-4" />
+                      Artiklar
+                    </div>
+                    <p className="text-2xl font-semibold mt-1">{fullImportSummary.articles.created}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {fullImportSummary.articles.skipped} hoppade över
+                      {fullImportSummary.articles.errors > 0 && `, ${fullImportSummary.articles.errors} fel`}
+                    </p>
+                  </div>
+                </div>
+                {fullImportSummary.errors && fullImportSummary.errors.length > 0 && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Vissa poster kunde inte importeras</AlertTitle>
+                    <AlertDescription>
+                      <ul className="list-disc list-inside text-xs mt-1 space-y-0.5">
+                        {fullImportSummary.errors.slice(0, 5).map((e, i) => (
+                          <li key={i}>{e}</li>
+                        ))}
+                        {fullImportSummary.errors.length > 5 && (
+                          <li>... och {fullImportSummary.errors.length - 5} till</li>
+                        )}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </CardContent>
+            )}
+          </Card>
+
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between gap-2 flex-wrap">
