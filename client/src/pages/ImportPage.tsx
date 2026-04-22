@@ -17,7 +17,7 @@ import {
   Upload, Users, Building2, Truck, Trash2, CheckCircle, AlertCircle, 
   Loader2, Download, Eye, X, FileUp, Check, Clock, FileSpreadsheet, Database,
   ArrowRight, Info, Settings, ChevronDown, ChevronUp, ListChecks, History, Undo2,
-  SkipForward, Ban, BarChart3, ClipboardList, Tag, AlertTriangle, Merge, Copy
+  SkipForward, Ban, BarChart3, ClipboardList, Tag, AlertTriangle, Merge, Copy, Link2
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -623,6 +623,319 @@ function ColumnTable({ columns }: { columns: { name: string; required: boolean; 
           ))}
         </TableBody>
       </Table>
+    </div>
+  );
+}
+
+interface FortnoxXlsxPreviewCustomer {
+  rowNum: number;
+  customerNumber: string;
+  name: string;
+  orgNumber: string;
+  address: string;
+  postalCode: string;
+  city: string;
+  email: string;
+  invoiceEmail: string;
+  phone: string;
+  contactPerson: string;
+  alreadyImported: boolean;
+  existingMatch: { id: string; name: string } | null;
+}
+
+interface FortnoxXlsxValidateResponse {
+  totalRows: number;
+  validRows: number;
+  skippedRows: { rowNum: number; reason: string; name: string }[];
+  alreadyImportedCount: number;
+  newCount: number;
+  customers: FortnoxXlsxPreviewCustomer[];
+}
+
+interface FortnoxXlsxBulkResponse {
+  success: boolean;
+  importBatchId: string;
+  summary: {
+    customersCreated: number;
+    customersSkipped: number;
+    customersErrors: number;
+    objectsCreated: number;
+    objectsSkipped: number;
+    objectsErrors: number;
+    geocodingQueued: number;
+  };
+  errors: string[];
+}
+
+function FortnoxXlsxImportPanel() {
+  const { toast } = useToast();
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<FortnoxXlsxValidateResponse | null>(null);
+  const [bulkResult, setBulkResult] = useState<FortnoxXlsxBulkResponse | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const validateMutation = useMutation({
+    mutationFn: async (f: File) => {
+      const fd = new FormData();
+      fd.append("file", f);
+      const res = await fetch("/api/import/fortnox-customers/validate", {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Kunde inte läsa filen");
+      }
+      return res.json() as Promise<FortnoxXlsxValidateResponse>;
+    },
+    onSuccess: (data) => {
+      setPreview(data);
+      setBulkResult(null);
+      toast({ title: `${data.validRows} kunder hittades (${data.newCount} nya)` });
+    },
+    onError: (e: Error) => toast({ title: "Validering misslyckades", description: e.message, variant: "destructive" }),
+  });
+
+  const bulkMutation = useMutation({
+    mutationFn: async (f: File) => {
+      const fd = new FormData();
+      fd.append("file", f);
+      const res = await fetch("/api/import/fortnox-customers/bulk", {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Import misslyckades");
+      }
+      return res.json() as Promise<FortnoxXlsxBulkResponse>;
+    },
+    onSuccess: (data) => {
+      setBulkResult(data);
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fortnox/mappings"] });
+      toast({
+        title: `${data.summary.customersCreated} kunder importerade`,
+        description: `${data.summary.objectsCreated} fastighet-objekt skapade, ${data.summary.geocodingQueued} köade för geokodning`,
+      });
+    },
+    onError: (e: Error) => toast({ title: "Import misslyckades", description: e.message, variant: "destructive" }),
+  });
+
+  const handleFileChange = (f: File | null) => {
+    setFile(f);
+    setPreview(null);
+    setBulkResult(null);
+    if (f) validateMutation.mutate(f);
+  };
+
+  const reset = () => {
+    setFile(null);
+    setPreview(null);
+    setBulkResult(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-3">
+            <Info className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+            <div className="space-y-2 text-sm">
+              <p className="font-medium">Importera kunder från Fortnox-utdrag (xlsx)</p>
+              <p className="text-muted-foreground">
+                Ladda upp en Fortnox-export (xlsx) av kundregistret. Systemet skapar automatiskt en
+                kund + ett fastighet-objekt per rad och kopplar dem mot Fortnox via kundnummer.
+                Adresser geokodas i bakgrunden. Befintliga kunder med samma Fortnox-kundnummer hoppas över.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileUp className="h-4 w-4" />
+            Steg 1 – Ladda upp xlsx-fil
+          </CardTitle>
+          <CardDescription>Excel-export från Fortnox med kolumner som customer_number, name, delivery_address, …</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
+            disabled={validateMutation.isPending || bulkMutation.isPending}
+            data-testid="input-fortnox-xlsx-file"
+          />
+          {file && (
+            <div className="text-sm text-muted-foreground" data-testid="text-fortnox-file-info">
+              {file.name} ({(file.size / 1024).toFixed(1)} kB)
+            </div>
+          )}
+          {validateMutation.isPending && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Läser och validerar …
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {preview && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Eye className="h-4 w-4" />
+              Steg 2 – Förhandsgranskning
+            </CardTitle>
+            <CardDescription>
+              {preview.totalRows} rader i filen, {preview.validRows} giltiga kunder
+              ({preview.newCount} nya, {preview.alreadyImportedCount} redan importerade)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-md border p-3" data-testid="stat-total-rows">
+                <div className="text-xs text-muted-foreground">Totalt rader</div>
+                <div className="text-2xl font-semibold">{preview.totalRows}</div>
+              </div>
+              <div className="rounded-md border p-3" data-testid="stat-valid-rows">
+                <div className="text-xs text-muted-foreground">Giltiga</div>
+                <div className="text-2xl font-semibold">{preview.validRows}</div>
+              </div>
+              <div className="rounded-md border p-3" data-testid="stat-new-rows">
+                <div className="text-xs text-muted-foreground">Nya att importera</div>
+                <div className="text-2xl font-semibold text-green-600">{preview.newCount}</div>
+              </div>
+              <div className="rounded-md border p-3" data-testid="stat-already-imported">
+                <div className="text-xs text-muted-foreground">Redan importerade</div>
+                <div className="text-2xl font-semibold text-muted-foreground">{preview.alreadyImportedCount}</div>
+              </div>
+            </div>
+
+            {preview.skippedRows.length > 0 && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 text-sm">
+                <div className="font-medium mb-1 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  {preview.skippedRows.length} rader hoppas över
+                </div>
+                <ul className="text-xs text-muted-foreground space-y-0.5 max-h-24 overflow-y-auto">
+                  {preview.skippedRows.slice(0, 20).map((s) => (
+                    <li key={s.rowNum}>Rad {s.rowNum}: {s.reason} – {s.name || "(utan namn)"}</li>
+                  ))}
+                  {preview.skippedRows.length > 20 && <li>… och {preview.skippedRows.length - 20} till</li>}
+                </ul>
+              </div>
+            )}
+
+            <ScrollArea className="h-72 border rounded-md">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>#</TableHead>
+                    <TableHead>Kundnr</TableHead>
+                    <TableHead>Namn</TableHead>
+                    <TableHead>Adress</TableHead>
+                    <TableHead>Ort</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {preview.customers.slice(0, 200).map((c) => (
+                    <TableRow key={c.customerNumber} data-testid={`row-fortnox-${c.customerNumber}`}>
+                      <TableCell className="text-xs text-muted-foreground">{c.rowNum}</TableCell>
+                      <TableCell className="font-mono text-xs">{c.customerNumber}</TableCell>
+                      <TableCell className="font-medium">{c.name}</TableCell>
+                      <TableCell className="text-xs">{c.address || "-"}</TableCell>
+                      <TableCell className="text-xs">{[c.postalCode, c.city].filter(Boolean).join(" ") || "-"}</TableCell>
+                      <TableCell>
+                        {c.alreadyImported ? (
+                          <Badge variant="secondary" className="text-xs">Importerad</Badge>
+                        ) : (
+                          <Badge className="text-xs bg-green-600">Ny</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {preview.customers.length > 200 && (
+                <div className="p-2 text-center text-xs text-muted-foreground">
+                  Visar 200 av {preview.customers.length} – alla importeras
+                </div>
+              )}
+            </ScrollArea>
+
+            <div className="flex items-center justify-between gap-2">
+              <Button variant="outline" onClick={reset} data-testid="button-fortnox-reset">
+                <X className="h-4 w-4 mr-1" /> Rensa
+              </Button>
+              <Button
+                onClick={() => file && bulkMutation.mutate(file)}
+                disabled={!file || preview.newCount === 0 || bulkMutation.isPending}
+                data-testid="button-fortnox-import"
+              >
+                {bulkMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Importerar …</>
+                ) : (
+                  <><Check className="h-4 w-4 mr-1" /> Importera {preview.newCount} nya kunder</>
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {bulkResult && (
+        <Card className="border-green-200 dark:border-green-800 bg-green-50/30 dark:bg-green-950/10">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              Import klar
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-md border p-3" data-testid="stat-imported-customers">
+                <div className="text-xs text-muted-foreground">Kunder skapade</div>
+                <div className="text-2xl font-semibold text-green-600">{bulkResult.summary.customersCreated}</div>
+              </div>
+              <div className="rounded-md border p-3" data-testid="stat-imported-objects">
+                <div className="text-xs text-muted-foreground">Objekt skapade</div>
+                <div className="text-2xl font-semibold text-green-600">{bulkResult.summary.objectsCreated}</div>
+              </div>
+              <div className="rounded-md border p-3" data-testid="stat-skipped">
+                <div className="text-xs text-muted-foreground">Hoppade över</div>
+                <div className="text-2xl font-semibold">{bulkResult.summary.customersSkipped}</div>
+              </div>
+              <div className="rounded-md border p-3" data-testid="stat-geocoding">
+                <div className="text-xs text-muted-foreground">Geokodning köad</div>
+                <div className="text-2xl font-semibold">{bulkResult.summary.geocodingQueued}</div>
+              </div>
+            </div>
+            {bulkResult.summary.customersErrors > 0 && (
+              <div className="rounded-md border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30 p-3 text-sm">
+                <div className="font-medium mb-1 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  {bulkResult.summary.customersErrors} fel
+                </div>
+                <ul className="text-xs text-muted-foreground space-y-0.5 max-h-32 overflow-y-auto">
+                  {bulkResult.errors.map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              </div>
+            )}
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={reset} data-testid="button-fortnox-done">Stäng</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1342,8 +1655,8 @@ export default function ImportPage() {
     <div className="p-6 space-y-6">
       <PageHeader icon={Upload} title={tl("page.import.title")} description={tl("page.import.description")} testId="text-import-title" />
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "modus" | "manual" | "mapped" | "history" | "quality")}>
-        <TabsList className="grid w-full grid-cols-5">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "modus" | "manual" | "fortnox" | "mapped" | "history" | "quality")}>
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="modus" className="flex items-center gap-2" data-testid="tab-modus-import">
             <FileSpreadsheet className="h-4 w-4" />
             Modus 2.0
@@ -1351,6 +1664,10 @@ export default function ImportPage() {
           <TabsTrigger value="manual" className="flex items-center gap-2" data-testid="tab-manual-import">
             <Upload className="h-4 w-4" />
             Manuell CSV
+          </TabsTrigger>
+          <TabsTrigger value="fortnox" className="flex items-center gap-2" data-testid="tab-fortnox-import">
+            <Link2 className="h-4 w-4" />
+            Fortnox-export
           </TabsTrigger>
           <TabsTrigger value="mapped" className="flex items-center gap-2" data-testid="tab-mapped-import">
             <Database className="h-4 w-4" />
@@ -2934,6 +3251,10 @@ export default function ImportPage() {
               </TabsContent>
             ))}
           </Tabs>
+        </TabsContent>
+
+        <TabsContent value="fortnox" className="space-y-6">
+          <FortnoxXlsxImportPanel />
         </TabsContent>
 
         <TabsContent value="mapped" className="space-y-6">
