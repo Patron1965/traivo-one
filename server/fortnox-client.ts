@@ -60,6 +60,19 @@ interface FortnoxProject {
   [key: string]: string | number | boolean | null | undefined;
 }
 
+export interface FortnoxContactPerson {
+  ContactPersonId?: string | number;
+  ContactPersonName?: string;
+  CustomerNumber?: string;
+  Email?: string;
+  EmailInvoice?: string;
+  Phone1?: string;
+  Phone2?: string;
+  Position?: string;
+  Comments?: string;
+  [key: string]: string | number | boolean | null | undefined;
+}
+
 interface FortnoxPaginatedResponse<T> {
   MetaInformation?: { "@TotalPages": number; "@CurrentPage": number };
   [key: string]: T[] | { "@TotalPages": number; "@CurrentPage": number } | undefined;
@@ -332,6 +345,20 @@ export class FortnoxClient {
     }
 
     return allCustomers;
+  }
+
+  async getCustomerContacts(customerNumber: string): Promise<FortnoxContactPerson[]> {
+    try {
+      const response = await this.apiRequest<{ ContactPersons?: FortnoxContactPerson[] }>(
+        "GET",
+        `/customers/${encodeURIComponent(customerNumber)}/contactpersons`
+      );
+      return response?.ContactPersons || [];
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("404")) return [];
+      throw err;
+    }
   }
 
   async getCustomerDetails(customerNumber: string): Promise<FortnoxCustomer | null> {

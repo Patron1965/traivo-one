@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
-import { objects, workOrders, articles, customers, fortnoxMappings } from "@shared/schema";
+import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts } from "@shared/schema";
 import { getISOWeek } from "./helpers";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 
@@ -2523,8 +2523,19 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
     const customerSummary = { created: 0, skipped: 0, errors: 0 };
     const objectSummary = { created: 0, skipped: 0, errors: 0, geocodingQueued: 0 };
     const articleSummary = { created: 0, skipped: 0, errors: 0 };
+    const contactSummary = { created: 0, skipped: 0, errors: 0 };
     const errorMessages: string[] = [];
     const newObjectIdsForGeocoding: string[] = [];
+
+    const inferContactType = (position?: string | null): string => {
+      const p = (position || "").toLowerCase();
+      if (!p) return "primary";
+      if (/(faktur|ekonomi|billing|invoice)/.test(p)) return "billing";
+      if (/(tekn|drift|service|underh)/.test(p)) return "technical";
+      if (/(akut|jour|emergency|larm)/.test(p)) return "emergency";
+      if (/(lever|delivery|godsmott|portier|reception)/.test(p)) return "secondary";
+      return "primary";
+    };
 
     // === STEP 1: Customers ===
     const fortnoxCustomers = await client.getCustomers();
@@ -2634,7 +2645,82 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
       }
     }
 
-    // === STEP 3: Articles (optional) ===
+    // === STEP 3: Customer Contacts -> object_contacts ===
+    const existingContactMappings = await storage.getFortnoxMappings(tenantId, "customer_contact");
+    const contactFortnoxIds = new Set(existingContactMappings.map(m => m.fortnoxId));
+    // Refresh object mappings so we link contacts to the freshly created objects
+    const objectMappingsAfter = await storage.getFortnoxMappings(tenantId, "object");
+    const customerNumberToObjectId = new Map(objectMappingsAfter.map(m => [m.fortnoxId, m.unicornId]));
+
+    for (const fc of fortnoxCustomers) {
+      const customerNumber = (fc.CustomerNumber || "").toString();
+      if (!customerNumber) continue;
+
+      const objectId = customerNumberToObjectId.get(customerNumber);
+      if (!objectId) continue;
+
+      let contacts;
+      try {
+        contacts = await client.getCustomerContacts(customerNumber);
+      } catch (err) {
+        contactSummary.errors++;
+        errorMessages.push(`Kontakter för kund ${customerNumber}: ${err instanceof Error ? err.message : String(err)}`);
+        continue;
+      }
+
+      for (const cp of contacts) {
+        const contactPersonId = cp.ContactPersonId != null ? String(cp.ContactPersonId) : "";
+        if (!contactPersonId) {
+          contactSummary.errors++;
+          continue;
+        }
+        const mappingFortnoxId = `${customerNumber}:${contactPersonId}`;
+
+        try {
+          if (contactFortnoxIds.has(mappingFortnoxId)) {
+            contactSummary.skipped++;
+            continue;
+          }
+
+          const name = (cp.ContactPersonName || "").toString().trim();
+          const email = (cp.Email || cp.EmailInvoice || "").toString().trim() || null;
+          const phone = (cp.Phone1 as string) || (cp.Phone2 as string) || null;
+          const role = (cp.Position || "").toString().trim() || null;
+
+          if (!name && !email && !phone) {
+            contactSummary.skipped++;
+            continue;
+          }
+
+          await db.transaction(async (tx) => {
+            const [created] = await tx.insert(objectContacts).values({
+              tenantId,
+              objectId,
+              name: name || email || phone || "Kontakt",
+              email,
+              phone,
+              role,
+              contactType: inferContactType(role),
+              isInheritable: true,
+              notes: cp.Comments ? String(cp.Comments) : null,
+            }).returning();
+            await tx.insert(fortnoxMappings).values({
+              tenantId,
+              entityType: "customer_contact",
+              unicornId: created.id,
+              fortnoxId: mappingFortnoxId,
+            });
+          });
+          contactFortnoxIds.add(mappingFortnoxId);
+          contactSummary.created++;
+        } catch (err) {
+          contactSummary.errors++;
+          errorMessages.push(`Kontakt ${mappingFortnoxId}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    }
+
+    // === STEP 4: Articles (optional) ===
     if (includeArticles) {
       try {
         const fortnoxArticles = await client.getArticles();
@@ -2700,6 +2786,7 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
       summary: {
         customers: customerSummary,
         objects: objectSummary,
+        contacts: contactSummary,
         articles: articleSummary,
       },
       errors: errorMessages.slice(0, 20),
