@@ -83,7 +83,11 @@ function parseFortnoxXlsx(buffer: Buffer): Record<string, string>[] {
       obj[key] = str;
       if (str !== "") hasContent = true;
     }
-    if (hasContent) out.push(obj);
+    if (hasContent) {
+      // 1-indexerad faktisk excel-rad (header är på rad headerRowIdx+1)
+      obj.__rowNum = String(i + 1);
+      out.push(obj);
+    }
   }
   return out;
 }
@@ -150,8 +154,8 @@ function mapFortnoxRow(row: Record<string, string>, rowNum: number): FortnoxCust
     postalCode,
     city,
     contactPerson: pickField(row, ["your_reference", "our_reference"]),
-    phone: pickField(row, ["delivery_phone1", "delivery_phone2", "phone1", "phone2"]) ||
-      pickField(row, ["invoice_phone"]),
+    phone: pickField(row, ["delivery_phone", "delivery_phone1", "delivery_phone2", "phone1", "phone2", "phone"]) ||
+      pickField(row, ["invoice_phone", "invoice_phone1"]),
     deliveryName: pickField(row, ["delivery_name"]),
   };
 }
@@ -1818,7 +1822,7 @@ app.post("/api/import/fortnox-customers/validate", xlsxUpload.single("file"), as
   const rawRows = parseFortnoxXlsx(req.file.buffer);
   if (rawRows.length === 0) throw new ValidationError("Excel-filen är tom eller saknar rubriker");
 
-  const mapped = rawRows.map((r, i) => mapFortnoxRow(r, i + 2));
+  const mapped = rawRows.map((r) => mapFortnoxRow(r, parseInt(r.__rowNum || "0", 10)));
 
   // Eligibility-filter
   const eligible: FortnoxCustomerRow[] = [];
@@ -1904,7 +1908,7 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
 
   const rawRows = parseFortnoxXlsx(req.file.buffer);
   if (rawRows.length === 0) throw new ValidationError("Excel-filen är tom");
-  const mapped = rawRows.map((r, i) => mapFortnoxRow(r, i + 2));
+  const mapped = rawRows.map((r) => mapFortnoxRow(r, parseInt(r.__rowNum || "0", 10)));
 
   const existingCustomerMappings = await storage.getFortnoxMappings(tenantId, "customer");
   const customerFortnoxIdToUnicornId = new Map(existingCustomerMappings.map(m => [m.fortnoxId, m.unicornId]));

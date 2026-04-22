@@ -898,11 +898,13 @@ function FortnoxXlsxImportPanel() {
               </Button>
               <Button
                 onClick={() => file && bulkMutation.mutate(file)}
-                disabled={!file || preview.newCount === 0 || bulkMutation.isPending}
+                disabled={!file || bulkMutation.isPending || (preview.newCount === 0 && !mergeMode)}
                 data-testid="button-fortnox-import"
               >
                 {bulkMutation.isPending ? (
                   <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Importerar …</>
+                ) : mergeMode ? (
+                  <><Check className="h-4 w-4 mr-1" /> Importera {preview.newCount} nya + uppdatera {preview.duplicateCount}</>
                 ) : (
                   <><Check className="h-4 w-4 mr-1" /> Importera {preview.newCount} nya kunder</>
                 )}
