@@ -118,7 +118,6 @@ function PortalSidebar({ unreadCount, currentPath }: { unreadCount: number; curr
     { href: "/portal/contracts", label: "Tjänsteavtal", icon: Package, badge: 0 },
     { href: "/portal/issues", label: "Ärenden", icon: AlertCircle, badge: 0 },
     { href: "/portal/field", label: "Fältdokumentation", icon: Camera, badge: 0 },
-    { href: "/portal/roi-report", label: "ROI-rapport", icon: Star, badge: 0 },
     { href: "/portal/settings", label: "Inställningar", icon: Settings, badge: 0 },
   ];
 
