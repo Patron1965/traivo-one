@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +21,7 @@ import {
   Clock, Package, FileText, Image, Contact, GitFork, AlertTriangle,
   Calendar, Loader2, ChevronRight, ExternalLink, Wrench, Shield,
   Hash, Truck, Timer, Info, Box, Layers, ClipboardList, Plus,
-  Trash2, Pencil, Save, X, Phone, Mail, LinkIcon
+  Trash2, Pencil, Save, X, Phone, Mail, LinkIcon, Search
 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -188,6 +188,19 @@ export default function ObjectDetailPage() {
   });
   const [workOrderForm, setWorkOrderForm] = useState({ title: "", description: "", scheduledDate: "" });
 
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(searchInput.trim()), 250);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+  useEffect(() => {
+    setSearchInput("");
+    setSearchQuery("");
+    setSearchOpen(false);
+  }, [objectId]);
+
   const { data: resolvedObject, isLoading: loadingObject } = useQuery<any>({
     queryKey: ["/api/objects", objectId, "resolved"],
     queryFn: async () => {
@@ -201,6 +214,29 @@ export default function ObjectDetailPage() {
   const { data: customer } = useQuery<any>({
     queryKey: ["/api/customers", resolvedObject?.customerId],
     enabled: !!resolvedObject?.customerId,
+  });
+
+  const customerIdForSearch: string | undefined = resolvedObject?.customerId || undefined;
+  const searchHitsQuery = useQuery<Array<{
+    id: string;
+    name: string;
+    objectNumber: string | null;
+    address: string | null;
+    hierarchyLevel: string | null;
+    path: Array<{ id: string; name: string; hierarchyLevel: string | null }>;
+  }>>({
+    queryKey: ["/api/customers", customerIdForSearch, "objects", "search", searchQuery],
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/customers/${encodeURIComponent(customerIdForSearch!)}/objects/search?q=${encodeURIComponent(searchQuery)}&limit=50`,
+        { credentials: "include" },
+      );
+      if (!r.ok) throw new Error("Sökningen misslyckades");
+      return r.json();
+    },
+    enabled: !!customerIdForSearch && searchQuery.length > 0,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
 
   const { data: descendants = [] } = useQuery<ServiceObject[]>({
@@ -576,6 +612,104 @@ export default function ObjectDetailPage() {
           </div>
         </div>
       </div>
+
+      {customerIdForSearch && (
+        <div className="relative" data-testid="object-tree-search">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              type="text"
+              value={searchInput}
+              onChange={(e) => { setSearchInput(e.target.value); setSearchOpen(true); }}
+              onFocus={() => setSearchOpen(true)}
+              onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+              placeholder={`Sök i ${customer?.name ? `${customer.name}s ` : ""}hierarki (namn, adress, objektnummer)...`}
+              className="pl-8 pr-8"
+              data-testid="input-tree-search"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); setSearchInput(""); setSearchQuery(""); setSearchOpen(false); }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover-elevate"
+                aria-label="Rensa sökning"
+                data-testid="button-clear-search"
+              >
+                <X className="h-4 w-4 text-muted-foreground" />
+              </button>
+            )}
+          </div>
+          {searchOpen && searchQuery && (
+            <div
+              className="absolute z-20 left-0 right-0 mt-1 bg-popover border rounded-md shadow-md max-h-[320px] overflow-y-auto"
+              data-testid="search-results"
+            >
+              {searchHitsQuery.isLoading ? (
+                <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Söker...
+                </div>
+              ) : searchHitsQuery.isError ? (
+                <div className="flex items-center gap-2 p-3 text-xs text-destructive">
+                  <AlertTriangle className="h-3 w-3" /> Sökningen misslyckades.
+                  <Button variant="ghost" size="sm" className="h-5 text-xs px-1" onMouseDown={(e) => { e.preventDefault(); searchHitsQuery.refetch(); }}>Försök igen</Button>
+                </div>
+              ) : (searchHitsQuery.data || []).length === 0 ? (
+                <div className="p-3 text-xs text-muted-foreground" data-testid="text-empty-search">
+                  Inga objekt matchar "{searchQuery}".
+                </div>
+              ) : (
+                <ul className="divide-y">
+                  {(searchHitsQuery.data || []).map((hit) => {
+                    const levelLabel = hit.hierarchyLevel && hierarchyLevelLabels[hit.hierarchyLevel];
+                    const pathLabel = hit.path
+                      .filter((p) => p.id !== hit.id)
+                      .map((p) => p.name)
+                      .join(" › ");
+                    return (
+                      <li key={hit.id}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setSearchInput("");
+                            setSearchQuery("");
+                            setSearchOpen(false);
+                            navigate(`/objects/${hit.id}`);
+                          }}
+                          className="w-full text-left px-3 py-2 hover-elevate flex items-start gap-2"
+                          data-testid={`search-hit-${hit.id}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-medium truncate">{hit.name || hit.objectNumber || "Objekt"}</span>
+                              {levelLabel && (
+                                <Badge variant="outline" className="text-[10px]">{levelLabel.label}</Badge>
+                              )}
+                              {hit.objectNumber && (
+                                <span className="text-[10px] font-mono text-muted-foreground">#{hit.objectNumber}</span>
+                              )}
+                            </div>
+                            {pathLabel && (
+                              <div className="text-xs text-muted-foreground truncate" data-testid={`search-hit-path-${hit.id}`}>
+                                {pathLabel}
+                              </div>
+                            )}
+                            {hit.address && (
+                              <div className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                                <MapPin className="h-3 w-3" /> {hit.address}
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1" data-testid="object-detail-tabs">
