@@ -2020,9 +2020,8 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
         // Skapa fastighet-objekt om Fortnox-mappning saknas (oavsett create/merge)
         const objectFortnoxId = r.customerNumber;
         if (!objectFortnoxIdToUnicornId.has(objectFortnoxId)) {
-          const objectName = r.deliveryName
-            ? `${r.name} – ${r.deliveryName}`
-            : (r.city ? `${r.name} – ${r.city}` : r.name);
+          // Spec: objects.name = delivery_name om finns, annars customers.name
+          const objectName = r.deliveryName || r.name;
           const [createdObject] = await tx.insert(objects).values({
             tenantId,
             customerId,
