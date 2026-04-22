@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,11 +13,14 @@ import { QueryErrorState } from "@/components/ErrorBoundary";
 import {
   ArrowLeft, Building2, Layers, Package, ClipboardList, Phone, Mail, MapPin,
   ChevronDown, ChevronRight, Users, Home, Container, Trash2, TreePine, Map as MapIcon,
-  ExternalLink, Repeat, Receipt, GitBranch, Info,
+  ExternalLink, Repeat, Receipt, GitBranch,
 } from "lucide-react";
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Circle, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
+import "leaflet.markercluster";
 import { useMapConfig } from "@/hooks/use-map-config";
 import { BatchGeoMapFitter } from "@/components/ObjectsMapView";
 import type { Customer, ServiceObject } from "@shared/schema";
@@ -45,15 +48,13 @@ interface CustomerStats {
   clusters: CustomerStatsCluster[];
 }
 
-const HIERARCHY_LEVELS: Record<string, { label: string; icon: typeof Building2; color: string }> = {
-  koncern: { label: "Koncern", icon: Building2, color: "text-purple-600 dark:text-purple-400" },
-  brf: { label: "BRF", icon: Users, color: "text-blue-600 dark:text-blue-400" },
-  fastighet: { label: "Fastighet", icon: Home, color: "text-green-600 dark:text-green-400" },
-  rum: { label: "Rum", icon: Container, color: "text-yellow-600 dark:text-yellow-400" },
-  karl: { label: "Objekt", icon: Trash2, color: "text-orange-600 dark:text-orange-400" },
+const HIERARCHY_LEVELS: Record<string, { label: string; icon: typeof Building2; color: string; hex: string }> = {
+  koncern: { label: "Koncern", icon: Building2, color: "text-purple-600 dark:text-purple-400", hex: "#9333ea" },
+  brf: { label: "BRF", icon: Users, color: "text-blue-600 dark:text-blue-400", hex: "#3b82f6" },
+  fastighet: { label: "Fastighet", icon: Home, color: "text-green-600 dark:text-green-400", hex: "#22c55e" },
+  rum: { label: "Rum", icon: Container, color: "text-yellow-600 dark:text-yellow-400", hex: "#eab308" },
+  karl: { label: "Objekt", icon: Trash2, color: "text-orange-600 dark:text-orange-400", hex: "#f97316" },
 };
-
-const MAP_MARKER_LIMIT = 500;
 
 interface TreeNode { object: ServiceObject; children: TreeNode[] }
 
@@ -114,10 +115,7 @@ function groupByCluster(
   return groups;
 }
 
-interface InheritedSignals {
-  inherited: boolean;
-  fields: string[];
-}
+interface InheritedSignals { inherited: boolean; fields: string[] }
 
 function getInheritedSignals(o: ServiceObject): InheritedSignals {
   const obj = o as unknown as Record<string, unknown>;
@@ -128,40 +126,49 @@ function getInheritedSignals(o: ServiceObject): InheritedSignals {
   return { inherited: fields.length > 0, fields };
 }
 
+interface SyncState {
+  selectedObjectId: string | null;
+  selectedClusterId: string | null;
+  hoveredObjectId: string | null;
+  hoveredClusterId: string | null;
+}
+
 function TreeRow({
   node,
   level,
-  selectedId,
-  onSelect,
+  sync,
+  onSelectObject,
+  onHoverObject,
 }: {
   node: TreeNode;
   level: number;
-  selectedId: string | null;
-  onSelect: (id: string | null) => void;
+  sync: SyncState;
+  onSelectObject: (id: string | null) => void;
+  onHoverObject: (id: string | null) => void;
 }) {
   const [open, setOpen] = useState(level < 1);
   const hasChildren = node.children.length > 0;
   const info = HIERARCHY_LEVELS[node.object.hierarchyLevel || "fastighet"] || HIERARCHY_LEVELS.fastighet;
   const Icon = info.icon;
   const inh = getInheritedSignals(node.object);
-  const isSelected = selectedId === node.object.id;
+  const isSelected = sync.selectedObjectId === node.object.id;
+  const isHovered = sync.hoveredObjectId === node.object.id;
   return (
     <div className="select-none">
       <Collapsible open={open} onOpenChange={setOpen}>
         <div
-          className={`flex items-center gap-2 py-1.5 px-2 rounded-md hover-elevate cursor-pointer ${isSelected ? "bg-primary/10 ring-1 ring-primary/40" : ""}`}
+          className={`flex items-center gap-2 py-1.5 px-2 rounded-md hover-elevate cursor-pointer ${
+            isSelected ? "bg-primary/10 ring-1 ring-primary/40" : isHovered ? "bg-muted" : ""
+          }`}
           style={{ paddingLeft: `${level * 18 + 8}px` }}
-          onClick={() => onSelect(isSelected ? null : node.object.id)}
+          onClick={() => onSelectObject(isSelected ? null : node.object.id)}
+          onMouseEnter={() => onHoverObject(node.object.id)}
+          onMouseLeave={() => onHoverObject(null)}
           data-testid={`tree-row-${node.object.id}`}
         >
           {hasChildren ? (
             <CollapsibleTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 p-0"
-                onClick={(e) => e.stopPropagation()}
-              >
+              <Button variant="ghost" size="icon" className="h-5 w-5 p-0" onClick={(e) => e.stopPropagation()}>
                 {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               </Button>
             </CollapsibleTrigger>
@@ -202,7 +209,14 @@ function TreeRow({
         {hasChildren && (
           <CollapsibleContent>
             {node.children.map((c) => (
-              <TreeRow key={c.object.id} node={c} level={level + 1} selectedId={selectedId} onSelect={onSelect} />
+              <TreeRow
+                key={c.object.id}
+                node={c}
+                level={level + 1}
+                sync={sync}
+                onSelectObject={onSelectObject}
+                onHoverObject={onHoverObject}
+              />
             ))}
           </CollapsibleContent>
         )}
@@ -211,13 +225,15 @@ function TreeRow({
   );
 }
 
-function makeIcon(level: string, isSelected: boolean) {
-  const colors: Record<string, string> = {
-    koncern: "#9333ea", brf: "#3b82f6", fastighet: "#22c55e", rum: "#eab308", karl: "#f97316",
-  };
-  const color = colors[level] || "#6b7280";
-  const size = isSelected ? 26 : 18;
-  const ring = isSelected ? "border:3px solid #f59e0b;" : "border:2px solid white;";
+function makeIcon(level: string, isSelected: boolean, isHovered: boolean) {
+  const info = HIERARCHY_LEVELS[level] || HIERARCHY_LEVELS.fastighet;
+  const color = info.hex;
+  const size = isSelected ? 28 : isHovered ? 22 : 18;
+  const ring = isSelected
+    ? "border:3px solid #f59e0b;"
+    : isHovered
+    ? "border:3px solid #fcd34d;"
+    : "border:2px solid white;";
   return L.divIcon({
     className: "custom-marker",
     html: `<div style="background-color:${color};width:${size}px;height:${size}px;border-radius:50%;${ring}box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>`,
@@ -228,9 +244,75 @@ function makeIcon(level: string, isSelected: boolean) {
 
 function FlyToObject({ object }: { object: ServiceObject | null }) {
   const map = useMap();
-  if (object && object.latitude && object.longitude) {
-    map.flyTo([object.latitude, object.longitude], Math.max(map.getZoom(), 14), { duration: 0.6 });
-  }
+  useEffect(() => {
+    if (object && object.latitude && object.longitude) {
+      map.flyTo([object.latitude, object.longitude], Math.max(map.getZoom(), 14), { duration: 0.6 });
+    }
+  }, [object?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+interface MarkerClusterLayerProps {
+  objects: ServiceObject[];
+  sync: SyncState;
+  onSelectObject: (id: string | null) => void;
+  onHoverObject: (id: string | null) => void;
+}
+
+function MarkerClusterLayer({ objects, sync, onSelectObject, onHoverObject }: MarkerClusterLayerProps) {
+  const map = useMap();
+  const groupRef = useRef<L.MarkerClusterGroup | null>(null);
+  const markerMapRef = useRef<Map<string, L.Marker>>(new Map());
+
+  useEffect(() => {
+    const lAny = L as unknown as { markerClusterGroup: (opts?: unknown) => L.MarkerClusterGroup };
+    const group = lAny.markerClusterGroup({
+      chunkedLoading: true,
+      showCoverageOnHover: true,
+      maxClusterRadius: 60,
+    });
+    groupRef.current = group;
+    map.addLayer(group);
+    return () => {
+      map.removeLayer(group);
+      groupRef.current = null;
+      markerMapRef.current.clear();
+    };
+  }, [map]);
+
+  useEffect(() => {
+    const group = groupRef.current;
+    if (!group) return;
+    group.clearLayers();
+    markerMapRef.current.clear();
+    const markers: L.Marker[] = [];
+    for (const o of objects) {
+      if (!o.latitude || !o.longitude) continue;
+      const marker = L.marker([o.latitude, o.longitude], {
+        icon: makeIcon(o.hierarchyLevel || "fastighet", o.id === sync.selectedObjectId, o.id === sync.hoveredObjectId),
+      });
+      marker.bindPopup(
+        `<div><div style="font-weight:500">${o.name}</div>${o.address ? `<div style="font-size:11px">${o.address}</div>` : ""}<a href="/objects/${o.id}" style="font-size:11px;color:#3b82f6">Öppna objekt →</a></div>`,
+      );
+      marker.on("click", () => onSelectObject(o.id === sync.selectedObjectId ? null : o.id));
+      marker.on("mouseover", () => onHoverObject(o.id));
+      marker.on("mouseout", () => onHoverObject(null));
+      markers.push(marker);
+      markerMapRef.current.set(o.id, marker);
+    }
+    group.addLayers(markers);
+  }, [objects]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    for (const [id, marker] of markerMapRef.current) {
+      const o = objects.find((x) => x.id === id);
+      if (!o) continue;
+      marker.setIcon(
+        makeIcon(o.hierarchyLevel || "fastighet", id === sync.selectedObjectId, id === sync.hoveredObjectId),
+      );
+    }
+  }, [sync.selectedObjectId, sync.hoveredObjectId, objects]);
+
   return null;
 }
 
@@ -242,7 +324,21 @@ export default function CustomerDetailPage() {
   const [, params] = useRoute("/customers/:id");
   const customerId = params?.id;
   const mapConfig = useMapConfig();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sync, setSync] = useState<SyncState>({
+    selectedObjectId: null,
+    selectedClusterId: null,
+    hoveredObjectId: null,
+    hoveredClusterId: null,
+  });
+
+  const setSelectedObject = (id: string | null) =>
+    setSync((s) => ({ ...s, selectedObjectId: id }));
+  const setSelectedCluster = (id: string | null) =>
+    setSync((s) => ({ ...s, selectedClusterId: s.selectedClusterId === id ? null : id }));
+  const setHoveredObject = (id: string | null) =>
+    setSync((s) => ({ ...s, hoveredObjectId: id }));
+  const setHoveredCluster = (id: string | null) =>
+    setSync((s) => ({ ...s, hoveredClusterId: id }));
 
   const customerQuery = useQuery<Customer>({
     queryKey: ["/api/customers", customerId],
@@ -267,21 +363,22 @@ export default function CustomerDetailPage() {
     enabled: !!customerId,
   });
 
+  const allObjects = objectsQuery.data || [];
   const clusterGroups = useMemo(
-    () => groupByCluster(objectsQuery.data || [], statsQuery.data?.clusters || []),
-    [objectsQuery.data, statsQuery.data?.clusters],
+    () => groupByCluster(allObjects, statsQuery.data?.clusters || []),
+    [allObjects, statsQuery.data?.clusters],
+  );
+  const filteredObjects = useMemo(
+    () => (sync.selectedClusterId ? allObjects.filter((o) => o.clusterId === sync.selectedClusterId) : allObjects),
+    [allObjects, sync.selectedClusterId],
   );
   const mapObjects = useMemo(
-    () => (objectsQuery.data || []).filter((o) => o.latitude && o.longitude),
-    [objectsQuery.data],
-  );
-  const visibleMarkers = useMemo(
-    () => mapObjects.slice(0, MAP_MARKER_LIMIT),
-    [mapObjects],
+    () => filteredObjects.filter((o) => o.latitude && o.longitude),
+    [filteredObjects],
   );
   const selectedObject = useMemo(
-    () => (objectsQuery.data || []).find((o) => o.id === selectedId) || null,
-    [objectsQuery.data, selectedId],
+    () => allObjects.find((o) => o.id === sync.selectedObjectId) || null,
+    [allObjects, sync.selectedObjectId],
   );
   const clustersWithGeo = useMemo(
     () => (statsQuery.data?.clusters || []).filter((c) => c.centerLatitude && c.centerLongitude),
@@ -296,6 +393,12 @@ export default function CustomerDetailPage() {
   const customer = customerQuery.data;
   const stats = statsQuery.data;
   const isLoading = customerQuery.isLoading || statsQuery.isLoading;
+
+  const initialCenter: [number, number] = clustersWithGeo[0]
+    ? [clustersWithGeo[0].centerLatitude!, clustersWithGeo[0].centerLongitude!]
+    : mapObjects[0]
+    ? [mapObjects[0].latitude!, mapObjects[0].longitude!]
+    : [59.3, 18.07];
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-6">
@@ -404,6 +507,28 @@ export default function CustomerDetailPage() {
             </Card>
           </div>
 
+          {stats && Object.keys(stats.objectsByLevel || {}).length > 0 && (
+            <Card data-testid="card-objects-by-level">
+              <CardContent className="p-3 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground font-medium mr-1">Objekt per nivå:</span>
+                {Object.entries(stats.objectsByLevel).map(([level, count]) => {
+                  const info = HIERARCHY_LEVELS[level] || HIERARCHY_LEVELS.fastighet;
+                  return (
+                    <Badge
+                      key={level}
+                      variant="outline"
+                      className="gap-1.5"
+                      data-testid={`badge-level-${level}`}
+                    >
+                      <span className={info.color}>●</span>
+                      {info.label}: <span className="font-semibold">{count}</span>
+                    </Badge>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <Card className="lg:col-span-1">
               <CardHeader>
@@ -435,6 +560,17 @@ export default function CustomerDetailPage() {
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <Layers className="h-4 w-4" /> Kluster
+                  {sync.selectedClusterId && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="ml-auto h-6 text-xs"
+                      onClick={() => setSelectedCluster(sync.selectedClusterId)}
+                      data-testid="button-clear-cluster-filter"
+                    >
+                      Rensa filter
+                    </Button>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -444,10 +580,18 @@ export default function CustomerDetailPage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {stats.clusters.map((cl) => (
-                      <Link key={cl.id} href={`/clusters/${cl.id}`}>
+                    {stats.clusters.map((cl) => {
+                      const isSelected = sync.selectedClusterId === cl.id;
+                      const isHovered = sync.hoveredClusterId === cl.id;
+                      return (
                         <div
-                          className="flex items-center gap-2 p-3 rounded-md border hover-elevate cursor-pointer"
+                          key={cl.id}
+                          onClick={() => setSelectedCluster(cl.id)}
+                          onMouseEnter={() => setHoveredCluster(cl.id)}
+                          onMouseLeave={() => setHoveredCluster(null)}
+                          className={`flex items-center gap-2 p-3 rounded-md border hover-elevate cursor-pointer ${
+                            isSelected ? "ring-2 ring-primary" : isHovered ? "bg-muted" : ""
+                          }`}
                           data-testid={`card-cluster-${cl.id}`}
                         >
                           <div
@@ -462,8 +606,8 @@ export default function CustomerDetailPage() {
                             <Badge variant="outline" className="text-[10px]">{cl.status}</Badge>
                           )}
                         </div>
-                      </Link>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -482,25 +626,7 @@ export default function CustomerDetailPage() {
 
             <TabsContent value="tree">
               <Card>
-                <CardContent className="p-3 space-y-4">
-                  {stats && Object.keys(stats.objectsByLevel || {}).length > 0 && (
-                    <div className="flex flex-wrap gap-2 pb-2 border-b" data-testid="section-objects-by-level">
-                      {Object.entries(stats.objectsByLevel).map(([level, count]) => {
-                        const info = HIERARCHY_LEVELS[level] || HIERARCHY_LEVELS.fastighet;
-                        return (
-                          <Badge
-                            key={level}
-                            variant="outline"
-                            className="gap-1.5"
-                            data-testid={`badge-level-${level}`}
-                          >
-                            <span className={info.color}>●</span>
-                            {info.label}: <span className="font-semibold">{count}</span>
-                          </Badge>
-                        );
-                      })}
-                    </div>
-                  )}
+                <CardContent className="p-3">
                   {objectsQuery.isLoading ? (
                     <div className="space-y-2">
                       {Array.from({ length: 5 }).map((_, i) => (
@@ -513,37 +639,52 @@ export default function CustomerDetailPage() {
                     </div>
                   ) : (
                     <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                      {clusterGroups.map((g) => (
-                        <div key={g.id ?? "no-cluster"} className="border rounded-md" data-testid={`group-cluster-${g.id ?? "none"}`}>
-                          <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border-b">
-                            <Layers className="h-4 w-4 text-muted-foreground" />
-                            {g.id ? (
-                              <Link href={`/clusters/${g.id}`} className="text-sm font-semibold hover:underline flex items-center gap-1.5">
-                                {g.color && (
-                                  <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: g.color }} />
-                                )}
-                                {g.name}
-                              </Link>
-                            ) : (
-                              <span className="text-sm font-semibold">{g.name}</span>
-                            )}
-                            <Badge variant="secondary" className="text-[10px] ml-auto">
-                              {g.roots.length} rot{g.roots.length === 1 ? "" : "ter"}
-                            </Badge>
+                      {clusterGroups.map((g) => {
+                        const isSelected = sync.selectedClusterId === g.id;
+                        const isHovered = sync.hoveredClusterId === g.id;
+                        return (
+                          <div
+                            key={g.id ?? "no-cluster"}
+                            className={`border rounded-md ${isSelected ? "ring-2 ring-primary" : isHovered ? "ring-1 ring-muted-foreground/40" : ""}`}
+                            data-testid={`group-cluster-${g.id ?? "none"}`}
+                            onMouseEnter={() => g.id && setHoveredCluster(g.id)}
+                            onMouseLeave={() => g.id && setHoveredCluster(null)}
+                          >
+                            <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border-b">
+                              <Layers className="h-4 w-4 text-muted-foreground" />
+                              {g.id ? (
+                                <button
+                                  onClick={() => setSelectedCluster(g.id!)}
+                                  className="text-sm font-semibold hover:underline flex items-center gap-1.5"
+                                  data-testid={`button-select-cluster-${g.id}`}
+                                >
+                                  {g.color && (
+                                    <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: g.color }} />
+                                  )}
+                                  {g.name}
+                                </button>
+                              ) : (
+                                <span className="text-sm font-semibold">{g.name}</span>
+                              )}
+                              <Badge variant="secondary" className="text-[10px] ml-auto">
+                                {g.roots.length} rot{g.roots.length === 1 ? "" : "ter"}
+                              </Badge>
+                            </div>
+                            <div className="p-2 space-y-0.5">
+                              {g.roots.map((n) => (
+                                <TreeRow
+                                  key={n.object.id}
+                                  node={n}
+                                  level={0}
+                                  sync={sync}
+                                  onSelectObject={setSelectedObject}
+                                  onHoverObject={setHoveredObject}
+                                />
+                              ))}
+                            </div>
                           </div>
-                          <div className="p-2 space-y-0.5">
-                            {g.roots.map((n) => (
-                              <TreeRow
-                                key={n.object.id}
-                                node={n}
-                                level={0}
-                                selectedId={selectedId}
-                                onSelect={setSelectedId}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>
@@ -562,68 +703,54 @@ export default function CustomerDetailPage() {
                     </div>
                   ) : (
                     <div className="h-[500px] relative">
-                      {mapObjects.length > MAP_MARKER_LIMIT && (
-                        <div className="absolute top-2 right-2 z-[1000] bg-background/95 border rounded-md px-2 py-1 text-xs flex items-center gap-1.5 shadow" data-testid="text-marker-limit">
-                          <Info className="h-3 w-3" />
-                          Visar {MAP_MARKER_LIMIT} av {mapObjects.length} objekt — använd filtrerad objektlista för full vy
-                        </div>
-                      )}
                       <MapContainer
-                        center={
-                          clustersWithGeo[0]
-                            ? [clustersWithGeo[0].centerLatitude!, clustersWithGeo[0].centerLongitude!]
-                            : [visibleMarkers[0]?.latitude ?? 59.3, visibleMarkers[0]?.longitude ?? 18.07]
-                        }
+                        center={initialCenter}
                         zoom={11}
                         style={{ height: "100%", width: "100%" }}
                         scrollWheelZoom
                       >
                         <TileLayer url={mapConfig.tileUrl} attribution={mapConfig.attribution} />
-                        {visibleMarkers.length > 0 && <BatchGeoMapFitter objects={visibleMarkers} />}
+                        {mapObjects.length > 0 && <BatchGeoMapFitter objects={mapObjects} />}
                         <FlyToObject object={selectedObject} />
-                        {clustersWithGeo.map((cl) => (
-                          <Circle
-                            key={`circle-${cl.id}`}
-                            center={[cl.centerLatitude!, cl.centerLongitude!]}
-                            radius={(cl.radiusKm || 5) * 1000}
-                            pathOptions={{
-                              color: cl.color || "#3b82f6",
-                              fillColor: cl.color || "#3b82f6",
-                              fillOpacity: 0.08,
-                              weight: 2,
-                            }}
-                          >
-                            <Popup>
-                              <div className="space-y-1">
-                                <div className="font-medium">{cl.name}</div>
-                                <div className="text-xs">{cl.objectCount} objekt · radie {cl.radiusKm ?? 5} km</div>
-                                <Link href={`/clusters/${cl.id}`} className="text-xs text-primary hover:underline">
-                                  Öppna kluster →
-                                </Link>
-                              </div>
-                            </Popup>
-                          </Circle>
-                        ))}
-                        {visibleMarkers.map((o) => (
-                          <Marker
-                            key={o.id}
-                            position={[o.latitude!, o.longitude!]}
-                            icon={makeIcon(o.hierarchyLevel || "fastighet", o.id === selectedId)}
-                            eventHandlers={{
-                              click: () => setSelectedId(o.id === selectedId ? null : o.id),
-                            }}
-                          >
-                            <Popup>
-                              <div className="space-y-1">
-                                <div className="font-medium">{o.name}</div>
-                                {o.address && <div className="text-xs">{o.address}</div>}
-                                <Link href={`/objects/${o.id}`} className="text-xs text-primary hover:underline">
-                                  Öppna objekt →
-                                </Link>
-                              </div>
-                            </Popup>
-                          </Marker>
-                        ))}
+                        {clustersWithGeo.map((cl) => {
+                          const isSelected = sync.selectedClusterId === cl.id;
+                          const isHovered = sync.hoveredClusterId === cl.id;
+                          const baseColor = cl.color || "#3b82f6";
+                          return (
+                            <Circle
+                              key={`circle-${cl.id}`}
+                              center={[cl.centerLatitude!, cl.centerLongitude!]}
+                              radius={(cl.radiusKm || 5) * 1000}
+                              pathOptions={{
+                                color: isSelected ? "#f59e0b" : baseColor,
+                                fillColor: baseColor,
+                                fillOpacity: isSelected ? 0.18 : isHovered ? 0.14 : 0.08,
+                                weight: isSelected ? 3 : isHovered ? 2.5 : 2,
+                              }}
+                              eventHandlers={{
+                                click: () => setSelectedCluster(cl.id),
+                                mouseover: () => setHoveredCluster(cl.id),
+                                mouseout: () => setHoveredCluster(null),
+                              }}
+                            >
+                              <Popup>
+                                <div className="space-y-1">
+                                  <div className="font-medium">{cl.name}</div>
+                                  <div className="text-xs">{cl.objectCount} objekt · radie {cl.radiusKm ?? 5} km</div>
+                                  <Link href={`/clusters/${cl.id}`} className="text-xs text-primary hover:underline">
+                                    Öppna kluster →
+                                  </Link>
+                                </div>
+                              </Popup>
+                            </Circle>
+                          );
+                        })}
+                        <MarkerClusterLayer
+                          objects={mapObjects}
+                          sync={sync}
+                          onSelectObject={setSelectedObject}
+                          onHoverObject={setHoveredObject}
+                        />
                       </MapContainer>
                     </div>
                   )}
