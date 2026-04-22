@@ -61,6 +61,7 @@ export function getGrunddataItems(t: (key: string, fallback: string) => string, 
   const l = tl || svFallback;
   const useI18n = lang === "en";
   return [
+    { title: "Kunder", url: "/customers", icon: Building, description: "Översikt av kunder, kluster och objekt" },
     { title: useI18n ? l("nav.objects") : t("object_plural", l("nav.objects")), url: "/objects", icon: Building2, description: l("nav.objects.desc") },
     { title: useI18n ? l("nav.resources") : t("resource_plural", l("nav.resources")), url: "/resources", icon: Users, description: l("nav.resources.desc") },
     { title: useI18n ? l("nav.vehicles") : t("vehicle_plural", l("nav.vehicles")), url: "/vehicles", icon: Truck, description: l("nav.vehicles.desc") },

@@ -175,7 +175,7 @@ export interface IStorage {
   getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]>;
   getObject(id: string): Promise<ServiceObject | undefined>;
   getObjectByObjectNumber(tenantId: string, objectNumber: string): Promise<ServiceObject | undefined>;
-  getObjectsByCustomer(customerId: string): Promise<ServiceObject[]>;
+  getObjectsByCustomer(customerId: string, tenantId?: string): Promise<ServiceObject[]>;
   createObject(object: InsertObject): Promise<ServiceObject>;
   updateObject(id: string, object: Partial<InsertObject>): Promise<ServiceObject | undefined>;
   deleteObject(id: string): Promise<void>;
@@ -1075,8 +1075,10 @@ export class DatabaseStorage implements IStorage {
     return object || undefined;
   }
 
-  async getObjectsByCustomer(customerId: string): Promise<ServiceObject[]> {
-    return db.select().from(objects).where(and(eq(objects.customerId, customerId), isNull(objects.deletedAt)));
+  async getObjectsByCustomer(customerId: string, tenantId?: string): Promise<ServiceObject[]> {
+    const conditions = [eq(objects.customerId, customerId), isNull(objects.deletedAt)];
+    if (tenantId) conditions.push(eq(objects.tenantId, tenantId));
+    return db.select().from(objects).where(and(...conditions));
   }
 
   async createObject(insertObject: InsertObject): Promise<ServiceObject> {
