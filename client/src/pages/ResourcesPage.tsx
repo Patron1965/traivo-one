@@ -827,23 +827,26 @@ export default function ResourcesPage() {
         })}
       </div>
 
-      {filteredResources.length === 0 && !isLoading && (
-        <Card>
-          <CardContent className="p-0">
-            <EmptyState
-              icon={Users}
-              title={searchQuery || filterStatus !== "all" ? "Inga resurser matchade filtren" : "Inga resurser ännu"}
-              description={searchQuery || filterStatus !== "all"
-                ? "Försök med andra sökord eller rensa filtren"
-                : "Lägg till tekniker och resurser som ska schemaläggas för fältarbete"
-              }
-              actionLabel={searchQuery || filterStatus !== "all" ? undefined : "Lägg till resurs"}
-              onAction={searchQuery || filterStatus !== "all" ? undefined : () => setCreateOpen(true)}
-              actionIcon={UserPlus}
-            />
-          </CardContent>
-        </Card>
-      )}
+      {filteredResources.length === 0 && !isLoading && (() => {
+        const hasActiveFilter = !!searchQuery || competencyFilter !== "all" || availabilityFilter !== "all";
+        return (
+          <Card>
+            <CardContent className="p-0">
+              <EmptyState
+                icon={Users}
+                title={hasActiveFilter ? "Inga resurser matchade filtren" : "Inga resurser ännu"}
+                description={hasActiveFilter
+                  ? "Försök med andra sökord eller rensa filtren"
+                  : "Lägg till tekniker och resurser som ska schemaläggas för fältarbete"
+                }
+                actionLabel={hasActiveFilter ? undefined : "Lägg till resurs"}
+                onAction={hasActiveFilter ? undefined : () => setDialogOpen(true)}
+                actionIcon={UserPlus}
+              />
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between border-t pt-4" data-testid="pagination-resources">

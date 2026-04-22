@@ -49,6 +49,14 @@ import { registerUrgentJobRoutes } from "./routes/urgentJobRoutes";
 import { registerCapacityForecastRoutes, capacityForecastScheduler } from "./routes/capacityForecastRoutes";
 
 async function ensureDefaultTenant() {
+  // Only auto-create the legacy demo tenant if the database has no tenants at all.
+  // In production / customer setups (e.g. Kinab) this is a no-op.
+  const existing = await storage.getTenant(DEFAULT_TENANT_ID);
+  if (existing) return existing;
+  const { db } = await import("./db");
+  const { tenants } = await import("@shared/schema");
+  const any = await db.select().from(tenants).limit(1);
+  if (any.length > 0) return undefined;
   return storage.ensureTenant(DEFAULT_TENANT_ID, {
     name: "Plannix",
     orgNumber: "556789-1234",
