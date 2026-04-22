@@ -1229,7 +1229,8 @@ export class DatabaseStorage implements IStorage {
         or(
           sql`LOWER(${objects.name}) LIKE ${searchTerm}`,
           sql`LOWER(${objects.objectNumber}) LIKE ${searchTerm}`,
-          sql`LOWER(${objects.address}) LIKE ${searchTerm}`
+          sql`LOWER(${objects.address}) LIKE ${searchTerm}`,
+          sql`LOWER(${objects.city}) LIKE ${searchTerm}`
         )
       );
     }
