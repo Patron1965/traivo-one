@@ -639,31 +639,26 @@ interface FortnoxXlsxPreviewCustomer {
   invoiceEmail: string;
   phone: string;
   contactPerson: string;
-  alreadyImported: boolean;
+  isDuplicate: boolean;
+  matchType: "fortnox_mapping" | "customer_number" | "name" | null;
   existingMatch: { id: string; name: string } | null;
 }
 
 interface FortnoxXlsxValidateResponse {
   totalRows: number;
-  validRows: number;
-  skippedRows: { rowNum: number; reason: string; name: string }[];
-  alreadyImportedCount: number;
+  preview: FortnoxXlsxPreviewCustomer[];
+  duplicateCount: number;
   newCount: number;
-  customers: FortnoxXlsxPreviewCustomer[];
+  errorCount: number;
+  errorRows: { rowNum: number; reason: string; name: string }[];
 }
 
 interface FortnoxXlsxBulkResponse {
   success: boolean;
   importBatchId: string;
-  summary: {
-    customersCreated: number;
-    customersSkipped: number;
-    customersErrors: number;
-    objectsCreated: number;
-    objectsSkipped: number;
-    objectsErrors: number;
-    geocodingQueued: number;
-  };
+  customers: { created: number; merged: number; skipped: number };
+  objects: { created: number; geocodingQueued: number };
+  errorCount: number;
   errors: string[];
 }
 
@@ -672,6 +667,7 @@ function FortnoxXlsxImportPanel() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<FortnoxXlsxValidateResponse | null>(null);
   const [bulkResult, setBulkResult] = useState<FortnoxXlsxBulkResponse | null>(null);
+  const [mergeMode, setMergeMode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const validateMutation = useMutation({
@@ -692,7 +688,7 @@ function FortnoxXlsxImportPanel() {
     onSuccess: (data) => {
       setPreview(data);
       setBulkResult(null);
-      toast({ title: `${data.validRows} kunder hittades (${data.newCount} nya)` });
+      toast({ title: `${data.preview.length} företagskunder hittades (${data.newCount} nya, ${data.duplicateCount} dubbletter)` });
     },
     onError: (e: Error) => toast({ title: "Validering misslyckades", description: e.message, variant: "destructive" }),
   });
@@ -701,6 +697,7 @@ function FortnoxXlsxImportPanel() {
     mutationFn: async (f: File) => {
       const fd = new FormData();
       fd.append("file", f);
+      fd.append("mode", mergeMode ? "merge" : "skip");
       const res = await fetch("/api/import/fortnox-customers/bulk", {
         method: "POST",
         body: fd,
@@ -718,8 +715,8 @@ function FortnoxXlsxImportPanel() {
       queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
       queryClient.invalidateQueries({ queryKey: ["/api/fortnox/mappings"] });
       toast({
-        title: `${data.summary.customersCreated} kunder importerade`,
-        description: `${data.summary.objectsCreated} fastighet-objekt skapade, ${data.summary.geocodingQueued} köade för geokodning`,
+        title: `Import klar – ${data.customers.created} nya, ${data.customers.merged} uppdaterade, ${data.customers.skipped} hoppade`,
+        description: `${data.objects.created} fastighet-objekt skapade, ${data.objects.geocodingQueued} köade för geokodning`,
       });
     },
     onError: (e: Error) => toast({ title: "Import misslyckades", description: e.message, variant: "destructive" }),
@@ -795,8 +792,8 @@ function FortnoxXlsxImportPanel() {
               Steg 2 – Förhandsgranskning
             </CardTitle>
             <CardDescription>
-              {preview.totalRows} rader i filen, {preview.validRows} giltiga kunder
-              ({preview.newCount} nya, {preview.alreadyImportedCount} redan importerade)
+              {preview.totalRows} rader totalt, {preview.preview.length} företagskunder
+              ({preview.newCount} nya, {preview.duplicateCount} dubbletter, {preview.errorCount} hoppade)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -805,31 +802,46 @@ function FortnoxXlsxImportPanel() {
                 <div className="text-xs text-muted-foreground">Totalt rader</div>
                 <div className="text-2xl font-semibold">{preview.totalRows}</div>
               </div>
-              <div className="rounded-md border p-3" data-testid="stat-valid-rows">
-                <div className="text-xs text-muted-foreground">Giltiga</div>
-                <div className="text-2xl font-semibold">{preview.validRows}</div>
-              </div>
               <div className="rounded-md border p-3" data-testid="stat-new-rows">
                 <div className="text-xs text-muted-foreground">Nya att importera</div>
                 <div className="text-2xl font-semibold text-green-600">{preview.newCount}</div>
               </div>
-              <div className="rounded-md border p-3" data-testid="stat-already-imported">
-                <div className="text-xs text-muted-foreground">Redan importerade</div>
-                <div className="text-2xl font-semibold text-muted-foreground">{preview.alreadyImportedCount}</div>
+              <div className="rounded-md border p-3" data-testid="stat-duplicates">
+                <div className="text-xs text-muted-foreground">Dubbletter</div>
+                <div className="text-2xl font-semibold text-amber-600">{preview.duplicateCount}</div>
+              </div>
+              <div className="rounded-md border p-3" data-testid="stat-errors">
+                <div className="text-xs text-muted-foreground">Fel/hoppade</div>
+                <div className="text-2xl font-semibold text-muted-foreground">{preview.errorCount}</div>
               </div>
             </div>
 
-            {preview.skippedRows.length > 0 && (
+            {preview.duplicateCount > 0 && (
+              <div className="flex items-center gap-2 rounded-md border p-3 bg-muted/30">
+                <Checkbox
+                  id="merge-mode"
+                  checked={mergeMode}
+                  onCheckedChange={(c) => setMergeMode(c === true)}
+                  data-testid="checkbox-merge-mode"
+                />
+                <label htmlFor="merge-mode" className="text-sm cursor-pointer">
+                  <span className="font-medium">Uppdatera befintliga kunder (merge)</span>
+                  <span className="text-muted-foreground ml-2">– annars hoppas dubbletter över</span>
+                </label>
+              </div>
+            )}
+
+            {preview.errorRows.length > 0 && (
               <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 text-sm">
                 <div className="font-medium mb-1 flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-amber-600" />
-                  {preview.skippedRows.length} rader hoppas över
+                  {preview.errorRows.length} rader hoppas över
                 </div>
                 <ul className="text-xs text-muted-foreground space-y-0.5 max-h-24 overflow-y-auto">
-                  {preview.skippedRows.slice(0, 20).map((s) => (
+                  {preview.errorRows.slice(0, 20).map((s) => (
                     <li key={s.rowNum}>Rad {s.rowNum}: {s.reason} – {s.name || "(utan namn)"}</li>
                   ))}
-                  {preview.skippedRows.length > 20 && <li>… och {preview.skippedRows.length - 20} till</li>}
+                  {preview.errorRows.length > 20 && <li>… och {preview.errorRows.length - 20} till</li>}
                 </ul>
               </div>
             )}
@@ -847,27 +859,35 @@ function FortnoxXlsxImportPanel() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {preview.customers.slice(0, 200).map((c) => (
-                    <TableRow key={c.customerNumber} data-testid={`row-fortnox-${c.customerNumber}`}>
-                      <TableCell className="text-xs text-muted-foreground">{c.rowNum}</TableCell>
-                      <TableCell className="font-mono text-xs">{c.customerNumber}</TableCell>
-                      <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell className="text-xs">{c.address || "-"}</TableCell>
-                      <TableCell className="text-xs">{[c.postalCode, c.city].filter(Boolean).join(" ") || "-"}</TableCell>
-                      <TableCell>
-                        {c.alreadyImported ? (
-                          <Badge variant="secondary" className="text-xs">Importerad</Badge>
-                        ) : (
-                          <Badge className="text-xs bg-green-600">Ny</Badge>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {preview.preview.slice(0, 200).map((c) => {
+                    const dupLabel = c.matchType === "fortnox_mapping" ? "Fortnox-koppling"
+                      : c.matchType === "customer_number" ? "Kundnr"
+                      : c.matchType === "name" ? "Namn"
+                      : null;
+                    return (
+                      <TableRow key={c.customerNumber} data-testid={`row-fortnox-${c.customerNumber}`}>
+                        <TableCell className="text-xs text-muted-foreground">{c.rowNum}</TableCell>
+                        <TableCell className="font-mono text-xs">{c.customerNumber}</TableCell>
+                        <TableCell className="font-medium">{c.name}</TableCell>
+                        <TableCell className="text-xs">{c.address || "-"}</TableCell>
+                        <TableCell className="text-xs">{[c.postalCode, c.city].filter(Boolean).join(" ") || "-"}</TableCell>
+                        <TableCell>
+                          {c.isDuplicate ? (
+                            <Badge variant="secondary" className="text-xs" title={`Match via ${dupLabel}`}>
+                              Dubblett ({dupLabel})
+                            </Badge>
+                          ) : (
+                            <Badge className="text-xs bg-green-600">Ny</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
-              {preview.customers.length > 200 && (
+              {preview.preview.length > 200 && (
                 <div className="p-2 text-center text-xs text-muted-foreground">
-                  Visar 200 av {preview.customers.length} – alla importeras
+                  Visar 200 av {preview.preview.length} – alla bearbetas
                 </div>
               )}
             </ScrollArea>
@@ -901,29 +921,33 @@ function FortnoxXlsxImportPanel() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <div className="rounded-md border p-3" data-testid="stat-imported-customers">
                 <div className="text-xs text-muted-foreground">Kunder skapade</div>
-                <div className="text-2xl font-semibold text-green-600">{bulkResult.summary.customersCreated}</div>
+                <div className="text-2xl font-semibold text-green-600">{bulkResult.customers.created}</div>
               </div>
-              <div className="rounded-md border p-3" data-testid="stat-imported-objects">
-                <div className="text-xs text-muted-foreground">Objekt skapade</div>
-                <div className="text-2xl font-semibold text-green-600">{bulkResult.summary.objectsCreated}</div>
+              <div className="rounded-md border p-3" data-testid="stat-merged-customers">
+                <div className="text-xs text-muted-foreground">Kunder uppdaterade</div>
+                <div className="text-2xl font-semibold text-blue-600">{bulkResult.customers.merged}</div>
               </div>
               <div className="rounded-md border p-3" data-testid="stat-skipped">
                 <div className="text-xs text-muted-foreground">Hoppade över</div>
-                <div className="text-2xl font-semibold">{bulkResult.summary.customersSkipped}</div>
+                <div className="text-2xl font-semibold">{bulkResult.customers.skipped}</div>
+              </div>
+              <div className="rounded-md border p-3" data-testid="stat-imported-objects">
+                <div className="text-xs text-muted-foreground">Objekt skapade</div>
+                <div className="text-2xl font-semibold text-green-600">{bulkResult.objects.created}</div>
               </div>
               <div className="rounded-md border p-3" data-testid="stat-geocoding">
                 <div className="text-xs text-muted-foreground">Geokodning köad</div>
-                <div className="text-2xl font-semibold">{bulkResult.summary.geocodingQueued}</div>
+                <div className="text-2xl font-semibold">{bulkResult.objects.geocodingQueued}</div>
               </div>
             </div>
-            {bulkResult.summary.customersErrors > 0 && (
+            {bulkResult.errorCount > 0 && (
               <div className="rounded-md border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30 p-3 text-sm">
                 <div className="font-medium mb-1 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 text-red-600" />
-                  {bulkResult.summary.customersErrors} fel
+                  {bulkResult.errorCount} fel
                 </div>
                 <ul className="text-xs text-muted-foreground space-y-0.5 max-h-32 overflow-y-auto">
                   {bulkResult.errors.map((e, i) => <li key={i}>{e}</li>)}
@@ -950,7 +974,7 @@ export default function ImportPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [activeTab, setActiveTab] = useState<"modus" | "manual" | "mapped" | "history" | "quality">("modus");
+  const [activeTab, setActiveTab] = useState<"modus" | "manual" | "fortnox" | "mapped" | "history" | "quality">("modus");
   const [showObjectColumns, setShowObjectColumns] = useState(false);
   const [showTaskColumns, setShowTaskColumns] = useState(false);
   const [showEventColumns, setShowEventColumns] = useState(false);

@@ -1795,6 +1795,21 @@ app.post("/api/import/customers/validate", upload.single("file"), asyncHandler(a
 }));
 
 // === Fortnox-xlsx-import ===
+
+// Filtrerar Fortnox-rader enligt importspec: endast företagskunder (type=company eller tom),
+// active != "0", customer_number och name måste finnas.
+function isEligibleFortnoxRow(r: FortnoxCustomerRow): { ok: true } | { ok: false; reason: string } {
+  if (!r.customerNumber) return { ok: false, reason: "Saknar kundnummer" };
+  if (!r.name) return { ok: false, reason: "Saknar namn" };
+  // Type: tillåt company eller tom (privatpersoner = "private" hoppas över)
+  const t = r.type.toLowerCase().trim();
+  if (t && t !== "company") return { ok: false, reason: `Privatperson/okänd typ (${t})` };
+  // Active: skippa endast om explicit "0" eller "false"/"nej"
+  const a = r.active.toLowerCase().trim();
+  if (a === "0" || a === "false" || a === "nej") return { ok: false, reason: "Inaktiv kund" };
+  return { ok: true };
+}
+
 // Validera uppladdad Fortnox-xlsx-export och returnera förhandsgranskning + dubblettmatchning
 app.post("/api/import/fortnox-customers/validate", xlsxUpload.single("file"), asyncHandler(async (req, res) => {
   if (!req.file) throw new ValidationError("Ingen fil uppladdad");
@@ -1805,36 +1820,44 @@ app.post("/api/import/fortnox-customers/validate", xlsxUpload.single("file"), as
 
   const mapped = rawRows.map((r, i) => mapFortnoxRow(r, i + 2));
 
-  // Filtrera: endast aktiva kunder med customer_number
-  const valid: FortnoxCustomerRow[] = [];
-  const skipped: { rowNum: number; reason: string; name: string }[] = [];
+  // Eligibility-filter
+  const eligible: FortnoxCustomerRow[] = [];
+  const errorRows: { rowNum: number; reason: string; name: string }[] = [];
   for (const r of mapped) {
-    if (!r.customerNumber) { skipped.push({ rowNum: r.rowNum, reason: "Saknar kundnummer", name: r.name }); continue; }
-    if (!r.name) { skipped.push({ rowNum: r.rowNum, reason: "Saknar namn", name: r.customerNumber }); continue; }
-    if (r.active && r.active !== "1" && r.active.toLowerCase() !== "true" && r.active.toLowerCase() !== "ja") {
-      skipped.push({ rowNum: r.rowNum, reason: "Inaktiv kund", name: r.name });
-      continue;
-    }
-    valid.push(r);
+    const check = isEligibleFortnoxRow(r);
+    if (check.ok) eligible.push(r);
+    else errorRows.push({ rowNum: r.rowNum, reason: check.reason, name: r.name || r.customerNumber });
   }
 
-  // Hämta befintliga Fortnox-mappningar (customer) för dedup
+  // Hämta befintliga Fortnox-mappningar (customer) för dedup primär
   const existingMappings = await storage.getFortnoxMappings(tenantId, "customer");
   const mappedFortnoxIds = new Set(existingMappings.map(m => m.fortnoxId));
 
-  // Hämta befintliga kundnummer för soft-match
+  // Hämta befintliga kunder för dubblettmatchning (customer_number primärt + name fallback)
   const existingCustomers = await db
     .select({ id: customers.id, customerNumber: customers.customerNumber, name: customers.name })
     .from(customers)
     .where(and(eq(customers.tenantId, tenantId), isNull(customers.deletedAt)));
-  const customerNumberToId = new Map<string, { id: string; name: string }>();
+  const customerNumberToCustomer = new Map<string, { id: string; name: string }>();
+  const customerNameToCustomer = new Map<string, { id: string; name: string }>();
   for (const c of existingCustomers) {
-    if (c.customerNumber) customerNumberToId.set(c.customerNumber, { id: c.id, name: c.name });
+    if (c.customerNumber) customerNumberToCustomer.set(c.customerNumber, { id: c.id, name: c.name });
+    customerNameToCustomer.set(c.name.toLowerCase().trim(), { id: c.id, name: c.name });
   }
 
-  const preview = valid.map(r => {
+  let duplicateCount = 0;
+  let newCount = 0;
+  const preview = eligible.map(r => {
     const alreadyMapped = mappedFortnoxIds.has(r.customerNumber);
-    const existingByNumber = customerNumberToId.get(r.customerNumber) || null;
+    const matchByNumber = customerNumberToCustomer.get(r.customerNumber) || null;
+    const matchByName = !matchByNumber ? (customerNameToCustomer.get(r.name.toLowerCase().trim()) || null) : null;
+    const existingMatch = matchByNumber || matchByName;
+    const matchType: "fortnox_mapping" | "customer_number" | "name" | null =
+      alreadyMapped ? "fortnox_mapping" :
+      matchByNumber ? "customer_number" :
+      matchByName ? "name" : null;
+    const isDuplicate = alreadyMapped || existingMatch !== null;
+    if (isDuplicate) duplicateCount++; else newCount++;
     return {
       rowNum: r.rowNum,
       customerNumber: r.customerNumber,
@@ -1847,28 +1870,33 @@ app.post("/api/import/fortnox-customers/validate", xlsxUpload.single("file"), as
       invoiceEmail: r.invoiceEmail,
       phone: r.phone,
       contactPerson: r.contactPerson,
-      alreadyImported: alreadyMapped,
-      existingMatch: existingByNumber,
+      isDuplicate,
+      matchType,
+      existingMatch,
     };
   });
 
   res.json({
     totalRows: rawRows.length,
-    validRows: valid.length,
-    skippedRows: skipped,
-    alreadyImportedCount: preview.filter(p => p.alreadyImported).length,
-    newCount: preview.filter(p => !p.alreadyImported).length,
-    customers: preview,
+    preview,
+    duplicateCount,
+    newCount,
+    errorCount: errorRows.length,
+    errorRows,
   });
 }));
 
-// Bulk-import av Fortnox-kunder från xlsx → skapar kund + fastighet-objekt + fortnox_mappings
+// Bulk-import av Fortnox-kunder från xlsx → skapar/uppdaterar kund + fastighet-objekt + fortnox_mappings
 app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncHandler(async (req, res) => {
   if (!req.file) throw new ValidationError("Ingen fil uppladdad");
   const tenantId = await getTenantIdWithFallback(req);
   const importBatchId = crypto.randomUUID();
 
-  // Selected customer numbers att importera (om utelämnat: alla nya)
+  // mode=merge => uppdatera befintliga kunder; default = skip
+  const mode = ((req.body?.mode as string) || "skip").toLowerCase();
+  const merge = mode === "merge";
+
+  // Valbart: lista över customer_number som ska importeras (default: alla berättigade)
   const selectedRaw = (req.body?.selectedCustomerNumbers as string) || "";
   const selectedSet = selectedRaw
     ? new Set(selectedRaw.split(",").map(s => s.trim()).filter(Boolean))
@@ -1879,68 +1907,121 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
   const mapped = rawRows.map((r, i) => mapFortnoxRow(r, i + 2));
 
   const existingCustomerMappings = await storage.getFortnoxMappings(tenantId, "customer");
-  const customerMappedFortnoxIds = new Set(existingCustomerMappings.map(m => m.fortnoxId));
+  const customerFortnoxIdToUnicornId = new Map(existingCustomerMappings.map(m => [m.fortnoxId, m.unicornId]));
   const existingObjectMappings = await storage.getFortnoxMappings(tenantId, "object");
-  const objectMappedFortnoxIds = new Set(existingObjectMappings.map(m => m.fortnoxId));
+  const objectFortnoxIdToUnicornId = new Map(existingObjectMappings.map(m => [m.fortnoxId, m.unicornId]));
+
+  // För namn-fallback i bulk
+  const existingCustomers = await db
+    .select({ id: customers.id, customerNumber: customers.customerNumber, name: customers.name })
+    .from(customers)
+    .where(and(eq(customers.tenantId, tenantId), isNull(customers.deletedAt)));
+  const customerNumberToId = new Map<string, string>();
+  const customerNameToId = new Map<string, string>();
+  for (const c of existingCustomers) {
+    if (c.customerNumber) customerNumberToId.set(c.customerNumber, c.id);
+    customerNameToId.set(c.name.toLowerCase().trim(), c.id);
+  }
 
   const summary = {
-    customersCreated: 0,
-    customersSkipped: 0,
-    customersErrors: 0,
-    objectsCreated: 0,
-    objectsSkipped: 0,
-    objectsErrors: 0,
-    geocodingQueued: 0,
+    customers: { created: 0, merged: 0, skipped: 0 },
+    objects: { created: 0, geocodingQueued: 0 },
   };
+  let errorCount = 0;
   const errors: string[] = [];
   const newObjectIdsForGeocoding: string[] = [];
 
   for (const r of mapped) {
-    if (!r.customerNumber || !r.name) continue;
-    if (r.active && r.active !== "1" && r.active.toLowerCase() !== "true" && r.active.toLowerCase() !== "ja") continue;
+    const check = isEligibleFortnoxRow(r);
+    if (!check.ok) continue;
     if (selectedSet && !selectedSet.has(r.customerNumber)) continue;
-    if (customerMappedFortnoxIds.has(r.customerNumber)) {
-      summary.customersSkipped++;
-      continue;
-    }
+
+    // Hitta befintlig kund: 1) Fortnox-mappning, 2) customer_number, 3) namn
+    let existingCustomerId: string | null =
+      customerFortnoxIdToUnicornId.get(r.customerNumber) ||
+      customerNumberToId.get(r.customerNumber) ||
+      customerNameToId.get(r.name.toLowerCase().trim()) ||
+      null;
 
     try {
-      const result = await db.transaction(async (tx) => {
-        const [createdCustomer] = await tx.insert(customers).values({
-          tenantId,
-          name: r.name,
-          customerNumber: r.customerNumber,
-          orgNumber: r.orgNumber || null,
-          contactPerson: r.contactPerson || null,
-          email: r.email || null,
-          phone: r.phone || null,
-          address: r.address || null,
-          city: r.city || null,
-          postalCode: r.postalCode || null,
-          invoiceEmail: r.invoiceEmail || null,
-          invoiceAddress: r.invoiceAddress || null,
-          invoicePostalCode: r.invoicePostalCode || null,
-          invoiceCity: r.invoiceCity || null,
-          notes: "Importerat från Fortnox-xlsx",
-          importBatchId,
-        }).returning();
+      await db.transaction(async (tx) => {
+        let customerId: string;
+        if (existingCustomerId) {
+          if (!merge) {
+            summary.customers.skipped++;
+            // Säkerställ ändå att Fortnox-mappning finns för befintlig kund
+            if (!customerFortnoxIdToUnicornId.has(r.customerNumber)) {
+              await tx.insert(fortnoxMappings).values({
+                tenantId, entityType: "customer", unicornId: existingCustomerId, fortnoxId: r.customerNumber,
+              });
+              customerFortnoxIdToUnicornId.set(r.customerNumber, existingCustomerId);
+            }
+            return;
+          }
+          // Merge: uppdatera fält som inte är tomma i nya raden
+          await tx.update(customers).set({
+            name: r.name,
+            customerNumber: r.customerNumber,
+            ...(r.orgNumber && { orgNumber: r.orgNumber }),
+            ...(r.contactPerson && { contactPerson: r.contactPerson }),
+            ...(r.email && { email: r.email }),
+            ...(r.phone && { phone: r.phone }),
+            ...(r.address && { address: r.address }),
+            ...(r.city && { city: r.city }),
+            ...(r.postalCode && { postalCode: r.postalCode }),
+            ...(r.invoiceEmail && { invoiceEmail: r.invoiceEmail }),
+            ...(r.invoiceAddress && { invoiceAddress: r.invoiceAddress }),
+            ...(r.invoicePostalCode && { invoicePostalCode: r.invoicePostalCode }),
+            ...(r.invoiceCity && { invoiceCity: r.invoiceCity }),
+          }).where(and(eq(customers.id, existingCustomerId), eq(customers.tenantId, tenantId)));
+          customerId = existingCustomerId;
+          summary.customers.merged++;
+          // Säkerställ Fortnox-mappning
+          if (!customerFortnoxIdToUnicornId.has(r.customerNumber)) {
+            await tx.insert(fortnoxMappings).values({
+              tenantId, entityType: "customer", unicornId: customerId, fortnoxId: r.customerNumber,
+            });
+            customerFortnoxIdToUnicornId.set(r.customerNumber, customerId);
+          }
+        } else {
+          // Skapa ny kund
+          const [createdCustomer] = await tx.insert(customers).values({
+            tenantId,
+            name: r.name,
+            customerNumber: r.customerNumber,
+            orgNumber: r.orgNumber || null,
+            contactPerson: r.contactPerson || null,
+            email: r.email || null,
+            phone: r.phone || null,
+            address: r.address || null,
+            city: r.city || null,
+            postalCode: r.postalCode || null,
+            invoiceEmail: r.invoiceEmail || null,
+            invoiceAddress: r.invoiceAddress || null,
+            invoicePostalCode: r.invoicePostalCode || null,
+            invoiceCity: r.invoiceCity || null,
+            notes: "Importerat från Fortnox-xlsx",
+            importBatchId,
+          }).returning();
+          customerId = createdCustomer.id;
+          await tx.insert(fortnoxMappings).values({
+            tenantId, entityType: "customer", unicornId: customerId, fortnoxId: r.customerNumber,
+          });
+          customerFortnoxIdToUnicornId.set(r.customerNumber, customerId);
+          customerNumberToId.set(r.customerNumber, customerId);
+          customerNameToId.set(r.name.toLowerCase().trim(), customerId);
+          summary.customers.created++;
+        }
 
-        await tx.insert(fortnoxMappings).values({
-          tenantId,
-          entityType: "customer",
-          unicornId: createdCustomer.id,
-          fortnoxId: r.customerNumber,
-        });
-
-        let createdObjectId: string | null = null;
+        // Skapa fastighet-objekt om Fortnox-mappning saknas (oavsett create/merge)
         const objectFortnoxId = r.customerNumber;
-        if (!objectMappedFortnoxIds.has(objectFortnoxId)) {
+        if (!objectFortnoxIdToUnicornId.has(objectFortnoxId)) {
           const objectName = r.deliveryName
             ? `${r.name} – ${r.deliveryName}`
             : (r.city ? `${r.name} – ${r.city}` : r.name);
           const [createdObject] = await tx.insert(objects).values({
             tenantId,
-            customerId: createdCustomer.id,
+            customerId,
             name: objectName,
             objectNumber: r.customerNumber,
             objectType: "fastighet",
@@ -1954,46 +2035,33 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
             importBatchId,
           }).returning();
           await tx.insert(fortnoxMappings).values({
-            tenantId,
-            entityType: "object",
-            unicornId: createdObject.id,
-            fortnoxId: objectFortnoxId,
+            tenantId, entityType: "object", unicornId: createdObject.id, fortnoxId: objectFortnoxId,
           });
-          createdObjectId = createdObject.id;
+          objectFortnoxIdToUnicornId.set(objectFortnoxId, createdObject.id);
+          summary.objects.created++;
+          if (r.address && r.address.trim() !== "") {
+            newObjectIdsForGeocoding.push(createdObject.id);
+          }
         }
-
-        return { customerId: createdCustomer.id, objectId: createdObjectId };
       });
-
-      summary.customersCreated++;
-      customerMappedFortnoxIds.add(r.customerNumber);
-      if (result.objectId) {
-        summary.objectsCreated++;
-        objectMappedFortnoxIds.add(r.customerNumber);
-        if (r.address && r.address.trim() !== "") {
-          newObjectIdsForGeocoding.push(result.objectId);
-        }
-      } else {
-        summary.objectsSkipped++;
-      }
     } catch (err) {
-      summary.customersErrors++;
+      errorCount++;
       errors.push(`Rad ${r.rowNum} (${r.customerNumber} ${r.name}): ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
-  // Fire-and-forget geokodning av nya objekt
+  // Fire-and-forget geokodning (triggerGeocodeIfMissing returnerar void och hanterar egna fel)
   for (const objId of newObjectIdsForGeocoding) {
-    triggerGeocodeIfMissing(objId).catch((e) => {
-      console.error(`[fortnox-xlsx-import] Geocoding-trigger misslyckades för objekt ${objId}:`, e);
-    });
+    triggerGeocodeIfMissing(objId);
   }
-  summary.geocodingQueued = newObjectIdsForGeocoding.length;
+  summary.objects.geocodingQueued = newObjectIdsForGeocoding.length;
 
   res.json({
     success: true,
     importBatchId,
-    summary,
+    customers: summary.customers,
+    objects: summary.objects,
+    errorCount,
     errors: errors.slice(0, 50),
   });
 }));
