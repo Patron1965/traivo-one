@@ -321,6 +321,7 @@ export const workOrders = pgTable("work_orders", {
   index("idx_work_orders_resource_date").on(table.resourceId, table.scheduledDate),
   index("idx_work_orders_tenant_deleted").on(table.tenantId, table.deletedAt),
   index("idx_work_orders_tenant_resource_date").on(table.tenantId, table.resourceId, table.scheduledDate),
+  index("idx_work_orders_tenant_customer").on(table.tenantId, table.customerId),
 ]);
 
 // Orderrader - artiklar kopplade till en order med beräknade priser
@@ -766,6 +767,7 @@ export const clusters = pgTable("clusters", {
 }, (table) => [
   index("idx_clusters_tenant").on(table.tenantId),
   index("idx_clusters_tenant_status").on(table.tenantId, table.status),
+  index("idx_clusters_tenant_root_customer").on(table.tenantId, table.rootCustomerId),
 ]);
 
 // Team - grupper av resurser

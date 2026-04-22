@@ -204,6 +204,13 @@
       "when": 1776720234081,
       "tag": "0028_purple_beyonder",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1777000000000,
+      "tag": "0029_kinab_search_indexes",
+      "breakpoints": true
     }
   ]
 }
