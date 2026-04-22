@@ -6,7 +6,7 @@ import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
-import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
+import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
 import multer from "multer";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
@@ -2134,7 +2134,9 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
       });
     } catch (err) {
       errorCount++;
-      errors.push(`Kund ${customerNumber} (${primary.name}): ${err instanceof Error ? err.message : String(err)}`);
+      const friendly = describeFortnoxMappingConflict(err);
+      const detail = friendly || (err instanceof Error ? err.message : String(err));
+      errors.push(`Kund ${customerNumber} (${primary.name}): ${detail}`);
     }
   }
 

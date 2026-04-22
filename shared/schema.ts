@@ -1507,6 +1507,7 @@ export const fortnoxMappings = pgTable("fortnox_mappings", {
 }, (table) => [
   index("idx_fortnox_mappings_tenant").on(table.tenantId),
   index("idx_fortnox_mappings_entity").on(table.entityType, table.unicornId),
+  uniqueIndex("uq_fortnox_mappings_tenant_entity_fortnox").on(table.tenantId, table.entityType, table.fortnoxId),
 ]);
 
 // Fakturaexport-logg

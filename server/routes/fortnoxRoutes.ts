@@ -6,7 +6,7 @@ import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
-import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
+import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
 import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts } from "@shared/schema";
 import { getISOWeek } from "./helpers";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
@@ -2585,7 +2585,9 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
         }
       } catch (err) {
         customerSummary.errors++;
-        errorMessages.push(`Kund ${customerNumber}: ${err instanceof Error ? err.message : String(err)}`);
+        const friendly = describeFortnoxMappingConflict(err);
+        const detail = friendly || (err instanceof Error ? err.message : String(err));
+        errorMessages.push(`Kund ${customerNumber}: ${detail}`);
       }
     }
 
@@ -2732,7 +2734,9 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
           }
         } catch (err) {
           objectSummary.errors++;
-          errorMessages.push(`Objekt ${so.fortnoxId} (kund ${customerNumber}): ${err instanceof Error ? err.message : String(err)}`);
+          const friendly = describeFortnoxMappingConflict(err);
+          const detail = friendly || (err instanceof Error ? err.message : String(err));
+          errorMessages.push(`Objekt ${so.fortnoxId} (kund ${customerNumber}): ${detail}`);
         }
       }
     }
@@ -2823,7 +2827,9 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
           contactSummary.created++;
         } catch (err) {
           contactSummary.errors++;
-          errorMessages.push(`Kontakt ${mappingFortnoxId}: ${err instanceof Error ? err.message : String(err)}`);
+          const friendly = describeFortnoxMappingConflict(err);
+          const detail = friendly || (err instanceof Error ? err.message : String(err));
+          errorMessages.push(`Kontakt ${mappingFortnoxId}: ${detail}`);
         }
       }
     }
@@ -2869,7 +2875,9 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
             articleSummary.created++;
           } catch (err) {
             articleSummary.errors++;
-            errorMessages.push(`Artikel ${articleNumber}: ${err instanceof Error ? err.message : String(err)}`);
+            const friendly = describeFortnoxMappingConflict(err);
+            const detail = friendly || (err instanceof Error ? err.message : String(err));
+            errorMessages.push(`Artikel ${articleNumber}: ${detail}`);
           }
         }
       } catch (err) {

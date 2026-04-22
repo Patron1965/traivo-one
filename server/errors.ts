@@ -39,3 +39,21 @@ export class ConflictError extends AppError {
     super(message, 409);
   }
 }
+
+/**
+ * Översätter Postgres unique-constraint-fel (kod 23505) på fortnox_mappings till
+ * ett tydligt svenskt meddelande. Returnerar null om felet inte är en sådan kollision.
+ */
+export function describeFortnoxMappingConflict(err: unknown): string | null {
+  if (!err || typeof err !== "object") return null;
+  const e = err as { code?: string; constraint?: string; constraint_name?: string; message?: string };
+  const constraint = e.constraint || e.constraint_name || "";
+  const isUniqueViolation = e.code === "23505";
+  const matchesMappingIndex =
+    constraint === "uq_fortnox_mappings_tenant_entity_fortnox" ||
+    (typeof e.message === "string" && e.message.includes("uq_fortnox_mappings_tenant_entity_fortnox"));
+  if (isUniqueViolation && matchesMappingIndex) {
+    return "Fortnox-kopplingen finns redan för denna kund/objekt — importen rullades tillbaka för att förhindra dubblett.";
+  }
+  return null;
+}
