@@ -20,14 +20,10 @@
  */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { db } from "../server/db";
-import { sql, getTableName, isTable, Table } from "drizzle-orm";
+import { sql, getTableName, isTable, type Table } from "drizzle-orm";
 import * as schema from "../shared/schema";
-
-function isDrizzleTable(value: unknown): value is Table {
-  return isTable(value);
-}
 
 const KINAB_TENANT_ID = "kinab";
 const ANNA_USER_ID = "42556180";
@@ -75,12 +71,9 @@ function takeBackup(): string {
 function collectSchemaTableNames(): string[] {
   const names = new Set<string>();
   for (const value of Object.values(schema as Record<string, unknown>)) {
-    if (value && isTable(value as any)) {
-      try {
-        names.add(getTableName(value as any));
-      } catch {
-        // not a drizzle table — skip
-      }
+    if (isTable(value)) {
+      const table: Table = value;
+      names.add(getTableName(table));
     }
   }
   return Array.from(names).sort();
