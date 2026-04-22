@@ -1800,6 +1800,15 @@ app.post("/api/import/customers/validate", upload.single("file"), asyncHandler(a
 
 // === Fortnox-xlsx-import ===
 
+// Stabil nyckel för en leveransadress: lowercase + trim + kollapsa whitespace.
+// Används för dedup av leveransadresser inom samma Fortnox-kund och för stabil
+// fortnoxId vid re-import (`delivery:<customerNumber>:<key>`).
+function deliveryAddressKey(address: string | null, postalCode: string | null, city: string | null): string {
+  return [address, postalCode, city]
+    .map(s => (s || "").toLowerCase().replace(/\s+/g, " ").trim())
+    .join("|");
+}
+
 // Filtrerar Fortnox-rader enligt importspec: endast företagskunder (type=company eller tom),
 // active != "0", customer_number och name måste finnas.
 function isEligibleFortnoxRow(r: FortnoxCustomerRow): { ok: true } | { ok: false; reason: string } {
@@ -1927,6 +1936,27 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
     customerNameToId.set(c.name.toLowerCase().trim(), c.id);
   }
 
+  // För backwards-kompatibilitet: hämta adress för befintliga objekt mappade
+  // via fortnoxId = customerNumber (legacy single-object-per-customer).
+  // Detta används för att undvika att skapa ett "delivery:" duplikat för en
+  // adress som redan finns som legacy-objekt.
+  const legacyObjectIds = existingObjectMappings
+    .filter(m => !m.fortnoxId.includes(":"))
+    .map(m => m.unicornId);
+  const legacyObjectAddressByFortnoxId = new Map<string, string>();
+  if (legacyObjectIds.length > 0) {
+    const legacyObjects = await db
+      .select({ id: objects.id, address: objects.address, postalCode: objects.postalCode, city: objects.city })
+      .from(objects)
+      .where(inArray(objects.id, legacyObjectIds));
+    const idToObj = new Map(legacyObjects.map(o => [o.id, o]));
+    for (const m of existingObjectMappings) {
+      if (m.fortnoxId.includes(":")) continue;
+      const o = idToObj.get(m.unicornId);
+      if (o) legacyObjectAddressByFortnoxId.set(m.fortnoxId, deliveryAddressKey(o.address, o.postalCode, o.city));
+    }
+  }
+
   const summary = {
     customers: { created: 0, merged: 0, skipped: 0 },
     objects: { created: 0, geocodingQueued: 0 },
@@ -1935,16 +1965,38 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
   const errors: string[] = [];
   const newObjectIdsForGeocoding: string[] = [];
 
+  // Gruppera berättigade rader per customer_number så att flera leveransadress-
+  // rader för samma kund kan bli flera fastighet-objekt.
+  const rowsByCustomer = new Map<string, FortnoxCustomerRow[]>();
   for (const r of mapped) {
     const check = isEligibleFortnoxRow(r);
     if (!check.ok) continue;
     if (selectedSet && !selectedSet.has(r.customerNumber)) continue;
+    const arr = rowsByCustomer.get(r.customerNumber) || [];
+    arr.push(r);
+    rowsByCustomer.set(r.customerNumber, arr);
+  }
+
+  for (const [customerNumber, rows] of rowsByCustomer) {
+    // Välj en "primary" som föredrar rader med ifylld leveransadress, så att
+    // single-object-fallbacken inte plockar en tom adress när en ifylld finns.
+    const primary = rows.find(r => r.address && r.address.trim() !== "") || rows[0];
+
+    // Bygg unika leveransadresser inom samma kund (deduplicera identiska rader)
+    const uniqueDeliveryRows = new Map<string, FortnoxCustomerRow>();
+    for (const r of rows) {
+      const key = deliveryAddressKey(r.address, r.postalCode, r.city);
+      if (!uniqueDeliveryRows.has(key)) uniqueDeliveryRows.set(key, r);
+    }
+    const deliveryRowsWithAddress = Array.from(uniqueDeliveryRows.entries())
+      .filter(([, r]) => r.address && r.address.trim() !== "");
+    const useMultiDelivery = deliveryRowsWithAddress.length > 1;
 
     // Hitta befintlig kund: 1) Fortnox-mappning, 2) customer_number, 3) namn
-    let existingCustomerId: string | null =
-      customerFortnoxIdToUnicornId.get(r.customerNumber) ||
-      customerNumberToId.get(r.customerNumber) ||
-      customerNameToId.get(r.name.toLowerCase().trim()) ||
+    const existingCustomerId: string | null =
+      customerFortnoxIdToUnicornId.get(customerNumber) ||
+      customerNumberToId.get(customerNumber) ||
+      customerNameToId.get(primary.name.toLowerCase().trim()) ||
       null;
 
     try {
@@ -1953,103 +2005,136 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
         if (existingCustomerId && !merge) {
           summary.customers.skipped++;
           customerId = existingCustomerId;
-          // Säkerställ ändå att Fortnox-mappning finns för befintlig kund
-          if (!customerFortnoxIdToUnicornId.has(r.customerNumber)) {
+          if (!customerFortnoxIdToUnicornId.has(customerNumber)) {
             await tx.insert(fortnoxMappings).values({
-              tenantId, entityType: "customer", unicornId: existingCustomerId, fortnoxId: r.customerNumber,
+              tenantId, entityType: "customer", unicornId: existingCustomerId, fortnoxId: customerNumber,
             });
-            customerFortnoxIdToUnicornId.set(r.customerNumber, existingCustomerId);
+            customerFortnoxIdToUnicornId.set(customerNumber, existingCustomerId);
           }
-          // Fortsätt nedan så att saknat objekt + objekt-mappning fortfarande skapas
         } else if (existingCustomerId) {
-          // Merge: uppdatera fält som inte är tomma i nya raden
           await tx.update(customers).set({
-            name: r.name,
-            customerNumber: r.customerNumber,
-            ...(r.orgNumber && { orgNumber: r.orgNumber }),
-            ...(r.contactPerson && { contactPerson: r.contactPerson }),
-            ...(r.email && { email: r.email }),
-            ...(r.phone && { phone: r.phone }),
-            ...(r.address && { address: r.address }),
-            ...(r.city && { city: r.city }),
-            ...(r.postalCode && { postalCode: r.postalCode }),
-            ...(r.invoiceEmail && { invoiceEmail: r.invoiceEmail }),
-            ...(r.invoiceAddress && { invoiceAddress: r.invoiceAddress }),
-            ...(r.invoicePostalCode && { invoicePostalCode: r.invoicePostalCode }),
-            ...(r.invoiceCity && { invoiceCity: r.invoiceCity }),
+            name: primary.name,
+            customerNumber: customerNumber,
+            ...(primary.orgNumber && { orgNumber: primary.orgNumber }),
+            ...(primary.contactPerson && { contactPerson: primary.contactPerson }),
+            ...(primary.email && { email: primary.email }),
+            ...(primary.phone && { phone: primary.phone }),
+            ...(primary.address && { address: primary.address }),
+            ...(primary.city && { city: primary.city }),
+            ...(primary.postalCode && { postalCode: primary.postalCode }),
+            ...(primary.invoiceEmail && { invoiceEmail: primary.invoiceEmail }),
+            ...(primary.invoiceAddress && { invoiceAddress: primary.invoiceAddress }),
+            ...(primary.invoicePostalCode && { invoicePostalCode: primary.invoicePostalCode }),
+            ...(primary.invoiceCity && { invoiceCity: primary.invoiceCity }),
           }).where(and(eq(customers.id, existingCustomerId), eq(customers.tenantId, tenantId)));
           customerId = existingCustomerId;
           summary.customers.merged++;
-          // Säkerställ Fortnox-mappning
-          if (!customerFortnoxIdToUnicornId.has(r.customerNumber)) {
+          if (!customerFortnoxIdToUnicornId.has(customerNumber)) {
             await tx.insert(fortnoxMappings).values({
-              tenantId, entityType: "customer", unicornId: customerId, fortnoxId: r.customerNumber,
+              tenantId, entityType: "customer", unicornId: customerId, fortnoxId: customerNumber,
             });
-            customerFortnoxIdToUnicornId.set(r.customerNumber, customerId);
+            customerFortnoxIdToUnicornId.set(customerNumber, customerId);
           }
         } else {
-          // Skapa ny kund
           const [createdCustomer] = await tx.insert(customers).values({
             tenantId,
-            name: r.name,
-            customerNumber: r.customerNumber,
-            orgNumber: r.orgNumber || null,
-            contactPerson: r.contactPerson || null,
-            email: r.email || null,
-            phone: r.phone || null,
-            address: r.address || null,
-            city: r.city || null,
-            postalCode: r.postalCode || null,
-            invoiceEmail: r.invoiceEmail || null,
-            invoiceAddress: r.invoiceAddress || null,
-            invoicePostalCode: r.invoicePostalCode || null,
-            invoiceCity: r.invoiceCity || null,
+            name: primary.name,
+            customerNumber: customerNumber,
+            orgNumber: primary.orgNumber || null,
+            contactPerson: primary.contactPerson || null,
+            email: primary.email || null,
+            phone: primary.phone || null,
+            address: primary.address || null,
+            city: primary.city || null,
+            postalCode: primary.postalCode || null,
+            invoiceEmail: primary.invoiceEmail || null,
+            invoiceAddress: primary.invoiceAddress || null,
+            invoicePostalCode: primary.invoicePostalCode || null,
+            invoiceCity: primary.invoiceCity || null,
             notes: "Importerat från Fortnox-xlsx",
             importBatchId,
           }).returning();
           customerId = createdCustomer.id;
           await tx.insert(fortnoxMappings).values({
-            tenantId, entityType: "customer", unicornId: customerId, fortnoxId: r.customerNumber,
+            tenantId, entityType: "customer", unicornId: customerId, fortnoxId: customerNumber,
           });
-          customerFortnoxIdToUnicornId.set(r.customerNumber, customerId);
-          customerNumberToId.set(r.customerNumber, customerId);
-          customerNameToId.set(r.name.toLowerCase().trim(), customerId);
+          customerFortnoxIdToUnicornId.set(customerNumber, customerId);
+          customerNumberToId.set(customerNumber, customerId);
+          customerNameToId.set(primary.name.toLowerCase().trim(), customerId);
           summary.customers.created++;
         }
 
-        // Skapa fastighet-objekt om Fortnox-mappning saknas (oavsett create/merge)
-        const objectFortnoxId = r.customerNumber;
-        if (!objectFortnoxIdToUnicornId.has(objectFortnoxId)) {
-          // Spec: objects.name = delivery_name om finns, annars customers.name
-          const objectName = r.deliveryName || r.name;
-          const [createdObject] = await tx.insert(objects).values({
-            tenantId,
-            customerId,
-            name: objectName,
-            objectNumber: r.customerNumber,
-            objectType: "fastighet",
-            hierarchyLevel: "fastighet",
-            objectLevel: 1,
-            address: r.address || null,
-            city: r.city || null,
-            postalCode: r.postalCode || null,
-            status: "active",
-            notes: "Skapad automatiskt vid Fortnox-xlsx-import",
-            importBatchId,
-          }).returning();
-          await tx.insert(fortnoxMappings).values({
-            tenantId, entityType: "object", unicornId: createdObject.id, fortnoxId: objectFortnoxId,
-          });
-          objectFortnoxIdToUnicornId.set(objectFortnoxId, createdObject.id);
-          summary.objects.created++;
-          if (r.address && r.address.trim() !== "") {
-            newObjectIdsForGeocoding.push(createdObject.id);
+        // Skapa fastighet-objekt: en per unik leveransadress vid flera, annars
+        // ett enstaka standardobjekt (legacy-beteende).
+        const legacyAddressKey = legacyObjectAddressByFortnoxId.get(customerNumber);
+
+        if (useMultiDelivery) {
+          for (const [addrKey, r] of deliveryRowsWithAddress) {
+            const objectFortnoxId = `delivery:${customerNumber}:${addrKey}`;
+            if (objectFortnoxIdToUnicornId.has(objectFortnoxId)) continue;
+            // Hoppa över om legacy-objekt redan finns för exakt samma adress
+            if (legacyAddressKey && legacyAddressKey === addrKey) continue;
+
+            const objectName = r.deliveryName
+              || (r.city ? `${primary.name} – ${r.city}` : `${primary.name} – ${r.address}`);
+            const [createdObject] = await tx.insert(objects).values({
+              tenantId,
+              customerId,
+              name: objectName,
+              objectNumber: `${customerNumber}-${addrKey.slice(0, 16)}`,
+              objectType: "fastighet",
+              hierarchyLevel: "fastighet",
+              objectLevel: 1,
+              address: r.address || null,
+              city: r.city || null,
+              postalCode: r.postalCode || null,
+              status: "active",
+              notes: "Skapad automatiskt vid Fortnox-xlsx-import (leveransadress)",
+              importBatchId,
+            }).returning();
+            await tx.insert(fortnoxMappings).values({
+              tenantId, entityType: "object", unicornId: createdObject.id, fortnoxId: objectFortnoxId,
+            });
+            objectFortnoxIdToUnicornId.set(objectFortnoxId, createdObject.id);
+            summary.objects.created++;
+            if (r.address && r.address.trim() !== "") {
+              newObjectIdsForGeocoding.push(createdObject.id);
+            }
+          }
+        } else {
+          // Fallback: ett standardobjekt per kund (befintligt beteende).
+          const objectFortnoxId = customerNumber;
+          if (!objectFortnoxIdToUnicornId.has(objectFortnoxId)) {
+            const objectName = primary.deliveryName || primary.name;
+            const [createdObject] = await tx.insert(objects).values({
+              tenantId,
+              customerId,
+              name: objectName,
+              objectNumber: customerNumber,
+              objectType: "fastighet",
+              hierarchyLevel: "fastighet",
+              objectLevel: 1,
+              address: primary.address || null,
+              city: primary.city || null,
+              postalCode: primary.postalCode || null,
+              status: "active",
+              notes: "Skapad automatiskt vid Fortnox-xlsx-import",
+              importBatchId,
+            }).returning();
+            await tx.insert(fortnoxMappings).values({
+              tenantId, entityType: "object", unicornId: createdObject.id, fortnoxId: objectFortnoxId,
+            });
+            objectFortnoxIdToUnicornId.set(objectFortnoxId, createdObject.id);
+            summary.objects.created++;
+            if (primary.address && primary.address.trim() !== "") {
+              newObjectIdsForGeocoding.push(createdObject.id);
+            }
           }
         }
       });
     } catch (err) {
       errorCount++;
-      errors.push(`Rad ${r.rowNum} (${r.customerNumber} ${r.name}): ${err instanceof Error ? err.message : String(err)}`);
+      errors.push(`Kund ${customerNumber} (${primary.name}): ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
