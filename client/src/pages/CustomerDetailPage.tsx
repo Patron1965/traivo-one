@@ -12,6 +12,7 @@ import { QueryErrorState } from "@/components/ErrorBoundary";
 import {
   ArrowLeft, Building2, Layers, Package, ClipboardList, Phone, Mail, MapPin,
   ChevronDown, ChevronRight, Users, Home, Container, Trash2, TreePine, Map as MapIcon,
+  ExternalLink,
 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -40,17 +41,24 @@ const HIERARCHY_LEVELS: Record<string, { label: string; icon: typeof Building2; 
 
 interface TreeNode { object: ServiceObject; children: TreeNode[] }
 
-function buildTree(objects: ServiceObject[]): TreeNode[] {
+interface ClusterGroup {
+  id: string | null;
+  name: string;
+  color: string | null;
+  roots: TreeNode[];
+}
+
+function buildTreeFromList(list: ServiceObject[], allIdSet: Set<string>): TreeNode[] {
   const childrenMap = new Map<string, ServiceObject[]>();
-  objects.forEach((o) => {
-    if (o.parentId) {
+  const subsetIds = new Set(list.map((o) => o.id));
+  list.forEach((o) => {
+    if (o.parentId && subsetIds.has(o.parentId)) {
       const arr = childrenMap.get(o.parentId) || [];
       arr.push(o);
       childrenMap.set(o.parentId, arr);
     }
   });
-  const idSet = new Set(objects.map((o) => o.id));
-  const roots = objects.filter((o) => !o.parentId || !idSet.has(o.parentId));
+  const roots = list.filter((o) => !o.parentId || !subsetIds.has(o.parentId));
   function build(o: ServiceObject): TreeNode {
     const ch = (childrenMap.get(o.id) || []).map(build);
     ch.sort((a, b) => a.object.name.localeCompare(b.object.name, "sv"));
@@ -58,7 +66,55 @@ function buildTree(objects: ServiceObject[]): TreeNode[] {
   }
   const tree = roots.map(build);
   tree.sort((a, b) => a.object.name.localeCompare(b.object.name, "sv"));
+  // Suppress unused-warning
+  void allIdSet;
   return tree;
+}
+
+function groupByCluster(
+  objects: ServiceObject[],
+  clusters: Array<{ id: string; name: string; color: string | null }>,
+): ClusterGroup[] {
+  const allIds = new Set(objects.map((o) => o.id));
+  const byCluster = new Map<string, ServiceObject[]>();
+  const orphans: ServiceObject[] = [];
+  for (const o of objects) {
+    if (o.clusterId) {
+      const arr = byCluster.get(o.clusterId) || [];
+      arr.push(o);
+      byCluster.set(o.clusterId, arr);
+    } else {
+      orphans.push(o);
+    }
+  }
+  const groups: ClusterGroup[] = clusters
+    .filter((c) => byCluster.has(c.id))
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      color: c.color,
+      roots: buildTreeFromList(byCluster.get(c.id)!, allIds),
+    }));
+  // Add any cluster IDs present on objects but not in stats.clusters list
+  for (const [cid, list] of byCluster) {
+    if (!groups.find((g) => g.id === cid)) {
+      groups.push({
+        id: cid,
+        name: "Kluster",
+        color: null,
+        roots: buildTreeFromList(list, allIds),
+      });
+    }
+  }
+  if (orphans.length > 0) {
+    groups.push({
+      id: null,
+      name: "Övriga objekt (utan kluster)",
+      color: null,
+      roots: buildTreeFromList(orphans, allIds),
+    });
+  }
+  return groups;
 }
 
 function TreeRow({ node, level }: { node: TreeNode; level: number }) {
@@ -150,7 +206,10 @@ export default function CustomerDetailPage() {
     enabled: !!customerId,
   });
 
-  const tree = useMemo(() => buildTree(objectsQuery.data || []), [objectsQuery.data]);
+  const clusterGroups = useMemo(
+    () => groupByCluster(objectsQuery.data || [], statsQuery.data?.clusters || []),
+    [objectsQuery.data, statsQuery.data?.clusters],
+  );
   const mapObjects = useMemo(
     () => (objectsQuery.data || []).filter((o) => o.latitude && o.longitude),
     [objectsQuery.data],
@@ -186,6 +245,24 @@ export default function CustomerDetailPage() {
             description={customer.customerNumber ? `Kundnummer: ${customer.customerNumber}` : undefined}
             icon={Building2}
           />
+
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/objects?customerId=${customer.id}`}>
+              <Button variant="outline" size="sm" className="gap-1.5" data-testid="link-customer-objects">
+                <Package className="h-3.5 w-3.5" /> Visa objekt
+              </Button>
+            </Link>
+            <Link href={`/planner?customerId=${customer.id}`}>
+              <Button variant="outline" size="sm" className="gap-1.5" data-testid="link-customer-orders">
+                <ClipboardList className="h-3.5 w-3.5" /> Ordrar
+              </Button>
+            </Link>
+            {customer.fortnoxCustomerId && (
+              <Badge variant="secondary" className="gap-1" data-testid="badge-fortnox-linked">
+                <ExternalLink className="h-3 w-3" /> Fortnox: {customer.fortnoxCustomerId}
+              </Badge>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Card>
@@ -311,21 +388,59 @@ export default function CustomerDetailPage() {
 
             <TabsContent value="tree">
               <Card>
-                <CardContent className="p-3">
+                <CardContent className="p-3 space-y-4">
+                  {stats && Object.keys(stats.objectsByLevel || {}).length > 0 && (
+                    <div className="flex flex-wrap gap-2 pb-2 border-b" data-testid="section-objects-by-level">
+                      {Object.entries(stats.objectsByLevel).map(([level, count]) => {
+                        const info = HIERARCHY_LEVELS[level] || HIERARCHY_LEVELS.fastighet;
+                        return (
+                          <Badge
+                            key={level}
+                            variant="outline"
+                            className="gap-1.5"
+                            data-testid={`badge-level-${level}`}
+                          >
+                            <span className={info.color}>●</span>
+                            {info.label}: <span className="font-semibold">{count}</span>
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )}
                   {objectsQuery.isLoading ? (
                     <div className="space-y-2">
                       {Array.from({ length: 5 }).map((_, i) => (
                         <Skeleton key={i} className="h-8 w-full" />
                       ))}
                     </div>
-                  ) : tree.length === 0 ? (
+                  ) : clusterGroups.length === 0 ? (
                     <div className="text-sm text-muted-foreground py-8 text-center" data-testid="text-empty-tree">
                       Inga objekt registrerade på denna kund ännu.
                     </div>
                   ) : (
-                    <div className="space-y-0.5 max-h-[600px] overflow-y-auto">
-                      {tree.map((n) => (
-                        <TreeRow key={n.object.id} node={n} level={0} />
+                    <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                      {clusterGroups.map((g) => (
+                        <div key={g.id ?? "no-cluster"} className="border rounded-md" data-testid={`group-cluster-${g.id ?? "none"}`}>
+                          <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border-b">
+                            <Layers className="h-4 w-4 text-muted-foreground" />
+                            {g.id ? (
+                              <Link href={`/clusters/${g.id}`} className="text-sm font-semibold hover:underline flex items-center gap-1.5">
+                                {g.color && (
+                                  <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: g.color }} />
+                                )}
+                                {g.name}
+                              </Link>
+                            ) : (
+                              <span className="text-sm font-semibold">{g.name}</span>
+                            )}
+                            <Badge variant="secondary" className="text-[10px] ml-auto">{g.roots.length} rot{g.roots.length === 1 ? "" : "ter"}</Badge>
+                          </div>
+                          <div className="p-2 space-y-0.5">
+                            {g.roots.map((n) => (
+                              <TreeRow key={n.object.id} node={n} level={0} />
+                            ))}
+                          </div>
+                        </div>
                       ))}
                     </div>
                   )}
