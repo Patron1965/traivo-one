@@ -22,8 +22,12 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { db } from "../server/db";
-import { sql, getTableName, isTable } from "drizzle-orm";
+import { sql, getTableName, isTable, Table } from "drizzle-orm";
 import * as schema from "../shared/schema";
+
+function isDrizzleTable(value: unknown): value is Table {
+  return isTable(value);
+}
 
 const KINAB_TENANT_ID = "kinab";
 const ANNA_USER_ID = "42556180";

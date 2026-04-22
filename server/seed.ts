@@ -24,16 +24,20 @@ export async function seedDatabase() {
 
   // Skip seed entirely if any tenant already exists (production / customer setup).
   // Demo seed only runs against a completely empty tenants table.
-  const anyTenant = await db.select().from(tenants).limit(1);
+  const defaultRows = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(sql`id = ${DEFAULT_TENANT_ID}`)
+    .limit(1);
+  if (defaultRows.length > 0) {
+    console.log("Default demo tenant present, refreshing demo dates...");
+    await refreshDemoWorkOrderDates();
+    await seedSystemMetadataLabels();
+    return;
+  }
+  const anyTenant = await db.select({ id: tenants.id }).from(tenants).limit(1);
   if (anyTenant.length > 0) {
-    const existingDefault = anyTenant.find((t) => t.id === DEFAULT_TENANT_ID);
-    if (existingDefault) {
-      console.log("Default demo tenant present, refreshing demo dates...");
-      await refreshDemoWorkOrderDates();
-      await seedSystemMetadataLabels();
-    } else {
-      console.log("Tenant(s) already exist, skipping demo seed.");
-    }
+    console.log("Tenant(s) already exist, skipping demo seed.");
     return;
   }
 
