@@ -31,10 +31,11 @@ import { ObjectApplicableArticlesPanel } from "@/components/ObjectApplicableArti
 import { ObjectContactsDialog } from "@/components/ObjectContactsPanel";
 import { ObjectImagesDialog } from "@/components/ObjectImagesGallery";
 import { AddressSearch } from "@/components/AddressSearch";
+import { CustomerCombobox, CustomerMultiCombobox, useCustomerLookup } from "@/components/CustomerCombobox";
 import { GeocodedObjectsMap, ObjectsMapTab } from "@/components/ObjectsMapView";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { Checkbox } from "@/components/ui/checkbox";
-import type { ServiceObject, Customer } from "@shared/schema";
+import type { ServiceObject } from "@shared/schema";
 
 const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
   koncern: { label: "Koncern", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
@@ -259,10 +260,16 @@ export default function ObjectsPage() {
   const totalObjects = objectsData?.total || 0;
   const totalPages = Math.ceil(totalObjects / PAGE_SIZE);
 
-  const { data: customers = [] } = useQuery<Customer[]>({
-    queryKey: ["/api/customers"],
-    staleTime: 60000,
-  });
+  const visibleCustomerIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const o of objects) {
+      if (o.customerId) ids.add(o.customerId);
+    }
+    for (const id of customerFilter) ids.add(id);
+    return Array.from(ids);
+  }, [objects, customerFilter]);
+
+  const customerNameMap = useCustomerLookup(visibleCustomerIds);
 
   const { data: clustersList = [] } = useQuery<Array<{ id: string; name: string; cachedObjectCount: number }>>({
     queryKey: ["/api/clusters"],
@@ -410,7 +417,7 @@ export default function ObjectsPage() {
     },
   });
 
-  const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c.name])), [customers]);
+  const customerMap = customerNameMap;
 
   const topLevelObjects = useMemo(() => objects.filter(obj => !obj.parentId), [objects]);
 
@@ -577,7 +584,7 @@ export default function ObjectsPage() {
       
       const newObj = {
         tenantId: "default-tenant",
-        customerId: customers.length > 0 ? customers[0].id : "",
+        customerId: "",
         name,
         objectType: typeIdx >= 0 ? (typeMap[values[typeIdx]?.toLowerCase()] || "fastighet") : "fastighet",
         objectLevel: 1,
@@ -1103,7 +1110,7 @@ export default function ObjectsPage() {
               )}
               {customerFilter.map(cId => (
                 <Badge key={cId} variant="secondary" className="gap-1 cursor-pointer" onClick={() => removeCustomerFilter(cId)} data-testid={`badge-filter-customer-${cId}`}>
-                  {customers.find(c => c.id === cId)?.name || cId}
+                  {customerNameMap.get(cId) || cId}
                   <X className="h-3 w-3" />
                 </Badge>
               ))}
@@ -1148,24 +1155,14 @@ export default function ObjectsPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value="" onValueChange={(v) => { if (v === "__clear__") { setCustomerFilter([]); } else if (v && v !== "__none__") { addCustomerFilter(v); } }}>
-                <SelectTrigger className="w-[180px]" data-testid="select-customer-filter">
-                  <SelectValue placeholder={customerFilter.length > 0 ? `${customerFilter.length} kunder valda` : "Filtrera kund"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {customerFilter.length > 0 && (
-                    <SelectItem value="__clear__" data-testid="select-customer-clear">
-                      Rensa alla kunder
-                    </SelectItem>
-                  )}
-                  {customers.filter(c => !customerFilter.includes(c.id)).map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                  {customers.filter(c => !customerFilter.includes(c.id)).length === 0 && customerFilter.length > 0 && (
-                    <SelectItem value="__none__" disabled>Alla kunder valda</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+              <CustomerMultiCombobox
+                selected={customerFilter}
+                onAdd={addCustomerFilter}
+                onRemoveAll={() => setCustomerFilter([])}
+                placeholder="Filtrera kund"
+                className="w-[180px]"
+                testId="select-customer-filter"
+              />
               <Select value={hierarchyFilter} onValueChange={setHierarchyFilter}>
                 <SelectTrigger className="w-[140px]" data-testid="select-hierarchy-filter">
                   <SelectValue placeholder="Nivå" />
@@ -1459,17 +1456,14 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
             </div>
             <div>
               <Label>Kund</Label>
-              <Select value={newObject.customerId || "none"} onValueChange={(v) => setNewObject({ ...newObject, customerId: v === "none" ? "" : v })}>
-                <SelectTrigger data-testid="select-new-customer">
-                  <SelectValue placeholder="Välj kund" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Ingen kund</SelectItem>
-                  {customers.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <CustomerCombobox
+                value={newObject.customerId || null}
+                onChange={(id) => setNewObject({ ...newObject, customerId: id || "" })}
+                placeholder="Välj kund"
+                emptyOptionLabel="Ingen kund"
+                className="w-full"
+                testId="select-new-customer"
+              />
             </div>
           </div>
           <DialogFooter>

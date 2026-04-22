@@ -187,6 +187,7 @@ export interface IStorage {
   
   getCustomers(tenantId: string): Promise<Customer[]>;
   getCustomersPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ customers: Customer[]; total: number }>;
+  getCustomersByIds(tenantId: string, ids: string[]): Promise<Customer[]>;
   getCustomer(id: string): Promise<Customer | undefined>;
   getCustomerAggregates(tenantId: string, customerIds?: string[]): Promise<Array<{ customerId: string; clusterCount: number; objectCount: number; activeOrders: number }>>;
   getCustomerTotals(tenantId: string): Promise<{ customerCount: number; clusterCount: number; objectCount: number; activeOrders: number }>;
@@ -211,6 +212,19 @@ export interface IStorage {
   getObjects(tenantId: string): Promise<ServiceObject[]>;
   getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean; issue?: string; clusterId?: string }): Promise<{ objects: ServiceObject[]; total: number }>;
   getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]>;
+  getObjectsByTenant(tenantId: string): Promise<ServiceObject[]>;
+  getObjectsWithIssues(tenantId: string, options?: { issueType?: string; status?: string; customerId?: string; limit?: number }): Promise<{
+    totalObjectsWithIssues: number;
+    issueTypes: Record<string, number>;
+    objects: Array<{
+      object: ServiceObject;
+      issueType: string;
+      issueCount: number;
+      latestIssue: Date | null;
+      severity?: string;
+      details: Array<{ id: string; title: string; status: string; reportedAt: Date; severity: string | null }>;
+    }>;
+  }>;
   getObject(id: string): Promise<ServiceObject | undefined>;
   getObjectByObjectNumber(tenantId: string, objectNumber: string): Promise<ServiceObject | undefined>;
   getObjectsByCustomer(customerId: string, tenantId?: string): Promise<ServiceObject[]>;
@@ -1004,6 +1018,18 @@ export class DatabaseStorage implements IStorage {
     return customer || undefined;
   }
 
+  async getCustomersByIds(tenantId: string, ids: string[]): Promise<Customer[]> {
+    if (!ids || ids.length === 0) return [];
+    const limited = ids.slice(0, 500);
+    return db.select()
+      .from(customers)
+      .where(and(
+        eq(customers.tenantId, tenantId),
+        isNull(customers.deletedAt),
+        inArray(customers.id, limited)
+      ));
+  }
+
   async getCustomerAggregates(tenantId: string, customerIds?: string[]): Promise<Array<{ customerId: string; clusterCount: number; objectCount: number; activeOrders: number }>> {
     if (customerIds && customerIds.length === 0) {
       return [];
@@ -1258,6 +1284,135 @@ export class DatabaseStorage implements IStorage {
         isNull(objects.deletedAt),
         inArray(objects.id, ids)
       ));
+  }
+
+  async getObjectsByTenant(tenantId: string): Promise<ServiceObject[]> {
+    return this.getObjects(tenantId);
+  }
+
+  async getObjectsWithIssues(tenantId: string, options?: { issueType?: string; status?: string; customerId?: string; limit?: number }) {
+    const { issueType, status, customerId, limit } = options || {};
+    const statusFilter = status ? sql` AND dr.status = ${status}` : sql``;
+    const issueTypeFilter = issueType ? sql` AND COALESCE(dr.category, 'other') = ${issueType}` : sql``;
+    const customerFilter = customerId ? sql` AND o.customer_id = ${customerId}` : sql``;
+
+    // Aggregate per (object, category) using a single SQL query.
+    const aggResult = await db.execute(sql`
+      WITH issues AS (
+        SELECT
+          dr.object_id,
+          COALESCE(dr.category, 'other') AS category,
+          dr.id,
+          dr.title,
+          dr.status,
+          dr.reported_at,
+          dr.severity_level AS severity,
+          ROW_NUMBER() OVER (
+            PARTITION BY dr.object_id, COALESCE(dr.category, 'other')
+            ORDER BY dr.reported_at DESC
+          ) AS rn,
+          COUNT(*) OVER (PARTITION BY dr.object_id, COALESCE(dr.category, 'other')) AS issue_count,
+          MAX(dr.reported_at) OVER (PARTITION BY dr.object_id, COALESCE(dr.category, 'other')) AS latest_issue
+        FROM deviation_reports dr
+        INNER JOIN objects o ON o.id = dr.object_id AND o.tenant_id = ${tenantId} AND o.deleted_at IS NULL
+        WHERE dr.tenant_id = ${tenantId}
+          ${statusFilter}
+          ${issueTypeFilter}
+          ${customerFilter}
+      )
+      SELECT object_id, category, id, title, status, reported_at, severity, issue_count, latest_issue
+      FROM issues
+      WHERE rn <= 5
+      ORDER BY latest_issue DESC, object_id, rn
+    `);
+
+    interface IssueAggRow {
+      object_id: string;
+      category: string;
+      id: string;
+      title: string;
+      status: string;
+      reported_at: Date;
+      severity: string | null;
+      issue_count: string | number;
+      latest_issue: Date | null;
+    }
+
+    type GroupKey = string;
+    const groups = new Map<GroupKey, {
+      objectId: string;
+      category: string;
+      issueCount: number;
+      latestIssue: Date | null;
+      severity?: string;
+      details: Array<{ id: string; title: string; status: string; reportedAt: Date; severity: string | null }>;
+    }>();
+
+    const objectIdSet = new Set<string>();
+    for (const row of aggResult.rows as IssueAggRow[]) {
+      const key = `${row.object_id}::${row.category}`;
+      let g = groups.get(key);
+      if (!g) {
+        g = {
+          objectId: row.object_id,
+          category: row.category,
+          issueCount: Number(row.issue_count) || 0,
+          latestIssue: row.latest_issue ? new Date(row.latest_issue) : null,
+          severity: undefined,
+          details: [],
+        };
+        groups.set(key, g);
+        objectIdSet.add(row.object_id);
+      }
+      if (g.details.length === 0 && row.severity) {
+        g.severity = row.severity;
+      }
+      g.details.push({
+        id: row.id,
+        title: row.title,
+        status: row.status,
+        reportedAt: new Date(row.reported_at),
+        severity: row.severity,
+      });
+    }
+
+    // Fetch all involved objects in one query.
+    const objectIds = Array.from(objectIdSet);
+    const objectRows = objectIds.length > 0 ? await this.getObjectsByIds(tenantId, objectIds) : [];
+    const objectMap = new Map<string, ServiceObject>();
+    for (const obj of objectRows) {
+      objectMap.set(obj.id, obj);
+    }
+
+    const allItems = Array.from(groups.values())
+      .filter(g => objectMap.has(g.objectId))
+      .map(g => ({
+        object: objectMap.get(g.objectId)!,
+        issueType: g.category,
+        issueCount: g.issueCount,
+        latestIssue: g.latestIssue,
+        severity: g.severity,
+        details: g.details,
+      }));
+
+    allItems.sort((a, b) => {
+      if (!a.latestIssue) return 1;
+      if (!b.latestIssue) return -1;
+      return b.latestIssue.getTime() - a.latestIssue.getTime();
+    });
+
+    const issueTypeCounts: Record<string, number> = {};
+    for (const item of allItems) {
+      issueTypeCounts[item.issueType] = (issueTypeCounts[item.issueType] || 0) + 1;
+    }
+
+    // Apply limit *after* totals are computed, so callers still see the full count.
+    const limited = limit && limit > 0 ? allItems.slice(0, limit) : allItems;
+    return {
+      totalObjectsWithIssues: allItems.length,
+      issueTypes: issueTypeCounts,
+      objects: limited,
+    };
   }
 
   async getObject(id: string): Promise<ServiceObject | undefined> {

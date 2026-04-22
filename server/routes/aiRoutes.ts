@@ -2298,9 +2298,7 @@ app.post("/api/clusters/auto-assign-unclustered", asyncHandler(async (req, res) 
       throw new ValidationError("Data saknas");
     }
 
-    const allObjects = await storage.getObjectsByTenant(tenantId);
-    const idSet = new Set(unclusteredObjectIds);
-    const unclustered = allObjects.filter(o => idSet.has(o.id));
+    const unclustered = await storage.getObjectsByIds(tenantId, unclusteredObjectIds);
 
     const postalToCluster = new Map<string, string>();
     for (const s of suggestions) {

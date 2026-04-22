@@ -140,6 +140,12 @@ app.get("/api/proactive-sales/inactive", asyncHandler(async (req, res) => {
 
 app.get("/api/customers", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
+  const idsParam = typeof req.query.ids === "string" ? req.query.ids : undefined;
+  if (idsParam) {
+    const ids = idsParam.split(",").map(s => s.trim()).filter(Boolean).slice(0, 500);
+    const list = await storage.getCustomersByIds(tenantId, ids);
+    return res.json(list);
+  }
   const page = parseInt(req.query.page as string);
   const limit = Math.min(parseInt(req.query.limit as string) || 0, 200);
   const search = typeof req.query.search === "string" ? req.query.search : undefined;
@@ -409,86 +415,16 @@ app.get("/api/objects/tree/:parentId/descendants", asyncHandler(async (req, res)
 app.get("/api/objects/with-issues", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const { issueType, status, customerId, limit } = req.query;
+  const parsedLimit = limit ? Math.max(1, Math.min(1000, parseInt(limit as string) || 0)) : undefined;
 
-  const allObjects = await storage.getObjects(tenantId);
-  const deviations = await storage.getDeviationReports(tenantId, {
-    status: status as string || undefined
+  const result = await storage.getObjectsWithIssues(tenantId, {
+    issueType: typeof issueType === "string" ? issueType : undefined,
+    status: typeof status === "string" ? status : undefined,
+    customerId: typeof customerId === "string" ? customerId : undefined,
+    limit: parsedLimit,
   });
 
-  type ObjectWithIssue = {
-    object: (typeof allObjects)[0];
-    issueType: string;
-    issueCount: number;
-    latestIssue: Date | null;
-    severity?: string;
-    details?: Array<Record<string, unknown>>;
-  };
-
-  const objectsWithIssues: ObjectWithIssue[] = [];
-
-  const deviationsByObject = new Map<string, typeof deviations>();
-  for (const dev of deviations) {
-    const existing = deviationsByObject.get(dev.objectId) || [];
-    existing.push(dev);
-    deviationsByObject.set(dev.objectId, existing);
-  }
-
-  for (const [objectId, devList] of deviationsByObject) {
-    const obj = allObjects.find(o => o.id === objectId);
-    if (!obj) continue;
-    if (customerId && obj.customerId !== customerId) continue;
-
-    const byCategory = new Map<string, typeof devList>();
-    for (const dev of devList) {
-      const cat = dev.category || 'other';
-      const existing = byCategory.get(cat) || [];
-      existing.push(dev);
-      byCategory.set(cat, existing);
-    }
-
-    for (const [category, categoryDevs] of byCategory) {
-      if (issueType && category !== issueType) continue;
-
-      const sorted = categoryDevs.sort((a, b) =>
-        new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime()
-      );
-      const latest = sorted[0];
-
-      objectsWithIssues.push({
-        object: obj,
-        issueType: category,
-        issueCount: categoryDevs.length,
-        latestIssue: new Date(latest.reportedAt),
-        severity: latest.severity || undefined,
-        details: sorted.slice(0, 5).map(d => ({
-          id: d.id,
-          title: d.title,
-          status: d.status,
-          reportedAt: d.reportedAt,
-          severity: d.severity,
-        })),
-      });
-    }
-  }
-
-  objectsWithIssues.sort((a, b) => {
-    if (!a.latestIssue) return 1;
-    if (!b.latestIssue) return -1;
-    return b.latestIssue.getTime() - a.latestIssue.getTime();
-  });
-
-  const limited = limit ? objectsWithIssues.slice(0, parseInt(limit as string)) : objectsWithIssues;
-
-  const issueTypeCounts: Record<string, number> = {};
-  for (const item of objectsWithIssues) {
-    issueTypeCounts[item.issueType] = (issueTypeCounts[item.issueType] || 0) + 1;
-  }
-
-  res.json({
-    totalObjectsWithIssues: objectsWithIssues.length,
-    issueTypes: issueTypeCounts,
-    objects: limited,
-  });
+  res.json(result);
 }));
 
 app.get("/api/objects/:id/work-orders", asyncHandler(async (req, res) => {
@@ -579,10 +515,9 @@ app.post("/api/objects/coordinates", asyncHandler(async (req, res) => {
     return res.json([]);
   }
   const limited = objectIds.slice(0, 3000);
-  const allObjects = await storage.getObjectsByTenant(tenantId);
-  const idSet = new Set(limited);
-  const coords = allObjects
-    .filter(o => idSet.has(o.id) && o.latitude && o.longitude)
+  const matchedObjects = await storage.getObjectsByIds(tenantId, limited);
+  const coords = matchedObjects
+    .filter(o => o.latitude && o.longitude)
     .map(o => ({ id: o.id, latitude: o.latitude, longitude: o.longitude }));
   res.json(coords);
 }));
