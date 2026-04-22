@@ -225,8 +225,13 @@ export default function CustomerPortalPage() {
                 data-testid="input-customer-search"
               />
             </div>
+            <div className="text-xs text-muted-foreground" data-testid="text-customer-count">
+              {customerSearch.trim()
+                ? `${filteredCustomers.length} träff${filteredCustomers.length === 1 ? "" : "ar"} av ${customers.length} kunder`
+                : `${customers.length} kunder · skriv för att söka`}
+            </div>
             <div className="space-y-2 max-h-96 overflow-y-auto">
-              {filteredCustomers.slice(0, 20).map(customer => (
+              {(customerSearch.trim() ? filteredCustomers : filteredCustomers.slice(0, 100)).map(customer => (
                 <div
                   key={customer.id}
                   onClick={() => setSelectedCustomerId(customer.id)}
