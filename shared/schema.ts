@@ -3028,6 +3028,44 @@ export const insertCustomerServiceContractSchema = createInsertSchema(customerSe
 export type CustomerServiceContract = typeof customerServiceContracts.$inferSelect;
 export type InsertCustomerServiceContract = z.infer<typeof insertCustomerServiceContractSchema>;
 
+// === FORTNOX FAKTURAHISTORIK → AVTALSFÖRSLAG ===
+// Återkommande artiklar härleds från historiska Fortnox-fakturor och blir förslag på tjänsteavtal
+export const fortnoxContractSuggestions = pgTable("fortnox_contract_suggestions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  importBatchId: varchar("import_batch_id").notNull(),
+  customerId: varchar("customer_id").references(() => customers.id),
+  fortnoxCustomerNumber: text("fortnox_customer_number").notNull(),
+  customerName: text("customer_name").notNull(),
+  articleNumber: text("article_number"),
+  articleDescription: text("article_description").notNull(),
+  occurrenceCount: integer("occurrence_count").notNull(),
+  firstSeen: timestamp("first_seen").notNull(),
+  lastSeen: timestamp("last_seen").notNull(),
+  avgIntervalDays: real("avg_interval_days"),
+  suggestedBillingCycle: text("suggested_billing_cycle").notNull(),
+  avgPrice: real("avg_price"),
+  avgQuantity: real("avg_quantity"),
+  totalRevenue: real("total_revenue").notNull(),
+  monthlyValue: real("monthly_value"),
+  confidence: real("confidence"),
+  status: text("status").default("pending").notNull(),
+  createdContractId: varchar("created_contract_id").references(() => customerServiceContracts.id),
+  rawSamples: jsonb("raw_samples").default([]),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  tenantIdx: index("idx_fortnox_contract_suggestions_tenant").on(table.tenantId),
+  statusIdx: index("idx_fortnox_contract_suggestions_status").on(table.status),
+  batchIdx: index("idx_fortnox_contract_suggestions_batch").on(table.importBatchId),
+}));
+
+export const insertFortnoxContractSuggestionSchema = createInsertSchema(fortnoxContractSuggestions).omit({ id: true, createdAt: true, updatedAt: true });
+export type FortnoxContractSuggestion = typeof fortnoxContractSuggestions.$inferSelect;
+export type InsertFortnoxContractSuggestion = z.infer<typeof insertFortnoxContractSuggestionSchema>;
+
 // === KUNDPROFIL/NOTIFIERINGSINSTÄLLNINGAR ===
 export const customerNotificationSettings = pgTable("customer_notification_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

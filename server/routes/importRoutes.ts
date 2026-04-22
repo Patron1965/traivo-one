@@ -13,7 +13,7 @@ import * as XLSX from "xlsx";
 import { importJobs, notifyImportProgress } from "./helpers";
 import { geocodeAddress } from "../google-geocoding";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
-import { objects, workOrders, customers, objectMetadata, workOrderLines, metadataKatalog, fortnoxMappings } from "@shared/schema";
+import { objects, workOrders, customers, objectMetadata, workOrderLines, metadataKatalog, fortnoxMappings, customerServiceContracts, type InsertFortnoxContractSuggestion } from "@shared/schema";
 import { createMetadata, getAllMetadataTypes } from "../metadata-queries";
 import { ensureClusterForCustomer, updateClusterCache } from "../auto-cluster";
 
@@ -2154,6 +2154,449 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
     errorCount,
     errors: errors.slice(0, 50),
   });
+}));
+
+// ============================================================================
+// FORTNOX FAKTURAHISTORIK → AVTALSFÖRSLAG
+// Identifierar återkommande artiklar per kund från historiska fakturor
+// och föreslår tjänsteavtal som måste godkännas innan de blir skarpa.
+// ============================================================================
+
+interface FortnoxInvoiceLine {
+  invoiceNumber: string;
+  invoiceDate: Date | null;
+  customerNumber: string;
+  customerName: string;
+  articleNumber: string;
+  description: string;
+  quantity: number;
+  price: number;
+  total: number;
+  rowNum: number;
+}
+
+function pickAny(row: Record<string, string>, keys: string[]): string {
+  for (const k of keys) {
+    // case-insensitive
+    const found = Object.keys(row).find(rk => rk.toLowerCase() === k.toLowerCase());
+    if (found) {
+      const v = row[found];
+      if (v && String(v).trim() !== "") return String(v).trim();
+    }
+  }
+  return "";
+}
+
+function parseSwedishNumber(s: string): number {
+  if (!s) return 0;
+  const cleaned = s.replace(/\s/g, "").replace(/[^\d.,-]/g, "").replace(/,/g, ".");
+  // If multiple dots remain, keep only the last as decimal separator
+  const lastDot = cleaned.lastIndexOf(".");
+  let normalized = cleaned;
+  if (lastDot >= 0 && cleaned.indexOf(".") !== lastDot) {
+    normalized = cleaned.substring(0, lastDot).replace(/\./g, "") + cleaned.substring(lastDot);
+  }
+  const n = parseFloat(normalized);
+  return isFinite(n) ? n : 0;
+}
+
+function parseInvoiceDate(s: string): Date | null {
+  if (!s) return null;
+  const trimmed = s.trim();
+  // ISO YYYY-MM-DD
+  const iso = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) {
+    const d = new Date(`${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`);
+    if (!isNaN(d.getTime())) return d;
+  }
+  // DD/MM/YYYY or DD.MM.YYYY
+  const eu = trimmed.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/);
+  if (eu) {
+    const d = new Date(`${eu[3]}-${eu[2].padStart(2, "0")}-${eu[1].padStart(2, "0")}`);
+    if (!isNaN(d.getTime())) return d;
+  }
+  // Try Excel serial number
+  const num = parseFloat(trimmed);
+  if (!isNaN(num) && num > 25569 && num < 80000) {
+    const ms = (num - 25569) * 86400 * 1000;
+    return new Date(ms);
+  }
+  const d = new Date(trimmed);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function parseFortnoxInvoiceXlsx(buffer: Buffer): FortnoxInvoiceLine[] {
+  const wb = XLSX.read(buffer, { type: "buffer" });
+  const sheetName = wb.SheetNames[0];
+  if (!sheetName) return [];
+  const sheet = wb.Sheets[sheetName];
+  const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "", raw: false });
+  if (aoa.length === 0) return [];
+
+  // Locate header row (within first 15 rows) – look for common Fortnox columns
+  const candidates = ["invoicenumber", "invoice_number", "fakturanummer", "invoicedate", "customernumber", "customer_number", "kundnummer", "articlenumber", "artikelnummer"];
+  let headerRowIdx = 0;
+  for (let i = 0; i < Math.min(aoa.length, 15); i++) {
+    const row = (aoa[i] || []).map((c) => String(c || "").trim().toLowerCase().replace(/\s+/g, ""));
+    if (candidates.some(c => row.includes(c))) {
+      headerRowIdx = i;
+      break;
+    }
+  }
+  const headers = (aoa[headerRowIdx] || []).map((c) => String(c || "").trim());
+  const out: FortnoxInvoiceLine[] = [];
+  for (let i = headerRowIdx + 1; i < aoa.length; i++) {
+    const arr = aoa[i] || [];
+    const row: Record<string, string> = {};
+    let hasContent = false;
+    for (let j = 0; j < headers.length; j++) {
+      const k = headers[j];
+      if (!k) continue;
+      const v = arr[j];
+      const s = v == null ? "" : String(v).trim();
+      row[k] = s;
+      if (s !== "") hasContent = true;
+    }
+    if (!hasContent) continue;
+
+    const invoiceNumber = pickAny(row, ["InvoiceNumber", "Invoice_Number", "Fakturanummer", "DocumentNumber"]);
+    const invoiceDateStr = pickAny(row, ["InvoiceDate", "Invoice_Date", "Fakturadatum", "Datum"]);
+    const customerNumber = pickAny(row, ["CustomerNumber", "Customer_Number", "Kundnummer"]);
+    const customerName = pickAny(row, ["CustomerName", "Customer_Name", "Kundnamn", "Kund", "Name"]);
+    const articleNumber = pickAny(row, ["ArticleNumber", "Article_Number", "Artikelnummer", "Article"]);
+    const description = pickAny(row, ["Description", "Beskrivning", "ArticleDescription", "Artikelbeskrivning", "Benämning"]);
+    const quantityStr = pickAny(row, ["DeliveredQuantity", "Quantity", "Antal", "Delivered_Quantity"]);
+    const priceStr = pickAny(row, ["Price", "Pris", "UnitPrice", "Unit_Price", "Á-pris", "À-pris"]);
+    const totalStr = pickAny(row, ["Total", "Summa", "RowSum", "Belopp"]);
+
+    if (!customerNumber || (!articleNumber && !description)) continue;
+
+    const quantity = parseSwedishNumber(quantityStr) || 1;
+    const price = parseSwedishNumber(priceStr);
+    const total = parseSwedishNumber(totalStr) || price * quantity;
+
+    out.push({
+      invoiceNumber,
+      invoiceDate: parseInvoiceDate(invoiceDateStr),
+      customerNumber,
+      customerName,
+      articleNumber: articleNumber || "",
+      description: description || articleNumber || "",
+      quantity,
+      price,
+      total,
+      rowNum: i + 1,
+    });
+  }
+  return out;
+}
+
+interface RecurrenceGroup {
+  customerNumber: string;
+  customerName: string;
+  articleNumber: string;
+  articleDescription: string;
+  invoices: { invoiceNumber: string; date: Date; total: number; quantity: number; price: number }[];
+}
+
+function inferBillingCycle(avgIntervalDays: number): { cycle: string; monthly: number } {
+  if (avgIntervalDays < 10) return { cycle: "weekly", monthly: 30 / Math.max(avgIntervalDays, 1) };
+  if (avgIntervalDays < 45) return { cycle: "monthly", monthly: 1 };
+  if (avgIntervalDays < 135) return { cycle: "quarterly", monthly: 1 / 3 };
+  if (avgIntervalDays < 270) return { cycle: "biannual", monthly: 1 / 6 };
+  return { cycle: "yearly", monthly: 1 / 12 };
+}
+
+function analyzeRecurrence(
+  lines: FortnoxInvoiceLine[],
+  opts: { minOccurrences: number; minSpanDays: number }
+): {
+  suggestions: Omit<InsertFortnoxContractSuggestion, "tenantId" | "importBatchId" | "customerId">[];
+  totalGroups: number;
+  totalLines: number;
+  uniqueCustomers: number;
+} {
+  const grouped = new Map<string, RecurrenceGroup>();
+  for (const l of lines) {
+    if (!l.invoiceDate) continue;
+    const key = `${l.customerNumber}::${(l.articleNumber || l.description).toLowerCase().trim()}`;
+    let g = grouped.get(key);
+    if (!g) {
+      g = {
+        customerNumber: l.customerNumber,
+        customerName: l.customerName,
+        articleNumber: l.articleNumber,
+        articleDescription: l.description,
+        invoices: [],
+      };
+      grouped.set(key, g);
+    }
+    g.invoices.push({
+      invoiceNumber: l.invoiceNumber,
+      date: l.invoiceDate,
+      total: l.total,
+      quantity: l.quantity,
+      price: l.price,
+    });
+  }
+
+  const suggestions: Omit<InsertFortnoxContractSuggestion, "tenantId" | "importBatchId" | "customerId">[] = [];
+  const uniqueCustomers = new Set<string>();
+  for (const g of grouped.values()) {
+    uniqueCustomers.add(g.customerNumber);
+    // Dedup by invoiceNumber (one line per invoice for this article)
+    const byInvoice = new Map<string, { date: Date; total: number; quantity: number; price: number }>();
+    for (const inv of g.invoices) {
+      const existing = byInvoice.get(inv.invoiceNumber);
+      if (!existing) {
+        byInvoice.set(inv.invoiceNumber, { date: inv.date, total: inv.total, quantity: inv.quantity, price: inv.price });
+      } else {
+        existing.total += inv.total;
+        existing.quantity += inv.quantity;
+      }
+    }
+    const arr = Array.from(byInvoice.values()).sort((a, b) => a.date.getTime() - b.date.getTime());
+    if (arr.length < opts.minOccurrences) continue;
+    const first = arr[0].date;
+    const last = arr[arr.length - 1].date;
+    const spanDays = (last.getTime() - first.getTime()) / 86400000;
+    if (spanDays < opts.minSpanDays) continue;
+
+    // Average interval between consecutive invoices
+    let totalGap = 0;
+    for (let i = 1; i < arr.length; i++) {
+      totalGap += (arr[i].date.getTime() - arr[i - 1].date.getTime()) / 86400000;
+    }
+    const avgIntervalDays = totalGap / (arr.length - 1);
+    const { cycle, monthly: cyclesPerMonth } = inferBillingCycle(avgIntervalDays);
+    const totalRevenue = arr.reduce((s, x) => s + x.total, 0);
+    const avgPrice = arr.reduce((s, x) => s + x.price, 0) / arr.length;
+    const avgQuantity = arr.reduce((s, x) => s + x.quantity, 0) / arr.length;
+    const avgInvoiceTotal = totalRevenue / arr.length;
+    const monthlyValue = avgInvoiceTotal * cyclesPerMonth;
+
+    // Confidence: more invoices, longer span, smaller variance => higher
+    const intervals: number[] = [];
+    for (let i = 1; i < arr.length; i++) intervals.push((arr[i].date.getTime() - arr[i - 1].date.getTime()) / 86400000);
+    const meanI = avgIntervalDays;
+    const variance = intervals.length > 0 ? intervals.reduce((s, v) => s + (v - meanI) ** 2, 0) / intervals.length : 0;
+    const stdDev = Math.sqrt(variance);
+    const cv = meanI > 0 ? stdDev / meanI : 1;
+    let confidence = Math.min(1, arr.length / 12) * Math.max(0, 1 - cv);
+    confidence = Math.max(0.05, Math.min(1, confidence));
+
+    suggestions.push({
+      fortnoxCustomerNumber: g.customerNumber,
+      customerName: g.customerName || g.customerNumber,
+      articleNumber: g.articleNumber || null,
+      articleDescription: g.articleDescription,
+      occurrenceCount: arr.length,
+      firstSeen: first,
+      lastSeen: last,
+      avgIntervalDays,
+      suggestedBillingCycle: cycle,
+      avgPrice,
+      avgQuantity,
+      totalRevenue,
+      monthlyValue,
+      confidence,
+      status: "pending",
+      rawSamples: arr.slice(0, 10).map(x => ({
+        date: x.date.toISOString().slice(0, 10),
+        quantity: x.quantity,
+        price: x.price,
+        total: x.total,
+      })),
+    });
+  }
+
+  return {
+    suggestions,
+    totalGroups: grouped.size,
+    totalLines: lines.length,
+    uniqueCustomers: uniqueCustomers.size,
+  };
+}
+
+// Validate + analyze – returns preview (does not persist)
+app.post("/api/import/fortnox-invoices/analyze", xlsxUpload.single("file"), asyncHandler(async (req, res) => {
+  if (!req.file) throw new ValidationError("Ingen fil uppladdad");
+  const tenantId = await getTenantIdWithFallback(req);
+
+  const minOccurrences = Math.max(2, parseInt(String(req.body?.minOccurrences || "3"), 10));
+  const minSpanDays = Math.max(0, parseInt(String(req.body?.minSpanDays || "60"), 10));
+  const persist = String(req.body?.persist || "false").toLowerCase() === "true";
+
+  const lines = parseFortnoxInvoiceXlsx(req.file.buffer);
+  if (lines.length === 0) throw new ValidationError("Filen innehåller inga fakturarader vi kunde tolka. Kontrollera att kolumner som InvoiceDate, CustomerNumber och ArticleNumber finns.");
+
+  const { suggestions, totalGroups, totalLines, uniqueCustomers } = analyzeRecurrence(lines, { minOccurrences, minSpanDays });
+
+  // Map fortnoxCustomerNumber → existing customer
+  const customerNumbers = Array.from(new Set(suggestions.map(s => s.fortnoxCustomerNumber)));
+  let customerLookup = new Map<string, { id: string; name: string }>();
+  if (customerNumbers.length > 0) {
+    const rows = await db.select({ id: customers.id, customerNumber: customers.customerNumber, name: customers.name })
+      .from(customers)
+      .where(and(eq(customers.tenantId, tenantId), isNull(customers.deletedAt), inArray(customers.customerNumber, customerNumbers as string[])));
+    for (const r of rows) {
+      if (r.customerNumber) customerLookup.set(r.customerNumber, { id: r.id, name: r.name });
+    }
+  }
+
+  const enriched = suggestions.map(s => {
+    const match = customerLookup.get(s.fortnoxCustomerNumber);
+    return { ...s, customerId: match?.id || null, matchedCustomerName: match?.name || null };
+  });
+
+  let importBatchId: string | null = null;
+  if (persist && enriched.length > 0) {
+    importBatchId = crypto.randomUUID();
+    const toInsert: InsertFortnoxContractSuggestion[] = enriched.map(s => ({
+      tenantId,
+      importBatchId: importBatchId!,
+      customerId: s.customerId,
+      fortnoxCustomerNumber: s.fortnoxCustomerNumber,
+      customerName: s.customerName,
+      articleNumber: s.articleNumber,
+      articleDescription: s.articleDescription,
+      occurrenceCount: s.occurrenceCount,
+      firstSeen: s.firstSeen,
+      lastSeen: s.lastSeen,
+      avgIntervalDays: s.avgIntervalDays,
+      suggestedBillingCycle: s.suggestedBillingCycle,
+      avgPrice: s.avgPrice,
+      avgQuantity: s.avgQuantity,
+      totalRevenue: s.totalRevenue,
+      monthlyValue: s.monthlyValue,
+      confidence: s.confidence,
+      status: "pending",
+      rawSamples: s.rawSamples,
+    }));
+    await storage.createFortnoxContractSuggestions(toInsert);
+  }
+
+  res.json({
+    importBatchId,
+    persisted: persist,
+    totalLines,
+    totalGroups,
+    uniqueCustomers,
+    suggestionsCount: enriched.length,
+    matchedCustomers: enriched.filter(s => s.customerId).length,
+    unmatchedCustomers: enriched.filter(s => !s.customerId).length,
+    suggestions: enriched.map(s => ({
+      fortnoxCustomerNumber: s.fortnoxCustomerNumber,
+      customerName: s.customerName,
+      matchedCustomerId: s.customerId,
+      matchedCustomerName: s.matchedCustomerName,
+      articleNumber: s.articleNumber,
+      articleDescription: s.articleDescription,
+      occurrenceCount: s.occurrenceCount,
+      firstSeen: s.firstSeen,
+      lastSeen: s.lastSeen,
+      avgIntervalDays: s.avgIntervalDays,
+      suggestedBillingCycle: s.suggestedBillingCycle,
+      avgPrice: s.avgPrice,
+      avgQuantity: s.avgQuantity,
+      totalRevenue: s.totalRevenue,
+      monthlyValue: s.monthlyValue,
+      confidence: s.confidence,
+      rawSamples: s.rawSamples,
+    })),
+  });
+}));
+
+// List persisted suggestions (for the review UI)
+app.get("/api/import/fortnox-invoices/suggestions", asyncHandler(async (req, res) => {
+  const tenantId = await getTenantIdWithFallback(req);
+  const status = (req.query.status as string) || undefined;
+  const importBatchId = (req.query.importBatchId as string) || undefined;
+  const customerId = (req.query.customerId as string) || undefined;
+  const rows = await storage.listFortnoxContractSuggestions(tenantId, { status, importBatchId, customerId });
+  res.json({ suggestions: rows });
+}));
+
+// Approve a suggestion → create a real customerServiceContract
+app.post("/api/import/fortnox-invoices/suggestions/:id/approve", asyncHandler(async (req, res) => {
+  const tenantId = await getTenantIdWithFallback(req);
+  const suggestion = await storage.getFortnoxContractSuggestion(req.params.id, tenantId);
+  if (!suggestion) throw new NotFoundError("Förslag hittades inte");
+  if (suggestion.status !== "pending") {
+    throw new ValidationError(`Förslag är redan ${suggestion.status}`);
+  }
+
+  // Allow override values from body
+  const overrides = (req.body || {}) as {
+    customerId?: string;
+    name?: string;
+    monthlyValue?: number;
+    billingCycle?: string;
+    startDate?: string;
+    notes?: string;
+  };
+
+  const customerId = overrides.customerId || suggestion.customerId;
+  if (!customerId) {
+    throw new ValidationError("Förslaget har ingen kopplad kund. Importera Fortnox-kunder eller ange customerId i begäran.");
+  }
+  // Verify customer belongs to tenant
+  const cust = await db.select({ id: customers.id }).from(customers)
+    .where(and(eq(customers.id, customerId), eq(customers.tenantId, tenantId), isNull(customers.deletedAt)));
+  if (cust.length === 0) throw new ValidationError("Kund tillhör inte denna tenant");
+
+  const created = await storage.createCustomerServiceContract({
+    tenantId,
+    customerId,
+    contractNumber: null,
+    name: overrides.name || suggestion.articleDescription,
+    description: `Härlett från Fortnox-fakturahistorik (${suggestion.occurrenceCount} fakturor ${new Date(suggestion.firstSeen).toISOString().slice(0,10)}–${new Date(suggestion.lastSeen).toISOString().slice(0,10)})`,
+    status: "active",
+    startDate: overrides.startDate ? new Date(overrides.startDate) : new Date(),
+    endDate: null,
+    renewalType: "auto",
+    billingCycle: overrides.billingCycle || suggestion.suggestedBillingCycle,
+    monthlyValue: overrides.monthlyValue ?? suggestion.monthlyValue ?? null,
+    objectIds: [],
+    services: [{
+      articleNumber: suggestion.articleNumber,
+      description: suggestion.articleDescription,
+      avgQuantity: suggestion.avgQuantity,
+      avgPrice: suggestion.avgPrice,
+    }],
+    notes: overrides.notes || `Genererat förslag (konfidens ${(Math.round((suggestion.confidence || 0) * 100))}%) från Fortnox-import ${suggestion.importBatchId}`,
+  });
+
+  const reviewerId = (req.user as { claims?: { sub?: string } } | undefined)?.claims?.sub || null;
+  const updated = await storage.updateFortnoxContractSuggestion(suggestion.id, tenantId, {
+    status: "approved",
+    createdContractId: created.id,
+    reviewedAt: new Date(),
+    reviewedBy: reviewerId,
+  });
+
+  res.json({ success: true, contract: created, suggestion: updated });
+}));
+
+// Reject a suggestion
+app.post("/api/import/fortnox-invoices/suggestions/:id/reject", asyncHandler(async (req, res) => {
+  const tenantId = await getTenantIdWithFallback(req);
+  const suggestion = await storage.getFortnoxContractSuggestion(req.params.id, tenantId);
+  if (!suggestion) throw new NotFoundError("Förslag hittades inte");
+  const reviewerId = (req.user as { claims?: { sub?: string } } | undefined)?.claims?.sub || null;
+  const updated = await storage.updateFortnoxContractSuggestion(suggestion.id, tenantId, {
+    status: "rejected",
+    reviewedAt: new Date(),
+    reviewedBy: reviewerId,
+  });
+  res.json({ success: true, suggestion: updated });
+}));
+
+// Delete a whole suggestion batch (cleanup)
+app.delete("/api/import/fortnox-invoices/suggestions/batch/:batchId", asyncHandler(async (req, res) => {
+  const tenantId = await getTenantIdWithFallback(req);
+  const removed = await storage.deleteFortnoxContractSuggestionsByBatch(tenantId, req.params.batchId);
+  res.json({ success: true, removed });
 }));
 
 app.post("/api/import/customers/bulk", upload.single("file"), asyncHandler(async (req, res) => {

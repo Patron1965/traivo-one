@@ -966,6 +966,426 @@ function FortnoxXlsxImportPanel() {
   );
 }
 
+// ============================================================================
+// FORTNOX FAKTURAHISTORIK → AVTALSFÖRSLAG
+// ============================================================================
+
+interface FortnoxInvoiceSuggestion {
+  fortnoxCustomerNumber: string;
+  customerName: string;
+  matchedCustomerId: string | null;
+  matchedCustomerName: string | null;
+  articleNumber: string | null;
+  articleDescription: string;
+  occurrenceCount: number;
+  firstSeen: string;
+  lastSeen: string;
+  avgIntervalDays: number | null;
+  suggestedBillingCycle: string;
+  avgPrice: number | null;
+  avgQuantity: number | null;
+  totalRevenue: number;
+  monthlyValue: number | null;
+  confidence: number | null;
+  rawSamples: Array<{ date: string; quantity: number; price: number; total: number }>;
+}
+
+interface FortnoxInvoiceAnalyzeResponse {
+  importBatchId: string | null;
+  persisted: boolean;
+  totalLines: number;
+  totalGroups: number;
+  uniqueCustomers: number;
+  suggestionsCount: number;
+  matchedCustomers: number;
+  unmatchedCustomers: number;
+  suggestions: FortnoxInvoiceSuggestion[];
+}
+
+interface PersistedSuggestion {
+  id: string;
+  importBatchId: string;
+  customerId: string | null;
+  fortnoxCustomerNumber: string;
+  customerName: string;
+  articleNumber: string | null;
+  articleDescription: string;
+  occurrenceCount: number;
+  firstSeen: string;
+  lastSeen: string;
+  avgIntervalDays: number | null;
+  suggestedBillingCycle: string;
+  avgPrice: number | null;
+  avgQuantity: number | null;
+  totalRevenue: number;
+  monthlyValue: number | null;
+  confidence: number | null;
+  status: string;
+  createdContractId: string | null;
+  createdAt: string;
+}
+
+function billingCycleLabel(cycle: string): string {
+  switch (cycle) {
+    case "weekly": return "Vecka";
+    case "monthly": return "Månad";
+    case "quarterly": return "Kvartal";
+    case "biannual": return "Halvår";
+    case "yearly": return "År";
+    default: return cycle;
+  }
+}
+
+function FortnoxInvoiceImportPanel() {
+  const { toast } = useToast();
+  const [file, setFile] = useState<File | null>(null);
+  const [minOccurrences, setMinOccurrences] = useState(3);
+  const [minSpanDays, setMinSpanDays] = useState(60);
+  const [analysis, setAnalysis] = useState<FortnoxInvoiceAnalyzeResponse | null>(null);
+  const [batchId, setBatchId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const persistedQuery = useQuery<{ suggestions: PersistedSuggestion[] }>({
+    queryKey: ["/api/import/fortnox-invoices/suggestions", { status: "pending" }],
+    queryFn: async () => {
+      const res = await fetch("/api/import/fortnox-invoices/suggestions?status=pending", { credentials: "include" });
+      if (!res.ok) throw new Error("Kunde inte hämta förslag");
+      return res.json();
+    },
+  });
+
+  const analyzeMutation = useMutation({
+    mutationFn: async (params: { file: File; persist: boolean }) => {
+      const fd = new FormData();
+      fd.append("file", params.file);
+      fd.append("minOccurrences", String(minOccurrences));
+      fd.append("minSpanDays", String(minSpanDays));
+      fd.append("persist", String(params.persist));
+      const res = await fetch("/api/import/fortnox-invoices/analyze", { method: "POST", body: fd, credentials: "include" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Analys misslyckades");
+      }
+      return res.json() as Promise<FortnoxInvoiceAnalyzeResponse>;
+    },
+    onSuccess: (data, vars) => {
+      setAnalysis(data);
+      setBatchId(data.importBatchId);
+      toast({
+        title: vars.persist
+          ? `${data.suggestionsCount} förslag sparade för granskning`
+          : `${data.suggestionsCount} förslag (förhandsgranskning)`,
+        description: `${data.totalLines} fakturarader, ${data.uniqueCustomers} kunder. ${data.matchedCustomers} matchade kunder, ${data.unmatchedCustomers} omatchade.`,
+      });
+      if (vars.persist) {
+        queryClient.invalidateQueries({ queryKey: ["/api/import/fortnox-invoices/suggestions"] });
+      }
+    },
+    onError: (e: Error) => toast({ title: "Analys misslyckades", description: e.message, variant: "destructive" }),
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/import/fortnox-invoices/suggestions/${id}/approve`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Avtal skapat" });
+      queryClient.invalidateQueries({ queryKey: ["/api/import/fortnox-invoices/suggestions"] });
+    },
+    onError: (e: Error) => toast({ title: "Kunde inte godkänna", description: e.message, variant: "destructive" }),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/import/fortnox-invoices/suggestions/${id}/reject`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Förslag avvisat" });
+      queryClient.invalidateQueries({ queryKey: ["/api/import/fortnox-invoices/suggestions"] });
+    },
+    onError: (e: Error) => toast({ title: "Kunde inte avvisa", description: e.message, variant: "destructive" }),
+  });
+
+  const handleFileChange = (f: File | null) => {
+    setFile(f);
+    setAnalysis(null);
+    setBatchId(null);
+  };
+
+  const reset = () => {
+    setFile(null);
+    setAnalysis(null);
+    setBatchId(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const persisted = persistedQuery.data?.suggestions || [];
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-3">
+            <Info className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+            <div className="space-y-2 text-sm">
+              <p className="font-medium">Importera Fortnox-fakturahistorik → avtalsförslag</p>
+              <p className="text-muted-foreground">
+                Ladda upp en Fortnox-export (xlsx) av historiska fakturor. Systemet identifierar
+                återkommande artiklar per kund (t.ex. samma städning varje månad) och föreslår
+                tjänsteavtal. Förslag måste godkännas innan de blir skarpa avtal.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileUp className="h-4 w-4" />
+            Steg 1 – Ladda upp fakturaexport
+          </CardTitle>
+          <CardDescription>
+            Excel med kolumner som InvoiceNumber, InvoiceDate, CustomerNumber, ArticleNumber/Description, Quantity, Price.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
+            disabled={analyzeMutation.isPending}
+            data-testid="input-fortnox-invoice-file"
+          />
+          {file && (
+            <div className="text-sm text-muted-foreground" data-testid="text-fortnox-invoice-file-info">
+              {file.name} ({(file.size / 1024).toFixed(1)} kB)
+            </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground">Min antal fakturor per artikel</label>
+              <Input
+                type="number"
+                min={2}
+                max={50}
+                value={minOccurrences}
+                onChange={(e) => setMinOccurrences(parseInt(e.target.value || "3", 10))}
+                data-testid="input-min-occurrences"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Min tidsspann (dagar)</label>
+              <Input
+                type="number"
+                min={0}
+                max={3650}
+                value={minSpanDays}
+                onChange={(e) => setMinSpanDays(parseInt(e.target.value || "60", 10))}
+                data-testid="input-min-span-days"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => file && analyzeMutation.mutate({ file, persist: false })}
+              disabled={!file || analyzeMutation.isPending}
+              variant="outline"
+              data-testid="button-analyze-preview"
+            >
+              {analyzeMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Eye className="h-4 w-4 mr-2" />}
+              Förhandsgranska
+            </Button>
+            <Button
+              onClick={() => file && analyzeMutation.mutate({ file, persist: true })}
+              disabled={!file || analyzeMutation.isPending}
+              data-testid="button-analyze-persist"
+            >
+              {analyzeMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
+              Spara förslag för granskning
+            </Button>
+            {(file || analysis) && (
+              <Button variant="ghost" onClick={reset} data-testid="button-fortnox-invoice-reset">
+                Återställ
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {analysis && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Steg 2 – Analysresultat</CardTitle>
+            <CardDescription>
+              {analysis.totalLines} fakturarader · {analysis.uniqueCustomers} kunder · {analysis.suggestionsCount} förslag
+              {batchId && <> · batch <code className="text-xs">{batchId.slice(0, 8)}</code></>}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-md border p-3" data-testid="stat-invoice-lines">
+                <div className="text-xs text-muted-foreground">Fakturarader</div>
+                <div className="text-2xl font-semibold">{analysis.totalLines}</div>
+              </div>
+              <div className="rounded-md border p-3" data-testid="stat-invoice-suggestions">
+                <div className="text-xs text-muted-foreground">Avtalsförslag</div>
+                <div className="text-2xl font-semibold text-green-600">{analysis.suggestionsCount}</div>
+              </div>
+              <div className="rounded-md border p-3" data-testid="stat-invoice-matched">
+                <div className="text-xs text-muted-foreground">Matchade kunder</div>
+                <div className="text-2xl font-semibold">{analysis.matchedCustomers}</div>
+              </div>
+              <div className="rounded-md border p-3" data-testid="stat-invoice-unmatched">
+                <div className="text-xs text-muted-foreground">Omatchade kunder</div>
+                <div className="text-2xl font-semibold text-amber-600">{analysis.unmatchedCustomers}</div>
+              </div>
+            </div>
+
+            <ScrollArea className="h-80 border rounded-md">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Kund</TableHead>
+                    <TableHead>Artikel</TableHead>
+                    <TableHead className="text-right">Antal</TableHead>
+                    <TableHead>Cykel</TableHead>
+                    <TableHead className="text-right">Snitt á-pris</TableHead>
+                    <TableHead className="text-right">Mån.värde</TableHead>
+                    <TableHead className="text-right">Totalt</TableHead>
+                    <TableHead className="text-right">Konfidens</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {analysis.suggestions.slice(0, 200).map((s, idx) => (
+                    <TableRow key={`${s.fortnoxCustomerNumber}-${s.articleNumber}-${idx}`} data-testid={`row-preview-${idx}`}>
+                      <TableCell>
+                        <div className="text-sm font-medium">{s.customerName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          #{s.fortnoxCustomerNumber}
+                          {s.matchedCustomerId ? (
+                            <Badge variant="outline" className="ml-2 text-xs">Kopplad</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="ml-2 text-xs">Saknar kund</Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate" title={s.articleDescription}>
+                        {s.articleNumber && <span className="text-xs text-muted-foreground mr-1">{s.articleNumber}</span>}
+                        {s.articleDescription}
+                      </TableCell>
+                      <TableCell className="text-right">{s.occurrenceCount}</TableCell>
+                      <TableCell>{billingCycleLabel(s.suggestedBillingCycle)}</TableCell>
+                      <TableCell className="text-right">{s.avgPrice?.toFixed(0) ?? "-"}</TableCell>
+                      <TableCell className="text-right">{s.monthlyValue?.toFixed(0) ?? "-"}</TableCell>
+                      <TableCell className="text-right">{s.totalRevenue.toFixed(0)}</TableCell>
+                      <TableCell className="text-right">
+                        {s.confidence != null ? `${Math.round(s.confidence * 100)}%` : "-"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+            {analysis.suggestions.length > 200 && (
+              <div className="text-xs text-muted-foreground">Visar 200 av {analysis.suggestions.length} förslag</div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ListChecks className="h-4 w-4" />
+            Sparade förslag (väntar på granskning)
+          </CardTitle>
+          <CardDescription>
+            Godkänn för att skapa skarpa tjänsteavtal, eller avvisa för att ta bort förslaget.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {persistedQuery.isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Hämtar förslag …
+            </div>
+          ) : persisted.length === 0 ? (
+            <div className="text-sm text-muted-foreground" data-testid="text-no-pending-suggestions">
+              Inga väntande förslag. Spara förslag från en analys ovan för att granska dem här.
+            </div>
+          ) : (
+            <ScrollArea className="h-96 border rounded-md">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Kund</TableHead>
+                    <TableHead>Artikel</TableHead>
+                    <TableHead>Cykel</TableHead>
+                    <TableHead className="text-right">Mån.värde</TableHead>
+                    <TableHead className="text-right">Konfidens</TableHead>
+                    <TableHead className="text-right">Åtgärder</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {persisted.map((s) => (
+                    <TableRow key={s.id} data-testid={`row-suggestion-${s.id}`}>
+                      <TableCell>
+                        <div className="text-sm font-medium">{s.customerName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          #{s.fortnoxCustomerNumber}
+                          {!s.customerId && (
+                            <Badge variant="secondary" className="ml-2 text-xs">Saknar kund</Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate" title={s.articleDescription}>
+                        {s.articleNumber && <span className="text-xs text-muted-foreground mr-1">{s.articleNumber}</span>}
+                        {s.articleDescription}
+                      </TableCell>
+                      <TableCell>{billingCycleLabel(s.suggestedBillingCycle)}</TableCell>
+                      <TableCell className="text-right">{s.monthlyValue?.toFixed(0) ?? "-"}</TableCell>
+                      <TableCell className="text-right">
+                        {s.confidence != null ? `${Math.round(s.confidence * 100)}%` : "-"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={!s.customerId || approveMutation.isPending}
+                            onClick={() => approveMutation.mutate(s.id)}
+                            data-testid={`button-approve-suggestion-${s.id}`}
+                          >
+                            <Check className="h-3 w-3 mr-1" />
+                            Godkänn
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={rejectMutation.isPending}
+                            onClick={() => rejectMutation.mutate(s.id)}
+                            data-testid={`button-reject-suggestion-${s.id}`}
+                          >
+                            <X className="h-3 w-3 mr-1" />
+                            Avvisa
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function ImportPage() {
   const { toast } = useToast();
   const { t: tl } = useLanguage();
@@ -3280,7 +3700,22 @@ export default function ImportPage() {
         </TabsContent>
 
         <TabsContent value="fortnox" className="space-y-6">
-          <FortnoxXlsxImportPanel />
+          <Tabs defaultValue="customers" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="customers" data-testid="tab-fortnox-customers">
+                Kunder & objekt
+              </TabsTrigger>
+              <TabsTrigger value="invoices" data-testid="tab-fortnox-invoices">
+                Fakturahistorik → avtalsförslag
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="customers" className="space-y-4 mt-4">
+              <FortnoxXlsxImportPanel />
+            </TabsContent>
+            <TabsContent value="invoices" className="space-y-4 mt-4">
+              <FortnoxInvoiceImportPanel />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         <TabsContent value="mapped" className="space-y-6">

@@ -70,6 +70,7 @@ import {
   type CustomerInvoice, type InsertCustomerInvoice,
   type CustomerIssueReport, type InsertCustomerIssueReport,
   type CustomerServiceContract, type InsertCustomerServiceContract,
+  type FortnoxContractSuggestion, type InsertFortnoxContractSuggestion,
   type CustomerNotificationSettings, type InsertCustomerNotificationSettings,
   type Protocol, type InsertProtocol,
   type DeviationReport, type InsertDeviationReport,
@@ -120,7 +121,7 @@ import {
   orderConceptObjects, orderConceptArticles, articleObjectMappings,
   invoiceConfigurations, documentConfigurations, deliverySchedules,
   customerPortalTokens, customerPortalSessions, customerBookingRequests, customerPortalMessages,
-  customerInvoices, customerIssueReports, customerServiceContracts, customerNotificationSettings,
+  customerInvoices, customerIssueReports, customerServiceContracts, fortnoxContractSuggestions, customerNotificationSettings,
   protocols, deviationReports, qrCodeLinks, publicIssueReports, customerChangeRequests, environmentalData,
   visitConfirmations, technicianRatings, portalMessages, selfBookingSlots, selfBookings,
   tenantFeatures,
@@ -665,6 +666,13 @@ export interface IStorage {
   // Customer Portal - Service Contracts
   getCustomerServiceContracts(tenantId: string, customerId: string): Promise<CustomerServiceContract[]>;
   createCustomerServiceContract(contract: InsertCustomerServiceContract): Promise<CustomerServiceContract>;
+
+  // Fortnox contract suggestions (from invoice history)
+  listFortnoxContractSuggestions(tenantId: string, opts?: { status?: string; importBatchId?: string; customerId?: string }): Promise<FortnoxContractSuggestion[]>;
+  getFortnoxContractSuggestion(id: string, tenantId: string): Promise<FortnoxContractSuggestion | undefined>;
+  createFortnoxContractSuggestions(rows: InsertFortnoxContractSuggestion[]): Promise<FortnoxContractSuggestion[]>;
+  updateFortnoxContractSuggestion(id: string, tenantId: string, updates: Partial<FortnoxContractSuggestion>): Promise<FortnoxContractSuggestion | undefined>;
+  deleteFortnoxContractSuggestionsByBatch(tenantId: string, importBatchId: string): Promise<number>;
   
   // Customer Portal - Notification Settings
   getCustomerNotificationSettings(tenantId: string, customerId: string): Promise<CustomerNotificationSettings | undefined>;
@@ -5362,6 +5370,46 @@ export class DatabaseStorage implements IStorage {
   async createCustomerServiceContract(contract: InsertCustomerServiceContract): Promise<CustomerServiceContract> {
     const [result] = await db.insert(customerServiceContracts).values(contract).returning();
     return result;
+  }
+
+  // ============================================
+  // FORTNOX INVOICE → CONTRACT SUGGESTIONS
+  // ============================================
+
+  async listFortnoxContractSuggestions(tenantId: string, opts: { status?: string; importBatchId?: string; customerId?: string } = {}): Promise<FortnoxContractSuggestion[]> {
+    const conds = [eq(fortnoxContractSuggestions.tenantId, tenantId)];
+    if (opts.status) conds.push(eq(fortnoxContractSuggestions.status, opts.status));
+    if (opts.importBatchId) conds.push(eq(fortnoxContractSuggestions.importBatchId, opts.importBatchId));
+    if (opts.customerId) conds.push(eq(fortnoxContractSuggestions.customerId, opts.customerId));
+    return db.select().from(fortnoxContractSuggestions)
+      .where(and(...conds))
+      .orderBy(desc(fortnoxContractSuggestions.totalRevenue));
+  }
+
+  async getFortnoxContractSuggestion(id: string, tenantId: string): Promise<FortnoxContractSuggestion | undefined> {
+    const [row] = await db.select().from(fortnoxContractSuggestions)
+      .where(and(eq(fortnoxContractSuggestions.id, id), eq(fortnoxContractSuggestions.tenantId, tenantId)));
+    return row;
+  }
+
+  async createFortnoxContractSuggestions(rows: InsertFortnoxContractSuggestion[]): Promise<FortnoxContractSuggestion[]> {
+    if (rows.length === 0) return [];
+    return db.insert(fortnoxContractSuggestions).values(rows).returning();
+  }
+
+  async updateFortnoxContractSuggestion(id: string, tenantId: string, updates: Partial<FortnoxContractSuggestion>): Promise<FortnoxContractSuggestion | undefined> {
+    const [row] = await db.update(fortnoxContractSuggestions)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(fortnoxContractSuggestions.id, id), eq(fortnoxContractSuggestions.tenantId, tenantId)))
+      .returning();
+    return row;
+  }
+
+  async deleteFortnoxContractSuggestionsByBatch(tenantId: string, importBatchId: string): Promise<number> {
+    const result = await db.delete(fortnoxContractSuggestions)
+      .where(and(eq(fortnoxContractSuggestions.tenantId, tenantId), eq(fortnoxContractSuggestions.importBatchId, importBatchId)))
+      .returning({ id: fortnoxContractSuggestions.id });
+    return result.length;
   }
 
   // ============================================
