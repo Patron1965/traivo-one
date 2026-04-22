@@ -143,11 +143,24 @@ function NavItemRow({
     <SidebarMenuItem>
       <div className="flex items-center group/fav">
         <SidebarMenuButton asChild isActive={isActive} tooltip={item.title} className="flex-1">
-          <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
-            <item.icon className="h-4 w-4" />
-            <span className="flex-1">{item.title}</span>
-            {badgeCount !== undefined && badgeCount > 0 && <Badge count={badgeCount} />}
-          </Link>
+          {item.external ? (
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid={`nav-${item.url.replace("/", "") || "home"}`}
+            >
+              <item.icon className="h-4 w-4" />
+              <span className="flex-1">{item.title}</span>
+              {badgeCount !== undefined && badgeCount > 0 && <Badge count={badgeCount} />}
+            </a>
+          ) : (
+            <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
+              <item.icon className="h-4 w-4" />
+              <span className="flex-1">{item.title}</span>
+              {badgeCount !== undefined && badgeCount > 0 && <Badge count={badgeCount} />}
+            </Link>
+          )}
         </SidebarMenuButton>
         <button
           onClick={(e) => {

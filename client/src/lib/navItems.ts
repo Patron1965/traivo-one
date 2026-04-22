@@ -35,6 +35,7 @@ import {
   CalendarDays,
   MessageCircle,
   Gauge,
+  Globe,
   type LucideIcon,
 } from "lucide-react";
 import { translate } from "./i18n";
@@ -44,6 +45,7 @@ export interface NavItem {
   url: string;
   icon: LucideIcon;
   description: string;
+  external?: boolean;
 }
 
 export interface NavGroup {
@@ -152,6 +154,7 @@ export function getAdminItems(tl?: (key: string) => string): NavItem[] {
     { title: l("nav.api-costs"), url: "/api-costs", icon: Activity, description: l("nav.api-costs.desc") },
     { title: l("nav.system-overview"), url: "/system-overview", icon: FileText, description: l("nav.system-overview.desc") },
     { title: l("nav.settings"), url: "/settings", icon: Settings, description: l("nav.settings.desc") },
+    { title: "Kundportal extern", url: "/portal", icon: Globe, description: "Öppna den externa kundportalen i ny flik", external: true },
   ];
 }
 
