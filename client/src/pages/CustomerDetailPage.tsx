@@ -13,8 +13,9 @@ import { QueryErrorState } from "@/components/ErrorBoundary";
 import {
   ArrowLeft, Building2, Layers, Package, ClipboardList, Phone, Mail, MapPin,
   ChevronDown, ChevronRight, Users, Home, Container, Trash2, TreePine, Map as MapIcon,
-  Repeat, Receipt, GitBranch, Hash, FileText, AlertTriangle, Loader2,
+  Repeat, Receipt, GitBranch, Hash, FileText, AlertTriangle, Loader2, Search, X,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { MapContainer, TileLayer, Circle, Popup, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -57,6 +58,17 @@ interface TreeNode {
   accessInfoInherited: boolean | null;
   hasCoords: boolean;
   childCount: number;
+}
+
+interface SearchHit {
+  id: string;
+  name: string;
+  objectNumber: string | null;
+  address: string | null;
+  hierarchyLevel: string | null;
+  clusterId: string | null;
+  parentId: string | null;
+  path: Array<{ id: string; name: string; hierarchyLevel: string | null }>;
 }
 
 interface MapPoint {
@@ -125,6 +137,8 @@ function TreeRow({
   level,
   customerId,
   sync,
+  expanded,
+  onToggleExpand,
   onSelectObject,
   onHoverObject,
 }: {
@@ -132,10 +146,14 @@ function TreeRow({
   level: number;
   customerId: string;
   sync: SyncState;
+  expanded: Set<string>;
+  onToggleExpand: (id: string, open: boolean) => void;
   onSelectObject: (id: string | null) => void;
   onHoverObject: (id: string | null) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const open = expanded.has(node.id);
+  const setOpen = (v: boolean) => onToggleExpand(node.id, v);
+  const rowRef = useRef<HTMLDivElement | null>(null);
   const hasChildren = (node.childCount ?? 0) > 0;
   const info = HIERARCHY_LEVELS[node.hierarchyLevel || "fastighet"] || HIERARCHY_LEVELS.fastighet;
   const Icon = info.icon;
@@ -156,6 +174,12 @@ function TreeRow({
     staleTime: 60_000,
   });
 
+  useEffect(() => {
+    if (isSelected && rowRef.current) {
+      rowRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [isSelected]);
+
   return (
     <div className="select-none">
       <Collapsible open={open} onOpenChange={setOpen}>
@@ -164,6 +188,7 @@ function TreeRow({
             isSelected ? "bg-primary/10 ring-1 ring-primary/40" : isHovered ? "bg-muted" : ""
           }`}
           style={{ paddingLeft: `${level * 18 + 8}px` }}
+          ref={rowRef}
           onClick={() => onSelectObject(isSelected ? null : node.id)}
           onMouseEnter={() => onHoverObject(node.id)}
           onMouseLeave={() => onHoverObject(null)}
@@ -249,6 +274,8 @@ function TreeRow({
                 level={level + 1}
                 customerId={customerId}
                 sync={sync}
+                expanded={expanded}
+                onToggleExpand={onToggleExpand}
                 onSelectObject={onSelectObject}
                 onHoverObject={onHoverObject}
               />
@@ -409,6 +436,28 @@ export default function CustomerDetailPage() {
   });
   const [mapBbox, setMapBbox] = useState<[number, number, number, number] | null>(null);
   const [mapTabActive, setMapTabActive] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(searchInput.trim()), 250);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setExpanded(new Set());
+    setSearchInput("");
+    setSearchQuery("");
+  }, [customerId]);
+
+  const toggleExpand = (id: string, open: boolean) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (open) next.add(id);
+      else next.delete(id);
+      return next;
+    });
 
   const setSelectedObject = (id: string | null) =>
     setSync((s) => ({ ...s, selectedObjectId: id }));
@@ -447,6 +496,36 @@ export default function CustomerDetailPage() {
     enabled: !!customerId,
     staleTime: 60_000,
   });
+
+  const searchHitsQuery = useQuery<SearchHit[]>({
+    queryKey: ["/api/customers", customerId, "objects", "search", searchQuery],
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/customers/${encodeURIComponent(customerId!)}/objects/search?q=${encodeURIComponent(searchQuery)}&limit=50`,
+        { credentials: "include" },
+      );
+      if (!r.ok) throw new Error("Sökningen misslyckades");
+      return r.json();
+    },
+    enabled: !!customerId && searchQuery.length > 0,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
+
+  const jumpToHit = (hit: SearchHit) => {
+    if (sync.selectedClusterId) {
+      setSync((s) => ({ ...s, selectedClusterId: null }));
+    }
+    const ancestorIds = hit.path
+      .filter((p) => p.id !== hit.id)
+      .map((p) => p.id);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      ancestorIds.forEach((id) => next.add(id));
+      return next;
+    });
+    setSelectedObject(hit.id);
+  };
 
   const coordsQueryKey = useMemo(() => {
     const bboxKey = mapBbox ? mapBbox.map((n) => n.toFixed(3)).join(",") : "all";
@@ -804,7 +883,92 @@ export default function CustomerDetailPage() {
 
             <TabsContent value="tree">
               <Card>
-                <CardContent className="p-3">
+                <CardContent className="p-3 space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <Input
+                      type="text"
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
+                      placeholder="Sök i hierarkin (namn, adress, objektnummer)..."
+                      className="pl-8 pr-8"
+                      data-testid="input-tree-search"
+                    />
+                    {searchInput && (
+                      <button
+                        onClick={() => { setSearchInput(""); setSearchQuery(""); }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover-elevate"
+                        aria-label="Rensa sökning"
+                        data-testid="button-clear-search"
+                      >
+                        <X className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                    )}
+                  </div>
+
+                  {searchQuery && (
+                    <div
+                      className="border rounded-md max-h-[300px] overflow-y-auto"
+                      data-testid="search-results"
+                    >
+                      {searchHitsQuery.isLoading ? (
+                        <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" /> Söker...
+                        </div>
+                      ) : searchHitsQuery.isError ? (
+                        <div className="flex items-center gap-2 p-3 text-xs text-destructive">
+                          <AlertTriangle className="h-3 w-3" /> Sökningen misslyckades.
+                          <Button variant="ghost" size="sm" className="h-5 text-xs px-1" onClick={() => searchHitsQuery.refetch()}>Försök igen</Button>
+                        </div>
+                      ) : (searchHitsQuery.data || []).length === 0 ? (
+                        <div className="p-3 text-xs text-muted-foreground" data-testid="text-empty-search">
+                          Inga objekt matchar "{searchQuery}".
+                        </div>
+                      ) : (
+                        <ul className="divide-y">
+                          {(searchHitsQuery.data || []).map((hit) => {
+                            const info = HIERARCHY_LEVELS[hit.hierarchyLevel || "fastighet"] || HIERARCHY_LEVELS.fastighet;
+                            const HitIcon = info.icon;
+                            const pathLabel = hit.path
+                              .filter((p) => p.id !== hit.id)
+                              .map((p) => p.name)
+                              .join(" › ");
+                            return (
+                              <li key={hit.id}>
+                                <button
+                                  onClick={() => jumpToHit(hit)}
+                                  className="w-full text-left px-3 py-2 hover-elevate flex items-start gap-2"
+                                  data-testid={`search-hit-${hit.id}`}
+                                >
+                                  <HitIcon className={`h-4 w-4 mt-0.5 ${info.color}`} />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-sm font-medium truncate">{hit.name}</span>
+                                      <Badge variant="outline" className="text-[10px]">{info.label}</Badge>
+                                      {hit.objectNumber && (
+                                        <span className="text-[10px] font-mono text-muted-foreground">#{hit.objectNumber}</span>
+                                      )}
+                                    </div>
+                                    {pathLabel && (
+                                      <div className="text-xs text-muted-foreground truncate" data-testid={`search-hit-path-${hit.id}`}>
+                                        {pathLabel}
+                                      </div>
+                                    )}
+                                    {hit.address && (
+                                      <div className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                                        <MapPin className="h-3 w-3" /> {hit.address}
+                                      </div>
+                                    )}
+                                  </div>
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
                   {rootsQuery.isLoading ? (
                     <div className="space-y-2">
                       {Array.from({ length: 5 }).map((_, i) => (
@@ -856,6 +1020,8 @@ export default function CustomerDetailPage() {
                                   level={0}
                                   customerId={customerId}
                                   sync={sync}
+                                  expanded={expanded}
+                                  onToggleExpand={toggleExpand}
                                   onSelectObject={setSelectedObject}
                                   onHoverObject={setHoveredObject}
                                 />

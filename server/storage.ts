@@ -168,6 +168,17 @@ export interface CustomerMapPoint {
   clusterId: string | null;
 }
 
+export interface CustomerObjectSearchHit {
+  id: string;
+  name: string;
+  objectNumber: string | null;
+  address: string | null;
+  hierarchyLevel: string | null;
+  clusterId: string | null;
+  parentId: string | null;
+  path: Array<{ id: string; name: string; hierarchyLevel: string | null }>;
+}
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -231,6 +242,7 @@ export interface IStorage {
   getCustomerObjectTreeRoots(customerId: string, tenantId: string, clusterId?: string | null): Promise<CustomerTreeNode[]>;
   getCustomerObjectTreeChildren(customerId: string, tenantId: string, parentId: string): Promise<CustomerTreeNode[]>;
   getCustomerObjectMapPoints(customerId: string, tenantId: string, opts?: { bbox?: [number, number, number, number]; clusterId?: string | null; limit?: number }): Promise<CustomerMapPoint[]>;
+  searchCustomerObjects(customerId: string, tenantId: string, query: string, limit?: number): Promise<CustomerObjectSearchHit[]>;
   createObject(object: InsertObject): Promise<ServiceObject>;
   updateObject(id: string, object: Partial<InsertObject>): Promise<ServiceObject | undefined>;
   deleteObject(id: string): Promise<void>;
@@ -1532,6 +1544,113 @@ export class DatabaseStorage implements IStorage {
       LIMIT ${limit}
     `);
     return (result.rows as unknown as CustomerMapPoint[]) || [];
+  }
+
+  async searchCustomerObjects(
+    customerId: string,
+    tenantId: string,
+    query: string,
+    limit: number = 50,
+  ): Promise<CustomerObjectSearchHit[]> {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+    const safeLimit = Math.max(1, Math.min(100, limit));
+    const like = `%${trimmed}%`;
+
+    const matches = await db.execute(sql`
+      SELECT
+        o.id,
+        o.name,
+        o.object_number AS "objectNumber",
+        o.address,
+        o.hierarchy_level AS "hierarchyLevel",
+        o.cluster_id AS "clusterId",
+        o.parent_id AS "parentId"
+      FROM objects o
+      WHERE o.customer_id = ${customerId}
+        AND o.tenant_id = ${tenantId}
+        AND o.deleted_at IS NULL
+        AND (
+          o.name ILIKE ${like}
+          OR o.address ILIKE ${like}
+          OR o.object_number ILIKE ${like}
+        )
+      ORDER BY
+        CASE WHEN o.name ILIKE ${trimmed + '%'} THEN 0 ELSE 1 END,
+        o.name
+      LIMIT ${safeLimit}
+    `);
+
+    interface MatchRow {
+      id: string;
+      name: string;
+      objectNumber: string | null;
+      address: string | null;
+      hierarchyLevel: string | null;
+      clusterId: string | null;
+      parentId: string | null;
+    }
+    const matchRows = (matches.rows as unknown as MatchRow[]) || [];
+    if (matchRows.length === 0) return [];
+
+    const ids = matchRows.map((r) => r.id);
+    const ancestors = await db.execute(sql`
+      WITH RECURSIVE chain AS (
+        SELECT
+          o.id AS leaf_id,
+          o.id,
+          o.name,
+          o.parent_id,
+          o.hierarchy_level,
+          0 AS depth
+        FROM objects o
+        WHERE o.id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+          AND o.tenant_id = ${tenantId}
+          AND o.deleted_at IS NULL
+        UNION ALL
+        SELECT
+          c.leaf_id,
+          p.id,
+          p.name,
+          p.parent_id,
+          p.hierarchy_level,
+          c.depth + 1
+        FROM chain c
+        JOIN objects p ON p.id = c.parent_id
+        WHERE p.tenant_id = ${tenantId}
+          AND p.deleted_at IS NULL
+          AND p.customer_id = ${customerId}
+      )
+      SELECT leaf_id AS "leafId", id, name, hierarchy_level AS "hierarchyLevel", depth
+      FROM chain
+      ORDER BY leaf_id, depth DESC
+    `);
+
+    interface ChainRow {
+      leafId: string;
+      id: string;
+      name: string;
+      hierarchyLevel: string | null;
+      depth: number;
+    }
+    const chainRows = (ancestors.rows as unknown as ChainRow[]) || [];
+    const pathByLeaf = new Map<string, Array<{ id: string; name: string; hierarchyLevel: string | null }>>();
+    for (const row of chainRows) {
+      const arr = pathByLeaf.get(row.leafId) || [];
+      arr.push({ id: row.id, name: row.name, hierarchyLevel: row.hierarchyLevel });
+      pathByLeaf.set(row.leafId, arr);
+    }
+
+    return matchRows.map((m) => ({
+      id: m.id,
+      name: m.name,
+      objectNumber: m.objectNumber,
+      address: m.address,
+      hierarchyLevel: m.hierarchyLevel,
+      clusterId: m.clusterId,
+      parentId: m.parentId,
+      path: pathByLeaf.get(m.id) || [{ id: m.id, name: m.name, hierarchyLevel: m.hierarchyLevel }],
+    }));
   }
 
   async createObject(insertObject: InsertObject): Promise<ServiceObject> {

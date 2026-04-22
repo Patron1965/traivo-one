@@ -486,6 +486,21 @@ app.get("/api/customers/:customerId/objects/tree-children", asyncHandler(async (
   res.json(children);
 }));
 
+app.get("/api/customers/:customerId/objects/search", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customer = await storage.getCustomer(req.params.customerId);
+  if (!verifyTenantOwnership(customer, tenantId)) {
+    throw new NotFoundError("Kund");
+  }
+  const q = typeof req.query.q === "string" ? req.query.q : "";
+  const limit = Math.max(1, Math.min(100, parseInt(req.query.limit as string) || 50));
+  if (!q.trim()) {
+    return res.json([]);
+  }
+  const hits = await storage.searchCustomerObjects(req.params.customerId, tenantId, q, limit);
+  res.json(hits);
+}));
+
 app.get("/api/customers/:customerId/objects/coordinates", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const customer = await storage.getCustomer(req.params.customerId);
