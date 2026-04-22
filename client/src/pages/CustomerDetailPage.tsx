@@ -104,11 +104,11 @@ function groupByCluster(
   const groups: ClusterGroup[] = clusters
     .filter((c) => byCluster.has(c.id))
     .map((c) => ({ id: c.id, name: c.name, color: c.color, roots: buildSubtree(byCluster.get(c.id)!) }));
-  for (const [cid, list] of byCluster) {
+  Array.from(byCluster.entries()).forEach(([cid, list]) => {
     if (!groups.find((g) => g.id === cid)) {
       groups.push({ id: cid, name: "Kluster", color: null, roots: buildSubtree(list) });
     }
-  }
+  });
   if (orphans.length > 0) {
     groups.push({ id: null, name: "Övriga objekt (utan kluster)", color: null, roots: buildSubtree(orphans) });
   }
@@ -319,13 +319,13 @@ function MarkerClusterLayer({ objects, sync, onSelectObject, onHoverObject }: Ma
   }, [objects]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    for (const [id, marker] of markerMapRef.current) {
+    Array.from(markerMapRef.current.entries()).forEach(([id, marker]) => {
       const o = objects.find((x) => x.id === id);
-      if (!o) continue;
+      if (!o) return;
       marker.setIcon(
         makeIcon(o.hierarchyLevel || "fastighet", id === sync.selectedObjectId, id === sync.hoveredObjectId),
       );
-    }
+    });
   }, [sync.selectedObjectId, sync.hoveredObjectId, objects]);
 
   return null;
@@ -467,13 +467,6 @@ export default function CustomerDetailPage() {
                 <FileText className="h-3.5 w-3.5" /> Fakturahistorik
               </Button>
             </Link>
-            {customer.fortnoxCustomerId && (
-              <Link href={`/fortnox?customerId=${customer.fortnoxCustomerId}`}>
-                <Button variant="outline" size="sm" className="gap-1.5" data-testid="link-fortnox">
-                  <ExternalLink className="h-3.5 w-3.5" /> Fortnox-kund {customer.fortnoxCustomerId}
-                </Button>
-              </Link>
-            )}
           </div>
 
           {statsQuery.isError && (
