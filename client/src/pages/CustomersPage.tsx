@@ -43,6 +43,7 @@ export default function CustomersPage() {
       return (
         c.name?.toLowerCase().includes(q) ||
         c.customerNumber?.toLowerCase().includes(q) ||
+        c.orgNumber?.toLowerCase().includes(q) ||
         c.contactPerson?.toLowerCase().includes(q) ||
         c.city?.toLowerCase().includes(q) ||
         c.email?.toLowerCase().includes(q)
@@ -146,6 +147,7 @@ export default function CustomersPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Kund</TableHead>
+                    <TableHead>Org-nr</TableHead>
                     <TableHead>Kundnummer</TableHead>
                     <TableHead>Ort</TableHead>
                     <TableHead className="text-right">Kluster</TableHead>
@@ -166,6 +168,9 @@ export default function CustomersPage() {
                           {c.contactPerson && (
                             <div className="text-xs text-muted-foreground">{c.contactPerson}</div>
                           )}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground font-mono" data-testid={`text-org-number-${c.id}`}>
+                          {c.orgNumber || "—"}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground" data-testid={`text-customer-number-${c.id}`}>
                           {c.customerNumber || "—"}

@@ -13,7 +13,7 @@ import { QueryErrorState } from "@/components/ErrorBoundary";
 import {
   ArrowLeft, Building2, Layers, Package, ClipboardList, Phone, Mail, MapPin,
   ChevronDown, ChevronRight, Users, Home, Container, Trash2, TreePine, Map as MapIcon,
-  ExternalLink, Repeat, Receipt, GitBranch,
+  ExternalLink, Repeat, Receipt, GitBranch, Hash, FileText, AlertTriangle,
 } from "lucide-react";
 import { MapContainer, TileLayer, Circle, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -206,7 +206,7 @@ function TreeRow({
             <Badge variant="secondary" className="text-[10px]">{node.children.length}</Badge>
           )}
         </div>
-        {hasChildren && (
+        {hasChildren && open && (
           <CollapsibleContent>
             {node.children.map((c) => (
               <TreeRow
@@ -291,9 +291,24 @@ function MarkerClusterLayer({ objects, sync, onSelectObject, onHoverObject }: Ma
       const marker = L.marker([o.latitude, o.longitude], {
         icon: makeIcon(o.hierarchyLevel || "fastighet", o.id === sync.selectedObjectId, o.id === sync.hoveredObjectId),
       });
-      marker.bindPopup(
-        `<div><div style="font-weight:500">${o.name}</div>${o.address ? `<div style="font-size:11px">${o.address}</div>` : ""}<a href="/objects/${o.id}" style="font-size:11px;color:#3b82f6">Öppna objekt →</a></div>`,
-      );
+      const popupEl = document.createElement("div");
+      const nameEl = document.createElement("div");
+      nameEl.style.fontWeight = "500";
+      nameEl.textContent = o.name;
+      popupEl.appendChild(nameEl);
+      if (o.address) {
+        const addrEl = document.createElement("div");
+        addrEl.style.fontSize = "11px";
+        addrEl.textContent = o.address;
+        popupEl.appendChild(addrEl);
+      }
+      const linkEl = document.createElement("a");
+      linkEl.setAttribute("href", `/objects/${encodeURIComponent(o.id)}`);
+      linkEl.style.fontSize = "11px";
+      linkEl.style.color = "#3b82f6";
+      linkEl.textContent = "Öppna objekt →";
+      popupEl.appendChild(linkEl);
+      marker.bindPopup(popupEl);
       marker.on("click", () => onSelectObject(o.id === sync.selectedObjectId ? null : o.id));
       marker.on("mouseover", () => onHoverObject(o.id));
       marker.on("mouseout", () => onHoverObject(null));
@@ -394,6 +409,17 @@ export default function CustomerDetailPage() {
   const stats = statsQuery.data;
   const isLoading = customerQuery.isLoading || statsQuery.isLoading;
 
+  const ErrorBanner = ({ message, onRetry, testId }: { message: string; onRetry: () => void; testId: string }) => (
+    <div
+      className="flex items-center gap-3 p-3 rounded-md border border-destructive/40 bg-destructive/5 text-sm"
+      data-testid={testId}
+    >
+      <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+      <span className="flex-1">{message}</span>
+      <Button variant="outline" size="sm" onClick={onRetry}>Försök igen</Button>
+    </div>
+  );
+
   const initialCenter: [number, number] = clustersWithGeo[0]
     ? [clustersWithGeo[0].centerLatitude!, clustersWithGeo[0].centerLongitude!]
     : mapObjects[0]
@@ -417,7 +443,11 @@ export default function CustomerDetailPage() {
         <>
           <PageHeader
             title={customer.name}
-            description={customer.customerNumber ? `Kundnummer: ${customer.customerNumber}` : undefined}
+            description={
+              [customer.customerNumber && `Kundnr: ${customer.customerNumber}`, customer.orgNumber && `Org-nr: ${customer.orgNumber}`]
+                .filter(Boolean)
+                .join(" · ") || undefined
+            }
             icon={Building2}
           />
 
@@ -428,8 +458,13 @@ export default function CustomerDetailPage() {
               </Button>
             </Link>
             <Link href={`/planner?customerId=${customer.id}`}>
-              <Button variant="outline" size="sm" className="gap-1.5" data-testid="link-customer-orders">
-                <ClipboardList className="h-3.5 w-3.5" /> Orderhistorik
+              <Button variant="outline" size="sm" className="gap-1.5" data-testid="link-customer-planning">
+                <ClipboardList className="h-3.5 w-3.5" /> Planering
+              </Button>
+            </Link>
+            <Link href={`/invoicing?customerId=${customer.id}`}>
+              <Button variant="outline" size="sm" className="gap-1.5" data-testid="link-customer-invoices">
+                <FileText className="h-3.5 w-3.5" /> Fakturahistorik
               </Button>
             </Link>
             {customer.fortnoxCustomerId && (
@@ -440,6 +475,21 @@ export default function CustomerDetailPage() {
               </Link>
             )}
           </div>
+
+          {statsQuery.isError && (
+            <ErrorBanner
+              message="Kunde inte hämta statistik för kunden."
+              onRetry={() => statsQuery.refetch()}
+              testId="error-stats"
+            />
+          )}
+          {objectsQuery.isError && (
+            <ErrorBanner
+              message="Kunde inte hämta objekt för kunden."
+              onRetry={() => objectsQuery.refetch()}
+              testId="error-objects"
+            />
+          )}
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <Card>
@@ -535,6 +585,12 @@ export default function CustomerDetailPage() {
                 <CardTitle className="text-base">Kontakt</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
+                {customer.orgNumber && (
+                  <div className="flex items-center gap-2" data-testid="text-org-number">
+                    <Hash className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="font-mono">{customer.orgNumber}</span>
+                  </div>
+                )}
                 {customer.contactPerson && (
                   <div className="flex items-center gap-2"><Users className="h-3.5 w-3.5 text-muted-foreground" />{customer.contactPerson}</div>
                 )}
@@ -547,7 +603,24 @@ export default function CustomerDetailPage() {
                 {(customer.address || customer.city) && (
                   <div className="flex items-start gap-2"><MapPin className="h-3.5 w-3.5 text-muted-foreground mt-0.5" /><span>{[customer.address, customer.postalCode, customer.city].filter(Boolean).join(", ")}</span></div>
                 )}
-                {!customer.contactPerson && !customer.email && !customer.phone && !customer.address && (
+                {(customer.invoiceAddress || customer.invoiceEmail) && (
+                  <div className="pt-2 mt-2 border-t space-y-1" data-testid="section-invoice-address">
+                    <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Faktureringsuppgifter</div>
+                    {customer.invoiceAddress && (
+                      <div className="flex items-start gap-2 text-xs">
+                        <FileText className="h-3 w-3 text-muted-foreground mt-0.5" />
+                        <span>{[customer.invoiceAddress, customer.invoicePostalCode, customer.invoiceCity].filter(Boolean).join(", ")}</span>
+                      </div>
+                    )}
+                    {customer.invoiceEmail && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <Mail className="h-3 w-3 text-muted-foreground" />
+                        <a href={`mailto:${customer.invoiceEmail}`} className="hover:underline">{customer.invoiceEmail}</a>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {!customer.orgNumber && !customer.contactPerson && !customer.email && !customer.phone && !customer.address && (
                   <div className="text-muted-foreground text-xs">Ingen kontaktinformation registrerad</div>
                 )}
                 {customer.notes && (
