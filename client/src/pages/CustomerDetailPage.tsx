@@ -7,19 +7,31 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryErrorState } from "@/components/ErrorBoundary";
 import {
   ArrowLeft, Building2, Layers, Package, ClipboardList, Phone, Mail, MapPin,
   ChevronDown, ChevronRight, Users, Home, Container, Trash2, TreePine, Map as MapIcon,
-  ExternalLink,
+  ExternalLink, Repeat, Receipt, GitBranch, Info,
 } from "lucide-react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useMapConfig } from "@/hooks/use-map-config";
 import { BatchGeoMapFitter } from "@/components/ObjectsMapView";
 import type { Customer, ServiceObject } from "@shared/schema";
+
+interface CustomerStatsCluster {
+  id: string;
+  name: string;
+  color: string | null;
+  status: string;
+  objectCount: number;
+  centerLatitude: number | null;
+  centerLongitude: number | null;
+  radiusKm: number | null;
+}
 
 interface CustomerStats {
   objectsByLevel: Record<string, number>;
@@ -28,7 +40,9 @@ interface CustomerStats {
   completedOrders: number;
   invoicedOrders: number;
   totalOrders: number;
-  clusters: Array<{ id: string; name: string; color: string | null; status: string; objectCount: number }>;
+  activeSubscriptions: number;
+  invoicedLast12Months: number;
+  clusters: CustomerStatsCluster[];
 }
 
 const HIERARCHY_LEVELS: Record<string, { label: string; icon: typeof Building2; color: string }> = {
@@ -39,6 +53,8 @@ const HIERARCHY_LEVELS: Record<string, { label: string; icon: typeof Building2; 
   karl: { label: "Objekt", icon: Trash2, color: "text-orange-600 dark:text-orange-400" },
 };
 
+const MAP_MARKER_LIMIT = 500;
+
 interface TreeNode { object: ServiceObject; children: TreeNode[] }
 
 interface ClusterGroup {
@@ -48,16 +64,16 @@ interface ClusterGroup {
   roots: TreeNode[];
 }
 
-function buildTreeFromList(list: ServiceObject[], allIdSet: Set<string>): TreeNode[] {
+function buildSubtree(list: ServiceObject[]): TreeNode[] {
   const childrenMap = new Map<string, ServiceObject[]>();
   const subsetIds = new Set(list.map((o) => o.id));
-  list.forEach((o) => {
+  for (const o of list) {
     if (o.parentId && subsetIds.has(o.parentId)) {
       const arr = childrenMap.get(o.parentId) || [];
       arr.push(o);
       childrenMap.set(o.parentId, arr);
     }
-  });
+  }
   const roots = list.filter((o) => !o.parentId || !subsetIds.has(o.parentId));
   function build(o: ServiceObject): TreeNode {
     const ch = (childrenMap.get(o.id) || []).map(build);
@@ -66,16 +82,13 @@ function buildTreeFromList(list: ServiceObject[], allIdSet: Set<string>): TreeNo
   }
   const tree = roots.map(build);
   tree.sort((a, b) => a.object.name.localeCompare(b.object.name, "sv"));
-  // Suppress unused-warning
-  void allIdSet;
   return tree;
 }
 
 function groupByCluster(
   objects: ServiceObject[],
-  clusters: Array<{ id: string; name: string; color: string | null }>,
+  clusters: CustomerStatsCluster[],
 ): ClusterGroup[] {
-  const allIds = new Set(objects.map((o) => o.id));
   const byCluster = new Map<string, ServiceObject[]>();
   const orphans: ServiceObject[] = [];
   for (const o of objects) {
@@ -89,50 +102,66 @@ function groupByCluster(
   }
   const groups: ClusterGroup[] = clusters
     .filter((c) => byCluster.has(c.id))
-    .map((c) => ({
-      id: c.id,
-      name: c.name,
-      color: c.color,
-      roots: buildTreeFromList(byCluster.get(c.id)!, allIds),
-    }));
-  // Add any cluster IDs present on objects but not in stats.clusters list
+    .map((c) => ({ id: c.id, name: c.name, color: c.color, roots: buildSubtree(byCluster.get(c.id)!) }));
   for (const [cid, list] of byCluster) {
     if (!groups.find((g) => g.id === cid)) {
-      groups.push({
-        id: cid,
-        name: "Kluster",
-        color: null,
-        roots: buildTreeFromList(list, allIds),
-      });
+      groups.push({ id: cid, name: "Kluster", color: null, roots: buildSubtree(list) });
     }
   }
   if (orphans.length > 0) {
-    groups.push({
-      id: null,
-      name: "Övriga objekt (utan kluster)",
-      color: null,
-      roots: buildTreeFromList(orphans, allIds),
-    });
+    groups.push({ id: null, name: "Övriga objekt (utan kluster)", color: null, roots: buildSubtree(orphans) });
   }
   return groups;
 }
 
-function TreeRow({ node, level }: { node: TreeNode; level: number }) {
+interface InheritedSignals {
+  inherited: boolean;
+  fields: string[];
+}
+
+function getInheritedSignals(o: ServiceObject): InheritedSignals {
+  const obj = o as unknown as Record<string, unknown>;
+  const fields: string[] = [];
+  if (obj.accessInfoInherited) fields.push("Åtkomstinfo");
+  if (obj.pricingRulesInherited) fields.push("Prisregler");
+  if (obj.serviceConfigInherited) fields.push("Servicekonfiguration");
+  return { inherited: fields.length > 0, fields };
+}
+
+function TreeRow({
+  node,
+  level,
+  selectedId,
+  onSelect,
+}: {
+  node: TreeNode;
+  level: number;
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+}) {
   const [open, setOpen] = useState(level < 1);
   const hasChildren = node.children.length > 0;
   const info = HIERARCHY_LEVELS[node.object.hierarchyLevel || "fastighet"] || HIERARCHY_LEVELS.fastighet;
   const Icon = info.icon;
+  const inh = getInheritedSignals(node.object);
+  const isSelected = selectedId === node.object.id;
   return (
     <div className="select-none">
       <Collapsible open={open} onOpenChange={setOpen}>
         <div
-          className="flex items-center gap-2 py-1.5 px-2 rounded-md hover-elevate"
+          className={`flex items-center gap-2 py-1.5 px-2 rounded-md hover-elevate cursor-pointer ${isSelected ? "bg-primary/10 ring-1 ring-primary/40" : ""}`}
           style={{ paddingLeft: `${level * 18 + 8}px` }}
+          onClick={() => onSelect(isSelected ? null : node.object.id)}
           data-testid={`tree-row-${node.object.id}`}
         >
           {hasChildren ? (
             <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-5 w-5 p-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 p-0"
+                onClick={(e) => e.stopPropagation()}
+              >
                 {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               </Button>
             </CollapsibleTrigger>
@@ -140,9 +169,26 @@ function TreeRow({ node, level }: { node: TreeNode; level: number }) {
             <div className="w-5" />
           )}
           <Icon className={`h-4 w-4 ${info.color}`} />
-          <Link href={`/objects/${node.object.id}`} className="text-sm font-medium flex-1 truncate hover:underline">
+          <Link
+            href={`/objects/${node.object.id}`}
+            className="text-sm font-medium flex-1 truncate hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
             {node.object.name}
           </Link>
+          {inh.inherited && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <GitBranch className="h-3 w-3 text-blue-500" data-testid={`inherited-${node.object.id}`} />
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p className="text-xs font-medium">Ärvda värden:</p>
+                <ul className="text-xs text-muted-foreground">
+                  {inh.fields.map((f) => <li key={f}>{f}</li>)}
+                </ul>
+              </TooltipContent>
+            </Tooltip>
+          )}
           <Badge variant="outline" className="text-[10px]">{info.label}</Badge>
           {node.object.address && (
             <span className="text-xs text-muted-foreground truncate max-w-[180px] hidden sm:inline">
@@ -156,7 +202,7 @@ function TreeRow({ node, level }: { node: TreeNode; level: number }) {
         {hasChildren && (
           <CollapsibleContent>
             {node.children.map((c) => (
-              <TreeRow key={c.object.id} node={c} level={level + 1} />
+              <TreeRow key={c.object.id} node={c} level={level + 1} selectedId={selectedId} onSelect={onSelect} />
             ))}
           </CollapsibleContent>
         )}
@@ -165,23 +211,38 @@ function TreeRow({ node, level }: { node: TreeNode; level: number }) {
   );
 }
 
-function makeIcon(level: string) {
+function makeIcon(level: string, isSelected: boolean) {
   const colors: Record<string, string> = {
     koncern: "#9333ea", brf: "#3b82f6", fastighet: "#22c55e", rum: "#eab308", karl: "#f97316",
   };
   const color = colors[level] || "#6b7280";
+  const size = isSelected ? 26 : 18;
+  const ring = isSelected ? "border:3px solid #f59e0b;" : "border:2px solid white;";
   return L.divIcon({
     className: "custom-marker",
-    html: `<div style="background-color:${color};width:18px;height:18px;border-radius:50%;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>`,
-    iconSize: [18, 18],
-    iconAnchor: [9, 9],
+    html: `<div style="background-color:${color};width:${size}px;height:${size}px;border-radius:50%;${ring}box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
   });
+}
+
+function FlyToObject({ object }: { object: ServiceObject | null }) {
+  const map = useMap();
+  if (object && object.latitude && object.longitude) {
+    map.flyTo([object.latitude, object.longitude], Math.max(map.getZoom(), 14), { duration: 0.6 });
+  }
+  return null;
+}
+
+function formatSek(value: number): string {
+  return new Intl.NumberFormat("sv-SE", { style: "currency", currency: "SEK", maximumFractionDigits: 0 }).format(value);
 }
 
 export default function CustomerDetailPage() {
   const [, params] = useRoute("/customers/:id");
   const customerId = params?.id;
   const mapConfig = useMapConfig();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const customerQuery = useQuery<Customer>({
     queryKey: ["/api/customers", customerId],
@@ -214,9 +275,20 @@ export default function CustomerDetailPage() {
     () => (objectsQuery.data || []).filter((o) => o.latitude && o.longitude),
     [objectsQuery.data],
   );
+  const visibleMarkers = useMemo(
+    () => mapObjects.slice(0, MAP_MARKER_LIMIT),
+    [mapObjects],
+  );
+  const selectedObject = useMemo(
+    () => (objectsQuery.data || []).find((o) => o.id === selectedId) || null,
+    [objectsQuery.data, selectedId],
+  );
+  const clustersWithGeo = useMemo(
+    () => (statsQuery.data?.clusters || []).filter((c) => c.centerLatitude && c.centerLongitude),
+    [statsQuery.data?.clusters],
+  );
 
   if (!customerId) return null;
-
   if (customerQuery.isError) {
     return <QueryErrorState onRetry={() => customerQuery.refetch()} />;
   }
@@ -254,17 +326,19 @@ export default function CustomerDetailPage() {
             </Link>
             <Link href={`/planner?customerId=${customer.id}`}>
               <Button variant="outline" size="sm" className="gap-1.5" data-testid="link-customer-orders">
-                <ClipboardList className="h-3.5 w-3.5" /> Ordrar
+                <ClipboardList className="h-3.5 w-3.5" /> Orderhistorik
               </Button>
             </Link>
             {customer.fortnoxCustomerId && (
-              <Badge variant="secondary" className="gap-1" data-testid="badge-fortnox-linked">
-                <ExternalLink className="h-3 w-3" /> Fortnox: {customer.fortnoxCustomerId}
-              </Badge>
+              <Link href={`/fortnox?customerId=${customer.fortnoxCustomerId}`}>
+                <Button variant="outline" size="sm" className="gap-1.5" data-testid="link-fortnox">
+                  <ExternalLink className="h-3.5 w-3.5" /> Fortnox-kund {customer.fortnoxCustomerId}
+                </Button>
+              </Link>
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <Card>
               <CardContent className="p-4">
                 <div className="text-xs text-muted-foreground flex items-center gap-1">
@@ -288,10 +362,30 @@ export default function CustomerDetailPage() {
             <Card>
               <CardContent className="p-4">
                 <div className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Repeat className="h-3.5 w-3.5" /> Aktiva abonnemang
+                </div>
+                <div className="text-2xl font-semibold mt-1" data-testid="stat-active-subscriptions">
+                  {stats?.activeSubscriptions ?? 0}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground flex items-center gap-1">
                   <ClipboardList className="h-3.5 w-3.5" /> Aktiva ordrar
                 </div>
                 <div className="text-2xl font-semibold mt-1" data-testid="stat-active-orders">
                   {stats?.activeOrders ?? 0}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Receipt className="h-3.5 w-3.5" /> Fakturerat 12 mån
+                </div>
+                <div className="text-lg font-semibold mt-1" data-testid="stat-invoiced-12m">
+                  {formatSek(stats?.invoicedLast12Months ?? 0)}
                 </div>
               </CardContent>
             </Card>
@@ -433,11 +527,19 @@ export default function CustomerDetailPage() {
                             ) : (
                               <span className="text-sm font-semibold">{g.name}</span>
                             )}
-                            <Badge variant="secondary" className="text-[10px] ml-auto">{g.roots.length} rot{g.roots.length === 1 ? "" : "ter"}</Badge>
+                            <Badge variant="secondary" className="text-[10px] ml-auto">
+                              {g.roots.length} rot{g.roots.length === 1 ? "" : "ter"}
+                            </Badge>
                           </div>
                           <div className="p-2 space-y-0.5">
                             {g.roots.map((n) => (
-                              <TreeRow key={n.object.id} node={n} level={0} />
+                              <TreeRow
+                                key={n.object.id}
+                                node={n}
+                                level={0}
+                                selectedId={selectedId}
+                                onSelect={setSelectedId}
+                              />
                             ))}
                           </div>
                         </div>
@@ -453,26 +555,63 @@ export default function CustomerDetailPage() {
                 <CardContent className="p-0 overflow-hidden rounded-md">
                   {objectsQuery.isLoading ? (
                     <Skeleton className="h-[500px] w-full" />
-                  ) : mapObjects.length === 0 ? (
+                  ) : mapObjects.length === 0 && clustersWithGeo.length === 0 ? (
                     <div className="h-[500px] flex flex-col items-center justify-center text-muted-foreground text-sm gap-2" data-testid="text-empty-map">
                       <MapIcon className="h-8 w-8 opacity-40" />
                       Inga objekt med koordinater att visa.
                     </div>
                   ) : (
-                    <div className="h-[500px]">
+                    <div className="h-[500px] relative">
+                      {mapObjects.length > MAP_MARKER_LIMIT && (
+                        <div className="absolute top-2 right-2 z-[1000] bg-background/95 border rounded-md px-2 py-1 text-xs flex items-center gap-1.5 shadow" data-testid="text-marker-limit">
+                          <Info className="h-3 w-3" />
+                          Visar {MAP_MARKER_LIMIT} av {mapObjects.length} objekt — använd filtrerad objektlista för full vy
+                        </div>
+                      )}
                       <MapContainer
-                        center={[mapObjects[0].latitude!, mapObjects[0].longitude!]}
+                        center={
+                          clustersWithGeo[0]
+                            ? [clustersWithGeo[0].centerLatitude!, clustersWithGeo[0].centerLongitude!]
+                            : [visibleMarkers[0]?.latitude ?? 59.3, visibleMarkers[0]?.longitude ?? 18.07]
+                        }
                         zoom={11}
                         style={{ height: "100%", width: "100%" }}
                         scrollWheelZoom
                       >
                         <TileLayer url={mapConfig.tileUrl} attribution={mapConfig.attribution} />
-                        <BatchGeoMapFitter objects={mapObjects} />
-                        {mapObjects.map((o) => (
+                        {visibleMarkers.length > 0 && <BatchGeoMapFitter objects={visibleMarkers} />}
+                        <FlyToObject object={selectedObject} />
+                        {clustersWithGeo.map((cl) => (
+                          <Circle
+                            key={`circle-${cl.id}`}
+                            center={[cl.centerLatitude!, cl.centerLongitude!]}
+                            radius={(cl.radiusKm || 5) * 1000}
+                            pathOptions={{
+                              color: cl.color || "#3b82f6",
+                              fillColor: cl.color || "#3b82f6",
+                              fillOpacity: 0.08,
+                              weight: 2,
+                            }}
+                          >
+                            <Popup>
+                              <div className="space-y-1">
+                                <div className="font-medium">{cl.name}</div>
+                                <div className="text-xs">{cl.objectCount} objekt · radie {cl.radiusKm ?? 5} km</div>
+                                <Link href={`/clusters/${cl.id}`} className="text-xs text-primary hover:underline">
+                                  Öppna kluster →
+                                </Link>
+                              </div>
+                            </Popup>
+                          </Circle>
+                        ))}
+                        {visibleMarkers.map((o) => (
                           <Marker
                             key={o.id}
                             position={[o.latitude!, o.longitude!]}
-                            icon={makeIcon(o.hierarchyLevel || "fastighet")}
+                            icon={makeIcon(o.hierarchyLevel || "fastighet", o.id === selectedId)}
+                            eventHandlers={{
+                              click: () => setSelectedId(o.id === selectedId ? null : o.id),
+                            }}
                           >
                             <Popup>
                               <div className="space-y-1">

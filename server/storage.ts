@@ -166,6 +166,21 @@ export interface IStorage {
   getCustomers(tenantId: string): Promise<Customer[]>;
   getCustomersPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ customers: Customer[]; total: number }>;
   getCustomer(id: string): Promise<Customer | undefined>;
+  getCustomerAggregates(tenantId: string): Promise<Array<{ customerId: string; clusterCount: number; objectCount: number; activeOrders: number }>>;
+  getCustomerStats(tenantId: string, customerId: string): Promise<{
+    objectsByLevel: Record<string, number>;
+    totalObjects: number;
+    activeOrders: number;
+    completedOrders: number;
+    invoicedOrders: number;
+    totalOrders: number;
+    activeSubscriptions: number;
+    invoicedLast12Months: number;
+    clusters: Array<{
+      id: string; name: string; color: string | null; status: string; objectCount: number;
+      centerLatitude: number | null; centerLongitude: number | null; radiusKm: number | null;
+    }>;
+  }>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   updateCustomer(id: string, customer: Partial<InsertCustomer>): Promise<Customer | undefined>;
   deleteCustomer(id: string): Promise<void>;
@@ -961,6 +976,131 @@ export class DatabaseStorage implements IStorage {
   async getCustomer(id: string): Promise<Customer | undefined> {
     const [customer] = await db.select().from(customers).where(and(eq(customers.id, id), isNull(customers.deletedAt)));
     return customer || undefined;
+  }
+
+  async getCustomerAggregates(tenantId: string): Promise<Array<{ customerId: string; clusterCount: number; objectCount: number; activeOrders: number }>> {
+    const result = await db.execute(sql`
+      SELECT
+        c.id as customer_id,
+        COALESCE(cl.cluster_count, 0)::int as cluster_count,
+        COALESCE(o.object_count, 0)::int as object_count,
+        COALESCE(wo.active_orders, 0)::int as active_orders
+      FROM customers c
+      LEFT JOIN (
+        SELECT root_customer_id, COUNT(*) as cluster_count
+        FROM clusters
+        WHERE tenant_id = ${tenantId} AND deleted_at IS NULL AND root_customer_id IS NOT NULL
+        GROUP BY root_customer_id
+      ) cl ON cl.root_customer_id = c.id
+      LEFT JOIN (
+        SELECT customer_id, COUNT(*) as object_count
+        FROM objects
+        WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
+        GROUP BY customer_id
+      ) o ON o.customer_id = c.id
+      LEFT JOIN (
+        SELECT customer_id, COUNT(*) as active_orders
+        FROM work_orders
+        WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
+          AND order_status NOT IN ('utford', 'fakturerad')
+        GROUP BY customer_id
+      ) wo ON wo.customer_id = c.id
+      WHERE c.tenant_id = ${tenantId} AND c.deleted_at IS NULL
+    `);
+    interface AggRow { customer_id: string; cluster_count: number; object_count: number; active_orders: number }
+    return (result.rows as AggRow[]).map(r => ({
+      customerId: r.customer_id,
+      clusterCount: Number(r.cluster_count) || 0,
+      objectCount: Number(r.object_count) || 0,
+      activeOrders: Number(r.active_orders) || 0,
+    }));
+  }
+
+  async getCustomerStats(tenantId: string, customerId: string) {
+    const [levelsRes, ordersRes, subsRes, invoicedRes, clusterRes] = await Promise.all([
+      db.execute(sql`
+        SELECT COALESCE(hierarchy_level, 'fastighet') as level, COUNT(*)::int as count
+        FROM objects
+        WHERE tenant_id = ${tenantId} AND customer_id = ${customerId} AND deleted_at IS NULL
+        GROUP BY COALESCE(hierarchy_level, 'fastighet')
+      `),
+      db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE order_status NOT IN ('utford', 'fakturerad'))::int as active_orders,
+          COUNT(*) FILTER (WHERE order_status = 'utford')::int as completed_orders,
+          COUNT(*) FILTER (WHERE order_status = 'fakturerad')::int as invoiced_orders,
+          COUNT(*)::int as total_orders
+        FROM work_orders
+        WHERE tenant_id = ${tenantId} AND customer_id = ${customerId} AND deleted_at IS NULL
+      `),
+      db.execute(sql`
+        SELECT COUNT(*)::int as active_subscriptions
+        FROM subscriptions
+        WHERE tenant_id = ${tenantId} AND customer_id = ${customerId}
+          AND (end_date IS NULL OR end_date > NOW())
+      `),
+      db.execute(sql`
+        SELECT COALESCE(SUM(cached_value), 0)::bigint as invoiced_total
+        FROM work_orders
+        WHERE tenant_id = ${tenantId} AND customer_id = ${customerId} AND deleted_at IS NULL
+          AND order_status = 'fakturerad'
+          AND scheduled_date >= NOW() - INTERVAL '12 months'
+      `),
+      db.execute(sql`
+        SELECT cl.id, cl.name, cl.color, cl.status,
+          cl.center_latitude, cl.center_longitude, cl.radius_km,
+          COALESCE(oc.object_count, 0)::int as object_count
+        FROM clusters cl
+        LEFT JOIN (
+          SELECT cluster_id, COUNT(*) as object_count
+          FROM objects
+          WHERE tenant_id = ${tenantId} AND customer_id = ${customerId} AND deleted_at IS NULL
+          GROUP BY cluster_id
+        ) oc ON oc.cluster_id = cl.id
+        WHERE cl.tenant_id = ${tenantId} AND cl.deleted_at IS NULL AND cl.root_customer_id = ${customerId}
+        ORDER BY cl.name
+      `),
+    ]);
+
+    interface LevelRow { level: string; count: number }
+    interface OrdersRow { active_orders: number; completed_orders: number; invoiced_orders: number; total_orders: number }
+    interface SubsRow { active_subscriptions: number }
+    interface InvRow { invoiced_total: string | number }
+    interface ClusterRow {
+      id: string; name: string; color: string | null; status: string; object_count: number;
+      center_latitude: number | null; center_longitude: number | null; radius_km: number | null;
+    }
+
+    const objectsByLevel: Record<string, number> = {};
+    for (const r of levelsRes.rows as LevelRow[]) {
+      objectsByLevel[r.level] = Number(r.count) || 0;
+    }
+    const orders = (ordersRes.rows as OrdersRow[])[0] || { active_orders: 0, completed_orders: 0, invoiced_orders: 0, total_orders: 0 };
+    const subs = (subsRes.rows as SubsRow[])[0] || { active_subscriptions: 0 };
+    const inv = (invoicedRes.rows as InvRow[])[0] || { invoiced_total: 0 };
+    const clustersData = (clusterRes.rows as ClusterRow[]).map(r => ({
+      id: r.id,
+      name: r.name,
+      color: r.color,
+      status: r.status,
+      objectCount: Number(r.object_count) || 0,
+      centerLatitude: r.center_latitude !== null ? Number(r.center_latitude) : null,
+      centerLongitude: r.center_longitude !== null ? Number(r.center_longitude) : null,
+      radiusKm: r.radius_km !== null ? Number(r.radius_km) : null,
+    }));
+    const totalObjects = Object.values(objectsByLevel).reduce((a, b) => a + b, 0);
+
+    return {
+      objectsByLevel,
+      totalObjects,
+      activeOrders: Number(orders.active_orders) || 0,
+      completedOrders: Number(orders.completed_orders) || 0,
+      invoicedOrders: Number(orders.invoiced_orders) || 0,
+      totalOrders: Number(orders.total_orders) || 0,
+      activeSubscriptions: Number(subs.active_subscriptions) || 0,
+      invoicedLast12Months: Number(inv.invoiced_total) || 0,
+      clusters: clustersData,
+    };
   }
 
   async createCustomer(insertCustomer: InsertCustomer): Promise<Customer> {
