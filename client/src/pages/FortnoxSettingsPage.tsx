@@ -200,7 +200,7 @@ export default function FortnoxSettingsPage() {
   const [importComplete, setImportComplete] = useState<{ created: number; skipped: number; errors: number } | null>(null);
   const [fullImportSummary, setFullImportSummary] = useState<{
     customers: { created: number; skipped: number; errors: number };
-    objects: { created: number; skipped: number; errors: number };
+    objects: { created: number; skipped: number; errors: number; geocodingQueued?: number };
     articles: { created: number; skipped: number; errors: number };
     errors?: string[];
   } | null>(null);
@@ -777,6 +777,14 @@ export default function FortnoxSettingsPage() {
                       {fullImportSummary.objects.skipped} hoppade över
                       {fullImportSummary.objects.errors > 0 && `, ${fullImportSummary.objects.errors} fel`}
                     </p>
+                    {(fullImportSummary.objects.geocodingQueued ?? 0) > 0 && (
+                      <p
+                        className="text-xs text-muted-foreground mt-1"
+                        data-testid="text-geocoding-queued"
+                      >
+                        {fullImportSummary.objects.geocodingQueued} väntar på geokodning
+                      </p>
+                    )}
                   </div>
                   <div className="rounded-md border bg-background p-3" data-testid="summary-articles">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">

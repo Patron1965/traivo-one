@@ -9,6 +9,7 @@ import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { objects, workOrders, articles, customers, fortnoxMappings } from "@shared/schema";
 import { getISOWeek } from "./helpers";
+import { triggerGeocodeIfMissing } from "../services/geocoding";
 
 export async function registerFortnoxRoutes(app: Express) {
 // ============================================
@@ -2520,9 +2521,10 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
     const importBatchId = `fortnox-full-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`;
 
     const customerSummary = { created: 0, skipped: 0, errors: 0 };
-    const objectSummary = { created: 0, skipped: 0, errors: 0 };
+    const objectSummary = { created: 0, skipped: 0, errors: 0, geocodingQueued: 0 };
     const articleSummary = { created: 0, skipped: 0, errors: 0 };
     const errorMessages: string[] = [];
+    const newObjectIdsForGeocoding: string[] = [];
 
     // === STEP 1: Customers ===
     const fortnoxCustomers = await client.getCustomers();
@@ -2596,7 +2598,8 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
         const addressParts = [fc.Address1, fc.Address2].filter(Boolean) as string[];
         const objectName = fc.City ? `${fc.Name} – ${fc.City}` : fc.Name;
 
-        await db.transaction(async (tx) => {
+        const fullAddress = addressParts.join(", ") || null;
+        const createdObjectId = await db.transaction(async (tx) => {
           const [created] = await tx.insert(objects).values({
             tenantId,
             customerId: unicornCustomerId!,
@@ -2605,7 +2608,7 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
             objectType: "fastighet",
             hierarchyLevel: "fastighet",
             objectLevel: 1,
-            address: addressParts.join(", ") || null,
+            address: fullAddress,
             city: fc.City || null,
             postalCode: fc.ZipCode || null,
             status: "active",
@@ -2618,9 +2621,13 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
             unicornId: created.id,
             fortnoxId: customerNumber,
           });
+          return created.id;
         });
         objectFortnoxIds.add(customerNumber);
         objectSummary.created++;
+        if (fullAddress && fullAddress.trim() !== "") {
+          newObjectIdsForGeocoding.push(createdObjectId);
+        }
       } catch (err) {
         objectSummary.errors++;
         errorMessages.push(`Objekt för kund ${customerNumber}: ${err instanceof Error ? err.message : String(err)}`);
@@ -2674,6 +2681,17 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
       } catch (err) {
         errorMessages.push(`Artikelhämtning misslyckades: ${err instanceof Error ? err.message : String(err)}`);
       }
+    }
+
+    // === STEP 4: Queue geocoding for newly created objects with addresses ===
+    for (const newObjectId of newObjectIdsForGeocoding) {
+      triggerGeocodeIfMissing(newObjectId);
+    }
+    objectSummary.geocodingQueued = newObjectIdsForGeocoding.length;
+    if (newObjectIdsForGeocoding.length > 0) {
+      console.log(
+        `[fortnox-full-import] Queued ${newObjectIdsForGeocoding.length} new object(s) for geocoding (tenant ${tenantId})`
+      );
     }
 
     res.json({
