@@ -5,13 +5,13 @@ import { eq, and } from "drizzle-orm";
 const DEFAULT_TENANT_ID = "default-tenant";
 
 async function resolveFallbackTenantId(): Promise<string | null> {
-  // Prefer legacy default-tenant if it exists, otherwise pick the only tenant
-  // (single-tenant production deployments e.g. Kinab). If multiple exist, no
-  // automatic assignment is performed and the user must be invited explicitly.
+  // Auto-assign new authenticated users only to the legacy demo "default-tenant"
+  // when it exists. In production single-tenant setups (e.g. Kinab) we never
+  // auto-assign — every member must be invited explicitly via the invitation
+  // flow to avoid broken-access-control where any signed-in Replit user would
+  // gain tenant membership.
   const def = await db.select().from(tenants).where(eq(tenants.id, DEFAULT_TENANT_ID)).limit(1);
   if (def.length > 0) return DEFAULT_TENANT_ID;
-  const all = await db.select({ id: tenants.id }).from(tenants).limit(2);
-  if (all.length === 1) return all[0].id;
   return null;
 }
 
