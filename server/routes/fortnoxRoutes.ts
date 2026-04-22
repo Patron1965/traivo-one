@@ -2589,9 +2589,51 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
       }
     }
 
-    // === STEP 2: Objects (one default object per customer) ===
+    // === STEP 2: Objects (one fastighet per Fortnox-projekt eller leveransadress; fallback: en per kund) ===
     const existingObjectMappings = await storage.getFortnoxMappings(tenantId, "object");
     const objectFortnoxIds = new Set(existingObjectMappings.map(m => m.fortnoxId));
+
+    // Hämta projekt + leveransadresser (kan misslyckas oberoende av kund/objekt-importen)
+    let fortnoxProjects: any[] = [];
+    let fortnoxDeliveryAddresses: any[] = [];
+    try {
+      fortnoxProjects = await client.getProjects();
+    } catch (err) {
+      errorMessages.push(`Projektshämtning misslyckades: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    try {
+      fortnoxDeliveryAddresses = await client.getDeliveryAddresses();
+    } catch (err) {
+      errorMessages.push(`Leveransadresshämtning misslyckades: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // Gruppera per kundnummer
+    const projectsByCustomer = new Map<string, any[]>();
+    for (const p of fortnoxProjects) {
+      const cn = p?.CustomerNumber;
+      if (!cn) continue;
+      const key = String(cn);
+      if (!projectsByCustomer.has(key)) projectsByCustomer.set(key, []);
+      projectsByCustomer.get(key)!.push(p);
+    }
+    const deliveriesByCustomer = new Map<string, any[]>();
+    for (const d of fortnoxDeliveryAddresses) {
+      const cn = d?.CustomerNumber;
+      if (!cn) continue;
+      const key = String(cn);
+      if (!deliveriesByCustomer.has(key)) deliveriesByCustomer.set(key, []);
+      deliveriesByCustomer.get(key)!.push(d);
+    }
+
+    type SubObject = {
+      fortnoxId: string;
+      name: string;
+      objectNumber: string | null;
+      address: string | null;
+      city: string | null;
+      postalCode: string | null;
+      notes: string;
+    };
 
     for (const fc of fortnoxCustomers) {
       const customerNumber = (fc.CustomerNumber || "").toString();
@@ -2600,57 +2642,123 @@ app.post("/api/fortnox/full-import", asyncHandler(async (req, res) => {
       const unicornCustomerId = customerFortnoxIdToUnicornId.get(customerNumber);
       if (!unicornCustomerId) continue;
 
-      try {
-        if (objectFortnoxIds.has(customerNumber)) {
-          objectSummary.skipped++;
-          continue;
-        }
+      const customerAddress = [fc.Address1, fc.Address2].filter(Boolean).join(", ") || null;
+      const projects = projectsByCustomer.get(customerNumber) || [];
+      const deliveries = deliveriesByCustomer.get(customerNumber) || [];
 
-        const addressParts = [fc.Address1, fc.Address2].filter(Boolean) as string[];
-        const objectName = fc.City ? `${fc.Name} – ${fc.City}` : fc.Name;
+      const subObjects: SubObject[] = [];
 
-        const fullAddress = addressParts.join(", ") || null;
-        const createdObjectId = await db.transaction(async (tx) => {
-          const [created] = await tx.insert(objects).values({
-            tenantId,
-            customerId: unicornCustomerId!,
-            name: objectName,
-            objectNumber: customerNumber,
-            objectType: "fastighet",
-            hierarchyLevel: "fastighet",
-            objectLevel: 1,
-            address: fullAddress,
+      if (projects.length > 0) {
+        // Projekt har högst prio: ett objekt per projekt
+        for (const p of projects) {
+          const projectNumber = String(p.ProjectNumber || "");
+          if (!projectNumber) continue;
+          const description = (p.Description as string) || "";
+          subObjects.push({
+            fortnoxId: `project:${projectNumber}`,
+            name: description ? `${fc.Name} – ${description}` : `${fc.Name} – Projekt ${projectNumber}`,
+            objectNumber: projectNumber,
+            address: customerAddress,
             city: fc.City || null,
             postalCode: fc.ZipCode || null,
-            status: "active",
-            notes: "Skapad automatiskt vid Fortnox-import",
-            importBatchId,
-          }).returning();
-          await tx.insert(fortnoxMappings).values({
-            tenantId,
-            entityType: "object",
-            unicornId: created.id,
-            fortnoxId: customerNumber,
+            notes: `Importerat från Fortnox-projekt ${projectNumber}`,
           });
-          return created.id;
-        });
-        objectFortnoxIds.add(customerNumber);
-        objectSummary.created++;
-        if (fullAddress && fullAddress.trim() !== "") {
-          newObjectIdsForGeocoding.push(createdObjectId);
         }
-      } catch (err) {
-        objectSummary.errors++;
-        errorMessages.push(`Objekt för kund ${customerNumber}: ${err instanceof Error ? err.message : String(err)}`);
+      } else if (deliveries.length > 0) {
+        // Annars: ett objekt per leveransadress
+        for (const d of deliveries) {
+          const daId = String(d.DeliveryAddressId || "");
+          if (!daId) continue;
+          const daAddress = [d.Address1, d.Address2].filter(Boolean).join(", ") || null;
+          const labelPart = d.City || d.Address1 || `Leveransadress ${daId}`;
+          subObjects.push({
+            fortnoxId: `delivery:${customerNumber}:${daId}`,
+            name: `${fc.Name} – ${labelPart}`,
+            objectNumber: `${customerNumber}-${daId}`,
+            address: daAddress,
+            city: (d.City as string) || null,
+            postalCode: (d.ZipCode as string) || null,
+            notes: `Importerat från Fortnox-leveransadress ${daId}`,
+          });
+        }
+      } else {
+        // Fallback: ett standardobjekt per kund (befintligt beteende)
+        subObjects.push({
+          fortnoxId: customerNumber,
+          name: fc.City ? `${fc.Name} – ${fc.City}` : fc.Name,
+          objectNumber: customerNumber,
+          address: customerAddress,
+          city: fc.City || null,
+          postalCode: fc.ZipCode || null,
+          notes: "Skapad automatiskt vid Fortnox-import",
+        });
+      }
+
+      for (const so of subObjects) {
+        try {
+          if (objectFortnoxIds.has(so.fortnoxId)) {
+            objectSummary.skipped++;
+            continue;
+          }
+
+          const createdObjectId = await db.transaction(async (tx) => {
+            const [created] = await tx.insert(objects).values({
+              tenantId,
+              customerId: unicornCustomerId!,
+              name: so.name,
+              objectNumber: so.objectNumber,
+              objectType: "fastighet",
+              hierarchyLevel: "fastighet",
+              objectLevel: 1,
+              address: so.address,
+              city: so.city,
+              postalCode: so.postalCode,
+              status: "active",
+              notes: so.notes,
+              importBatchId,
+            }).returning();
+            await tx.insert(fortnoxMappings).values({
+              tenantId,
+              entityType: "object",
+              unicornId: created.id,
+              fortnoxId: so.fortnoxId,
+            });
+            return created.id;
+          });
+          objectFortnoxIds.add(so.fortnoxId);
+          objectSummary.created++;
+          if (so.address && so.address.trim() !== "") {
+            newObjectIdsForGeocoding.push(createdObjectId);
+          }
+        } catch (err) {
+          objectSummary.errors++;
+          errorMessages.push(`Objekt ${so.fortnoxId} (kund ${customerNumber}): ${err instanceof Error ? err.message : String(err)}`);
+        }
       }
     }
 
     // === STEP 3: Customer Contacts -> object_contacts ===
     const existingContactMappings = await storage.getFortnoxMappings(tenantId, "customer_contact");
     const contactFortnoxIds = new Set(existingContactMappings.map(m => m.fortnoxId));
-    // Refresh object mappings so we link contacts to the freshly created objects
+    // Bygg kund-nr → första objekt-id från alla objekt-mappningar (inkl. de nyskapade).
+    // Eftersom sub-objekt nu har olika fortnoxId-prefix (project:, delivery:, eller bara
+    // kundnumret), härleder vi kundnumret per mappning för att kunna länka kontakter.
     const objectMappingsAfter = await storage.getFortnoxMappings(tenantId, "object");
-    const customerNumberToObjectId = new Map(objectMappingsAfter.map(m => [m.fortnoxId, m.unicornId]));
+    const customerNumberToObjectId = new Map<string, string>();
+    for (const m of objectMappingsAfter) {
+      let cn: string | null = null;
+      if (m.fortnoxId.startsWith("delivery:")) {
+        cn = m.fortnoxId.split(":")[1] || null;
+      } else if (m.fortnoxId.startsWith("project:")) {
+        // Projekt-mappningar saknar kundkoppling — hoppa över här.
+        continue;
+      } else {
+        cn = m.fortnoxId; // legacy: kundnr som fortnoxId
+      }
+      if (cn && !customerNumberToObjectId.has(cn)) {
+        customerNumberToObjectId.set(cn, m.unicornId);
+      }
+    }
 
     for (const fc of fortnoxCustomers) {
       const customerNumber = (fc.CustomerNumber || "").toString();

@@ -57,6 +57,21 @@ interface FortnoxProject {
   ProjectNumber: string;
   Description: string;
   Status?: string;
+  CustomerNumber?: string;
+  CustomerName?: string;
+  [key: string]: string | number | boolean | null | undefined;
+}
+
+export interface FortnoxDeliveryAddress {
+  DeliveryAddressId: string;
+  CustomerNumber: string;
+  CustomerName?: string;
+  Address1?: string;
+  Address2?: string;
+  ZipCode?: string;
+  City?: string;
+  Country?: string;
+  Comments?: string;
   [key: string]: string | number | boolean | null | undefined;
 }
 
@@ -309,6 +324,19 @@ export class FortnoxClient {
     while (currentPage <= totalPages) {
       const response = await this.apiRequest<FortnoxPaginatedResponse<FortnoxProject>>("GET", `/projects?limit=500&page=${currentPage}`);
       if (response?.Projects) all.push(...(response.Projects as FortnoxProject[]));
+      if (response?.MetaInformation) totalPages = response.MetaInformation["@TotalPages"] || 1;
+      currentPage++;
+    }
+    return all;
+  }
+
+  async getDeliveryAddresses(): Promise<FortnoxDeliveryAddress[]> {
+    const all: FortnoxDeliveryAddress[] = [];
+    let currentPage = 1;
+    let totalPages = 1;
+    while (currentPage <= totalPages) {
+      const response = await this.apiRequest<FortnoxPaginatedResponse<FortnoxDeliveryAddress>>("GET", `/deliveryaddresses?limit=500&page=${currentPage}`);
+      if (response?.DeliveryAddresses) all.push(...(response.DeliveryAddresses as FortnoxDeliveryAddress[]));
       if (response?.MetaInformation) totalPages = response.MetaInformation["@TotalPages"] || 1;
       currentPage++;
     }
