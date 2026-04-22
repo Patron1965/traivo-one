@@ -1950,18 +1950,18 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
     try {
       await db.transaction(async (tx) => {
         let customerId: string;
-        if (existingCustomerId) {
-          if (!merge) {
-            summary.customers.skipped++;
-            // Säkerställ ändå att Fortnox-mappning finns för befintlig kund
-            if (!customerFortnoxIdToUnicornId.has(r.customerNumber)) {
-              await tx.insert(fortnoxMappings).values({
-                tenantId, entityType: "customer", unicornId: existingCustomerId, fortnoxId: r.customerNumber,
-              });
-              customerFortnoxIdToUnicornId.set(r.customerNumber, existingCustomerId);
-            }
-            return;
+        if (existingCustomerId && !merge) {
+          summary.customers.skipped++;
+          customerId = existingCustomerId;
+          // Säkerställ ändå att Fortnox-mappning finns för befintlig kund
+          if (!customerFortnoxIdToUnicornId.has(r.customerNumber)) {
+            await tx.insert(fortnoxMappings).values({
+              tenantId, entityType: "customer", unicornId: existingCustomerId, fortnoxId: r.customerNumber,
+            });
+            customerFortnoxIdToUnicornId.set(r.customerNumber, existingCustomerId);
           }
+          // Fortsätt nedan så att saknat objekt + objekt-mappning fortfarande skapas
+        } else if (existingCustomerId) {
           // Merge: uppdatera fält som inte är tomma i nya raden
           await tx.update(customers).set({
             name: r.name,
