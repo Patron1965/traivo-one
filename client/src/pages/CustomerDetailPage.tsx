@@ -60,6 +60,29 @@ interface TreeNode {
   childCount: number;
 }
 
+function escapeRegExp(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function HighlightedText({ text, query }: { text: string | null | undefined; query: string }) {
+  if (!text) return null;
+  const q = query.trim();
+  if (!q) return <>{text}</>;
+  const parts = text.split(new RegExp(`(${escapeRegExp(q)})`, "gi"));
+  const lower = q.toLowerCase();
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === lower ? (
+          <mark key={i} className="bg-yellow-200 dark:bg-yellow-700/60 text-inherit rounded-sm px-0.5">{part}</mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
+
 interface SearchHit {
   id: string;
   name: string;
@@ -943,10 +966,10 @@ export default function CustomerDetailPage() {
                                   <HitIcon className={`h-4 w-4 mt-0.5 ${info.color}`} />
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="text-sm font-medium truncate">{hit.name}</span>
+                                      <span className="text-sm font-medium truncate"><HighlightedText text={hit.name} query={searchQuery} /></span>
                                       <Badge variant="outline" className="text-[10px]">{info.label}</Badge>
                                       {hit.objectNumber && (
-                                        <span className="text-[10px] font-mono text-muted-foreground">#{hit.objectNumber}</span>
+                                        <span className="text-[10px] font-mono text-muted-foreground">#<HighlightedText text={hit.objectNumber} query={searchQuery} /></span>
                                       )}
                                     </div>
                                     {pathLabel && (
@@ -956,7 +979,7 @@ export default function CustomerDetailPage() {
                                     )}
                                     {hit.address && (
                                       <div className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                                        <MapPin className="h-3 w-3" /> {hit.address}
+                                        <MapPin className="h-3 w-3" /> <HighlightedText text={hit.address} query={searchQuery} />
                                       </div>
                                     )}
                                   </div>
