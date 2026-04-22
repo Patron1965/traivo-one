@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useRoute } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,17 +13,16 @@ import { QueryErrorState } from "@/components/ErrorBoundary";
 import {
   ArrowLeft, Building2, Layers, Package, ClipboardList, Phone, Mail, MapPin,
   ChevronDown, ChevronRight, Users, Home, Container, Trash2, TreePine, Map as MapIcon,
-  ExternalLink, Repeat, Receipt, GitBranch, Hash, FileText, AlertTriangle,
+  Repeat, Receipt, GitBranch, Hash, FileText, AlertTriangle, Loader2,
 } from "lucide-react";
-import { MapContainer, TileLayer, Circle, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Circle, Popup, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import "leaflet.markercluster";
 import { useMapConfig } from "@/hooks/use-map-config";
-import { BatchGeoMapFitter } from "@/components/ObjectsMapView";
-import type { Customer, ServiceObject } from "@shared/schema";
+import type { Customer } from "@shared/schema";
 
 interface CustomerStatsCluster {
   id: string;
@@ -48,6 +47,28 @@ interface CustomerStats {
   clusters: CustomerStatsCluster[];
 }
 
+interface TreeNode {
+  id: string;
+  name: string;
+  parentId: string | null;
+  clusterId: string | null;
+  hierarchyLevel: string | null;
+  address: string | null;
+  accessInfoInherited: boolean | null;
+  hasCoords: boolean;
+  childCount: number;
+}
+
+interface MapPoint {
+  id: string;
+  name: string;
+  address: string | null;
+  latitude: number;
+  longitude: number;
+  hierarchyLevel: string | null;
+  clusterId: string | null;
+}
+
 const HIERARCHY_LEVELS: Record<string, { label: string; icon: typeof Building2; color: string; hex: string }> = {
   koncern: { label: "Koncern", icon: Building2, color: "text-purple-600 dark:text-purple-400", hex: "#9333ea" },
   brf: { label: "BRF", icon: Users, color: "text-blue-600 dark:text-blue-400", hex: "#3b82f6" },
@@ -56,8 +77,6 @@ const HIERARCHY_LEVELS: Record<string, { label: string; icon: typeof Building2; 
   karl: { label: "Objekt", icon: Trash2, color: "text-orange-600 dark:text-orange-400", hex: "#f97316" },
 };
 
-interface TreeNode { object: ServiceObject; children: TreeNode[] }
-
 interface ClusterGroup {
   id: string | null;
   name: string;
@@ -65,65 +84,33 @@ interface ClusterGroup {
   roots: TreeNode[];
 }
 
-function buildSubtree(list: ServiceObject[]): TreeNode[] {
-  const childrenMap = new Map<string, ServiceObject[]>();
-  const subsetIds = new Set(list.map((o) => o.id));
-  for (const o of list) {
-    if (o.parentId && subsetIds.has(o.parentId)) {
-      const arr = childrenMap.get(o.parentId) || [];
-      arr.push(o);
-      childrenMap.set(o.parentId, arr);
-    }
-  }
-  const roots = list.filter((o) => !o.parentId || !subsetIds.has(o.parentId));
-  function build(o: ServiceObject): TreeNode {
-    const ch = (childrenMap.get(o.id) || []).map(build);
-    ch.sort((a, b) => a.object.name.localeCompare(b.object.name, "sv"));
-    return { object: o, children: ch };
-  }
-  const tree = roots.map(build);
-  tree.sort((a, b) => a.object.name.localeCompare(b.object.name, "sv"));
-  return tree;
-}
-
-function groupByCluster(
-  objects: ServiceObject[],
+function groupRootsByCluster(
+  roots: TreeNode[],
   clusters: CustomerStatsCluster[],
 ): ClusterGroup[] {
-  const byCluster = new Map<string, ServiceObject[]>();
-  const orphans: ServiceObject[] = [];
-  for (const o of objects) {
-    if (o.clusterId) {
-      const arr = byCluster.get(o.clusterId) || [];
-      arr.push(o);
-      byCluster.set(o.clusterId, arr);
+  const byCluster = new Map<string, TreeNode[]>();
+  const orphans: TreeNode[] = [];
+  for (const r of roots) {
+    if (r.clusterId) {
+      const arr = byCluster.get(r.clusterId) || [];
+      arr.push(r);
+      byCluster.set(r.clusterId, arr);
     } else {
-      orphans.push(o);
+      orphans.push(r);
     }
   }
   const groups: ClusterGroup[] = clusters
     .filter((c) => byCluster.has(c.id))
-    .map((c) => ({ id: c.id, name: c.name, color: c.color, roots: buildSubtree(byCluster.get(c.id)!) }));
+    .map((c) => ({ id: c.id, name: c.name, color: c.color, roots: byCluster.get(c.id)! }));
   Array.from(byCluster.entries()).forEach(([cid, list]) => {
     if (!groups.find((g) => g.id === cid)) {
-      groups.push({ id: cid, name: "Kluster", color: null, roots: buildSubtree(list) });
+      groups.push({ id: cid, name: "Kluster", color: null, roots: list });
     }
   });
   if (orphans.length > 0) {
-    groups.push({ id: null, name: "Övriga objekt (utan kluster)", color: null, roots: buildSubtree(orphans) });
+    groups.push({ id: null, name: "Övriga objekt (utan kluster)", color: null, roots: orphans });
   }
   return groups;
-}
-
-interface InheritedSignals { inherited: boolean; fields: string[] }
-
-function getInheritedSignals(o: ServiceObject): InheritedSignals {
-  const obj = o as unknown as Record<string, unknown>;
-  const fields: string[] = [];
-  if (obj.accessInfoInherited) fields.push("Åtkomstinfo");
-  if (obj.pricingRulesInherited) fields.push("Prisregler");
-  if (obj.serviceConfigInherited) fields.push("Servicekonfiguration");
-  return { inherited: fields.length > 0, fields };
 }
 
 interface SyncState {
@@ -136,23 +123,39 @@ interface SyncState {
 function TreeRow({
   node,
   level,
+  customerId,
   sync,
   onSelectObject,
   onHoverObject,
 }: {
   node: TreeNode;
   level: number;
+  customerId: string;
   sync: SyncState;
   onSelectObject: (id: string | null) => void;
   onHoverObject: (id: string | null) => void;
 }) {
-  const [open, setOpen] = useState(level < 1);
-  const hasChildren = node.children.length > 0;
-  const info = HIERARCHY_LEVELS[node.object.hierarchyLevel || "fastighet"] || HIERARCHY_LEVELS.fastighet;
+  const [open, setOpen] = useState(false);
+  const hasChildren = (node.childCount ?? 0) > 0;
+  const info = HIERARCHY_LEVELS[node.hierarchyLevel || "fastighet"] || HIERARCHY_LEVELS.fastighet;
   const Icon = info.icon;
-  const inh = getInheritedSignals(node.object);
-  const isSelected = sync.selectedObjectId === node.object.id;
-  const isHovered = sync.hoveredObjectId === node.object.id;
+  const isSelected = sync.selectedObjectId === node.id;
+  const isHovered = sync.hoveredObjectId === node.id;
+
+  const childrenQuery = useQuery<TreeNode[]>({
+    queryKey: ["/api/customers", customerId, "objects", "tree-children", node.id],
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/customers/${encodeURIComponent(customerId)}/objects/tree-children?parentId=${encodeURIComponent(node.id)}`,
+        { credentials: "include" },
+      );
+      if (!r.ok) throw new Error("Kunde inte hämta barnobjekt");
+      return r.json();
+    },
+    enabled: open && hasChildren,
+    staleTime: 60_000,
+  });
+
   return (
     <div className="select-none">
       <Collapsible open={open} onOpenChange={setOpen}>
@@ -161,14 +164,20 @@ function TreeRow({
             isSelected ? "bg-primary/10 ring-1 ring-primary/40" : isHovered ? "bg-muted" : ""
           }`}
           style={{ paddingLeft: `${level * 18 + 8}px` }}
-          onClick={() => onSelectObject(isSelected ? null : node.object.id)}
-          onMouseEnter={() => onHoverObject(node.object.id)}
+          onClick={() => onSelectObject(isSelected ? null : node.id)}
+          onMouseEnter={() => onHoverObject(node.id)}
           onMouseLeave={() => onHoverObject(null)}
-          data-testid={`tree-row-${node.object.id}`}
+          data-testid={`tree-row-${node.id}`}
         >
           {hasChildren ? (
             <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-5 w-5 p-0" onClick={(e) => e.stopPropagation()}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 p-0"
+                onClick={(e) => e.stopPropagation()}
+                data-testid={`button-toggle-${node.id}`}
+              >
                 {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               </Button>
             </CollapsibleTrigger>
@@ -177,42 +186,68 @@ function TreeRow({
           )}
           <Icon className={`h-4 w-4 ${info.color}`} />
           <Link
-            href={`/objects/${node.object.id}`}
+            href={`/objects/${node.id}`}
             className="text-sm font-medium flex-1 truncate hover:underline"
             onClick={(e) => e.stopPropagation()}
           >
-            {node.object.name}
+            {node.name}
           </Link>
-          {inh.inherited && (
+          {node.accessInfoInherited && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <GitBranch className="h-3 w-3 text-blue-500" data-testid={`inherited-${node.object.id}`} />
+                <GitBranch className="h-3 w-3 text-blue-500" data-testid={`inherited-${node.id}`} />
               </TooltipTrigger>
               <TooltipContent side="top">
                 <p className="text-xs font-medium">Ärvda värden:</p>
-                <ul className="text-xs text-muted-foreground">
-                  {inh.fields.map((f) => <li key={f}>{f}</li>)}
-                </ul>
+                <ul className="text-xs text-muted-foreground"><li>Åtkomstinfo</li></ul>
               </TooltipContent>
             </Tooltip>
           )}
           <Badge variant="outline" className="text-[10px]">{info.label}</Badge>
-          {node.object.address && (
+          {node.address && (
             <span className="text-xs text-muted-foreground truncate max-w-[180px] hidden sm:inline">
-              {node.object.address}
+              {node.address}
             </span>
           )}
           {hasChildren && (
-            <Badge variant="secondary" className="text-[10px]">{node.children.length}</Badge>
+            <Badge variant="secondary" className="text-[10px]" data-testid={`badge-childcount-${node.id}`}>
+              {node.childCount}
+            </Badge>
           )}
         </div>
-        {hasChildren && open && (
+        {hasChildren && (
           <CollapsibleContent>
-            {node.children.map((c) => (
+            {childrenQuery.isLoading && (
+              <div
+                className="flex items-center gap-2 py-1.5 text-xs text-muted-foreground"
+                style={{ paddingLeft: `${(level + 1) * 18 + 8}px` }}
+                data-testid={`loading-children-${node.id}`}
+              >
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Laddar...
+              </div>
+            )}
+            {childrenQuery.isError && (
+              <div
+                className="flex items-center gap-2 py-1.5 text-xs text-destructive"
+                style={{ paddingLeft: `${(level + 1) * 18 + 8}px` }}
+              >
+                <AlertTriangle className="h-3 w-3" />
+                Kunde inte ladda barn.
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 text-xs px-1"
+                  onClick={(e) => { e.stopPropagation(); childrenQuery.refetch(); }}
+                >Försök igen</Button>
+              </div>
+            )}
+            {(childrenQuery.data || []).map((c) => (
               <TreeRow
-                key={c.object.id}
+                key={c.id}
                 node={c}
                 level={level + 1}
+                customerId={customerId}
                 sync={sync}
                 onSelectObject={onSelectObject}
                 onHoverObject={onHoverObject}
@@ -225,8 +260,8 @@ function TreeRow({
   );
 }
 
-function makeIcon(level: string, isSelected: boolean, isHovered: boolean) {
-  const info = HIERARCHY_LEVELS[level] || HIERARCHY_LEVELS.fastighet;
+function makeIcon(level: string | null, isSelected: boolean, isHovered: boolean) {
+  const info = HIERARCHY_LEVELS[level || "fastighet"] || HIERARCHY_LEVELS.fastighet;
   const color = info.hex;
   const size = isSelected ? 28 : isHovered ? 22 : 18;
   const ring = isSelected
@@ -242,24 +277,52 @@ function makeIcon(level: string, isSelected: boolean, isHovered: boolean) {
   });
 }
 
-function FlyToObject({ object }: { object: ServiceObject | null }) {
+function FlyToPoint({ point }: { point: { latitude: number; longitude: number; id: string } | null }) {
   const map = useMap();
   useEffect(() => {
-    if (object && object.latitude && object.longitude) {
-      map.flyTo([object.latitude, object.longitude], Math.max(map.getZoom(), 14), { duration: 0.6 });
+    if (point) {
+      map.flyTo([point.latitude, point.longitude], Math.max(map.getZoom(), 14), { duration: 0.6 });
     }
-  }, [object?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [point?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+function MapBoundsFitter({ points, refitKey }: { points: MapPoint[]; refitKey: string }) {
+  const map = useMap();
+  const fittedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (points.length === 0) return;
+    if (fittedKeyRef.current === refitKey) return;
+    const bounds = L.latLngBounds(points.map((p) => L.latLng(p.latitude, p.longitude)));
+    map.fitBounds(bounds, { padding: [30, 30] });
+    fittedKeyRef.current = refitKey;
+  }, [points, map, refitKey]);
+  return null;
+}
+
+function ViewportTracker({ onChange }: { onChange: (bbox: [number, number, number, number]) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    const b = map.getBounds();
+    onChange([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+  }, [map]); // eslint-disable-line react-hooks/exhaustive-deps
+  useMapEvents({
+    moveend: () => {
+      const b = map.getBounds();
+      onChange([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+    },
+  });
   return null;
 }
 
 interface MarkerClusterLayerProps {
-  objects: ServiceObject[];
+  points: MapPoint[];
   sync: SyncState;
   onSelectObject: (id: string | null) => void;
   onHoverObject: (id: string | null) => void;
 }
 
-function MarkerClusterLayer({ objects, sync, onSelectObject, onHoverObject }: MarkerClusterLayerProps) {
+function MarkerClusterLayer({ points, sync, onSelectObject, onHoverObject }: MarkerClusterLayerProps) {
   const map = useMap();
   const groupRef = useRef<L.MarkerClusterGroup | null>(null);
   const markerMapRef = useRef<Map<string, L.Marker>>(new Map());
@@ -286,47 +349,46 @@ function MarkerClusterLayer({ objects, sync, onSelectObject, onHoverObject }: Ma
     group.clearLayers();
     markerMapRef.current.clear();
     const markers: L.Marker[] = [];
-    for (const o of objects) {
-      if (!o.latitude || !o.longitude) continue;
-      const marker = L.marker([o.latitude, o.longitude], {
-        icon: makeIcon(o.hierarchyLevel || "fastighet", o.id === sync.selectedObjectId, o.id === sync.hoveredObjectId),
+    for (const p of points) {
+      const marker = L.marker([p.latitude, p.longitude], {
+        icon: makeIcon(p.hierarchyLevel, p.id === sync.selectedObjectId, p.id === sync.hoveredObjectId),
       });
       const popupEl = document.createElement("div");
       const nameEl = document.createElement("div");
       nameEl.style.fontWeight = "500";
-      nameEl.textContent = o.name;
+      nameEl.textContent = p.name;
       popupEl.appendChild(nameEl);
-      if (o.address) {
+      if (p.address) {
         const addrEl = document.createElement("div");
         addrEl.style.fontSize = "11px";
-        addrEl.textContent = o.address;
+        addrEl.textContent = p.address;
         popupEl.appendChild(addrEl);
       }
       const linkEl = document.createElement("a");
-      linkEl.setAttribute("href", `/objects/${encodeURIComponent(o.id)}`);
+      linkEl.setAttribute("href", `/objects/${encodeURIComponent(p.id)}`);
       linkEl.style.fontSize = "11px";
       linkEl.style.color = "#3b82f6";
       linkEl.textContent = "Öppna objekt →";
       popupEl.appendChild(linkEl);
       marker.bindPopup(popupEl);
-      marker.on("click", () => onSelectObject(o.id === sync.selectedObjectId ? null : o.id));
-      marker.on("mouseover", () => onHoverObject(o.id));
+      marker.on("click", () => onSelectObject(p.id === sync.selectedObjectId ? null : p.id));
+      marker.on("mouseover", () => onHoverObject(p.id));
       marker.on("mouseout", () => onHoverObject(null));
       markers.push(marker);
-      markerMapRef.current.set(o.id, marker);
+      markerMapRef.current.set(p.id, marker);
     }
     group.addLayers(markers);
-  }, [objects]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [points]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     Array.from(markerMapRef.current.entries()).forEach(([id, marker]) => {
-      const o = objects.find((x) => x.id === id);
-      if (!o) return;
+      const p = points.find((x) => x.id === id);
+      if (!p) return;
       marker.setIcon(
-        makeIcon(o.hierarchyLevel || "fastighet", id === sync.selectedObjectId, id === sync.hoveredObjectId),
+        makeIcon(p.hierarchyLevel, id === sync.selectedObjectId, id === sync.hoveredObjectId),
       );
     });
-  }, [sync.selectedObjectId, sync.hoveredObjectId, objects]);
+  }, [sync.selectedObjectId, sync.hoveredObjectId, points]);
 
   return null;
 }
@@ -345,6 +407,8 @@ export default function CustomerDetailPage() {
     hoveredObjectId: null,
     hoveredClusterId: null,
   });
+  const [mapBbox, setMapBbox] = useState<[number, number, number, number] | null>(null);
+  const [mapTabActive, setMapTabActive] = useState(false);
 
   const setSelectedObject = (id: string | null) =>
     setSync((s) => ({ ...s, selectedObjectId: id }));
@@ -359,15 +423,7 @@ export default function CustomerDetailPage() {
     queryKey: ["/api/customers", customerId],
     enabled: !!customerId,
   });
-  const objectsQuery = useQuery<ServiceObject[]>({
-    queryKey: ["/api/customers", customerId, "objects"],
-    queryFn: async () => {
-      const r = await fetch(`/api/customers/${customerId}/objects`, { credentials: "include" });
-      if (!r.ok) throw new Error("Kunde inte hämta objekt");
-      return r.json();
-    },
-    enabled: !!customerId,
-  });
+
   const statsQuery = useQuery<CustomerStats>({
     queryKey: ["/api/customers", customerId, "stats"],
     queryFn: async () => {
@@ -378,27 +434,83 @@ export default function CustomerDetailPage() {
     enabled: !!customerId,
   });
 
-  const allObjects = objectsQuery.data || [];
+  const rootsQuery = useQuery<TreeNode[]>({
+    queryKey: ["/api/customers", customerId, "objects", "tree-roots", sync.selectedClusterId ?? "all"],
+    queryFn: async () => {
+      const url = `/api/customers/${encodeURIComponent(customerId!)}/objects/tree-roots${
+        sync.selectedClusterId ? `?clusterId=${encodeURIComponent(sync.selectedClusterId)}` : ""
+      }`;
+      const r = await fetch(url, { credentials: "include" });
+      if (!r.ok) throw new Error("Kunde inte hämta hierarki");
+      return r.json();
+    },
+    enabled: !!customerId,
+    staleTime: 60_000,
+  });
+
+  const coordsQueryKey = useMemo(() => {
+    const bboxKey = mapBbox ? mapBbox.map((n) => n.toFixed(3)).join(",") : "all";
+    return [
+      "/api/customers",
+      customerId,
+      "objects",
+      "coordinates",
+      sync.selectedClusterId ?? "all",
+      bboxKey,
+    ];
+  }, [customerId, sync.selectedClusterId, mapBbox]);
+
+  const coordsQuery = useQuery<MapPoint[]>({
+    queryKey: coordsQueryKey,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (sync.selectedClusterId) params.set("clusterId", sync.selectedClusterId);
+      if (mapBbox) params.set("bbox", mapBbox.join(","));
+      params.set("limit", "3000");
+      const r = await fetch(
+        `/api/customers/${encodeURIComponent(customerId!)}/objects/coordinates?${params.toString()}`,
+        { credentials: "include" },
+      );
+      if (!r.ok) throw new Error("Kunde inte hämta kartdata");
+      return r.json();
+    },
+    enabled: !!customerId && mapTabActive,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
+
+  const selectedPointQuery = useQuery<MapPoint | null>({
+    queryKey: ["/api/customers", customerId, "objects", "point", sync.selectedObjectId],
+    queryFn: async () => {
+      const r = await fetch(`/api/objects/${encodeURIComponent(sync.selectedObjectId!)}`, { credentials: "include" });
+      if (!r.ok) return null;
+      const o = await r.json();
+      if (o.latitude == null || o.longitude == null) return null;
+      return {
+        id: o.id,
+        name: o.name,
+        address: o.address ?? null,
+        latitude: o.latitude,
+        longitude: o.longitude,
+        hierarchyLevel: o.hierarchyLevel ?? null,
+        clusterId: o.clusterId ?? null,
+      };
+    },
+    enabled: !!customerId && !!sync.selectedObjectId,
+    staleTime: 60_000,
+  });
+
+  const roots = rootsQuery.data || [];
   const clusterGroups = useMemo(
-    () => groupByCluster(allObjects, statsQuery.data?.clusters || []),
-    [allObjects, statsQuery.data?.clusters],
+    () => groupRootsByCluster(roots, statsQuery.data?.clusters || []),
+    [roots, statsQuery.data?.clusters],
   );
-  const filteredObjects = useMemo(
-    () => (sync.selectedClusterId ? allObjects.filter((o) => o.clusterId === sync.selectedClusterId) : allObjects),
-    [allObjects, sync.selectedClusterId],
-  );
-  const mapObjects = useMemo(
-    () => filteredObjects.filter((o) => o.latitude && o.longitude),
-    [filteredObjects],
-  );
-  const selectedObject = useMemo(
-    () => allObjects.find((o) => o.id === sync.selectedObjectId) || null,
-    [allObjects, sync.selectedObjectId],
-  );
+  const mapPoints = coordsQuery.data || [];
   const clustersWithGeo = useMemo(
     () => (statsQuery.data?.clusters || []).filter((c) => c.centerLatitude && c.centerLongitude),
     [statsQuery.data?.clusters],
   );
+  const flyTarget = selectedPointQuery.data || null;
 
   if (!customerId) return null;
   if (customerQuery.isError) {
@@ -422,8 +534,8 @@ export default function CustomerDetailPage() {
 
   const initialCenter: [number, number] = clustersWithGeo[0]
     ? [clustersWithGeo[0].centerLatitude!, clustersWithGeo[0].centerLongitude!]
-    : mapObjects[0]
-    ? [mapObjects[0].latitude!, mapObjects[0].longitude!]
+    : mapPoints[0]
+    ? [mapPoints[0].latitude, mapPoints[0].longitude]
     : [59.3, 18.07];
 
   return (
@@ -476,10 +588,10 @@ export default function CustomerDetailPage() {
               testId="error-stats"
             />
           )}
-          {objectsQuery.isError && (
+          {rootsQuery.isError && (
             <ErrorBanner
-              message="Kunde inte hämta objekt för kunden."
-              onRetry={() => objectsQuery.refetch()}
+              message="Kunde inte hämta hierarkin."
+              onRetry={() => rootsQuery.refetch()}
               testId="error-objects"
             />
           )}
@@ -680,7 +792,7 @@ export default function CustomerDetailPage() {
             </Card>
           </div>
 
-          <Tabs defaultValue="tree">
+          <Tabs defaultValue="tree" onValueChange={(v) => setMapTabActive(v === "map")}>
             <TabsList>
               <TabsTrigger value="tree" data-testid="tab-tree">
                 <TreePine className="h-4 w-4 mr-2" /> Hierarki
@@ -693,7 +805,7 @@ export default function CustomerDetailPage() {
             <TabsContent value="tree">
               <Card>
                 <CardContent className="p-3">
-                  {objectsQuery.isLoading ? (
+                  {rootsQuery.isLoading ? (
                     <div className="space-y-2">
                       {Array.from({ length: 5 }).map((_, i) => (
                         <Skeleton key={i} className="h-8 w-full" />
@@ -739,9 +851,10 @@ export default function CustomerDetailPage() {
                             <div className="p-2 space-y-0.5">
                               {g.roots.map((n) => (
                                 <TreeRow
-                                  key={n.object.id}
+                                  key={n.id}
                                   node={n}
                                   level={0}
+                                  customerId={customerId}
                                   sync={sync}
                                   onSelectObject={setSelectedObject}
                                   onHoverObject={setHoveredObject}
@@ -760,15 +873,24 @@ export default function CustomerDetailPage() {
             <TabsContent value="map">
               <Card>
                 <CardContent className="p-0 overflow-hidden rounded-md">
-                  {objectsQuery.isLoading ? (
+                  {coordsQuery.isLoading && mapPoints.length === 0 ? (
                     <Skeleton className="h-[500px] w-full" />
-                  ) : mapObjects.length === 0 && clustersWithGeo.length === 0 ? (
+                  ) : mapPoints.length === 0 && clustersWithGeo.length === 0 ? (
                     <div className="h-[500px] flex flex-col items-center justify-center text-muted-foreground text-sm gap-2" data-testid="text-empty-map">
                       <MapIcon className="h-8 w-8 opacity-40" />
                       Inga objekt med koordinater att visa.
                     </div>
                   ) : (
                     <div className="h-[500px] relative">
+                      {coordsQuery.isFetching && (
+                        <div className="absolute top-2 right-2 z-[1000] bg-background/90 border rounded-md px-2 py-1 text-xs flex items-center gap-1.5 shadow" data-testid="map-loading-indicator">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Uppdaterar
+                        </div>
+                      )}
+                      <div className="absolute bottom-2 left-2 z-[1000] bg-background/90 border rounded-md px-2 py-1 text-xs shadow" data-testid="map-points-count">
+                        {mapPoints.length} objekt i vyn
+                      </div>
                       <MapContainer
                         center={initialCenter}
                         zoom={11}
@@ -776,8 +898,9 @@ export default function CustomerDetailPage() {
                         scrollWheelZoom
                       >
                         <TileLayer url={mapConfig.tileUrl} attribution={mapConfig.attribution} />
-                        {mapObjects.length > 0 && <BatchGeoMapFitter objects={mapObjects} />}
-                        <FlyToObject object={selectedObject} />
+                        <MapBoundsFitter points={mapPoints} refitKey={sync.selectedClusterId ?? "all"} />
+                        <ViewportTracker onChange={setMapBbox} />
+                        <FlyToPoint point={flyTarget} />
                         {clustersWithGeo.map((cl) => {
                           const isSelected = sync.selectedClusterId === cl.id;
                           const isHovered = sync.hoveredClusterId === cl.id;
@@ -812,7 +935,7 @@ export default function CustomerDetailPage() {
                           );
                         })}
                         <MarkerClusterLayer
-                          objects={mapObjects}
+                          points={mapPoints}
                           sync={sync}
                           onSelectObject={setSelectedObject}
                           onHoverObject={setHoveredObject}

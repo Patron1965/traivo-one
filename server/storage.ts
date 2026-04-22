@@ -146,6 +146,28 @@ export interface ResolvedArticlePrice {
   overridePrice: number | null;
 }
 
+export interface CustomerTreeNode {
+  id: string;
+  name: string;
+  parentId: string | null;
+  clusterId: string | null;
+  hierarchyLevel: string | null;
+  address: string | null;
+  accessInfoInherited: boolean | null;
+  hasCoords: boolean;
+  childCount: number;
+}
+
+export interface CustomerMapPoint {
+  id: string;
+  name: string;
+  address: string | null;
+  latitude: number;
+  longitude: number;
+  hierarchyLevel: string | null;
+  clusterId: string | null;
+}
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -192,6 +214,9 @@ export interface IStorage {
   getObject(id: string): Promise<ServiceObject | undefined>;
   getObjectByObjectNumber(tenantId: string, objectNumber: string): Promise<ServiceObject | undefined>;
   getObjectsByCustomer(customerId: string, tenantId?: string): Promise<ServiceObject[]>;
+  getCustomerObjectTreeRoots(customerId: string, tenantId: string, clusterId?: string | null): Promise<CustomerTreeNode[]>;
+  getCustomerObjectTreeChildren(customerId: string, tenantId: string, parentId: string): Promise<CustomerTreeNode[]>;
+  getCustomerObjectMapPoints(customerId: string, tenantId: string, opts?: { bbox?: [number, number, number, number]; clusterId?: string | null; limit?: number }): Promise<CustomerMapPoint[]>;
   createObject(object: InsertObject): Promise<ServiceObject>;
   updateObject(id: string, object: Partial<InsertObject>): Promise<ServiceObject | undefined>;
   deleteObject(id: string): Promise<void>;
@@ -1250,6 +1275,107 @@ export class DatabaseStorage implements IStorage {
     const conditions = [eq(objects.customerId, customerId), isNull(objects.deletedAt)];
     if (tenantId) conditions.push(eq(objects.tenantId, tenantId));
     return db.select().from(objects).where(and(...conditions));
+  }
+
+  async getCustomerObjectTreeRoots(customerId: string, tenantId: string, clusterId?: string | null): Promise<CustomerTreeNode[]> {
+    const clusterFilter = clusterId === undefined
+      ? sql``
+      : clusterId === null
+      ? sql`AND o.cluster_id IS NULL`
+      : sql`AND o.cluster_id = ${clusterId}`;
+    const result = await db.execute(sql`
+      SELECT
+        o.id,
+        o.name,
+        o.parent_id AS "parentId",
+        o.cluster_id AS "clusterId",
+        o.hierarchy_level AS "hierarchyLevel",
+        o.address,
+        o.access_info_inherited AS "accessInfoInherited",
+        (o.latitude IS NOT NULL AND o.longitude IS NOT NULL) AS "hasCoords",
+        (
+          SELECT COUNT(*)::int FROM objects c
+          WHERE c.parent_id = o.id AND c.deleted_at IS NULL
+        ) AS "childCount"
+      FROM objects o
+      WHERE o.customer_id = ${customerId}
+        AND o.tenant_id = ${tenantId}
+        AND o.deleted_at IS NULL
+        ${clusterFilter}
+        AND (
+          o.parent_id IS NULL
+          OR NOT EXISTS (
+            SELECT 1 FROM objects p
+            WHERE p.id = o.parent_id
+              AND p.customer_id = ${customerId}
+              AND p.deleted_at IS NULL
+          )
+        )
+      ORDER BY o.name
+    `);
+    return (result.rows as unknown as CustomerTreeNode[]) || [];
+  }
+
+  async getCustomerObjectTreeChildren(customerId: string, tenantId: string, parentId: string): Promise<CustomerTreeNode[]> {
+    const result = await db.execute(sql`
+      SELECT
+        o.id,
+        o.name,
+        o.parent_id AS "parentId",
+        o.cluster_id AS "clusterId",
+        o.hierarchy_level AS "hierarchyLevel",
+        o.address,
+        o.access_info_inherited AS "accessInfoInherited",
+        (o.latitude IS NOT NULL AND o.longitude IS NOT NULL) AS "hasCoords",
+        (
+          SELECT COUNT(*)::int FROM objects c
+          WHERE c.parent_id = o.id AND c.deleted_at IS NULL
+        ) AS "childCount"
+      FROM objects o
+      WHERE o.parent_id = ${parentId}
+        AND o.customer_id = ${customerId}
+        AND o.tenant_id = ${tenantId}
+        AND o.deleted_at IS NULL
+      ORDER BY o.name
+    `);
+    return (result.rows as unknown as CustomerTreeNode[]) || [];
+  }
+
+  async getCustomerObjectMapPoints(
+    customerId: string,
+    tenantId: string,
+    opts?: { bbox?: [number, number, number, number]; clusterId?: string | null; limit?: number },
+  ): Promise<CustomerMapPoint[]> {
+    const limit = Math.max(1, Math.min(5000, opts?.limit ?? 3000));
+    const bboxFilter = opts?.bbox
+      ? sql`AND o.longitude BETWEEN ${opts.bbox[0]} AND ${opts.bbox[2]} AND o.latitude BETWEEN ${opts.bbox[1]} AND ${opts.bbox[3]}`
+      : sql``;
+    const clusterFilter = opts?.clusterId === undefined
+      ? sql``
+      : opts.clusterId === null
+      ? sql`AND o.cluster_id IS NULL`
+      : sql`AND o.cluster_id = ${opts.clusterId}`;
+    const result = await db.execute(sql`
+      SELECT
+        o.id,
+        o.name,
+        o.address,
+        o.latitude,
+        o.longitude,
+        o.hierarchy_level AS "hierarchyLevel",
+        o.cluster_id AS "clusterId"
+      FROM objects o
+      WHERE o.customer_id = ${customerId}
+        AND o.tenant_id = ${tenantId}
+        AND o.deleted_at IS NULL
+        AND o.latitude IS NOT NULL
+        AND o.longitude IS NOT NULL
+        ${bboxFilter}
+        ${clusterFilter}
+      ORDER BY o.id
+      LIMIT ${limit}
+    `);
+    return (result.rows as unknown as CustomerMapPoint[]) || [];
   }
 
   async createObject(insertObject: InsertObject): Promise<ServiceObject> {

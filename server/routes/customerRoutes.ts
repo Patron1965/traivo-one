@@ -522,6 +522,56 @@ app.get("/api/customers/:customerId/objects", asyncHandler(async (req, res) => {
   res.json(objects);
 }));
 
+app.get("/api/customers/:customerId/objects/tree-roots", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customer = await storage.getCustomer(req.params.customerId);
+  if (!verifyTenantOwnership(customer, tenantId)) {
+    throw new NotFoundError("Kund");
+  }
+  let clusterId: string | null | undefined = undefined;
+  if (typeof req.query.clusterId === "string") {
+    clusterId = req.query.clusterId === "null" || req.query.clusterId === "" ? null : req.query.clusterId;
+  }
+  const roots = await storage.getCustomerObjectTreeRoots(req.params.customerId, tenantId, clusterId);
+  res.json(roots);
+}));
+
+app.get("/api/customers/:customerId/objects/tree-children", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customer = await storage.getCustomer(req.params.customerId);
+  if (!verifyTenantOwnership(customer, tenantId)) {
+    throw new NotFoundError("Kund");
+  }
+  const parentId = (req.query.parentId as string | undefined)?.trim();
+  if (!parentId) {
+    throw new ValidationError("parentId krävs");
+  }
+  const children = await storage.getCustomerObjectTreeChildren(req.params.customerId, tenantId, parentId);
+  res.json(children);
+}));
+
+app.get("/api/customers/:customerId/objects/coordinates", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customer = await storage.getCustomer(req.params.customerId);
+  if (!verifyTenantOwnership(customer, tenantId)) {
+    throw new NotFoundError("Kund");
+  }
+  let clusterId: string | null | undefined = undefined;
+  if (typeof req.query.clusterId === "string") {
+    clusterId = req.query.clusterId === "null" || req.query.clusterId === "" ? null : req.query.clusterId;
+  }
+  let bbox: [number, number, number, number] | undefined;
+  if (typeof req.query.bbox === "string") {
+    const parts = req.query.bbox.split(",").map(Number);
+    if (parts.length === 4 && parts.every((n) => Number.isFinite(n))) {
+      bbox = [parts[0], parts[1], parts[2], parts[3]];
+    }
+  }
+  const limit = Math.max(1, Math.min(5000, parseInt(req.query.limit as string) || 3000));
+  const points = await storage.getCustomerObjectMapPoints(req.params.customerId, tenantId, { bbox, clusterId, limit });
+  res.json(points);
+}));
+
 app.post("/api/objects/coordinates", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const { objectIds } = req.body as { objectIds: string[] };
