@@ -166,7 +166,8 @@ export interface IStorage {
   getCustomers(tenantId: string): Promise<Customer[]>;
   getCustomersPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ customers: Customer[]; total: number }>;
   getCustomer(id: string): Promise<Customer | undefined>;
-  getCustomerAggregates(tenantId: string): Promise<Array<{ customerId: string; clusterCount: number; objectCount: number; activeOrders: number }>>;
+  getCustomerAggregates(tenantId: string, customerIds?: string[]): Promise<Array<{ customerId: string; clusterCount: number; objectCount: number; activeOrders: number }>>;
+  getCustomerTotals(tenantId: string): Promise<{ customerCount: number; clusterCount: number; objectCount: number; activeOrders: number }>;
   getCustomerStats(tenantId: string, customerId: string): Promise<{
     objectsByLevel: Record<string, number>;
     totalObjects: number;
@@ -978,7 +979,19 @@ export class DatabaseStorage implements IStorage {
     return customer || undefined;
   }
 
-  async getCustomerAggregates(tenantId: string): Promise<Array<{ customerId: string; clusterCount: number; objectCount: number; activeOrders: number }>> {
+  async getCustomerAggregates(tenantId: string, customerIds?: string[]): Promise<Array<{ customerId: string; clusterCount: number; objectCount: number; activeOrders: number }>> {
+    if (customerIds && customerIds.length === 0) {
+      return [];
+    }
+    const idFilter = customerIds && customerIds.length > 0
+      ? sql` AND c.id IN (${sql.join(customerIds.map(id => sql`${id}`), sql`, `)})`
+      : sql``;
+    const objIdFilter = customerIds && customerIds.length > 0
+      ? sql` AND customer_id IN (${sql.join(customerIds.map(id => sql`${id}`), sql`, `)})`
+      : sql``;
+    const clusterIdFilter = customerIds && customerIds.length > 0
+      ? sql` AND root_customer_id IN (${sql.join(customerIds.map(id => sql`${id}`), sql`, `)})`
+      : sql``;
     const result = await db.execute(sql`
       SELECT
         c.id as customer_id,
@@ -989,23 +1002,23 @@ export class DatabaseStorage implements IStorage {
       LEFT JOIN (
         SELECT root_customer_id, COUNT(*) as cluster_count
         FROM clusters
-        WHERE tenant_id = ${tenantId} AND deleted_at IS NULL AND root_customer_id IS NOT NULL
+        WHERE tenant_id = ${tenantId} AND deleted_at IS NULL AND root_customer_id IS NOT NULL${clusterIdFilter}
         GROUP BY root_customer_id
       ) cl ON cl.root_customer_id = c.id
       LEFT JOIN (
         SELECT customer_id, COUNT(*) as object_count
         FROM objects
-        WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
+        WHERE tenant_id = ${tenantId} AND deleted_at IS NULL${objIdFilter}
         GROUP BY customer_id
       ) o ON o.customer_id = c.id
       LEFT JOIN (
         SELECT customer_id, COUNT(*) as active_orders
         FROM work_orders
         WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
-          AND order_status NOT IN ('utford', 'fakturerad')
+          AND order_status NOT IN ('utford', 'fakturerad')${objIdFilter}
         GROUP BY customer_id
       ) wo ON wo.customer_id = c.id
-      WHERE c.tenant_id = ${tenantId} AND c.deleted_at IS NULL
+      WHERE c.tenant_id = ${tenantId} AND c.deleted_at IS NULL${idFilter}
     `);
     interface AggRow { customer_id: string; cluster_count: number; object_count: number; active_orders: number }
     return (result.rows as AggRow[]).map(r => ({
@@ -1014,6 +1027,24 @@ export class DatabaseStorage implements IStorage {
       objectCount: Number(r.object_count) || 0,
       activeOrders: Number(r.active_orders) || 0,
     }));
+  }
+
+  async getCustomerTotals(tenantId: string): Promise<{ customerCount: number; clusterCount: number; objectCount: number; activeOrders: number }> {
+    const result = await db.execute(sql`
+      SELECT
+        (SELECT COUNT(*)::int FROM customers WHERE tenant_id = ${tenantId} AND deleted_at IS NULL) as customer_count,
+        (SELECT COUNT(*)::int FROM clusters WHERE tenant_id = ${tenantId} AND deleted_at IS NULL AND root_customer_id IS NOT NULL) as cluster_count,
+        (SELECT COUNT(*)::int FROM objects WHERE tenant_id = ${tenantId} AND deleted_at IS NULL) as object_count,
+        (SELECT COUNT(*)::int FROM work_orders WHERE tenant_id = ${tenantId} AND deleted_at IS NULL AND order_status NOT IN ('utford', 'fakturerad')) as active_orders
+    `);
+    interface TotalsRow { customer_count: number; cluster_count: number; object_count: number; active_orders: number }
+    const row = (result.rows as TotalsRow[])[0];
+    return {
+      customerCount: Number(row?.customer_count) || 0,
+      clusterCount: Number(row?.cluster_count) || 0,
+      objectCount: Number(row?.object_count) || 0,
+      activeOrders: Number(row?.active_orders) || 0,
+    };
   }
 
   async getCustomerStats(tenantId: string, customerId: string) {

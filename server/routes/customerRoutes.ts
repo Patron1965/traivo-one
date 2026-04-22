@@ -154,8 +154,18 @@ app.get("/api/customers", asyncHandler(async (req, res) => {
 
 app.get("/api/customers/aggregates", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
-  const rows = await storage.getCustomerAggregates(tenantId);
+  const idsParam = typeof req.query.ids === "string" ? req.query.ids : undefined;
+  const customerIds = idsParam
+    ? idsParam.split(",").map(s => s.trim()).filter(Boolean).slice(0, 500)
+    : undefined;
+  const rows = await storage.getCustomerAggregates(tenantId, customerIds);
   res.json(rows);
+}));
+
+app.get("/api/customers/totals", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const totals = await storage.getCustomerTotals(tenantId);
+  res.json(totals);
 }));
 
 app.get("/api/customers/:id/stats", asyncHandler(async (req, res) => {
