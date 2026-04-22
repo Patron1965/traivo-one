@@ -113,7 +113,7 @@ async function loadAvgArticleMinutes(tenantId: string): Promise<Map<string, numb
   return map;
 }
 
-interface GoalRow {
+export interface GoalRow {
   id: string;
   customerId: string | null;
   objectId: string | null;
@@ -125,12 +125,42 @@ interface GoalRow {
   sourceId: string | null;
 }
 
+export function resolveGoalsToClustersPure(
+  goals: GoalRow[],
+  objectClusterMap: Map<string, string | null>,
+  customerClusterMap: Map<string, string[]>,
+): Map<string, GoalRow[]> {
+  const byCluster = new Map<string, GoalRow[]>();
+
+  const push = (clusterId: string, goal: GoalRow) => {
+    if (!byCluster.has(clusterId)) byCluster.set(clusterId, []);
+    byCluster.get(clusterId)!.push(goal);
+  };
+
+  for (const goal of goals) {
+    if (goal.clusterId) {
+      push(goal.clusterId, goal);
+    } else if (goal.objectId) {
+      const cid = objectClusterMap.get(goal.objectId);
+      if (cid) push(cid, goal);
+    } else if (goal.customerId) {
+      const cids = customerClusterMap.get(goal.customerId) || [];
+      if (cids.length > 0) {
+        const share = goal.targetCount / cids.length;
+        for (const cid of cids) {
+          push(cid, { ...goal, targetCount: share });
+        }
+      }
+    }
+  }
+
+  return byCluster;
+}
+
 async function resolveGoalsToClusters(
   tenantId: string,
   goals: GoalRow[],
 ): Promise<Map<string, GoalRow[]>> {
-  const byCluster = new Map<string, GoalRow[]>();
-
   const objectIds = goals.filter(g => g.objectId).map(g => g.objectId!) as string[];
   const customerIds = goals.filter(g => !g.objectId && !g.clusterId && g.customerId).map(g => g.customerId!) as string[];
 
@@ -162,29 +192,7 @@ async function resolveGoalsToClusters(
     }
   }
 
-  const push = (clusterId: string, goal: GoalRow) => {
-    if (!byCluster.has(clusterId)) byCluster.set(clusterId, []);
-    byCluster.get(clusterId)!.push(goal);
-  };
-
-  for (const goal of goals) {
-    if (goal.clusterId) {
-      push(goal.clusterId, goal);
-    } else if (goal.objectId) {
-      const cid = objectClusterMap.get(goal.objectId);
-      if (cid) push(cid, goal);
-    } else if (goal.customerId) {
-      const cids = customerClusterMap.get(goal.customerId) || [];
-      if (cids.length > 0) {
-        const share = goal.targetCount / cids.length;
-        for (const cid of cids) {
-          push(cid, { ...goal, targetCount: share });
-        }
-      }
-    }
-  }
-
-  return byCluster;
+  return resolveGoalsToClustersPure(goals, objectClusterMap, customerClusterMap);
 }
 
 async function getSubscriptionSeasons(tenantId: string): Promise<Map<string, string | null>> {
@@ -197,19 +205,10 @@ async function getSubscriptionSeasons(tenantId: string): Promise<Map<string, str
   return map;
 }
 
-async function loadClusterCapacity(
-  tenantId: string,
+export function computeClusterCapacityPure(
   clusterList: Cluster[],
-): Promise<Map<string, number>> {
-  const allResources: Resource[] = await db
-    .select()
-    .from(resources)
-    .where(and(
-      eq(resources.tenantId, tenantId),
-      eq(resources.status, "active"),
-      isNull(resources.deletedAt),
-    ));
-
+  allResources: Resource[],
+): Map<string, number> {
   const result = new Map<string, number>();
   if (clusterList.length === 0) return result;
 
@@ -234,6 +233,22 @@ async function loadClusterCapacity(
     result.set(cluster.id, weeklyHours);
   }
   return result;
+}
+
+async function loadClusterCapacity(
+  tenantId: string,
+  clusterList: Cluster[],
+): Promise<Map<string, number>> {
+  const allResources: Resource[] = await db
+    .select()
+    .from(resources)
+    .where(and(
+      eq(resources.tenantId, tenantId),
+      eq(resources.status, "active"),
+      isNull(resources.deletedAt),
+    ));
+
+  return computeClusterCapacityPure(clusterList, allResources);
 }
 
 interface ClusterCenter {
@@ -329,6 +344,41 @@ async function getWeatherMultipliersForWeeks(
   return byCluster;
 }
 
+export function computeWeekDemandHours(
+  goals: GoalRow[],
+  weekStart: Date,
+  avgMinutesByType: Map<string, number>,
+  subscriptionSeasons: Map<string, string | null>,
+): number {
+  let demandHours = 0;
+  const year = weekStart.getFullYear();
+
+  for (const goal of goals) {
+    if (goal.year !== year) continue;
+    const minutesPerUnit = avgMinutesByType.get(goal.articleType) ?? DEFAULT_PRODUCTION_MINUTES;
+
+    let season: string | null = null;
+    if (goal.sourceType === "subscription" && goal.sourceId) {
+      season = subscriptionSeasons.get(goal.sourceId) ?? null;
+    }
+
+    let inSeasonWeeks = 52;
+    if (season && season !== "all_year") {
+      inSeasonWeeks = 0;
+      for (let m = 0; m < 12; m++) {
+        const probe = new Date(year, m, 15);
+        if (isDateInSeason(probe, season as Season)) inSeasonWeeks += 52 / 12;
+      }
+    }
+    const weekInSeason = isDateInSeason(weekStart, (season ?? "all_year") as Season);
+    if (!weekInSeason) continue;
+
+    const weeklyShare = goal.targetCount / Math.max(inSeasonWeeks, 1);
+    demandHours += (weeklyShare * minutesPerUnit) / 60;
+  }
+  return demandHours;
+}
+
 export interface ComputedForecastResult {
   clusters: ClusterForecastSummary[];
   computedAt: Date;
@@ -401,32 +451,7 @@ export async function computeCapacityForecast(
       const weatherMul = clusterWeather?.get(ws.toISOString()) ?? 1.0;
       const capacityHours = baseCapacity * weatherMul;
 
-      let demandHours = 0;
-      const year = ws.getFullYear();
-
-      for (const goal of goals) {
-        if (goal.year !== year) continue;
-        const minutesPerUnit = avgMinutesByType.get(goal.articleType) ?? DEFAULT_PRODUCTION_MINUTES;
-
-        let season: string | null = null;
-        if (goal.sourceType === "subscription" && goal.sourceId) {
-          season = subscriptionSeasons.get(goal.sourceId) ?? null;
-        }
-
-        let inSeasonWeeks = 52;
-        if (season && season !== "all_year") {
-          inSeasonWeeks = 0;
-          for (let m = 0; m < 12; m++) {
-            const probe = new Date(year, m, 15);
-            if (isDateInSeason(probe, season as Season)) inSeasonWeeks += 52 / 12;
-          }
-        }
-        const weekInSeason = isDateInSeason(ws, (season ?? "all_year") as Season);
-        if (!weekInSeason) continue;
-
-        const weeklyShare = goal.targetCount / Math.max(inSeasonWeeks, 1);
-        demandHours += (weeklyShare * minutesPerUnit) / 60;
-      }
+      const demandHours = computeWeekDemandHours(goals, ws, avgMinutesByType, subscriptionSeasons);
 
       return {
         weekStart: ws.toISOString(),
