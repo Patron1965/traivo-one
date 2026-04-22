@@ -84,7 +84,7 @@ export default function ObjectsPage() {
   });
   const [customerFilter, setCustomerFilterRaw] = useState<string[]>(() => {
     const params = new URLSearchParams(window.location.search);
-    const c = params.get("customer");
+    const c = params.get("customerId") || params.get("customer");
     return c ? [c] : [];
   });
   const [hierarchyFilter, setHierarchyFilterRaw] = useState("all");
