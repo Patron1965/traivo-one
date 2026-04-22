@@ -2,7 +2,11 @@ import { Dimensions, Platform } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
-export const Colors = {
+// Brand colors live in a mutable store so tenant branding can override them at
+// runtime via setBrandColors(). The exported `Colors` object below uses
+// getters so any read of Colors.primary etc. always returns the current
+// tenant brand value, regardless of when the consumer was evaluated.
+const _brandStore = {
   primary: '#1B4B6B',
   primaryLight: '#2A6496',
   primaryDark: '#0E2F4A',
@@ -10,6 +14,34 @@ export const Colors = {
   secondaryLight: '#5AABAB',
   accent: '#7DBFB0',
   accentLight: '#B0D9D2',
+};
+
+export type BrandColors = typeof _brandStore;
+
+export const PLANNIX_DEFAULT_BRAND_COLORS: BrandColors = { ..._brandStore };
+
+export function setBrandColors(next: Partial<BrandColors>): void {
+  if (next.primary) _brandStore.primary = next.primary;
+  if (next.primaryLight) _brandStore.primaryLight = next.primaryLight;
+  if (next.primaryDark) _brandStore.primaryDark = next.primaryDark;
+  if (next.secondary) _brandStore.secondary = next.secondary;
+  if (next.secondaryLight) _brandStore.secondaryLight = next.secondaryLight;
+  if (next.accent) _brandStore.accent = next.accent;
+  if (next.accentLight) _brandStore.accentLight = next.accentLight;
+}
+
+export function resetBrandColors(): void {
+  Object.assign(_brandStore, PLANNIX_DEFAULT_BRAND_COLORS);
+}
+
+export const Colors = {
+  get primary() { return _brandStore.primary; },
+  get primaryLight() { return _brandStore.primaryLight; },
+  get primaryDark() { return _brandStore.primaryDark; },
+  get secondary() { return _brandStore.secondary; },
+  get secondaryLight() { return _brandStore.secondaryLight; },
+  get accent() { return _brandStore.accent; },
+  get accentLight() { return _brandStore.accentLight; },
 
   success: '#4A9B9B',
   successLight: '#B3E8E8',

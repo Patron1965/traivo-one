@@ -13,14 +13,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { useBranding, useThemeColors } from '../context/BrandingContext';
 import { ThemedText } from '../components/ThemedText';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+
+const FALLBACK_LOGO = require('../../assets/plannix-logo.png');
 
 type LoginMode = 'pin' | 'email_pin' | 'credentials';
 
 export function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
+  const { branding } = useBranding();
+  const themeColors = useThemeColors();
   const [mode, setMode] = useState<LoginMode>('pin');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -80,7 +85,7 @@ export function LoginScreen() {
 
   return (
     <LinearGradient
-      colors={[Colors.primaryDark, Colors.primary, Colors.primaryLight]}
+      colors={[themeColors.primaryDark, themeColors.primary, themeColors.primaryLight]}
       style={styles.gradient}
     >
       <KeyboardAvoidingView
@@ -89,12 +94,13 @@ export function LoginScreen() {
       >
         <View style={styles.header}>
           <Image
-            source={require('../../assets/plannix-logo.png')}
+            source={branding.logoUrl ? { uri: branding.logoUrl } : FALLBACK_LOGO}
             style={styles.logoImage}
             resizeMode="contain"
+            defaultSource={FALLBACK_LOGO}
           />
           <ThemedText variant="body" color="rgba(255,255,255,0.7)">
-            Field Service
+            {branding.companyName} Field Service
           </ThemedText>
         </View>
 
@@ -249,7 +255,7 @@ export function LoginScreen() {
           ) : null}
 
           <Pressable
-            style={[styles.loginButton, isLoading ? styles.loginButtonDisabled : null]}
+            style={[styles.loginButton, { backgroundColor: themeColors.secondary }, isLoading ? styles.loginButtonDisabled : null]}
             onPress={handleLogin}
             disabled={isLoading}
             testID="button-login"
@@ -276,7 +282,7 @@ export function LoginScreen() {
           color="rgba(255,255,255,0.5)"
           style={styles.version}
         >
-          Plannix GO v2.0
+          {branding.companyName} GO v2.0
         </ThemedText>
       </KeyboardAvoidingView>
     </LinearGradient>

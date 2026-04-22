@@ -10,6 +10,7 @@ import { syncRouter } from './sync';
 import { routingRouter } from './routing';
 import { miscRouter } from './misc';
 import { urgentJobsRouter } from './urgentJobs';
+import { brandingRouter } from './branding';
 
 const router = Router();
 
@@ -49,5 +50,6 @@ router.use(syncRouter);
 router.use(routingRouter);
 router.use(miscRouter);
 router.use(urgentJobsRouter);
+router.use(brandingRouter);
 
 export { router as mobileRoutes, MOCK_ORDERS };

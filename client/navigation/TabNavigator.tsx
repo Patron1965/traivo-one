@@ -11,17 +11,22 @@ import { DayReportScreen } from '../screens/DayReportScreen';
 import { ScreenErrorBoundary } from '../components/ScreenErrorBoundary';
 import { HamburgerMenuButton } from '../components/HamburgerMenu';
 import { useScreenOptions } from '../hooks/useScreenOptions';
+import { useBranding, useThemeColors } from '../context/BrandingContext';
 import { Colors, FontSize, Spacing, BorderRadius } from '../constants/theme';
 import { hapticLight } from '../utils/haptics';
 
 const Tab = createBottomTabNavigator();
 
+const FALLBACK_LOGO = require('../../assets/plannix-logo.png');
+
 function HeaderTitle() {
+  const { branding } = useBranding();
   return (
     <Image
-      source={require('../../assets/plannix-logo.png')}
+      source={branding.logoUrl ? { uri: branding.logoUrl } : FALLBACK_LOGO}
       style={{ width: 120, height: 32 }}
       resizeMode="contain"
+      defaultSource={FALLBACK_LOGO}
     />
   );
 }
@@ -46,6 +51,7 @@ function TodoBadgeWrapper({ children }: { children: React.ReactNode }) {
 
 export function TabNavigator() {
   const screenOptions = useScreenOptions();
+  const themeColors = useThemeColors();
   const [todoBadge, setTodoBadge] = useState<number>(0);
 
   useFocusEffect(
@@ -61,7 +67,7 @@ export function TabNavigator() {
       screenOptions={{
         ...screenOptions,
         tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: Colors.primary,
+        tabBarActiveTintColor: themeColors.primary,
         tabBarInactiveTintColor: Colors.textMuted,
         tabBarLabelStyle: styles.tabBarLabel,
         tabBarItemStyle: styles.tabBarItem,
