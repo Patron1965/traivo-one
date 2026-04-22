@@ -230,7 +230,7 @@ export default function CustomerPortalPage() {
                 ? `${filteredCustomers.length} träff${filteredCustomers.length === 1 ? "" : "ar"} av ${customers.length} kunder`
                 : `${customers.length} kunder · skriv för att söka`}
             </div>
-            <div className="space-y-2 max-h-96 overflow-y-auto">
+            <div className="space-y-2 max-h-[65vh] overflow-y-auto pr-1 border rounded-md p-2">
               {(customerSearch.trim() ? filteredCustomers : filteredCustomers.slice(0, 100)).map(customer => (
                 <div
                   key={customer.id}
