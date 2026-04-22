@@ -5,12 +5,23 @@ import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import { Component, Suspense, type ComponentType, type ReactNode } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { LanguageProvider } from "@/hooks/use-language";
 import ResourcesPage from "@/pages/ResourcesPage";
 import ClustersPage from "@/pages/ClustersPage";
 import ObjectsPage from "@/pages/ObjectsPage";
 import VehiclesPage from "@/pages/VehiclesPage";
 import ArticlesPage from "@/pages/ArticlesPage";
 import FleetManagementPage from "@/pages/FleetManagementPage";
+import ProcurementsPage from "@/pages/ProcurementsPage";
+import OrderStockPage from "@/pages/OrderStockPage";
+import BookingSlotsAdminPage from "@/pages/BookingSlotsAdminPage";
+import ChecklistTemplatesPage from "@/pages/ChecklistTemplatesPage";
+import NotificationsPage from "@/pages/NotificationsPage";
+import WorkSessionsPage from "@/pages/WorkSessionsPage";
+import SubscriptionsPage from "@/pages/SubscriptionsPage";
+import MyTasksPage from "@/pages/MyTasksPage";
+import MyReportsPage from "@/pages/MyReportsPage";
+import OrderConceptsPage from "@/pages/OrderConceptsPage";
 
 class CapturingErrorBoundary extends Component<
   { onError: (e: unknown) => void; children: ReactNode },
@@ -50,15 +61,17 @@ function renderPage(
   const { hook } = memoryLocation({ path: "/" });
   return render(
     <QueryClientProvider client={makeClient()}>
-      <TooltipProvider>
-        <Router hook={hook}>
-          <CapturingErrorBoundary onError={onError}>
-            <Suspense fallback={<div>loading</div>}>
-              <Page />
-            </Suspense>
-          </CapturingErrorBoundary>
-        </Router>
-      </TooltipProvider>
+      <LanguageProvider>
+        <TooltipProvider>
+          <Router hook={hook}>
+            <CapturingErrorBoundary onError={onError}>
+              <Suspense fallback={<div>loading</div>}>
+                <Page />
+              </Suspense>
+            </CapturingErrorBoundary>
+          </Router>
+        </TooltipProvider>
+      </LanguageProvider>
     </QueryClientProvider>,
   );
 }
@@ -76,6 +89,16 @@ const cases: Array<[string, ComponentType<unknown>]> = [
   ["VehiclesPage", VehiclesPage],
   ["ArticlesPage", ArticlesPage],
   ["FleetManagementPage", FleetManagementPage],
+  ["ProcurementsPage", ProcurementsPage],
+  ["OrderStockPage", OrderStockPage],
+  ["BookingSlotsAdminPage", BookingSlotsAdminPage],
+  ["ChecklistTemplatesPage", ChecklistTemplatesPage],
+  ["NotificationsPage", NotificationsPage],
+  ["WorkSessionsPage", WorkSessionsPage],
+  ["SubscriptionsPage", SubscriptionsPage],
+  ["MyTasksPage", MyTasksPage],
+  ["MyReportsPage", MyReportsPage],
+  ["OrderConceptsPage", OrderConceptsPage],
 ];
 
 describe("List pages render with empty data without crashing", () => {
