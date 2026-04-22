@@ -350,18 +350,88 @@ function MapBoundsFitter({ points, refitKey }: { points: MapPoint[]; refitKey: s
   return null;
 }
 
-function ViewportTracker({ onChange }: { onChange: (bbox: [number, number, number, number]) => void }) {
+function ViewportTracker({
+  onChange,
+}: {
+  onChange: (bbox: [number, number, number, number], zoom: number) => void;
+}) {
   const map = useMap();
   useEffect(() => {
     const b = map.getBounds();
-    onChange([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+    onChange([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()], map.getZoom());
   }, [map]); // eslint-disable-line react-hooks/exhaustive-deps
   useMapEvents({
     moveend: () => {
       const b = map.getBounds();
-      onChange([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+      onChange([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()], map.getZoom());
+    },
+    zoomend: () => {
+      const b = map.getBounds();
+      onChange([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()], map.getZoom());
     },
   });
+  return null;
+}
+
+interface MapAggregate {
+  cellKey: string;
+  latitude: number;
+  longitude: number;
+  count: number;
+}
+
+function makeAggregateIcon(count: number) {
+  let size = 36;
+  let bg = "#3b82f6";
+  if (count >= 1000) {
+    size = 56;
+    bg = "#dc2626";
+  } else if (count >= 100) {
+    size = 48;
+    bg = "#f59e0b";
+  } else if (count >= 10) {
+    size = 42;
+    bg = "#10b981";
+  }
+  return L.divIcon({
+    className: "server-cluster-marker",
+    html: `<div style="background-color:${bg};color:white;width:${size}px;height:${size}px;border-radius:50%;border:3px solid rgba(255,255,255,0.9);box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;">${count}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+}
+
+function ServerClusterLayer({
+  aggregates,
+  onClusterClick,
+}: {
+  aggregates: MapAggregate[];
+  onClusterClick: (lat: number, lng: number) => void;
+}) {
+  const map = useMap();
+  const groupRef = useRef<L.LayerGroup | null>(null);
+
+  useEffect(() => {
+    const group = L.layerGroup();
+    groupRef.current = group;
+    map.addLayer(group);
+    return () => {
+      map.removeLayer(group);
+      groupRef.current = null;
+    };
+  }, [map]);
+
+  useEffect(() => {
+    const group = groupRef.current;
+    if (!group) return;
+    group.clearLayers();
+    for (const a of aggregates) {
+      const marker = L.marker([a.latitude, a.longitude], { icon: makeAggregateIcon(a.count) });
+      marker.on("click", () => onClusterClick(a.latitude, a.longitude));
+      group.addLayer(marker);
+    }
+  }, [aggregates, onClusterClick]);
+
   return null;
 }
 
@@ -458,10 +528,12 @@ export default function CustomerDetailPage() {
     hoveredClusterId: null,
   });
   const [mapBbox, setMapBbox] = useState<[number, number, number, number] | null>(null);
+  const [mapZoom, setMapZoom] = useState<number>(11);
   const [mapTabActive, setMapTabActive] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const mapRef = useRef<L.Map | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setSearchQuery(searchInput.trim()), 250);
@@ -550,6 +622,7 @@ export default function CustomerDetailPage() {
     setSelectedObject(hit.id);
   };
 
+  const zoomBucket = Math.round(mapZoom);
   const coordsQueryKey = useMemo(() => {
     const bboxKey = mapBbox ? mapBbox.map((n) => n.toFixed(3)).join(",") : "all";
     return [
@@ -559,16 +632,22 @@ export default function CustomerDetailPage() {
       "coordinates",
       sync.selectedClusterId ?? "all",
       bboxKey,
+      zoomBucket,
     ];
-  }, [customerId, sync.selectedClusterId, mapBbox]);
+  }, [customerId, sync.selectedClusterId, mapBbox, zoomBucket]);
 
-  const coordsQuery = useQuery<MapPoint[]>({
+  type CoordsResponse =
+    | { mode: "points"; points: MapPoint[]; total: number }
+    | { mode: "aggregates"; aggregates: MapAggregate[]; total: number };
+
+  const coordsQuery = useQuery<CoordsResponse>({
     queryKey: coordsQueryKey,
     queryFn: async () => {
       const params = new URLSearchParams();
       if (sync.selectedClusterId) params.set("clusterId", sync.selectedClusterId);
       if (mapBbox) params.set("bbox", mapBbox.join(","));
-      params.set("limit", "3000");
+      params.set("limit", "2000");
+      params.set("zoom", String(zoomBucket));
       const r = await fetch(
         `/api/customers/${encodeURIComponent(customerId!)}/objects/coordinates?${params.toString()}`,
         { credentials: "include" },
@@ -607,7 +686,10 @@ export default function CustomerDetailPage() {
     () => groupRootsByCluster(roots, statsQuery.data?.clusters || []),
     [roots, statsQuery.data?.clusters],
   );
-  const mapPoints = coordsQuery.data || [];
+  const coordsData = coordsQuery.data;
+  const mapPoints: MapPoint[] = coordsData?.mode === "points" ? coordsData.points : [];
+  const mapAggregates: MapAggregate[] = coordsData?.mode === "aggregates" ? coordsData.aggregates : [];
+  const mapTotalInView = coordsData?.total ?? 0;
   const clustersWithGeo = useMemo(
     () => (statsQuery.data?.clusters || []).filter((c) => c.centerLatitude && c.centerLongitude),
     [statsQuery.data?.clusters],
@@ -638,7 +720,16 @@ export default function CustomerDetailPage() {
     ? [clustersWithGeo[0].centerLatitude!, clustersWithGeo[0].centerLongitude!]
     : mapPoints[0]
     ? [mapPoints[0].latitude, mapPoints[0].longitude]
+    : mapAggregates[0]
+    ? [mapAggregates[0].latitude, mapAggregates[0].longitude]
     : [59.3, 18.07];
+
+  const handleAggregateClick = (lat: number, lng: number) => {
+    const map = mapRef.current;
+    if (!map) return;
+    const targetZoom = Math.min(map.getZoom() + 2, 18);
+    map.flyTo([lat, lng], targetZoom, { duration: 0.5 });
+  };
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-6">
@@ -1062,9 +1153,9 @@ export default function CustomerDetailPage() {
             <TabsContent value="map">
               <Card>
                 <CardContent className="p-0 overflow-hidden rounded-md">
-                  {coordsQuery.isLoading && mapPoints.length === 0 ? (
+                  {coordsQuery.isLoading && mapPoints.length === 0 && mapAggregates.length === 0 ? (
                     <Skeleton className="h-[500px] w-full" />
-                  ) : mapPoints.length === 0 && clustersWithGeo.length === 0 ? (
+                  ) : mapPoints.length === 0 && mapAggregates.length === 0 && clustersWithGeo.length === 0 ? (
                     <div className="h-[500px] flex flex-col items-center justify-center text-muted-foreground text-sm gap-2" data-testid="text-empty-map">
                       <MapIcon className="h-8 w-8 opacity-40" />
                       Inga objekt med koordinater att visa.
@@ -1078,17 +1169,27 @@ export default function CustomerDetailPage() {
                         </div>
                       )}
                       <div className="absolute bottom-2 left-2 z-[1000] bg-background/90 border rounded-md px-2 py-1 text-xs shadow" data-testid="map-points-count">
-                        {mapPoints.length} objekt i vyn
+                        {coordsData?.mode === "aggregates"
+                          ? `${mapTotalInView} objekt i vyn (${mapAggregates.length} kluster) – zooma in för detaljer`
+                          : `${mapPoints.length} objekt i vyn`}
                       </div>
                       <MapContainer
                         center={initialCenter}
                         zoom={11}
                         style={{ height: "100%", width: "100%" }}
                         scrollWheelZoom
+                        ref={(instance) => {
+                          mapRef.current = instance ?? null;
+                        }}
                       >
                         <TileLayer url={mapConfig.tileUrl} attribution={mapConfig.attribution} />
                         <MapBoundsFitter points={mapPoints} refitKey={sync.selectedClusterId ?? "all"} />
-                        <ViewportTracker onChange={setMapBbox} />
+                        <ViewportTracker
+                          onChange={(bbox, zoom) => {
+                            setMapBbox(bbox);
+                            setMapZoom(zoom);
+                          }}
+                        />
                         <FlyToPoint point={flyTarget} />
                         {clustersWithGeo.map((cl) => {
                           const isSelected = sync.selectedClusterId === cl.id;
@@ -1123,12 +1224,19 @@ export default function CustomerDetailPage() {
                             </Circle>
                           );
                         })}
-                        <MarkerClusterLayer
-                          points={mapPoints}
-                          sync={sync}
-                          onSelectObject={setSelectedObject}
-                          onHoverObject={setHoveredObject}
-                        />
+                        {coordsData?.mode === "aggregates" ? (
+                          <ServerClusterLayer
+                            aggregates={mapAggregates}
+                            onClusterClick={handleAggregateClick}
+                          />
+                        ) : (
+                          <MarkerClusterLayer
+                            points={mapPoints}
+                            sync={sync}
+                            onSelectObject={setSelectedObject}
+                            onHoverObject={setHoveredObject}
+                          />
+                        )}
                       </MapContainer>
                     </div>
                   )}

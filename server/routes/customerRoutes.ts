@@ -518,9 +518,15 @@ app.get("/api/customers/:customerId/objects/coordinates", asyncHandler(async (re
       bbox = [parts[0], parts[1], parts[2], parts[3]];
     }
   }
-  const limit = Math.max(1, Math.min(5000, parseInt(req.query.limit as string) || 3000));
-  const points = await storage.getCustomerObjectMapPoints(req.params.customerId, tenantId, { bbox, clusterId, limit });
-  res.json(points);
+  const limit = Math.max(1, Math.min(5000, parseInt(req.query.limit as string) || 2000));
+  const zoomRaw = parseFloat(req.query.zoom as string);
+  if (!Number.isFinite(zoomRaw)) {
+    // Backward compatible: no zoom = legacy point list
+    const points = await storage.getCustomerObjectMapPoints(req.params.customerId, tenantId, { bbox, clusterId, limit });
+    return res.json(points);
+  }
+  const data = await storage.getCustomerObjectMapData(req.params.customerId, tenantId, { bbox, clusterId, zoom: zoomRaw, limit });
+  res.json(data);
 }));
 
 app.post("/api/objects/coordinates", asyncHandler(async (req, res) => {

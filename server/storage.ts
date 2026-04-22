@@ -179,6 +179,18 @@ export interface CustomerObjectSearchHit {
   path: Array<{ id: string; name: string; hierarchyLevel: string | null }>;
 }
 
+export interface CustomerMapAggregate {
+  cellKey: string;
+  latitude: number;
+  longitude: number;
+  count: number;
+}
+
+export type CustomerMapData =
+  | { mode: "points"; points: CustomerMapPoint[]; total: number }
+  | { mode: "aggregates"; aggregates: CustomerMapAggregate[]; total: number };
+
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -243,6 +255,7 @@ export interface IStorage {
   getCustomerObjectTreeChildren(customerId: string, tenantId: string, parentId: string): Promise<CustomerTreeNode[]>;
   getCustomerObjectMapPoints(customerId: string, tenantId: string, opts?: { bbox?: [number, number, number, number]; clusterId?: string | null; limit?: number }): Promise<CustomerMapPoint[]>;
   searchCustomerObjects(customerId: string, tenantId: string, query: string, limit?: number): Promise<CustomerObjectSearchHit[]>;
+  getCustomerObjectMapData(customerId: string, tenantId: string, opts: { bbox?: [number, number, number, number]; clusterId?: string | null; zoom: number; limit?: number }): Promise<CustomerMapData>;
   createObject(object: InsertObject): Promise<ServiceObject>;
   updateObject(id: string, object: Partial<InsertObject>): Promise<ServiceObject | undefined>;
   deleteObject(id: string): Promise<void>;
@@ -1651,6 +1664,112 @@ export class DatabaseStorage implements IStorage {
       parentId: m.parentId,
       path: pathByLeaf.get(m.id) || [{ id: m.id, name: m.name, hierarchyLevel: m.hierarchyLevel }],
     }));
+  }
+
+  async getCustomerObjectMapData(
+    customerId: string,
+    tenantId: string,
+    opts: { bbox?: [number, number, number, number]; clusterId?: string | null; zoom: number; limit?: number },
+  ): Promise<CustomerMapData> {
+    const limit = Math.max(1, Math.min(5000, opts.limit ?? 2000));
+    const zoom = Math.max(0, Math.min(22, opts.zoom));
+    const INDIVIDUAL_ZOOM_THRESHOLD = 14;
+
+    const bboxFilter = opts.bbox
+      ? sql`AND o.longitude BETWEEN ${opts.bbox[0]} AND ${opts.bbox[2]} AND o.latitude BETWEEN ${opts.bbox[1]} AND ${opts.bbox[3]}`
+      : sql``;
+    const clusterFilter = opts.clusterId === undefined
+      ? sql``
+      : opts.clusterId === null
+      ? sql`AND o.cluster_id IS NULL`
+      : sql`AND o.cluster_id = ${opts.clusterId}`;
+
+    const totalRow = await db.execute(sql`
+      SELECT COUNT(*)::int AS total
+      FROM objects o
+      WHERE o.customer_id = ${customerId}
+        AND o.tenant_id = ${tenantId}
+        AND o.deleted_at IS NULL
+        AND o.latitude IS NOT NULL
+        AND o.longitude IS NOT NULL
+        ${bboxFilter}
+        ${clusterFilter}
+    `);
+    const total = Number((totalRow.rows[0] as { total?: number } | undefined)?.total ?? 0);
+
+    if (zoom >= INDIVIDUAL_ZOOM_THRESHOLD && total <= limit) {
+      const result = await db.execute(sql`
+        SELECT
+          o.id,
+          o.name,
+          o.address,
+          o.latitude,
+          o.longitude,
+          o.hierarchy_level AS "hierarchyLevel",
+          o.cluster_id AS "clusterId"
+        FROM objects o
+        WHERE o.customer_id = ${customerId}
+          AND o.tenant_id = ${tenantId}
+          AND o.deleted_at IS NULL
+          AND o.latitude IS NOT NULL
+          AND o.longitude IS NOT NULL
+          ${bboxFilter}
+          ${clusterFilter}
+        ORDER BY o.id
+        LIMIT ${limit}
+      `);
+      const points = (result.rows as unknown as CustomerMapPoint[]) || [];
+      return { mode: "points", points, total };
+    }
+
+    // Server-side grid clustering. Cell size in degrees scales with zoom so that
+    // clusters roughly correspond to ~60 px on screen at the given zoom. To
+    // guarantee that every object is represented (no dropped cells), coarsen
+    // the grid by doubling the cell size until the bin count fits within
+    // `limit`. We fetch limit+1 rows and detect overflow.
+    let cellSize = Math.max(0.00005, (360 / Math.pow(2, zoom)) * (60 / 256));
+    let rows: Array<{ gx: number; gy: number; count: number; latitude: number; longitude: number }> = [];
+    const fetchLimit = limit + 1;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const r = await db.execute(sql`
+        WITH binned AS (
+          SELECT
+            floor(o.longitude / ${cellSize})::int AS gx,
+            floor(o.latitude / ${cellSize})::int AS gy,
+            o.latitude,
+            o.longitude
+          FROM objects o
+          WHERE o.customer_id = ${customerId}
+            AND o.tenant_id = ${tenantId}
+            AND o.deleted_at IS NULL
+            AND o.latitude IS NOT NULL
+            AND o.longitude IS NOT NULL
+            ${bboxFilter}
+            ${clusterFilter}
+        )
+        SELECT
+          gx,
+          gy,
+          COUNT(*)::int AS count,
+          AVG(latitude)::float AS latitude,
+          AVG(longitude)::float AS longitude
+        FROM binned
+        GROUP BY gx, gy
+        LIMIT ${fetchLimit}
+      `);
+      rows = r.rows as unknown as typeof rows;
+      if (rows.length <= limit) break;
+      cellSize *= 2;
+    }
+
+    const aggregates: CustomerMapAggregate[] = rows.slice(0, limit).map((row) => ({
+      cellKey: `${row.gx}:${row.gy}`,
+      latitude: Number(row.latitude),
+      longitude: Number(row.longitude),
+      count: Number(row.count),
+    }));
+
+    return { mode: "aggregates", aggregates, total };
   }
 
   async createObject(insertObject: InsertObject): Promise<ServiceObject> {
