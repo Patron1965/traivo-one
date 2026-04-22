@@ -2,6 +2,7 @@ import { createContext, useContext, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ModuleKey, PackageTier } from "@shared/modules";
 import { MODULE_DEFINITIONS, PACKAGE_DEFINITIONS } from "@shared/modules";
+import { useAuth } from "@/hooks/use-auth";
 
 interface FeatureContextType {
   enabledModules: ModuleKey[];
@@ -29,14 +30,17 @@ function getModuleForUrl(url: string): ModuleKey | null {
 }
 
 export function FeatureProvider({ children }: { children: React.ReactNode }) {
-  const { data, isLoading } = useQuery<{
+  const { user, isLoading: authLoading } = useAuth();
+  const { data, isLoading: queryLoading } = useQuery<{
     enabledModules: ModuleKey[];
     packageTier: PackageTier;
   }>({
     queryKey: ["/api/tenant/features"],
     staleTime: 60_000,
     retry: 1,
+    enabled: !!user,
   });
+  const isLoading = authLoading || (!!user && queryLoading);
 
   const value = useMemo<FeatureContextType>(() => {
     const modules = data?.enabledModules ?? ["core" as ModuleKey];
