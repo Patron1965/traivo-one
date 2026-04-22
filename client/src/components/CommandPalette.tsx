@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { isAdminRole } from "@/lib/role-config";
 import {
   CommandDialog,
   CommandEmpty,
@@ -48,9 +50,21 @@ import {
   MapPin,
   User,
   Loader2,
+  Globe,
+  ExternalLink,
 } from "lucide-react";
 
-const allNavItems = [
+interface NavItemConfig {
+  title: string;
+  url: string;
+  icon: typeof Home;
+  category: string;
+  keywords: string[];
+  external?: boolean;
+  adminOnly?: boolean;
+}
+
+const allNavItems: NavItemConfig[] = [
   { title: "Start", url: "/", icon: Home, category: "Navigation", keywords: ["hem", "dashboard", "översikt"] },
   { title: "Mina uppgifter", url: "/home", icon: Home, category: "Navigation", keywords: ["tasks", "uppgifter", "todo"] },
   { title: "Objekt", url: "/objects", icon: Building2, category: "Grunddata", keywords: ["fastighet", "plats", "kund", "adress"] },
@@ -80,6 +94,7 @@ const allNavItems = [
   { title: "Kundportal", url: "/customer-portal", icon: Building, category: "Avancerat", keywords: ["extern", "kund"] },
   { title: "Systemöversikt", url: "/system-overview", icon: Database, category: "Avancerat", keywords: ["data", "statistik"] },
   { title: "Admin", url: "/system-dashboard", icon: Palette, category: "Avancerat", keywords: ["varumärke", "roller", "användare"] },
+  { title: "Kundportal extern", url: "/portal", icon: Globe, category: "Avancerat", keywords: ["extern", "kund", "portal", "ny flik"], external: true, adminOnly: true },
 ];
 
 const quickActions = [
@@ -104,6 +119,8 @@ interface CommandPaletteProps {
 export function CommandPalette({ onThemeToggle, currentTheme }: CommandPaletteProps) {
   const [open, setOpen] = useState(false);
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const userIsAdmin = isAdminRole(user?.role);
   const [recentItems, setRecentItems] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -200,7 +217,12 @@ export function CommandPalette({ onThemeToggle, currentTheme }: CommandPalettePr
     return () => document.removeEventListener("keydown", down);
   }, []);
 
-  const handleNavigate = (url: string) => {
+  const handleNavigate = (url: string, external?: boolean) => {
+    if (external) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      setOpen(false);
+      return;
+    }
     addToRecent(url);
     setLocation(url);
     setOpen(false);
@@ -235,11 +257,13 @@ export function CommandPalette({ onThemeToggle, currentTheme }: CommandPalettePr
     }
   };
 
+  const visibleNavItems = allNavItems.filter((item) => !item.adminOnly || userIsAdmin);
+
   const recentNavItems = recentItems
-    .map((url) => allNavItems.find((item) => item.url === url))
+    .map((url) => visibleNavItems.find((item) => item.url === url))
     .filter(Boolean);
 
-  const groupedItems = allNavItems.reduce((acc, item) => {
+  const groupedItems = visibleNavItems.reduce((acc, item) => {
     if (!acc[item.category]) {
       acc[item.category] = [];
     }
@@ -348,18 +372,24 @@ export function CommandPalette({ onThemeToggle, currentTheme }: CommandPalettePr
 
         {Object.entries(groupedItems).map(([category, items]) => (
           <CommandGroup key={category} heading={category}>
-            {items.map((item) => (
-              <CommandItem
-                key={item.url}
-                value={`${item.title} ${item.keywords.join(" ")}`}
-                onSelect={() => handleNavigate(item.url)}
-                className="gap-3"
-                data-testid={`command-nav-${item.url.replace("/", "") || "home"}`}
-              >
-                <item.icon className="h-4 w-4" />
-                <span>{item.title}</span>
-              </CommandItem>
-            ))}
+            {items.map((item) => {
+              const external = item.external;
+              return (
+                <CommandItem
+                  key={item.url}
+                  value={`${item.title} ${item.keywords.join(" ")}`}
+                  onSelect={() => handleNavigate(item.url, external)}
+                  className="gap-3"
+                  data-testid={`command-nav-${item.url.replace("/", "") || "home"}`}
+                >
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.title}</span>
+                  {external && (
+                    <ExternalLink className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
+                  )}
+                </CommandItem>
+              );
+            })}
           </CommandGroup>
         ))}
       </CommandList>

@@ -46,9 +46,23 @@ import {
   MessageSquare,
   Activity,
   Gauge,
+  Globe,
+  ExternalLink,
 } from "lucide-react";
 
-function getNavigationGroups(tl: (key: string) => string) {
+interface MobileNavItem {
+  title: string;
+  url: string;
+  icon: typeof Calendar;
+  external?: boolean;
+}
+
+interface MobileNavGroup {
+  title: string;
+  items: MobileNavItem[];
+}
+
+function getNavigationGroups(tl: (key: string) => string): MobileNavGroup[] {
   return [
     {
       title: tl("mobile.start"),
@@ -118,6 +132,7 @@ function getNavigationGroups(tl: (key: string) => string) {
         { title: tl("nav.api-costs"), url: "/api-costs", icon: Activity },
         { title: tl("nav.system-overview"), url: "/system-overview", icon: FileText },
         { title: tl("nav.settings"), url: "/settings", icon: Settings },
+        { title: "Kundportal extern", url: "/portal", icon: Globe, external: true },
       ],
     },
   ];
@@ -166,22 +181,43 @@ export function MobileNav() {
                   {group.title}
                 </h3>
                 <div className="space-y-1">
-                  {group.items.map((item) => (
-                    <Link
-                      key={item.url}
-                      href={item.url}
-                      onClick={() => setOpen(false)}
-                      data-testid={`mobile-nav-${item.url.replace("/", "") || "home"}`}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-md hover-elevate active-elevate-2 ${
-                        location === item.url
-                          ? "bg-accent text-accent-foreground"
-                          : "text-muted-foreground"
-                      }`}
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span className="text-sm font-medium">{item.title}</span>
-                    </Link>
-                  ))}
+                  {group.items.map((item) => {
+                    const external = item.external;
+                    const className = `flex items-center gap-3 px-3 py-2 rounded-md hover-elevate active-elevate-2 ${
+                      !external && location === item.url
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground"
+                    }`;
+                    if (external) {
+                      return (
+                        <a
+                          key={item.url}
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => setOpen(false)}
+                          data-testid={`mobile-nav-${item.url.replace("/", "") || "home"}`}
+                          className={className}
+                        >
+                          <item.icon className="h-4 w-4" />
+                          <span className="text-sm font-medium flex-1">{item.title}</span>
+                          <ExternalLink className="h-3.5 w-3.5 opacity-70" />
+                        </a>
+                      );
+                    }
+                    return (
+                      <Link
+                        key={item.url}
+                        href={item.url}
+                        onClick={() => setOpen(false)}
+                        data-testid={`mobile-nav-${item.url.replace("/", "") || "home"}`}
+                        className={className}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        <span className="text-sm font-medium">{item.title}</span>
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
             ))}
