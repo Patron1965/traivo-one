@@ -1655,22 +1655,17 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                 </Button>
                 <Button
                   onClick={() => runModusImport(false)}
-                  disabled={
-                    modusBusy ||
-                    !modusPreview ||
-                    (modusPreview.create + modusPreview.update === 0 &&
-                      !(modusCreateMissingCustomers && modusPreview.unmatchedCustomers.length > 0))
-                  }
+                  disabled={modusBusy || !modusPreview}
                   data-testid="button-modus-import"
                 >
                   {modusBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-                  Importera {modusPreview
-                    ? `${
-                        modusCreateMissingCustomers
-                          ? modusPreview.total - (modusPreview.skip - 0)
-                          : modusPreview.create + modusPreview.update
-                      } rader`
-                    : ""}
+                  {(() => {
+                    if (!modusPreview) return "Importera";
+                    const willProcess = modusCreateMissingCustomers
+                      ? modusPreview.total
+                      : modusPreview.create + modusPreview.update;
+                    return `Importera ${willProcess} rader`;
+                  })()}
                 </Button>
               </>
             ) : (
