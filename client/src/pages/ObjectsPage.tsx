@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, memo } from "react";
 import { useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -71,11 +71,36 @@ const accessTypeLabels: Record<string, { label: string; icon: typeof Key }> = {
 
 const PAGE_SIZE = 100;
 
+type SearchInputProps = {
+  placeholder: string;
+  initialValue: string;
+  onDebouncedChange: (value: string) => void;
+};
+
+const SearchInput = memo(function SearchInput({ placeholder, initialValue, onDebouncedChange }: SearchInputProps) {
+  const [value, setValue] = useState(initialValue);
+  useEffect(() => {
+    const timer = setTimeout(() => onDebouncedChange(value), 300);
+    return () => clearTimeout(timer);
+  }, [value, onDebouncedChange]);
+  return (
+    <div className="relative flex-1 min-w-[200px] max-w-md">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <Input
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="pl-9"
+        data-testid="input-search-objects"
+      />
+    </div>
+  );
+});
+
 export default function ObjectsPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { t } = useTerminology();
-  const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [typeFilter, setTypeFilterRaw] = useState("all");
   const [accessFilter, setAccessFilterRaw] = useState("all");
@@ -183,14 +208,6 @@ export default function ObjectsPage() {
       window.history.replaceState({}, "", window.location.pathname + (remaining ? `?${remaining}` : ""));
     }
   }, []);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchQuery);
-      setCurrentPage(0);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
 
   const { data: objectsData, isLoading } = useQuery<{ objects: ServiceObject[]; total: number }>({
     queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, typeFilter, accessFilter, hierarchyFilter, clusterFilter, interimFilter, issueFilter],
@@ -1215,16 +1232,11 @@ export default function ObjectsPage() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4 flex-1">
-              <div className="relative flex-1 min-w-[200px] max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  placeholder={`Sök ${t("object_plural").toLowerCase()}, kund, adress, stad...`} 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                  data-testid="input-search-objects"
-                />
-              </div>
+              <SearchInput
+                placeholder={`Sök ${t("object_plural").toLowerCase()}, kund, adress, stad...`}
+                initialValue={debouncedSearch}
+                onDebouncedChange={(v) => { setDebouncedSearch(v); setCurrentPage(0); }}
+              />
               <Button
                 variant="outline"
                 size="sm"
