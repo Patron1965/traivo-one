@@ -19,7 +19,8 @@ import {
   Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
   Map as MapIcon, List, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, ChevronDown, ChevronUp, XCircle,
-  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, Layers, FileUp, Pyramid
+  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, Layers, FileUp, Pyramid,
+  ArrowUp, ArrowDown, ArrowUpDown
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -450,6 +451,11 @@ export default function ObjectsPage() {
 
   const topLevelObjects = useMemo(() => objects.filter(obj => !obj.parentId), [objects]);
 
+  type SortField = "name" | "level" | "children" | "city" | "customer";
+  const [sortConfig, setSortConfig] = useState<{ field: SortField; direction: "asc" | "desc" }>({ field: "name", direction: "asc" });
+
+  const hierarchyOrder: Record<string, number> = { koncern: 1, brf: 2, fastighet: 3, rum: 4, karl: 5 };
+
   const childrenMap = useMemo(() => {
     const map = new Map<string, ServiceObject[]>();
     for (const obj of objects) {
@@ -465,8 +471,64 @@ export default function ObjectsPage() {
     return map;
   }, [objects]);
 
-  const getChildren = useCallback((parentId: string) => 
-    childrenMap.get(parentId) || [], [childrenMap]);
+  const sortObjects = useCallback((arr: ServiceObject[]): ServiceObject[] => {
+    const dir = sortConfig.direction === "asc" ? 1 : -1;
+    const copy = [...arr];
+    copy.sort((a, b) => {
+      let cmp = 0;
+      switch (sortConfig.field) {
+        case "name": {
+          const an = (a.name || a.objectNumber || "").toString();
+          const bn = (b.name || b.objectNumber || "").toString();
+          cmp = an.localeCompare(bn, "sv", { numeric: true, sensitivity: "base" });
+          break;
+        }
+        case "level": {
+          const ao = hierarchyOrder[a.hierarchyLevel || ""] ?? 99;
+          const bo = hierarchyOrder[b.hierarchyLevel || ""] ?? 99;
+          cmp = ao - bo;
+          break;
+        }
+        case "children": {
+          const ac = childrenMap.get(a.id)?.length ?? 0;
+          const bc = childrenMap.get(b.id)?.length ?? 0;
+          cmp = ac - bc;
+          break;
+        }
+        case "city": {
+          cmp = (a.city || "").localeCompare(b.city || "", "sv", { sensitivity: "base" });
+          break;
+        }
+        case "customer": {
+          const ac = customerNameMap.get(a.customerId) || "";
+          const bc = customerNameMap.get(b.customerId) || "";
+          cmp = ac.localeCompare(bc, "sv", { sensitivity: "base" });
+          break;
+        }
+      }
+      return cmp * dir;
+    });
+    return copy;
+  }, [sortConfig, childrenMap, customerNameMap]);
+
+  const getChildren = useCallback((parentId: string) =>
+    sortObjects(childrenMap.get(parentId) || []), [childrenMap, sortObjects]);
+
+  const toggleSort = useCallback((field: SortField) => {
+    setSortConfig(prev => {
+      if (prev.field === field) {
+        return { field, direction: prev.direction === "asc" ? "desc" : "asc" };
+      }
+      return { field, direction: "asc" };
+    });
+  }, []);
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortConfig.field !== field) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
+    return sortConfig.direction === "asc"
+      ? <ArrowUp className="h-3 w-3" />
+      : <ArrowDown className="h-3 w-3" />;
+  };
 
   const toggleExpand = useCallback((id: string) => {
     setExpandedAreas(prev => {
@@ -482,7 +544,7 @@ export default function ObjectsPage() {
 
   const filteredObjects = objects;
 
-  const filteredTopLevel = useMemo(() => filteredObjects.filter(obj => !obj.parentId), [filteredObjects]);
+  const filteredTopLevel = useMemo(() => sortObjects(filteredObjects.filter(obj => !obj.parentId)), [filteredObjects, sortObjects]);
 
   const activeFilterCount = useMemo(() => [
     typeFilter !== "all" ? 1 : 0,
@@ -1454,6 +1516,47 @@ export default function ObjectsPage() {
             </Button>
           </BulkActionBar>
           <div className="border rounded-md bg-card">
+            {filteredTopLevel.length > 0 && (
+              <div className="flex items-center gap-3 px-3 py-2 border-b bg-muted/40 text-xs font-medium text-muted-foreground sticky top-0 z-10" data-testid="header-sort-row">
+                <div className="w-4 shrink-0" />
+                <div className="w-4 shrink-0" />
+                <button
+                  onClick={() => toggleSort("name")}
+                  className="flex-1 min-w-0 flex items-center gap-1 hover:text-foreground text-left"
+                  data-testid="button-sort-name"
+                >
+                  Namn <SortIcon field="name" />
+                </button>
+                <button
+                  onClick={() => toggleSort("level")}
+                  className="hidden sm:flex items-center gap-1 hover:text-foreground w-24 shrink-0"
+                  data-testid="button-sort-level"
+                >
+                  Nivå <SortIcon field="level" />
+                </button>
+                <button
+                  onClick={() => toggleSort("city")}
+                  className="hidden md:flex items-center gap-1 hover:text-foreground w-32 shrink-0"
+                  data-testid="button-sort-city"
+                >
+                  Stad <SortIcon field="city" />
+                </button>
+                <button
+                  onClick={() => toggleSort("customer")}
+                  className="hidden lg:flex items-center gap-1 hover:text-foreground w-40 shrink-0"
+                  data-testid="button-sort-customer"
+                >
+                  Kund <SortIcon field="customer" />
+                </button>
+                <button
+                  onClick={() => toggleSort("children")}
+                  className="flex items-center gap-1 hover:text-foreground w-20 shrink-0 justify-end"
+                  data-testid="button-sort-children"
+                >
+                  Antal <SortIcon field="children" />
+                </button>
+              </div>
+            )}
             {filteredTopLevel.length > 0 ? (
               filteredTopLevel.map(obj => renderObjectTree(obj))
             ) : totalObjects === 0 && !debouncedSearch && typeFilter === "all" && accessFilter === "all" && customerFilter.length === 0 && hierarchyFilter === "all" && !interimFilter ? (
