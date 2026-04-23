@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Building2, Search, Layers, Package, ClipboardList, ArrowRight, Users, ChevronLeft, ChevronRight } from "lucide-react";
+import { Building2, Search, Layers, Package, ClipboardList, ArrowRight, Users, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { versionedUrl } from "@/lib/queryClient";
 import type { Customer } from "@shared/schema";
 
@@ -48,6 +48,20 @@ export default function CustomersPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebounced(search, 300);
+
+  type SortField = "name" | "orgNumber" | "customerNumber" | "city" | "clusters" | "objects" | "activeOrders";
+  const [sortConfig, setSortConfig] = useState<{ field: SortField; direction: "asc" | "desc" }>({ field: "name", direction: "asc" });
+  const toggleSort = (field: SortField) => {
+    setSortConfig(prev => prev.field === field
+      ? { field, direction: prev.direction === "asc" ? "desc" : "asc" }
+      : { field, direction: "asc" });
+  };
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortConfig.field !== field) return <ArrowUpDown className="h-3 w-3 opacity-40 inline ml-1" />;
+    return sortConfig.direction === "asc"
+      ? <ArrowUp className="h-3 w-3 inline ml-1" />
+      : <ArrowDown className="h-3 w-3 inline ml-1" />;
+  };
 
   useEffect(() => {
     setPage(1);
@@ -95,6 +109,39 @@ export default function CustomersPage() {
     (aggregates || []).forEach((a) => map.set(a.customerId, a));
     return map;
   }, [aggregates]);
+
+  const sortedCustomers = useMemo(() => {
+    const dir = sortConfig.direction === "asc" ? 1 : -1;
+    const arr = [...visibleCustomers];
+    arr.sort((a, b) => {
+      let cmp = 0;
+      switch (sortConfig.field) {
+        case "name":
+          cmp = (a.name || "").localeCompare(b.name || "", "sv", { numeric: true, sensitivity: "base" });
+          break;
+        case "orgNumber":
+          cmp = (a.orgNumber || "").localeCompare(b.orgNumber || "", "sv", { numeric: true });
+          break;
+        case "customerNumber":
+          cmp = (a.customerNumber || "").localeCompare(b.customerNumber || "", "sv", { numeric: true });
+          break;
+        case "city":
+          cmp = (a.city || "").localeCompare(b.city || "", "sv", { sensitivity: "base" });
+          break;
+        case "clusters":
+          cmp = (aggMap.get(a.id)?.clusterCount ?? 0) - (aggMap.get(b.id)?.clusterCount ?? 0);
+          break;
+        case "objects":
+          cmp = (aggMap.get(a.id)?.objectCount ?? 0) - (aggMap.get(b.id)?.objectCount ?? 0);
+          break;
+        case "activeOrders":
+          cmp = (aggMap.get(a.id)?.activeOrders ?? 0) - (aggMap.get(b.id)?.activeOrders ?? 0);
+          break;
+      }
+      return cmp * dir;
+    });
+    return arr;
+  }, [visibleCustomers, sortConfig, aggMap]);
 
   const isLoading = customersLoading;
   const customerCount = totals?.customerCount ?? 0;
@@ -187,18 +234,46 @@ export default function CustomersPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Kund</TableHead>
-                      <TableHead>Org-nr</TableHead>
-                      <TableHead>Kundnummer</TableHead>
-                      <TableHead>Ort</TableHead>
-                      <TableHead className="text-right">Kluster</TableHead>
-                      <TableHead className="text-right">Objekt</TableHead>
-                      <TableHead className="text-right">Aktiva ordrar</TableHead>
+                      <TableHead>
+                        <button onClick={() => toggleSort("name")} className="flex items-center hover:text-foreground" data-testid="button-sort-name">
+                          Kund <SortIcon field="name" />
+                        </button>
+                      </TableHead>
+                      <TableHead>
+                        <button onClick={() => toggleSort("orgNumber")} className="flex items-center hover:text-foreground" data-testid="button-sort-org">
+                          Org-nr <SortIcon field="orgNumber" />
+                        </button>
+                      </TableHead>
+                      <TableHead>
+                        <button onClick={() => toggleSort("customerNumber")} className="flex items-center hover:text-foreground" data-testid="button-sort-customernumber">
+                          Kundnummer <SortIcon field="customerNumber" />
+                        </button>
+                      </TableHead>
+                      <TableHead>
+                        <button onClick={() => toggleSort("city")} className="flex items-center hover:text-foreground" data-testid="button-sort-city">
+                          Ort <SortIcon field="city" />
+                        </button>
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <button onClick={() => toggleSort("clusters")} className="flex items-center hover:text-foreground ml-auto" data-testid="button-sort-clusters">
+                          Kluster <SortIcon field="clusters" />
+                        </button>
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <button onClick={() => toggleSort("objects")} className="flex items-center hover:text-foreground ml-auto" data-testid="button-sort-objects">
+                          Objekt <SortIcon field="objects" />
+                        </button>
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <button onClick={() => toggleSort("activeOrders")} className="flex items-center hover:text-foreground ml-auto" data-testid="button-sort-activeorders">
+                          Aktiva ordrar <SortIcon field="activeOrders" />
+                        </button>
+                      </TableHead>
                       <TableHead className="text-right" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {visibleCustomers.map((c) => {
+                    {sortedCustomers.map((c) => {
                       const agg = aggMap.get(c.id);
                       const aggReady = !aggLoading && aggregates !== undefined;
                       return (
