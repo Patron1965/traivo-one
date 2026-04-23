@@ -276,6 +276,39 @@ app.post("/api/system/scrape-branding", requireAdmin, asyncHandler(async (req, r
 
       // Bad-context indicators: parent class/id values that mean "not our logo"
       const BAD_CONTEXT_RE = /partner|customer|sponsor|client|kund-?logo|logo-?slider|logo-?carousel|customer-?logo|partners?|kunder/i;
+
+      // Build site/brand tokens from hostname + companyName so we can reject
+      // images whose alt/title clearly point at OTHER brands (Willys, ICA, ...).
+      const siteTokens = new Set<string>();
+      const addToken = (t: string) => {
+        const norm = t.toLowerCase().replace(/[^a-z0-9åäö]/g, "");
+        if (norm.length >= 2) siteTokens.add(norm);
+      };
+      const hostNoTld = parsedUrl.host.replace(/^www\./, "").split(".")[0];
+      addToken(hostNoTld);
+      if (companyName) {
+        for (const w of companyName.split(/\s+/)) addToken(w);
+      }
+      const altMentionsOtherBrand = (alt: string, title: string) => {
+        const text = `${alt} ${title}`.toLowerCase();
+        if (!text.trim()) return false;
+        // Words 3+ chars that look like a brand-name token
+        const words = text.match(/[a-zåäö0-9]{3,}/gi) || [];
+        if (words.length === 0) return false;
+        // Common generic words that should NOT trigger rejection
+        const GENERIC = new Set(["logo","logotyp","logotype","brand","image","img","picture","header","site","main","company","företag","foretag","aktiebolag","group"]);
+        const meaningful = words.filter(w => !GENERIC.has(w.toLowerCase()));
+        if (meaningful.length === 0) return false;
+        // Reject if NONE of the meaningful tokens overlap with our site tokens
+        const anyMatch = meaningful.some(w => {
+          const lw = w.toLowerCase();
+          for (const t of siteTokens) {
+            if (lw === t || lw.includes(t) || t.includes(lw)) return true;
+          }
+          return false;
+        });
+        return !anyMatch;
+      };
       // Good-context indicators: parent class/id values that suggest the brand logo
       const GOOD_CONTEXT_RE = /(?:^|[^a-z])(?:logo(?:-?box|-?wrap|-?container|-?image|-?img)?|brand(?:ing)?|navbar-?brand|site-?logo|header-?logo|main-?logo)(?:[^a-z]|$)/i;
 
@@ -316,9 +349,13 @@ app.post("/api/system/scrape-branding", requireAdmin, asyncHandler(async (req, r
             // Check if this img has bad alt/class
             const imgTag = im[0];
             const altMatch = imgTag.match(/\balt=["']([^"']*)["']/i);
+            const titleMatch = imgTag.match(/\btitle=["']([^"']*)["']/i);
             const classMatch = imgTag.match(/\bclass=["']([^"']*)["']/i);
-            const altOrClass = `${altMatch?.[1] || ""} ${classMatch?.[1] || ""}`;
+            const alt = altMatch?.[1] || "";
+            const title = titleMatch?.[1] || "";
+            const altOrClass = `${alt} ${classMatch?.[1] || ""}`;
             if (BAD_CONTEXT_RE.test(altOrClass)) continue;
+            if (altMentionsOtherBrand(alt, title)) continue;
             addCandidate(im[1], 100);
           }
 
@@ -354,10 +391,12 @@ app.post("/api/system/scrape-branding", requireAdmin, asyncHandler(async (req, r
         addCandidate(ogImageMatch[1], 40);
       }
 
-      // Favicons (lowest priority, only as fallback)
-      const linkIconMatches = [...html.matchAll(/<link[^>]+rel=["'](?:icon|apple-touch-icon|shortcut icon)["'][^>]*href=["']([^"']+)["'][^>]*>/gi)];
-      for (const m of linkIconMatches) {
-        if (m[1]) addCandidate(m[1], 10);
+      // Favicons — only included as a fallback when no real logo candidates were found
+      if (candidates.length === 0) {
+        const linkIconMatches = [...html.matchAll(/<link[^>]+rel=["'](?:icon|apple-touch-icon|shortcut icon)["'][^>]*href=["']([^"']+)["'][^>]*>/gi)];
+        for (const m of linkIconMatches) {
+          if (m[1]) addCandidate(m[1], 10);
+        }
       }
 
       // Score adjustments based on URL hints
