@@ -524,10 +524,10 @@ export default function ObjectsPage() {
   }, []);
 
   const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortConfig.field !== field) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
+    if (sortConfig.field !== field) return <ArrowUpDown className="h-4 w-4 opacity-50 stroke-[2.25]" />;
     return sortConfig.direction === "asc"
-      ? <ArrowUp className="h-3 w-3" />
-      : <ArrowDown className="h-3 w-3" />;
+      ? <ArrowUp className="h-4 w-4 stroke-[2.75] text-primary" />
+      : <ArrowDown className="h-4 w-4 stroke-[2.75] text-primary" />;
   };
 
   const toggleExpand = useCallback((id: string) => {

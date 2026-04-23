@@ -57,10 +57,10 @@ export default function CustomersPage() {
       : { field, direction: "asc" });
   };
   const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortConfig.field !== field) return <ArrowUpDown className="h-3 w-3 opacity-40 inline ml-1" />;
+    if (sortConfig.field !== field) return <ArrowUpDown className="h-4 w-4 opacity-50 inline ml-1.5 stroke-[2.25]" />;
     return sortConfig.direction === "asc"
-      ? <ArrowUp className="h-3 w-3 inline ml-1" />
-      : <ArrowDown className="h-3 w-3 inline ml-1" />;
+      ? <ArrowUp className="h-4 w-4 inline ml-1.5 stroke-[2.75] text-primary" />
+      : <ArrowDown className="h-4 w-4 inline ml-1.5 stroke-[2.75] text-primary" />;
   };
 
   useEffect(() => {
