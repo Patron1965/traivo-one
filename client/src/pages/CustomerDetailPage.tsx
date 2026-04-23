@@ -14,6 +14,7 @@ import {
   ArrowLeft, Building2, Layers, Package, ClipboardList, Phone, Mail, MapPin,
   ChevronDown, ChevronRight, Users, Home, Container, Trash2, TreePine, Map as MapIcon,
   Repeat, Receipt, GitBranch, Hash, FileText, AlertTriangle, Loader2, Search, X,
+  Pyramid, DoorClosed,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { MapContainer, TileLayer, Circle, Popup, useMap, useMapEvents } from "react-leaflet";
@@ -105,11 +106,12 @@ interface MapPoint {
 }
 
 const HIERARCHY_LEVELS: Record<string, { label: string; icon: typeof Building2; color: string; hex: string }> = {
-  koncern: { label: "Koncern", icon: Building2, color: "text-purple-600 dark:text-purple-400", hex: "#9333ea" },
-  brf: { label: "BRF", icon: Users, color: "text-blue-600 dark:text-blue-400", hex: "#3b82f6" },
+  koncern: { label: "Koncern", icon: Pyramid, color: "text-purple-600 dark:text-purple-400", hex: "#9333ea" },
+  brf: { label: "BRF", icon: Building2, color: "text-blue-600 dark:text-blue-400", hex: "#3b82f6" },
   fastighet: { label: "Fastighet", icon: Home, color: "text-green-600 dark:text-green-400", hex: "#22c55e" },
-  rum: { label: "Rum", icon: Container, color: "text-yellow-600 dark:text-yellow-400", hex: "#eab308" },
-  karl: { label: "Objekt", icon: Trash2, color: "text-orange-600 dark:text-orange-400", hex: "#f97316" },
+  rum: { label: "Rum", icon: DoorClosed, color: "text-yellow-600 dark:text-yellow-400", hex: "#eab308" },
+  karl: { label: "Kärl", icon: Trash2, color: "text-orange-600 dark:text-orange-400", hex: "#f97316" },
+  objekt: { label: "Objekt", icon: Package, color: "text-slate-600 dark:text-slate-400", hex: "#64748b" },
 };
 
 interface ClusterGroup {
