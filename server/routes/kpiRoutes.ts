@@ -483,6 +483,100 @@ app.post("/api/system/tenant-branding/confirm-logo", requireAdmin, asyncHandler(
     res.json({ url: serveUrl, objectPath });
 }));
 
+// Mirror an external logo URL into our object storage so the asset survives
+// even if the remote site goes down or changes its layout.
+app.post("/api/system/tenant-branding/mirror-logo", requireAdmin, asyncHandler(async (req, res) => {
+    const { sourceUrl } = req.body;
+    if (!sourceUrl || typeof sourceUrl !== "string") {
+      throw new ValidationError("sourceUrl krävs");
+    }
+
+    let parsed: URL;
+    try {
+      parsed = new URL(sourceUrl);
+    } catch {
+      throw new ValidationError("Ogiltig URL");
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new ValidationError("Endast http(s) stöds");
+    }
+
+    const MAX_BYTES = 5 * 1024 * 1024;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    let buffer: Buffer;
+    let contentType = "application/octet-stream";
+    try {
+      const response = await fetch(sourceUrl, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; PlannixBrandBot/1.0)",
+          "Accept": "image/*",
+        },
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        return res.status(502).json({ error: `Kunde inte hämta bilden (HTTP ${response.status})` });
+      }
+
+      const ct = response.headers.get("content-type") || "";
+      if (ct && !ct.startsWith("image/") && !ct.includes("octet-stream")) {
+        return res.status(415).json({ error: `Förväntade en bild men fick ${ct}` });
+      }
+      if (ct) contentType = ct.split(";")[0].trim();
+
+      const len = response.headers.get("content-length");
+      if (len && parseInt(len, 10) > MAX_BYTES) {
+        return res.status(413).json({ error: "Bilden är större än 5 MB" });
+      }
+
+      const arrayBuf = await response.arrayBuffer();
+      if (arrayBuf.byteLength > MAX_BYTES) {
+        return res.status(413).json({ error: "Bilden är större än 5 MB" });
+      }
+      buffer = Buffer.from(arrayBuf);
+    } catch (err) {
+      clearTimeout(timeout);
+      const msg = err instanceof Error
+        ? (err.name === "AbortError" ? "Timeout vid hämtning av bilden" : err.message)
+        : "Kunde inte hämta bilden";
+      return res.status(502).json({ error: msg });
+    }
+
+    if (contentType === "application/octet-stream") {
+      const ext = (parsed.pathname.split(".").pop() || "").toLowerCase();
+      const extMap: Record<string, string> = {
+        png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+        svg: "image/svg+xml", webp: "image/webp", gif: "image/gif", ico: "image/x-icon",
+      };
+      if (extMap[ext]) contentType = extMap[ext];
+    }
+
+    try {
+      const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+
+      const putResp = await fetch(uploadURL, {
+        method: "PUT",
+        body: buffer,
+        headers: { "Content-Type": contentType },
+      });
+      if (!putResp.ok) {
+        return res.status(502).json({ error: `Kunde inte spara till objektlagret (HTTP ${putResp.status})` });
+      }
+
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      const serveUrl = `/api/storage/serve${objectPath}`;
+      res.json({ url: serveUrl, objectPath });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Kunde inte spegla logon";
+      return res.status(500).json({ error: msg });
+    }
+}));
+
 app.get("/api/storage/serve/objects/*", asyncHandler(async (req, res) => {
     const objectPath = `/objects/${(req.params as any)[0]}`;
     const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");

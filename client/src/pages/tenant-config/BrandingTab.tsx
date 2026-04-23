@@ -37,21 +37,62 @@ export function BrandingTab() {
     sourceUrl: string;
   } | null>(null);
 
+  const mirrorExternalLogo = async (sourceUrl: string): Promise<string> => {
+    if (!sourceUrl || sourceUrl.startsWith("data:") || sourceUrl.startsWith("/")) {
+      return sourceUrl;
+    }
+    try {
+      const resp = await apiRequest("POST", "/api/system/tenant-branding/mirror-logo", { sourceUrl });
+      const data = await resp.json();
+      if (data?.url) return data.url;
+      throw new Error("Tomt svar från speglingen");
+    } catch (err: any) {
+      toast({
+        title: "Logon kunde inte sparas i molnet",
+        description: `Använder den externa länken istället. ${err?.message || ""}`.trim(),
+        variant: "destructive",
+      });
+      return sourceUrl;
+    }
+  };
+
+  const selectLogo = async (sourceUrl: string) => {
+    setForm(prev => ({ ...prev, logoUrl: sourceUrl }));
+    if (sourceUrl.startsWith("data:") || sourceUrl.startsWith("/")) return;
+    setLogoUploading(true);
+    try {
+      const finalUrl = await mirrorExternalLogo(sourceUrl);
+      setForm(prev => (prev.logoUrl === sourceUrl ? { ...prev, logoUrl: finalUrl } : prev));
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
   const scrapeMutation = useMutation({
     mutationFn: async (url: string) => {
       const resp = await apiRequest("POST", "/api/system/scrape-branding", { url });
       return resp.json();
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setScrapeResult(data);
       if (data.companyName && !form.companyName) {
         setForm(prev => ({ ...prev, companyName: data.companyName }));
       }
       if (data.logos.length > 0) {
         // Always pre-select the best (top-ranked) logo from the scrape, even if a
-        // logo was previously saved. Users can pick another from the gallery or
-        // drag-drop a manual file to override.
-        setForm(prev => ({ ...prev, logoUrl: data.logos[0] }));
+        // logo was previously saved. Mirror it into our object storage so the
+        // asset survives even if the source site goes down or changes layout.
+        const top = data.logos[0];
+        setForm(prev => ({ ...prev, logoUrl: top }));
+        if (!top.startsWith("data:") && !top.startsWith("/")) {
+          setLogoUploading(true);
+          try {
+            const mirrored = await mirrorExternalLogo(top);
+            setForm(prev => (prev.logoUrl === top ? { ...prev, logoUrl: mirrored } : prev));
+          } finally {
+            setLogoUploading(false);
+          }
+        }
       }
       if (data.colors.length >= 1) {
         setForm(prev => ({
@@ -238,7 +279,7 @@ export function BrandingTab() {
                         <button
                           key={i}
                           data-testid={`button-select-logo-${i}`}
-                          onClick={() => setForm(prev => ({ ...prev, logoUrl: logo }))}
+                          onClick={() => selectLogo(logo)}
                           className={`relative border rounded-lg p-2 bg-white dark:bg-gray-800 hover:border-primary transition-colors ${form.logoUrl === logo ? "border-primary ring-2 ring-primary/30" : "border-border"}`}
                           style={{ minWidth: "60px", maxWidth: "140px" }}
                         >
@@ -528,7 +569,7 @@ export function BrandingTab() {
             <Button
               data-testid="button-save-branding"
               onClick={() => saveMutation.mutate(form)}
-              disabled={saveMutation.isPending}
+              disabled={saveMutation.isPending || logoUploading}
             >
               {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
               Spara varumärke
