@@ -1358,17 +1358,22 @@ app.post("/api/import/modus/tasks/validate", upload.single("file"), asyncHandler
 
     const customers = await storage.getCustomers(tenantId);
     const customerNames = new Set(customers.map(c => c.name.toLowerCase()));
+    // Build a map from Modus customer-id (from customerNumber or metadata) to known customer
+    const customersByModusId = new Map<string, string>();
+    for (const c of customers) {
+      if (c.customerNumber) customersByModusId.set(c.customerNumber, c.id);
+    }
 
     const existingWorkOrders = await storage.getWorkOrders(tenantId);
     const existingExternalRefs = new Set<string>();
     for (const wo of existingWorkOrders) {
-      const meta = wo.metadata as any;
-      if (meta?.modusId) existingExternalRefs.add(String(meta.modusId));
-      if ((wo as any).externalReference) existingExternalRefs.add(String((wo as any).externalReference));
+      const meta = (wo.metadata ?? {}) as { modusId?: string };
+      if (meta.modusId) existingExternalRefs.add(String(meta.modusId));
+      if (wo.externalReference) existingExternalRefs.add(String(wo.externalReference));
     }
 
     const missingObjects = new Map<string, number>();
-    const missingCustomers = new Map<string, number>();
+    const missingCustomers = new Map<string, { count: number; modusId?: string; suggestedCustomerId?: string }>();
     const duplicateIds = new Map<string, number>();
     const collisionsWithExisting: string[] = [];
     const seenIds = new Set<string>();
@@ -1398,9 +1403,17 @@ app.post("/api/import/modus/tasks/validate", upload.single("file"), asyncHandler
 
       const kundRaw = row["Kund"] || "";
       if (kundRaw) {
+        const modusIdMatch = kundRaw.match(/\((\d+)\)\s*$/);
+        const modusCustomerId = modusIdMatch ? modusIdMatch[1] : undefined;
         const kundName = kundRaw.replace(/\s*\(\d+\)\s*$/, "").trim();
         if (kundName && !customerNames.has(kundName.toLowerCase())) {
-          missingCustomers.set(kundName, (missingCustomers.get(kundName) || 0) + 1);
+          const existing = missingCustomers.get(kundName);
+          const suggestedCustomerId = modusCustomerId ? customersByModusId.get(modusCustomerId) : undefined;
+          missingCustomers.set(kundName, {
+            count: (existing?.count || 0) + 1,
+            modusId: modusCustomerId,
+            suggestedCustomerId,
+          });
         }
       }
 
@@ -1422,9 +1435,14 @@ app.post("/api/import/modus/tasks/validate", upload.single("file"), asyncHandler
       missingObjectsCount: missingObjects.size,
       missingObjectRowsTotal: Array.from(missingObjects.values()).reduce((a, b) => a + b, 0),
       missingCustomers: Array.from(missingCustomers.entries())
-        .sort((a, b) => b[1] - a[1])
+        .sort((a, b) => b[1].count - a[1].count)
         .slice(0, 100)
-        .map(([name, count]) => ({ name, count })),
+        .map(([name, info]) => ({
+          name,
+          count: info.count,
+          modusId: info.modusId,
+          suggestedCustomerId: info.suggestedCustomerId,
+        })),
       missingCustomersCount: missingCustomers.size,
       duplicatesInFile: Array.from(duplicateIds.entries()).map(([id, count]) => ({ modusId: id, count: count + 1 })),
       duplicatesInFileCount: duplicateIds.size,
@@ -1460,6 +1478,16 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
         resourceNameOverrides = JSON.parse(req.body.resourceNameOverrides);
       }
     } catch {}
+    // Optional customer overrides: map from Modus customer-id (or Kund-name) to our customer.id
+    let customerOverrides: Record<string, string> = {};
+    try {
+      if (req.body?.customerOverrides) {
+        customerOverrides = JSON.parse(req.body.customerOverrides);
+      }
+    } catch {}
+    // Policy for rows where Kund in CSV doesn't match any known customer and no override is provided:
+    //   "object" (default) = use object.customerId, "skip" = skip the row
+    const unresolvedCustomerPolicy: "object" | "skip" = req.body?.unresolvedCustomerPolicy === "skip" ? "skip" : "object";
 
     const objects = await storage.getObjects(tenantId);
     const objectMap = new Map(objects.map(o => [o.objectNumber, o]));
@@ -1474,18 +1502,19 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
     const existingWorkOrders = await storage.getWorkOrders(tenantId);
     const workOrderByModusId = new Map<string, { id: string }>();
     for (const wo of existingWorkOrders) {
-      const meta = wo.metadata as any;
-      if (meta?.modusId) {
+      const meta = (wo.metadata ?? {}) as { modusId?: string };
+      if (meta.modusId) {
         workOrderByModusId.set(String(meta.modusId), wo);
       }
-      if ((wo as any).externalReference) {
-        workOrderByModusId.set(String((wo as any).externalReference), wo);
+      if (wo.externalReference) {
+        workOrderByModusId.set(String(wo.externalReference), wo);
       }
     }
 
     const created: string[] = [];
     const updated: string[] = [];
     const errors: string[] = [];
+    const skipped: string[] = [];
     
     for (const row of result.data as Record<string, string>[]) {
       try {
@@ -1511,6 +1540,22 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
         if (!uppgiftsId) continue;
         if (!uppgiftsnamn) uppgiftsnamn = `Uppgift ${uppgiftsId}`;
         
+        // Resolve customer: prefer override (by Modus customer-id or name), else object.customerId
+        let resolvedCustomerId: string | undefined;
+        const kundModusIdMatch = kundRaw.match(/\((\d+)\)\s*$/);
+        const kundModusId = kundModusIdMatch ? kundModusIdMatch[1] : undefined;
+        const kundName = kundRaw.replace(/\s*\(\d+\)\s*$/, "").trim();
+        if (kundModusId && customerOverrides[kundModusId]) {
+          resolvedCustomerId = customerOverrides[kundModusId];
+        } else if (kundName && customerOverrides[kundName]) {
+          resolvedCustomerId = customerOverrides[kundName];
+        } else if (kundName && customerMap.has(kundName.toLowerCase())) {
+          resolvedCustomerId = customerMap.get(kundName.toLowerCase());
+        }
+        // Track if CSV referenced a customer that can't be resolved
+        const kundReferenced = Boolean(kundRaw);
+        const kundUnresolved = kundReferenced && !resolvedCustomerId;
+
         // Find object by Modus ID
         const objectNumber = `MODUS-${objekt}`;
         const object = objectMap.get(objectNumber);
@@ -1587,8 +1632,13 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
         const parsedPris = parseFloat(pris.replace(",", ".")) || 0;
         const parsedVaraktighet = parseFloat(varaktighet.replace(",", ".")) || 60;
         
+        if (kundUnresolved && unresolvedCustomerPolicy === "skip") {
+          skipped.push(`Uppgift ${uppgiftsId} hoppades över: okänd kund "${kundName}"`);
+          continue;
+        }
+
         const workOrderFields: Omit<InsertWorkOrder, "tenantId" | "importBatchId"> = {
-          customerId: object.customerId,
+          customerId: resolvedCustomerId || object.customerId,
           objectId: object.id,
           resourceId,
           title: uppgiftsnamn,
@@ -1638,6 +1688,8 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
       imported: created.length + updated.length,
       created: created.length,
       updated: updated.length,
+      skipped: skipped.length,
+      skippedDetails: skipped.slice(0, 50),
       errors: errors.slice(0, 50),
       totalRows: (result.data as unknown[]).length,
     });

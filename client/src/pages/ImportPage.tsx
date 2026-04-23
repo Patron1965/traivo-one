@@ -1468,7 +1468,7 @@ export default function ImportPage() {
     missingObjectIds: { modusId: string; count: number }[];
     missingObjectsCount: number;
     missingObjectRowsTotal: number;
-    missingCustomers: { name: string; count: number }[];
+    missingCustomers: { name: string; count: number; modusId?: string; suggestedCustomerId?: string }[];
     missingCustomersCount: number;
     duplicatesInFile: { modusId: string; count: number }[];
     duplicatesInFileCount: number;
@@ -2984,16 +2984,25 @@ export default function ImportPage() {
                               <summary className="cursor-pointer font-medium text-amber-700 dark:text-amber-300">
                                 Visa saknade kunder ({taskValidation.missingCustomersCount})
                               </summary>
-                              <ScrollArea className="h-32 mt-2 border rounded p-2">
+                              <ScrollArea className="h-40 mt-2 border rounded p-2">
                                 <ul className="space-y-0.5">
-                                  {taskValidation.missingCustomers.map(({ name, count }) => (
-                                    <li key={name}>
+                                  {taskValidation.missingCustomers.map(({ name, count, modusId, suggestedCustomerId }) => (
+                                    <li key={name} data-testid={`text-missing-customer-${modusId || name}`}>
                                       <span className="text-foreground">{name}</span>
+                                      {modusId && <span className="text-muted-foreground ml-1">[Modus-id: {modusId}]</span>}
                                       <span className="text-muted-foreground ml-2">({count} rader)</span>
+                                      {suggestedCustomerId && (
+                                        <span className="ml-2 text-green-700 dark:text-green-400">
+                                          → förslag: matchande kund hittad
+                                        </span>
+                                      )}
                                     </li>
                                   ))}
                                 </ul>
                               </ScrollArea>
+                              <p className="text-[10px] text-muted-foreground mt-1">
+                                Rader med okänd kund importeras mot objektets registrerade kund. Använd objektets kund-koppling för manuell remapping innan import om avvikelser behöver rättas.
+                              </p>
                             </details>
                           )}
 
