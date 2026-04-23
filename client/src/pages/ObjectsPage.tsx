@@ -19,7 +19,7 @@ import {
   Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
   Map as MapIcon, List, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, ChevronDown, ChevronUp, XCircle,
-  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, Layers
+  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, Layers, FileUp
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -99,6 +99,7 @@ export default function ObjectsPage() {
   const [copyName, setCopyName] = useState("");
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [csvData, setCsvData] = useState("");
+  const [csvDragActive, setCsvDragActive] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const setTypeFilter = (v: string) => { setTypeFilterRaw(v); setCurrentPage(0); };
   const setAccessFilter = (v: string) => { setAccessFilterRaw(v); setCurrentPage(0); };
@@ -550,6 +551,33 @@ export default function ObjectsPage() {
     };
     createObjectMutation.mutate(newObj);
   };
+
+  const handleCsvFile = useCallback(async (file: File) => {
+    const name = file.name.toLowerCase();
+    const isCsv = name.endsWith(".csv") || file.type === "text/csv" || file.type === "application/vnd.ms-excel" && name.endsWith(".csv");
+    const isXlsx = name.endsWith(".xlsx") || name.endsWith(".xls");
+    if (!isCsv && !isXlsx) {
+      toast({ title: "Format som inte stöds", description: "Använd .csv, .xlsx eller .xls.", variant: "destructive" });
+      return;
+    }
+    try {
+      if (isCsv) {
+        const text = await file.text();
+        setCsvData(text);
+      } else {
+        const XLSX = await import("xlsx");
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: "array" });
+        const firstSheet = wb.Sheets[wb.SheetNames[0]];
+        if (!firstSheet) throw new Error("Hittade inget kalkylblad");
+        const csv = XLSX.utils.sheet_to_csv(firstSheet);
+        setCsvData(csv);
+      }
+      toast({ title: "Fil inläst", description: `${file.name} är klar att importeras.` });
+    } catch (err: any) {
+      toast({ title: "Kunde inte läsa filen", description: err?.message || "Okänt fel", variant: "destructive" });
+    }
+  }, [toast]);
 
   const handleImportCSV = async () => {
     const lines = csvData.trim().split("\n");
@@ -1345,18 +1373,67 @@ export default function ObjectsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={importDialogOpen} onOpenChange={(open) => { setImportDialogOpen(open); if (!open) setCsvDragActive(false); }}>
+        <DialogContent
+          className="max-w-2xl"
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onDrop={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSpreadsheet className="h-5 w-5" />
               Importera objekt från CSV
             </DialogTitle>
             <DialogDescription>
-              Klistra in CSV-data med header: Namn, Objektnummer, Typ, Adress, Stad, Tillgång, Kod
+              Dra in en fil eller klistra in CSV-data med header: Namn, Objektnummer, Typ, Adress, Stad, Tillgång, Kod
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <label
+              htmlFor="csv-file-input"
+              onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setCsvDragActive(true); }}
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setCsvDragActive(true); }}
+              onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setCsvDragActive(false); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setCsvDragActive(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file) handleCsvFile(file);
+              }}
+              className={`flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-md cursor-pointer transition-colors ${
+                csvDragActive
+                  ? "border-primary bg-primary/5"
+                  : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/40"
+              }`}
+              data-testid="dropzone-csv-import"
+            >
+              <FileUp className={`h-8 w-8 ${csvDragActive ? "text-primary" : "text-muted-foreground"}`} />
+              <div className="text-sm font-medium text-center">
+                {csvDragActive ? "Släpp filen här" : "Dra hit en fil eller klicka för att välja"}
+              </div>
+              <div className="text-xs text-muted-foreground">Tillåtna format: .csv, .xlsx, .xls</div>
+              <input
+                id="csv-file-input"
+                type="file"
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleCsvFile(file);
+                  e.target.value = "";
+                }}
+                data-testid="input-csv-file"
+              />
+            </label>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">eller klistra in</span>
+              </div>
+            </div>
             <textarea
               className="w-full h-48 p-3 text-sm font-mono border rounded-md bg-muted"
               placeholder="Namn,Objektnummer,Typ,Adress,Stad,Tillgång,Kod
