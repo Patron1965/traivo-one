@@ -20,7 +20,6 @@ export function TerminologyTab() {
   });
 
   const [editValues, setEditValues] = useState<Record<string, string>>({});
-  const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
     if (data?.labels) {
@@ -28,14 +27,20 @@ export function TerminologyTab() {
     }
   }, [data]);
 
+  const industry = data?.industry || "waste_management";
+  const industryDefaults = INDUSTRY_TERMINOLOGY[industry as keyof typeof INDUSTRY_TERMINOLOGY] || {};
+  const baseline: Record<string, string> = { ...DEFAULT_TERMINOLOGY, ...industryDefaults };
+
+  const hasChanges = !!data?.labels && Object.keys(LABEL_KEY_DESCRIPTIONS).some(
+    key => (editValues[key] || "") !== (data.labels[key] || "")
+  );
+  const hasCustomizations = (data?.customized?.length || 0) > 0;
+
   const saveMutation = useMutation({
     mutationFn: async (values: Record<string, string>) => {
-      const industry = data?.industry || "waste_management";
-      const industryDefaults = INDUSTRY_TERMINOLOGY[industry as keyof typeof INDUSTRY_TERMINOLOGY] || {};
-      const baseline = { ...DEFAULT_TERMINOLOGY, ...industryDefaults };
       const overrides: Record<string, string> = {};
       for (const key of Object.keys(DEFAULT_TERMINOLOGY)) {
-        const val = values[key] || "";
+        const val = (values[key] || "").trim();
         const base = baseline[key] || "";
         if (val && val !== base) {
           overrides[key] = val;
@@ -45,11 +50,22 @@ export function TerminologyTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/terminology"] });
-      setHasChanges(false);
       toast({ title: "Sparat", description: "Terminologin har uppdaterats." });
     },
     onError: (error: Error) => {
       toast({ title: "Kunde inte spara terminologi", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: async () => apiRequest("PUT", "/api/terminology", { labels: {} }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/terminology"] });
+      setEditValues(baseline);
+      toast({ title: "Återställt", description: "Terminologin har återställts till branschens standardvärden." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte återställa terminologi", description: error.message, variant: "destructive" });
     },
   });
 
@@ -104,12 +120,11 @@ export function TerminologyTab() {
                       <TableCell>
                         <Input
                           data-testid={`input-label-${key}`}
-                          value={editValues[key] || ""}
+                          value={editValues[key] ?? ""}
                           onChange={(e) => {
                             setEditValues(prev => ({ ...prev, [key]: e.target.value }));
-                            setHasChanges(true);
                           }}
-                          placeholder={data?.labels[key] || key}
+                          placeholder={baseline[key] || key}
                           className="max-w-[250px]"
                         />
                       </TableCell>
@@ -148,23 +163,32 @@ export function TerminologyTab() {
 
           <Separator />
           <div className="flex justify-end gap-3">
+            {hasChanges && (
+              <Button
+                variant="ghost"
+                data-testid="button-discard-terminology"
+                onClick={() => {
+                  if (data?.labels) setEditValues(data.labels);
+                }}
+              >
+                Ångra ändringar
+              </Button>
+            )}
             <Button
               variant="outline"
               data-testid="button-reset-terminology"
-              onClick={() => {
-                if (data?.labels) {
-                  setEditValues(data.labels);
-                  setHasChanges(false);
-                }
-              }}
-              disabled={!hasChanges}
+              onClick={() => resetMutation.mutate()}
+              disabled={resetMutation.isPending || (!hasCustomizations && !hasChanges)}
+              title={!hasCustomizations && !hasChanges ? "Inga anpassningar att återställa" : "Återställ alla termer till branschens standardvärden"}
             >
-              Återställ
+              {resetMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Återställ till standard
             </Button>
             <Button
               data-testid="button-save-terminology"
               onClick={() => saveMutation.mutate(editValues)}
               disabled={!hasChanges || saveMutation.isPending}
+              title={!hasChanges ? "Inga ändringar att spara" : "Spara dina anpassade termer"}
             >
               {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
               Spara terminologi
