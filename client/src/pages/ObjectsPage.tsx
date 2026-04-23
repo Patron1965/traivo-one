@@ -100,6 +100,15 @@ export default function ObjectsPage() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [csvData, setCsvData] = useState("");
   const [csvDragActive, setCsvDragActive] = useState(false);
+  const [modusPreview, setModusPreview] = useState<null | {
+    total: number;
+    create: number;
+    update: number;
+    skip: number;
+    unmatchedCustomers: string[];
+    skippedRows: { modusId: string; name: string; reason?: string }[];
+  }>(null);
+  const [modusBusy, setModusBusy] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const setTypeFilter = (v: string) => { setTypeFilterRaw(v); setCurrentPage(0); };
   const setAccessFilter = (v: string) => { setAccessFilterRaw(v); setCurrentPage(0); };
@@ -578,6 +587,143 @@ export default function ObjectsPage() {
       toast({ title: "Kunde inte läsa filen", description: err?.message || "Okänt fel", variant: "destructive" });
     }
   }, [toast]);
+
+  const parseDelimitedRows = useCallback((raw: string): string[][] => {
+    const text = raw.replace(/\r\n?/g, "\n").trim();
+    if (!text) return [];
+    const firstLine = text.split("\n")[0] ?? "";
+    const candidates: Array<[string, number]> = [
+      ["\t", (firstLine.match(/\t/g) || []).length],
+      [";", (firstLine.match(/;/g) || []).length],
+      [",", (firstLine.match(/,/g) || []).length],
+    ];
+    candidates.sort((a, b) => b[1] - a[1]);
+    const delim = candidates[0][1] > 0 ? candidates[0][0] : ",";
+
+    const rows: string[][] = [];
+    let i = 0;
+    let cur = "";
+    let row: string[] = [];
+    let inQuotes = false;
+    while (i < text.length) {
+      const ch = text[i];
+      if (inQuotes) {
+        if (ch === '"' && text[i + 1] === '"') { cur += '"'; i += 2; continue; }
+        if (ch === '"') { inQuotes = false; i++; continue; }
+        cur += ch; i++; continue;
+      }
+      if (ch === '"') { inQuotes = true; i++; continue; }
+      if (ch === delim) { row.push(cur); cur = ""; i++; continue; }
+      if (ch === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; i++; continue; }
+      cur += ch; i++;
+    }
+    row.push(cur);
+    if (row.length > 1 || row[0] !== "") rows.push(row);
+    return rows;
+  }, []);
+
+  const isModusHeaders = useCallback((headers: string[]): boolean => {
+    const lower = headers.map(h => h.trim().toLowerCase());
+    const hasId = lower.includes("id");
+    const hasParent = lower.includes("parent");
+    const hasAdress1 = lower.some(h => h === "adress 1" || h === "adress1");
+    const hasLat = lower.some(h => h === "latitud" || h === "latitude");
+    return hasId && hasParent && (hasAdress1 || hasLat);
+  }, []);
+
+  const buildModusRows = useCallback((rows: string[][]) => {
+    const headers = rows[0].map(h => h.trim().toLowerCase());
+    const idx = (names: string[]) => {
+      for (const n of names) {
+        const i = headers.indexOf(n);
+        if (i >= 0) return i;
+      }
+      return -1;
+    };
+    const iId = idx(["id"]);
+    const iName = idx(["namn", "name"]);
+    const iParent = idx(["parent", "föralder", "foralder"]);
+    const iKund = idx(["kund", "customer"]);
+    const iDesc = idx(["beskrivning", "description"]);
+    const iAddr = idx(["adress 1", "adress1", "adress", "address 1", "address1", "address"]);
+    const iZip = idx(["postnummer", "postal", "postal code", "zip"]);
+    const iCity = idx(["ort", "stad", "city"]);
+    const iLat = idx(["latitud", "latitude"]);
+    const iLng = idx(["longitud", "longitude", "long"]);
+
+    const out: any[] = [];
+    for (let r = 1; r < rows.length; r++) {
+      const v = rows[r];
+      if (!v || v.every(x => !x?.trim())) continue;
+      const get = (i: number) => (i >= 0 && i < v.length ? v[i].trim() : "");
+      const modusId = get(iId);
+      const name = get(iName);
+      if (!modusId || !name) continue;
+      const parseNum = (s: string) => {
+        if (!s) return null;
+        const n = Number(s.replace(",", "."));
+        return Number.isFinite(n) ? n : null;
+      };
+      out.push({
+        modusId,
+        name,
+        parentModusId: get(iParent) || null,
+        customerName: get(iKund) || null,
+        description: get(iDesc) || null,
+        address: get(iAddr) || null,
+        postalCode: get(iZip) || null,
+        city: get(iCity) || null,
+        latitude: parseNum(get(iLat)),
+        longitude: parseNum(get(iLng)),
+      });
+    }
+    return out;
+  }, []);
+
+  const modusInfo = useMemo(() => {
+    if (!csvData.trim()) return null;
+    const rows = parseDelimitedRows(csvData);
+    if (rows.length < 2) return null;
+    if (!isModusHeaders(rows[0])) return null;
+    return { rowCount: rows.length - 1, rows };
+  }, [csvData, parseDelimitedRows, isModusHeaders]);
+
+  const runModusImport = async (dryRun: boolean) => {
+    if (!modusInfo) return;
+    setModusBusy(true);
+    try {
+      const modusRows = buildModusRows(modusInfo.rows);
+      if (modusRows.length === 0) {
+        toast({ title: "Inga giltiga rader", description: "Hittade inga rader med både ID och Namn.", variant: "destructive" });
+        return;
+      }
+      const res = await apiRequest("POST", "/api/objects/import-modus", { rows: modusRows, dryRun });
+      const data = await res.json();
+      if (dryRun) {
+        setModusPreview({
+          total: data.total,
+          create: data.create,
+          update: data.update,
+          skip: data.skip,
+          unmatchedCustomers: data.unmatchedCustomers ?? [],
+          skippedRows: data.skippedRows ?? [],
+        });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
+        toast({
+          title: "Modus-import klar",
+          description: `Skapade ${data.created}, uppdaterade ${data.updated}, hoppade över ${data.skipped}. Föräldralänkar: ${data.parentLinked}.`,
+        });
+        setImportDialogOpen(false);
+        setCsvData("");
+        setModusPreview(null);
+      }
+    } catch (err: any) {
+      toast({ title: "Modus-import misslyckades", description: err?.message || "Okänt fel", variant: "destructive" });
+    } finally {
+      setModusBusy(false);
+    }
+  };
 
   const handleImportCSV = async () => {
     const lines = csvData.trim().split("\n");
@@ -1373,7 +1519,7 @@ export default function ObjectsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={importDialogOpen} onOpenChange={(open) => { setImportDialogOpen(open); if (!open) setCsvDragActive(false); }}>
+      <Dialog open={importDialogOpen} onOpenChange={(open) => { setImportDialogOpen(open); if (!open) { setCsvDragActive(false); setModusPreview(null); } }}>
         <DialogContent
           className="max-w-2xl"
           onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
@@ -1383,9 +1529,12 @@ export default function ObjectsPage() {
             <DialogTitle className="flex items-center gap-2">
               <FileSpreadsheet className="h-5 w-5" />
               Importera objekt från CSV
+              {modusInfo && <Badge variant="secondary" data-testid="badge-modus-mode">Modus-läge</Badge>}
             </DialogTitle>
             <DialogDescription>
-              Dra in en fil eller klistra in CSV-data med header: Namn, Objektnummer, Typ, Adress, Stad, Tillgång, Kod
+              {modusInfo
+                ? `Modus-export upptäckt (${modusInfo.rowCount} rader). Förhandsgranska först – matchning sker via Kund-namn och idempotent uppdatering på Modus-ID.`
+                : "Dra in en fil eller klistra in CSV-data med header: Namn, Objektnummer, Typ, Adress, Stad, Tillgång, Kod"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -1443,15 +1592,66 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
               data-testid="textarea-csv-import"
             />
             <p className="text-xs text-muted-foreground">
-              Tips: Exportera först för att se korrekt format
+              Tips: Exportera först för att se korrekt format. Modus-export (kolumnerna ID, Parent, Adress 1, Latitud …) känns igen automatiskt.
             </p>
+            {modusInfo && modusPreview && (
+              <div className="rounded-md border bg-muted/30 p-3 space-y-2 text-sm" data-testid="modus-preview">
+                <div className="font-medium">Förhandsvisning</div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                  <div>Totalt rader:</div><div className="font-mono">{modusPreview.total}</div>
+                  <div className="text-emerald-700 dark:text-emerald-400">Skapas:</div>
+                  <div className="font-mono" data-testid="text-preview-create">{modusPreview.create}</div>
+                  <div className="text-blue-700 dark:text-blue-400">Uppdateras:</div>
+                  <div className="font-mono" data-testid="text-preview-update">{modusPreview.update}</div>
+                  <div className="text-amber-700 dark:text-amber-400">Hoppas över:</div>
+                  <div className="font-mono" data-testid="text-preview-skip">{modusPreview.skip}</div>
+                </div>
+                {modusPreview.unmatchedCustomers.length > 0 && (
+                  <div className="pt-2">
+                    <div className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">
+                      {modusPreview.unmatchedCustomers.length} kund(er) saknas i Plannix:
+                    </div>
+                    <div className="text-xs max-h-24 overflow-auto">
+                      {modusPreview.unmatchedCustomers.slice(0, 20).map(n => (
+                        <div key={n} className="font-mono">{n}</div>
+                      ))}
+                      {modusPreview.unmatchedCustomers.length > 20 && (
+                        <div className="text-muted-foreground">… och {modusPreview.unmatchedCustomers.length - 20} till</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setImportDialogOpen(false)}>Avbryt</Button>
-            <Button onClick={handleImportCSV} data-testid="button-confirm-import">
-              <Upload className="h-4 w-4 mr-2" />
-              Importera
-            </Button>
+            {modusInfo ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => runModusImport(true)}
+                  disabled={modusBusy}
+                  data-testid="button-modus-preview"
+                >
+                  {modusBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 mr-2" />}
+                  Förhandsvisa
+                </Button>
+                <Button
+                  onClick={() => runModusImport(false)}
+                  disabled={modusBusy || !modusPreview || modusPreview.create + modusPreview.update === 0}
+                  data-testid="button-modus-import"
+                >
+                  {modusBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                  Importera {modusPreview ? `${modusPreview.create + modusPreview.update} rader` : ""}
+                </Button>
+              </>
+            ) : (
+              <Button onClick={handleImportCSV} data-testid="button-confirm-import">
+                <Upload className="h-4 w-4 mr-2" />
+                Importera
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -864,6 +864,235 @@ app.post("/api/objects/:id/geocode", asyncHandler(async (req, res) => {
   res.json(result);
 }));
 
+const modusRowSchema = z.object({
+  modusId: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+  parentModusId: z.string().trim().optional().nullable(),
+  customerName: z.string().trim().optional().nullable(),
+  description: z.string().trim().optional().nullable(),
+  address: z.string().trim().optional().nullable(),
+  postalCode: z.string().trim().optional().nullable(),
+  city: z.string().trim().optional().nullable(),
+  latitude: z.number().finite().optional().nullable(),
+  longitude: z.number().finite().optional().nullable(),
+});
+
+const modusImportSchema = z.object({
+  rows: z.array(modusRowSchema).min(1).max(5000),
+  dryRun: z.boolean().optional().default(false),
+  defaultCustomerId: z.string().trim().optional().nullable(),
+});
+
+app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const parseResult = modusImportSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    return res.status(400).json(formatZodError(parseResult.error));
+  }
+  const { rows, dryRun, defaultCustomerId } = parseResult.data;
+
+  const customers = await storage.getCustomers(tenantId);
+  const customerByName = new Map<string, string>();
+  for (const c of customers) {
+    if (c.name) customerByName.set(c.name.trim().toLowerCase(), c.id);
+  }
+  const fallbackCustomerId = defaultCustomerId && customers.find(c => c.id === defaultCustomerId)
+    ? defaultCustomerId
+    : null;
+
+  const existing = await storage.getObjectsByTenant(tenantId);
+  const existingByModusId = new Map<string, typeof existing[number]>();
+  for (const obj of existing) {
+    if (obj.objectNumber) existingByModusId.set(obj.objectNumber, obj);
+  }
+
+  type RowOutcome = {
+    modusId: string;
+    name: string;
+    action: "create" | "update" | "skip";
+    reason?: string;
+    customerId?: string;
+    parentModusId?: string | null;
+  };
+  const outcomes: RowOutcome[] = [];
+  const unmatchedCustomerSet = new Set<string>();
+
+  for (const row of rows) {
+    const customerKey = row.customerName?.trim().toLowerCase() ?? "";
+    let customerId = customerKey ? customerByName.get(customerKey) : undefined;
+    if (!customerId) customerId = fallbackCustomerId ?? undefined;
+
+    if (!customerId) {
+      if (row.customerName) unmatchedCustomerSet.add(row.customerName);
+      outcomes.push({
+        modusId: row.modusId,
+        name: row.name,
+        action: "skip",
+        reason: row.customerName
+          ? `Kund "${row.customerName}" finns inte i Plannix`
+          : "Ingen kund angiven",
+        parentModusId: row.parentModusId ?? null,
+      });
+      continue;
+    }
+
+    const existingObj = existingByModusId.get(row.modusId);
+    outcomes.push({
+      modusId: row.modusId,
+      name: row.name,
+      action: existingObj ? "update" : "create",
+      customerId,
+      parentModusId: row.parentModusId ?? null,
+    });
+  }
+
+  const summary = {
+    total: rows.length,
+    create: outcomes.filter(o => o.action === "create").length,
+    update: outcomes.filter(o => o.action === "update").length,
+    skip: outcomes.filter(o => o.action === "skip").length,
+    unmatchedCustomers: Array.from(unmatchedCustomerSet).sort(),
+    skippedRows: outcomes.filter(o => o.action === "skip").slice(0, 50).map(o => ({
+      modusId: o.modusId,
+      name: o.name,
+      reason: o.reason,
+    })),
+  };
+
+  if (dryRun) {
+    return res.json({ dryRun: true, ...summary });
+  }
+
+  // Pass 1: create or update without parent linkage
+  const modusIdToObjectId = new Map<string, string>();
+  for (const obj of existing) {
+    if (obj.objectNumber) modusIdToObjectId.set(obj.objectNumber, obj.id);
+  }
+
+  const errors: { modusId: string; name: string; reason: string }[] = [];
+  let createdCount = 0;
+  let updatedCount = 0;
+  const importBatchId = `modus-${Date.now()}`;
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const outcome = outcomes[i];
+    if (outcome.action === "skip" || !outcome.customerId) continue;
+
+    const basePayload = {
+      name: row.name,
+      objectNumber: row.modusId,
+      address: row.address ?? null,
+      postalCode: row.postalCode ?? null,
+      city: row.city ?? null,
+      latitude: typeof row.latitude === "number" ? row.latitude : null,
+      longitude: typeof row.longitude === "number" ? row.longitude : null,
+    };
+
+    try {
+      if (outcome.action === "create") {
+        const created = await storage.createObject({
+          tenantId,
+          customerId: outcome.customerId,
+          objectType: "fastighet",
+          hierarchyLevel: "fastighet",
+          objectLevel: 1,
+          status: "active",
+          accessType: "open",
+          importBatchId,
+          ...basePayload,
+        } as any);
+        modusIdToObjectId.set(row.modusId, created.id);
+        createdCount++;
+      } else {
+        const existingObj = existingByModusId.get(row.modusId)!;
+        await storage.updateObject(existingObj.id, {
+          ...basePayload,
+          customerId: outcome.customerId,
+        } as any);
+        modusIdToObjectId.set(row.modusId, existingObj.id);
+        updatedCount++;
+      }
+    } catch (err: any) {
+      errors.push({
+        modusId: row.modusId,
+        name: row.name,
+        reason: err?.message ?? "Okänt fel",
+      });
+    }
+  }
+
+  // Pass 2: link parents
+  let parentLinked = 0;
+  let parentMissing = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row.parentModusId) continue;
+    const childId = modusIdToObjectId.get(row.modusId);
+    const parentId = modusIdToObjectId.get(row.parentModusId);
+    if (!childId) continue;
+    if (!parentId) {
+      parentMissing++;
+      continue;
+    }
+    try {
+      await storage.updateObject(childId, { parentId } as any);
+      parentLinked++;
+    } catch (err: any) {
+      errors.push({
+        modusId: row.modusId,
+        name: row.name,
+        reason: `Kunde inte länka förälder: ${err?.message ?? "okänt fel"}`,
+      });
+    }
+  }
+
+  // Pass 3: recompute hierarchyDepth (BFS, capped at 10)
+  let depthUpdated = 0;
+  try {
+    const refreshed = await storage.getObjectsByTenant(tenantId);
+    const byId = new Map(refreshed.map(o => [o.id, o]));
+    const depthCache = new Map<string, number>();
+    const computeDepth = (id: string, guard = 0): number => {
+      if (guard > 12) return 10;
+      const cached = depthCache.get(id);
+      if (cached !== undefined) return cached;
+      const node = byId.get(id);
+      if (!node || !node.parentId) {
+        depthCache.set(id, 0);
+        return 0;
+      }
+      const d = Math.min(10, computeDepth(node.parentId, guard + 1) + 1);
+      depthCache.set(id, d);
+      return d;
+    };
+    for (const obj of refreshed) {
+      if (!modusIdToObjectId.has(obj.objectNumber ?? "")) continue;
+      const d = computeDepth(obj.id);
+      if ((obj.hierarchyDepth ?? 0) !== d) {
+        await storage.updateObject(obj.id, { hierarchyDepth: d } as any);
+        depthUpdated++;
+      }
+    }
+  } catch (err) {
+    console.error("[modus-import] depth recompute failed:", err);
+  }
+
+  res.json({
+    dryRun: false,
+    total: rows.length,
+    created: createdCount,
+    updated: updatedCount,
+    skipped: summary.skip,
+    parentLinked,
+    parentMissing,
+    depthUpdated,
+    unmatchedCustomers: summary.unmatchedCustomers,
+    skippedRows: summary.skippedRows,
+    errors: errors.slice(0, 50),
+  });
+}));
+
 app.post("/api/clusters/:id/process-inheritance", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const cluster = await storage.getCluster(req.params.id);
