@@ -1354,7 +1354,18 @@ app.post("/api/import/modus/tasks/validate", upload.single("file"), asyncHandler
     const rows = parsed.data as Record<string, string>[];
 
     const objects = await storage.getObjects(tenantId);
-    const objectsByNumber = new Map(objects.map(o => [o.objectNumber, o]));
+    // Build lookup map tolerant to both "MODUS-12345" and "12345" formats,
+    // since some tenants have objects imported without the MODUS- prefix.
+    const objectsByNumber = new Map<string, typeof objects[number]>();
+    for (const o of objects) {
+      if (!o.objectNumber) continue;
+      objectsByNumber.set(o.objectNumber, o);
+      if (o.objectNumber.startsWith("MODUS-")) {
+        objectsByNumber.set(o.objectNumber.substring(6), o);
+      } else {
+        objectsByNumber.set(`MODUS-${o.objectNumber}`, o);
+      }
+    }
 
     const customers = await storage.getCustomers(tenantId);
     const customerNames = new Set(customers.map(c => c.name.toLowerCase()));
@@ -1490,7 +1501,18 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
     const unresolvedCustomerPolicy: "object" | "skip" = req.body?.unresolvedCustomerPolicy === "object" ? "object" : "skip";
 
     const objects = await storage.getObjects(tenantId);
-    const objectMap = new Map(objects.map(o => [o.objectNumber, o]));
+    // Tolerant lookup: accept both "MODUS-12345" and plain "12345" object numbers,
+    // since some tenants imported objects without the MODUS- prefix.
+    const objectMap = new Map<string, typeof objects[number]>();
+    for (const o of objects) {
+      if (!o.objectNumber) continue;
+      objectMap.set(o.objectNumber, o);
+      if (o.objectNumber.startsWith("MODUS-")) {
+        objectMap.set(o.objectNumber.substring(6), o);
+      } else {
+        objectMap.set(`MODUS-${o.objectNumber}`, o);
+      }
+    }
     
     const customers = await storage.getCustomers(tenantId);
     const customerMap = new Map(customers.map(c => [c.name.toLowerCase(), c.id]));
