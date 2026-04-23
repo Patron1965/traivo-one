@@ -8,7 +8,22 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { TenantBranding } from "@shared/schema";
-import { Building2, Save, Loader2, Palette, Image, Type, Globe, Search, Check, Upload, X, Eye } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Building2, Save, Loader2, Palette, Image, Type, Globe, Search, Check, Upload, X, Eye, AlertTriangle } from "lucide-react";
+
+const isExternallyHostedLogo = (url: string): boolean => {
+  if (!url) return false;
+  if (!/^https?:\/\//i.test(url)) return false;
+  try {
+    const parsed = new URL(url);
+    const sameOrigin =
+      typeof window !== "undefined" && parsed.origin === window.location.origin;
+    if (!sameOrigin) return true;
+    return !parsed.pathname.startsWith("/api/storage/serve");
+  } catch {
+    return false;
+  }
+};
 
 export function BrandingTab() {
   const { toast } = useToast();
@@ -345,6 +360,19 @@ export function BrandingTab() {
                   <Image className="h-4 w-4" />
                   Logotyp
                 </Label>
+                {isExternallyHostedLogo(form.logoUrl) && (
+                  <Alert
+                    variant="destructive"
+                    data-testid="alert-external-logo-warning"
+                    className="border-amber-500/50 text-amber-700 dark:text-amber-400 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400"
+                  >
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Logon är hostad externt</AlertTitle>
+                    <AlertDescription>
+                      Den nuvarande logotypen ligger på en extern webbadress och kan sluta fungera om källan ändras eller tas bort. Spara om varumärkesprofilen eller välj en ny logotyp för att flytta in den i Plannix.
+                    </AlertDescription>
+                  </Alert>
+                )}
                 {form.logoUrl ? (
                   <div
                     className={`border rounded-lg p-4 bg-muted/30 relative group cursor-pointer transition-colors ${logoDragOver ? "border-primary bg-primary/10" : "hover:border-primary/50"} ${logoUploading ? "pointer-events-none opacity-60" : ""}`}
