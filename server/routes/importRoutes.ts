@@ -1374,7 +1374,17 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
     
     const resources = await storage.getResources(tenantId);
     const resourceMap = new Map(resources.map(r => [r.name.toLowerCase(), r.id]));
-    
+
+    // Preload existing work orders and index by modusId to avoid N queries
+    const existingWorkOrders = await storage.getWorkOrders(tenantId);
+    const workOrderByModusId = new Map<string, typeof existingWorkOrders[number]>();
+    for (const wo of existingWorkOrders) {
+      const meta = wo.metadata as any;
+      if (meta?.modusId) {
+        workOrderByModusId.set(String(meta.modusId), wo);
+      }
+    }
+
     const created: string[] = [];
     const updated: string[] = [];
     const errors: string[] = [];
@@ -1485,13 +1495,14 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
           },
         };
         
-        const existingWo = await storage.getWorkOrderByModusId(tenantId, uppgiftsId);
-        
+        const existingWo = workOrderByModusId.get(uppgiftsId);
+
         if (existingWo) {
           await storage.updateWorkOrder(existingWo.id, workOrderFields);
           updated.push(uppgiftsnamn);
         } else {
-          await storage.createWorkOrder({ tenantId, ...workOrderFields, importBatchId: taskBatchId });
+          const newWo = await storage.createWorkOrder({ tenantId, ...workOrderFields, importBatchId: taskBatchId });
+          workOrderByModusId.set(uppgiftsId, newWo);
           created.push(uppgiftsnamn);
         }
       } catch (err) {
