@@ -14,7 +14,7 @@ import {
   ArrowLeft, Building2, Layers, Package, ClipboardList, Phone, Mail, MapPin,
   ChevronDown, ChevronRight, Users, Home, Container, Trash2, TreePine, Map as MapIcon,
   Repeat, Receipt, GitBranch, Hash, FileText, AlertTriangle, Loader2, Search, X,
-  Pyramid, DoorClosed,
+  Pyramid, DoorClosed, ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { MapContainer, TileLayer, Circle, Popup, useMap, useMapEvents } from "react-leaflet";
@@ -157,6 +157,38 @@ interface SyncState {
   hoveredClusterId: string | null;
 }
 
+type TreeSortField = "name" | "level" | "children" | "address";
+interface TreeSortConfig { field: TreeSortField; direction: "asc" | "desc" }
+
+const HIERARCHY_ORDER: Record<string, number> = { koncern: 1, brf: 2, fastighet: 3, rum: 4, karl: 5, objekt: 6 };
+
+function sortTreeNodes(nodes: TreeNode[], cfg: TreeSortConfig): TreeNode[] {
+  const dir = cfg.direction === "asc" ? 1 : -1;
+  const arr = [...nodes];
+  arr.sort((a, b) => {
+    let cmp = 0;
+    switch (cfg.field) {
+      case "name":
+        cmp = (a.name || "").localeCompare(b.name || "", "sv", { numeric: true, sensitivity: "base" });
+        break;
+      case "level": {
+        const ao = HIERARCHY_ORDER[a.hierarchyLevel || ""] ?? 99;
+        const bo = HIERARCHY_ORDER[b.hierarchyLevel || ""] ?? 99;
+        cmp = ao - bo;
+        break;
+      }
+      case "children":
+        cmp = (a.childCount ?? 0) - (b.childCount ?? 0);
+        break;
+      case "address":
+        cmp = (a.address || "").localeCompare(b.address || "", "sv", { sensitivity: "base" });
+        break;
+    }
+    return cmp * dir;
+  });
+  return arr;
+}
+
 function TreeRow({
   node,
   level,
@@ -166,6 +198,7 @@ function TreeRow({
   onToggleExpand,
   onSelectObject,
   onHoverObject,
+  sortConfig,
 }: {
   node: TreeNode;
   level: number;
@@ -175,6 +208,7 @@ function TreeRow({
   onToggleExpand: (id: string, open: boolean) => void;
   onSelectObject: (id: string | null) => void;
   onHoverObject: (id: string | null) => void;
+  sortConfig: TreeSortConfig;
 }) {
   const open = expanded.has(node.id);
   const setOpen = (v: boolean) => onToggleExpand(node.id, v);
@@ -292,7 +326,7 @@ function TreeRow({
                 >Försök igen</Button>
               </div>
             )}
-            {(childrenQuery.data || []).map((c) => (
+            {sortTreeNodes(childrenQuery.data || [], sortConfig).map((c) => (
               <TreeRow
                 key={c.id}
                 node={c}
@@ -303,6 +337,7 @@ function TreeRow({
                 onToggleExpand={onToggleExpand}
                 onSelectObject={onSelectObject}
                 onHoverObject={onHoverObject}
+                sortConfig={sortConfig}
               />
             ))}
           </CollapsibleContent>
@@ -569,6 +604,16 @@ export default function CustomerDetailPage() {
   const [mapZoom, setMapZoom] = useState<number>(11);
   const [mapTabActive, setMapTabActive] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [sortConfig, setSortConfig] = useState<TreeSortConfig>({ field: "name", direction: "asc" });
+  const toggleSort = useCallback((field: TreeSortField) => {
+    setSortConfig(prev => prev.field === field
+      ? { field, direction: prev.direction === "asc" ? "desc" : "asc" }
+      : { field, direction: "asc" });
+  }, []);
+  const SortIcon = ({ field }: { field: TreeSortField }) => {
+    if (sortConfig.field !== field) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
+    return sortConfig.direction === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResetKey, setSearchResetKey] = useState(0);
   const mapRef = useRef<L.Map | null>(null);
@@ -1118,6 +1163,21 @@ export default function CustomerDetailPage() {
                     </div>
                   ) : (
                     <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                      <div className="flex items-center gap-3 px-3 py-2 border rounded-md bg-muted/40 text-xs font-medium text-muted-foreground" data-testid="header-sort-row">
+                        <span className="text-muted-foreground/70 mr-1">Sortera:</span>
+                        <button onClick={() => toggleSort("name")} className="flex items-center gap-1 hover:text-foreground" data-testid="button-sort-name">
+                          Namn <SortIcon field="name" />
+                        </button>
+                        <button onClick={() => toggleSort("level")} className="flex items-center gap-1 hover:text-foreground" data-testid="button-sort-level">
+                          Nivå <SortIcon field="level" />
+                        </button>
+                        <button onClick={() => toggleSort("address")} className="flex items-center gap-1 hover:text-foreground" data-testid="button-sort-address">
+                          Adress <SortIcon field="address" />
+                        </button>
+                        <button onClick={() => toggleSort("children")} className="flex items-center gap-1 hover:text-foreground ml-auto" data-testid="button-sort-children">
+                          Antal barn <SortIcon field="children" />
+                        </button>
+                      </div>
                       {clusterGroups.map((g) => {
                         const isSelected = sync.selectedClusterId === g.id;
                         const isHovered = sync.hoveredClusterId === g.id;
@@ -1150,7 +1210,7 @@ export default function CustomerDetailPage() {
                               </Badge>
                             </div>
                             <div className="p-2 space-y-0.5">
-                              {g.roots.map((n) => (
+                              {sortTreeNodes(g.roots, sortConfig).map((n) => (
                                 <TreeRow
                                   key={n.id}
                                   node={n}
@@ -1161,6 +1221,7 @@ export default function CustomerDetailPage() {
                                   onToggleExpand={toggleExpand}
                                   onSelectObject={setSelectedObject}
                                   onHoverObject={setHoveredObject}
+                                  sortConfig={sortConfig}
                                 />
                               ))}
                             </div>
