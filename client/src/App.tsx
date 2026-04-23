@@ -85,6 +85,7 @@ const PortalIssuesPage = lazy(() => import("@/pages/portal/PortalIssuesPage"));
 const PortalDemoPage = lazy(() => import("@/pages/portal/PortalDemoPage"));
 const PortalROIReportPage = lazy(() => import("@/pages/portal/PortalROIReportPage"));
 const PortalFieldPage = lazy(() => import("@/pages/portal/PortalFieldPage"));
+const PortalMapPage = lazy(() => import("@/pages/portal/PortalMapPage"));
 const AIPlanningPage = lazy(() => import("@/pages/AIPlanningPage"));
 const AICommandCenterPage = lazy(() => import("@/pages/AICommandCenterPage"));
 const FieldLoginPage = lazy(() => import("@/pages/FieldLoginPage"));
@@ -228,6 +229,7 @@ function PortalRouter() {
         <Route path="/portal/issues" component={PortalIssuesPage} />
         <Route path="/portal/roi-report" component={PortalROIReportPage} />
         <Route path="/portal/field" component={PortalFieldPage} />
+        <Route path="/portal/map" component={PortalMapPage} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

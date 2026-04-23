@@ -266,7 +266,10 @@ app.get("/api/portal/objects", asyncHandler(async (req, res) => {
       name: o.name,
       address: o.address,
       city: o.city,
+      postalCode: o.postalCode,
       objectType: o.objectType,
+      latitude: o.latitude,
+      longitude: o.longitude,
     })));
 }));
 
