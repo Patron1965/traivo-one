@@ -13,7 +13,7 @@ import * as XLSX from "xlsx";
 import { importJobs, notifyImportProgress } from "./helpers";
 import { geocodeAddress } from "../google-geocoding";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
-import { objects, workOrders, customers, objectMetadata, workOrderLines, metadataKatalog, fortnoxMappings, customerServiceContracts, type InsertFortnoxContractSuggestion } from "@shared/schema";
+import { objects, workOrders, customers, objectMetadata, workOrderLines, metadataKatalog, fortnoxMappings, customerServiceContracts, type InsertFortnoxContractSuggestion, type InsertWorkOrder } from "@shared/schema";
 import { createMetadata, getAllMetadataTypes } from "../metadata-queries";
 import { ensureClusterForCustomer, updateClusterCache } from "../auto-cluster";
 
@@ -1472,7 +1472,7 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
 
     // Preload existing work orders and index by modusId/externalReference to avoid N queries
     const existingWorkOrders = await storage.getWorkOrders(tenantId);
-    const workOrderByModusId = new Map<string, typeof existingWorkOrders[number]>();
+    const workOrderByModusId = new Map<string, { id: string }>();
     for (const wo of existingWorkOrders) {
       const meta = wo.metadata as any;
       if (meta?.modusId) {
@@ -1587,7 +1587,7 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
         const parsedPris = parseFloat(pris.replace(",", ".")) || 0;
         const parsedVaraktighet = parseFloat(varaktighet.replace(",", ".")) || 60;
         
-        const workOrderFields: any = {
+        const workOrderFields: Omit<InsertWorkOrder, "tenantId" | "importBatchId"> = {
           customerId: object.customerId,
           objectId: object.id,
           resourceId,
