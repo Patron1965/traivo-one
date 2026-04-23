@@ -11,6 +11,8 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/hooks/use-language";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
@@ -1386,6 +1388,67 @@ function FortnoxInvoiceImportPanel() {
   );
 }
 
+function CustomerCombobox({
+  customers,
+  value,
+  onChange,
+  testId,
+}: {
+  customers: Customer[];
+  value: string;
+  onChange: (id: string) => void;
+  testId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = value && value !== "__unresolved__"
+    ? customers.find(c => c.id === value)
+    : undefined;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          role="combobox"
+          aria-expanded={open}
+          className="w-56 h-8 justify-between text-xs font-normal"
+          data-testid={testId}
+        >
+          <span className="truncate">{selected ? selected.name : "Välj kund..."}</span>
+          <ChevronDown className="h-3 w-3 ml-1 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-0" align="end">
+        {open && (
+          <Command>
+            <CommandInput placeholder="Sök kund..." className="h-8" />
+            <CommandEmpty>Ingen kund hittades.</CommandEmpty>
+            <CommandList className="max-h-64">
+              <CommandGroup>
+                <CommandItem
+                  value="__ej_mappad__"
+                  onSelect={() => { onChange("__unresolved__"); setOpen(false); }}
+                >
+                  Ej mappad
+                </CommandItem>
+                {customers.map(c => (
+                  <CommandItem
+                    key={c.id}
+                    value={c.name}
+                    onSelect={() => { onChange(c.id); setOpen(false); }}
+                  >
+                    {c.name}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export default function ImportPage() {
   const { toast } = useToast();
   const { t: tl } = useLanguage();
@@ -1479,6 +1542,9 @@ export default function ImportPage() {
     statusCounts: Record<string, number>;
   }>(null);
   const [isValidatingTasks, setIsValidatingTasks] = useState(false);
+  const [showMissingCustomers, setShowMissingCustomers] = useState(false);
+  const [showMissingObjects, setShowMissingObjects] = useState(false);
+  const [showDuplicatesInFile, setShowDuplicatesInFile] = useState(false);
 
   const [customerValidation, setCustomerValidation] = useState<CustomerValidationResult | null>(null);
   const [customerFile, setCustomerFile] = useState<File | null>(null);
@@ -2982,106 +3048,121 @@ export default function ImportPage() {
                           )}
 
                           {taskValidation.missingObjectIds.length > 0 && (
-                            <details className="text-xs">
-                              <summary className="cursor-pointer font-medium text-amber-700 dark:text-amber-300">
-                                Visa saknade objekt-ID ({taskValidation.missingObjectsCount})
-                              </summary>
-                              <ScrollArea className="h-32 mt-2 border rounded p-2">
-                                <ul className="space-y-0.5">
-                                  {taskValidation.missingObjectIds.map(({ modusId, count }) => (
-                                    <li key={modusId} className="font-mono">
-                                      <span className="text-foreground">{modusId}</span>
-                                      <span className="text-muted-foreground ml-2">({count} rader)</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </ScrollArea>
-                            </details>
+                            <div className="text-xs">
+                              <button
+                                type="button"
+                                onClick={() => setShowMissingObjects(o => !o)}
+                                className="cursor-pointer font-medium text-amber-700 dark:text-amber-300 hover:underline"
+                                data-testid="button-toggle-missing-objects"
+                              >
+                                {showMissingObjects ? "Dölj" : "Visa"} saknade objekt-ID ({taskValidation.missingObjectsCount})
+                              </button>
+                              {showMissingObjects && (
+                                <ScrollArea className="h-32 mt-2 border rounded p-2">
+                                  <ul className="space-y-0.5">
+                                    {taskValidation.missingObjectIds.map(({ modusId, count }) => (
+                                      <li key={modusId} className="font-mono">
+                                        <span className="text-foreground">{modusId}</span>
+                                        <span className="text-muted-foreground ml-2">({count} rader)</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </ScrollArea>
+                              )}
+                            </div>
                           )}
 
                           {taskValidation.missingCustomers.length > 0 && (
-                            <details className="text-xs">
-                              <summary className="cursor-pointer font-medium text-amber-700 dark:text-amber-300">
-                                Visa saknade kunder ({taskValidation.missingCustomersCount})
-                              </summary>
-                              <ScrollArea className="h-64 mt-2 border rounded p-2">
-                                <div className="space-y-2">
-                                  {taskValidation.missingCustomers.map(({ name, count, modusId, suggestedCustomerId }) => {
-                                    const key = modusId || name;
-                                    const currentValue = taskCustomerOverrides[key] || suggestedCustomerId || "";
-                                    return (
-                                      <div key={key} className="flex items-center gap-2 text-xs" data-testid={`row-missing-customer-${key}`}>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="truncate">
-                                            <span className="text-foreground font-medium">{name}</span>
-                                            {modusId && <span className="text-muted-foreground ml-1">[{modusId}]</span>}
+                            <div className="text-xs">
+                              <button
+                                type="button"
+                                onClick={() => setShowMissingCustomers(o => !o)}
+                                className="cursor-pointer font-medium text-amber-700 dark:text-amber-300 hover:underline"
+                                data-testid="button-toggle-missing-customers"
+                              >
+                                {showMissingCustomers ? "Dölj" : "Visa"} saknade kunder ({taskValidation.missingCustomersCount})
+                              </button>
+                              {showMissingCustomers && (
+                                <>
+                                  <ScrollArea className="h-64 mt-2 border rounded p-2">
+                                    <div className="space-y-2">
+                                      {taskValidation.missingCustomers.map(({ name, count, modusId, suggestedCustomerId }) => {
+                                        const key = modusId || name;
+                                        const currentValue = taskCustomerOverrides[key] || suggestedCustomerId || "";
+                                        return (
+                                          <div key={key} className="flex items-center gap-2 text-xs" data-testid={`row-missing-customer-${key}`}>
+                                            <div className="flex-1 min-w-0">
+                                              <div className="truncate">
+                                                <span className="text-foreground font-medium">{name}</span>
+                                                {modusId && <span className="text-muted-foreground ml-1">[{modusId}]</span>}
+                                              </div>
+                                              <div className="text-muted-foreground">{count} rader</div>
+                                            </div>
+                                            <CustomerCombobox
+                                              customers={customers}
+                                              value={currentValue}
+                                              onChange={(v) => {
+                                                setTaskCustomerOverrides(prev => {
+                                                  const next = { ...prev };
+                                                  if (v === "__unresolved__") delete next[key];
+                                                  else next[key] = v;
+                                                  return next;
+                                                });
+                                              }}
+                                              testId={`select-customer-map-${key}`}
+                                            />
                                           </div>
-                                          <div className="text-muted-foreground">{count} rader</div>
-                                        </div>
-                                        <Select
-                                          value={currentValue || "__unresolved__"}
-                                          onValueChange={(v) => {
-                                            setTaskCustomerOverrides(prev => {
-                                              const next = { ...prev };
-                                              if (v === "__unresolved__") delete next[key];
-                                              else next[key] = v;
-                                              return next;
-                                            });
-                                          }}
-                                        >
-                                          <SelectTrigger className="w-56 h-8" data-testid={`select-customer-map-${key}`}>
-                                            <SelectValue placeholder="Välj kund..." />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="__unresolved__">Ej mappad</SelectItem>
-                                            {customers.map(c => (
-                                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </ScrollArea>
-                              <div className="mt-2 flex items-center gap-3 text-xs">
-                                <label className="flex items-center gap-1">
-                                  <input
-                                    type="radio"
-                                    name="task-unresolved-policy"
-                                    checked={taskUnresolvedPolicy === "skip"}
-                                    onChange={() => setTaskUnresolvedPolicy("skip")}
-                                    data-testid="radio-policy-skip"
-                                  />
-                                  Hoppa över omappade rader (rekommenderat)
-                                </label>
-                                <label className="flex items-center gap-1">
-                                  <input
-                                    type="radio"
-                                    name="task-unresolved-policy"
-                                    checked={taskUnresolvedPolicy === "object"}
-                                    onChange={() => setTaskUnresolvedPolicy("object")}
-                                    data-testid="radio-policy-object"
-                                  />
-                                  Använd objektets kund som fallback
-                                </label>
-                              </div>
-                            </details>
+                                        );
+                                      })}
+                                    </div>
+                                  </ScrollArea>
+                                  <div className="mt-2 flex items-center gap-3 text-xs">
+                                    <label className="flex items-center gap-1">
+                                      <input
+                                        type="radio"
+                                        name="task-unresolved-policy"
+                                        checked={taskUnresolvedPolicy === "skip"}
+                                        onChange={() => setTaskUnresolvedPolicy("skip")}
+                                        data-testid="radio-policy-skip"
+                                      />
+                                      Hoppa över omappade rader (rekommenderat)
+                                    </label>
+                                    <label className="flex items-center gap-1">
+                                      <input
+                                        type="radio"
+                                        name="task-unresolved-policy"
+                                        checked={taskUnresolvedPolicy === "object"}
+                                        onChange={() => setTaskUnresolvedPolicy("object")}
+                                        data-testid="radio-policy-object"
+                                      />
+                                      Använd objektets kund som fallback
+                                    </label>
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           )}
 
                           {taskValidation.duplicatesInFile.length > 0 && (
-                            <details className="text-xs">
-                              <summary className="cursor-pointer font-medium text-amber-700 dark:text-amber-300">
-                                Visa dubbletter i fil ({taskValidation.duplicatesInFileCount})
-                              </summary>
-                              <ScrollArea className="h-24 mt-2 border rounded p-2">
-                                <ul className="space-y-0.5 font-mono">
-                                  {taskValidation.duplicatesInFile.slice(0, 200).map(({ modusId, count }) => (
-                                    <li key={modusId}>{modusId} ({count} gånger)</li>
-                                  ))}
-                                </ul>
-                              </ScrollArea>
-                            </details>
+                            <div className="text-xs">
+                              <button
+                                type="button"
+                                onClick={() => setShowDuplicatesInFile(o => !o)}
+                                className="cursor-pointer font-medium text-amber-700 dark:text-amber-300 hover:underline"
+                                data-testid="button-toggle-duplicates"
+                              >
+                                {showDuplicatesInFile ? "Dölj" : "Visa"} dubbletter i fil ({taskValidation.duplicatesInFileCount})
+                              </button>
+                              {showDuplicatesInFile && (
+                                <ScrollArea className="h-24 mt-2 border rounded p-2">
+                                  <ul className="space-y-0.5 font-mono">
+                                    {taskValidation.duplicatesInFile.slice(0, 200).map(({ modusId, count }) => (
+                                      <li key={modusId}>{modusId} ({count} gånger)</li>
+                                    ))}
+                                  </ul>
+                                </ScrollArea>
+                              )}
+                            </div>
                           )}
 
                           {taskValidation.collisionsWithExistingCount > 0 && (
