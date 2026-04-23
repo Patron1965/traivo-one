@@ -867,6 +867,7 @@ app.post("/api/objects/:id/geocode", asyncHandler(async (req, res) => {
 const modusRowSchema = z.object({
   modusId: z.string().trim().min(1),
   name: z.string().trim().min(1),
+  type: z.string().trim().optional().nullable(),
   parentModusId: z.string().trim().optional().nullable(),
   customerName: z.string().trim().optional().nullable(),
   description: z.string().trim().optional().nullable(),
@@ -1014,14 +1015,26 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
       longitude: typeof row.longitude === "number" ? row.longitude : null,
     };
 
+    const mapModusType = (raw: string | null | undefined): { hierarchyLevel: string; objectLevel: number; objectType: string } => {
+      const t = (raw ?? "").trim().toLowerCase();
+      if (t.includes("koncern")) return { hierarchyLevel: "koncern", objectLevel: 1, objectType: "organizational" };
+      if (t.includes("brf")) return { hierarchyLevel: "brf", objectLevel: 2, objectType: "organizational" };
+      if (t === "rum" || t.includes("soprum") || t.includes("kök") || t.includes("kok")) return { hierarchyLevel: "rum", objectLevel: 4, objectType: "rum" };
+      if (t.includes("kärl") || t.includes("karl") || t.includes("behållare") || t.includes("behallare") || t.includes("container")) return { hierarchyLevel: "karl", objectLevel: 5, objectType: "karl" };
+      if (t.includes("fastighet") || t.includes("byggnad") || t.includes("hus")) return { hierarchyLevel: "fastighet", objectLevel: 3, objectType: "fastighet" };
+      if (t === "objekt") return { hierarchyLevel: "objekt", objectLevel: 3, objectType: "physical" };
+      return { hierarchyLevel: "fastighet", objectLevel: 3, objectType: "fastighet" };
+    };
+    const typeMap = mapModusType(row.type);
+
     try {
       if (outcome.action === "create") {
         const created = await storage.createObject({
           tenantId,
           customerId: outcome.customerId,
-          objectType: "fastighet",
-          hierarchyLevel: "fastighet",
-          objectLevel: 1,
+          objectType: typeMap.objectType,
+          hierarchyLevel: typeMap.hierarchyLevel,
+          objectLevel: typeMap.objectLevel,
           status: "active",
           accessType: "open",
           importBatchId,
@@ -1034,6 +1047,9 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
         await storage.updateObject(existingObj.id, {
           ...basePayload,
           customerId: outcome.customerId,
+          objectType: typeMap.objectType,
+          hierarchyLevel: typeMap.hierarchyLevel,
+          objectLevel: typeMap.objectLevel,
         } as any);
         modusIdToObjectId.set(row.modusId, existingObj.id);
         updatedCount++;

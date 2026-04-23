@@ -661,6 +661,7 @@ export default function ObjectsPage() {
     };
     const iId = idx(["id"]);
     const iName = idx(["namn", "name"]);
+    const iType = idx(["typ", "type"]);
     const iParent = idx(["parent", "föralder", "foralder"]);
     const iKund = idx(["kund", "customer"]);
     const iDesc = idx(["beskrivning", "description"]);
@@ -686,6 +687,7 @@ export default function ObjectsPage() {
       out.push({
         modusId,
         name,
+        type: get(iType) || null,
         parentModusId: get(iParent) || null,
         customerName: get(iKund) || null,
         description: get(iDesc) || null,
