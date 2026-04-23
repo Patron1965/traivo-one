@@ -1,0 +1,252 @@
+﻿Id;Namn;Typ;Parent;Kund;Beskrivning;Adress 1;Adress 2;Postnummer;Ort;Latitud;Longitud;Metadata - Antal;Metadata - Area;Metadata - Er referens;Metadata - Ert ordernummer;Metadata - Etableringsavgift;Metadata - Etableringstid;Metadata - Extra fakturarad;Metadata - Fraktion;Metadata - Fraktionsmärkning / skyltar;Metadata - Hård eller mjukbehållare;Metadata - Kassun;Metadata - Kärltyp;Metadata - Lyftsystem;Metadata - Nyckel eller kod;Metadata - Rumsstorlek;Metadata - Senast renoverad / tillverkningsdatum säck;Metadata - Tillverkarens modell;Metadata - Tillverkarens namn;Metadata - Tillverkarens serienummer;Metadata - Vilken typ av lucka;Metadata - Volym (m3);Metadata - Årsmodell
+43771;Vrenen;Fastighet / Byggnad;43770;Returpappercentralen EHB (905);"08-666 02 12 Philip Sjöö Asplund. 
+
+philip@vrenen.se";;;;;;;;;;;;;;;;;;;;;;;;;;;;
+18075;Harvägen;Miljökärl;9080;Returpappercentralen EHB (905);;Harvägen;;745 71;Enköping;59.6265;16.9436;12;;;;;;;;;;;standard;;;;;;;;;;
+21646;Lärksoppsgatan 128;Miljökärl;10209;Returpappercentralen EHB (905);;Lärksoppsgatan 128;;749 45;Enköping;59.6287;17.1108;12;;;;;;;;;;;standard;;140;;;;;;;;
+21647;Lärksoppsgatan 50-54;Miljökärl;10210;Returpappercentralen EHB (905);;Lärksoppsgatan 50-54;;749 45;Enköping;59.6295;17.1112;13;;;;;;;;;;;standard;;140;;;;;;;;
+24671;Rävstigen;Miljökärl;11441;Returpappercentralen EHB (905);;Rävstigen;;745 31;Enköping;59.628300950363;16.952741146088;17;;;;;;;;;;;standard;;;;;;;;;;
+31049;Korsängsgatan 79;Miljökärl;31048;Returpappercentralen EHB (905);;79 Korsängsgatan;;749 49;Enköping;59.6365873;17.0847524;30;;;;;;;;;;;standard;;100;;;;;;;;
+31050;Sadelmakargatan 4;Miljökärl;31044;Returpappercentralen EHB (905);Ute;4 Sadelmakargatan;;749 59;Enköping;59.6357691;17.0856474;4;;;;;;;;;;;standard;;;;;;;;;;
+31051;Sadelmakargatan 10;Miljökärl;31044;Returpappercentralen EHB (905);Ute;10 Sadelmakargatan;;749 59;Enköping;59.6359832;17.0862892;4;;;;;;;;;;;standard;;;;;;;;;;
+31052;Sadelmakargatan 24;Miljökärl;31044;Returpappercentralen EHB (905);Ute;24 Sadelmakargatan;;749 59;Enköping;59.6350812;17.0859647;4;;;;;;;;;;;standard;;;;;;;;;;
+31053;Sadelmakargatan 11;Miljökärl;31044;Returpappercentralen EHB (905);Cykelskjul;Sadelmakargatan 11;;749 59;Enköping;59.635598931912;17.087656259537;4;;;;;;;;;;;standard;;;;;;;;;;
+31055;Källgatan 5;Miljökärl;31054;Returpappercentralen EHB (905);;5 Källgatan;;749 35;Enköping;59.6341389;17.0796541;5;;;;;;;;;;;standard;;;;;;;;;;
+31057;Kryddgårdsgatan 26 (Kryddgården);Miljökärl;31056;Returpappercentralen EHB (905);;26 Kryddgårdsgatan;;749 35;Enköping;59.6340115;17.0800849;5;;;;;;;;;;;standard;;;;;;;;;;
+31059;Kryddgårdsgatan 28 (Kryddgården);Miljökärl;31058;Returpappercentralen EHB (905);;28 Kryddgårdsgatan;;749 35;Enköping;59.6338013;17.0799667;5;;;;;;;;;;;standard;;;;;;;;;;
+31061;Kryddgårdsgatan 30 (Kryddgården);Miljökärl;31060;Returpappercentralen EHB (905);;30 Kryddgårdsgatan;;749 35;Enköping;59.633659;17.0796895;8;;;;;;;;;;;standard;;;;;;;;;;
+31063;Källgatan 1A;Miljökärl;31062;Returpappercentralen EHB (905);;1A Källgatan;;749 35;Enköping;59.6337273;17.0806456;11;;;;;;;;;;;standard;;;;;;;;;;
+31067;Östra Ringgatan 32;Miljökärl;31064;Returpappercentralen EHB (905);;32 Östra Ringgatan;;749 35;Enköping;59.633122;17.0798973;13;;;;;;;;;;;standard;;;;;;;;;;
+31073;Kryddgårdsgatan 32B;Miljökärl;31071;Returpappercentralen EHB (905);;32B Kryddgårdsgatan;;749 35;Enköping;59.6334017;17.079198;5;;;;;;;;;;;standard;;;;;;;;;;
+31079;Kryddgårdsgatan 32A;Miljökärl;31077;Returpappercentralen EHB (905);;32A Kryddgårdsgatan;;749 35;Enköping;59.6335309;17.0794509;5;;;;;;;;;;;standard;;;;;;;;;;
+31085;Sandgatan 30;Miljökärl;31083;Returpappercentralen EHB (905);;30 Sandgatan;;749 35;Enköping;59.633682;17.0787315;5;;;;;;;;;;;standard;;;;;;;;;;
+31089;Sandgatan 28;Miljökärl;31088;Returpappercentralen EHB (905);;28 Sandgatan;;749 35;Enköping;59.6332176;17.0793596;4;;;;;;;;;;;standard;;;;;;;;;;
+31092;Eriksgatan 33;Miljökärl;31090;Returpappercentralen EHB (905);;33 Eriksgatan;;749 35;Enköping;59.6338355;17.078279;6;;;;;;;;;;;standard;;;;;;;;;;
+31094;Eriksgatan 31;Miljökärl;31093;Returpappercentralen EHB (905);;Eriksgatan 31;;;Enköping;59.6339432;17.0785151;6;;;;;;;;;;;standard;;;;;;;;;;
+31096;Eriksgatan 29;Miljökärl;31095;Returpappercentralen EHB (905);;29 Eriksgatan;;749 35;Enköping;59.6340933;17.078781;8;;;;;;;;;;;standard;;;;;;;;;;
+31098;Eriksgatan 27;Miljökärl;31097;Returpappercentralen EHB (905);;27 Eriksgatan;;749 35;Enköping;59.634201;17.0790171;6;;;;;;;;;;;standard;;;;;;;;;;
+31100;Eriksgatan 25;Miljökärl;31099;Returpappercentralen EHB (905);;25 Eriksgatan;;749 35;Enköping;59.6343675;17.0793345;6;;;;;;;;;;;standard;;;;;;;;;;
+31101;Kristinagatan 36;Miljökärl;31044;Returpappercentralen EHB (905);Ute;36 Kristinagatan;;745 30;Enköping;59.639021;17.074596;3;;;;;;;;;;;standard;;;;;;;;;;
+31102;Kristinagatan 31-47;Miljökärl;31044;Returpappercentralen EHB (905);;Kristinagatan 31-47;;745 30;Enköping;59.639077;17.0756233;3;;;;;;;;;;;standard;;;;;;;;;;
+31104;Torggatan 42;Miljökärl;31103;Returpappercentralen EHB (905);;42 Torggatan;;745 30;Enköping;59.6384822;17.0735826;14;;;;;;;;;;;standard;;;;;;;;;;
+31106;Torggatan 46;Miljökärl;31105;Returpappercentralen EHB (905);;46 Torggatan;;745 30;Enköping;59.6391223;17.0722712;4;;;;;;;;;;;standard;;;;;;;;;;
+31107;Doktor Westerlunds Gata 2-6;Miljökärl;31044;Returpappercentralen EHB (905);;Doktor Westerlunds Gata 2-6;;745 30;Enköping;59.6373265;17.0723282;4;;;;;;;;;;;standard;;;;;;;;;;
+31109;Tornfalksgränd 8;Miljökärl;31108;Returpappercentralen EHB (905);;8 Tornfalksgränd;;745 61;Enköping;59.6392198;17.0609684;14;;;;;;;;;;;standard;;;;;;;;;;
+31111;Tornfalksgränd 2;Miljökärl;31110;Returpappercentralen EHB (905);;2 Tornfalksgränd;;745 61;Enköping;59.6386577;17.0609533;11;;;;;;;;;;;standard;;;;;;;;;;
+31113;Tornfalksgränd 1;Miljökärl;31112;Returpappercentralen EHB (905);;1 Tornfalksgränd;;745 61;Enköping;59.6387197;17.0602398;11;;;;;;;;;;;standard;;;;;;;;;;
+31115;Stenfalksgränd 2;Miljökärl;31114;Returpappercentralen EHB (905);;2 Stenfalksgränd;;745 61;Enköping;59.6388095;17.0595174;12;;;;;;;;;;;standard;;;;;;;;;;
+31117;Stenfalksgränd 1;Miljökärl;31116;Returpappercentralen EHB (905);;1 Stenfalksgränd;;745 61;Enköping;59.6389466;17.0588525;13;;;;;;;;;;;standard;;;;;;;;;;
+31119;Lärkfalksgränd 2;Miljökärl;31118;Returpappercentralen EHB (905);;2 Lärkfalksgränd;;745 61;Enköping;59.6389874;17.0580129;11;;;;;;;;;;;standard;;;;;;;;;;
+31121;Lärkfalksgränd 1;Miljökärl;31120;Returpappercentralen EHB (905);;1 Lärkfalksgränd;;745 61;Enköping;59.6390511;17.0573651;12;;;;;;;;;;;standard;;;;;;;;;;
+31123;Bivråksgränd 7;Miljökärl;31122;Returpappercentralen EHB (905);;7 Bivråksgränd;;745 61;Enköping;59.6395771;17.0563831;13;;;;;;;;;;;standard;;;;;;;;;;
+31125;Hornugglegränd 5;Miljökärl;31124;Returpappercentralen EHB (905);;5 Hornugglegränd;;745 60;Enköping;59.6442012;17.0552106;1;;;;;;;;;;;standard;;;;;;;;;;
+31127;Hornugglegränd 7;Miljökärl;31126;Returpappercentralen EHB (905);;7 Hornugglegränd;;745 60;Enköping;59.6442353;17.0554802;1;;;;;;;;;;;standard;;;;;;;;;;
+31129;Hornugglegränd 9;Miljökärl;31128;Returpappercentralen EHB (905);;9 Hornugglegränd;;745 60;Enköping;59.6442697;17.0557519;1;;;;;;;;;;;standard;;;;;;;;;;
+31131;Fiskgjusegränd 1;Miljökärl;31130;Returpappercentralen EHB (905);;1 Fiskgjusegränd;;745 61;Enköping;59.6416109;17.0557626;13;;;;;;;;;;;standard;;;;;;;;;;
+31133;Fiskgjusegränd 2;Miljökärl;31132;Returpappercentralen EHB (905);;Fiskgjusegränd 2;;745 60;Enköping;59.641175283251;17.055835251045;12;;;;;;;;;;;standard;;;;;;;;;;
+31135;Ormvråksgränd 1;Miljökärl;31134;Returpappercentralen EHB (905);;1 Ormvråksgränd;;745 61;Enköping;59.6409187;17.0560765;11;;;;;;;;;;;standard;;;;;;;;;;
+31137;Ormvråksgränd 2;Miljökärl;31136;Returpappercentralen EHB (905);;2 Ormvråksgränd;;745 61;Enköping;59.6405951;17.0562112;12;;;;;;;;;;;standard;;;;;;;;;;
+31139;Lärkfalksgränd 11;Miljökärl;31138;Returpappercentralen EHB (905);;11 Lärkfalksgränd;;745 61;Enköping;59.6398524;17.0578429;15;;;;;;;;;;;standard;;;;;;;;;;
+31141;Fiskgjusegränd 10;Miljökärl;31140;Returpappercentralen EHB (905);;10 Fiskgjusegränd;;745 61;Enköping;59.6414712;17.0572369;4;;;;;;;;;;;standard;;;;;;;;;;
+31143;Fiskgjusegränd 11;Miljökärl;31142;Returpappercentralen EHB (905);;11 Fiskgjusegränd;;745 61;Enköping;59.6417516;17.0573615;11;;;;;;;;;;;standard;;;;;;;;;;
+31145;Ormvråksgränd 7;Miljökärl;31144;Returpappercentralen EHB (905);;7 Ormvråksgränd;;745 61;Enköping;59.6411549;17.0577905;11;;;;;;;;;;;standard;;;;;;;;;;
+31147;Ormvråksgränd 10;Miljökärl;31146;Returpappercentralen EHB (905);;10 Ormvråksgränd;;745 61;Enköping;59.6407746;17.0575433;11;;;;;;;;;;;standard;;;;;;;;;;
+31149;Lärkfalksgränd 13;Miljökärl;31148;Returpappercentralen EHB (905);;13 Lärkfalksgränd;;745 61;Enköping;59.639720464919;17.058371901512;10;;;;;;;;;;;standard;;;;;;;;;;
+31151;Stenfalksgränd 18;Miljökärl;31150;Returpappercentralen EHB (905);;18 Stenfalksgränd;;745 61;Enköping;59.639704196705;17.059010267258;12;;;;;;;;;;;standard;;;;;;;;;;
+31153;Tornfalksgränd 9;Miljökärl;31152;Returpappercentralen EHB (905);;9 Tornfalksgränd;;745 61;Enköping;59.6394299;17.0604344;13;;;;;;;;;;;standard;;;;;;;;;;
+31155;Stenfalksgränd 12;Miljökärl;31154;Returpappercentralen EHB (905);;12 Stenfalksgränd;;745 61;Enköping;59.6396622;17.0597244;11;;;;;;;;;;;standard;;;;;;;;;;
+31373;Eiravägen 3-5;Miljökärl;31046;Returpappercentralen EHB (905);Skjul/Kärlskåp;Eiravägen 3-5;;745 69;Enköping;59.6462755;17.0954482;10;;;;;;;;;;;standard;;;;;;;;;;
+31374;Eiravägen 7-9;Miljökärl;31046;Returpappercentralen EHB (905);Skjul/Kärlskåp;Eiravägen 7-9;;745 69;Enköping;59.646939580593;17.093771414391;11;;;;;;;;;;;standard;;;;;;;;;;
+31377;Kraftgatan 14E (Ljunggården);Miljökärl;31376;Returpappercentralen EHB (905);;14E Kraftgatan;;745 62;Enköping;59.6419504;17.0658924;12;;;;;;;;;;;standard;;;;;;;;;;
+31380;Kraftgatan 14D (Ljunggården);Miljökärl;31379;Returpappercentralen EHB (905);;14D Kraftgatan;;745 62;Enköping;59.6416957;17.0662338;7;;;;;;;;;;;standard;;;;;;;;;;
+31382;Kraftgatan 14C (Ljunggården);Miljökärl;31381;Returpappercentralen EHB (905);;14C Kraftgatan;;745 62;Enköping;59.6414475;17.0666998;16;;;;;;;;;;;standard;;;;;;;;;;
+31384;Kraftgatan 14A (Ljunggården);Miljökärl;31383;Returpappercentralen EHB (905);;14A Kraftgatan;;745 62;Enköping;59.6409113;17.0672517;9;;;;;;;;;;;standard;;;;;;;;;;
+31385;Tärbygatan 7;Miljökärl;31046;Returpappercentralen EHB (905);Ute;7 Tärbygatan;;745 62;Enköping;59.6407836;17.069041;6;;;;;;;;;;;standard;;;;;;;;;;
+31387;Rombergsgatan 15-17;Miljökärl;31386;Returpappercentralen EHB (905);;Rombergsgatan 15-17;;745 33;Enköping;59.6500466;17.0773673;13;;;;;;;;;;;standard;;;;;;;;;;
+31392;Rombergsgatan 19-27;Miljökärl;31390;Returpappercentralen EHB (905);;Rombergsgatan 19-27;;745 33;Enköping;59.6502822;17.0766453;13;;;;;;;;;;;standard;;;;;;;;;;
+31395;Rombergsgatan 39;Miljökärl;31393;Returpappercentralen EHB (905);;39 Rombergsgatan;;745 33;Enköping;59.6506415;17.075738;13;;;;;;;;;;;standard;;;;;;;;;;
+31397;Rombergsgatan 18-28;Miljökärl;31396;Returpappercentralen EHB (905);;Rombergsgatan 18-28;;745 33;Enköping;59.65066484674;17.07860092433;13;;;;;;;;;;;standard;;;;;;;;;;
+31399;Rombergsgatan 30;Miljökärl;31398;Returpappercentralen EHB (905);;30 Rombergsgatan;;745 33;Enköping;59.6506476;17.077946;9;;;;;;;;;;;standard;;;;;;;;;;
+31401;Rombergsgatan 34;Miljökärl;31400;Returpappercentralen EHB (905);;34 Rombergsgatan;;745 33;Enköping;59.650947;17.0775063;14;;;;;;;;;;;standard;;;;;;;;;;
+31408;Rombergsgatan 40;Miljökärl;31406;Returpappercentralen EHB (905);;40 Rombergsgatan;;745 33;Enköping;59.6513531;17.0773612;13;;;;;;;;;;;standard;;;;;;;;;;
+31478;Rombergsgatan 42-50;Miljökärl;31476;Returpappercentralen EHB (905);;Rombergsgatan 42-50;;745 33;Enköping;59.6515523;17.0767403;12;;;;;;;;;;;standard;;;;;;;;;;
+31483;Rombergsgatan 29-37;Miljökärl;31481;Returpappercentralen EHB (905);;Rombergsgatan 29-37;;745 33;Enköping;59.6507768;17.0768511;13;;;;;;;;;;;standard;;;;;;;;;;
+31489;Rombergsgatan 41-49;Miljökärl;31486;Returpappercentralen EHB (905);;Rombergsgatan 41-49;;745 33;Enköping;59.651179;17.0755135;14;;;;;;;;;;;standard;;;;;;;;;;
+31493;Rombergsgatan 44-52;Miljökärl;31492;Returpappercentralen EHB (905);;Rombergsgatan 44-52;;745 33;Enköping;59.652275917924;17.075635153783;14;;;;;;;;;;;standard;;;;;;;;;;
+31497;Rombergsgatan 51-59;Miljökärl;31495;Returpappercentralen EHB (905);;Rombergsgatan 51-59;;745 33;Enköping;59.6516717;17.0756709;13;;;;;;;;;;;standard;;;;;;;;;;
+31500;Rombergsgatan 61;Miljökärl;31498;Returpappercentralen EHB (905);;61 Rombergsgatan;;745 33;Enköping;59.6515363;17.0746056;15;;;;;;;;;;;standard;;;;;;;;;;
+31503;Sämskarbogatan 55-59;Miljökärl;31502;Returpappercentralen EHB (905);;Sämskarbogatan 55-59;;745 33;Enköping;59.652564309253;17.077267062182;12;;;;;;;;;;;standard;;;;;;;;;;
+31505;Sämskarbogatan 49-53;Miljökärl;31504;Returpappercentralen EHB (905);;Sämskarbogatan 49-53;;745 33;Enköping;59.6518559;17.0775618;13;;;;;;;;;;;standard;;;;;;;;;;
+31507;Sämskarbogatan 41-47;Miljökärl;31506;Returpappercentralen EHB (905);;Sämskarbogatan 41-47;;745 33;Enköping;59.651793075569;17.078740596771;13;;;;;;;;;;;standard;;;;;;;;;;
+31509;Sämskarbogatan 35-39;Miljökärl;31508;Returpappercentralen EHB (905);;Sämskarbogatan 35-39;;745 33;Enköping;59.651213190829;17.079636284283;13;;;;;;;;;;;standard;;;;;;;;;;
+31512;Bergsgatan 24;Miljökärl;31511;Returpappercentralen EHB (905);;24 Bergsgatan;;745 32;Enköping;59.6446758;17.0760624;4;;;;;;;;;;;standard;;;;;;;;;;
+31515;Bergsgatan 28;Miljökärl;31513;Returpappercentralen EHB (905);;28 Bergsgatan;;745 32;Enköping;59.6445028;17.0756201;6;;;;;;;;;;;standard;;;;;;;;;;
+31519;Bergsgatan 30;Miljökärl;31517;Returpappercentralen EHB (905);;30 Bergsgatan;;745 32;Enköping;59.6446073;17.0750128;5;;;;;;;;;;;standard;;;;;;;;;;
+31522;Bergsgatan 38;Miljökärl;31521;Returpappercentralen EHB (905);;38 Bergsgatan;;745 32;Enköping;59.6446793;17.0743023;6;;;;;;;;;;;standard;;;;;;;;;;
+31524;Bergsgatan 40;Miljökärl;31523;Returpappercentralen EHB (905);;40 Bergsgatan;;745 32;Enköping;59.6447903;17.0738198;8;;;;;;;;;;;standard;;;;;;;;;;
+31528;Bergsgatan 48;Miljökärl;31527;Returpappercentralen EHB (905);;48 Bergsgatan;;745 32;Enköping;59.6448623;17.0731094;6;;;;;;;;;;;standard;;;;;;;;;;
+31530;Bergsgatan 50;Miljökärl;31529;Returpappercentralen EHB (905);;50 Bergsgatan;;745 32;Enköping;59.644957;17.0725753;6;;;;;;;;;;;standard;;;;;;;;;;
+31532;Bergsgatan 58;Miljökärl;31531;Returpappercentralen EHB (905);;58 Bergsgatan;;745 32;Enköping;59.6450877;17.0719463;6;;;;;;;;;;;standard;;;;;;;;;;
+31534;Fabriksgatan 1-5;Miljökärl;31533;Returpappercentralen EHB (905);;Fabriksgatan 1-5;;745 32;Enköping;59.6453487;17.0713622;10;;;;;;;;;;;standard;;;;;;;;;;
+31536;Fabriksgatan 6;Miljökärl;31535;Returpappercentralen EHB (905);;6 Fabriksgatan;;745 32;Enköping;59.64650802815;17.071225047112;5;;;;;;;;;;;standard;;;;;;;;;;
+31538;Bergsgatan 62-64;Miljökärl;31537;Returpappercentralen EHB (905);;Bergsgatan 62-64;;745 32;Enköping;59.6454879;17.0706569;11;;;;;;;;;;;standard;;;;;;;;;;
+31540;Bergsgatan 68-70;Miljökärl;31539;Returpappercentralen EHB (905);;Bergsgatan 68-70;;745 32;Enköping;59.6452474;17.0705793;11;;;;;;;;;;;standard;;;;;;;;;;
+31542;Bergsgatan 78-76;Miljökärl;31541;Returpappercentralen EHB (905);;Bergsgatan 78-76;;745 32;Enköping;59.6447411;17.0693894;10;;;;;;;;;;;standard;;;;;;;;;;
+31544;Fjärdhundragatan 3-5;Miljökärl;31543;Returpappercentralen EHB (905);;Fjärdhundragatan 3-5;;745 34;Enköping;59.6435147;17.0820463;12;;;;;;;;;;;standard;;;;;;;;;;
+31546;Sankt Olofsgatan 8;Miljökärl;31545;Returpappercentralen EHB (905);;8 Sankt Olofsgatan;;745 34;Enköping;59.6432281;17.0825333;9;;;;;;;;;;;standard;;;;;;;;;;
+31548;Vårfrugatan 4-6;Miljökärl;31547;Returpappercentralen EHB (905);;Vårfrugatan 4-6;;745 34;Enköping;59.6433259;17.0833634;13;;;;;;;;;;;standard;;;;;;;;;;
+31549;Skyttegatan 5;Miljökärl;31047;Returpappercentralen EHB (905);Ute;5 Skyttegatan;;745 34;Enköping;59.6432374;17.0850636;2;;;;;;;;;;;standard;;;;;;;;;;
+31550;Skyttegatan 3A-B;Miljökärl;31047;Returpappercentralen EHB (905);Ute;Skyttegatan 3A-B;;745 34;Enköping;59.6435667;17.0851973;3;;;;;;;;;;;standard;;;;;;;;;;
+31551;Fannalundsvägen 12;Miljökärl;31047;Returpappercentralen EHB (905);Kärlskåp;12 Fannalundsvägen;;749 43;Enköping;59.6379556;17.1055893;5;;;;;;;;;;;standard;;;;;;;;;;
+31552;Regemenstgatan 1A-7B;Miljökärl;31047;Returpappercentralen EHB (905);Står ute;Regemenstgatan 1A-7B;;749 41;Enköping;59.6453025;17.1009832;6;;;;;;;;;;;standard;;;;;;;;;;
+31555;Skolvägen 37B;Miljökärl;31553;Returpappercentralen EHB (905);;37B Skolvägen;;749 60;Örsundsbro;59.7315598;17.3054229;10;;;;;;;;;;;standard;;;;;;;;;;
+31557;Skolvägen 21;Miljökärl;31556;Returpappercentralen EHB (905);;21 Skolvägen;;749 60;Örsundsbro;59.7323798;17.3061509;10;;;;;;;;;;;standard;;;;;;;;;;
+31559;Tärbygatan 1-9;Miljökärl;31558;Returpappercentralen EHB (905);;Tärbygatan 1-9;;745 62;Enköping;59.640471;17.0696567;6;;;;;;;;;;;standard;;;;;;;;;;
+31563;Verkstadsvägen 17;Miljökärl;31562;Returpappercentralen EHB (905);;17 Verkstadsvägen;;749 60;Örsundsbro;59.7333525;17.3111647;9;;;;;;;;;;;standard;;;;;;;;;;
+31566;Verkstadsvägen 49;Miljökärl;31564;Returpappercentralen EHB (905);;49 Verkstadsvägen;;749 60;Örsundsbro;59.7329619;17.3101758;10;;;;;;;;;;;standard;;;;;;;;;;
+41285;Hornugglegränd 11;Miljökärl;41284;Returpappercentralen EHB (905);;Hornugglegränd 11;;;enköping;59.6445259;17.05603;14;;;;;;;;;;;standard;;;;;;;;;;
+9080;Harvägen;Miljörum;43771;Returpappercentralen EHB (905);Nyckel 120;Harvägen;;745 71;Enköping;59.6265;16.9436;1;;115180;;;;;;;;;;;;medium;;;;;;;
+10209;Lärksoppsgatan 128;Miljörum;43771;Returpappercentralen EHB (905);Nyckel 140;Lärksoppsgatan 128;;749 45;Enköping;59.6287;17.1108;1;;115045;;;;;;;;;;;;medium;;;;;;;
+10210;Lärksoppsgatan 50-54;Miljörum;43771;Returpappercentralen EHB (905);Nyckel 140;Lärksoppsgatan 50-54;;749 45;Enköping;59.629512715885;17.111761099958;1;;114045;;;;;;;;;;;;large;;;;;;;
+11441;Rävstigen;Miljörum;43771;Returpappercentralen EHB (905);Nyckel 120;Rävstigen;;745 31;Enköping;59.6287;16.9503;1;;115179;;;;;;;;;;;;large;;;;;;;
+31048;Korsängsgatan 79;Miljörum;31044;Returpappercentralen EHB (905);"Står ute vid infarten
+OBS, två rum i samma hus!
+
+Nyckel 100";79 Korsängsgatan;;749 49;Enköping;59.6365873;17.0847524;2;;;;;;;;;;;;;100;large;;;;;;;
+31054;Källgatan 5;Miljörum;31044;Returpappercentralen EHB (905);Nyckel 105;5 Källgatan;;749 35;Enköping;59.6341389;17.0796541;1;;;;;;;;;;;;;105;medium;;;;;;;
+31056;Kryddgårdsgatan 26 (Kryddgården);Miljörum;31044;Returpappercentralen EHB (905);"OBS! Ring bovärd 0171-627827 innan. Brandlarm måste slås av vid tvätt
+Nyckel 105";26 Kryddgårdsgatan;;749 35;Enköping;59.6340115;17.0800849;1;;;;;;;;;;;;;105 (OBS! Brandlarm, ring 0171-62 78 27);medium;;;;;;;
+31058;Kryddgårdsgatan 28 (Kryddgården);Miljörum;31044;Returpappercentralen EHB (905);"OBS! Ring bovärd 0171-627827 innan. Brandlarm måste slås av vid tvätt
+Nyckel 105";28 Kryddgårdsgatan;;749 35;Enköping;59.6338013;17.0799667;1;;;;;;;;;;;;;105 (OBS! Brandlarm, ring 0171-62 78 27);medium;;;;;;;
+31060;Kryddgårdsgatan 30 (Kryddgården);Miljörum;31044;Returpappercentralen EHB (905);"OBS! Ring bovärd 0171-627827 innan. Brandlarm måste slås av vid tvätt.
+Nyckel 105";30 Kryddgårdsgatan;;749 35;Enköping;59.633659;17.0796895;1;;;;;;;;;;;;;105 (OBS! Brandlarm, ring 0171-62 78 27);medium;;;;;;;
+31062;Källgatan 1A;Miljörum;31044;Returpappercentralen EHB (905);Nyckel 105;1A Källgatan;;749 35;Enköping;59.6337273;17.0806456;1;;;;;;;;;;;;;105;medium;;;;;;;
+31064;Östra Ringgatan 32;Miljörum;31044;Returpappercentralen EHB (905);Nyckel 115;32 Östra Ringgatan;;749 35;Enköping;59.633122;17.0798973;1;;;;;;;;;;;;;115;large;;;;;;;
+31071;Kryddgårdsgatan 32B;Miljörum;31044;Returpappercentralen EHB (905);"OBS! Ring bovärd 0171-627827 innan. Brandlarm måste slås av vid tvätt
+Nyckel 105";32B Kryddgårdsgatan;;749 35;Enköping;59.6334017;17.079198;1;;;;;;;;;;;;;105 (OBS! Brandlarm, ring 0171-62 78 27);medium;;;;;;;
+31077;Kryddgårdsgatan 32A;Miljörum;31044;Returpappercentralen EHB (905);"OBS! Ring bovärd 0171-627827 innan. Brandlarm måste slås av vid tvätt
+Nyckel 105";32A Kryddgårdsgatan;;749 35;Enköping;59.6335309;17.0794509;1;;;;;;;;;;;;;105 (OBS! Brandlarm, ring 0171-62 78 27);medium;;;;;;;
+31083;Sandgatan 30;Miljörum;31044;Returpappercentralen EHB (905);Nyckel 105;30 Sandgatan;;749 35;Enköping;59.633682;17.0787315;1;;;;;;;;;;;;;105;medium;;;;;;;
+31088;Sandgatan 28;Miljörum;31044;Returpappercentralen EHB (905);"I parkeringsgaraget. Gröna kärl. Ring 0171-627827 om ni inte hittar
+Nyckel 105
+";28 Sandgatan;;749 35;Enköping;59.6332176;17.0793596;1;;;;;;;;;;;;;105;small;;;;;;;
+31090;Eriksgatan 33;Miljörum;31044;Returpappercentralen EHB (905);Nyckel 105;33 Eriksgatan;;749 35;Enköping;59.6338355;17.078279;1;;;;;;;;;;;;;105;medium;;;;;;;
+31093;Eriksgatan 31;Miljörum;31044;Returpappercentralen EHB (905);Nyckel 105;31 Eriksgatan;;749 35;Enköping;59.6339432;17.0785151;1;;;;;;;;;;;;;105;medium;;;;;;;
+31095;Eriksgatan 29;Miljörum;31044;Returpappercentralen EHB (905);Nyckel 105;29 Eriksgatan;;749 35;Enköping;59.6340933;17.078781;1;;;;;;;;;;;;;105;medium;;;;;;;
+31097;Eriksgatan 27;Miljörum;31044;Returpappercentralen EHB (905);Nyckel 105;27 Eriksgatan;;749 35;Enköping;59.634201;17.0790171;1;;;;;;;;;;;;;105;medium;;;;;;;
+31099;Eriksgatan 25;Miljörum;31044;Returpappercentralen EHB (905);Nyckel 105;25 Eriksgatan;;749 35;Enköping;59.6343675;17.0793345;1;;;;;;;;;;;;;105;medium;;;;;;;
+31103;Torggatan 42;Miljörum;31044;Returpappercentralen EHB (905);Nyckel 117;42 Torggatan;;745 30;Enköping;59.6384822;17.0735826;1;;;;;;;;;;;;;117;large;;;;;;;
+31105;Torggatan 46;Miljörum;31044;Returpappercentralen EHB (905);;46 Torggatan;;745 30;Enköping;59.6391223;17.0722712;1;;;;;;;;;;;;;117;small;;;;;;;
+31108;Tornfalksgränd 8;Miljörum;31045;Returpappercentralen EHB (905);"Tas fr Västerleden, Lastzon
+Nyckel 115";8 Tornfalksgränd;;745 61;Enköping;59.6392198;17.0609684;1;;;;;;;;;;;;;115;large;;;;;;;
+31110;Tornfalksgränd 2;Miljörum;31045;Returpappercentralen EHB (905);Nyckel 115;2 Tornfalksgränd;;745 61;Enköping;59.6386577;17.0609533;1;;;;;;;;;;;;;115;large;;;;;;;
+31112;Tornfalksgränd 1;Miljörum;31045;Returpappercentralen EHB (905);Nyckel 115;1 Tornfalksgränd;;745 61;Enköping;59.6387197;17.0602398;1;;;;;;;;;;;;;115;large;;;;;;;
+31114;Stenfalksgränd 2;Miljörum;31045;Returpappercentralen EHB (905);Nyckel 115;2 Stenfalksgränd;;745 61;Enköping;59.6388095;17.0595174;1;;;;;;;;;;;;;115;large;;;;;;;
+31116;Stenfalksgränd 1;Miljörum;31045;Returpappercentralen EHB (905);Nyckel 115;1 Stenfalksgränd;;745 61;Enköping;59.6389466;17.0588525;1;;;;;;;;;;;;;115;large;;;;;;;
+31118;Lärkfalksgränd 2;Miljörum;31045;Returpappercentralen EHB (905);Nyckel 115;2 Lärkfalksgränd;;745 61;Enköping;59.6389874;17.0580129;1;;;;;;;;;;;;;115;large;;;;;;;
+31120;Lärkfalksgränd 1;Miljörum;31045;Returpappercentralen EHB (905);Nyckel 115;1 Lärkfalksgränd;;745 61;Enköping;59.6390511;17.0573651;1;;;;;;;;;;;;;115;large;;;;;;;
+31122;Bivråksgränd 7;Miljörum;31045;Returpappercentralen EHB (905);Nyckel 115;7 Bivråksgränd;;745 61;Enköping;59.6395771;17.0563831;1;;;;;;;;;;;;;115;large;;;;;;;
+31124;Hornugglegränd 5;Miljörum;31045;Returpappercentralen EHB (905);Olåst;5 Hornugglegränd;;745 60;Enköping;59.6442012;17.0552106;1;;;;;;;;;;;;;Öppet;small;;;;;;;
+31126;Hornugglegränd 7;Miljörum;31045;Returpappercentralen EHB (905);Olåst;7 Hornugglegränd;;745 60;Enköping;59.6442353;17.0554802;1;;;;;;;;;;;;;Öppet;small;;;;;;;
+31128;Hornugglegränd 9;Miljörum;31045;Returpappercentralen EHB (905);Olåst;9 Hornugglegränd;;745 60;Enköping;59.6442697;17.0557519;1;;;;;;;;;;;;;Öppet;small;;;;;;;
+31130;Fiskgjusegränd 1;Miljörum;31045;Returpappercentralen EHB (905);"OBS! 2 st rum i samma byggnad
+Nyckel 115";1 Fiskgjusegränd;;745 61;Enköping;59.6416109;17.0557626;2;;;;;;;;;;;;;115;medium;;;;;;;
+31132;Fiskgjusegränd 2;Miljörum;31045;Returpappercentralen EHB (905);"OBS! 2 st rum i samma byggnad
+Nyckel 115";Fiskgjusegränd 2;;745 60;Enköping;59.641202279764;17.056081295013;2;;;;;;;;;;;;;115;medium;;;;;;;
+31134;Ormvråksgränd 1;Miljörum;31045;Returpappercentralen EHB (905);"OBS! 2 st rum i samma byggnad
+Nyckel 115";1 Ormvråksgränd;;745 61;Enköping;59.6409187;17.0560765;2;;;;;;;;;;;;;115;medium;;;;;;;
+31136;Ormvråksgränd 2;Miljörum;31045;Returpappercentralen EHB (905);"OBS! 2 st rum i samma byggnad
+Nyckel 115";2 Ormvråksgränd;;745 61;Enköping;59.6405951;17.0562112;2;;;;;;;;;;;;;115;medium;;;;;;;
+31138;Lärkfalksgränd 11;Miljörum;31045;Returpappercentralen EHB (905);Nyckel 115;11 Lärkfalksgränd;;745 61;Enköping;59.6398524;17.0578429;1;;;;;;;;;;;;;115;large;;;;;;;
+31140;Fiskgjusegränd 10;Miljörum;31045;Returpappercentralen EHB (905);Nyckel 115;10 Fiskgjusegränd;;745 61;Enköping;59.6414712;17.0572369;1;;;;;;;;;;;;;115;medium;;;;;;;
+31142;Fiskgjusegränd 11;Miljörum;31045;Returpappercentralen EHB (905);Nyckel 115;11 Fiskgjusegränd;;745 61;Enköping;59.6417516;17.0573615;1;;;;;;;;;;;;;115;large;;;;;;;
+31144;Ormvråksgränd 7;Miljörum;31045;Returpappercentralen EHB (905);;7 Ormvråksgränd;;745 61;Enköping;59.6411549;17.0577905;1;;;;;;;;;;;;;115;medium;;;;;;;
+31146;Ormvråksgränd 10;Miljörum;31045;Returpappercentralen EHB (905);Nyckel 115;10 Ormvråksgränd;;745 61;Enköping;59.6407746;17.0575433;1;;;;;;;;;;;;;115;large;;;;;;;
+31148;Lärkfalksgränd 13;Miljörum;31045;Returpappercentralen EHB (905);Nyckel 115;13 Lärkfalksgränd;;745 61;Enköping;59.639739444493;17.058307528496;1;;;;;;;;;;;;;115;large;;;;;;;
+31150;Stenfalksgränd 18;Miljörum;31045;Returpappercentralen EHB (905);Nyckel 115;18 Stenfalksgränd;;745 61;Enköping;59.639704196705;17.059047818184;1;;;;;;;;;;;;;115;large;;;;;;;
+31152;Tornfalksgränd 9;Miljörum;31045;Returpappercentralen EHB (905);Nyckel 115;9 Tornfalksgränd;;745 61;Enköping;59.6394299;17.0604344;1;;;;;;;;;;;;;115;large;;;;;;;
+31154;Stenfalksgränd 12;Miljörum;31045;Returpappercentralen EHB (905);Nyckel 115;12 Stenfalksgränd;;745 61;Enköping;59.6396622;17.0597244;1;;;;;;;;;;;;;115;large;;;;;;;
+31376;Kraftgatan 14E (Ljunggården);Miljörum;31046;Returpappercentralen EHB (905);"Står ""Permobil"" på dörr OBS! BRANDLARM! Kontakta bovärd för att få larmet urkoppla
+Nyckel 112";14E Kraftgatan;;745 62;Enköping;59.6419504;17.0658924;2;;;;;;;;;;;;;112 (OBS! Brandlarm måste slås av);medium;;;;;;;
+31379;Kraftgatan 14D (Ljunggården);Miljörum;31046;Returpappercentralen EHB (905);"OBS! BRANDLARM! Kontakta bovärd för att få larmet urkoppla
+Nyckel 112";14D Kraftgatan;;745 62;Enköping;59.6416957;17.0662338;1;;;;;;;;;;;;;112 (OBS! Brandlarm måste slås av);medium;;;;;;;
+31381;Kraftgatan 14C (Ljunggården);Miljörum;31046;Returpappercentralen EHB (905);"OBS! BRANDLARM! Kontakta bovärd för att få larmet urkoppla
+Nyckel 112";14C Kraftgatan;;745 62;Enköping;59.6414475;17.0666998;1;;;;;;;;;;;;;112 (OBS! Brandlarm måste slås av);large;;;;;;;
+31383;Kraftgatan 14A (Ljunggården);Miljörum;31046;Returpappercentralen EHB (905);"OBS! BRANDLARM! Kontakta bovärd för att få larmet urkoppla
+Nyckel 112";14A Kraftgatan;;745 62;Enköping;59.641631925204;17.06523835659;3;;;;;;;;;;;;;112 (OBS! Brandlarm måste slås av);small;;;;;;;
+31386;Rombergsgatan 15-17;Miljörum;31046;Returpappercentralen EHB (905);125. Kod 3789;Rombergsgatan 15-17;;745 33;Enköping;59.6500466;17.0773673;1;;;;;;;;;;;;;125 (Kod 3789);medium;;;;;;;
+31390;Rombergsgatan 19-27;Miljörum;31046;Returpappercentralen EHB (905);125. Kod 3789;Rombergsgatan 19-27;;745 33;Enköping;59.6502822;17.0766453;1;;;;;;;;;;;;;125 (Kod 3789);medium;;;;;;;
+31393;Rombergsgatan 39;Miljörum;31046;Returpappercentralen EHB (905);"in vid 23-25, sen  höger
+125. Kod 1939";39 Rombergsgatan;;745 33;Enköping;59.6506415;17.075738;1;;;;;;;;;;;;;125 (Kod 1939);medium;;;;;;;
+31396;Rombergsgatan 18-28;Miljörum;31046;Returpappercentralen EHB (905);125. Kod 3789;Rombergsgatan 18-28;;745 33;Enköping;59.650669339116;17.078547587795;1;;;;;;;;;;;;;125 (Kod 3789);medium;;;;;;;
+31398;Rombergsgatan 30;Miljörum;31046;Returpappercentralen EHB (905);Kod 1826;30 Rombergsgatan;;745 33;Enköping;59.6506476;17.077946;1;;;;;;;;;;;;;Kod 1826;medium;;;;;;;
+31400;Rombergsgatan 34;Miljörum;31046;Returpappercentralen EHB (905);127. Kod 3040;34 Rombergsgatan;;745 33;Enköping;59.650947;17.0775063;1;;;;;;;;;;;;;127 (Kod 3040);medium;;;;;;;
+31406;Rombergsgatan 40;Miljörum;31046;Returpappercentralen EHB (905);127. Kod 3040;40 Rombergsgatan;;745 33;Enköping;59.6513531;17.0773612;1;;;;;;;;;;;;;127 (Kod 3040);large;;;;;;;
+31476;Rombergsgatan 42-50;Miljörum;31046;Returpappercentralen EHB (905);125. Kod 4250;Rombergsgatan 42-50;;745 33;Enköping;59.6515523;17.0767403;1;;;;;;;;;;;;;125 (Kod 4250);large;;;;;;;
+31481;Rombergsgatan 29-37;Miljörum;31046;Returpappercentralen EHB (905);125. Kod 1939;Rombergsgatan 29-37;;745 33;Enköping;59.6507768;17.0768511;1;;;;;;;;;;;;;125 (Kod 1939);medium;;;;;;;
+31486;Rombergsgatan 41-49;Miljörum;31046;Returpappercentralen EHB (905);125. Kod 4161;Rombergsgatan 41-49;;745 33;Enköping;59.651179;17.0755135;1;;;;;;;;;;;;;125 (Kod 4161);large;;;;;;;
+31492;Rombergsgatan 44-52;Miljörum;31046;Returpappercentralen EHB (905);130. Kod 4250;Rombergsgatan 44-52;;745 33;Enköping;59.652211430928;17.075682003675;1;;;;;;;;;;;;;130 (Kod 4250);large;;;;;;;
+31495;Rombergsgatan 51-59;Miljörum;31046;Returpappercentralen EHB (905);125. Kod 4161;Rombergsgatan 51-59;;745 33;Enköping;59.6516717;17.0756709;1;;;;;;;;;;;;;125 (Kod 4161);large;;;;;;;
+31498;Rombergsgatan 61;Miljörum;31046;Returpappercentralen EHB (905);"Bomnyckel. In vid 55, sen vänster. 
+125. Kod 4161";61 Rombergsgatan;;745 33;Enköping;59.6515363;17.0746056;1;;;;;;;;;;;;;125 (Kod 4161);large;;;;;;;
+31502;Sämskarbogatan 55-59;Miljörum;31046;Returpappercentralen EHB (905);130. Kod 4961;Sämskarbogatan 55-59;;745 33;Enköping;59.652568888395;17.07733255086;1;;;;;;;;;;;;;130 (Kod 4961);large;;;;;;;
+31504;Sämskarbogatan 49-53;Miljörum;31046;Returpappercentralen EHB (905);130. Kod 4961;Sämskarbogatan 49-53;;745 33;Enköping;59.6518559;17.0775618;1;;;;;;;;;;;;;130 (Kod 4961);large;;;;;;;
+31506;Sämskarbogatan 41-47;Miljörum;31046;Returpappercentralen EHB (905);130. Kod 3547;Sämskarbogatan 41-47;;745 33;Enköping;59.651784254383;17.078729072959;1;;;;;;;;;;;;;130 (Kod 3547);large;;;;;;;
+31508;Sämskarbogatan 35-39;Miljörum;31046;Returpappercentralen EHB (905);130. Kod 3547;Sämskarbogatan 35-39;;745 33;Enköping;59.651164206176;17.079753545632;1;;;;;;;;;;;;;130 (Kod 3547);large;;;;;;;
+31511;Bergsgatan 24;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 110;24 Bergsgatan;;745 32;Enköping;59.6446758;17.0760624;1;;;;;;;;;;;;;110;medium;;;;;;;
+31513;Bergsgatan 28;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 110;28 Bergsgatan;;745 32;Enköping;59.6445028;17.0756201;1;;;;;;;;;;;;;110;medium;;;;;;;
+31517;Bergsgatan 30;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 110;30 Bergsgatan;;745 32;Enköping;59.6446073;17.0750128;1;;;;;;;;;;;;;110;medium;;;;;;;
+31521;Bergsgatan 38;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 110;38 Bergsgatan;;745 32;Enköping;59.6446793;17.0743023;1;;;;;;;;;;;;;110;medium;;;;;;;
+31523;Bergsgatan 40;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 110;40 Bergsgatan;;745 32;Enköping;59.6447903;17.0738198;1;;;;;;;;;;;;;110;medium;;;;;;;
+31527;Bergsgatan 48;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 110;48 Bergsgatan;;745 32;Enköping;59.6448623;17.0731094;1;;;;;;;;;;;;;110;medium;;;;;;;
+31529;Bergsgatan 50;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 110;50 Bergsgatan;;745 32;Enköping;59.644957;17.0725753;1;;;;;;;;;;;;;110;medium;;;;;;;
+31531;Bergsgatan 58;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 110;58 Bergsgatan;;745 32;Enköping;59.6450877;17.0719463;1;;;;;;;;;;;;;110;medium;;;;;;;
+31533;Fabriksgatan 1-5;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 110;Fabriksgatan 1-5;;745 32;Enköping;59.6453487;17.0713622;1;;;;;;;;;;;;;110;medium;;;;;;;
+31535;Fabriksgatan 6;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 114;6 Fabriksgatan;;745 32;Enköping;59.64651073897;17.071208953857;1;;;;;;;;;;;;;114;large;;;;;;;
+31537;Bergsgatan 62-64;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 110;Bergsgatan 62-64;;745 32;Enköping;59.6454879;17.0706569;1;;;;;;;;;;;;;110;medium;;;;;;;
+31539;Bergsgatan 68-70;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 110;Bergsgatan 68-70;;745 32;Enköping;59.6452474;17.0705793;1;;;;;;;;;;;;;110;medium;;;;;;;
+31541;Bergsgatan 78-76;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 110;Bergsgatan 78-76;;745 32;Enköping;59.6447411;17.0693894;1;;;;;;;;;;;;;110;medium;;;;;;;
+31543;Fjärdhundragatan 3-5;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 115;Fjärdhundragatan 3-5;;745 34;Enköping;59.6435147;17.0820463;2;45;;;;;;;;;;;;115;large;;;;;;;
+31545;S:t Olofsgatan 8;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 115;8 Sankt Olofsgatan;;745 34;Enköping;59.6432281;17.0825333;1;;;;;;;;;;;;;115;medium;;;;;;;
+31547;Vårfrugatan 4-6;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 115;Vårfrugatan 4-6;;745 34;Enköping;59.6433259;17.0833634;1;;;;;;;;;;;;;115;large;;;;;;;
+31553;Skolvägen 37B;Miljörum;31047;Returpappercentralen EHB (905);"Olåst
+Garagelänga";37B Skolvägen;;749 60;Örsundsbro;59.7315598;17.3054229;1;;;;;;;;;;;;;Öppet;medium;;;;;;;
+31556;Skolvägen 21;Miljörum;45717;Returpappercentralen EHB (905);Hus finns ej kvar;21 Skolvägen;;749 60;Örsundsbro;59.7323798;17.3061509;1;;;;;;;;;;;;;Öppet;small;;;;;;;
+31558;Tärbygatan 1-9;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 118;Tärbygatan 1-9;;745 62;Enköping;59.640471;17.0696567;2;;;;;;;;;;;;;118;medium;;;;;;;
+31562;Verkstadsvägen 17;Miljörum;31047;Returpappercentralen EHB (905);"Garagelänga
+Nyckel 145";17 Verkstadsvägen;;749 60;Örsundsbro;59.7333525;17.3111647;1;;;;;;;;;;;;;145;large;;;;;;;
+31564;Verkstadsvägen 49;Miljörum;31047;Returpappercentralen EHB (905);Nyckel 145;49 Verkstadsvägen;;749 60;Örsundsbro;59.7329619;17.3101758;1;;;;;;;;;;;;;145;medium;;;;;;;
+41284;Hornugglegränd 11;Miljörum;31045;Returpappercentralen EHB (905);Ute;Hornugglegränd 11;;;enköping;59.6445259;17.05603;1;;;;;;;;;;;;;;small;;;;;;;
+31043;EHB Enköpings Hyresbostäder (vår 2024);Område;;Returpappercentralen EHB (905);"Mattias Bennermo 018-18 65 54
+transportledare@returpappercentralen.se
+OBS!!! EHB !!!!!!";;;745 95;Enköping;59.6356909;17.0778228;;;;;;;;;;;;;;;;;;;;;;
+31044;EHB Söder Linda;Område;31043;Returpappercentralen EHB (905);"Linda 0171-62 78 33
+Områdeschef: Kari Virtanen 0171-62 58 47
+OBS!!! EHB !!!!!!";;;;;;;;;114705;EHB Söder Linda;;;;;;;;;;;;;;;;;;
+31045; EHB Söder Stefan;Område;31043;Returpappercentralen EHB (905);"Stefan 0171-62 58 23
+Områdeschef: Kari Virtanen 0171-62 58 47
+OBS!!! EHB !!!!!!";;;;;;;;;114704;EHB Söder Stefan;;;;;;;;;;;;;;;;;;
+31046; EHB Norr Marie-Louis;Område;31043;Returpappercentralen EHB (905);"Marie-Louis 0171-62 58 45
+Områdeschef: Christer Asp 0171-62 58 43
+OBS!!! EHB !!!!!!";;;;;;;;;114707;EHB Norr Marie-Louis;;;;;;;;;;;;;;;;;;
+31047;EHB Norr Thomas;Område;31043;Returpappercentralen EHB (905);"Thomas 0171- 62 58 46
+Områdeschef: Christer Asp 0171-62 58 43
+OBS!!! EHB !!!!!!";;;;;;;;;114706;EHB Norr Thomas;;;;;;;;;;;;;;;;;;
+39879;EHB Underjord;Område;31043;Returpappercentralen EHB (905);OBS!!! EHB !!!!!!;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+39880;EHB Söder Mattias;Område;39879;Returpappercentralen EHB (905);"Mattias
+0171-62 78 27";;;;;;;;;114705;;;;;;;;;;;;;;;;;;;
+39887;EHB Norr Thomas;Område;39879;Returpappercentralen EHB (905);"Thomas
+0171- 62 58 46";;;;;;;;;114706;;;;;;;;;;;;;;;;;;;
+43770;EHB Övriga;Område;31043;Returpappercentralen EHB (905);;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+45717;EHB Används ej;Område;31043;Returpappercentralen EHB (905);;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+39881;Sadelmakargatan 4;Underjordsbehållare;39880;Returpappercentralen EHB (905);"OBS! Ej tvätt av moluck matavfall
+";4 Sadelmakargatan;;749 59;Enköping;59.6357691;17.0856474;2;;;;;;;;;;1;;;;;;;;;;;
+39882;Sadelmakargatan 10;Underjordsbehållare;39880;Returpappercentralen EHB (905);"OBS! Ej tvätt av moluck matavfall
+";10 Sadelmakargatan;;749 59;Enköping;59.63632481262;17.086497545242;2;;;;;;;;;;1;;;;;;;;;;;
+39883;Sadelmakargatan 24;Underjordsbehållare;39880;Returpappercentralen EHB (905);"OBS! Ej tvätt av moluck matavfall
+";24 Sadelmakargatan;;749 59;Enköping;59.63506116333;17.086116671562;2;;;;;;;;;;1;;;;;;;;;;;
+39884;Sadelmakargatan 11;Underjordsbehållare;39880;Returpappercentralen EHB (905);"OBS! Ej tvätt av moluck matavfall
+";Sadelmakargatan 11;;749 59;Enköping;59.635657741884;17.087763547897;2;;;;;;;;;;1;;;;;;;;;;;
+39885;Torggatan 42;Underjordsbehållare;39880;Returpappercentralen EHB (905);;42 Torggatan;;745 30;Enköping;59.639302064276;17.073220610619;2;;;;;;;;;;1;;;;;;;;;;;
+39886;Doktor Westerlunds Gata 2-6;Underjordsbehållare;39880;Returpappercentralen EHB (905);;Doktor Westerlunds Gata 2-6;;745 30;Enköping;59.637821606026;17.071804404259;2;;;;;;;;;;0;;;;;;;;;;;
+39888;Fannalundsvägen 12;Underjordsbehållare;39887;Returpappercentralen EHB (905);;12 Fannalundsvägen;;749 43;Enköping;59.6379556;17.1055893;8;;;;;;;;;;1;;;;;;;;;;;
