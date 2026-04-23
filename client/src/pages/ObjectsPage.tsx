@@ -42,7 +42,8 @@ const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
   brf: { label: "BRF", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
   fastighet: { label: "Fastighet", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
   rum: { label: "Rum", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
-  karl: { label: "Objekt", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" },
+  karl: { label: "Kärl", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" },
+  objekt: { label: "Objekt", color: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200" },
 };
 
 const objectTypeLabels: Record<string, string> = {
