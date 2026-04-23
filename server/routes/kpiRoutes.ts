@@ -1660,20 +1660,30 @@ app.post("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
         )
       );
 
+    let invitation;
     if (existing.length > 0) {
-      throw new ConflictError("En inbjudan finns redan för denna e-postadress");
+      [invitation] = await db
+        .update(invitations)
+        .set({
+          role: role || existing[0].role || "user",
+          invitedBy: userId,
+          createdAt: new Date(),
+        })
+        .where(eq(invitations.id, existing[0].id))
+        .returning();
+      console.log(`[invitation] Re-sending pending invitation for ${email.toLowerCase()}`);
+    } else {
+      [invitation] = await db
+        .insert(invitations)
+        .values({
+          email: email.toLowerCase(),
+          tenantId,
+          role: role || "user",
+          invitedBy: userId,
+          status: "pending",
+        })
+        .returning();
     }
-
-    const [invitation] = await db
-      .insert(invitations)
-      .values({
-        email: email.toLowerCase(),
-        tenantId,
-        role: role || "user",
-        invitedBy: userId,
-        status: "pending",
-      })
-      .returning();
 
     try {
       const appUrl = process.env.REPLIT_DEV_DOMAIN
