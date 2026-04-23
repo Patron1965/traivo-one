@@ -2866,6 +2866,8 @@ export default function ImportPage() {
                           setTaskPreviewFile(file);
                           setTaskPreviewResources(Array.from(teamSet).sort());
                           setTaskResourceOverrides({});
+                          setTaskCustomerOverrides({});
+                          setTaskUnresolvedPolicy("skip");
                           setTaskPreviewTotalRows(results.data.length);
                           setShowTaskPreview(true);
                           setTaskValidation(null);
@@ -2881,6 +2883,16 @@ export default function ImportPage() {
                             if (resp.ok) {
                               const data = await resp.json();
                               setTaskValidation(data);
+                              // Pre-seed customer overrides with any auto-suggested matches
+                              const seeded: Record<string, string> = {};
+                              for (const mc of (data.missingCustomers || []) as { name: string; modusId?: string; suggestedCustomerId?: string }[]) {
+                                if (mc.suggestedCustomerId) {
+                                  seeded[mc.modusId || mc.name] = mc.suggestedCustomerId;
+                                }
+                              }
+                              if (Object.keys(seeded).length > 0) {
+                                setTaskCustomerOverrides(seeded);
+                              }
                             }
                           } catch {} finally {
                             setIsValidatingTasks(false);

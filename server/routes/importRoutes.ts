@@ -1446,8 +1446,8 @@ app.post("/api/import/modus/tasks/validate", upload.single("file"), asyncHandler
       missingCustomersCount: missingCustomers.size,
       duplicatesInFile: Array.from(duplicateIds.entries()).map(([id, count]) => ({ modusId: id, count: count + 1 })),
       duplicatesInFileCount: duplicateIds.size,
-      collisionsWithExisting: collisionsWithExisting.slice(0, 200),
-      collisionsWithExistingCount: collisionsWithExisting.length,
+      collisionsWithExisting: Array.from(new Set(collisionsWithExisting)).slice(0, 200),
+      collisionsWithExistingCount: new Set(collisionsWithExisting).size,
       teams: Array.from(teams),
       statusCounts,
     });
