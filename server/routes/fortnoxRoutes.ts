@@ -11,6 +11,15 @@ import { objects, workOrders, articles, customers, fortnoxMappings, objectContac
 import { getISOWeek } from "./helpers";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 
+async function verifyObjectTenant(objectId: string, tenantId: string): Promise<boolean> {
+  try {
+    const obj = await storage.getObject(objectId);
+    return verifyTenantOwnership(obj, tenantId);
+  } catch {
+    return false;
+  }
+}
+
 export async function registerFortnoxRoutes(app: Express) {
 // ============================================
 // FORTNOX INTEGRATION
