@@ -1461,6 +1461,22 @@ export default function ImportPage() {
   const [taskPreviewResources, setTaskPreviewResources] = useState<string[]>([]);
   const [taskResourceOverrides, setTaskResourceOverrides] = useState<Record<string, string>>({});
   const [taskPreviewTotalRows, setTaskPreviewTotalRows] = useState(0);
+  const [taskValidation, setTaskValidation] = useState<null | {
+    totalRows: number;
+    uniqueTaskIds: number;
+    matchingObjects: number;
+    missingObjectIds: { modusId: string; count: number }[];
+    missingObjectsCount: number;
+    missingObjectRowsTotal: number;
+    missingCustomers: { name: string; count: number }[];
+    missingCustomersCount: number;
+    duplicatesInFile: { modusId: string; count: number }[];
+    duplicatesInFileCount: number;
+    collisionsWithExisting: string[];
+    collisionsWithExistingCount: number;
+    statusCounts: Record<string, number>;
+  }>(null);
+  const [isValidatingTasks, setIsValidatingTasks] = useState(false);
 
   const [customerValidation, setCustomerValidation] = useState<CustomerValidationResult | null>(null);
   const [customerFile, setCustomerFile] = useState<File | null>(null);
@@ -2830,7 +2846,7 @@ export default function ImportPage() {
                         header: true,
                         skipEmptyLines: true,
                         delimiter: ";",
-                        complete: (results) => {
+                        complete: async (results) => {
                           const teamSet = new Set<string>();
                           const existingResourceNames = new Set(resources.map(r => r.name.toLowerCase()));
                           for (const row of results.data) {
@@ -2844,6 +2860,23 @@ export default function ImportPage() {
                           setTaskResourceOverrides({});
                           setTaskPreviewTotalRows(results.data.length);
                           setShowTaskPreview(true);
+                          setTaskValidation(null);
+                          setIsValidatingTasks(true);
+                          try {
+                            const fd = new FormData();
+                            fd.append("file", file);
+                            const resp = await fetch("/api/import/modus/tasks/validate", {
+                              method: "POST",
+                              body: fd,
+                              credentials: "include",
+                            });
+                            if (resp.ok) {
+                              const data = await resp.json();
+                              setTaskValidation(data);
+                            }
+                          } catch {} finally {
+                            setIsValidatingTasks(false);
+                          }
                         },
                       });
                     }
@@ -2872,6 +2905,125 @@ export default function ImportPage() {
               </div>
 
               {showTaskPreview && taskPreviewFile && (
+                <>
+                  <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/20">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Eye className="h-4 w-4" />
+                        Förhandsgranskning av uppgifter
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Kontrollera matchningar mot befintliga objekt och kunder innan import.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {isValidatingTasks ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="text-validating-tasks">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Analyserar uppgifter-fil...
+                        </div>
+                      ) : taskValidation ? (
+                        <>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div className="p-2 rounded border bg-background">
+                              <div className="text-xs text-muted-foreground">Totalt</div>
+                              <div className="text-lg font-bold" data-testid="text-task-total-rows">{taskValidation.totalRows}</div>
+                              <div className="text-xs text-muted-foreground">{taskValidation.uniqueTaskIds} unika ID</div>
+                            </div>
+                            <div className="p-2 rounded border bg-background">
+                              <div className="text-xs text-muted-foreground">Saknade objekt</div>
+                              <div className={`text-lg font-bold ${taskValidation.missingObjectsCount > 0 ? "text-amber-600" : "text-green-600"}`} data-testid="text-task-missing-objects">
+                                {taskValidation.missingObjectsCount}
+                              </div>
+                              <div className="text-xs text-muted-foreground">{taskValidation.missingObjectRowsTotal} rader</div>
+                            </div>
+                            <div className="p-2 rounded border bg-background">
+                              <div className="text-xs text-muted-foreground">Saknade kunder</div>
+                              <div className={`text-lg font-bold ${taskValidation.missingCustomersCount > 0 ? "text-amber-600" : "text-green-600"}`} data-testid="text-task-missing-customers">
+                                {taskValidation.missingCustomersCount}
+                              </div>
+                            </div>
+                            <div className="p-2 rounded border bg-background">
+                              <div className="text-xs text-muted-foreground">Dubbletter / kollisioner</div>
+                              <div className={`text-lg font-bold ${(taskValidation.duplicatesInFileCount + taskValidation.collisionsWithExistingCount) > 0 ? "text-amber-600" : "text-green-600"}`} data-testid="text-task-duplicates">
+                                {taskValidation.duplicatesInFileCount} / {taskValidation.collisionsWithExistingCount}
+                              </div>
+                              <div className="text-xs text-muted-foreground">i fil / mot befintlig</div>
+                            </div>
+                          </div>
+
+                          {Object.keys(taskValidation.statusCounts).length > 0 && (
+                            <div className="text-xs">
+                              <span className="text-muted-foreground">Status-fördelning: </span>
+                              {Object.entries(taskValidation.statusCounts).map(([s, c]) => (
+                                <Badge key={s} variant="outline" className="ml-1">{s}: {c}</Badge>
+                              ))}
+                            </div>
+                          )}
+
+                          {taskValidation.missingObjectIds.length > 0 && (
+                            <details className="text-xs">
+                              <summary className="cursor-pointer font-medium text-amber-700 dark:text-amber-300">
+                                Visa saknade objekt-ID ({taskValidation.missingObjectsCount})
+                              </summary>
+                              <ScrollArea className="h-32 mt-2 border rounded p-2">
+                                <ul className="space-y-0.5">
+                                  {taskValidation.missingObjectIds.map(({ modusId, count }) => (
+                                    <li key={modusId} className="font-mono">
+                                      <span className="text-foreground">{modusId}</span>
+                                      <span className="text-muted-foreground ml-2">({count} rader)</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </ScrollArea>
+                            </details>
+                          )}
+
+                          {taskValidation.missingCustomers.length > 0 && (
+                            <details className="text-xs">
+                              <summary className="cursor-pointer font-medium text-amber-700 dark:text-amber-300">
+                                Visa saknade kunder ({taskValidation.missingCustomersCount})
+                              </summary>
+                              <ScrollArea className="h-32 mt-2 border rounded p-2">
+                                <ul className="space-y-0.5">
+                                  {taskValidation.missingCustomers.map(({ name, count }) => (
+                                    <li key={name}>
+                                      <span className="text-foreground">{name}</span>
+                                      <span className="text-muted-foreground ml-2">({count} rader)</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </ScrollArea>
+                            </details>
+                          )}
+
+                          {taskValidation.duplicatesInFile.length > 0 && (
+                            <details className="text-xs">
+                              <summary className="cursor-pointer font-medium text-amber-700 dark:text-amber-300">
+                                Visa dubbletter i fil ({taskValidation.duplicatesInFileCount})
+                              </summary>
+                              <ScrollArea className="h-24 mt-2 border rounded p-2">
+                                <ul className="space-y-0.5 font-mono">
+                                  {taskValidation.duplicatesInFile.slice(0, 200).map(({ modusId, count }) => (
+                                    <li key={modusId}>{modusId} ({count} gånger)</li>
+                                  ))}
+                                </ul>
+                              </ScrollArea>
+                            </details>
+                          )}
+
+                          {taskValidation.collisionsWithExistingCount > 0 && (
+                            <div className="text-xs p-2 rounded bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200">
+                              <Info className="h-3 w-3 inline mr-1" />
+                              {taskValidation.collisionsWithExistingCount} uppgifter finns redan (uppdateras via externalReference).
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="text-xs text-muted-foreground">Ingen server-validering tillgänglig.</div>
+                      )}
+                    </CardContent>
+                  </Card>
                 <ResourcePreviewPanel
                   resourceNames={taskPreviewResources}
                   resourceOverrides={taskResourceOverrides}
@@ -2888,6 +3040,7 @@ export default function ImportPage() {
                   isImporting={modusUploading === "tasks"}
                   totalRows={taskPreviewTotalRows}
                 />
+                </>
               )}
 
               {modusResults.tasks && (

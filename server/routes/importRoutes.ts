@@ -1340,6 +1340,101 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
 }));
 
 // Modus 2.0 Import - Tasks (uppgifter)
+// Preview/validate tasks CSV before import - returns missing objects/customers and duplicates
+app.post("/api/import/modus/tasks/validate", upload.single("file"), asyncHandler(async (req, res) => {
+    if (!req.file) {
+      throw new ValidationError("Ingen fil uppladdad");
+    }
+    const csvText = req.file.buffer.toString("utf-8");
+    const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true, delimiter: ";" });
+    if (parsed.errors.length > 0) {
+      return res.status(400).json({ error: "CSV-fel", details: parsed.errors.slice(0, 10) });
+    }
+    const tenantId = getTenantIdWithFallback(req);
+    const rows = parsed.data as Record<string, string>[];
+
+    const objects = await storage.getObjects(tenantId);
+    const objectsByNumber = new Map(objects.map(o => [o.objectNumber, o]));
+
+    const customers = await storage.getCustomers(tenantId);
+    const customerNames = new Set(customers.map(c => c.name.toLowerCase()));
+
+    const existingWorkOrders = await storage.getWorkOrders(tenantId);
+    const existingExternalRefs = new Set<string>();
+    for (const wo of existingWorkOrders) {
+      const meta = wo.metadata as any;
+      if (meta?.modusId) existingExternalRefs.add(String(meta.modusId));
+      if ((wo as any).externalReference) existingExternalRefs.add(String((wo as any).externalReference));
+    }
+
+    const missingObjects = new Map<string, number>();
+    const missingCustomers = new Map<string, number>();
+    const duplicateIds = new Map<string, number>();
+    const collisionsWithExisting: string[] = [];
+    const seenIds = new Set<string>();
+    const teams = new Set<string>();
+    const statusCounts: Record<string, number> = {};
+
+    for (const row of rows) {
+      const uppgiftsId = (row["Uppgifts Id"] || "").trim();
+      if (!uppgiftsId) continue;
+
+      if (seenIds.has(uppgiftsId)) {
+        duplicateIds.set(uppgiftsId, (duplicateIds.get(uppgiftsId) || 0) + 1);
+      }
+      seenIds.add(uppgiftsId);
+
+      if (existingExternalRefs.has(uppgiftsId)) {
+        collisionsWithExisting.push(uppgiftsId);
+      }
+
+      const objekt = (row["Objekt"] || "").replace(/\s/g, "");
+      if (objekt) {
+        const objectNumber = `MODUS-${objekt}`;
+        if (!objectsByNumber.has(objectNumber)) {
+          missingObjects.set(objekt, (missingObjects.get(objekt) || 0) + 1);
+        }
+      }
+
+      const kundRaw = row["Kund"] || "";
+      if (kundRaw) {
+        const kundName = kundRaw.replace(/\s*\(\d+\)\s*$/, "").trim();
+        if (kundName && !customerNames.has(kundName.toLowerCase())) {
+          missingCustomers.set(kundName, (missingCustomers.get(kundName) || 0) + 1);
+        }
+      }
+
+      const team = row["Team"] || "";
+      if (team) teams.add(team);
+
+      const status = row["Status"] || "unknown";
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+    }
+
+    res.json({
+      totalRows: rows.length,
+      uniqueTaskIds: seenIds.size,
+      matchingObjects: rows.length - Array.from(missingObjects.values()).reduce((a, b) => a + b, 0),
+      missingObjectIds: Array.from(missingObjects.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 100)
+        .map(([modusId, count]) => ({ modusId, count })),
+      missingObjectsCount: missingObjects.size,
+      missingObjectRowsTotal: Array.from(missingObjects.values()).reduce((a, b) => a + b, 0),
+      missingCustomers: Array.from(missingCustomers.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 100)
+        .map(([name, count]) => ({ name, count })),
+      missingCustomersCount: missingCustomers.size,
+      duplicatesInFile: Array.from(duplicateIds.entries()).map(([id, count]) => ({ modusId: id, count: count + 1 })),
+      duplicatesInFileCount: duplicateIds.size,
+      collisionsWithExisting: collisionsWithExisting.slice(0, 200),
+      collisionsWithExistingCount: collisionsWithExisting.length,
+      teams: Array.from(teams),
+      statusCounts,
+    });
+  }));
+
 app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       throw new ValidationError("Ingen fil uppladdad");
@@ -1375,13 +1470,16 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
     const resources = await storage.getResources(tenantId);
     const resourceMap = new Map(resources.map(r => [r.name.toLowerCase(), r.id]));
 
-    // Preload existing work orders and index by modusId to avoid N queries
+    // Preload existing work orders and index by modusId/externalReference to avoid N queries
     const existingWorkOrders = await storage.getWorkOrders(tenantId);
     const workOrderByModusId = new Map<string, typeof existingWorkOrders[number]>();
     for (const wo of existingWorkOrders) {
       const meta = wo.metadata as any;
       if (meta?.modusId) {
         workOrderByModusId.set(String(meta.modusId), wo);
+      }
+      if ((wo as any).externalReference) {
+        workOrderByModusId.set(String((wo as any).externalReference), wo);
       }
     }
 
@@ -1449,12 +1547,32 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
           }
         }
         
-        // Map status
+        // Map status - legacy status field + Modus orderStatus (swedish values)
         let mappedStatus = "draft";
-        if (status === "done") mappedStatus = "completed";
-        else if (status === "in_progress") mappedStatus = "in_progress";
-        else if (status === "not_started" || status === "scheduled") mappedStatus = "scheduled";
-        else if (status === "not_feasible") mappedStatus = "cancelled";
+        let mappedOrderStatus: "skapad" | "planerad_pre" | "planerad_resurs" | "planerad_las" | "utford" | "fakturerad" = "skapad";
+        let impossibleReason: string | null = null;
+        let completedAt: Date | null = null;
+        if (status === "done") {
+          mappedStatus = "completed";
+          mappedOrderStatus = "utford";
+          if (sluttid) {
+            const dt = new Date(sluttid);
+            if (!isNaN(dt.getTime())) completedAt = dt;
+          }
+        } else if (status === "in_progress") {
+          mappedStatus = "in_progress";
+          mappedOrderStatus = "planerad_resurs";
+        } else if (status === "not_started" || status === "scheduled") {
+          mappedStatus = "scheduled";
+          mappedOrderStatus = "skapad";
+        } else if (status === "not_feasible") {
+          mappedStatus = "cancelled";
+          mappedOrderStatus = "skapad";
+          impossibleReason = "not_feasible";
+        }
+        if (fakturerad === "1") {
+          mappedOrderStatus = "fakturerad";
+        }
         
         // Map task type
         const typLower = uppgiftstyp.toLowerCase();
@@ -1469,7 +1587,7 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
         const parsedPris = parseFloat(pris.replace(",", ".")) || 0;
         const parsedVaraktighet = parseFloat(varaktighet.replace(",", ".")) || 60;
         
-        const workOrderFields = {
+        const workOrderFields: any = {
           customerId: object.customerId,
           objectId: object.id,
           resourceId,
@@ -1478,12 +1596,17 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
           orderType,
           priority: "normal",
           status: mappedStatus,
+          orderStatus: mappedOrderStatus,
+          creationMethod: "import_modus",
+          externalReference: uppgiftsId,
           scheduledDate,
           scheduledStartTime,
           estimatedDuration: Math.round(parsedVaraktighet),
           cachedCost: Math.round(parsedKostnad * 100),
           cachedValue: Math.round(parsedPris * 100),
           notes: resultat || null,
+          completedAt,
+          impossibleReason,
           metadata: { 
             modusId: uppgiftsId, 
             prislista: prislista || undefined, 
