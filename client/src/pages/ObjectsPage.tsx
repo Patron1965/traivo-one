@@ -109,6 +109,7 @@ export default function ObjectsPage() {
     skippedRows: { modusId: string; name: string; reason?: string }[];
   }>(null);
   const [modusBusy, setModusBusy] = useState(false);
+  const [modusCreateMissingCustomers, setModusCreateMissingCustomers] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const setTypeFilter = (v: string) => { setTypeFilterRaw(v); setCurrentPage(0); };
   const setAccessFilter = (v: string) => { setAccessFilterRaw(v); setCurrentPage(0); };
@@ -697,7 +698,11 @@ export default function ObjectsPage() {
         toast({ title: "Inga giltiga rader", description: "Hittade inga rader med både ID och Namn.", variant: "destructive" });
         return;
       }
-      const res = await apiRequest("POST", "/api/objects/import-modus", { rows: modusRows, dryRun });
+      const res = await apiRequest("POST", "/api/objects/import-modus", {
+        rows: modusRows,
+        dryRun,
+        createMissingCustomers: !dryRun && modusCreateMissingCustomers,
+      });
       const data = await res.json();
       if (dryRun) {
         setModusPreview({
@@ -1607,7 +1612,7 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                   <div className="font-mono" data-testid="text-preview-skip">{modusPreview.skip}</div>
                 </div>
                 {modusPreview.unmatchedCustomers.length > 0 && (
-                  <div className="pt-2">
+                  <div className="pt-2 space-y-2">
                     <div className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">
                       {modusPreview.unmatchedCustomers.length} kund(er) saknas i Plannix:
                     </div>
@@ -1619,6 +1624,17 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                         <div className="text-muted-foreground">… och {modusPreview.unmatchedCustomers.length - 20} till</div>
                       )}
                     </div>
+                    <label className="flex items-start gap-2 pt-1 cursor-pointer text-xs">
+                      <Checkbox
+                        checked={modusCreateMissingCustomers}
+                        onCheckedChange={(v) => setModusCreateMissingCustomers(v === true)}
+                        className="mt-0.5"
+                        data-testid="checkbox-modus-create-customers"
+                      />
+                      <span>
+                        Skapa saknade kunder automatiskt vid import. Kunderna skapas med endast namn — du kan komplettera Fortnox-koppling, kontaktperson m.m. efteråt.
+                      </span>
+                    </label>
                   </div>
                 )}
               </div>

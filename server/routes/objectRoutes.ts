@@ -881,6 +881,7 @@ const modusImportSchema = z.object({
   rows: z.array(modusRowSchema).min(1).max(5000),
   dryRun: z.boolean().optional().default(false),
   defaultCustomerId: z.string().trim().optional().nullable(),
+  createMissingCustomers: z.boolean().optional().default(false),
 });
 
 app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
@@ -889,7 +890,7 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
   if (!parseResult.success) {
     return res.status(400).json(formatZodError(parseResult.error));
   }
-  const { rows, dryRun, defaultCustomerId } = parseResult.data;
+  const { rows, dryRun, defaultCustomerId, createMissingCustomers } = parseResult.data;
 
   const customers = await storage.getCustomers(tenantId);
   const customerByName = new Map<string, string>();
@@ -899,6 +900,30 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
   const fallbackCustomerId = defaultCustomerId && customers.find(c => c.id === defaultCustomerId)
     ? defaultCustomerId
     : null;
+
+  // Optionally auto-create missing customers (only when actually importing, not dry-run)
+  let autoCreatedCustomers = 0;
+  if (createMissingCustomers && !dryRun) {
+    const missingNames = new Set<string>();
+    for (const row of rows) {
+      const key = row.customerName?.trim().toLowerCase() ?? "";
+      if (!row.customerName || !key) continue;
+      if (!customerByName.has(key)) missingNames.add(row.customerName.trim());
+    }
+    for (const name of missingNames) {
+      try {
+        const created = await storage.createCustomer({
+          tenantId,
+          name,
+          importBatchId: `modus-${Date.now()}`,
+        } as any);
+        customerByName.set(name.toLowerCase(), created.id);
+        autoCreatedCustomers++;
+      } catch (err) {
+        console.error("[modus-import] failed to auto-create customer", name, err);
+      }
+    }
+  }
 
   const existing = await storage.getObjectsByTenant(tenantId);
   const existingByModusId = new Map<string, typeof existing[number]>();
@@ -1087,6 +1112,7 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
     parentLinked,
     parentMissing,
     depthUpdated,
+    autoCreatedCustomers,
     unmatchedCustomers: summary.unmatchedCustomers,
     skippedRows: summary.skippedRows,
     errors: errors.slice(0, 50),
