@@ -879,7 +879,7 @@ const modusRowSchema = z.object({
 });
 
 const modusImportSchema = z.object({
-  rows: z.array(modusRowSchema).min(1).max(5000),
+  rows: z.array(modusRowSchema).min(1).max(50000),
   dryRun: z.boolean().optional().default(false),
   defaultCustomerId: z.string().trim().optional().nullable(),
   createMissingCustomers: z.boolean().optional().default(false),
