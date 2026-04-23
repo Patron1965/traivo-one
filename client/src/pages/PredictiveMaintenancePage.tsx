@@ -157,7 +157,7 @@ export default function PredictiveMaintenancePage() {
 
   return (
     <div className="p-6 space-y-6">
-      <PageHeader icon={Wrench} title="Prediktivt underh\u00e5ll" description="AI-driven prognos f\u00f6r n\u00e4sta servicebehov baserat p\u00e5 IoT-signalhistorik" testId="text-predictive-title">
+      <PageHeader icon={Wrench} title="Prediktivt underhåll" description="AI-driven prognos för nästa servicebehov baserat på IoT-signalhistorik" testId="text-predictive-title">
         <Button
           onClick={() => analyzeMutation.mutate({ monthsBack: 12, useAI: true })}
           disabled={analyzeMutation.isPending}
