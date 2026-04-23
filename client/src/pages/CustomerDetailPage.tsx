@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { Link, useRoute } from "wouter";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -519,6 +519,42 @@ function formatSek(value: number): string {
   return new Intl.NumberFormat("sv-SE", { style: "currency", currency: "SEK", maximumFractionDigits: 0 }).format(value);
 }
 
+type TreeSearchInputProps = {
+  onDebouncedChange: (value: string) => void;
+  onClear: () => void;
+};
+
+const TreeSearchInput = memo(function TreeSearchInput({ onDebouncedChange, onClear }: TreeSearchInputProps) {
+  const [value, setValue] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => onDebouncedChange(value), 250);
+    return () => clearTimeout(timer);
+  }, [value, onDebouncedChange]);
+  return (
+    <div className="relative">
+      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+      <Input
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="Sök i hierarkin (namn, adress, objektnummer)..."
+        className="pl-8 pr-8"
+        data-testid="input-tree-search"
+      />
+      {value && (
+        <button
+          onClick={() => { setValue(""); onClear(); }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover-elevate"
+          aria-label="Rensa sökning"
+          data-testid="button-clear-search"
+        >
+          <X className="h-4 w-4 text-muted-foreground" />
+        </button>
+      )}
+    </div>
+  );
+});
+
 export default function CustomerDetailPage() {
   const [, params] = useRoute("/customers/:id");
   const customerId = params?.id;
@@ -533,19 +569,20 @@ export default function CustomerDetailPage() {
   const [mapZoom, setMapZoom] = useState<number>(11);
   const [mapTabActive, setMapTabActive] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResetKey, setSearchResetKey] = useState(0);
   const mapRef = useRef<L.Map | null>(null);
 
-  useEffect(() => {
-    const t = setTimeout(() => setSearchQuery(searchInput.trim()), 250);
-    return () => clearTimeout(t);
-  }, [searchInput]);
+  const handleDebouncedSearch = useCallback((v: string) => setSearchQuery(v.trim()), []);
+  const clearSearch = useCallback(() => {
+    setSearchQuery("");
+    setSearchResetKey((k) => k + 1);
+  }, []);
 
   useEffect(() => {
     setExpanded(new Set());
-    setSearchInput("");
     setSearchQuery("");
+    setSearchResetKey((k) => k + 1);
   }, [customerId]);
 
   const toggleExpand = (id: string, open: boolean) =>
@@ -1000,27 +1037,11 @@ export default function CustomerDetailPage() {
             <TabsContent value="tree">
               <Card>
                 <CardContent className="p-3 space-y-3">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                    <Input
-                      type="text"
-                      value={searchInput}
-                      onChange={(e) => setSearchInput(e.target.value)}
-                      placeholder="Sök i hierarkin (namn, adress, objektnummer)..."
-                      className="pl-8 pr-8"
-                      data-testid="input-tree-search"
-                    />
-                    {searchInput && (
-                      <button
-                        onClick={() => { setSearchInput(""); setSearchQuery(""); }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover-elevate"
-                        aria-label="Rensa sökning"
-                        data-testid="button-clear-search"
-                      >
-                        <X className="h-4 w-4 text-muted-foreground" />
-                      </button>
-                    )}
-                  </div>
+                  <TreeSearchInput
+                    key={searchResetKey}
+                    onDebouncedChange={handleDebouncedSearch}
+                    onClear={clearSearch}
+                  />
 
                   {searchQuery && (
                     <div
