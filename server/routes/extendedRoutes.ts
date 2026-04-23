@@ -4,7 +4,7 @@ import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
-import { getTenantIdWithFallback, assignUserToTenant } from "../tenant-middleware";
+import { getTenantIdWithFallback, assignUserToTenant, getUserTenants } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
 import { objects, workOrders, articles , insertDeviationReportSchema, insertProtocolSchema, apiUsageLogs, taskDependencyInstances, invitations } from "@shared/schema";
@@ -1513,9 +1513,11 @@ const requireAdminAuth = async (req: any, res: any, next: any) => {
       return res.status(403).json({ error: "Ej behörig", message: "Administratörsrättigheter krävs." });
     }
     req.userId = userId;
-    const tenantId = await getTenantIdWithFallback(req);
-    if (tenantId) {
-      req.tenantId = tenantId;
+    if (!req.tenantId) {
+      const userTenants = await getUserTenants(userId);
+      if (userTenants.length > 0) {
+        req.tenantId = userTenants[0].tenantId;
+      }
     }
     return next();
   } catch {
