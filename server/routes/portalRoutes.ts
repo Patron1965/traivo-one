@@ -733,6 +733,59 @@ app.get("/api/portal/visit-protocols", asyncHandler(async (req, res) => {
     res.json(protocols);
 }));
 
+// ============================================
+// PORTAL - COMPLETED JOBS WITH PHOTOS
+// ============================================
+app.get("/api/portal/completed-jobs", asyncHandler(async (req, res) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+
+    const allWorkOrders = await storage.getWorkOrders(session.tenantId!);
+    const customerOrders = allWorkOrders
+      .filter(o =>
+        o.customerId === session.customerId &&
+        ["utford", "fakturerad"].includes(o.orderStatus || "") &&
+        o.completedAt
+      )
+      .sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime())
+      .slice(0, 100);
+
+    const results = await Promise.all(
+      customerOrders.map(async (o) => {
+        let photos: string[] = [];
+        let workDescription: string | null = null;
+        let executedByName: string | null = null;
+        try {
+          const protocolList = await storage.getProtocols(session.tenantId!, { workOrderId: o.id });
+          for (const p of protocolList) {
+            if (p.beforePhotoUrl) photos.push(p.beforePhotoUrl);
+            if (p.afterPhotoUrl) photos.push(p.afterPhotoUrl);
+            if (Array.isArray(p.additionalPhotos)) photos.push(...p.additionalPhotos.filter(Boolean) as string[]);
+            if (!workDescription && p.workDescription) workDescription = p.workDescription;
+            if (!executedByName && p.executedByName) executedByName = p.executedByName;
+          }
+        } catch {}
+        photos = Array.from(new Set(photos.filter(Boolean)));
+
+        return {
+          id: o.id,
+          title: o.title,
+          description: o.description,
+          completedAt: o.completedAt,
+          objectId: o.objectId,
+          objectName: o.objectName,
+          objectAddress: o.objectAddress,
+          status: o.orderStatus,
+          workDescription,
+          executedByName,
+          photos,
+        };
+      })
+    );
+
+    res.json(results);
+}));
+
 app.post("/api/portal/auth/demo-login", asyncHandler(async (req, res) => {
     if (process.env.NODE_ENV === "production") {
       return res.status(404).json({ error: "Demo-inloggning är inte tillgänglig i produktion" });
