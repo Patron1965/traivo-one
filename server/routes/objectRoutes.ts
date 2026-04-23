@@ -885,6 +885,68 @@ const modusImportSchema = z.object({
   createMissingCustomers: z.boolean().optional().default(false),
 });
 
+app.post("/api/objects/derive-hierarchy", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customerId = typeof req.body?.customerId === "string" ? req.body.customerId : null;
+
+  const all = await storage.getObjectsByTenant(tenantId);
+  const scope = customerId ? all.filter(o => o.customerId === customerId) : all;
+  const scopeIds = new Set(scope.map(o => o.id));
+
+  const childrenByParent = new Map<string, string[]>();
+  for (const o of all) {
+    if (!o.parentId) continue;
+    const arr = childrenByParent.get(o.parentId) ?? [];
+    arr.push(o.id);
+    childrenByParent.set(o.parentId, arr);
+  }
+  const subtreeDepth = new Map<string, number>();
+  const computeSubtreeDepth = (id: string, guard = 0): number => {
+    if (guard > 20) return 0;
+    const cached = subtreeDepth.get(id);
+    if (cached !== undefined) return cached;
+    const kids = childrenByParent.get(id) ?? [];
+    if (kids.length === 0) { subtreeDepth.set(id, 0); return 0; }
+    let max = 0;
+    for (const k of kids) {
+      const d = computeSubtreeDepth(k, guard + 1) + 1;
+      if (d > max) max = d;
+    }
+    subtreeDepth.set(id, max);
+    return max;
+  };
+  const depthToLevel = (d: number) => {
+    if (d === 0) return { hierarchyLevel: "karl", objectLevel: 5, objectType: "karl" };
+    if (d === 1) return { hierarchyLevel: "rum", objectLevel: 4, objectType: "rum" };
+    if (d === 2) return { hierarchyLevel: "fastighet", objectLevel: 3, objectType: "fastighet" };
+    if (d === 3) return { hierarchyLevel: "brf", objectLevel: 2, objectType: "organizational" };
+    return { hierarchyLevel: "koncern", objectLevel: 1, objectType: "organizational" };
+  };
+
+  let updated = 0;
+  for (const obj of all) {
+    if (!scopeIds.has(obj.id)) continue;
+    const target = depthToLevel(computeSubtreeDepth(obj.id));
+    if (
+      obj.hierarchyLevel !== target.hierarchyLevel ||
+      obj.objectType !== target.objectType ||
+      obj.objectLevel !== target.objectLevel
+    ) {
+      try {
+        await storage.updateObject(obj.id, {
+          hierarchyLevel: target.hierarchyLevel,
+          objectLevel: target.objectLevel,
+          objectType: target.objectType,
+        } as any);
+        updated++;
+      } catch (err) {
+        console.error("[derive-hierarchy] update failed:", obj.id, err);
+      }
+    }
+  }
+  res.json({ scanned: scope.length, updated });
+}));
+
 app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const parseResult = modusImportSchema.safeParse(req.body);
@@ -1119,6 +1181,76 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
     console.error("[modus-import] depth recompute failed:", err);
   }
 
+  // Pass 4: derive hierarchyLevel from tree structure (subtree depth)
+  // Only for objects in this import batch. Mapping:
+  //   leaf (no children)            → karl  (kärl)
+  //   has only kärl children        → rum
+  //   has only rum children         → fastighet
+  //   has only fastighet children   → brf
+  //   anything above brf            → koncern
+  let hierarchyUpdated = 0;
+  try {
+    const refreshed = await storage.getObjectsByTenant(tenantId);
+    const importedIds = new Set(
+      refreshed.filter(o => o.objectNumber && modusIdToObjectId.has(o.objectNumber)).map(o => o.id)
+    );
+    const childrenByParent = new Map<string, string[]>();
+    for (const o of refreshed) {
+      if (!o.parentId) continue;
+      const arr = childrenByParent.get(o.parentId) ?? [];
+      arr.push(o.id);
+      childrenByParent.set(o.parentId, arr);
+    }
+    const subtreeDepth = new Map<string, number>();
+    const computeSubtreeDepth = (id: string, guard = 0): number => {
+      if (guard > 20) return 0;
+      const cached = subtreeDepth.get(id);
+      if (cached !== undefined) return cached;
+      const kids = childrenByParent.get(id) ?? [];
+      if (kids.length === 0) {
+        subtreeDepth.set(id, 0);
+        return 0;
+      }
+      let max = 0;
+      for (const k of kids) {
+        const d = computeSubtreeDepth(k, guard + 1) + 1;
+        if (d > max) max = d;
+      }
+      subtreeDepth.set(id, max);
+      return max;
+    };
+    const depthToLevel = (d: number): { hierarchyLevel: string; objectLevel: number; objectType: string } => {
+      if (d === 0) return { hierarchyLevel: "karl", objectLevel: 5, objectType: "karl" };
+      if (d === 1) return { hierarchyLevel: "rum", objectLevel: 4, objectType: "rum" };
+      if (d === 2) return { hierarchyLevel: "fastighet", objectLevel: 3, objectType: "fastighet" };
+      if (d === 3) return { hierarchyLevel: "brf", objectLevel: 2, objectType: "organizational" };
+      return { hierarchyLevel: "koncern", objectLevel: 1, objectType: "organizational" };
+    };
+    for (const obj of refreshed) {
+      if (!importedIds.has(obj.id)) continue;
+      const d = computeSubtreeDepth(obj.id);
+      const target = depthToLevel(d);
+      if (
+        obj.hierarchyLevel !== target.hierarchyLevel ||
+        obj.objectType !== target.objectType ||
+        obj.objectLevel !== target.objectLevel
+      ) {
+        try {
+          await storage.updateObject(obj.id, {
+            hierarchyLevel: target.hierarchyLevel,
+            objectLevel: target.objectLevel,
+            objectType: target.objectType,
+          } as any);
+          hierarchyUpdated++;
+        } catch (err) {
+          console.error("[modus-import] hierarchy update failed:", obj.id, err);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[modus-import] hierarchy derivation failed:", err);
+  }
+
   res.json({
     dryRun: false,
     total: rows.length,
@@ -1128,6 +1260,7 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
     parentLinked,
     parentMissing,
     depthUpdated,
+    hierarchyUpdated,
     autoCreatedCustomers,
     unmatchedCustomers: summary.unmatchedCustomers,
     skippedRows: summary.skippedRows,

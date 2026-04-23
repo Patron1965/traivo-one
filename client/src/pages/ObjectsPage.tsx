@@ -19,7 +19,7 @@ import {
   Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
   Map as MapIcon, List, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, ChevronDown, ChevronUp, XCircle,
-  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, Layers, FileUp
+  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, Layers, FileUp, Pyramid
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -1181,6 +1181,24 @@ export default function ObjectsPage() {
         <Button variant="outline" onClick={() => setImportDialogOpen(true)} data-testid="button-import">
           <Upload className="h-4 w-4 mr-2" />
           Importera CSV
+        </Button>
+        <Button
+          variant="outline"
+          onClick={async () => {
+            if (!confirm("Härled hierarkinivåer (Koncern/BRF/Fastighet/Rum/Kärl) från trädstrukturen för alla objekt? Befintliga nivåer skrivs över.")) return;
+            try {
+              const res = await apiRequest("POST", "/api/objects/derive-hierarchy", {});
+              const data = await res.json();
+              toast({ title: "Hierarki uppdaterad", description: `${data.updated} av ${data.scanned} objekt fick ny nivå.` });
+              queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+            } catch (err: any) {
+              toast({ title: "Fel", description: err?.message ?? "Kunde inte härleda hierarki", variant: "destructive" });
+            }
+          }}
+          data-testid="button-derive-hierarchy"
+        >
+          <Pyramid className="h-4 w-4 mr-2" />
+          Härled hierarki
         </Button>
         <Button variant="outline" onClick={exportCSV} data-testid="button-export">
           <Download className="h-4 w-4 mr-2" />
