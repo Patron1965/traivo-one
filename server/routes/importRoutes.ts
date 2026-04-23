@@ -1486,8 +1486,8 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
       }
     } catch {}
     // Policy for rows where Kund in CSV doesn't match any known customer and no override is provided:
-    //   "object" (default) = use object.customerId, "skip" = skip the row
-    const unresolvedCustomerPolicy: "object" | "skip" = req.body?.unresolvedCustomerPolicy === "skip" ? "skip" : "object";
+    //   "skip" (default) = skip the row, "object" = fall back to object.customerId
+    const unresolvedCustomerPolicy: "object" | "skip" = req.body?.unresolvedCustomerPolicy === "object" ? "object" : "skip";
 
     const objects = await storage.getObjects(tenantId);
     const objectMap = new Map(objects.map(o => [o.objectNumber, o]));

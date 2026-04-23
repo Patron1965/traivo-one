@@ -1460,6 +1460,8 @@ export default function ImportPage() {
   const [taskPreviewFile, setTaskPreviewFile] = useState<File | null>(null);
   const [taskPreviewResources, setTaskPreviewResources] = useState<string[]>([]);
   const [taskResourceOverrides, setTaskResourceOverrides] = useState<Record<string, string>>({});
+  const [taskCustomerOverrides, setTaskCustomerOverrides] = useState<Record<string, string>>({});
+  const [taskUnresolvedPolicy, setTaskUnresolvedPolicy] = useState<"skip" | "object">("skip");
   const [taskPreviewTotalRows, setTaskPreviewTotalRows] = useState(0);
   const [taskValidation, setTaskValidation] = useState<null | {
     totalRows: number;
@@ -2043,6 +2045,12 @@ export default function ImportPage() {
 
     if (type === "tasks" && Object.keys(taskResourceOverrides).length > 0) {
       formData.append("resourceNameOverrides", JSON.stringify(taskResourceOverrides));
+    }
+    if (type === "tasks") {
+      if (Object.keys(taskCustomerOverrides).length > 0) {
+        formData.append("customerOverrides", JSON.stringify(taskCustomerOverrides));
+      }
+      formData.append("unresolvedCustomerPolicy", taskUnresolvedPolicy);
     }
     
     if (type === "objects") {
@@ -2984,25 +2992,68 @@ export default function ImportPage() {
                               <summary className="cursor-pointer font-medium text-amber-700 dark:text-amber-300">
                                 Visa saknade kunder ({taskValidation.missingCustomersCount})
                               </summary>
-                              <ScrollArea className="h-40 mt-2 border rounded p-2">
-                                <ul className="space-y-0.5">
-                                  {taskValidation.missingCustomers.map(({ name, count, modusId, suggestedCustomerId }) => (
-                                    <li key={name} data-testid={`text-missing-customer-${modusId || name}`}>
-                                      <span className="text-foreground">{name}</span>
-                                      {modusId && <span className="text-muted-foreground ml-1">[Modus-id: {modusId}]</span>}
-                                      <span className="text-muted-foreground ml-2">({count} rader)</span>
-                                      {suggestedCustomerId && (
-                                        <span className="ml-2 text-green-700 dark:text-green-400">
-                                          → förslag: matchande kund hittad
-                                        </span>
-                                      )}
-                                    </li>
-                                  ))}
-                                </ul>
+                              <ScrollArea className="h-64 mt-2 border rounded p-2">
+                                <div className="space-y-2">
+                                  {taskValidation.missingCustomers.map(({ name, count, modusId, suggestedCustomerId }) => {
+                                    const key = modusId || name;
+                                    const currentValue = taskCustomerOverrides[key] || suggestedCustomerId || "";
+                                    return (
+                                      <div key={key} className="flex items-center gap-2 text-xs" data-testid={`row-missing-customer-${key}`}>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="truncate">
+                                            <span className="text-foreground font-medium">{name}</span>
+                                            {modusId && <span className="text-muted-foreground ml-1">[{modusId}]</span>}
+                                          </div>
+                                          <div className="text-muted-foreground">{count} rader</div>
+                                        </div>
+                                        <Select
+                                          value={currentValue || "__unresolved__"}
+                                          onValueChange={(v) => {
+                                            setTaskCustomerOverrides(prev => {
+                                              const next = { ...prev };
+                                              if (v === "__unresolved__") delete next[key];
+                                              else next[key] = v;
+                                              return next;
+                                            });
+                                          }}
+                                        >
+                                          <SelectTrigger className="w-56 h-8" data-testid={`select-customer-map-${key}`}>
+                                            <SelectValue placeholder="Välj kund..." />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="__unresolved__">Ej mappad</SelectItem>
+                                            {customers.map(c => (
+                                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </ScrollArea>
-                              <p className="text-[10px] text-muted-foreground mt-1">
-                                Rader med okänd kund importeras mot objektets registrerade kund. Använd objektets kund-koppling för manuell remapping innan import om avvikelser behöver rättas.
-                              </p>
+                              <div className="mt-2 flex items-center gap-3 text-xs">
+                                <label className="flex items-center gap-1">
+                                  <input
+                                    type="radio"
+                                    name="task-unresolved-policy"
+                                    checked={taskUnresolvedPolicy === "skip"}
+                                    onChange={() => setTaskUnresolvedPolicy("skip")}
+                                    data-testid="radio-policy-skip"
+                                  />
+                                  Hoppa över omappade rader (rekommenderat)
+                                </label>
+                                <label className="flex items-center gap-1">
+                                  <input
+                                    type="radio"
+                                    name="task-unresolved-policy"
+                                    checked={taskUnresolvedPolicy === "object"}
+                                    onChange={() => setTaskUnresolvedPolicy("object")}
+                                    data-testid="radio-policy-object"
+                                  />
+                                  Använd objektets kund som fallback
+                                </label>
+                              </div>
                             </details>
                           )}
 
