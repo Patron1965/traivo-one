@@ -47,7 +47,10 @@ export function BrandingTab() {
       if (data.companyName && !form.companyName) {
         setForm(prev => ({ ...prev, companyName: data.companyName }));
       }
-      if (data.logos.length > 0 && !form.logoUrl) {
+      if (data.logos.length > 0) {
+        // Always pre-select the best (top-ranked) logo from the scrape, even if a
+        // logo was previously saved. Users can pick another from the gallery or
+        // drag-drop a manual file to override.
         setForm(prev => ({ ...prev, logoUrl: data.logos[0] }));
       }
       if (data.colors.length >= 1) {
@@ -302,27 +305,71 @@ export function BrandingTab() {
                   Logotyp
                 </Label>
                 {form.logoUrl ? (
-                  <div className="border rounded-lg p-4 bg-muted/30 relative" data-testid="logo-upload-preview">
-                    <div className="flex items-center justify-center">
-                      <img
-                        src={form.logoUrl}
-                        alt="Logotyp"
-                        className="h-16 w-auto object-contain"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = "none";
-                        }}
-                      />
+                  <div
+                    className={`border rounded-lg p-4 bg-muted/30 relative group cursor-pointer transition-colors ${logoDragOver ? "border-primary bg-primary/10" : "hover:border-primary/50"} ${logoUploading ? "pointer-events-none opacity-60" : ""}`}
+                    data-testid="logo-upload-preview"
+                    onClick={(e) => {
+                      if ((e.target as HTMLElement).closest("[data-testid='button-remove-logo']")) return;
+                      if (!logoUploading) logoInputRef.current?.click();
+                    }}
+                    onDragOver={(e) => { e.preventDefault(); setLogoDragOver(true); }}
+                    onDragLeave={() => setLogoDragOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setLogoDragOver(false);
+                      const file = e.dataTransfer.files[0];
+                      if (file) handleLogoUpload(file);
+                    }}
+                  >
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      data-testid="input-logo-file"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleLogoUpload(file);
+                        e.target.value = "";
+                      }}
+                    />
+                    <div className="flex items-center justify-center min-h-16">
+                      {logoUploading ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                          <p className="text-xs text-muted-foreground">Laddar upp...</p>
+                        </div>
+                      ) : (
+                        <img
+                          src={form.logoUrl}
+                          alt="Logotyp"
+                          className="h-16 w-auto object-contain"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = "none";
+                          }}
+                        />
+                      )}
                     </div>
+                    {!logoUploading && (
+                      <div className={`absolute inset-0 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm transition-opacity ${logoDragOver ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+                        <div className="flex flex-col items-center gap-1 text-center pointer-events-none">
+                          <Upload className="h-6 w-6 text-primary" />
+                          <p className="text-xs font-medium">Dra in ny logotyp eller klicka för att byta</p>
+                        </div>
+                      </div>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="absolute top-2 right-2 h-6 w-6"
+                      className="absolute top-2 right-2 h-6 w-6 z-10 bg-background/80 hover:bg-background"
                       data-testid="button-remove-logo"
-                      onClick={() => setForm(prev => ({ ...prev, logoUrl: "" }))}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setForm(prev => ({ ...prev, logoUrl: "" }));
+                      }}
                     >
                       <X className="h-3 w-3" />
                     </Button>
-                    <p className="text-xs text-muted-foreground text-center mt-2">Klicka × för att ta bort och ladda upp en ny</p>
                   </div>
                 ) : (
                   <div

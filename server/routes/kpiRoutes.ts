@@ -231,7 +231,9 @@ app.post("/api/system/scrape-branding", requireAdmin, asyncHandler(async (req, r
         throw new Error(`Kunde inte hämta sidan (HTTP ${response.status})`);
       }
 
-      const html = await response.text();
+      const rawHtml = await response.text();
+      // Strip HTML comments so commented-out <img> tags don't pollute logo detection
+      const html = rawHtml.replace(/<!--[\s\S]*?-->/g, "");
 
       const logos: string[] = [];
       const colors: string[] = [];
@@ -260,36 +262,122 @@ app.post("/api/system/scrape-branding", requireAdmin, asyncHandler(async (req, r
         return baseUrl + "/" + src;
       };
 
-      const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
-        || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-      if (ogImageMatch) {
-        logos.push(resolveUrl(ogImageMatch[1]));
-      }
+      // Filter: only keep URLs from the same host (or relative paths that resolved to same host)
+      const sameHost = (absUrl: string) => {
+        try {
+          const u = new URL(absUrl);
+          const host = u.host.replace(/^www\./, "");
+          const target = parsedUrl.host.replace(/^www\./, "");
+          return host === target;
+        } catch {
+          return false;
+        }
+      };
 
-      const linkIconMatches = [...html.matchAll(/<link[^>]+rel=["'](?:icon|apple-touch-icon|shortcut icon)["'][^>]*href=["']([^"']+)["'][^>]*>/gi)];
-      for (const m of linkIconMatches) {
-        if (m[1]) logos.push(resolveUrl(m[1]));
-      }
+      // Bad-context indicators: parent class/id values that mean "not our logo"
+      const BAD_CONTEXT_RE = /partner|customer|sponsor|client|kund-?logo|logo-?slider|logo-?carousel|customer-?logo|partners?|kunder/i;
+      // Good-context indicators: parent class/id values that suggest the brand logo
+      const GOOD_CONTEXT_RE = /(?:^|[^a-z])(?:logo(?:-?box|-?wrap|-?container|-?image|-?img)?|brand(?:ing)?|navbar-?brand|site-?logo|header-?logo|main-?logo)(?:[^a-z]|$)/i;
 
-      const imgLogoPatterns = [
-        /<img[^>]+(?:class|id|alt)=["'][^"']*logo[^"']*["'][^>]*src=["']([^"']+)["']/gi,
-        /<img[^>]+src=["']([^"']+)["'][^>]*(?:class|id|alt)=["'][^"']*logo[^"']*["']/gi,
-        /<img[^>]+src=["']([^"']*logo[^"']*)["']/gi,
-      ];
-      for (const pattern of imgLogoPatterns) {
-        const matches = [...html.matchAll(pattern)];
-        for (const m of matches) {
-          if (m[1] && !m[1].includes("data:image/svg") && m[1].length < 500) {
-            logos.push(resolveUrl(m[1]));
+      type Candidate = { url: string; score: number };
+      const candidates: Candidate[] = [];
+      const seenUrls = new Set<string>();
+      const addCandidate = (rawSrc: string, score: number) => {
+        if (!rawSrc || rawSrc.startsWith("data:image/svg+xml")) return;
+        if (rawSrc.length > 500) return;
+        const absolute = resolveUrl(rawSrc);
+        if (!absolute || !sameHost(absolute)) return;
+        if (seenUrls.has(absolute)) return;
+        seenUrls.add(absolute);
+        candidates.push({ url: absolute, score });
+      };
+
+      // Walk through "good-context" containers: <a|div|header|nav|span> ... </same-tag>
+      const containerTags = ["a", "div", "header", "nav", "span", "section"];
+      for (const tag of containerTags) {
+        const openRe = new RegExp(`<${tag}\\b[^>]*\\b(?:class|id)\\s*=\\s*["']([^"']*)["'][^>]*>`, "gi");
+        let m: RegExpExecArray | null;
+        while ((m = openRe.exec(html)) !== null) {
+          const attr = m[1];
+          if (!GOOD_CONTEXT_RE.test(attr)) continue;
+          if (BAD_CONTEXT_RE.test(attr)) continue;
+
+          // Extract the inner content up to the matching close tag (best-effort, allows nesting one level)
+          const startIdx = openRe.lastIndex;
+          const closeRe = new RegExp(`</${tag}\\s*>`, "gi");
+          closeRe.lastIndex = startIdx;
+          const closeMatch = closeRe.exec(html);
+          const endIdx = closeMatch ? closeMatch.index : Math.min(startIdx + 4000, html.length);
+          const inner = html.slice(startIdx, endIdx);
+
+          // Find <img src=...> inside
+          const imgMatches = [...inner.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)];
+          for (const im of imgMatches) {
+            // Check if this img has bad alt/class
+            const imgTag = im[0];
+            const altMatch = imgTag.match(/\balt=["']([^"']*)["']/i);
+            const classMatch = imgTag.match(/\bclass=["']([^"']*)["']/i);
+            const altOrClass = `${altMatch?.[1] || ""} ${classMatch?.[1] || ""}`;
+            if (BAD_CONTEXT_RE.test(altOrClass)) continue;
+            addCandidate(im[1], 100);
+          }
+
+          // Inline SVGs as data URLs
+          const svgInside = inner.match(/<svg\b[\s\S]*?<\/svg>/i);
+          if (svgInside) {
+            const svgData = "data:image/svg+xml;base64," + Buffer.from(svgInside[0]).toString("base64");
+            if (!seenUrls.has(svgData)) {
+              seenUrls.add(svgData);
+              candidates.push({ url: svgData, score: 90 });
+            }
           }
         }
       }
 
-      const svgLogoMatch = html.match(/<(?:a[^>]+(?:class|id)=["'][^"']*logo[^"']*["'][^>]*>|header[^>]*>)[\s\S]*?(<svg[\s\S]*?<\/svg>)/i);
-      if (svgLogoMatch) {
-        const svgDataUrl = "data:image/svg+xml;base64," + Buffer.from(svgLogoMatch[1]).toString("base64");
-        logos.unshift(svgDataUrl);
+      // Fallback: imgs whose own class/id/alt explicitly say "logo" but parent context unknown — only if no good candidates yet
+      if (candidates.length === 0) {
+        const imgLogoRe = /<img\b[^>]*\b(?:class|id|alt)=["'][^"']*logo[^"']*["'][^>]*>/gi;
+        const imgs = [...html.matchAll(imgLogoRe)];
+        for (const im of imgs) {
+          const tag = im[0];
+          const attrs = tag.toLowerCase();
+          if (BAD_CONTEXT_RE.test(attrs)) continue;
+          const srcMatch = tag.match(/\bsrc=["']([^"']+)["']/i);
+          if (srcMatch) addCandidate(srcMatch[1], 60);
+        }
       }
+
+      // OG image (often a generic share image, lower priority)
+      const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+        || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+      if (ogImageMatch) {
+        addCandidate(ogImageMatch[1], 40);
+      }
+
+      // Favicons (lowest priority, only as fallback)
+      const linkIconMatches = [...html.matchAll(/<link[^>]+rel=["'](?:icon|apple-touch-icon|shortcut icon)["'][^>]*href=["']([^"']+)["'][^>]*>/gi)];
+      for (const m of linkIconMatches) {
+        if (m[1]) addCandidate(m[1], 10);
+      }
+
+      // Score adjustments based on URL hints
+      for (const c of candidates) {
+        const lower = c.url.toLowerCase();
+        if (/favicon|apple-touch/.test(lower)) c.score = Math.min(c.score, 15);
+        if (/sprite|icon-/.test(lower)) c.score -= 20;
+        // Larger images implied by filename hints
+        const sizeMatch = lower.match(/(\d{2,4})(?:px|x\d+)?\.(?:png|jpg|jpeg|svg|webp)/);
+        if (sizeMatch) {
+          const n = parseInt(sizeMatch[1], 10);
+          if (n >= 200) c.score += 10;
+          if (n >= 500) c.score += 5;
+        }
+        if (/\.svg(?:$|\?)/.test(lower)) c.score += 5;
+      }
+
+      // Sort by score desc, push into logos
+      candidates.sort((a, b) => b.score - a.score);
+      for (const c of candidates) logos.push(c.url);
 
       const hexColors = new Set<string>();
       const colorPatterns = [
