@@ -111,7 +111,7 @@
 
 ### External Fältapp Integration
 The mobile field app can also be consumed by an external standalone mobile application via REST API.
-- See **MOBILE_API.md** for complete API documentation
+- See **`docs/api/MOBILE_API.md`** for complete API documentation
 - Two auth paths: PIN-based session or tenant-scoped auth
 - Endpoints designed for offline-first with outbox sync pattern
 - Response format optimized for mobile: includes `isLocked`, `dependsOn`, `isDependentTask` flags

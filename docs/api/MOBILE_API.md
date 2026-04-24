@@ -429,4 +429,4 @@ Statusändringar, foton, metadata och besiktningar kan köas och synkas sekventi
 
 ---
 
-*Se även: SYSTEM_DOCUMENTATION.md för fullständig systemöversikt.*
+*Se även: `docs/product/SYSTEM_DOCUMENTATION.md` för fullständig systemöversikt.*

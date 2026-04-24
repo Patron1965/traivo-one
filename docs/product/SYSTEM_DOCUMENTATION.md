@@ -813,7 +813,7 @@ Varje kategori: OK / Varning / Fel status + valfri kommentar.
 - `priority_changed` - Prioritet ändrad
 
 ### Extern Fältapp-koppling
-Se **MOBILE_API.md** för komplett API-dokumentation avsedd för det externa Fältapp-projektet.
+Se **`docs/api/MOBILE_API.md`** för komplett API-dokumentation avsedd för det externa Fältapp-projektet.
 
 ---
 

@@ -320,7 +320,7 @@ for (let p = 1; p <= pageNum.val; p++) {
   }
 }
 
-const outputPath = "Arsplanering_Funktionsoversikt_2026.pdf";
+const outputPath = "docs/assets/Arsplanering_Funktionsoversikt_2026.pdf";
 const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
 fs.writeFileSync(outputPath, pdfBuffer);
 console.log(`PDF generated: ${outputPath} (${(pdfBuffer.length / 1024).toFixed(0)} KB)`);
