@@ -10,7 +10,7 @@
 endobj
 4 0 obj
 <<
-/Length 1791
+/Length 1793
 >>
 stream
 0.5670000000000001 w
@@ -53,8 +53,8 @@ BT
 /F1 14 Tf
 16.0999999999999979 TL
 0.42 0.486 0.549 rg
-208.3177952755905551 445.0396062992125508 Td
-(Traivo Field Service Platform) Tj
+204.8877952755905483 445.0396062992125508 Td
+(Plannix Field Service Platform) Tj
 ET
 BT
 /F1 11 Tf
@@ -74,8 +74,8 @@ BT
 /F1 9 Tf
 10.3499999999999996 TL
 1. g
-246.2477952755905903 56.69314960629913 Td
-(Konfidentiellt  |  Traivo AB) Tj
+244.0427952755905494 56.69314960629913 Td
+(Konfidentiellt  |  Plannix AB) Tj
 ET
 endstream
 endobj
@@ -89,7 +89,7 @@ endobj
 endobj
 6 0 obj
 <<
-/Length 14464
+/Length 14467
 >>
 stream
 0.5670000000000001 w
@@ -118,7 +118,7 @@ BT
 11.5 TL
 0.118 g
 76.5354330708661479 714.3309448818897636 Td
-(Årsplaneringsmodulen i Traivo ger planeraren full kontroll över årliga besöksmål. Från automatisk) Tj
+(Årsplaneringsmodulen i Plannix ger planeraren full kontroll över årliga besöksmål. Från automatisk) Tj
 T* (generering av mål baserat på abonnemang, till AI-driven fördelning av besök över året med hänsyn) Tj
 T* (till frekvens, säsong, kapacitet och restriktioner. Modulen visar realtidsframsteg med KPI-kort, varnar) Tj
 T* (för eftersatta mål, och låter planeraren godkänna AI-förslag som automatiskt skapar och flyttar) Tj
@@ -392,7 +392,7 @@ BT
 9.1999999999999993 TL
 0.42 0.486 0.549 rg
 70.8661417322834666 34.0159842519684616 Td
-(Traivo Field Service Platform) Tj
+(Plannix Field Service Platform) Tj
 ET
 BT
 /F1 8 Tf
@@ -411,7 +411,7 @@ BT
 9.1999999999999993 TL
 0.42 0.486 0.549 rg
 70.8661417322834666 34.0159842519684616 Td
-(Traivo Field Service Platform) Tj
+(Plannix Field Service Platform) Tj
 ET
 BT
 /F1 8 Tf
@@ -437,7 +437,7 @@ endobj
 endobj
 8 0 obj
 <<
-/Length 15661
+/Length 15663
 >>
 stream
 0.8503937007874016 w
@@ -771,7 +771,7 @@ BT
 9.1999999999999993 TL
 0.42 0.486 0.549 rg
 70.8661417322834666 34.0159842519684616 Td
-(Traivo Field Service Platform) Tj
+(Plannix Field Service Platform) Tj
 ET
 BT
 /F1 8 Tf
@@ -790,7 +790,7 @@ BT
 9.1999999999999993 TL
 0.42 0.486 0.549 rg
 70.8661417322834666 34.0159842519684616 Td
-(Traivo Field Service Platform) Tj
+(Plannix Field Service Platform) Tj
 ET
 BT
 /F1 8 Tf
@@ -816,7 +816,7 @@ endobj
 endobj
 10 0 obj
 <<
-/Length 12274
+/Length 12275
 >>
 stream
 0.8503937007874016 w
@@ -1135,7 +1135,7 @@ BT
 9.1999999999999993 TL
 0.42 0.486 0.549 rg
 70.8661417322834666 34.0159842519684616 Td
-(Traivo Field Service Platform) Tj
+(Plannix Field Service Platform) Tj
 ET
 BT
 /F1 8 Tf
@@ -1320,8 +1320,8 @@ endobj
 endobj
 25 0 obj
 <<
-/Producer (jsPDF 4.2.0)
-/CreationDate (D:20260319141156-00'00')
+/Producer (jsPDF 4.2.1)
+/CreationDate (D:20260424194656-00'00')
 >>
 endobj
 26 0 obj
@@ -1335,39 +1335,39 @@ endobj
 xref
 0 27
 0000000000 65535 f 
-0000044966 00000 n 
-0000046806 00000 n 
+0000044974 00000 n 
+0000046814 00000 n 
 0000000015 00000 n 
 0000000152 00000 n 
-0000001995 00000 n 
-0000002132 00000 n 
-0000016649 00000 n 
-0000016786 00000 n 
-0000032500 00000 n 
-0000032638 00000 n 
-0000045041 00000 n 
-0000045167 00000 n 
-0000045298 00000 n 
-0000045432 00000 n 
-0000045570 00000 n 
-0000045694 00000 n 
-0000045823 00000 n 
-0000045955 00000 n 
-0000046091 00000 n 
-0000046219 00000 n 
-0000046346 00000 n 
-0000046475 00000 n 
-0000046608 00000 n 
-0000046710 00000 n 
-0000047059 00000 n 
-0000047145 00000 n 
+0000001997 00000 n 
+0000002134 00000 n 
+0000016654 00000 n 
+0000016791 00000 n 
+0000032507 00000 n 
+0000032645 00000 n 
+0000045049 00000 n 
+0000045175 00000 n 
+0000045306 00000 n 
+0000045440 00000 n 
+0000045578 00000 n 
+0000045702 00000 n 
+0000045831 00000 n 
+0000045963 00000 n 
+0000046099 00000 n 
+0000046227 00000 n 
+0000046354 00000 n 
+0000046483 00000 n 
+0000046616 00000 n 
+0000046718 00000 n 
+0000047067 00000 n 
+0000047153 00000 n 
 trailer
 <<
 /Size 27
 /Root 26 0 R
 /Info 25 0 R
-/ID [ <5BE8E150DC4B7FAF573FDE68982FB261> <5BE8E150DC4B7FAF573FDE68982FB261> ]
+/ID [ <7E37352CDD9941E45D440519007CCE29> <7E37352CDD9941E45D440519007CCE29> ]
 >>
 startxref
-47249
+47257
 %%EOF
