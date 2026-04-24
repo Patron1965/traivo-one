@@ -544,7 +544,24 @@ export default function ObjectsPage() {
 
   const filteredObjects = objects;
 
-  const filteredTopLevel = useMemo(() => sortObjects(filteredObjects.filter(obj => !obj.parentId)), [filteredObjects, sortObjects]);
+  // Server-side pagination returns up to PAGE_SIZE arbitrary objects per page.
+  // The previous logic filtered out anything with a parentId to render a tree,
+  // but on a page that mostly contains child objects (kärl/rum) this leaves the
+  // list empty even though the count says e.g. 100 av 1608. To avoid this we
+  // render the paginated set flat, keeping the tree-style row component but
+  // showing every returned object at level 0. Children that happen to be on
+  // the same page are also rendered (under their parent if expanded), so we
+  // dedupe to avoid showing them twice.
+  const filteredTopLevel = useMemo(() => {
+    const childIdsRenderedUnderParent = new Set<string>();
+    const presentIds = new Set(filteredObjects.map(o => o.id));
+    for (const obj of filteredObjects) {
+      if (obj.parentId && presentIds.has(obj.parentId)) {
+        childIdsRenderedUnderParent.add(obj.id);
+      }
+    }
+    return sortObjects(filteredObjects.filter(obj => !childIdsRenderedUnderParent.has(obj.id)));
+  }, [filteredObjects, sortObjects]);
 
   const activeFilterCount = useMemo(() => [
     typeFilter !== "all" ? 1 : 0,
