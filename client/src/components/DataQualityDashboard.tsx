@@ -9,12 +9,13 @@ import { useToast } from "@/hooks/use-toast";
 import {
   MapPin, AlertTriangle, CheckCircle, Loader2, RefreshCw,
   Building2, Truck, GitBranch, Navigation, FileUp, Save, Pencil, X,
-  Phone, User, MessageSquare, Hash
+  Phone, User, MessageSquare, Hash, FileSearch, Trash2, Download
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { CleanupPanels } from "@/components/CleanupPanels";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface DataQualityStats {
   objects: {
@@ -42,6 +43,30 @@ interface DataQualityStats {
   };
 }
 
+interface NotInExportRow {
+  id: string;
+  objectNumber: string | null;
+  name: string;
+  address: string | null;
+  city: string | null;
+  customerId: string | null;
+  customerName: string | null;
+  createdAt: string | null;
+  format: "modus_prefixed" | "numeric" | "non_standard" | "missing";
+}
+
+interface NotInExportReport {
+  totalRows: number;
+  csvIdCount: number;
+  totalContainers: number;
+  inExportCount: number;
+  notInExportCount: number;
+  nonStandardFormatCount: number;
+  noObjectNumberCount: number;
+  truncated: boolean;
+  rows: NotInExportRow[];
+}
+
 interface DetailRow {
   id: string;
   name: string;
@@ -60,6 +85,11 @@ export function DataQualityDashboard() {
   const [editingRow, setEditingRow] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
   const hierarchyFileRef = useRef<HTMLInputElement>(null);
+  const notInExportFileRef = useRef<HTMLInputElement>(null);
+  const [notInExportFile, setNotInExportFile] = useState<File | null>(null);
+  const [notInExportReport, setNotInExportReport] = useState<NotInExportReport | null>(null);
+  const [selectedMissingIds, setSelectedMissingIds] = useState<Set<string>>(new Set());
+  const [keptLocalIds, setKeptLocalIds] = useState<Set<string>>(new Set());
 
   const { data: stats, isLoading } = useQuery<DataQualityStats>({
     queryKey: ["/api/import/data-quality"],
@@ -132,6 +162,78 @@ export function DataQualityDashboard() {
     },
     onError: (err: Error) => {
       toast({ title: "Kunde inte uppdatera orderstatus", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const notInExportMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/import/modus/objects/objects-not-in-export", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Kunde inte analysera Modus-exporten");
+      }
+      return res.json() as Promise<NotInExportReport>;
+    },
+    onSuccess: (data) => {
+      setNotInExportReport(data);
+      setSelectedMissingIds(new Set());
+      setKeptLocalIds(new Set());
+      toast({
+        title: "Diff-analys klar",
+        description: `${data.notInExportCount.toLocaleString("sv-SE")} kärl saknas i Modus-exporten`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Kunde inte analysera filen", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMissingMutation = useMutation({
+    mutationFn: async (objectIds: string[]) => {
+      const res = await apiRequest("POST", "/api/import/modus/objects/objects-not-in-export/delete", {
+        objectIds,
+        reason: "Saknas i senaste Modus-exporten",
+      });
+      return res.json() as Promise<{ deleted: number; ineligible: number; notFound: number }>;
+    },
+    onSuccess: (data, variables) => {
+      const removed = new Set(variables);
+      setNotInExportReport(prev =>
+        prev
+          ? {
+              ...prev,
+              notInExportCount: Math.max(0, prev.notInExportCount - data.deleted),
+              totalContainers: Math.max(0, prev.totalContainers - data.deleted),
+              rows: prev.rows.filter(r => !removed.has(r.id)),
+            }
+          : prev,
+      );
+      setSelectedMissingIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ["/api/import/data-quality"] });
+      const partialNotes: string[] = [];
+      if (data.ineligible > 0) {
+        partialNotes.push(`${data.ineligible.toLocaleString("sv-SE")} hoppades över (ej kärl eller annan tenant)`);
+      }
+      if (data.notFound > 0) {
+        partialNotes.push(`${data.notFound.toLocaleString("sv-SE")} hittades inte`);
+      }
+      const description = [
+        `${data.deleted.toLocaleString("sv-SE")} kärl markerade som borttagna`,
+        ...partialNotes,
+      ].join(". ");
+      toast({
+        title: "Borttagning klar",
+        description,
+        variant: partialNotes.length > 0 ? "destructive" : undefined,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Kunde inte ta bort kärlen", description: err.message, variant: "destructive" });
     },
   });
 
@@ -513,6 +615,298 @@ export function DataQualityDashboard() {
                 <p className="text-sm text-green-600 dark:text-green-300 mt-1">
                   Orderstatus: {workOrderStatusMutation.data.totalUpdated} ordrar markerade som utförda
                 </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card data-testid="card-not-in-modus-export">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileSearch className="h-5 w-5" />
+            Kärl som saknas i Modus-exporten
+            <HelpTooltip content="Ladda upp den senaste Modus Objekt-exporten (samma CSV som används vid berikning). Vi jämför den mot dina kärl och listar de som finns hos oss men inte i exporten — antingen borttagna i Modus, lokalt skapade, eller med annat ID-format." />
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="file"
+              accept=".csv"
+              ref={notInExportFileRef}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) {
+                  setNotInExportFile(f);
+                  setNotInExportReport(null);
+                }
+                e.target.value = "";
+              }}
+              className="hidden"
+              data-testid="input-not-in-export-file"
+            />
+            <Button
+              onClick={() => notInExportFileRef.current?.click()}
+              variant="outline"
+              data-testid="button-pick-not-in-export-file"
+            >
+              <FileUp className="h-4 w-4 mr-2" />
+              Välj Modus-exportfil
+            </Button>
+            {notInExportFile && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span data-testid="text-not-in-export-filename">{notInExportFile.name}</span>
+                <span>({Math.round(notInExportFile.size / 1024)} kB)</span>
+              </div>
+            )}
+            <Button
+              onClick={() => notInExportFile && notInExportMutation.mutate(notInExportFile)}
+              disabled={!notInExportFile || notInExportMutation.isPending}
+              data-testid="button-run-not-in-export"
+            >
+              {notInExportMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <FileSearch className="h-4 w-4 mr-2" />
+              )}
+              Analysera diff
+            </Button>
+          </div>
+
+          {notInExportReport && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="p-3 rounded border bg-muted/30">
+                  <div className="text-xs text-muted-foreground">Kärl i DB</div>
+                  <div className="text-xl font-bold" data-testid="text-not-in-export-db-total">
+                    {notInExportReport.totalContainers.toLocaleString("sv-SE")}
+                  </div>
+                </div>
+                <div className="p-3 rounded border bg-muted/30">
+                  <div className="text-xs text-muted-foreground">Unika ID i export</div>
+                  <div className="text-xl font-bold" data-testid="text-not-in-export-csv-ids">
+                    {notInExportReport.csvIdCount.toLocaleString("sv-SE")}
+                  </div>
+                </div>
+                <div className="p-3 rounded border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
+                  <div className="text-xs text-muted-foreground">Finns i exporten</div>
+                  <div className="text-xl font-bold text-green-700 dark:text-green-400" data-testid="text-not-in-export-matched">
+                    {notInExportReport.inExportCount.toLocaleString("sv-SE")}
+                  </div>
+                </div>
+                <div className="p-3 rounded border bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800">
+                  <div className="text-xs text-muted-foreground">Saknas i exporten</div>
+                  <div className="text-xl font-bold text-orange-700 dark:text-orange-400" data-testid="text-not-in-export-missing">
+                    {notInExportReport.notInExportCount.toLocaleString("sv-SE")}
+                  </div>
+                </div>
+              </div>
+
+              {(notInExportReport.nonStandardFormatCount > 0 || notInExportReport.noObjectNumberCount > 0) && (
+                <div className="text-sm p-3 rounded border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+                  Av de saknade kärlen har{" "}
+                  <strong data-testid="text-not-in-export-non-standard">
+                    {notInExportReport.nonStandardFormatCount.toLocaleString("sv-SE")}
+                  </strong>{" "}
+                  ett objektnummer som inte ser ut som ett Modus-id (sannolikt lokalt skapade hos oss) och{" "}
+                  <strong data-testid="text-not-in-export-no-objnr">
+                    {notInExportReport.noObjectNumberCount.toLocaleString("sv-SE")}
+                  </strong>{" "}
+                  saknar objektnummer helt.
+                </div>
+              )}
+
+              {notInExportReport.rows.length > 0 && (
+                <>
+                  <div className="flex flex-wrap items-center gap-2 justify-between">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const visible = notInExportReport.rows
+                            .filter(r => !keptLocalIds.has(r.id))
+                            .map(r => r.id);
+                          setSelectedMissingIds(new Set(visible));
+                        }}
+                        data-testid="button-select-all-missing"
+                      >
+                        Välj alla synliga
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSelectedMissingIds(new Set())}
+                        disabled={selectedMissingIds.size === 0}
+                        data-testid="button-clear-missing-selection"
+                      >
+                        Avmarkera alla
+                      </Button>
+                      <span className="text-sm text-muted-foreground" data-testid="text-missing-selection-count">
+                        {selectedMissingIds.size} valda
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          if (!notInExportFile) return;
+                          const formData = new FormData();
+                          formData.append("file", notInExportFile);
+                          const res = await fetch("/api/import/modus/objects/objects-not-in-export?format=csv", {
+                            method: "POST",
+                            body: formData,
+                          });
+                          if (!res.ok) {
+                            toast({ title: "Kunde inte skapa CSV", variant: "destructive" });
+                            return;
+                          }
+                          const blob = await res.blob();
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `objects-not-in-modus-export-${new Date().toISOString().slice(0, 10)}.csv`;
+                          document.body.appendChild(a);
+                          a.click();
+                          a.remove();
+                          URL.revokeObjectURL(url);
+                        }}
+                        disabled={!notInExportFile}
+                        data-testid="button-download-missing-csv"
+                      >
+                        <Download className="h-3.5 w-3.5 mr-2" />
+                        Ladda ner CSV
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={selectedMissingIds.size === 0 || deleteMissingMutation.isPending}
+                        onClick={() => {
+                          if (selectedMissingIds.size === 0) return;
+                          const ids = Array.from(selectedMissingIds);
+                          if (!confirm(`Markera ${ids.length} kärl som borttagna? Åtgärden loggas och kan backas via support.`)) return;
+                          deleteMissingMutation.mutate(ids);
+                        }}
+                        data-testid="button-delete-missing"
+                      >
+                        {deleteMissingMutation.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5 mr-2" />
+                        )}
+                        Markera valda för borttagning
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="border rounded">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10"></TableHead>
+                          <TableHead>Objektnr</TableHead>
+                          <TableHead>Namn</TableHead>
+                          <TableHead>Kund</TableHead>
+                          <TableHead>Adress</TableHead>
+                          <TableHead>Format</TableHead>
+                          <TableHead className="w-32">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {notInExportReport.rows.slice(0, 200).map((row) => {
+                          const isKeptLocal = keptLocalIds.has(row.id);
+                          const isSelected = selectedMissingIds.has(row.id);
+                          return (
+                            <TableRow
+                              key={row.id}
+                              className={isKeptLocal ? "opacity-60" : ""}
+                              data-testid={`row-missing-${row.id}`}
+                            >
+                              <TableCell>
+                                <Checkbox
+                                  checked={isSelected}
+                                  disabled={isKeptLocal}
+                                  onCheckedChange={(checked) => {
+                                    setSelectedMissingIds(prev => {
+                                      const next = new Set(prev);
+                                      if (checked) next.add(row.id);
+                                      else next.delete(row.id);
+                                      return next;
+                                    });
+                                  }}
+                                  data-testid={`checkbox-missing-${row.id}`}
+                                />
+                              </TableCell>
+                              <TableCell className="font-mono text-xs">
+                                {row.objectNumber || <span className="text-muted-foreground">—</span>}
+                              </TableCell>
+                              <TableCell className="font-medium">{row.name}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {row.customerName || "—"}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {row.address ? `${row.address}${row.city ? `, ${row.city}` : ""}` : "—"}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs"
+                                  data-testid={`badge-format-${row.id}`}
+                                >
+                                  {row.format === "modus_prefixed" && "MODUS-id"}
+                                  {row.format === "numeric" && "Numeriskt"}
+                                  {row.format === "non_standard" && "Annat format"}
+                                  {row.format === "missing" && "Saknas"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {isKeptLocal ? (
+                                  <Badge variant="secondary" className="text-xs">Behålls lokalt</Badge>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 text-xs"
+                                    onClick={() => {
+                                      setKeptLocalIds(prev => {
+                                        const next = new Set(prev);
+                                        next.add(row.id);
+                                        return next;
+                                      });
+                                      setSelectedMissingIds(prev => {
+                                        const next = new Set(prev);
+                                        next.delete(row.id);
+                                        return next;
+                                      });
+                                    }}
+                                    data-testid={`button-keep-local-${row.id}`}
+                                  >
+                                    Behåll som lokalt
+                                  </Button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {notInExportReport.rows.length > 200 && (
+                    <p className="text-xs text-muted-foreground text-center" data-testid="text-missing-truncated">
+                      Visar de första 200 av {notInExportReport.rows.length.toLocaleString("sv-SE")}{" "}
+                      saknade kärlen — använd CSV-nedladdning för komplett lista.
+                    </p>
+                  )}
+                </>
+              )}
+
+              {notInExportReport.notInExportCount === 0 && (
+                <div className="text-sm p-3 rounded border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800 flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  Alla kärl i DB finns även i den uppladdade Modus-exporten.
+                </div>
               )}
             </div>
           )}

@@ -5081,4 +5081,283 @@ async function runEnrichApplyJob(params: {
   }
 }
 
+// ============================================================================
+// OBJEKT SOM SAKNAS I MODUS-EXPORTEN (Task #250)
+// Användaren laddar upp den senaste Modus Objekt-exporten (samma fil-format som
+// enrich-flödet) och får tillbaka listan över kärl som finns i vår DB men INTE
+// i exporten. Tre kategorier rapporteras:
+//   - "missing"        — objektnummer matchar Modus-format men finns inte i CSV
+//   - "non_standard"   — objektnummer har inte Modus-format (varken "MODUS-{n}"
+//                        eller rent numeriskt) — sannolikt lokalt skapat hos oss
+//   - "no_object_number" — kärl utan objektnummer (kan inte matchas alls)
+// ============================================================================
+
+// Hjälpare: bestäm om ett object_number ser ut som ett Modus-id
+function classifyModusIdFormat(objectNumber: string | null | undefined):
+  "modus_prefixed" | "numeric" | "non_standard" | "missing" {
+  if (!objectNumber) return "missing";
+  const trimmed = objectNumber.trim();
+  if (trimmed === "") return "missing";
+  if (/^MODUS-\d+$/i.test(trimmed)) return "modus_prefixed";
+  if (/^\d+$/.test(trimmed)) return "numeric";
+  return "non_standard";
+}
+
+type NotInExportRow = {
+  id: string;
+  objectNumber: string | null;
+  name: string;
+  address: string | null;
+  city: string | null;
+  customerId: string | null;
+  customerName: string | null;
+  createdAt: string | null;
+  format: "modus_prefixed" | "numeric" | "non_standard" | "missing";
+};
+
+async function computeObjectsNotInExport(params: {
+  tenantId: string;
+  csvBuffer: Buffer;
+}): Promise<{
+  totalRows: number;
+  csvIdCount: number;
+  totalContainers: number;
+  inExportCount: number;
+  notInExportCount: number;
+  nonStandardFormatCount: number;
+  noObjectNumberCount: number;
+  rows: NotInExportRow[];
+}> {
+  const { tenantId, csvBuffer } = params;
+
+  const csvRows = parseEnrichCsv(csvBuffer);
+  const csvIds = new Set<string>();
+  for (const row of csvRows) {
+    const raw = (row["Id"] || "").replace(/\s/g, "");
+    if (!raw) continue;
+    csvIds.add(raw);
+  }
+
+  // Hämta alla kärl i tenantens DB (icke borttagna). Vi behöver objectNumber
+  // och en kort beskrivning för rapporten. Joina mot customers för läsbarhet.
+  const dbRows = await db.select({
+    id: objects.id,
+    objectNumber: objects.objectNumber,
+    name: objects.name,
+    address: objects.address,
+    city: objects.city,
+    customerId: objects.customerId,
+    customerName: customers.name,
+    createdAt: objects.createdAt,
+  })
+    .from(objects)
+    .leftJoin(customers, eq(objects.customerId, customers.id))
+    .where(and(
+      eq(objects.tenantId, tenantId),
+      isNull(objects.deletedAt),
+      eq(objects.hierarchyLevel, "karl"),
+    ));
+
+  const totalContainers = dbRows.length;
+  let inExportCount = 0;
+  const notInExport: NotInExportRow[] = [];
+  let nonStandardFormatCount = 0;
+  let noObjectNumberCount = 0;
+
+  for (const r of dbRows) {
+    const fmt = classifyModusIdFormat(r.objectNumber);
+    if (fmt === "modus_prefixed" || fmt === "numeric") {
+      const normalized = (r.objectNumber || "").replace(/^MODUS-/i, "").trim();
+      if (csvIds.has(normalized)) {
+        inExportCount++;
+        continue;
+      }
+    } else if (fmt === "missing") {
+      noObjectNumberCount++;
+    } else {
+      nonStandardFormatCount++;
+    }
+
+    notInExport.push({
+      id: r.id,
+      objectNumber: r.objectNumber,
+      name: r.name,
+      address: r.address,
+      city: r.city,
+      customerId: r.customerId,
+      customerName: r.customerName,
+      createdAt: r.createdAt ? r.createdAt.toISOString() : null,
+      format: fmt,
+    });
+  }
+
+  // Sortera: mest "deletbara" (matchar Modus-format men saknas) först,
+  // sen non_standard, sen missing.
+  const formatRank: Record<NotInExportRow["format"], number> = {
+    modus_prefixed: 0,
+    numeric: 1,
+    non_standard: 2,
+    missing: 3,
+  };
+  notInExport.sort((a, b) => {
+    const r = formatRank[a.format] - formatRank[b.format];
+    if (r !== 0) return r;
+    return (a.objectNumber || "").localeCompare(b.objectNumber || "", "sv");
+  });
+
+  return {
+    totalRows: csvRows.length,
+    csvIdCount: csvIds.size,
+    totalContainers,
+    inExportCount,
+    notInExportCount: notInExport.length,
+    nonStandardFormatCount,
+    noObjectNumberCount,
+    rows: notInExport,
+  };
+}
+
+// Diff-rapport: vilka kärl finns hos oss men inte i den uppladdade Modus-exporten?
+// JSON som default, ?format=csv för nedladdning.
+app.post(
+  "/api/import/modus/objects/objects-not-in-export",
+  requireAdmin,
+  upload.single("file"),
+  asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) throw new ValidationError("Ingen tenant");
+    if (!req.file) throw new ValidationError("Ingen fil uppladdad");
+
+    const result = await computeObjectsNotInExport({
+      tenantId,
+      csvBuffer: req.file.buffer,
+    });
+
+    const wantCsv = String(req.query.format || "").toLowerCase() === "csv";
+    if (wantCsv) {
+      const header = [
+        "objectNumber", "id", "name", "format",
+        "customerName", "address", "city", "createdAt",
+      ];
+      const escape = (v: unknown) => {
+        const s = v == null ? "" : String(v);
+        if (/[";\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+        return s;
+      };
+      const lines = [header.join(";")];
+      for (const r of result.rows) {
+        lines.push([
+          r.objectNumber, r.id, r.name, r.format,
+          r.customerName, r.address, r.city, r.createdAt,
+        ].map(escape).join(";"));
+      }
+      const csv = "\uFEFF" + lines.join("\n") + "\n";
+      const filename = `objects-not-in-modus-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      return res.send(csv);
+    }
+
+    // Begränsa rader i JSON-svar för att hålla payload rimlig (rapporten är
+    // typiskt ~100 rader för Kinab, men vi vill inte krascha frontend om någon
+    // tenant har 50k saknade kärl).
+    const MAX_ROWS_JSON = 5000;
+    res.json({
+      totalRows: result.totalRows,
+      csvIdCount: result.csvIdCount,
+      totalContainers: result.totalContainers,
+      inExportCount: result.inExportCount,
+      notInExportCount: result.notInExportCount,
+      nonStandardFormatCount: result.nonStandardFormatCount,
+      noObjectNumberCount: result.noObjectNumberCount,
+      truncated: result.rows.length > MAX_ROWS_JSON,
+      rows: result.rows.slice(0, MAX_ROWS_JSON),
+    });
+  }),
+);
+
+// Bulk-borttagning av kärl som identifierats som saknade i Modus-exporten.
+// Soft-delete (sätter deleted_at) + audit-logg per objekt så ändringen kan
+// granskas och vid behov backas i framtiden.
+app.post(
+  "/api/import/modus/objects/objects-not-in-export/delete",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) throw new ValidationError("Ingen tenant");
+    const userId = (req as any).user?.id || null;
+
+    const schema = z.object({
+      objectIds: z.array(z.string().min(1)).min(1).max(2000),
+      reason: z.string().max(500).optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+    const { objectIds, reason } = parsed.data;
+
+    // Verifiera att alla objekt tillhör tenant och är karl-nivå innan delete
+    const existing = await db.select({
+      id: objects.id,
+      objectNumber: objects.objectNumber,
+      name: objects.name,
+      hierarchyLevel: objects.hierarchyLevel,
+      deletedAt: objects.deletedAt,
+    })
+      .from(objects)
+      .where(and(
+        eq(objects.tenantId, tenantId),
+        inArray(objects.id, objectIds),
+      ));
+
+    const eligible = existing.filter(o =>
+      o.hierarchyLevel === "karl" && o.deletedAt == null
+    );
+    const ineligibleCount = existing.length - eligible.length;
+    const notFoundCount = objectIds.length - existing.length;
+
+    if (eligible.length === 0) {
+      return res.json({
+        deleted: 0,
+        ineligible: ineligibleCount,
+        notFound: notFoundCount,
+      });
+    }
+
+    const eligibleIds = eligible.map(o => o.id);
+    const now = new Date();
+    await db.update(objects)
+      .set({ deletedAt: now })
+      .where(and(
+        eq(objects.tenantId, tenantId),
+        inArray(objects.id, eligibleIds),
+      ));
+
+    // Audit per objekt så vi kan spåra/backa per id
+    const auditRows = eligible.map(o => ({
+      tenantId,
+      userId,
+      action: "delete_missing_in_modus" as const,
+      resourceType: "object" as const,
+      resourceId: o.id,
+      changes: {
+        before: { deletedAt: null, objectNumber: o.objectNumber, name: o.name },
+        after: { deletedAt: now.toISOString() },
+      },
+      metadata: {
+        source: "modus-objects-not-in-export",
+        reason: reason || null,
+      },
+    }));
+    if (auditRows.length > 0) {
+      await db.insert(auditLogs).values(auditRows);
+    }
+
+    res.json({
+      deleted: eligible.length,
+      ineligible: ineligibleCount,
+      notFound: notFoundCount,
+    });
+  }),
+);
+
 }
