@@ -269,10 +269,157 @@ const MODUS_EVENT_COLUMNS = [
   { name: "Tid", required: true, description: "Tidsstämpel för händelsen" },
 ];
 
+function BatchDetailsDialog({ batchId, open, onClose }: { batchId: string | null; open: boolean; onClose: () => void }) {
+  const batchQuery = useQuery<EnrichBatchStatus>({
+    queryKey: ["/api/import/batches", batchId],
+    enabled: open && !!batchId,
+    refetchInterval: (q) => {
+      const status = q.state.data?.metadata?.status;
+      // Stoppa polling när batchen är klar (eller saknar status — gäller t.ex. icke-enrich-batcher)
+      if (!status || status === "completed" || status === "failed") return false;
+      return 2000;
+    },
+    refetchOnWindowFocus: true,
+  });
+
+  // När en pågående batch blir klar — invalidera historiken så listan uppdateras direkt.
+  const phaseRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const phase = batchQuery.data?.metadata?.status;
+    if (phaseRef.current === "in_progress" && (phase === "completed" || phase === "failed")) {
+      queryClient.invalidateQueries({ queryKey: ["/api/import/history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/import/data-quality"] });
+    }
+    phaseRef.current = phase;
+  }, [batchQuery.data?.metadata?.status]);
+
+  const batch = batchQuery.data;
+  const phase = batch?.metadata?.status;
+  const total = batch?.totalRows ?? 0;
+  const done = batch?.metadata?.rowsProcessed ?? 0;
+  const progressPct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-batch-details">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {phase === "in_progress" && <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />}
+            {phase === "completed" && <CheckCircle className="h-5 w-5 text-green-600" />}
+            {phase === "failed" && <AlertCircle className="h-5 w-5 text-red-600" />}
+            {phase === "in_progress" ? "Berikning pågår" :
+             phase === "completed" ? "Berikning klar" :
+             phase === "failed" ? "Berikning misslyckades" :
+             "Batch-detaljer"}
+          </DialogTitle>
+          <DialogDescription>
+            Batch <code data-testid="text-dialog-batch-id">{batchId}</code>
+            {batch?.createdAt && ` — startad ${format(new Date(batch.createdAt), "d MMM yyyy HH:mm", { locale: sv })}`}
+          </DialogDescription>
+        </DialogHeader>
+
+        {batchQuery.isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : !batch ? (
+          <div className="text-sm text-muted-foreground py-4">Batch hittades inte.</div>
+        ) : (
+          <div className="space-y-4">
+            {phase === "in_progress" && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Bearbetade rader:{" "}
+                    <strong data-testid="text-dialog-progress-rows">{done.toLocaleString("sv-SE")}</strong> / {total.toLocaleString("sv-SE")}
+                  </span>
+                  <span className="font-medium" data-testid="text-dialog-progress-pct">{progressPct}%</span>
+                </div>
+                <Progress value={progressPct} className="h-2" data-testid="progress-dialog-batch" />
+                <div className="text-xs text-muted-foreground">Status uppdateras automatiskt var 2:e sekund.</div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              <div className="p-3 bg-muted/30 rounded border">
+                <div className="text-2xl font-bold text-green-600" data-testid="text-dialog-created">{batch.created ?? 0}</div>
+                <div className="text-xs text-muted-foreground">Nya värden</div>
+              </div>
+              <div className="p-3 bg-muted/30 rounded border">
+                <div className="text-2xl font-bold text-orange-500" data-testid="text-dialog-updated">{batch.updated ?? 0}</div>
+                <div className="text-xs text-muted-foreground">Uppdaterade</div>
+              </div>
+              <div className="p-3 bg-muted/30 rounded border">
+                <div className="text-2xl font-bold text-muted-foreground" data-testid="text-dialog-unchanged">{batch.metadata?.unchanged ?? 0}</div>
+                <div className="text-xs text-muted-foreground">Oförändrade</div>
+              </div>
+              <div className="p-3 bg-muted/30 rounded border">
+                <div className="text-2xl font-bold text-amber-600" data-testid="text-dialog-errors">{batch.errors ?? 0}</div>
+                <div className="text-xs text-muted-foreground">Fel</div>
+              </div>
+            </div>
+
+            {(batch.metadata?.matchedRowCount != null || batch.metadata?.uniqueMatchedObjectCount != null ||
+              (batch.metadata?.unmatchedCount ?? 0) > 0 || (batch.metadata?.invalidIdCount ?? 0) > 0) && (
+              <div className="text-xs text-muted-foreground space-y-1">
+                {batch.metadata?.uniqueMatchedObjectCount != null && (
+                  <div>
+                    <strong>{batch.metadata.uniqueMatchedObjectCount}</strong> unika objekt påverkades av {batch.metadata.matchedRowCount ?? 0} matchade rader.
+                  </div>
+                )}
+                {(batch.metadata?.unmatchedCount ?? 0) > 0 && (
+                  <div>{batch.metadata?.unmatchedCount} omatchade MODUS-id.</div>
+                )}
+                {(batch.metadata?.invalidIdCount ?? 0) > 0 && (
+                  <div>{batch.metadata?.invalidIdCount} rader saknade giltigt MODUS-id.</div>
+                )}
+              </div>
+            )}
+
+            {phase === "failed" && batch.metadata?.failureReason && (
+              <div className="text-sm p-3 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" data-testid="text-dialog-failure-reason">
+                <strong>Felorsak:</strong> {batch.metadata.failureReason}
+              </div>
+            )}
+
+            {(batch.errors ?? 0) > 0 && batch.metadata?.sampleErrors && batch.metadata.sampleErrors.length > 0 && (
+              <div className="text-sm p-3 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+                <strong>Felmeddelanden</strong> (visar första {Math.min(10, batch.metadata.sampleErrors.length)}):
+                <ul className="mt-2 list-disc list-inside text-xs space-y-1">
+                  {batch.metadata.sampleErrors.slice(0, 10).map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {batch.metadata?.metadataColumns && batch.metadata.metadataColumns.length > 0 && (
+              <div className="text-xs text-muted-foreground">
+                <strong>Metadata-kolumner:</strong> {batch.metadata.metadataColumns.join(", ")}
+              </div>
+            )}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} data-testid="button-close-batch-details">Stäng</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ImportHistorySection() {
   const { toast } = useToast();
   const historyQuery = useQuery<any[]>({
     queryKey: ["/api/import/history"],
+    // Polla automatiskt när någon batch är i status "in_progress" så listan visar progress
+    // även om användaren laddar om sidan eller en annan administratör startat körningen.
+    refetchInterval: (q) => {
+      const data = q.state.data;
+      if (!Array.isArray(data)) return false;
+      const hasRunning = data.some((b: any) => b?.metadata?.status === "in_progress");
+      return hasRunning ? 3000 : false;
+    },
+    refetchOnWindowFocus: true,
   });
 
   const rollbackMutation = useMutation({
@@ -312,6 +459,7 @@ function ImportHistorySection() {
   });
 
   const [confirmBatchId, setConfirmBatchId] = useState<string | null>(null);
+  const [detailsBatchId, setDetailsBatchId] = useState<string | null>(null);
   const batches = historyQuery.data || [];
 
   return (
@@ -322,7 +470,7 @@ function ImportHistorySection() {
             <History className="h-5 w-5" />
             Importhistorik
           </CardTitle>
-          <CardDescription>Visa och hantera tidigare importer. Du kan ångra en import genom att inaktivera alla poster i batchen.</CardDescription>
+          <CardDescription>Visa och hantera tidigare importer. Klicka på en rad för att se detaljerad status och progress för pågående eller klara körningar.</CardDescription>
         </CardHeader>
         <CardContent>
           {historyQuery.isLoading ? (
@@ -342,47 +490,81 @@ function ImportHistorySection() {
                 const isRestored = batch.metadata?.restored === true;
                 const isRolledBack = batch.metadata?.rolledBack === true || isRestored;
                 const isInProgress = batch.metadata?.status === "in_progress";
+                const isCompleted = batch.metadata?.status === "completed";
                 const isFailed = batch.metadata?.status === "failed";
+                // Beräkna progress för pågående batcher (rowsProcessed / totalRows)
+                const total = batch.totalRows ?? 0;
+                const done = batch.metadata?.rowsProcessed ?? 0;
+                const progressPct = isInProgress && total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+                // Klicka på raden öppnar detalj-dialogen (men inte när man klickar på Ångra-knappen)
+                const openDetails = () => setDetailsBatchId(batch.batchId);
                 return (
-                  <div key={batch.id} className={`flex items-center justify-between p-3 rounded-lg border ${isRolledBack ? "bg-muted/50 opacity-60" : "bg-background"}`} data-testid={`history-batch-${batch.batchId}`}>
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${isRolledBack ? "bg-gray-400" : isFailed ? "bg-destructive" : isInProgress ? "bg-blue-500 animate-pulse" : batch.errors > 0 ? "bg-amber-500" : "bg-green-500"}`} />
-                      <div>
-                        <div className="font-medium text-sm">
-                          {batch.batchId}
-                          {isRestored && <Badge variant="outline" className="ml-2 text-xs">Återställd</Badge>}
-                          {isRolledBack && !isRestored && <Badge variant="outline" className="ml-2 text-xs">Ångrad</Badge>}
-                          {isCleanup && !isRolledBack && <Badge variant="secondary" className="ml-2 text-xs">Sanering</Badge>}
-                          {isEnrich && !isRolledBack && <Badge variant="secondary" className="ml-2 text-xs">Berikning</Badge>}
-                          {isInProgress && <Badge variant="outline" className="ml-2 text-xs">Pågår</Badge>}
-                          {isFailed && <Badge variant="destructive" className="ml-2 text-xs">Misslyckades</Badge>}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {batch.createdAt ? format(new Date(batch.createdAt), "d MMM yyyy HH:mm", { locale: sv }) : ""}
+                  <div
+                    key={batch.id}
+                    className={`p-3 rounded-lg border transition-colors ${isRolledBack ? "bg-muted/50 opacity-60" : "bg-background hover-elevate active-elevate-2 cursor-pointer"}`}
+                    data-testid={`history-batch-${batch.batchId}`}
+                    onClick={isRolledBack ? undefined : openDetails}
+                    role={isRolledBack ? undefined : "button"}
+                    tabIndex={isRolledBack ? undefined : 0}
+                    onKeyDown={isRolledBack ? undefined : (e) => {
+                      // Ignorera tangenttryckningar som kommer från inre interaktiva element
+                      // (t.ex. Ångra-knappen) så vi inte konkurrerar med deras egen aktivering.
+                      if (e.target !== e.currentTarget) return;
+                      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDetails(); }
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full ${isRolledBack ? "bg-gray-400" : isFailed ? "bg-destructive" : isInProgress ? "bg-blue-500 animate-pulse" : batch.errors > 0 ? "bg-amber-500" : "bg-green-500"}`} />
+                        <div>
+                          <div className="font-medium text-sm">
+                            {batch.batchId}
+                            {isRestored && <Badge variant="outline" className="ml-2 text-xs">Återställd</Badge>}
+                            {isRolledBack && !isRestored && <Badge variant="outline" className="ml-2 text-xs">Ångrad</Badge>}
+                            {isCleanup && !isRolledBack && <Badge variant="secondary" className="ml-2 text-xs">Sanering</Badge>}
+                            {isEnrich && !isRolledBack && <Badge variant="secondary" className="ml-2 text-xs">Berikning</Badge>}
+                            {isInProgress && <Badge variant="outline" className="ml-2 text-xs border-blue-500 text-blue-700 dark:text-blue-300" data-testid={`badge-status-in-progress-${batch.batchId}`}>Pågår</Badge>}
+                            {isCompleted && !isRolledBack && <Badge variant="outline" className="ml-2 text-xs border-green-500 text-green-700 dark:text-green-300" data-testid={`badge-status-completed-${batch.batchId}`}>Klar</Badge>}
+                            {isFailed && <Badge variant="destructive" className="ml-2 text-xs" data-testid={`badge-status-failed-${batch.batchId}`}>Misslyckades</Badge>}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {batch.createdAt ? format(new Date(batch.createdAt), "d MMM yyyy HH:mm", { locale: sv }) : ""}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right text-xs">
-                        <span className="text-green-600 font-medium">{batch.created || 0} nya</span>
-                        <span className="text-muted-foreground mx-1">|</span>
-                        <span className="text-orange-500 dark:text-orange-400">{batch.updated || 0} uppdaterade</span>
-                        <span className="text-muted-foreground mx-1">|</span>
-                        <span className={batch.errors > 0 ? "text-destructive font-medium" : "text-muted-foreground"}>{batch.errors || 0} fel</span>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right text-xs">
+                          <span className="text-green-600 font-medium">{batch.created || 0} nya</span>
+                          <span className="text-muted-foreground mx-1">|</span>
+                          <span className="text-orange-500 dark:text-orange-400">{batch.updated || 0} uppdaterade</span>
+                          <span className="text-muted-foreground mx-1">|</span>
+                          <span className={batch.errors > 0 ? "text-destructive font-medium" : "text-muted-foreground"}>{batch.errors || 0} fel</span>
+                        </div>
+                        {!isRolledBack && !isInProgress && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => { e.stopPropagation(); setConfirmBatchId(batch.batchId); }}
+                            disabled={rollbackMutation.isPending}
+                            data-testid={`button-rollback-${batch.batchId}`}
+                          >
+                            <Undo2 className="h-3 w-3 mr-1" />
+                            Ångra
+                          </Button>
+                        )}
                       </div>
-                      {!isRolledBack && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setConfirmBatchId(batch.batchId)}
-                          disabled={rollbackMutation.isPending}
-                          data-testid={`button-rollback-${batch.batchId}`}
-                        >
-                          <Undo2 className="h-3 w-3 mr-1" />
-                          Ångra
-                        </Button>
-                      )}
                     </div>
+                    {isInProgress && (
+                      <div className="mt-3 space-y-1" data-testid={`progress-row-${batch.batchId}`}>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>
+                            {done.toLocaleString("sv-SE")} / {total.toLocaleString("sv-SE")} rader
+                          </span>
+                          <span className="font-medium" data-testid={`text-progress-pct-${batch.batchId}`}>{progressPct}%</span>
+                        </div>
+                        <Progress value={progressPct} className="h-1.5" />
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -390,6 +572,12 @@ function ImportHistorySection() {
           )}
         </CardContent>
       </Card>
+
+      <BatchDetailsDialog
+        batchId={detailsBatchId}
+        open={!!detailsBatchId}
+        onClose={() => setDetailsBatchId(null)}
+      />
 
       <AlertDialog open={!!confirmBatchId} onOpenChange={(open) => { if (!open) setConfirmBatchId(null); }}>
         <AlertDialogContent>
