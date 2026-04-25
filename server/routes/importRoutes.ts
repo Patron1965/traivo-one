@@ -11,9 +11,9 @@ import multer from "multer";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { importJobs, notifyImportProgress } from "./helpers";
-import { geocodeAddress } from "../google-geocoding";
+import { geocodeAddress, reverseGeocode } from "../google-geocoding";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
-import { objects, workOrders, customers, objectMetadata, workOrderLines, metadataKatalog, fortnoxMappings, customerServiceContracts, type InsertFortnoxContractSuggestion, type InsertWorkOrder } from "@shared/schema";
+import { objects, workOrders, customers, objectMetadata, workOrderLines, metadataKatalog, fortnoxMappings, customerServiceContracts, importBatches, auditLogs, type InsertFortnoxContractSuggestion, type InsertWorkOrder } from "@shared/schema";
 import { createMetadata, getAllMetadataTypes } from "../metadata-queries";
 import { ensureClusterForCustomer, updateClusterCache } from "../auto-cluster";
 
@@ -3376,6 +3376,11 @@ app.post("/api/import/rollback/:batchId", requireAdmin, asyncHandler(async (req,
     const [batch] = await db.select().from(importBatches)
       .where(and(eq(importBatches.batchId, batchId), eq(importBatches.tenantId, tenantId)));
     if (!batch) throw new NotFoundError("Import-batch hittades inte");
+
+    // Cleanup-batches får INTE rollas tillbaka via delete — de hanteras av separat restore-endpoint
+    if (batchId.startsWith("cleanup-")) {
+      throw new ValidationError("Sanering-batches kan inte ångras via radering. Använd 'Återställ sanering' istället för att läsa tillbaka från audit-loggen.");
+    }
     
     const deletedObjects = await db.execute(sql`
       UPDATE objects SET deleted_at = NOW(), status = 'deleted'
@@ -3609,6 +3614,22 @@ app.get("/api/import/data-quality", asyncHandler(async (req, res) => {
         isNull(workOrders.scheduledDate),
       ));
 
+    // Namn-skräp på kärl-nivå (Task #240)
+    const karlBase = and(
+      eq(objects.tenantId, tenantId),
+      isNull(objects.deletedAt),
+      eq(objects.hierarchyLevel, "karl"),
+    );
+    const [karlTotal] = await db.select({ count: sql<number>`count(*)` }).from(objects).where(karlBase);
+    const [karlPhone] = await db.select({ count: sql<number>`count(*)` }).from(objects)
+      .where(and(karlBase, sql`${objects.name} ~ '^[\\d\\s\\-+()]{6,}$'`));
+    const [karlNumeric] = await db.select({ count: sql<number>`count(*)` }).from(objects)
+      .where(and(karlBase, sql`${objects.name} ~ '^\\d{1,5}$'`));
+    const [karlPerson] = await db.select({ count: sql<number>`count(*)` }).from(objects)
+      .where(and(karlBase, sql`${objects.name} ~ '^[A-ZÅÄÖ][a-zåäöé]+ [A-ZÅÄÖ][a-zåäöé]+$'`));
+    const [karlInstruction] = await db.select({ count: sql<number>`count(*)` }).from(objects)
+      .where(and(karlBase, sql`${objects.name} ~* '(ring|kontakta|fastighetssk|skicka|tillträde|innan|nyckel|portkod|hämta)'`));
+
     res.json({
       objects: {
         total: Number(totalObjects.count),
@@ -3625,6 +3646,13 @@ app.get("/api/import/data-quality", asyncHandler(async (req, res) => {
         missingResource: Number(woNoResource.count),
         pastStillCreated: Number(woPastStillCreated.count),
         noDateStillCreated: Number(woNoDateCreated.count),
+      },
+      containerNames: {
+        total: Number(karlTotal.count),
+        phone: Number(karlPhone.count),
+        person: Number(karlPerson.count),
+        instruction: Number(karlInstruction.count),
+        numeric: Number(karlNumeric.count),
       },
     });
 }));
@@ -3902,6 +3930,580 @@ app.post("/api/import/repair/work-order-status", requireAdmin, asyncHandler(asyn
       noDateOrdersUpdated: noDateCount,
       totalUpdated: pastCount + noDateCount,
     });
+}));
+
+// ============================================================
+// SANERING — Task #240: Namn-rensning, föräldra-koppling, adress-backfill
+// Alla endpoints följer dryrun (preview) + commit (apply) mönster
+// med audit-logg och eget importBatchId så det går att rollback
+// ============================================================
+
+type ContaminationKind = "phone" | "person" | "instruction" | "numeric";
+
+function classifyName(name: string): ContaminationKind | null {
+  const trimmed = (name || "").trim();
+  if (!trimmed) return null;
+  if (/^[\d\s\-+()]{6,}$/.test(trimmed)) return "phone";
+  if (/^\d{1,5}$/.test(trimmed)) return "numeric";
+  if (/^[A-ZÅÄÖ][a-zåäöé]+ [A-ZÅÄÖ][a-zåäöé]+$/.test(trimmed)) return "person";
+  if (/(ring|kontakta|fastighetssk|skicka|tillträde|innan|nyckel|portkod|hämta)/i.test(trimmed)) return "instruction";
+  return null;
+}
+
+function suggestNewName(obj: { address: string | null; objectNumber: string | null; parentName?: string | null }): string {
+  if (obj.address) return `Kärl – ${obj.address}`;
+  if (obj.parentName) return `Kärl – ${obj.parentName}`;
+  if (obj.objectNumber) return `Kärl ${obj.objectNumber}`;
+  return "Kärl (namn saknas)";
+}
+
+// Steg 2: Namn-rensning — preview
+app.get("/api/import/cleanup/names/preview", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const kindFilter = (req.query.kind as string) || "all";
+  const limit = Math.min(parseInt((req.query.limit as string) || "200"), 1000);
+
+  const candidates = await db.select({
+    id: objects.id,
+    name: objects.name,
+    objectNumber: objects.objectNumber,
+    address: objects.address,
+    parentId: objects.parentId,
+    accessInfo: objects.accessInfo,
+    notes: objects.notes,
+  }).from(objects).where(and(
+    eq(objects.tenantId, tenantId),
+    isNull(objects.deletedAt),
+    eq(objects.hierarchyLevel, "karl"),
+    sql`(${objects.name} ~ '^[\\d\\s\\-+()]{6,}$' OR ${objects.name} ~ '^\\d{1,5}$' OR ${objects.name} ~ '^[A-ZÅÄÖ][a-zåäöé]+ [A-ZÅÄÖ][a-zåäöé]+$' OR ${objects.name} ~* '(ring|kontakta|fastighetssk|skicka|tillträde|innan|nyckel|portkod|hämta)')`,
+  )).limit(limit);
+
+  const parentIds = Array.from(new Set(candidates.map(c => c.parentId).filter((p): p is string => !!p)));
+  const parentRows = parentIds.length > 0
+    ? await db.select({ id: objects.id, name: objects.name, address: objects.address })
+        .from(objects).where(and(
+          eq(objects.tenantId, tenantId),
+          inArray(objects.id, parentIds),
+          isNull(objects.deletedAt),
+        ))
+    : [];
+  const parentMap = new Map(parentRows.map(p => [p.id, p]));
+
+  const proposals = candidates.map(c => {
+    const kind = classifyName(c.name);
+    if (!kind) return null;
+    if (kindFilter !== "all" && kindFilter !== kind) return null;
+    const parent = c.parentId ? parentMap.get(c.parentId) : null;
+    const targetField = kind === "phone" ? "accessInfo.phone"
+      : kind === "person" ? "accessInfo.contactPerson"
+      : kind === "instruction" ? "notes"
+      : "discard";
+    return {
+      id: c.id,
+      kind,
+      currentName: c.name,
+      objectNumber: c.objectNumber,
+      address: c.address,
+      parentName: parent?.name || null,
+      suggestedName: suggestNewName({ address: c.address, objectNumber: c.objectNumber, parentName: parent?.name }),
+      moveTo: targetField,
+    };
+  }).filter((p): p is NonNullable<typeof p> => p !== null);
+
+  res.json({
+    total: proposals.length,
+    proposals,
+    truncated: candidates.length === limit,
+  });
+}));
+
+// Steg 2: Namn-rensning — commit (transaktionellt + state-guard)
+app.post("/api/import/cleanup/names/apply", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const userId = (req as any).user?.id || null;
+  const rawIds: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const ids = Array.from(new Set(rawIds.filter(x => typeof x === "string" && x.length > 0)));
+  if (ids.length === 0) throw new ValidationError("Inga objekt valda");
+  if (ids.length > 5000) throw new ValidationError("Max 5000 objekt per körning");
+
+  const batchId = `cleanup-names-${Date.now()}`;
+
+  const result = await db.transaction(async (tx) => {
+    // Hämta endast kärl tillhörande denna tenant — låser raderna under transaktionen
+    const targets = await tx.select({
+      id: objects.id, name: objects.name, objectNumber: objects.objectNumber,
+      address: objects.address, parentId: objects.parentId,
+      accessInfo: objects.accessInfo, notes: objects.notes,
+    }).from(objects).where(and(
+      eq(objects.tenantId, tenantId),
+      eq(objects.hierarchyLevel, "karl"),
+      inArray(objects.id, ids),
+      isNull(objects.deletedAt),
+    ));
+
+    const parentIds = Array.from(new Set(targets.map(t => t.parentId).filter((p): p is string => !!p)));
+    const parentRows = parentIds.length > 0
+      ? await tx.select({ id: objects.id, name: objects.name })
+          .from(objects).where(and(
+            eq(objects.tenantId, tenantId),
+            inArray(objects.id, parentIds),
+          ))
+      : [];
+    const parentMap = new Map(parentRows.map(p => [p.id, p.name]));
+
+    const auditEntries: any[] = [];
+    let updated = 0;
+    let skipped = 0;
+
+    for (const t of targets) {
+      const kind = classifyName(t.name);
+      if (!kind) { skipped++; continue; }
+
+      const parentName = t.parentId ? parentMap.get(t.parentId) || null : null;
+      const newName = suggestNewName({ address: t.address, objectNumber: t.objectNumber, parentName });
+      const ai = (t.accessInfo as Record<string, any>) || {};
+      const updates: Record<string, any> = { name: newName, importBatchId: batchId };
+
+      if (kind === "phone") {
+        updates.accessInfo = { ...ai, phone: t.name };
+      } else if (kind === "person") {
+        updates.accessInfo = { ...ai, contactPerson: t.name };
+      } else if (kind === "instruction") {
+        const existingNotes = t.notes ? `${t.notes}\n\n` : "";
+        updates.notes = `${existingNotes}Importerad anteckning: ${t.name}`;
+      }
+
+      // State-guard: uppdatera bara om namnet är oförändrat sedan vi läste det
+      const upd = await tx.update(objects).set(updates).where(and(
+        eq(objects.id, t.id),
+        eq(objects.tenantId, tenantId),
+        eq(objects.hierarchyLevel, "karl"),
+        eq(objects.name, t.name),
+        isNull(objects.deletedAt),
+      )).returning({ id: objects.id });
+
+      if (upd.length === 0) { skipped++; continue; }
+
+      auditEntries.push({
+        tenantId, userId, action: "cleanup_names", resourceType: "objects", resourceId: t.id,
+        changes: {
+          before: { name: t.name, accessInfo: ai, notes: t.notes },
+          after: { name: newName, kind, moveTo: kind === "phone" ? "accessInfo.phone" : kind === "person" ? "accessInfo.contactPerson" : kind === "instruction" ? "notes" : "discard" },
+        },
+        metadata: { batchId, source: "cleanup-names" },
+      });
+      updated++;
+    }
+
+    if (auditEntries.length > 0) {
+      await tx.insert(auditLogs).values(auditEntries);
+    }
+
+    await tx.insert(importBatches).values({
+      tenantId, batchId, totalRows: targets.length, created: 0, updated, errors: 0,
+      metadata: { source: "cleanup-names", userId, skipped },
+    });
+
+    return { updated, skipped, total: targets.length };
+  });
+
+  res.json({ batchId, ...result });
+}));
+
+// Steg 3: Föräldra-koppling — preview (förslag baserat på samma kund + adress + koordinat)
+app.get("/api/import/cleanup/parents/preview", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const limit = Math.min(parseInt((req.query.limit as string) || "200"), 1000);
+
+  const orphans = await db.select({
+    id: objects.id, name: objects.name, customerId: objects.customerId,
+    address: objects.address, city: objects.city,
+    latitude: objects.latitude, longitude: objects.longitude,
+  }).from(objects).where(and(
+    eq(objects.tenantId, tenantId),
+    isNull(objects.deletedAt),
+    eq(objects.hierarchyLevel, "karl"),
+    isNull(objects.parentId),
+  )).limit(limit);
+
+  // Hämta alla möjliga föräldra-kandidater (rum) per kund
+  const customerIds = Array.from(new Set(orphans.map(o => o.customerId).filter((c): c is string => !!c)));
+  const candidates = customerIds.length > 0
+    ? await db.select({
+        id: objects.id, name: objects.name, customerId: objects.customerId,
+        address: objects.address, city: objects.city,
+        latitude: objects.latitude, longitude: objects.longitude,
+      }).from(objects).where(and(
+        eq(objects.tenantId, tenantId),
+        isNull(objects.deletedAt),
+        inArray(objects.customerId, customerIds),
+        sql`${objects.hierarchyLevel} IN ('rum','fastighet','brf')`,
+      ))
+    : [];
+
+  const candidatesByCustomer = new Map<string, typeof candidates>();
+  for (const c of candidates) {
+    const list = candidatesByCustomer.get(c.customerId) || [];
+    list.push(c);
+    candidatesByCustomer.set(c.customerId, list);
+  }
+
+  const norm = (s: string | null) => (s || "").toLowerCase().replace(/[^\wåäö]/g, " ").replace(/\s+/g, " ").trim();
+  const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371, toRad = (x: number) => x * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  };
+
+  const proposals = orphans.map(o => {
+    const pool = candidatesByCustomer.get(o.customerId || "") || [];
+    if (pool.length === 0) return null;
+    const orphanAddr = norm(o.address);
+    const scored = pool.map(p => {
+      let score = 0;
+      const reasons: string[] = [];
+      if (orphanAddr && norm(p.address) && norm(p.address) === orphanAddr) {
+        score += 100; reasons.push("samma adress");
+      } else if (orphanAddr && norm(p.address) && (norm(p.address).includes(orphanAddr) || orphanAddr.includes(norm(p.address)))) {
+        score += 60; reasons.push("liknande adress");
+      }
+      if (o.latitude && o.longitude && p.latitude && p.longitude) {
+        const dist = haversineKm(o.latitude, o.longitude, p.latitude, p.longitude);
+        if (dist < 0.05) { score += 40; reasons.push(`${Math.round(dist * 1000)} m`); }
+        else if (dist < 0.5) { score += 20; reasons.push(`${dist.toFixed(2)} km`); }
+        else if (dist < 2) { score += 5; reasons.push(`${dist.toFixed(1)} km`); }
+      }
+      return { id: p.id, name: p.name, address: p.address, score, reasons };
+    }).filter(x => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 3);
+
+    if (scored.length === 0) return null;
+    return {
+      id: o.id,
+      name: o.name,
+      address: o.address,
+      city: o.city,
+      candidates: scored,
+    };
+  }).filter((p): p is NonNullable<typeof p> => p !== null);
+
+  res.json({
+    total: proposals.length,
+    proposals,
+    truncated: orphans.length === limit,
+    orphansAnalyzed: orphans.length,
+  });
+}));
+
+// Steg 3: Föräldra-koppling — commit (transaktionellt + dedupe + guard)
+app.post("/api/import/cleanup/parents/apply", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const userId = (req as any).user?.id || null;
+  const raw: Array<{ objectId: string; parentId: string }> = Array.isArray(req.body?.assignments) ? req.body.assignments : [];
+  // Dedupe: en objectId får bara en parentId per request (sista vinner ersätts av första)
+  const seen = new Set<string>();
+  const assignments = raw.filter(a => {
+    if (!a || typeof a.objectId !== "string" || typeof a.parentId !== "string") return false;
+    if (a.objectId === a.parentId) return false; // self-parent
+    if (seen.has(a.objectId)) return false;
+    seen.add(a.objectId);
+    return true;
+  });
+  if (assignments.length === 0) throw new ValidationError("Inga giltiga kopplingar");
+  if (assignments.length > 5000) throw new ValidationError("Max 5000 kopplingar per körning");
+
+  const batchId = `cleanup-parents-${Date.now()}`;
+  const objIds = assignments.map(a => a.objectId);
+  const parentIds = Array.from(new Set(assignments.map(a => a.parentId)));
+
+  const result = await db.transaction(async (tx) => {
+    const objs = await tx.select({
+      id: objects.id, parentId: objects.parentId, customerId: objects.customerId,
+      hierarchyLevel: objects.hierarchyLevel,
+    }).from(objects).where(and(
+      eq(objects.tenantId, tenantId),
+      inArray(objects.id, objIds),
+      isNull(objects.deletedAt),
+    ));
+    const objMap = new Map(objs.map(o => [o.id, o]));
+
+    const parents = await tx.select({
+      id: objects.id, customerId: objects.customerId, hierarchyLevel: objects.hierarchyLevel,
+    }).from(objects).where(and(
+      eq(objects.tenantId, tenantId),
+      inArray(objects.id, parentIds),
+      isNull(objects.deletedAt),
+    ));
+    const parentMap = new Map(parents.map(p => [p.id, p]));
+    const ALLOWED_PARENT_LEVELS = new Set(["rum", "fastighet", "brf"]);
+
+    const auditEntries: any[] = [];
+    let updated = 0;
+    let skipped = 0;
+
+    for (const a of assignments) {
+      const obj = objMap.get(a.objectId);
+      if (!obj) { skipped++; continue; }
+      if (obj.hierarchyLevel !== "karl") { skipped++; continue; } // bara kärl får ny parent här
+      if (obj.parentId) { skipped++; continue; }
+
+      const parent = parentMap.get(a.parentId);
+      if (!parent) { skipped++; continue; }
+      if (parent.customerId !== obj.customerId) { skipped++; continue; }
+      if (!ALLOWED_PARENT_LEVELS.has(parent.hierarchyLevel || "")) { skipped++; continue; }
+
+      // State-guard: ta bara om parent_id fortfarande är null
+      const upd = await tx.update(objects).set({
+        parentId: a.parentId,
+        importBatchId: batchId,
+      }).where(and(
+        eq(objects.id, a.objectId),
+        eq(objects.tenantId, tenantId),
+        eq(objects.hierarchyLevel, "karl"),
+        isNull(objects.parentId),
+        isNull(objects.deletedAt),
+      )).returning({ id: objects.id });
+
+      if (upd.length === 0) { skipped++; continue; }
+
+      auditEntries.push({
+        tenantId, userId, action: "cleanup_parents", resourceType: "objects", resourceId: a.objectId,
+        changes: { before: { parentId: null }, after: { parentId: a.parentId } },
+        metadata: { batchId, source: "cleanup-parents" },
+      });
+      updated++;
+    }
+
+    if (auditEntries.length > 0) {
+      await tx.insert(auditLogs).values(auditEntries);
+    }
+
+    await tx.insert(importBatches).values({
+      tenantId, batchId, totalRows: assignments.length, created: 0, updated, errors: 0,
+      metadata: { source: "cleanup-parents", userId, skipped },
+    });
+
+    return { updated, skipped, total: assignments.length };
+  });
+
+  res.json({ batchId, ...result });
+}));
+
+// Steg 4: Adress-backfill — preview
+app.get("/api/import/cleanup/address/preview", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const limit = Math.min(parseInt((req.query.limit as string) || "100"), 500);
+
+  const missing = await db.select({
+    id: objects.id, name: objects.name, parentId: objects.parentId,
+    latitude: objects.latitude, longitude: objects.longitude,
+  }).from(objects).where(and(
+    eq(objects.tenantId, tenantId),
+    isNull(objects.deletedAt),
+    eq(objects.hierarchyLevel, "karl"),
+    sql`(${objects.address} IS NULL OR ${objects.address} = '')`,
+  )).limit(limit);
+
+  const parentIds = Array.from(new Set(missing.map(m => m.parentId).filter((p): p is string => !!p)));
+  const parents = parentIds.length > 0
+    ? await db.select({
+        id: objects.id, address: objects.address, city: objects.city, postalCode: objects.postalCode,
+      }).from(objects).where(and(
+        eq(objects.tenantId, tenantId),
+        inArray(objects.id, parentIds),
+        isNull(objects.deletedAt),
+      ))
+    : [];
+  const parentMap = new Map(parents.map(p => [p.id, p]));
+
+  const proposals: any[] = [];
+  let reverseGeocoded = 0;
+  for (const m of missing) {
+    const parent = m.parentId ? parentMap.get(m.parentId) : null;
+    if (parent && parent.address) {
+      proposals.push({
+        id: m.id, name: m.name, source: "parent",
+        suggestedAddress: parent.address,
+        suggestedCity: parent.city,
+        suggestedPostalCode: parent.postalCode,
+      });
+    } else if (m.latitude && m.longitude && reverseGeocoded < 25) {
+      // Begränsa omvänd-geokod till max 25 per preview för att skona API:t
+      const result = await reverseGeocode(m.latitude, m.longitude, tenantId);
+      reverseGeocoded++;
+      if (result?.city) {
+        proposals.push({
+          id: m.id, name: m.name, source: "reverse-geocode",
+          suggestedAddress: null,
+          suggestedCity: result.city,
+          suggestedPostalCode: result.postalCode || null,
+        });
+      }
+      await new Promise(r => setTimeout(r, 200));
+    }
+  }
+
+  res.json({
+    total: proposals.length,
+    proposals,
+    truncated: missing.length === limit,
+    note: reverseGeocoded > 0 ? `Omvänd-geokod begränsad till 25 per förhandsgranskning. Kör flera gånger om fler behövs.` : null,
+  });
+}));
+
+// Steg 4: Adress-backfill — commit
+app.post("/api/import/cleanup/address/apply", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const userId = (req as any).user?.id || null;
+  const raw: Array<{ id: string; address?: string | null; city?: string | null; postalCode?: string | null }> = Array.isArray(req.body?.items) ? req.body.items : [];
+  const seenIds = new Set<string>();
+  const items = raw.filter(i => {
+    if (!i || typeof i.id !== "string") return false;
+    if (seenIds.has(i.id)) return false;
+    seenIds.add(i.id);
+    return true;
+  });
+  if (items.length === 0) throw new ValidationError("Inga adresser att skriva");
+  if (items.length > 5000) throw new ValidationError("Max 5000 per körning");
+
+  const batchId = `cleanup-address-${Date.now()}`;
+  const ids = items.map(i => i.id);
+
+  const result = await db.transaction(async (tx) => {
+    const existing = await tx.select({
+      id: objects.id, address: objects.address, city: objects.city, postalCode: objects.postalCode,
+      hierarchyLevel: objects.hierarchyLevel,
+    }).from(objects).where(and(
+      eq(objects.tenantId, tenantId),
+      inArray(objects.id, ids),
+      isNull(objects.deletedAt),
+    ));
+    const existingMap = new Map(existing.map(e => [e.id, e]));
+
+    const auditEntries: any[] = [];
+    let updated = 0;
+    let skipped = 0;
+
+    for (const item of items) {
+      const before = existingMap.get(item.id);
+      if (!before) { skipped++; continue; }
+      if (before.hierarchyLevel !== "karl") { skipped++; continue; }
+      if (before.address && before.address.trim() !== "") { skipped++; continue; }
+
+      const updates: Record<string, any> = { importBatchId: batchId };
+      if (item.address !== undefined && item.address !== null) updates.address = item.address;
+      if (item.city !== undefined && item.city !== null) updates.city = item.city;
+      if (item.postalCode !== undefined && item.postalCode !== null) updates.postalCode = item.postalCode;
+      if (Object.keys(updates).length === 1) { skipped++; continue; }
+
+      // State-guard: bara om adress fortfarande är tom/null
+      const upd = await tx.update(objects).set(updates).where(and(
+        eq(objects.id, item.id),
+        eq(objects.tenantId, tenantId),
+        eq(objects.hierarchyLevel, "karl"),
+        sql`(${objects.address} IS NULL OR ${objects.address} = '')`,
+        isNull(objects.deletedAt),
+      )).returning({ id: objects.id });
+
+      if (upd.length === 0) { skipped++; continue; }
+
+      auditEntries.push({
+        tenantId, userId, action: "cleanup_address", resourceType: "objects", resourceId: item.id,
+        changes: {
+          before: { address: before.address, city: before.city, postalCode: before.postalCode },
+          after: { address: updates.address, city: updates.city, postalCode: updates.postalCode },
+        },
+        metadata: { batchId, source: "cleanup-address" },
+      });
+      updated++;
+    }
+
+    if (auditEntries.length > 0) {
+      await tx.insert(auditLogs).values(auditEntries);
+    }
+
+    await tx.insert(importBatches).values({
+      tenantId, batchId, totalRows: items.length, created: 0, updated, errors: 0,
+      metadata: { source: "cleanup-address", userId, skipped },
+    });
+
+    return { updated, skipped, total: items.length };
+  });
+
+  res.json({ batchId, ...result });
+}));
+
+// Återställ en sanering-batch via audit-loggen (inverse restore — INTE delete)
+app.post("/api/import/cleanup/restore/:batchId", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const userId = (req as any).user?.id || null;
+  const { batchId } = req.params;
+
+  if (!batchId.startsWith("cleanup-")) {
+    throw new ValidationError("Endast sanering-batches kan återställas via denna endpoint");
+  }
+
+  const [batch] = await db.select().from(importBatches)
+    .where(and(eq(importBatches.batchId, batchId), eq(importBatches.tenantId, tenantId)));
+  if (!batch) throw new NotFoundError("Sanering-batch hittades inte");
+
+  const action = batchId.startsWith("cleanup-names-") ? "cleanup_names"
+    : batchId.startsWith("cleanup-parents-") ? "cleanup_parents"
+    : batchId.startsWith("cleanup-address-") ? "cleanup_address"
+    : null;
+  if (!action) throw new ValidationError("Okänd sanering-typ");
+
+  const result = await db.transaction(async (tx) => {
+    const entries = await tx.select().from(auditLogs).where(and(
+      eq(auditLogs.tenantId, tenantId),
+      eq(auditLogs.action, action),
+      sql`${auditLogs.metadata}->>'batchId' = ${batchId}`,
+    ));
+
+    let restored = 0;
+    let skipped = 0;
+    const restoreAudit: any[] = [];
+
+    for (const entry of entries) {
+      const before = (entry.changes as any)?.before;
+      if (!before || !entry.resourceId) { skipped++; continue; }
+
+      const restoreFields: Record<string, any> = {};
+      if ("name" in before) restoreFields.name = before.name;
+      if ("accessInfo" in before) restoreFields.accessInfo = before.accessInfo;
+      if ("notes" in before) restoreFields.notes = before.notes;
+      if ("parentId" in before) restoreFields.parentId = before.parentId;
+      if ("address" in before) restoreFields.address = before.address;
+      if ("city" in before) restoreFields.city = before.city;
+      if ("postalCode" in before) restoreFields.postalCode = before.postalCode;
+
+      if (Object.keys(restoreFields).length === 0) { skipped++; continue; }
+
+      const upd = await tx.update(objects).set(restoreFields).where(and(
+        eq(objects.id, entry.resourceId),
+        eq(objects.tenantId, tenantId),
+        eq(objects.importBatchId, batchId),
+        isNull(objects.deletedAt),
+      )).returning({ id: objects.id });
+
+      if (upd.length === 0) { skipped++; continue; }
+
+      restoreAudit.push({
+        tenantId, userId, action: `${action}_restore`, resourceType: "objects", resourceId: entry.resourceId,
+        changes: { before: (entry.changes as any)?.after, after: before },
+        metadata: { batchId, restoredFromBatch: batchId, source: "cleanup-restore" },
+      });
+      restored++;
+    }
+
+    if (restoreAudit.length > 0) {
+      await tx.insert(auditLogs).values(restoreAudit);
+    }
+
+    return { restored, skipped, total: entries.length };
+  });
+
+  res.json({ batchId, ...result });
 }));
 
 }

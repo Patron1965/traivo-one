@@ -8,10 +8,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import {
   MapPin, AlertTriangle, CheckCircle, Loader2, RefreshCw,
-  Building2, Truck, GitBranch, Navigation, FileUp, Save, Pencil, X
+  Building2, Truck, GitBranch, Navigation, FileUp, Save, Pencil, X,
+  Phone, User, MessageSquare, Hash
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { CleanupPanels } from "@/components/CleanupPanels";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 
 interface DataQualityStats {
   objects: {
@@ -29,6 +32,13 @@ interface DataQualityStats {
     missingResource: number;
     pastStillCreated: number;
     noDateStillCreated: number;
+  };
+  containerNames?: {
+    total: number;
+    phone: number;
+    person: number;
+    instruction: number;
+    numeric: number;
   };
 }
 
@@ -224,6 +234,46 @@ export function DataQualityDashboard() {
     },
   ];
 
+  const cn = stats.containerNames;
+  const nameIssues = cn ? [
+    {
+      key: "name-phone",
+      label: "Telefonnummer som kärlnamn",
+      tooltip: "Kärl där hela namnet bara består av siffror och separatorer (telefonnummer som råkat hamna i namn-fältet vid import).",
+      count: cn.phone, total: cn.total,
+      icon: Phone, color: "text-blue-600",
+      bgColor: "bg-blue-50 dark:bg-blue-950/20",
+      borderColor: "border-blue-200 dark:border-blue-800",
+    },
+    {
+      key: "name-person",
+      label: "Personnamn som kärlnamn",
+      tooltip: "Kärl där namnet ser ut som ett för- och efternamn (kontaktperson som råkat hamna som kärlnamn).",
+      count: cn.person, total: cn.total,
+      icon: User, color: "text-purple-600",
+      bgColor: "bg-purple-50 dark:bg-purple-950/20",
+      borderColor: "border-purple-200 dark:border-purple-800",
+    },
+    {
+      key: "name-instruction",
+      label: "Instruktioner som kärlnamn",
+      tooltip: "Kärl med instruktionstext i namn-fältet (t.ex. 'Ring en dag innan', 'Hämta nyckel hos vaktmästare').",
+      count: cn.instruction, total: cn.total,
+      icon: MessageSquare, color: "text-amber-600",
+      bgColor: "bg-amber-50 dark:bg-amber-950/20",
+      borderColor: "border-amber-200 dark:border-amber-800",
+    },
+    {
+      key: "name-numeric",
+      label: "Korta sifferkombinationer",
+      tooltip: "Kärl vars namn är en kort sifferkombination (1-5 siffror) — sannolikt ett objektnummer som hamnat i namn-fältet.",
+      count: cn.numeric, total: cn.total,
+      icon: Hash, color: "text-slate-600",
+      bgColor: "bg-slate-50 dark:bg-slate-900/40",
+      borderColor: "border-slate-200 dark:border-slate-800",
+    },
+  ] : [];
+
   const handleHierarchyFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -313,6 +363,40 @@ export function DataQualityDashboard() {
           </Card>
         ))}
       </div>
+
+      {nameIssues.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              Namn-skräp på kärl
+              <HelpTooltip content="Vid Modus-import hamnade ofta kontaktinfo (telefonnummer, namn, instruktioner) i namn-fältet istället för i avsedda fält. Sanering flyttar värdena till rätt fält och döper om kärlen utan att förlora information." />
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {nameIssues.map(issue => (
+                <div
+                  key={issue.key}
+                  className={`p-3 rounded-lg border ${issue.borderColor} ${issue.bgColor}`}
+                  data-testid={`card-name-issue-${issue.key}`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <issue.icon className={`h-4 w-4 ${issue.color}`} />
+                    <span className="text-xs font-medium">{issue.label}</span>
+                    <HelpTooltip content={issue.tooltip} />
+                  </div>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-2xl font-bold" data-testid={`text-count-${issue.key}`}>{issue.count.toLocaleString("sv-SE")}</span>
+                    <span className="text-xs text-muted-foreground">av {issue.total.toLocaleString("sv-SE")}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <CleanupPanels />
 
       <Card>
         <CardHeader>
