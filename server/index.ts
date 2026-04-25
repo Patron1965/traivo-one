@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./seed";
 import { fixInitialOwnerRole } from "./startup-fixes";
+import { startImportBatchWatchdog } from "./import-batch-watchdog";
 import { AppError } from "./errors";
 
 const app = express();
@@ -144,7 +145,36 @@ process.on('exit', (code) => {
     } catch (error) {
       console.error("[startup] Failed to run owner role fix:", error);
     }
-    
+
+    // Återhämta avbrutna berikningskörningar (Task #253). Vid uppstart är alla
+    // import_batches med metadata.status='in_progress' per definition övergivna
+    // — processen som ägde dem är död. Markera dem som failed med tydlig orsak
+    // så UI inte fastnar i progress-läget och användaren kan starta om.
+    try {
+      console.log('[startup] Running import-batch watchdog...');
+      const recovered = await startImportBatchWatchdog();
+      // Operationell sammanfattning på en rad så det går enkelt att grepa i
+      // produktionsloggar för incidentdiagnostik (scanned/recovered/raced/errors).
+      console.log(
+        `[startup] [import-watchdog] summary scanned=${recovered.scanned} recovered=${recovered.recovered.length} raced=${recovered.raced.length} errors=${recovered.errors.length}`,
+      );
+      if (recovered.recovered.length > 0) {
+        console.log(
+          `[startup] Watchdog markerade ${recovered.recovered.length} övergiven(a) batch(es) som failed: ${recovered.recovered.join(", ")}`,
+        );
+      }
+      if (recovered.raced.length > 0) {
+        console.log(
+          `[startup] Watchdog hoppade över ${recovered.raced.length} batch(es) som hann progressera under racet: ${recovered.raced.join(", ")}`,
+        );
+      }
+      if (recovered.errors.length > 0) {
+        console.error('[startup] Watchdog kunde inte markera några batches:', recovered.errors);
+      }
+    } catch (error) {
+      console.error("[startup] Failed to run import-batch watchdog:", error);
+    }
+
     console.log('[startup] Registering routes...');
     await registerRoutes(httpServer, app);
     console.log('[startup] Routes registered');

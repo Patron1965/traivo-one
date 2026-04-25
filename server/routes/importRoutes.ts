@@ -4798,6 +4798,12 @@ app.post("/api/import/modus/objects/enrich/apply", requireAdmin, upload.single("
     throw new ValidationError("Inga metadata-kolumner att importera (varken 'Metadata - *' eller columnMapping)");
   }
 
+  // OBS: Prefixet "enrich-modus-" är ett kontrakt med
+  // server/import-batch-watchdog.ts — watchdogen filtrerar på
+  // `batch_id LIKE 'enrich-modus-%'` för att bara markera berikningskörningar
+  // som failed efter omstart/hängning. Byt INTE prefix utan att samtidigt
+  // uppdatera watchdogens filter (annars slutar automatisk återhämtning
+  // fungera tyst).
   const batchId = `enrich-modus-${Date.now()}`;
   const startedAt = new Date().toISOString();
   const baseMetadata = {
@@ -4816,7 +4822,14 @@ app.post("/api/import/modus/objects/enrich/apply", requireAdmin, upload.single("
     created: 0,
     updated: 0,
     errors: 0,
-    metadata: { ...baseMetadata, status: "in_progress", rowsProcessed: 0 },
+    metadata: {
+      ...baseMetadata,
+      status: "in_progress",
+      rowsProcessed: 0,
+      // Heartbeat-stämpel så watchdog kan upptäcka batches som aldrig hann
+      // skriva en första progress-rapport innan de övergavs.
+      lastProgressAt: new Date().toISOString(),
+    },
   });
 
   // Returnera 202 omedelbart - resten körs i bakgrunden så proxy/lastbalanserare
@@ -4900,6 +4913,10 @@ async function runEnrichApplyJob(params: {
         matchedRowCount,
         uniqueMatchedObjectCount: uniqueMatchedObjects.size,
         sampleErrors: errors.slice(0, 50),
+        // Heartbeat så watchdog kan upptäcka hängda jobb även utan omstart.
+        // Vid in_progress räcker det att vi rapporterar; vid completed/failed
+        // skrivs samma stämpel för enkel diagnostik.
+        lastProgressAt: new Date().toISOString(),
         ...extra,
       },
     }).where(and(
