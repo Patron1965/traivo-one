@@ -277,11 +277,13 @@ function ImportHistorySection() {
 
   const rollbackMutation = useMutation({
     mutationFn: async (batchId: string) => {
-      // Sanering-batches återställs via separat restore-endpoint som läser
-      // audit-loggens before-värden istället för att radera objekten
+      // Sanering- och enrich-batches återställs via separata restore-endpoints som läser
+      // audit-loggens before-värden istället för att radera objekten/metadata
       const url = batchId.startsWith("cleanup-")
         ? `/api/import/cleanup/restore/${batchId}`
-        : `/api/import/rollback/${batchId}`;
+        : batchId.startsWith("enrich-modus-")
+          ? `/api/import/enrich-modus/restore/${batchId}`
+          : `/api/import/rollback/${batchId}`;
       const res = await apiRequest("POST", url);
       return res.json();
     },
@@ -290,6 +292,11 @@ function ImportHistorySection() {
         toast({
           title: "Sanering återställd",
           description: `${data.restored || 0} objekt återställda från audit-loggen.`,
+        });
+      } else if (typeof batchId === "string" && batchId.startsWith("enrich-modus-")) {
+        toast({
+          title: "Berikning återställd",
+          description: `${data.restored || 0} värden återställda och ${data.deleted || 0} skapade värden borttagna.`,
         });
       } else {
         toast({
@@ -331,18 +338,24 @@ function ImportHistorySection() {
             <div className="space-y-2">
               {batches.map((batch: any) => {
                 const isCleanup = typeof batch.batchId === "string" && batch.batchId.startsWith("cleanup-");
+                const isEnrich = typeof batch.batchId === "string" && batch.batchId.startsWith("enrich-modus-");
                 const isRestored = batch.metadata?.restored === true;
                 const isRolledBack = batch.metadata?.rolledBack === true || isRestored;
+                const isInProgress = batch.metadata?.status === "in_progress";
+                const isFailed = batch.metadata?.status === "failed";
                 return (
                   <div key={batch.id} className={`flex items-center justify-between p-3 rounded-lg border ${isRolledBack ? "bg-muted/50 opacity-60" : "bg-background"}`} data-testid={`history-batch-${batch.batchId}`}>
                     <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${isRolledBack ? "bg-gray-400" : batch.errors > 0 ? "bg-amber-500" : "bg-green-500"}`} />
+                      <div className={`w-2 h-2 rounded-full ${isRolledBack ? "bg-gray-400" : isFailed ? "bg-destructive" : isInProgress ? "bg-blue-500 animate-pulse" : batch.errors > 0 ? "bg-amber-500" : "bg-green-500"}`} />
                       <div>
                         <div className="font-medium text-sm">
                           {batch.batchId}
                           {isRestored && <Badge variant="outline" className="ml-2 text-xs">Återställd</Badge>}
                           {isRolledBack && !isRestored && <Badge variant="outline" className="ml-2 text-xs">Ångrad</Badge>}
                           {isCleanup && !isRolledBack && <Badge variant="secondary" className="ml-2 text-xs">Sanering</Badge>}
+                          {isEnrich && !isRolledBack && <Badge variant="secondary" className="ml-2 text-xs">Berikning</Badge>}
+                          {isInProgress && <Badge variant="outline" className="ml-2 text-xs">Pågår</Badge>}
+                          {isFailed && <Badge variant="destructive" className="ml-2 text-xs">Misslyckades</Badge>}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {batch.createdAt ? format(new Date(batch.createdAt), "d MMM yyyy HH:mm", { locale: sv }) : ""}
@@ -405,6 +418,330 @@ function ImportHistorySection() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+interface EnrichPreviewResult {
+  totalRows: number;
+  matchedCount: number;
+  unmatchedCount: number;
+  unmatchedSample: string[];
+  metadataColumns: { csvColumn: string; metadataName: string }[];
+  perField: Record<string, { wouldCreate: number; wouldUpdate: number; unchanged: number; missingType: boolean }>;
+  missingMetadataTypes: string[];
+  warning?: string;
+}
+
+interface EnrichApplyResult {
+  batchId: string;
+  totalRows: number;
+  matchedCount: number;
+  unmatchedCount: number;
+  invalidIdCount: number;
+  uniqueMatchedObjectCount: number;
+  created: number;
+  updated: number;
+  unchanged: number;
+  errors: string[];
+  errorCount: number;
+  metadataColumns: string[];
+}
+
+function EnrichKarlSection() {
+  const { toast } = useToast();
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<EnrichPreviewResult | null>(null);
+  const [applyResult, setApplyResult] = useState<EnrichApplyResult | null>(null);
+
+  const seedTypesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/import/modus/objects/enrich/seed-types");
+      return res.json() as Promise<{ created: string[]; existing: string[]; definitions: { namn: string; datatyp: string; beskrivning: string }[] }>;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Standardtyper säkerställda",
+        description: `${data.created.length} nya typer skapade, ${data.existing.length} fanns redan.`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Fel vid seed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const previewMutation = useMutation({
+    mutationFn: async (f: File) => {
+      const formData = new FormData();
+      formData.append("file", f);
+      const res = await fetch("/api/import/modus/objects/enrich/preview", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Okänt fel" }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      return res.json() as Promise<EnrichPreviewResult>;
+    },
+    onSuccess: (data) => {
+      setPreview(data);
+      setApplyResult(null);
+      if (data.warning) {
+        toast({ title: "Förhandsvisning", description: data.warning });
+      } else {
+        toast({
+          title: "Förhandsvisning klar",
+          description: `${data.matchedCount} av ${data.totalRows} rader matchar befintliga objekt.`,
+        });
+      }
+    },
+    onError: (err: Error) => {
+      toast({ title: "Fel vid förhandsvisning", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const applyMutation = useMutation({
+    mutationFn: async (f: File) => {
+      const formData = new FormData();
+      formData.append("file", f);
+      const res = await fetch("/api/import/modus/objects/enrich/apply", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Okänt fel" }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      return res.json() as Promise<EnrichApplyResult>;
+    },
+    onSuccess: (data) => {
+      setApplyResult(data);
+      queryClient.invalidateQueries({ queryKey: ["/api/import/history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/import/data-quality"] });
+      toast({
+        title: "Berikning klar",
+        description: `${data.created} nya, ${data.updated} uppdaterade, ${data.unchanged} oförändrade. Batch: ${data.batchId}`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Fel vid berikning", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] || null;
+    setFile(f);
+    setPreview(null);
+    setApplyResult(null);
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-3">
+            <Info className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+            <div className="space-y-2 text-sm">
+              <p className="font-medium">Berika befintliga kärl med metadata</p>
+              <p className="text-muted-foreground">
+                Ladda upp en Modus Objekt-export för att lägga till metadata (storlek, material, placering, fraktion m.m.)
+                på <strong>befintliga objekt</strong>. Matchar på MODUS-id (objektnummer = "MODUS-{`{id}`}").
+                Inga nya objekt skapas och kärnfält som namn, parent och adress påverkas inte. Ändringar loggas
+                och syns i Importhistorik med batchid <code>enrich-modus-…</code>.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ListChecks className="h-5 w-5" />
+            Steg 1 — Säkerställ standardtyper för kärl
+          </CardTitle>
+          <CardDescription>
+            Skapar 7 standardmetadatatyper om de saknas: Kärlstorlek, Material, Lås, Placering, Fraktion,
+            Tömningsfrekvens, OrganisationsTyp.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={() => seedTypesMutation.mutate()}
+            disabled={seedTypesMutation.isPending}
+            data-testid="button-enrich-seed-types"
+          >
+            {seedTypesMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Tag className="h-4 w-4 mr-2" />}
+            Säkerställ standardtyper
+          </Button>
+          {seedTypesMutation.data && (
+            <div className="mt-3 text-xs text-muted-foreground space-y-1">
+              <div>Nya typer: {seedTypesMutation.data.created.join(", ") || "(inga – allt fanns)"}</div>
+              <div>Fanns redan: {seedTypesMutation.data.existing.join(", ") || "(inga)"}</div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileUp className="h-5 w-5" />
+            Steg 2 — Ladda upp Modus Objekt-export
+          </CardTitle>
+          <CardDescription>
+            CSV med semikolon (;) som separator. Kolumner som börjar med "Metadata - " upptäcks automatiskt.
+            Raden måste ha en <code>Id</code>-kolumn som matchar mot MODUS-id.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleFileChange}
+            data-testid="input-enrich-file"
+          />
+          {file && (
+            <div className="text-xs text-muted-foreground">
+              Vald fil: <strong>{file.name}</strong> ({Math.round(file.size / 1024)} kB)
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button
+              onClick={() => file && previewMutation.mutate(file)}
+              disabled={!file || previewMutation.isPending}
+              variant="outline"
+              data-testid="button-enrich-preview"
+            >
+              {previewMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Eye className="h-4 w-4 mr-2" />}
+              Förhandsvisa
+            </Button>
+            <Button
+              onClick={() => file && applyMutation.mutate(file)}
+              disabled={!file || !preview || applyMutation.isPending || preview.matchedCount === 0}
+              data-testid="button-enrich-apply"
+            >
+              {applyMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
+              Genomför berikning
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {preview && (
+        <Card data-testid="card-enrich-preview">
+          <CardHeader>
+            <CardTitle className="text-base">Förhandsvisning</CardTitle>
+            <CardDescription>
+              {preview.matchedCount} av {preview.totalRows} rader matchar befintliga objekt
+              {preview.unmatchedCount > 0 && ` — ${preview.unmatchedCount} omatchade MODUS-id`}.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {preview.warning && (
+              <div className="text-sm p-3 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
+                {preview.warning}
+              </div>
+            )}
+            {preview.missingMetadataTypes.length > 0 && (
+              <div className="text-sm p-3 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+                <strong>Saknade metadatatyper:</strong> {preview.missingMetadataTypes.join(", ")}.
+                Klicka "Säkerställ standardtyper" eller skapa typerna manuellt först.
+              </div>
+            )}
+            {Object.keys(preview.perField).length > 0 && (
+              <Table data-testid="table-enrich-perfield">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Metadata-fält</TableHead>
+                    <TableHead className="text-right">Skulle skapas</TableHead>
+                    <TableHead className="text-right">Skulle uppdateras</TableHead>
+                    <TableHead className="text-right">Oförändrade</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Object.entries(preview.perField).map(([field, stats]) => (
+                    <TableRow key={field} data-testid={`row-enrich-field-${field}`}>
+                      <TableCell className="font-medium">
+                        {field}
+                        {stats.missingType && <Badge variant="destructive" className="ml-2 text-xs">Saknad typ</Badge>}
+                      </TableCell>
+                      <TableCell className="text-right text-green-600">{stats.wouldCreate}</TableCell>
+                      <TableCell className="text-right text-orange-500">{stats.wouldUpdate}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{stats.unchanged}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            {preview.unmatchedSample.length > 0 && (
+              <details className="text-sm">
+                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                  Visa exempel på omatchade MODUS-id ({preview.unmatchedSample.length} av {preview.unmatchedCount})
+                </summary>
+                <div className="mt-2 p-3 bg-muted/50 rounded text-xs font-mono break-all">
+                  {preview.unmatchedSample.join(", ")}
+                </div>
+              </details>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {applyResult && (
+        <Card className="border-green-200 dark:border-green-800 bg-green-50/30 dark:bg-green-950/20" data-testid="card-enrich-result">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Berikning klar
+            </CardTitle>
+            <CardDescription>
+              Batch <code>{applyResult.batchId}</code> — kan ångras via fliken Historik.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              <div className="p-3 bg-background rounded border">
+                <div className="text-2xl font-bold text-green-600" data-testid="text-enrich-created">{applyResult.created}</div>
+                <div className="text-xs text-muted-foreground">Nya värden</div>
+              </div>
+              <div className="p-3 bg-background rounded border">
+                <div className="text-2xl font-bold text-orange-500" data-testid="text-enrich-updated">{applyResult.updated}</div>
+                <div className="text-xs text-muted-foreground">Uppdaterade</div>
+              </div>
+              <div className="p-3 bg-background rounded border">
+                <div className="text-2xl font-bold text-muted-foreground" data-testid="text-enrich-unchanged">{applyResult.unchanged}</div>
+                <div className="text-xs text-muted-foreground">Oförändrade</div>
+              </div>
+              <div className="p-3 bg-background rounded border">
+                <div className="text-2xl font-bold text-amber-600" data-testid="text-enrich-unmatched">{applyResult.unmatchedCount}</div>
+                <div className="text-xs text-muted-foreground">Omatchade</div>
+              </div>
+            </div>
+            <div className="mt-3 text-xs text-muted-foreground space-y-1">
+              <div>
+                <strong>{applyResult.uniqueMatchedObjectCount}</strong> unika objekt påverkades av {applyResult.matchedCount} matchade rader.
+              </div>
+              {applyResult.invalidIdCount > 0 && (
+                <div>
+                  {applyResult.invalidIdCount} rader saknade giltigt MODUS-id och hoppades över.
+                </div>
+              )}
+            </div>
+            {applyResult.errorCount > 0 && (
+              <div className="mt-4 text-sm p-3 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+                <strong>{applyResult.errorCount} fel</strong> (visar första {Math.min(10, applyResult.errors.length)}):
+                <ul className="mt-2 list-disc list-inside text-xs space-y-1">
+                  {applyResult.errors.slice(0, 10).map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1478,7 +1815,7 @@ export default function ImportPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [activeTab, setActiveTab] = useState<"modus" | "manual" | "fortnox" | "mapped" | "history" | "quality">("modus");
+  const [activeTab, setActiveTab] = useState<"modus" | "enrich" | "manual" | "fortnox" | "mapped" | "history" | "quality">("modus");
   const [showObjectColumns, setShowObjectColumns] = useState(false);
   const [showTaskColumns, setShowTaskColumns] = useState(false);
   const [showEventColumns, setShowEventColumns] = useState(false);
@@ -2210,11 +2547,15 @@ export default function ImportPage() {
     <div className="p-6 space-y-6">
       <PageHeader icon={Upload} title={tl("page.import.title")} description={tl("page.import.description")} testId="text-import-title" />
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "modus" | "manual" | "fortnox" | "mapped" | "history" | "quality")}>
-        <TabsList className="grid w-full grid-cols-6">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "modus" | "enrich" | "manual" | "fortnox" | "mapped" | "history" | "quality")}>
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="modus" className="flex items-center gap-2" data-testid="tab-modus-import">
             <FileSpreadsheet className="h-4 w-4" />
             Modus 2.0
+          </TabsTrigger>
+          <TabsTrigger value="enrich" className="flex items-center gap-2" data-testid="tab-enrich-karl">
+            <Tag className="h-4 w-4" />
+            Berika kärl
           </TabsTrigger>
           <TabsTrigger value="manual" className="flex items-center gap-2" data-testid="tab-manual-import">
             <Upload className="h-4 w-4" />
@@ -4059,6 +4400,10 @@ export default function ImportPage() {
             </CardContent>
           </Card>
           <ImportColumnMapper />
+        </TabsContent>
+
+        <TabsContent value="enrich" className="space-y-6">
+          <EnrichKarlSection />
         </TabsContent>
 
         <TabsContent value="history" className="space-y-6">

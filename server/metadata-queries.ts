@@ -1265,6 +1265,50 @@ export async function seedDefaultMetadataTypes(tenantId: string): Promise<void> 
 }
 
 // ============================================================================
+// SEED KÄRL-METADATATYPER (Modus-berikning, Task #241)
+// Idempotent: kontrollerar per (tenantId, namn) och skippar om typen redan finns.
+// ============================================================================
+
+export const KARL_METADATA_DEFINITIONS: Array<{
+  namn: string;
+  datatyp: 'string' | 'integer' | 'decimal' | 'boolean' | 'datetime' | 'json' | 'referens';
+  beskrivning: string;
+  kategori: string;
+  arLogisk: boolean;
+  standardArvs: boolean;
+  sortOrder: number;
+  icon: string;
+}> = [
+  { namn: 'Kärlstorlek', datatyp: 'decimal', beskrivning: 'Kärlets volym i liter', kategori: 'kärl', arLogisk: true, standardArvs: false, sortOrder: 200, icon: 'Box' },
+  { namn: 'Material', datatyp: 'string', beskrivning: 'Material (t.ex. plast, metall)', kategori: 'kärl', arLogisk: true, standardArvs: false, sortOrder: 201, icon: 'Layers' },
+  { namn: 'Lås', datatyp: 'string', beskrivning: 'Låstyp (t.ex. enkellås, dubbellås)', kategori: 'kärl', arLogisk: true, standardArvs: false, sortOrder: 202, icon: 'Lock' },
+  { namn: 'Placering', datatyp: 'string', beskrivning: 'Placering av kärl/rum (t.ex. källare, miljöhus)', kategori: 'kärl', arLogisk: true, standardArvs: true, sortOrder: 203, icon: 'MapPin' },
+  { namn: 'Fraktion', datatyp: 'string', beskrivning: 'Avfallsfraktion (t.ex. matavfall, restavfall)', kategori: 'kärl', arLogisk: true, standardArvs: true, sortOrder: 204, icon: 'Recycle' },
+  { namn: 'Tömningsfrekvens', datatyp: 'string', beskrivning: 'Hur ofta tömning sker (t.ex. veckovis, 2v)', kategori: 'kärl', arLogisk: true, standardArvs: true, sortOrder: 205, icon: 'RefreshCw' },
+  { namn: 'OrganisationsTyp', datatyp: 'string', beskrivning: 'Typ av organisation/uppdragsgivare', kategori: 'kärl', arLogisk: true, standardArvs: true, sortOrder: 206, icon: 'Building2' },
+];
+
+export async function seedKarlMetadataTypes(tenantId: string): Promise<{ created: string[]; existing: string[] }> {
+  const existing = await db
+    .select({ namn: metadataKatalog.namn })
+    .from(metadataKatalog)
+    .where(eq(metadataKatalog.tenantId, tenantId));
+  const existingNames = new Set(existing.map(e => e.namn.toLowerCase()));
+
+  const created: string[] = [];
+  const skipped: string[] = [];
+  for (const def of KARL_METADATA_DEFINITIONS) {
+    if (existingNames.has(def.namn.toLowerCase())) {
+      skipped.push(def.namn);
+      continue;
+    }
+    await db.insert(metadataKatalog).values({ tenantId, ...def });
+    created.push(def.namn);
+  }
+  return { created, existing: skipped };
+}
+
+// ============================================================================
 // WORK ORDER METADATA - CRUD operations for work order metadata
 // ============================================================================
 
