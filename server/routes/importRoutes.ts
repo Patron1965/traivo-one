@@ -959,36 +959,33 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
 }));
 
 // Modus 2.0 Import - Objects (semicolon-separated)
+//
+// Bakgrundsjobb: validerar fil + skapar import_batches-raden synkront, returnerar
+// 202 + batchId, och fortsätter sedan bearbeta i bakgrunden så stora filer (t.ex.
+// Kinabs 29 010 kärl) inte triggar proxy-/lastbalanserare-timeouts. UI pollar
+// GET /api/import/batches/:batchId för progress – samma mönster som
+// /api/import/modus/objects/enrich/apply (runEnrichApplyJob).
 app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       throw new ValidationError("Ingen fil uppladdad");
     }
-    
+
     const csvText = req.file.buffer.toString("utf-8");
-    const result = Papa.parse(csvText, { 
-      header: true, 
+    const result = Papa.parse(csvText, {
+      header: true,
       skipEmptyLines: true,
       delimiter: ";",
     });
-    
+
     if (result.errors.length > 0) {
       return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
     }
 
-    const customerNames = new Set<string>();
-    for (const row of result.data as Record<string, string>[]) {
-      const kundName = row["Kund"];
-      if (kundName) {
-        const match = kundName.match(/^(.+?)\s*\(\d+\)$/);
-        const cleanName = match ? match[1].trim() : kundName.trim();
-        if (cleanName) customerNames.add(cleanName);
-      }
-    }
-
     const tenantId = getTenantIdWithFallback(req);
     const importBatchId = crypto.randomUUID();
-    const totalRows = (result.data as unknown[]).length;
-    
+    const rows = result.data as Record<string, string>[];
+    const totalRows = rows.length;
+
     let scorecardSummary: Record<string, number> | null = null;
     try {
       if (req.body?.scorecardSummary) {
@@ -1002,16 +999,128 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
         nameOverrides = JSON.parse(req.body.nameOverrides);
       }
     } catch {}
-    
-    importJobs.set(importBatchId, { tenantId, status: "running", phase: "kunder", processed: 0, total: totalRows, created: 0, updated: 0, errors: 0, listeners: new Set() });
-    
-    res.json({ importBatchId, status: "started", totalRows });
-    
-    // Continue import in background
-    
+
+    const startedAt = new Date().toISOString();
+    const baseMetadata = {
+      type: "modus-objects" as const,
+      startedBy: (req as any).user?.id || null,
+      startedAt,
+    };
+
+    // Skapa import_batches-raden direkt så historik och poll-endpoint kan se
+    // körningen som "in_progress" innan vi släpper HTTP-anslutningen.
+    await db.insert(importBatches).values({
+      tenantId,
+      batchId: importBatchId,
+      totalRows,
+      created: 0,
+      updated: 0,
+      errors: 0,
+      scorecardSummary: scorecardSummary || null,
+      metadata: {
+        ...baseMetadata,
+        status: "in_progress",
+        phase: "startar",
+        rowsProcessed: 0,
+        customersCreated: 0,
+        parentsUpdated: 0,
+        metadataWritten: 0,
+        metadataColumns: [],
+        sampleErrors: [],
+        skipped: 0,
+      },
+    });
+
+    // Returnera 202 omedelbart – resten körs i bakgrunden så proxy/lastbalanserare
+    // inte timeoutar och användaren slipper hålla fliken öppen för en blockerande request.
+    res.status(202).json({
+      batchId: importBatchId,
+      importBatchId, // bibehåll äldre fältnamn för bakåtkompatibilitet med befintlig UI/typ
+      status: "in_progress",
+      totalRows,
+    });
+
+    // Bakgrundsbearbetning – inga undantag får läcka till Express
+    runModusObjectsImportJob({
+      tenantId,
+      importBatchId,
+      rows,
+      nameOverrides,
+      scorecardSummary,
+      baseMetadata,
+    }).catch((err) => {
+      console.error(`[modus-objects ${importBatchId}] bakgrundsjobb kraschade:`, err);
+    });
+}));
+
+async function runModusObjectsImportJob(params: {
+  tenantId: string;
+  importBatchId: string;
+  rows: Record<string, string>[];
+  nameOverrides: { objects?: Record<string, string>; customers?: Record<string, string>; metadata?: Record<string, string> };
+  scorecardSummary: Record<string, number> | null;
+  baseMetadata: { type: "modus-objects"; startedBy: string | null; startedAt: string };
+}) {
+  const { tenantId, importBatchId, rows, nameOverrides, scorecardSummary, baseMetadata } = params;
+  const totalRows = rows.length;
+
+  const created: string[] = [];
+  const updated: string[] = [];
+  const errors: string[] = [];
+  const skipped: string[] = [];
+  const modusIdMap = new Map<string, string>();
+  const modusOldClusterIds = new Set<string>();
+  let rowsProcessed = 0;
+  let phase: "startar" | "kunder" | "objekt" | "hierarki" | "metadata" | "klar" = "startar";
+  let customersCreated = 0;
+  let parentsUpdated = 0;
+  let metadataWritten = 0;
+  let metadataColumnNames: string[] = [];
+  const metadataErrors: string[] = [];
+
+  async function updateBatchProgress(extra: Record<string, any> = {}) {
+    const allErrors = [...errors, ...metadataErrors];
+    await db.update(importBatches).set({
+      created: created.length,
+      updated: updated.length,
+      errors: allErrors.length,
+      metadata: {
+        ...baseMetadata,
+        status: "in_progress",
+        phase,
+        rowsProcessed,
+        totalRows,
+        customersCreated,
+        parentsUpdated,
+        metadataWritten,
+        metadataColumns: metadataColumnNames,
+        sampleErrors: allErrors.slice(0, 50),
+        skipped: skipped.length,
+        ...extra,
+      },
+    }).where(and(
+      eq(importBatches.batchId, importBatchId),
+      eq(importBatches.tenantId, tenantId),
+    ));
+  }
+
+  try {
+    // Fas 1: skapa/koppla kunder
+    phase = "kunder";
+    const customerNames = new Set<string>();
+    for (const row of rows) {
+      const kundName = row["Kund"];
+      if (kundName) {
+        const match = kundName.match(/^(.+?)\s*\(\d+\)$/);
+        const cleanName = match ? match[1].trim() : kundName.trim();
+        if (cleanName) customerNames.add(cleanName);
+      }
+    }
+    await updateBatchProgress();
+
     const existingCustomers = await storage.getCustomers(tenantId);
     const customerMap = new Map(existingCustomers.map(c => [c.name.toLowerCase(), c.id]));
-    
+
     for (const name of Array.from(customerNames)) {
       const resolvedName = nameOverrides.customers?.[name] || name;
       const existingId = customerMap.get(resolvedName.toLowerCase());
@@ -1025,21 +1134,15 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
         });
         customerMap.set(name.toLowerCase(), newCustomer.id);
         customerMap.set(resolvedName.toLowerCase(), newCustomer.id);
+        customersCreated++;
       }
     }
 
-    const job = importJobs.get(importBatchId)!;
-    job.phase = "objekt";
-    notifyImportProgress(importBatchId);
-    
-    const modusIdMap = new Map<string, string>();
-    const modusOldClusterIds = new Set<string>();
-    const created: string[] = [];
-    const updated: string[] = [];
-    const errors: string[] = [];
-    const skipped: string[] = [];
-    
-    for (const row of result.data as Record<string, string>[]) {
+    // Fas 2: skapa/uppdatera objekt
+    phase = "objekt";
+    await updateBatchProgress();
+
+    for (const row of rows) {
       try {
         const modusId = (row["Id"] || "").replace(/\s/g, "");
         const originalName = row["Namn"] || "";
@@ -1047,19 +1150,21 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
         const typ = row["Typ"] || "Område";
         const parent = (row["Parent"] || "").replace(/\s/g, "");
         const kundRaw = row["Kund"] || "";
-        
+
         if (!originalName || !modusId) {
           skipped.push(`Rad utan namn eller ID`);
+          rowsProcessed++;
           continue;
         }
-        
+
         // Extract customer name
         const kundMatch = kundRaw.match(/^(.+?)\s*\(\d+\)$/);
         const kundName = kundMatch ? kundMatch[1].trim() : kundRaw.trim();
         const customerId = customerMap.get(kundName.toLowerCase());
-        
+
         if (!customerId) {
           errors.push(`Kund "${kundName}" hittades inte för "${name}"`);
+          rowsProcessed++;
           continue;
         }
         
@@ -1177,7 +1282,6 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
           if (updatedObject) {
             modusIdMap.set(modusId, updatedObject.id);
             updated.push(name);
-            job.updated++;
             if (updatedObject.address && (updatedObject.latitude == null || updatedObject.longitude == null)) {
               triggerGeocodeIfMissing(updatedObject.id);
             }
@@ -1191,37 +1295,38 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
           });
           modusIdMap.set(modusId, createdObject.id);
           created.push(name);
-          job.created++;
           triggerGeocodeIfMissing(createdObject.id);
         }
       } catch (err) {
         console.error("Modus object import error:", err);
         errors.push(`Rad ${row["Id"] || "?"}: ${err}`);
-        job.errors++;
       }
-      job.processed++;
-      if (job.processed % 10 === 0) notifyImportProgress(importBatchId);
+      rowsProcessed++;
+      // Periodisk progress-uppdatering så UI ser rörelse även för stora filer.
+      if (rowsProcessed % 50 === 0) {
+        await updateBatchProgress();
+      }
     }
-    
-    job.phase = "hierarki";
-    notifyImportProgress(importBatchId);
-    
-    let parentsUpdated = 0;
-    for (const row of result.data as Record<string, string>[]) {
+
+    // Fas 3: bygg parent-hierarki
+    phase = "hierarki";
+    await updateBatchProgress();
+
+    for (const row of rows) {
       const modusId = (row["Id"] || "").replace(/\s/g, "");
       const parentModusId = (row["Parent"] || "").replace(/\s/g, "");
-      
+
       if (modusId && parentModusId) {
         const objectId = modusIdMap.get(modusId);
         const parentId = modusIdMap.get(parentModusId);
-        
+
         if (objectId && parentId) {
           await storage.updateObject(objectId, { parentId });
           parentsUpdated++;
         }
       }
     }
-    
+
     const affectedClusterIds = new Set<string>(modusOldClusterIds);
     for (const [, objId] of modusIdMap) {
       const obj = await storage.getObject(objId);
@@ -1231,17 +1336,15 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
       updateClusterCache(cId).catch(e => console.error("Cluster cache update error:", e));
     }
 
-    job.phase = "metadata";
-    notifyImportProgress(importBatchId);
-    
-    let metadataWritten = 0;
-    const metadataErrors: string[] = [];
-    
+    // Fas 4: skriv metadata
+    phase = "metadata";
+    await updateBatchProgress();
+
     const metadataTypes = await getAllMetadataTypes(tenantId);
     const metadataTypeMap = new Map(metadataTypes.map(t => [t.namn.toLowerCase(), t]));
-    
+
     // Detect all "Metadata - *" columns from first row
-    const firstRow = (result.data as Record<string, string>[])[0];
+    const firstRow = rows[0];
     const metadataColumns: { csvColumn: string; metadataName: string }[] = [];
     if (firstRow) {
       for (const key of Object.keys(firstRow)) {
@@ -1252,17 +1355,19 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
         }
       }
     }
-    
+    metadataColumnNames = metadataColumns.map(c => c.metadataName);
+
     if (metadataColumns.length > 0) {
-      for (const row of result.data as Record<string, string>[]) {
+      let metaRowIdx = 0;
+      for (const row of rows) {
         const modusId = (row["Id"] || "").replace(/\s/g, "");
         const objectId = modusId ? modusIdMap.get(modusId) : null;
-        if (!objectId) continue;
-        
+        if (!objectId) { metaRowIdx++; continue; }
+
         for (const { csvColumn, metadataName } of metadataColumns) {
           const rawValue = (row[csvColumn] || "").trim();
           if (!rawValue) continue;
-          
+
           try {
             // Find metadata type by name (case-insensitive match)
             const metaType = metadataTypeMap.get(metadataName.toLowerCase());
@@ -1280,7 +1385,7 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
               }).returning();
               metadataTypeMap.set(metadataName.toLowerCase(), newType);
             }
-            
+
             await createMetadata({
               tenantId,
               objektId: objectId,
@@ -1294,52 +1399,91 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
             metadataErrors.push(`Metadata "${metadataName}" for "${row["Namn"] || modusId}": ${metaErr.message}`);
           }
         }
+        metaRowIdx++;
+        // Periodisk progress under metadatafasen så UI inte verkar fryst för stora filer.
+        if (metaRowIdx % 100 === 0) {
+          await updateBatchProgress();
+        }
       }
     }
-    
-    const responseData = { 
-      importBatchId,
-      imported: created.length + updated.length,
+
+    // Fas 5: klar – markera completed och spara slutresultatet i batchens metadata
+    phase = "klar";
+    const finishedAt = new Date().toISOString();
+    const allErrors = [...errors, ...metadataErrors];
+    await db.update(importBatches).set({
       created: created.length,
       updated: updated.length,
-      parentsUpdated,
-      customersCreated: customerNames.size,
-      skipped: skipped.length,
-      metadataWritten,
-      metadataColumns: metadataColumns.map(c => c.metadataName),
-      errors: [...errors, ...metadataErrors].slice(0, 50),
-      totalRows: (result.data as unknown[]).length,
-      scorecardSummary,
-    };
-    
+      errors: allErrors.length,
+      metadata: {
+        ...baseMetadata,
+        status: "completed",
+        phase: "klar",
+        rowsProcessed,
+        totalRows,
+        customersCreated,
+        parentsUpdated,
+        metadataWritten,
+        metadataColumns: metadataColumnNames,
+        sampleErrors: allErrors.slice(0, 50),
+        skipped: skipped.length,
+        scorecardCategories: scorecardSummary?.categories || null,
+        finishedAt,
+        // Färdig responsdata speglas hit så UI kan bygga ModusObjectResult från
+        // batchen utan att behöva ytterligare endpoints.
+        result: {
+          importBatchId,
+          imported: created.length + updated.length,
+          created: created.length,
+          updated: updated.length,
+          parentsUpdated,
+          customersCreated,
+          skipped: skipped.length,
+          metadataWritten,
+          metadataColumns: metadataColumnNames,
+          errors: allErrors.slice(0, 50),
+          totalRows,
+          scorecardSummary,
+        },
+      },
+    }).where(and(
+      eq(importBatches.batchId, importBatchId),
+      eq(importBatches.tenantId, tenantId),
+    ));
+  } catch (err: any) {
+    // Markera batchen som failed så UI kan stoppa polling och historiken vet.
+    console.error(`[modus-objects ${importBatchId}] bakgrundsjobb misslyckades:`, err);
     try {
-      const { importBatches: importBatchesTable } = await import("@shared/schema");
-      await db.insert(importBatchesTable).values({
-        tenantId,
-        batchId: importBatchId,
-        totalRows: (result.data as unknown[]).length,
+      const allErrors = [...errors, ...metadataErrors];
+      await db.update(importBatches).set({
         created: created.length,
         updated: updated.length,
-        errors: errors.length + metadataErrors.length,
-        scorecardSummary: scorecardSummary || null,
+        errors: allErrors.length,
         metadata: {
-          metadataWritten,
-          metadataColumns: metadataColumns.map(c => c.metadataName),
+          ...baseMetadata,
+          status: "failed",
+          phase,
+          rowsProcessed,
+          totalRows,
+          customersCreated,
           parentsUpdated,
-          customersCreated: customerNames.size,
-          scorecardCategories: scorecardSummary?.categories || null,
+          metadataWritten,
+          metadataColumns: metadataColumnNames,
+          sampleErrors: allErrors.slice(0, 50),
+          skipped: skipped.length,
+          finishedAt: new Date().toISOString(),
+          failureReason: err?.message || String(err),
         },
-      });
-    } catch (e) {
-      console.error("Failed to persist import batch:", e);
+      }).where(and(
+        eq(importBatches.batchId, importBatchId),
+        eq(importBatches.tenantId, tenantId),
+      ));
+    } catch (updateErr) {
+      console.error(`[modus-objects ${importBatchId}] kunde inte markera batch som failed:`, updateErr);
     }
-
-    job.status = "completed";
-    job.phase = "klar";
-    job.result = responseData;
-    notifyImportProgress(importBatchId);
-    setTimeout(() => importJobs.delete(importBatchId), 300000);
-}));
+    throw err;
+  }
+}
 
 // Modus 2.0 Import - Tasks (uppgifter)
 // Preview/validate tasks CSV before import - returns missing objects/customers and duplicates

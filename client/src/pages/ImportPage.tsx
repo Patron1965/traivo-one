@@ -2254,6 +2254,11 @@ export default function ImportPage() {
   const [modusValidation, setModusValidation] = useState<ModusValidationResult | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [importProgress, setImportProgress] = useState<SSEProgress | null>(null);
+  // Aktiv batch-id för Modus-objektimport — driver polling mot
+  // /api/import/batches/:batchId så stora filer inte timeoutar
+  // (samma mönster som "Berika kärl"). Sätts till null när batchen är klar.
+  const [activeModusBatchId, setActiveModusBatchId] = useState<string | null>(null);
+  const [modusBatchFailure, setModusBatchFailure] = useState<{ batchId: string; reason: string } | null>(null);
   const [undoBatchId, setUndoBatchId] = useState<string | null>(null);
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [previewObjectRows, setPreviewObjectRows] = useState<{ modusId: string; originalName: string; type: string; customer: string }[]>([]);
@@ -2431,6 +2436,104 @@ export default function ImportPage() {
       }
     };
   }, []);
+
+  // Polling-baserad batch-status för Modus-objektimport. När POST /api/import/modus/objects
+  // returnerar 202 + batchId fortsätter vi spegla progress härifrån i stället för via
+  // SSE — det funkar även om sidan refreshas eller stängs och kommer upp igen.
+  const modusBatchQuery = useQuery<{
+    id: string;
+    batchId: string;
+    totalRows: number | null;
+    created: number | null;
+    updated: number | null;
+    errors: number | null;
+    metadata: {
+      type?: string;
+      status?: "in_progress" | "completed" | "failed";
+      phase?: "startar" | "kunder" | "objekt" | "hierarki" | "metadata" | "klar";
+      rowsProcessed?: number;
+      customersCreated?: number;
+      parentsUpdated?: number;
+      metadataWritten?: number;
+      metadataColumns?: string[];
+      sampleErrors?: string[];
+      skipped?: number;
+      finishedAt?: string;
+      failureReason?: string;
+      result?: ModusObjectResult;
+    } | null;
+  }>({
+    queryKey: ["/api/import/batches", activeModusBatchId],
+    enabled: !!activeModusBatchId,
+    refetchInterval: (q) => {
+      const status = q.state.data?.metadata?.status;
+      if (status === "completed" || status === "failed") return false;
+      return 2000;
+    },
+    refetchOnWindowFocus: true,
+  });
+
+  // Synka in polled batch-status mot importProgress + finalisera när batchen är klar.
+  useEffect(() => {
+    if (!activeModusBatchId) return;
+    const batch = modusBatchQuery.data;
+    if (!batch) return;
+    const md = batch.metadata || {};
+    const status = md.status;
+    const phaseLabel = md.phase || "startar";
+    const total = batch.totalRows ?? 0;
+    const processed = md.rowsProcessed ?? 0;
+
+    setImportProgress({
+      status: status === "completed" ? "completed" : status === "failed" ? "failed" : "running",
+      phase: phaseLabel,
+      processed,
+      total,
+      created: batch.created ?? 0,
+      updated: batch.updated ?? 0,
+      errors: batch.errors ?? 0,
+    });
+
+    if (status === "completed") {
+      const result = md.result || {
+        importBatchId: batch.batchId,
+        imported: (batch.created ?? 0) + (batch.updated ?? 0),
+        created: batch.created ?? 0,
+        updated: batch.updated ?? 0,
+        parentsUpdated: md.parentsUpdated ?? 0,
+        customersCreated: md.customersCreated ?? 0,
+        skipped: md.skipped ?? 0,
+        metadataWritten: md.metadataWritten ?? 0,
+        metadataColumns: md.metadataColumns ?? [],
+        errors: md.sampleErrors ?? [],
+        totalRows: total,
+      } satisfies ModusObjectResult;
+      setModusResults(prev => ({ ...prev, objects: result }));
+      markStepCompleted(2);
+      setActiveModusBatchId(null);
+      setModusUploading(null);
+      setModusBatchFailure(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/import/batches"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/import/history"] });
+      toast({
+        title: "Modus-import klar",
+        description: `${result.created} skapade, ${result.updated} uppdaterade. Du kan ångra via fliken Historik.`,
+      });
+    } else if (status === "failed") {
+      const reason = md.failureReason || "Okänt fel under bakgrundskörning";
+      setModusBatchFailure({ batchId: batch.batchId, reason });
+      setActiveModusBatchId(null);
+      setModusUploading(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/import/history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/import/batches"] });
+      toast({ title: "Modus-import misslyckades", description: reason, variant: "destructive" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modusBatchQuery.data, activeModusBatchId]);
 
   const counts = {
     customers: customers.length,
@@ -2860,25 +2963,45 @@ export default function ImportPage() {
     
     if (type === "objects") {
       setImportProgress({ status: "running", phase: "startar", processed: 0, total: 0, created: 0, updated: 0, errors: 0 });
+      setModusBatchFailure(null);
     }
-    
+
     try {
       const response = await fetch(`/api/import/modus/${type}`, {
         method: "POST",
         body: formData,
         credentials: "include",
       });
-      
-      if (!response.ok) {
+
+      if (!response.ok && response.status !== 202) {
         const error = await response.json();
         throw new Error(error.error || "Import misslyckades");
       }
-      
+
       const result = await response.json();
-      
-      if (type === "objects" && result.importBatchId && result.status === "started") {
-        connectSSE(result.importBatchId);
-        return;
+
+      // Modus-objektimport körs nu som bakgrundsjobb och svarar 202 + batchId direkt.
+      // Vi switchar då över till att polla /api/import/batches/:batchId via modusBatchQuery
+      // i stället för den gamla SSE-strömmen — fungerar även om sidan stängs och kommer upp igen.
+      if (type === "objects") {
+        const batchId = result.batchId || result.importBatchId;
+        if (batchId && (result.status === "in_progress" || result.status === "started" || response.status === 202)) {
+          setActiveModusBatchId(batchId);
+          // Sätt initial total redan här så progress-baren visar 0/N direkt.
+          if (typeof result.totalRows === "number") {
+            setImportProgress(prev => ({
+              status: "running",
+              phase: "startar",
+              processed: 0,
+              created: 0,
+              updated: 0,
+              errors: 0,
+              ...(prev || {}),
+              total: result.totalRows,
+            }));
+          }
+          return;
+        }
       }
       
       setModusResults(prev => ({ ...prev, [type]: result }));
