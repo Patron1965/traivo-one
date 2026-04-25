@@ -276,12 +276,26 @@ function ImportHistorySection() {
   });
 
   const rollbackMutation = useMutation({
-    mutationFn: (batchId: string) => apiRequest("POST", `/api/import/rollback/${batchId}`),
-    onSuccess: (data: any) => {
-      toast({
-        title: "Import ångrad",
-        description: `${data.rolledBack?.objects || 0} objekt, ${data.rolledBack?.workOrders || 0} ordrar, ${data.rolledBack?.customers || 0} kunder inaktiverade.`,
-      });
+    mutationFn: (batchId: string) => {
+      // Sanering-batches återställs via separat restore-endpoint som läser
+      // audit-loggens before-värden istället för att radera objekten
+      const url = batchId.startsWith("cleanup-")
+        ? `/api/import/cleanup/restore/${batchId}`
+        : `/api/import/rollback/${batchId}`;
+      return apiRequest("POST", url);
+    },
+    onSuccess: (data: any, batchId) => {
+      if (typeof batchId === "string" && batchId.startsWith("cleanup-")) {
+        toast({
+          title: "Sanering återställd",
+          description: `${data.restored || 0} objekt återställda från audit-loggen.`,
+        });
+      } else {
+        toast({
+          title: "Import ångrad",
+          description: `${data.rolledBack?.objects || 0} objekt, ${data.rolledBack?.workOrders || 0} ordrar, ${data.rolledBack?.customers || 0} kunder inaktiverade.`,
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/import/history"] });
     },
     onError: (err: Error) => {
