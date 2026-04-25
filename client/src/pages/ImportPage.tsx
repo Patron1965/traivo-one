@@ -468,11 +468,45 @@ interface EnrichApplyResult {
   metadataColumns: string[];
 }
 
+interface EnrichApplyAccepted {
+  batchId: string;
+  totalRows: number;
+  status: "in_progress";
+  metadataColumns: string[];
+}
+
+interface EnrichBatchStatus {
+  id: string;
+  batchId: string;
+  totalRows: number | null;
+  created: number | null;
+  updated: number | null;
+  errors: number | null;
+  metadata: {
+    type?: string;
+    status?: "in_progress" | "completed" | "failed";
+    rowsProcessed?: number;
+    unchanged?: number;
+    unmatchedCount?: number;
+    invalidIdCount?: number;
+    matchedRowCount?: number;
+    uniqueMatchedObjectCount?: number;
+    sampleErrors?: string[];
+    metadataColumns?: string[];
+    startedAt?: string;
+    finishedAt?: string;
+    failureReason?: string;
+  } | null;
+  createdAt?: string;
+}
+
 function EnrichKarlSection() {
   const { toast } = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<EnrichPreviewResult | null>(null);
   const [applyResult, setApplyResult] = useState<EnrichApplyResult | null>(null);
+  const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ batchId: string; reason: string } | null>(null);
 
   const seedTypesMutation = useMutation({
     mutationFn: async () => {
@@ -535,15 +569,16 @@ function EnrichKarlSection() {
         const err = await res.json().catch(() => ({ error: "Okänt fel" }));
         throw new Error(err.error || `HTTP ${res.status}`);
       }
-      return res.json() as Promise<EnrichApplyResult>;
+      return res.json() as Promise<EnrichApplyAccepted>;
     },
     onSuccess: (data) => {
-      setApplyResult(data);
+      setApplyResult(null);
+      setFailure(null);
+      setActiveBatchId(data.batchId);
       queryClient.invalidateQueries({ queryKey: ["/api/import/history"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/import/data-quality"] });
       toast({
-        title: "Berikning klar",
-        description: `${data.created} nya, ${data.updated} uppdaterade, ${data.unchanged} oförändrade. Batch: ${data.batchId}`,
+        title: "Berikning startad",
+        description: `Bearbetar ${data.totalRows.toLocaleString("sv-SE")} rader i bakgrunden. Du kan stänga sidan – körningen fortsätter.`,
       });
     },
     onError: (err: Error) => {
@@ -551,12 +586,76 @@ function EnrichKarlSection() {
     },
   });
 
+  // Polla pågående batch-status så UI visar progress utan sidladdning. Stannar
+  // automatiskt när status är "completed" eller "failed".
+  const batchStatusQuery = useQuery<EnrichBatchStatus>({
+    queryKey: ["/api/import/batches", activeBatchId],
+    enabled: !!activeBatchId,
+    refetchInterval: (q) => {
+      const status = q.state.data?.metadata?.status;
+      if (status === "completed" || status === "failed") return false;
+      return 2000;
+    },
+    refetchOnWindowFocus: true,
+  });
+
+  const batchStatus = batchStatusQuery.data;
+  const batchPhase = batchStatus?.metadata?.status;
+  const isBatchRunning = !!activeBatchId && batchPhase !== "completed" && batchPhase !== "failed";
+
+  // När batchen är klar: bygg ett applyResult-objekt från batch-metadata och städa state.
+  useEffect(() => {
+    if (!activeBatchId || !batchStatus) return;
+    if (batchPhase === "completed") {
+      const md = batchStatus.metadata || {};
+      const result: EnrichApplyResult = {
+        batchId: batchStatus.batchId,
+        totalRows: batchStatus.totalRows ?? 0,
+        matchedCount: md.matchedRowCount ?? 0,
+        unmatchedCount: md.unmatchedCount ?? 0,
+        invalidIdCount: md.invalidIdCount ?? 0,
+        uniqueMatchedObjectCount: md.uniqueMatchedObjectCount ?? 0,
+        created: batchStatus.created ?? 0,
+        updated: batchStatus.updated ?? 0,
+        unchanged: md.unchanged ?? 0,
+        errors: md.sampleErrors ?? [],
+        errorCount: batchStatus.errors ?? 0,
+        metadataColumns: md.metadataColumns ?? [],
+      };
+      setApplyResult(result);
+      setActiveBatchId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/import/history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/import/data-quality"] });
+      toast({
+        title: "Berikning klar",
+        description: `${result.created} nya, ${result.updated} uppdaterade, ${result.unchanged} oförändrade. Batch: ${result.batchId}`,
+      });
+    } else if (batchPhase === "failed") {
+      const reason = batchStatus.metadata?.failureReason || "Okänt fel under bakgrundskörning";
+      setFailure({ batchId: batchStatus.batchId, reason });
+      setActiveBatchId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/import/history"] });
+      toast({ title: "Berikning misslyckades", description: reason, variant: "destructive" });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchPhase, activeBatchId]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0] || null;
     setFile(f);
     setPreview(null);
     setApplyResult(null);
+    setFailure(null);
   };
+
+  // Beräkna progress-procent baserat på rowsProcessed / totalRows.
+  const progressPct = (() => {
+    if (!batchStatus) return 0;
+    const total = batchStatus.totalRows ?? 0;
+    const done = batchStatus.metadata?.rowsProcessed ?? 0;
+    if (total <= 0) return 0;
+    return Math.min(100, Math.round((done / total) * 100));
+  })();
 
   return (
     <div className="space-y-4">
@@ -641,11 +740,11 @@ function EnrichKarlSection() {
             </Button>
             <Button
               onClick={() => file && applyMutation.mutate(file)}
-              disabled={!file || !preview || applyMutation.isPending || preview.matchedCount === 0}
+              disabled={!file || !preview || applyMutation.isPending || isBatchRunning || preview.matchedCount === 0}
               data-testid="button-enrich-apply"
             >
-              {applyMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
-              Genomför berikning
+              {(applyMutation.isPending || isBatchRunning) ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
+              {isBatchRunning ? "Bearbetar i bakgrunden …" : "Genomför berikning"}
             </Button>
           </div>
         </CardContent>
@@ -707,6 +806,82 @@ function EnrichKarlSection() {
                 </div>
               </details>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {isBatchRunning && batchStatus && (
+        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/20" data-testid="card-enrich-progress">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+              Berikning pågår i bakgrunden
+            </CardTitle>
+            <CardDescription>
+              Batch <code data-testid="text-enrich-progress-batch">{batchStatus.batchId}</code> — du kan stänga sidan utan att avbryta körningen.
+              Status uppdateras automatiskt var 2:e sekund.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                Bearbetade rader:{" "}
+                <strong data-testid="text-enrich-progress-rows">
+                  {(batchStatus.metadata?.rowsProcessed ?? 0).toLocaleString("sv-SE")}
+                </strong>{" "}
+                / {(batchStatus.totalRows ?? 0).toLocaleString("sv-SE")}
+              </span>
+              <span className="font-medium" data-testid="text-enrich-progress-pct">{progressPct}%</span>
+            </div>
+            <Progress value={progressPct} className="h-2" data-testid="progress-enrich" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm pt-2">
+              <div className="p-3 bg-background rounded border">
+                <div className="text-xl font-bold text-green-600" data-testid="text-enrich-progress-created">
+                  {(batchStatus.created ?? 0).toLocaleString("sv-SE")}
+                </div>
+                <div className="text-xs text-muted-foreground">Nya värden</div>
+              </div>
+              <div className="p-3 bg-background rounded border">
+                <div className="text-xl font-bold text-orange-500" data-testid="text-enrich-progress-updated">
+                  {(batchStatus.updated ?? 0).toLocaleString("sv-SE")}
+                </div>
+                <div className="text-xs text-muted-foreground">Uppdaterade</div>
+              </div>
+              <div className="p-3 bg-background rounded border">
+                <div className="text-xl font-bold text-muted-foreground" data-testid="text-enrich-progress-matched">
+                  {(batchStatus.metadata?.matchedRowCount ?? 0).toLocaleString("sv-SE")}
+                </div>
+                <div className="text-xs text-muted-foreground">Matchade rader</div>
+              </div>
+              <div className="p-3 bg-background rounded border">
+                <div className="text-xl font-bold text-amber-600" data-testid="text-enrich-progress-errors">
+                  {(batchStatus.errors ?? 0).toLocaleString("sv-SE")}
+                </div>
+                <div className="text-xs text-muted-foreground">Fel hittills</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {failure && (
+        <Card className="border-red-200 dark:border-red-800 bg-red-50/30 dark:bg-red-950/20" data-testid="card-enrich-failed">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              Berikning misslyckades
+            </CardTitle>
+            <CardDescription>
+              Batch <code>{failure.batchId}</code> kunde inte slutföras.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm p-3 rounded bg-background border" data-testid="text-enrich-failure-reason">
+              {failure.reason}
+            </div>
+            <div className="mt-3 text-xs text-muted-foreground">
+              Eventuella delvis skrivna ändringar kan ångras via fliken Historik (Återställ berikning).
+            </div>
           </CardContent>
         </Card>
       )}

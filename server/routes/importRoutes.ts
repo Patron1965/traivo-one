@@ -4769,13 +4769,18 @@ app.post("/api/import/modus/objects/enrich/preview", requireAdmin, upload.single
   });
 }));
 
-// Apply: skarpkörning av berikning
+// Apply: skarpkörning av berikning. Körs som bakgrundsjobb för att undvika
+// HTTP-timeouts vid stora filer (t.ex. 29 010 kärl × 7 metadatafält). Endpointen
+// validerar fil + skapar import_batches-raden synkront, returnerar 202 + batchId,
+// och fortsätter sedan bearbeta i bakgrunden. UI pollar
+// GET /api/import/batches/:batchId för progress.
 app.post("/api/import/modus/objects/enrich/apply", requireAdmin, upload.single("file"), asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   if (!tenantId) throw new ValidationError("Ingen tenant");
   if (!req.file) throw new ValidationError("Ingen fil uppladdad");
   const userId = (req as any).user?.id || null;
 
+  // Synkron validering så att uppenbara fel returneras direkt (utan att behöva polla).
   const rows = parseEnrichCsv(req.file.buffer);
   if (rows.length === 0) throw new ValidationError("CSV är tom");
 
@@ -4784,72 +4789,7 @@ app.post("/api/import/modus/objects/enrich/apply", requireAdmin, upload.single("
     throw new ValidationError("Inga metadata-kolumner att importera (varken 'Metadata - *' eller columnMapping)");
   }
 
-  // Auto-seed standard kärl-metadatatyper innan import
-  await seedKarlMetadataTypes(tenantId);
-
-  const allTypes = await getAllMetadataTypes(tenantId);
-  const typeByName = new Map(allTypes.map(t => [t.namn.toLowerCase(), t]));
-
-  const modusIds = new Set<string>();
-  for (const row of rows) {
-    const modusId = (row["Id"] || "").replace(/\s/g, "");
-    if (modusId) modusIds.add(modusId);
-  }
-
-  const objectNumbers = Array.from(modusIds).map(id => `MODUS-${id}`);
-  const matchedObjs = objectNumbers.length > 0
-    ? await db.select({ id: objects.id, objectNumber: objects.objectNumber }).from(objects).where(and(
-        eq(objects.tenantId, tenantId),
-        inArray(objects.objectNumber, objectNumbers),
-        isNull(objects.deletedAt),
-      ))
-    : [];
-
-  const modusToObjectId = new Map<string, string>();
-  for (const o of matchedObjs) {
-    if (!o.objectNumber) continue;
-    const modusId = o.objectNumber.replace(/^MODUS-/, "");
-    modusToObjectId.set(modusId, o.id);
-  }
-
   const batchId = `enrich-modus-${Date.now()}`;
-
-  // Ladda existerande värden så vi kan välja create vs update + capture before-värdet
-  const matchedObjectIds = Array.from(new Set(Array.from(modusToObjectId.values())));
-  const typeIds = metadataColumns
-    .map(c => typeByName.get(c.metadataName.toLowerCase())?.id)
-    .filter((x): x is string => !!x);
-
-  type ExistingRow = { id: string; objektId: string; metadataKatalogId: string; display: string | null };
-  const existingByKey = new Map<string, ExistingRow>(); // objectId+typeId -> row
-  if (matchedObjectIds.length > 0 && typeIds.length > 0) {
-    const existing = await db.select().from(metadataVarden).where(and(
-      eq(metadataVarden.tenantId, tenantId),
-      inArray(metadataVarden.objektId, matchedObjectIds),
-      inArray(metadataVarden.metadataKatalogId, typeIds),
-    ));
-    for (const v of existing) {
-      if (!v.objektId) continue;
-      const display = v.vardeString ??
-        (v.vardeInteger != null ? String(v.vardeInteger) : null) ??
-        (v.vardeDecimal != null ? String(v.vardeDecimal) : null) ??
-        (v.vardeBoolean != null ? String(v.vardeBoolean) : null) ??
-        (v.vardeReferens ?? null);
-      existingByKey.set(`${v.objektId}::${v.metadataKatalogId}`, {
-        id: v.id, objektId: v.objektId, metadataKatalogId: v.metadataKatalogId, display,
-      });
-    }
-  }
-
-  let created = 0;
-  let updated = 0;
-  let unchanged = 0;
-  const errors: string[] = [];
-  let unmatchedCount = 0;
-  let invalidIdCount = 0;
-  let matchedRowCount = 0;
-  const uniqueMatchedObjects = new Set<string>();
-
   const startedAt = new Date().toISOString();
   const baseMetadata = {
     type: "enrich-modus" as const,
@@ -4858,7 +4798,8 @@ app.post("/api/import/modus/objects/enrich/apply", requireAdmin, upload.single("
     startedAt,
   };
 
-  // Skapa import_batch med status="in_progress" så historik visar pågående körning
+  // Skapa import_batches-raden direkt så historik och poll-endpoint kan se körningen
+  // som "in_progress" innan vi släpper HTTP-anslutningen.
   await db.insert(importBatches).values({
     tenantId,
     batchId,
@@ -4866,18 +4807,74 @@ app.post("/api/import/modus/objects/enrich/apply", requireAdmin, upload.single("
     created: 0,
     updated: 0,
     errors: 0,
-    metadata: { ...baseMetadata, status: "in_progress" },
+    metadata: { ...baseMetadata, status: "in_progress", rowsProcessed: 0 },
   });
 
-  // Bearbeta rad-för-rad. Audit-loggar samlas och skrivs i batch.
-  // Varje skrivning av createMetadata/updateMetadata är atomär per anrop.
-  const auditBatch: any[] = [];
-  const FLUSH_AT = 200;
+  // Returnera 202 omedelbart - resten körs i bakgrunden så proxy/lastbalanserare
+  // inte timeoutar och användaren slipper hålla fliken öppen för en blockerande request.
+  res.status(202).json({
+    batchId,
+    totalRows: rows.length,
+    status: "in_progress",
+    metadataColumns: metadataColumns.map(c => c.metadataName),
+  });
 
-  async function flushAudit() {
+  // Bakgrundsbearbetning - inga undantag får läcka till Express
+  runEnrichApplyJob({
+    tenantId,
+    userId,
+    batchId,
+    rows,
+    metadataColumns,
+    baseMetadata,
+  }).catch((err) => {
+    console.error(`[enrich-apply ${batchId}] bakgrundsjobb kraschade:`, err);
+  });
+}));
+
+// Hämta status för en pågående/avslutad import-batch (används av UI för progress-polling)
+app.get("/api/import/batches/:batchId", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const { batchId } = req.params;
+  const [batch] = await db.select().from(importBatches)
+    .where(and(eq(importBatches.batchId, batchId), eq(importBatches.tenantId, tenantId)));
+  if (!batch) throw new NotFoundError("Import-batch hittades inte");
+  res.json(batch);
+}));
+
+async function runEnrichApplyJob(params: {
+  tenantId: string;
+  userId: string | null;
+  batchId: string;
+  rows: Record<string, string>[];
+  metadataColumns: { csvColumn: string; metadataName: string }[];
+  baseMetadata: {
+    type: "enrich-modus";
+    metadataColumns: string[];
+    startedBy: string | null;
+    startedAt: string;
+  };
+}) {
+  const { tenantId, userId, batchId, rows, metadataColumns, baseMetadata } = params;
+
+  let created = 0;
+  let updated = 0;
+  let unchanged = 0;
+  const errors: string[] = [];
+  let unmatchedCount = 0;
+  let invalidIdCount = 0;
+  let matchedRowCount = 0;
+  let rowsProcessed = 0;
+  const uniqueMatchedObjects = new Set<string>();
+
+  // Audit-batch deklareras här så även catch-grenen kan flusha väntande audits
+  // innan batchen markeras failed - annars tappas in-memory audit-rader för
+  // de delvis-skrivna metadata-ändringarna och rollback/återställning förlorar spårbarhet.
+  const auditBatch: any[] = [];
+  const flushAudit = async () => {
     if (auditBatch.length === 0) return;
     await db.insert(auditLogs).values(auditBatch.splice(0, auditBatch.length));
-  }
+  };
 
   async function updateBatchProgress(status: "in_progress" | "completed" | "failed", extra: Record<string, any> = {}) {
     await db.update(importBatches).set({
@@ -4887,11 +4884,13 @@ app.post("/api/import/modus/objects/enrich/apply", requireAdmin, upload.single("
       metadata: {
         ...baseMetadata,
         status,
+        rowsProcessed,
         unchanged,
         unmatchedCount,
         invalidIdCount,
         matchedRowCount,
         uniqueMatchedObjectCount: uniqueMatchedObjects.size,
+        sampleErrors: errors.slice(0, 50),
         ...extra,
       },
     }).where(and(
@@ -4901,96 +4900,167 @@ app.post("/api/import/modus/objects/enrich/apply", requireAdmin, upload.single("
   }
 
   try {
+    // Auto-seed standard kärl-metadatatyper innan import
+    await seedKarlMetadataTypes(tenantId);
+
+    const allTypes = await getAllMetadataTypes(tenantId);
+    const typeByName = new Map(allTypes.map(t => [t.namn.toLowerCase(), t]));
+
+    const modusIds = new Set<string>();
     for (const row of rows) {
       const modusId = (row["Id"] || "").replace(/\s/g, "");
-      if (!modusId) { invalidIdCount++; continue; }
-      const objectId = modusToObjectId.get(modusId);
-      if (!objectId) { unmatchedCount++; continue; }
-      matchedRowCount++;
-      uniqueMatchedObjects.add(objectId);
+      if (modusId) modusIds.add(modusId);
+    }
 
-      for (const c of metadataColumns) {
-        const type = typeByName.get(c.metadataName.toLowerCase());
-        if (!type) {
-          if (errors.length < 1000) errors.push(`Saknad metadata-typ för "${c.metadataName}"`);
-          continue;
-        }
-        const raw = (row[c.csvColumn] || "").trim();
-        if (!raw) continue;
+    const objectNumbers = Array.from(modusIds).map(id => `MODUS-${id}`);
+    const matchedObjs = objectNumbers.length > 0
+      ? await db.select({ id: objects.id, objectNumber: objects.objectNumber }).from(objects).where(and(
+          eq(objects.tenantId, tenantId),
+          inArray(objects.objectNumber, objectNumbers),
+          isNull(objects.deletedAt),
+        ))
+      : [];
 
-        const key = `${objectId}::${type.id}`;
-        const existing = existingByKey.get(key);
+    const modusToObjectId = new Map<string, string>();
+    for (const o of matchedObjs) {
+      if (!o.objectNumber) continue;
+      const modusId = o.objectNumber.replace(/^MODUS-/, "");
+      modusToObjectId.set(modusId, o.id);
+    }
 
-        try {
-          if (!existing) {
-            const newRow = await createMetadata({
-              tenantId,
-              objektId: objectId,
-              metadataTypNamn: type.namn,
-              varde: raw,
-              skapadAv: userId || "modus-enrich",
-              metod: "modus-enrich",
-            });
-            existingByKey.set(key, {
-              id: newRow.id, objektId: objectId, metadataKatalogId: type.id, display: raw,
-            });
-            created++;
-            auditBatch.push({
-              tenantId, userId, action: "enrich_modus", resourceType: "object_metadata", resourceId: newRow.id,
-              changes: { before: null, after: { metadataKatalogId: type.id, metadataNamn: type.namn, value: raw } },
-              metadata: { batchId, objectId, source: "modus-enrich" },
-            });
-          } else if ((existing.display ?? "").trim() === raw) {
-            unchanged++;
-          } else {
-            const beforeValue = existing.display;
-            await updateMetadata(existing.id, raw, tenantId, userId || "modus-enrich", "modus-enrich");
-            existing.display = raw;
-            updated++;
-            auditBatch.push({
-              tenantId, userId, action: "enrich_modus", resourceType: "object_metadata", resourceId: existing.id,
-              changes: { before: { value: beforeValue }, after: { metadataKatalogId: type.id, metadataNamn: type.namn, value: raw } },
-              metadata: { batchId, objectId, source: "modus-enrich" },
-            });
+    // Ladda existerande värden så vi kan välja create vs update + capture before-värdet
+    const matchedObjectIds = Array.from(new Set(Array.from(modusToObjectId.values())));
+    const typeIds = metadataColumns
+      .map(c => typeByName.get(c.metadataName.toLowerCase())?.id)
+      .filter((x): x is string => !!x);
+
+    type ExistingRow = { id: string; objektId: string; metadataKatalogId: string; display: string | null };
+    const existingByKey = new Map<string, ExistingRow>(); // objectId+typeId -> row
+    if (matchedObjectIds.length > 0 && typeIds.length > 0) {
+      const existing = await db.select().from(metadataVarden).where(and(
+        eq(metadataVarden.tenantId, tenantId),
+        inArray(metadataVarden.objektId, matchedObjectIds),
+        inArray(metadataVarden.metadataKatalogId, typeIds),
+      ));
+      for (const v of existing) {
+        if (!v.objektId) continue;
+        const display = v.vardeString ??
+          (v.vardeInteger != null ? String(v.vardeInteger) : null) ??
+          (v.vardeDecimal != null ? String(v.vardeDecimal) : null) ??
+          (v.vardeBoolean != null ? String(v.vardeBoolean) : null) ??
+          (v.vardeReferens ?? null);
+        existingByKey.set(`${v.objektId}::${v.metadataKatalogId}`, {
+          id: v.id, objektId: v.objektId, metadataKatalogId: v.metadataKatalogId, display,
+        });
+      }
+    }
+
+    // Skriv en första progress-rapport efter setup så UI ser att lookup-fasen är klar.
+    await updateBatchProgress("in_progress");
+
+    // Bearbeta rad-för-rad. Audit-loggar samlas och skrivs i batch.
+    // Varje skrivning av createMetadata/updateMetadata är atomär per anrop.
+    // auditBatch + flushAudit är hoistade till funktionsnivå så catch-grenen
+    // kan flusha väntande audits innan failed-status skrivs.
+    const FLUSH_AT = 200;
+    const PROGRESS_EVERY_ROWS = 250; // periodisk progress även när inga audits skapas
+
+    for (const row of rows) {
+      rowsProcessed++;
+      const modusId = (row["Id"] || "").replace(/\s/g, "");
+      if (!modusId) { invalidIdCount++; }
+      else {
+        const objectId = modusToObjectId.get(modusId);
+        if (!objectId) { unmatchedCount++; }
+        else {
+          matchedRowCount++;
+          uniqueMatchedObjects.add(objectId);
+
+          for (const c of metadataColumns) {
+            const type = typeByName.get(c.metadataName.toLowerCase());
+            if (!type) {
+              if (errors.length < 1000) errors.push(`Saknad metadata-typ för "${c.metadataName}"`);
+              continue;
+            }
+            const raw = (row[c.csvColumn] || "").trim();
+            if (!raw) continue;
+
+            const key = `${objectId}::${type.id}`;
+            const existing = existingByKey.get(key);
+
+            try {
+              if (!existing) {
+                const newRow = await createMetadata({
+                  tenantId,
+                  objektId: objectId,
+                  metadataTypNamn: type.namn,
+                  varde: raw,
+                  skapadAv: userId || "modus-enrich",
+                  metod: "modus-enrich",
+                });
+                existingByKey.set(key, {
+                  id: newRow.id, objektId: objectId, metadataKatalogId: type.id, display: raw,
+                });
+                created++;
+                auditBatch.push({
+                  tenantId, userId, action: "enrich_modus", resourceType: "object_metadata", resourceId: newRow.id,
+                  changes: { before: null, after: { metadataKatalogId: type.id, metadataNamn: type.namn, value: raw } },
+                  metadata: { batchId, objectId, source: "modus-enrich" },
+                });
+              } else if ((existing.display ?? "").trim() === raw) {
+                unchanged++;
+              } else {
+                const beforeValue = existing.display;
+                await updateMetadata(existing.id, raw, tenantId, userId || "modus-enrich", "modus-enrich");
+                existing.display = raw;
+                updated++;
+                auditBatch.push({
+                  tenantId, userId, action: "enrich_modus", resourceType: "object_metadata", resourceId: existing.id,
+                  changes: { before: { value: beforeValue }, after: { metadataKatalogId: type.id, metadataNamn: type.namn, value: raw } },
+                  metadata: { batchId, objectId, source: "modus-enrich" },
+                });
+              }
+            } catch (err: any) {
+              if (errors.length < 1000) {
+                errors.push(`"${c.metadataName}" (MODUS-${modusId}): ${err.message || err}`);
+              }
+            }
+
+            if (auditBatch.length >= FLUSH_AT) {
+              await flushAudit();
+              await updateBatchProgress("in_progress");
+            }
           }
-        } catch (err: any) {
-          if (errors.length < 1000) {
-            errors.push(`"${c.metadataName}" (MODUS-${modusId}): ${err.message || err}`);
-          }
         }
+      }
 
-        if (auditBatch.length >= FLUSH_AT) {
-          await flushAudit();
-          await updateBatchProgress("in_progress");
-        }
+      // Periodisk progress även om vi inte hunnit fylla auditBatch (t.ex. när majoriteten
+      // av raderna är omatchade eller tomma). Säkerställer att UI ser rörelse.
+      if (rowsProcessed % PROGRESS_EVERY_ROWS === 0) {
+        await updateBatchProgress("in_progress");
       }
     }
     await flushAudit();
     await updateBatchProgress("completed", { finishedAt: new Date().toISOString() });
   } catch (err: any) {
-    // Försök flusha vad som finns och markera batchen som failed så historik vet
-    try { await flushAudit(); } catch {}
-    await updateBatchProgress("failed", {
-      finishedAt: new Date().toISOString(),
-      failureReason: err?.message || String(err),
-    });
+    // Flusha väntande audit-rader innan vi markerar failed så vi inte tappar
+    // spårbarhet för de metadata-skrivningar som hann gå igenom innan felet.
+    try {
+      await flushAudit();
+    } catch (flushErr) {
+      console.error(`[enrich-apply ${batchId}] kunde inte flusha audit-rader vid fel:`, flushErr);
+    }
+    // Markera batchen som failed så historik vet
+    try {
+      await updateBatchProgress("failed", {
+        finishedAt: new Date().toISOString(),
+        failureReason: err?.message || String(err),
+      });
+    } catch (updateErr) {
+      console.error(`[enrich-apply ${batchId}] kunde inte markera batch som failed:`, updateErr);
+    }
     throw err;
   }
-
-  res.json({
-    batchId,
-    totalRows: rows.length,
-    matchedCount: matchedRowCount,
-    unmatchedCount,
-    invalidIdCount,
-    uniqueMatchedObjectCount: uniqueMatchedObjects.size,
-    created,
-    updated,
-    unchanged,
-    errors: errors.slice(0, 50),
-    errorCount: errors.length,
-    metadataColumns: metadataColumns.map(c => c.metadataName),
-  });
-}));
+}
 
 }
