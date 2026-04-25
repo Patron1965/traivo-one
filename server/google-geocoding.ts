@@ -277,7 +277,7 @@ export async function reverseGeocode(
   latitude: number,
   longitude: number,
   tenantId?: string
-): Promise<{ city?: string; postalCode?: string } | null> {
+): Promise<{ city?: string; postalCode?: string; address?: string } | null> {
   if (GEOAPIFY_API_KEY) {
     try {
       const params = new URLSearchParams({
@@ -305,7 +305,12 @@ export async function reverseGeocode(
         const props = data.features[0].properties;
         const city = props.city || props.town || props.village;
         if (city) {
-          return { city, postalCode: props.postcode };
+          const street = props.street || props.name;
+          const houseNo = props.housenumber;
+          const address = street
+            ? (houseNo ? `${street} ${houseNo}` : street)
+            : undefined;
+          return { city, postalCode: props.postcode, address };
         }
       }
     } catch (error) {
@@ -338,7 +343,12 @@ export async function reverseGeocode(
     const addr = data.address || {};
     const city = addr.city || addr.town || addr.village;
     if (city) {
-      return { city, postalCode: addr.postcode };
+      const street = addr.road || addr.pedestrian || addr.path;
+      const houseNo = addr.house_number;
+      const address = street
+        ? (houseNo ? `${street} ${houseNo}` : street)
+        : undefined;
+      return { city, postalCode: addr.postcode, address };
     }
     return null;
   } catch (error) {

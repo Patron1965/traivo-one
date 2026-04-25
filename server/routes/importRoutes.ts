@@ -3630,6 +3630,14 @@ app.get("/api/import/data-quality", asyncHandler(async (req, res) => {
     const [karlInstruction] = await db.select({ count: sql<number>`count(*)` }).from(objects)
       .where(and(karlBase, sql`${objects.name} ~* '(ring|kontakta|fastighetssk|skicka|tillträde|innan|nyckel|portkod|hämta)'`));
 
+    // Kärl-scopade kvalitetsstats (Task #240) — visar saneringens faktiska påverkan
+    const [karlNoAddress] = await db.select({ count: sql<number>`count(*)` }).from(objects)
+      .where(and(karlBase, sql`(${objects.address} IS NULL OR ${objects.address} = '')`));
+    const [karlNoParent] = await db.select({ count: sql<number>`count(*)` }).from(objects)
+      .where(and(karlBase, isNull(objects.parentId)));
+    const [karlNoCoords] = await db.select({ count: sql<number>`count(*)` }).from(objects)
+      .where(and(karlBase, sql`(${objects.latitude} IS NULL OR ${objects.longitude} IS NULL)`));
+
     res.json({
       objects: {
         total: Number(totalObjects.count),
@@ -3653,6 +3661,12 @@ app.get("/api/import/data-quality", asyncHandler(async (req, res) => {
         person: Number(karlPerson.count),
         instruction: Number(karlInstruction.count),
         numeric: Number(karlNumeric.count),
+      },
+      containers: {
+        total: Number(karlTotal.count),
+        missingAddress: Number(karlNoAddress.count),
+        missingParent: Number(karlNoParent.count),
+        missingCoordinates: Number(karlNoCoords.count),
       },
     });
 }));
@@ -4334,7 +4348,7 @@ app.get("/api/import/cleanup/address/preview", requireAdmin, asyncHandler(async 
       if (result?.city) {
         proposals.push({
           id: m.id, name: m.name, source: "reverse-geocode",
-          suggestedAddress: null,
+          suggestedAddress: result.address || null,
           suggestedCity: result.city,
           suggestedPostalCode: result.postalCode || null,
         });
@@ -4499,6 +4513,21 @@ app.post("/api/import/cleanup/restore/:batchId", requireAdmin, asyncHandler(asyn
     if (restoreAudit.length > 0) {
       await tx.insert(auditLogs).values(restoreAudit);
     }
+
+    // Markera batchen som återställd så historik-UI vet det
+    const existingMeta = (batch.metadata as Record<string, any>) || {};
+    await tx.update(importBatches).set({
+      metadata: {
+        ...existingMeta,
+        restored: true,
+        restoredAt: new Date().toISOString(),
+        restoredBy: userId,
+        restoredCount: restored,
+      },
+    }).where(and(
+      eq(importBatches.batchId, batchId),
+      eq(importBatches.tenantId, tenantId),
+    ));
 
     return { restored, skipped, total: entries.length };
   });

@@ -527,7 +527,7 @@ function AddressCleanupDialog({ open, onClose, onApplied, toast }: { open: boole
                           {p.source === "parent" ? "från förälder" : "omvänd-geokod"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm">{p.suggestedAddress || <span className="text-muted-foreground italic">(endast ort)</span>}</TableCell>
+                      <TableCell className="text-sm">{p.suggestedAddress || <span className="text-muted-foreground italic">(saknas — endast ort)</span>}</TableCell>
                       <TableCell className="text-sm">{p.suggestedCity || "—"}</TableCell>
                       <TableCell className="text-sm">{p.suggestedPostalCode || "—"}</TableCell>
                     </TableRow>
