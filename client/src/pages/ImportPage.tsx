@@ -393,29 +393,49 @@ function ImportHistorySection() {
 
       <AlertDialog open={!!confirmBatchId} onOpenChange={(open) => { if (!open) setConfirmBatchId(null); }}>
         <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Ångra import?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Alla objekt, ordrar och kunder som importerades i denna batch kommer att inaktiveras. 
-              Data raderas inte permanent men syns inte längre i systemet.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-rollback">Avbryt</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (confirmBatchId) {
-                  rollbackMutation.mutate(confirmBatchId);
-                  setConfirmBatchId(null);
-                }
-              }}
-              data-testid="button-confirm-rollback"
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              <Undo2 className="h-4 w-4 mr-1" />
-              Ångra import
-            </AlertDialogAction>
-          </AlertDialogFooter>
+          {(() => {
+            const isCleanup = !!confirmBatchId && confirmBatchId.startsWith("cleanup-");
+            const isEnrich = !!confirmBatchId && confirmBatchId.startsWith("enrich-modus-");
+            const title = isEnrich
+              ? "Återställ berikning?"
+              : isCleanup
+                ? "Återställ sanering?"
+                : "Ångra import?";
+            const description = isEnrich
+              ? "Metadata-värden som denna berikning skapade tas bort, och värden som ändrades återställs till sitt tidigare värde via audit-loggen. Inga objekt raderas."
+              : isCleanup
+                ? "Sanerade fält (namn, föräldrakopplingar, adresser) återställs till sina tidigare värden via audit-loggen. Inga objekt raderas."
+                : "Alla objekt, ordrar och kunder som importerades i denna batch kommer att inaktiveras. Data raderas inte permanent men syns inte längre i systemet.";
+            const buttonLabel = isEnrich
+              ? "Återställ berikning"
+              : isCleanup
+                ? "Återställ sanering"
+                : "Ångra import";
+            return (
+              <>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>{title}</AlertDialogTitle>
+                  <AlertDialogDescription>{description}</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel data-testid="button-cancel-rollback">Avbryt</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      if (confirmBatchId) {
+                        rollbackMutation.mutate(confirmBatchId);
+                        setConfirmBatchId(null);
+                      }
+                    }}
+                    data-testid="button-confirm-rollback"
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    <Undo2 className="h-4 w-4 mr-1" />
+                    {buttonLabel}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </>
+            );
+          })()}
         </AlertDialogContent>
       </AlertDialog>
     </div>
