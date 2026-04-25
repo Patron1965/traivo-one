@@ -17,6 +17,7 @@ import { objects, workOrders, customers, objectMetadata, workOrderLines, metadat
 import { createMetadata, updateMetadata, getAllMetadataTypes, seedKarlMetadataTypes, KARL_METADATA_DEFINITIONS } from "../metadata-queries";
 import { metadataVarden } from "@shared/schema";
 import { ensureClusterForCustomer, updateClusterCache } from "../auto-cluster";
+import { restoreEnrichModusBatch } from "../enrich-modus-restore";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -4554,88 +4555,7 @@ app.post("/api/import/enrich-modus/restore/:batchId", requireAdmin, asyncHandler
   const userId = (req as any).user?.id || null;
   const { batchId } = req.params;
 
-  if (!batchId.startsWith("enrich-modus-")) {
-    throw new ValidationError("Endast enrich-modus-batches kan återställas via denna endpoint");
-  }
-
-  const [batch] = await db.select().from(importBatches)
-    .where(and(eq(importBatches.batchId, batchId), eq(importBatches.tenantId, tenantId)));
-  if (!batch) throw new NotFoundError("Berikning-batch hittades inte");
-
-  const result = await db.transaction(async (tx) => {
-    const entries = await tx.select().from(auditLogs).where(and(
-      eq(auditLogs.tenantId, tenantId),
-      eq(auditLogs.action, "enrich_modus"),
-      sql`${auditLogs.metadata}->>'batchId' = ${batchId}`,
-    ));
-
-    let restored = 0;
-    let deleted = 0;
-    let skipped = 0;
-    const restoreAudit: any[] = [];
-
-    for (const entry of entries) {
-      if (!entry.resourceId) { skipped++; continue; }
-      const before = (entry.changes as any)?.before;
-      const after = (entry.changes as any)?.after;
-
-      if (before === null || before === undefined) {
-        // Skapad av enrich → ta bort raden helt
-        const del = await tx.delete(metadataVarden).where(and(
-          eq(metadataVarden.id, entry.resourceId),
-          eq(metadataVarden.tenantId, tenantId),
-        )).returning({ id: metadataVarden.id });
-        if (del.length > 0) {
-          deleted++;
-          restoreAudit.push({
-            tenantId, userId, action: "enrich_modus_restore", resourceType: "object_metadata", resourceId: entry.resourceId,
-            changes: { before: after, after: null },
-            metadata: { batchId, restoredFromBatch: batchId, source: "enrich-modus-restore" },
-          });
-        } else {
-          skipped++;
-        }
-      } else if (typeof before === "object" && "value" in before) {
-        // Uppdaterad av enrich → återställ värdet via updateMetadata
-        try {
-          await updateMetadata(entry.resourceId, before.value, tenantId, userId || "enrich-restore", "enrich-modus-restore");
-          restored++;
-          restoreAudit.push({
-            tenantId, userId, action: "enrich_modus_restore", resourceType: "object_metadata", resourceId: entry.resourceId,
-            changes: { before: after, after: before },
-            metadata: { batchId, restoredFromBatch: batchId, source: "enrich-modus-restore" },
-          });
-        } catch {
-          skipped++;
-        }
-      } else {
-        skipped++;
-      }
-    }
-
-    if (restoreAudit.length > 0) {
-      // Insert i mindre chunks för att inte spränga query-storleken
-      for (let i = 0; i < restoreAudit.length; i += 500) {
-        await tx.insert(auditLogs).values(restoreAudit.slice(i, i + 500));
-      }
-    }
-
-    const existingMeta = (batch.metadata as Record<string, any>) || {};
-    await tx.update(importBatches).set({
-      metadata: {
-        ...existingMeta,
-        restored: true,
-        restoredAt: new Date().toISOString(),
-        restoredBy: userId,
-        restoredCount: restored + deleted,
-      },
-    }).where(and(
-      eq(importBatches.batchId, batchId),
-      eq(importBatches.tenantId, tenantId),
-    ));
-
-    return { restored, deleted, skipped, total: entries.length };
-  });
+  const result = await restoreEnrichModusBatch({ batchId, tenantId, userId });
 
   res.json({ batchId, ...result });
 }));
