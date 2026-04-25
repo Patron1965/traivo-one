@@ -4662,23 +4662,32 @@ app.post("/api/import/modus/objects/enrich/preview", requireAdmin, upload.single
     return res.json({ totalRows: rows.length, matchedCount: 0, unmatchedCount: 0, unmatchedSample: [], metadataColumns: metadataColumns.map(c => c.metadataName), perField: {}, missingMetadataTypes: [], warning: "Inga rader har giltigt Id." });
   }
 
-  const objectNumbers = Array.from(modusIds).map(id => `MODUS-${id}`);
-  const matchedObjs = await db.select({
-    id: objects.id,
-    objectNumber: objects.objectNumber,
-    hierarchyLevel: objects.hierarchyLevel,
-  }).from(objects).where(and(
-    eq(objects.tenantId, tenantId),
-    inArray(objects.objectNumber, objectNumbers),
-    isNull(objects.deletedAt),
-  ));
+  // Tolerant uppslag: vissa tenants har objekt importerade som "MODUS-12345",
+  // andra som rakt nummer "12345". Sök båda formerna och chunka in-listan så
+  // vi inte träffar Postgres parameter-tak (~65k) vid stora filer.
+  const objectNumbersToSearch = Array.from(modusIds).flatMap(id => [`MODUS-${id}`, id]);
+  const LOOKUP_CHUNK = 5000;
+  const matchedObjs: Array<{ id: string; objectNumber: string | null; hierarchyLevel: string | null }> = [];
+  for (let i = 0; i < objectNumbersToSearch.length; i += LOOKUP_CHUNK) {
+    const slice = objectNumbersToSearch.slice(i, i + LOOKUP_CHUNK);
+    const partial = await db.select({
+      id: objects.id,
+      objectNumber: objects.objectNumber,
+      hierarchyLevel: objects.hierarchyLevel,
+    }).from(objects).where(and(
+      eq(objects.tenantId, tenantId),
+      inArray(objects.objectNumber, slice),
+      isNull(objects.deletedAt),
+    ));
+    matchedObjs.push(...partial);
+  }
 
-  // Bygg map MODUS-id → object
+  // Bygg map MODUS-id → object (normalisera bort ev. "MODUS-"-prefix)
   const modusToObject = new Map<string, { id: string; hierarchyLevel: string | null }>();
   for (const o of matchedObjs) {
     if (!o.objectNumber) continue;
-    const modusId = o.objectNumber.replace(/^MODUS-/, "");
-    modusToObject.set(modusId, { id: o.id, hierarchyLevel: o.hierarchyLevel });
+    const normalized = o.objectNumber.replace(/^MODUS-/, "");
+    modusToObject.set(normalized, { id: o.id, hierarchyLevel: o.hierarchyLevel });
   }
 
   // Hämta existerande metadata för matchade objekt + våra metadatatyper
@@ -4912,14 +4921,23 @@ async function runEnrichApplyJob(params: {
       if (modusId) modusIds.add(modusId);
     }
 
-    const objectNumbers = Array.from(modusIds).map(id => `MODUS-${id}`);
-    const matchedObjs = objectNumbers.length > 0
-      ? await db.select({ id: objects.id, objectNumber: objects.objectNumber }).from(objects).where(and(
+    // Tolerant uppslag: stöder både "MODUS-12345" och rakt "12345" som
+    // object_number (några tenants, t.ex. Kinab, har historiskt importerats
+    // utan MODUS-prefix). Chunka för att hålla oss under Postgres parameter-
+    // tak vid stora filer (45k rader × 2 varianter > 65k).
+    const objectNumbersToSearch = Array.from(modusIds).flatMap(id => [`MODUS-${id}`, id]);
+    const APPLY_LOOKUP_CHUNK = 5000;
+    const matchedObjs: Array<{ id: string; objectNumber: string | null }> = [];
+    for (let i = 0; i < objectNumbersToSearch.length; i += APPLY_LOOKUP_CHUNK) {
+      const slice = objectNumbersToSearch.slice(i, i + APPLY_LOOKUP_CHUNK);
+      const partial = await db.select({ id: objects.id, objectNumber: objects.objectNumber })
+        .from(objects).where(and(
           eq(objects.tenantId, tenantId),
-          inArray(objects.objectNumber, objectNumbers),
+          inArray(objects.objectNumber, slice),
           isNull(objects.deletedAt),
-        ))
-      : [];
+        ));
+      matchedObjs.push(...partial);
+    }
 
     const modusToObjectId = new Map<string, string>();
     for (const o of matchedObjs) {
