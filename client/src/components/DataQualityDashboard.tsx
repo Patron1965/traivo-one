@@ -185,8 +185,15 @@ export function DataQualityDashboard() {
 
   if (!stats) return null;
 
-  const objectScore = stats.objects.total > 0
-    ? Math.round(((stats.objects.total - stats.objects.missingCoordinates - stats.objects.missingAddress - stats.objects.missingParent) / (stats.objects.total * 3)) * 100 + 66)
+  // Föredra kärl-scopade siffror (Task #240) — fall tillbaka på objects om de inte finns ännu
+  const containers = (stats as any).containers || {
+    total: stats.objects.total,
+    missingCoordinates: stats.objects.missingCoordinates,
+    missingAddress: stats.objects.missingAddress,
+    missingParent: stats.objects.missingParent,
+  };
+  const objectScore = containers.total > 0
+    ? Math.round(((containers.total - containers.missingCoordinates - containers.missingAddress - containers.missingParent) / (containers.total * 3)) * 100 + 66)
     : 100;
 
   const overallScore = Math.min(100, Math.max(0, objectScore));
@@ -194,9 +201,9 @@ export function DataQualityDashboard() {
   const issues = [
     {
       key: "missing-coordinates",
-      label: "Saknar koordinater",
-      count: stats.objects.missingCoordinates,
-      total: stats.objects.total,
+      label: "Kärl utan koordinater",
+      count: containers.missingCoordinates,
+      total: containers.total,
       icon: MapPin,
       color: "text-orange-500",
       bgColor: "bg-orange-50 dark:bg-orange-950/20",
@@ -204,9 +211,9 @@ export function DataQualityDashboard() {
     },
     {
       key: "missing-address",
-      label: "Saknar adress",
-      count: stats.objects.missingAddress,
-      total: stats.objects.total,
+      label: "Kärl utan adress",
+      count: containers.missingAddress,
+      total: containers.total,
       icon: Navigation,
       color: "text-red-500",
       bgColor: "bg-red-50 dark:bg-red-950/20",
@@ -214,9 +221,9 @@ export function DataQualityDashboard() {
     },
     {
       key: "missing-parent",
-      label: "Saknar förälder (nivå > 1)",
-      count: stats.objects.missingParent,
-      total: stats.objects.total,
+      label: "Kärl utan förälder",
+      count: containers.missingParent,
+      total: containers.total,
       icon: GitBranch,
       color: "text-purple-500",
       bgColor: "bg-purple-50 dark:bg-purple-950/20",

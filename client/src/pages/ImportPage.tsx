@@ -276,13 +276,14 @@ function ImportHistorySection() {
   });
 
   const rollbackMutation = useMutation({
-    mutationFn: (batchId: string) => {
+    mutationFn: async (batchId: string) => {
       // Sanering-batches återställs via separat restore-endpoint som läser
       // audit-loggens before-värden istället för att radera objekten
       const url = batchId.startsWith("cleanup-")
         ? `/api/import/cleanup/restore/${batchId}`
         : `/api/import/rollback/${batchId}`;
-      return apiRequest("POST", url);
+      const res = await apiRequest("POST", url);
+      return res.json();
     },
     onSuccess: (data: any, batchId) => {
       if (typeof batchId === "string" && batchId.startsWith("cleanup-")) {
@@ -329,7 +330,9 @@ function ImportHistorySection() {
           ) : (
             <div className="space-y-2">
               {batches.map((batch: any) => {
-                const isRolledBack = batch.metadata?.rolledBack === true;
+                const isCleanup = typeof batch.batchId === "string" && batch.batchId.startsWith("cleanup-");
+                const isRestored = batch.metadata?.restored === true;
+                const isRolledBack = batch.metadata?.rolledBack === true || isRestored;
                 return (
                   <div key={batch.id} className={`flex items-center justify-between p-3 rounded-lg border ${isRolledBack ? "bg-muted/50 opacity-60" : "bg-background"}`} data-testid={`history-batch-${batch.batchId}`}>
                     <div className="flex items-center gap-3">
@@ -337,7 +340,9 @@ function ImportHistorySection() {
                       <div>
                         <div className="font-medium text-sm">
                           {batch.batchId}
-                          {isRolledBack && <Badge variant="outline" className="ml-2 text-xs">Ångrad</Badge>}
+                          {isRestored && <Badge variant="outline" className="ml-2 text-xs">Återställd</Badge>}
+                          {isRolledBack && !isRestored && <Badge variant="outline" className="ml-2 text-xs">Ångrad</Badge>}
+                          {isCleanup && !isRolledBack && <Badge variant="secondary" className="ml-2 text-xs">Sanering</Badge>}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {batch.createdAt ? format(new Date(batch.createdAt), "d MMM yyyy HH:mm", { locale: sv }) : ""}
