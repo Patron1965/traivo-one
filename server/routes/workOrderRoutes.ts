@@ -199,6 +199,12 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
 
   if (workOrder.resourceId) {
     notificationService.notifyJobAssigned(workOrder, workOrder.resourceId);
+    try {
+      const { maybeSendExtraJobSms } = await import("../extra-job-sms");
+      void maybeSendExtraJobSms({ workOrder, resourceId: workOrder.resourceId, reason: "assigned" });
+    } catch (e) {
+      console.error("[extra-job-sms] hook failed (create):", e);
+    }
   }
 
   res.status(201).json(workOrder);
@@ -271,6 +277,12 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
     if (oldResourceId) {
       notificationService.notifyJobCancelled(existingOrder, oldResourceId);
     }
+    try {
+      const { maybeSendExtraJobSms } = await import("../extra-job-sms");
+      void maybeSendExtraJobSms({ workOrder, resourceId: newResourceId, reason: "assigned" });
+    } catch (e) {
+      console.error("[extra-job-sms] hook failed (reassign):", e);
+    }
   }
 
   if (newResourceId && updateData.scheduledDate !== undefined) {
@@ -278,6 +290,14 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
     const newDate = workOrder.scheduledDate?.toISOString().split('T')[0];
     if (oldDate !== newDate) {
       notificationService.notifyScheduleChanged(workOrder, newResourceId, oldDate, newDate);
+      if (newResourceId === oldResourceId) {
+        try {
+          const { maybeSendExtraJobSms } = await import("../extra-job-sms");
+          void maybeSendExtraJobSms({ workOrder, resourceId: newResourceId, reason: "rescheduled" });
+        } catch (e) {
+          console.error("[extra-job-sms] hook failed (reschedule):", e);
+        }
+      }
     }
   }
 

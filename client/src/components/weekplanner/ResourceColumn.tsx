@@ -1,9 +1,11 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Send } from "lucide-react";
+import { Send, CheckCircle2, AlertCircle } from "lucide-react";
+import { format, differenceInHours } from "date-fns";
+import { sv } from "date-fns/locale";
 import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
 
 interface ResourceColumnProps {
@@ -12,9 +14,11 @@ interface ResourceColumnProps {
   onResourceClick: (resourceId: string) => void;
   onSendSchedule: (resource: Resource) => void;
   isClusterMatch?: boolean;
+  /** Period currently shown in the planner — used to color the publish indicator. */
+  currentPeriod?: { start: string; end: string };
 }
 
-export const ResourceColumn = memo(function ResourceColumn({ resource, summary, onResourceClick, onSendSchedule, isClusterMatch }: ResourceColumnProps) {
+export const ResourceColumn = memo(function ResourceColumn({ resource, summary, onResourceClick, onSendSchedule, isClusterMatch, currentPeriod }: ResourceColumnProps) {
   const { data: profiles = [] } = useQuery<ResourceProfile[]>({ queryKey: ["/api/resource-profiles"] });
   const { data: assignments = [] } = useQuery<ResourceProfileAssignment[]>({
     queryKey: ["/api/resource-profiles", "all-assignments"],
@@ -73,20 +77,59 @@ export const ResourceColumn = memo(function ResourceColumn({ resource, summary, 
           <div className="text-[9px] text-muted-foreground mt-0.5">{summary.totalHours.toFixed(1)}h / {summary.weeklyCapacity}h</div>
         </div>
       )}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => { e.stopPropagation(); onSendSchedule(resource); }}
-            data-testid={`send-schedule-${resource.id}`}
-          >
-            <Send className="h-3.5 w-3.5" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Skicka schema till {resource.name}</TooltipContent>
-      </Tooltip>
+      {(() => {
+        const lastPublishedAt = resource.lastSchedulePublishedAt ? new Date(resource.lastSchedulePublishedAt as any) : null;
+        const periodMatchesCurrent = currentPeriod
+          && resource.lastSchedulePeriodStart === currentPeriod.start
+          && resource.lastSchedulePeriodEnd === currentPeriod.end;
+        const hoursAgo = lastPublishedAt ? differenceInHours(new Date(), lastPublishedAt) : null;
+        const fresh = lastPublishedAt && periodMatchesCurrent && (hoursAgo ?? 999) < 24;
+        const stale = lastPublishedAt && periodMatchesCurrent && !fresh;
+        const neverPublished = !lastPublishedAt || !periodMatchesCurrent;
+
+        const indicatorClass = fresh
+          ? "text-green-600 dark:text-green-400"
+          : stale
+            ? "text-amber-600 dark:text-amber-400"
+            : "text-red-600 dark:text-red-400";
+
+        const labelText = lastPublishedAt && periodMatchesCurrent
+          ? `Skickat ${format(lastPublishedAt, "EEE HH:mm", { locale: sv })}`
+          : "Ej skickat";
+
+        return (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className={`flex items-center gap-1 mt-1 text-[9px] ${indicatorClass}`}
+                onClick={(e) => { e.stopPropagation(); onSendSchedule(resource); }}
+                data-testid={`indicator-published-${resource.id}`}
+              >
+                {neverPublished ? <AlertCircle className="h-2.5 w-2.5" /> : <CheckCircle2 className="h-2.5 w-2.5" />}
+                <span className="truncate">{labelText}</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {lastPublishedAt
+                ? `${periodMatchesCurrent ? "Aktuell period publicerad" : "Senaste publicering avsåg en annan period"} — ${format(lastPublishedAt, "d MMM yyyy HH:mm", { locale: sv })}`
+                : "Schemat för denna period har inte publicerats än"}
+            </TooltipContent>
+          </Tooltip>
+        );
+      })()}
+      <div className="mt-1">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-6 w-full text-[10px] gap-1 px-2"
+          onClick={(e) => { e.stopPropagation(); onSendSchedule(resource); }}
+          data-testid={`send-schedule-${resource.id}`}
+        >
+          <Send className="h-3 w-3" />
+          Skicka
+        </Button>
+      </div>
     </div>
   );
 });

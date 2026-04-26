@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertTriangle, Loader2, User, Sparkles, Wand2, Mail, Copy, Check, Link2, ArrowRight, Trash2, Send, MapPin, Calendar, ChevronRight } from "lucide-react";
+import { AlertTriangle, Loader2, User, Sparkles, Wand2, Mail, Copy, Check, Link2, ArrowRight, Trash2, Send, MapPin, Calendar, ChevronRight, MessageSquare, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { format, startOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useQuery } from "@tanstack/react-query";
@@ -137,48 +138,144 @@ interface SendScheduleDialogProps {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   resource: Resource | null;
-  onSendEmail: () => void;
+  onSend: (channels: { email: boolean; sms: boolean }) => void;
   onCopyLink: () => void;
   copied: boolean;
   isPending: boolean;
+  channelEmail: boolean;
+  setChannelEmail: (v: boolean) => void;
+  channelSms: boolean;
+  setChannelSms: (v: boolean) => void;
+  lastResult: {
+    email?: { success: boolean; recipient?: string; error?: string };
+    sms?: { success: boolean; recipient?: string; error?: string };
+  } | null;
 }
 
 export const SendScheduleDialog = memo(function SendScheduleDialog(props: SendScheduleDialogProps) {
-  const { open, onOpenChange, resource, onSendEmail, onCopyLink, copied, isPending } = props;
+  const {
+    open, onOpenChange, resource, onSend, onCopyLink, copied, isPending,
+    channelEmail, setChannelEmail, channelSms, setChannelSms, lastResult,
+  } = props;
+
+  const hasEmail = !!resource?.email;
+  const hasPhone = !!resource?.phone;
+  const smsAllowedByPref = resource?.smsOnScheduleSend !== false;
+  const lastPublishedAt = resource?.lastSchedulePublishedAt
+    ? new Date(resource.lastSchedulePublishedAt as any)
+    : null;
+
+  const canSend = (channelEmail && hasEmail) || (channelSms && hasPhone && smsAllowedByPref);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Skicka schema</DialogTitle>
-          <DialogDescription>Skicka schemat till {resource?.name} för aktuell period</DialogDescription>
+          <DialogDescription>Publicera schemat för {resource?.name} för aktuell period</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           {resource && (
             <>
               <div className="p-4 bg-muted rounded-lg">
-                <div className="flex items-center gap-3 mb-3">
+                <div className="flex items-center gap-3">
                   <Avatar className="h-10 w-10">
                     <AvatarFallback>{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
                   </Avatar>
-                  <div>
+                  <div className="min-w-0">
                     <div className="font-medium">{resource.name}</div>
-                    <div className="text-sm text-muted-foreground">{resource.email || "Ingen e-post"}</div>
+                    <div className="text-xs text-muted-foreground" data-testid={`text-last-published-${resource.id}`}>
+                      {lastPublishedAt
+                        ? `Senast publicerat ${format(lastPublishedAt, "d MMM HH:mm", { locale: sv })}`
+                        : "Schemat har inte skickats tidigare"}
+                    </div>
                   </div>
                 </div>
               </div>
+
               <div className="space-y-3">
-                <Button className="w-full justify-start gap-3" variant="outline" onClick={onSendEmail} disabled={!resource.email || isPending} data-testid="button-send-schedule-email">
-                  {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                  <div className="text-left flex-1">
-                    <div>Skicka via e-post</div>
-                    <div className="text-xs text-muted-foreground">{resource.email || "Ingen e-post registrerad"}</div>
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Välj kanal</div>
+
+                <label
+                  className={`flex items-center gap-3 p-3 border rounded-lg ${hasEmail ? "cursor-pointer hover:bg-muted/40" : "opacity-60 cursor-not-allowed"}`}
+                  data-testid="row-channel-email"
+                >
+                  <Checkbox
+                    checked={channelEmail && hasEmail}
+                    onCheckedChange={(v) => setChannelEmail(!!v)}
+                    disabled={!hasEmail}
+                    data-testid="checkbox-channel-email"
+                  />
+                  <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">E-post</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {resource.email || "Ingen e-post registrerad"}
+                    </div>
                   </div>
+                </label>
+
+                <label
+                  className={`flex items-center gap-3 p-3 border rounded-lg ${hasPhone && smsAllowedByPref ? "cursor-pointer hover:bg-muted/40" : "opacity-60 cursor-not-allowed"}`}
+                  data-testid="row-channel-sms"
+                >
+                  <Checkbox
+                    checked={channelSms && hasPhone && smsAllowedByPref}
+                    onCheckedChange={(v) => setChannelSms(!!v)}
+                    disabled={!hasPhone || !smsAllowedByPref}
+                    data-testid="checkbox-channel-sms"
+                  />
+                  <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">SMS</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {!hasPhone
+                        ? "Inget telefonnummer registrerat"
+                        : !smsAllowedByPref
+                          ? "Teknikern har stängt av SMS-utskick"
+                          : resource.phone}
+                    </div>
+                  </div>
+                </label>
+
+                {lastResult && (
+                  <div className="space-y-2 mt-2">
+                    {lastResult.email && (
+                      <div className={`flex items-start gap-2 text-xs p-2 rounded ${lastResult.email.success ? "bg-green-50 text-green-800 dark:bg-green-950/40 dark:text-green-300" : "bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-300"}`} data-testid="status-email-result">
+                        {lastResult.email.success ? <Check className="h-3.5 w-3.5 mt-0.5 shrink-0" /> : <X className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
+                        <div>
+                          <div className="font-medium">E-post {lastResult.email.success ? "skickad" : "misslyckades"}</div>
+                          <div className="text-[11px] opacity-80">{lastResult.email.success ? `Till ${lastResult.email.recipient}` : (lastResult.email.error || "Okänt fel")}</div>
+                        </div>
+                      </div>
+                    )}
+                    {lastResult.sms && (
+                      <div className={`flex items-start gap-2 text-xs p-2 rounded ${lastResult.sms.success ? "bg-green-50 text-green-800 dark:bg-green-950/40 dark:text-green-300" : "bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-300"}`} data-testid="status-sms-result">
+                        {lastResult.sms.success ? <Check className="h-3.5 w-3.5 mt-0.5 shrink-0" /> : <X className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
+                        <div>
+                          <div className="font-medium">SMS {lastResult.sms.success ? "skickat" : "misslyckades"}</div>
+                          <div className="text-[11px] opacity-80">{lastResult.sms.success ? `Till ${lastResult.sms.recipient}` : (lastResult.sms.error || "Okänt fel")}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <Button
+                  className="w-full gap-2"
+                  onClick={() => onSend({ email: channelEmail && hasEmail, sms: channelSms && hasPhone && smsAllowedByPref })}
+                  disabled={!canSend || isPending}
+                  data-testid="button-send-schedule"
+                >
+                  {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  Publicera schema
                 </Button>
+
                 <Button className="w-full justify-start gap-3" variant="outline" onClick={onCopyLink} data-testid="button-copy-field-link">
                   {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
                   <div className="text-left flex-1">
                     <div>Kopiera länk till Plannix Go</div>
-                    <div className="text-xs text-muted-foreground">Klistra in i SMS eller meddelande</div>
+                    <div className="text-xs text-muted-foreground">Klistra in i annat meddelande</div>
                   </div>
                 </Button>
               </div>
@@ -187,6 +284,134 @@ export const SendScheduleDialog = memo(function SendScheduleDialog(props: SendSc
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Stäng</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+});
+
+interface BulkSendScheduleDialogProps {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  resources: Resource[];
+  resourceJobCount: Record<string, number>;
+  selectedResourceIds: Set<string>;
+  setSelectedResourceIds: (s: Set<string>) => void;
+  channelEmail: boolean;
+  setChannelEmail: (v: boolean) => void;
+  channelSms: boolean;
+  setChannelSms: (v: boolean) => void;
+  onSend: () => void;
+  isPending: boolean;
+  results: Record<string, { email?: { success: boolean; error?: string }; sms?: { success: boolean; error?: string } }>;
+}
+
+export const BulkSendScheduleDialog = memo(function BulkSendScheduleDialog(props: BulkSendScheduleDialogProps) {
+  const {
+    open, onOpenChange, resources, resourceJobCount,
+    selectedResourceIds, setSelectedResourceIds,
+    channelEmail, setChannelEmail, channelSms, setChannelSms,
+    onSend, isPending, results,
+  } = props;
+
+  const eligibleResources = useMemo(
+    () => resources.filter(r => (resourceJobCount[r.id] || 0) > 0),
+    [resources, resourceJobCount]
+  );
+  const allSelected = eligibleResources.length > 0 && eligibleResources.every(r => selectedResourceIds.has(r.id));
+  const toggleAll = () => {
+    if (allSelected) setSelectedResourceIds(new Set());
+    else setSelectedResourceIds(new Set(eligibleResources.map(r => r.id)));
+  };
+  const toggleOne = (id: string) => {
+    const next = new Set(selectedResourceIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelectedResourceIds(next);
+  };
+
+  const canSend = selectedResourceIds.size > 0 && (channelEmail || channelSms);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Publicera schema till flera</DialogTitle>
+          <DialogDescription>
+            Välj tekniker som ska få veckans schema och vilka kanaler som ska användas.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="flex gap-4 items-center">
+            <label className="flex items-center gap-2 text-sm cursor-pointer" data-testid="bulk-checkbox-email-row">
+              <Checkbox checked={channelEmail} onCheckedChange={(v) => setChannelEmail(!!v)} data-testid="bulk-checkbox-email" />
+              <Mail className="h-4 w-4" /> E-post
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer" data-testid="bulk-checkbox-sms-row">
+              <Checkbox checked={channelSms} onCheckedChange={(v) => setChannelSms(!!v)} data-testid="bulk-checkbox-sms" />
+              <MessageSquare className="h-4 w-4" /> SMS
+            </label>
+          </div>
+
+          <div className="border rounded-lg">
+            <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/40">
+              <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                <Checkbox checked={allSelected} onCheckedChange={toggleAll} data-testid="bulk-checkbox-all" />
+                Alla med jobb ({eligibleResources.length})
+              </label>
+              <span className="text-xs text-muted-foreground">{selectedResourceIds.size} valda</span>
+            </div>
+            <ScrollArea className="max-h-[280px]">
+              <div className="divide-y">
+                {eligibleResources.length === 0 && (
+                  <div className="p-4 text-sm text-muted-foreground text-center">Inga tekniker har planerade jobb i aktuell period.</div>
+                )}
+                {eligibleResources.map(r => {
+                  const res = results[r.id];
+                  const lastPublishedAt = r.lastSchedulePublishedAt ? new Date(r.lastSchedulePublishedAt as any) : null;
+                  return (
+                    <label
+                      key={r.id}
+                      className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted/40"
+                      data-testid={`bulk-row-${r.id}`}
+                    >
+                      <Checkbox
+                        checked={selectedResourceIds.has(r.id)}
+                        onCheckedChange={() => toggleOne(r.id)}
+                        data-testid={`bulk-checkbox-${r.id}`}
+                      />
+                      <Avatar className="h-7 w-7">
+                        <AvatarFallback className="text-[10px]">{r.initials || r.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{r.name}</div>
+                        <div className="text-[11px] text-muted-foreground truncate">
+                          {resourceJobCount[r.id] || 0} jobb •{" "}
+                          {lastPublishedAt ? `senast ${format(lastPublishedAt, "d MMM HH:mm", { locale: sv })}` : "ej skickat"}
+                        </div>
+                      </div>
+                      {res && (
+                        <div className="flex items-center gap-1">
+                          {res.email && (res.email.success
+                            ? <Check className="h-4 w-4 text-green-600" data-testid={`bulk-status-email-ok-${r.id}`} />
+                            : <X className="h-4 w-4 text-red-500" data-testid={`bulk-status-email-fail-${r.id}`} />)}
+                          {res.sms && (res.sms.success
+                            ? <Check className="h-4 w-4 text-green-600" data-testid={`bulk-status-sms-ok-${r.id}`} />
+                            : <X className="h-4 w-4 text-red-500" data-testid={`bulk-status-sms-fail-${r.id}`} />)}
+                        </div>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Stäng</Button>
+          <Button onClick={onSend} disabled={!canSend || isPending} data-testid="button-bulk-send-schedule">
+            {isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+            Publicera till valda
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

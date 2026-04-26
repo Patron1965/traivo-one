@@ -322,15 +322,74 @@ export interface ScheduleJob {
   keyNumber?: string;
 }
 
+export interface ScheduleSendChannelResult {
+  success: boolean;
+  recipient?: string;
+  messageId?: string;
+  error?: string;
+}
+
+export interface ScheduleSendResult {
+  success: boolean;
+  email?: ScheduleSendChannelResult;
+  sms?: ScheduleSendChannelResult;
+  publishedPeriod?: { start: string; end: string };
+}
+
+function formatPhoneE164(phone: string): string | null {
+  if (!phone) return null;
+  let cleaned = phone.replace(/[\s\-().]/g, "");
+  if (cleaned.startsWith("00")) cleaned = "+" + cleaned.substring(2);
+  if (cleaned.startsWith("+")) {
+    const digits = cleaned.substring(1);
+    if (!/^\d{8,15}$/.test(digits)) return null;
+    return cleaned;
+  }
+  if (cleaned.startsWith("0")) cleaned = "+46" + cleaned.substring(1);
+  else if (/^\d+$/.test(cleaned)) cleaned = "+46" + cleaned;
+  else return null;
+  const digits = cleaned.substring(1);
+  if (!/^\d{8,15}$/.test(digits)) return null;
+  return cleaned;
+}
+
+function buildScheduleSmsBody(params: {
+  companyName: string;
+  resourceName: string;
+  totalJobs: number;
+  firstJobTime?: string;
+  fieldAppUrl: string;
+}): string {
+  const { companyName, resourceName, totalJobs, firstJobTime, fieldAppUrl } = params;
+  const firstName = resourceName.split(" ")[0] || resourceName;
+  const startStr = firstJobTime ? ` Första pass ${firstJobTime}.` : "";
+  const body = `${companyName}: Hej ${firstName}, ditt schema är publicerat (${totalJobs} jobb).${startStr} Öppna Plannix Go: ${fieldAppUrl}`;
+  return body.length > 320 ? body.substring(0, 317) + "..." : body;
+}
+
 export async function sendScheduleToResource(
   tenantId: string,
   resourceId: string,
   resourceName: string,
-  resourceEmail: string,
+  resourceEmail: string | null,
   jobs: ScheduleJob[],
   dateRange: { start: string; end: string },
-  fieldAppUrl: string
-): Promise<NotificationResult> {
+  fieldAppUrl: string,
+  options?: {
+    channels?: { email?: boolean; sms?: boolean };
+    resourcePhone?: string | null;
+    smsAllowed?: boolean;
+  }
+): Promise<ScheduleSendResult> {
+  const channels = options?.channels ?? { email: true, sms: false };
+  const wantEmail = channels.email !== false;
+  const wantSms = channels.sms === true;
+
+  const result: ScheduleSendResult = {
+    success: false,
+    publishedPeriod: dateRange,
+  };
+
   try {
     const tenant = await storage.getTenant(tenantId);
     const companyName = tenant?.name || "Plannix";
@@ -424,24 +483,119 @@ export async function sendScheduleToResource(
     `;
     
     const subject = `Ditt schema - ${totalJobs} jobb planerade`;
-    
-    const result = await sendEmail({
-      to: resourceEmail,
-      subject,
-      html,
-    });
-    
-    if (result.error) {
-      return { success: false, error: result.error.message, recipient: resourceEmail };
+
+    if (wantEmail) {
+      if (!resourceEmail) {
+        result.email = { success: false, error: "Resursen saknar e-postadress" };
+      } else {
+        try {
+          const emailResult = await sendEmail({
+            to: resourceEmail,
+            subject,
+            html,
+          });
+          if (emailResult.error) {
+            result.email = { success: false, error: emailResult.error.message, recipient: resourceEmail };
+          } else {
+            result.email = { success: true, recipient: resourceEmail, messageId: emailResult.data?.id };
+          }
+        } catch (e) {
+          result.email = { success: false, error: e instanceof Error ? e.message : "E-postfel", recipient: resourceEmail };
+        }
+      }
     }
-    
-    return { success: true, recipient: resourceEmail, messageId: result.data?.id };
+
+    if (wantSms) {
+      const phone = options?.resourcePhone;
+      if (!phone) {
+        result.sms = { success: false, error: "Resursen saknar telefonnummer" };
+      } else if (options?.smsAllowed === false) {
+        result.sms = { success: false, error: "Teknikern har stängt av SMS-utskick av schema" };
+      } else {
+        try {
+          const { sendSms, isTwilioConfigured } = await import("./replit_integrations/twilio");
+          const configured = await isTwilioConfigured();
+          if (!configured) {
+            result.sms = { success: false, error: "SMS-tjänsten är inte konfigurerad" };
+          } else {
+            const firstJobForSms = sortedDates.length
+              ? jobsByDate[sortedDates[0]].sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""))[0]
+              : undefined;
+            const smsBody = buildScheduleSmsBody({
+              companyName,
+              resourceName,
+              totalJobs,
+              firstJobTime: firstJobForSms?.scheduledStartTime,
+              fieldAppUrl,
+            });
+            const to = formatPhoneE164(phone);
+            if (!to) {
+              result.sms = { success: false, error: "Ogiltigt telefonnummer", recipient: phone };
+            } else {
+              const smsResult = await sendSms({ to, body: smsBody });
+              if (smsResult.success) {
+                result.sms = { success: true, recipient: to, messageId: smsResult.messageId };
+              } else {
+                result.sms = { success: false, error: smsResult.error, recipient: to };
+              }
+            }
+          }
+        } catch (e) {
+          result.sms = { success: false, error: e instanceof Error ? e.message : "SMS-fel", recipient: phone };
+        }
+      }
+    }
+
+    const emailOk = !wantEmail || result.email?.success === true;
+    const smsOk = !wantSms || result.sms?.success === true;
+    result.success = (wantEmail || wantSms) && emailOk && smsOk;
+
+    const anySuccess = result.email?.success === true || result.sms?.success === true;
+    if (anySuccess) {
+      try {
+        await storage.updateResource(resourceId, {
+          lastSchedulePublishedAt: new Date() as any,
+          lastSchedulePeriodStart: dateRange.start,
+          lastSchedulePeriodEnd: dateRange.end,
+        } as any);
+      } catch (e) {
+        console.error("[notification] Failed to persist last published period:", e);
+      }
+
+      const channelsLog: string[] = [];
+      if (result.email?.success) channelsLog.push(`e-post → ${result.email.recipient}`);
+      if (result.sms?.success) channelsLog.push(`SMS → ${result.sms.recipient}`);
+      try {
+        await storage.createDriverNotification({
+          tenantId,
+          resourceId,
+          type: "schedule_published",
+          title: "Schema publicerat",
+          message: `Schemat för ${dateRange.start} – ${dateRange.end} skickades via ${channelsLog.join(", ") || "ingen kanal"} (${totalJobs} jobb)`,
+          orderId: null,
+          data: {
+            dateRange,
+            totalJobs,
+            channels: {
+              email: result.email ? { success: result.email.success, error: result.email.error } : undefined,
+              sms: result.sms ? { success: result.sms.success, error: result.sms.error } : undefined,
+            },
+          },
+          isRead: false,
+        });
+      } catch (e) {
+        console.error("[notification] Failed to log schedule send:", e);
+      }
+    }
+
+    return result;
   } catch (error) {
     console.error("[notification] Error sending schedule to resource:", error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : "Okänt fel vid skickning av schema",
-      recipient: resourceEmail
+    return {
+      success: false,
+      email: wantEmail ? { success: false, error: error instanceof Error ? error.message : "Okänt fel", recipient: resourceEmail || undefined } : undefined,
+      sms: wantSms ? { success: false, error: error instanceof Error ? error.message : "Okänt fel" } : undefined,
+      publishedPeriod: dateRange,
     };
   }
 }

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
@@ -226,6 +227,8 @@ interface ResourceFormData {
   competencies: string[];
   status: string;
   availability: Record<string, string>;
+  smsOnScheduleSend: boolean;
+  smsOnExtraJob: boolean;
 }
 
 const emptyFormData: ResourceFormData = {
@@ -239,6 +242,8 @@ const emptyFormData: ResourceFormData = {
   competencies: [],
   status: "active",
   availability: {},
+  smsOnScheduleSend: true,
+  smsOnExtraJob: true,
 };
 
 export default function ResourcesPage() {
@@ -440,6 +445,8 @@ export default function ResourcesPage() {
       competencies: resource.competencies || [],
       status: resource.status,
       availability: (resource.availability || {}) as Record<string, string>,
+      smsOnScheduleSend: resource.smsOnScheduleSend !== false,
+      smsOnExtraJob: resource.smsOnExtraJob !== false,
     });
     setDialogOpen(true);
   };
@@ -1017,6 +1024,45 @@ export default function ResourcesPage() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="space-y-3 border rounded-md p-3">
+              <Label className="text-sm font-medium">SMS-notiser till tekniker</Label>
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="sms-on-publish" className="text-sm font-normal">SMS när schema publiceras</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Skickas när planeraren publicerar veckans schema
+                  </p>
+                </div>
+                <Switch
+                  id="sms-on-publish"
+                  checked={formData.smsOnScheduleSend}
+                  onCheckedChange={(v) => setFormData(prev => ({ ...prev, smsOnScheduleSend: !!v }))}
+                  disabled={!formData.phone}
+                  data-testid="switch-sms-on-schedule-send"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="sms-on-extra" className="text-sm font-normal">SMS vid extrajobb</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Skickas när nytt jobb läggs till efter publicering
+                  </p>
+                </div>
+                <Switch
+                  id="sms-on-extra"
+                  checked={formData.smsOnExtraJob}
+                  onCheckedChange={(v) => setFormData(prev => ({ ...prev, smsOnExtraJob: !!v }))}
+                  disabled={!formData.phone}
+                  data-testid="switch-sms-on-extra-job"
+                />
+              </div>
+              {!formData.phone && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Lägg till ett telefonnummer för att kunna skicka SMS.
+                </p>
+              )}
             </div>
           </div>
 

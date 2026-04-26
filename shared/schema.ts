@@ -213,6 +213,13 @@ export const resources = pgTable("resources", {
   isOnline: boolean("is_online").default(false),
   lastSeenAt: timestamp("last_seen_at"),
   status: text("status").default("active").notNull(),
+  // SMS-preferenser (på som default för nya tekniker)
+  smsOnScheduleSend: boolean("sms_on_schedule_send").default(true).notNull(),
+  smsOnExtraJob: boolean("sms_on_extra_job").default(true).notNull(),
+  // Senast publicerade schemaperiod (för att detektera "extrajobb" inom redan publicerad vecka)
+  lastSchedulePublishedAt: timestamp("last_schedule_published_at"),
+  lastSchedulePeriodStart: text("last_schedule_period_start"),
+  lastSchedulePeriodEnd: text("last_schedule_period_end"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [

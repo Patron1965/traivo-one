@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight, ChevronDown, ChevronUp, Crosshair, ExternalLink, ShieldCheck } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight, ChevronDown, ChevronUp, Crosshair, ExternalLink, ShieldCheck, Send } from "lucide-react";
 import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
 import type { ViewMode } from "./types";
 import { zoomLevels } from "./types";
@@ -51,6 +51,7 @@ interface PlannerToolbarProps {
   unscheduledCount: number;
   showConstraintLayer?: boolean;
   onToggleConstraintLayer?: () => void;
+  onPublishWeek?: () => void;
 }
 
 const getGoalColor = (pct: number) => {
@@ -76,6 +77,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
     visibleDates, getResourceDayHours,
     jobConflictCount, filteredScheduledCount, unscheduledCount,
     showConstraintLayer, onToggleConstraintLayer,
+    onPublishWeek,
   } = props;
 
   const [showCapacity, setShowCapacity] = useState(false);
@@ -354,6 +356,24 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                 <TooltipContent side="top">Visa/dölj veckomål</TooltipContent>
               </Tooltip>
             </>
+          )}
+
+          {onPublishWeek && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  onClick={onPublishWeek}
+                  data-testid="button-publish-week"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  Publicera schema
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Skicka veckans schema till tekniker (e-post + SMS)</TooltipContent>
+            </Tooltip>
           )}
 
           <Tooltip>

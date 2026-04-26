@@ -14,7 +14,7 @@ import { zoomLevels } from "./weekplanner/types";
 import { DroppableCell, DraggableJobCard } from "./weekplanner/DndComponents";
 import { JobCard, DragOverlayContent } from "./weekplanner/JobCard";
 import { UnscheduledSidebar } from "./weekplanner/UnscheduledSidebar";
-import { AssignDialog, SendScheduleDialog, ConflictDialog, ClearDialog, AutoFillDialog, DepChainDialog, ConflictListDialog } from "./weekplanner/PlannerDialogs";
+import { AssignDialog, SendScheduleDialog, BulkSendScheduleDialog, ConflictDialog, ClearDialog, AutoFillDialog, DepChainDialog, ConflictListDialog } from "./weekplanner/PlannerDialogs";
 import { PlannerToolbar, PlannerFooter } from "./weekplanner/PlannerToolbar";
 import { DisruptionPanel } from "./weekplanner/DisruptionPanel";
 import { DayTimelineView } from "./weekplanner/DayTimelineView";
@@ -179,6 +179,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             unscheduledCount={d.unscheduledJobs.length}
             showConstraintLayer={d.showConstraintLayer}
             onToggleConstraintLayer={() => d.setShowConstraintLayer(!d.showConstraintLayer)}
+            onPublishWeek={d.openBulkSendDialog}
           />
 
           <DisruptionPanel />
@@ -256,6 +257,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
               clusterMatchedResourceIds={d.clusterMatchedResourceIds}
               showConstraintLayer={d.showConstraintLayer}
               constraintMap={d.constraintMap}
+              currentPeriod={d.currentPeriodRange}
             />
           )}
           {d.viewMode === "month" && (
@@ -348,7 +350,35 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
       </DragOverlay>
 
       <AssignDialog open={d.assignDialogOpen} onOpenChange={d.setAssignDialogOpen} jobToAssign={d.jobToAssign} assignDate={d.assignDate} setAssignDate={d.setAssignDate} assignResourceId={d.assignResourceId} setAssignResourceId={d.setAssignResourceId} resources={d.resources} onConfirm={d.handleQuickAssign} isPending={d.updateWorkOrderMutation.isPending} />
-      <SendScheduleDialog open={d.sendScheduleDialogOpen} onOpenChange={d.setSendScheduleDialogOpen} resource={d.sendScheduleResource} onSendEmail={d.handleSendScheduleEmail} onCopyLink={d.handleCopyFieldAppLink} copied={d.sendScheduleCopied} isPending={d.sendScheduleMutation.isPending} />
+      <SendScheduleDialog
+        open={d.sendScheduleDialogOpen}
+        onOpenChange={d.setSendScheduleDialogOpen}
+        resource={d.sendScheduleResource}
+        onSend={d.submitSendSchedule}
+        onCopyLink={d.handleCopyFieldAppLink}
+        copied={d.sendScheduleCopied}
+        isPending={d.sendScheduleMutation.isPending}
+        channelEmail={d.sendChannelEmail}
+        setChannelEmail={d.setSendChannelEmail}
+        channelSms={d.sendChannelSms}
+        setChannelSms={d.setSendChannelSms}
+        lastResult={d.sendLastResult}
+      />
+      <BulkSendScheduleDialog
+        open={d.bulkSendOpen}
+        onOpenChange={d.setBulkSendOpen}
+        resources={d.resources}
+        resourceJobCount={d.resourceJobCountForCurrentPeriod}
+        selectedResourceIds={d.bulkSelectedIds}
+        setSelectedResourceIds={d.setBulkSelectedIds}
+        channelEmail={d.bulkChannelEmail}
+        setChannelEmail={d.setBulkChannelEmail}
+        channelSms={d.bulkChannelSms}
+        setChannelSms={d.setBulkChannelSms}
+        onSend={d.handleBulkSendSchedule}
+        isPending={d.bulkSending}
+        results={d.bulkResults}
+      />
       <ConflictDialog open={d.conflictDialogOpen} onOpenChange={(o) => { if (!o) { d.setConflictDialogOpen(false); d.setPendingSchedule(null); } }} pendingSchedule={d.pendingSchedule} workOrders={d.workOrders} onAccept={d.handleAcceptConflict} onCancel={() => { d.setConflictDialogOpen(false); d.setPendingSchedule(null); }} />
       <ClearDialog open={d.clearDialogOpen} onOpenChange={d.setClearDialogOpen} viewMode={d.viewMode} jobCount={d.currentViewScheduledJobs.length} onConfirm={d.handleClearAllScheduled} loading={d.clearLoading} />
       <AutoFillDialog open={d.autoFillDialogOpen} onOpenChange={d.setAutoFillDialogOpen} overbooking={d.autoFillOverbooking} setOverbooking={d.setAutoFillOverbooking} geoClustering={d.autoFillGeoClustering} setGeoClustering={d.setAutoFillGeoClustering} geoSpread={d.autoFillGeoSpread} loading={d.autoFillLoading} applying={d.autoFillApplying} preview={d.autoFillPreview} skipped={d.autoFillSkipped} diag={d.autoFillDiag} resources={d.resources} viewMode={d.viewMode} currentWeekStart={d.currentWeekStart} currentDate={d.currentDate} onPreview={d.handleAutoFillPreview} onApply={d.handleAutoFillApply} />

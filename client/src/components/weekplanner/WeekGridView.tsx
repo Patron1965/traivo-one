@@ -33,6 +33,7 @@ interface WeekGridViewProps {
   clusterMatchedResourceIds?: Set<string>;
   showConstraintLayer?: boolean;
   constraintMap?: Map<string, ConstraintCell>;
+  currentPeriod?: { start: string; end: string };
 }
 
 function getWeatherIcon(code: number) {
@@ -114,7 +115,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
           return (
             <div key={resource.id} className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] border-b">
               <div className="sticky left-0 bg-background z-10">
-                <ResourceColumn resource={resource} summary={summary} onResourceClick={onResourceClick} onSendSchedule={onSendSchedule} isClusterMatch={!!activeDragJob && clusterMatchedResourceIds?.has(resource.id)} />
+                <ResourceColumn resource={resource} summary={summary} onResourceClick={onResourceClick} onSendSchedule={onSendSchedule} isClusterMatch={!!activeDragJob && clusterMatchedResourceIds?.has(resource.id)} currentPeriod={props.currentPeriod} />
               </div>
               {visibleDates.map((day, dayIndex) => {
                 const jobs = getJobsForResourceAndDay(resource.id, day);

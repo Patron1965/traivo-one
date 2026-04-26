@@ -82,6 +82,18 @@ export function usePlannerData() {
   const [sendScheduleDialogOpen, setSendScheduleDialogOpen] = useState(false);
   const [sendScheduleResource, setSendScheduleResource] = useState<Resource | null>(null);
   const [sendScheduleCopied, setSendScheduleCopied] = useState(false);
+  const [sendChannelEmail, setSendChannelEmail] = useState(true);
+  const [sendChannelSms, setSendChannelSms] = useState(true);
+  const [sendLastResult, setSendLastResult] = useState<{
+    email?: { success: boolean; recipient?: string; error?: string };
+    sms?: { success: boolean; recipient?: string; error?: string };
+  } | null>(null);
+  const [bulkSendOpen, setBulkSendOpen] = useState(false);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkChannelEmail, setBulkChannelEmail] = useState(true);
+  const [bulkChannelSms, setBulkChannelSms] = useState(true);
+  const [bulkResults, setBulkResults] = useState<Record<string, { email?: { success: boolean; error?: string }; sms?: { success: boolean; error?: string } }>>({});
+  const [bulkSending, setBulkSending] = useState(false);
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
   const [pendingSchedule, setPendingSchedule] = useState<{ jobId: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; conflicts: string[]; bulkJobs?: Array<{ jobId: string; startTime: string }> } | null>(null);
   const [autoFillDialogOpen, setAutoFillDialogOpen] = useState(false);
@@ -257,8 +269,32 @@ export function usePlannerData() {
   });
 
   const sendScheduleMutation = useMutation({
-    mutationFn: async ({ resourceId, jobs, dateRange }: { resourceId: string; jobs: Array<{ id: string; title: string; objectName?: string; objectAddress?: string; scheduledDate: string; scheduledStartTime?: string; estimatedDuration?: number; accessCode?: string; keyNumber?: string }>; dateRange: { start: string; end: string } }) => (await apiRequest("POST", `/api/notifications/send-schedule/${resourceId}`, { jobs, dateRange, fieldAppUrl: `${window.location.origin}/field` })).json(),
-    onSuccess: (data) => { if (data.success) { toast({ title: "Schema skickat!", description: `Schemat har skickats till ${data.recipient}` }); setSendScheduleDialogOpen(false); } else { toast({ title: "Kunde inte skicka", description: data.error || "Ett fel uppstod", variant: "destructive" }); } },
+    mutationFn: async ({ resourceId, jobs, dateRange, channels }: { resourceId: string; jobs: Array<{ id: string; title: string; objectName?: string; objectAddress?: string; scheduledDate: string; scheduledStartTime?: string; estimatedDuration?: number; accessCode?: string; keyNumber?: string }>; dateRange: { start: string; end: string }; channels: { email: boolean; sms: boolean } }) => (await apiRequest("POST", `/api/notifications/send-schedule/${resourceId}`, { jobs, dateRange, fieldAppUrl: `${window.location.origin}/field`, channels })).json(),
+    onSuccess: (data) => {
+      const result = {
+        email: data.email as { success: boolean; recipient?: string; error?: string } | undefined,
+        sms: data.sms as { success: boolean; recipient?: string; error?: string } | undefined,
+      };
+      setSendLastResult(result);
+      const emailOk = result.email?.success;
+      const smsOk = result.sms?.success;
+      const emailFail = result.email && !emailOk;
+      const smsFail = result.sms && !smsOk;
+      const okParts: string[] = [];
+      if (emailOk) okParts.push("e-post");
+      if (smsOk) okParts.push("SMS");
+      const failParts: string[] = [];
+      if (emailFail) failParts.push("e-post");
+      if (smsFail) failParts.push("SMS");
+      if (okParts.length > 0 && failParts.length === 0) {
+        toast({ title: "Schema skickat", description: `Skickat via ${okParts.join(" + ")}.` });
+      } else if (okParts.length > 0 && failParts.length > 0) {
+        toast({ title: "Delvis skickat", description: `OK: ${okParts.join(", ")}. Misslyckades: ${failParts.join(", ")}.`, variant: "destructive" });
+      } else if (failParts.length > 0) {
+        toast({ title: "Kunde inte skicka", description: `Misslyckades: ${failParts.join(", ")}.`, variant: "destructive" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
+    },
     onError: (err) => { toast({ title: "Kunde inte skicka schema", description: err instanceof Error ? err.message : "Försök igen senare.", variant: "destructive" }); },
   });
 
@@ -555,10 +591,124 @@ export function usePlannerData() {
   const activeResourceJobs = useMemo(() => activeResourceId ? scheduledJobs.filter(j => j.resourceId === activeResourceId).sort((a, b) => { if (!a.scheduledDate || !b.scheduledDate) return 0; return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime(); }) : [], [activeResourceId, scheduledJobs]);
   const activeResourceJobsByDay = useMemo(() => { const m: Record<string, WorkOrderWithObject[]> = {}; for (const j of activeResourceJobs) { if (!j.scheduledDate) continue; const dk = (typeof j.scheduledDate === "string" ? j.scheduledDate : (j.scheduledDate as Date).toISOString()).split("T")[0]; if (!m[dk]) m[dk] = []; m[dk].push(j); } return m; }, [activeResourceJobs]);
 
-  const handleSendSchedule = useCallback((r: Resource) => { setSendScheduleResource(r); setSendScheduleCopied(false); setSendScheduleDialogOpen(true); }, []);
+  const handleSendSchedule = useCallback((r: Resource) => {
+    setSendScheduleResource(r);
+    setSendScheduleCopied(false);
+    setSendLastResult(null);
+    setSendChannelEmail(!!r.email);
+    const smsEnabled = (r as any).smsOnScheduleSend !== false;
+    setSendChannelSms(!!r.phone && smsEnabled);
+    setSendScheduleDialogOpen(true);
+  }, []);
   const getResourceScheduleJobs = useCallback((rid: string) => { const sd = viewMode === "week" ? currentWeekStart : currentDate; const ed = viewMode === "week" ? addDays(currentWeekStart, 4) : viewMode === "month" ? addDays(startOfMonth(currentDate), getDaysInMonth(currentDate) - 1) : currentDate; return workOrders.filter(j => j.resourceId === rid && j.scheduledDate && new Date(j.scheduledDate) >= sd && new Date(j.scheduledDate) <= ed).map(j => ({ id: j.id, title: j.title, objectName: j.objectName || undefined, objectAddress: j.objectAddress || undefined, scheduledDate: typeof j.scheduledDate === "string" ? j.scheduledDate : j.scheduledDate instanceof Date ? j.scheduledDate.toISOString() : new Date(String(j.scheduledDate)).toISOString(), scheduledStartTime: j.scheduledStartTime || undefined, estimatedDuration: j.estimatedDuration || undefined, accessCode: j.objectAccessCode || undefined, keyNumber: j.objectKeyNumber || undefined })); }, [workOrders, viewMode, currentWeekStart, currentDate]);
 
-  const handleSendScheduleEmail = useCallback(() => { if (!sendScheduleResource) return; const jobs = getResourceScheduleJobs(sendScheduleResource.id); if (jobs.length === 0) { toast({ title: "Inga jobb att skicka", description: "Resursen har inga planerade jobb för denna period.", variant: "destructive" }); return; } const sd = viewMode === "week" ? format(currentWeekStart, "yyyy-MM-dd") : format(currentDate, "yyyy-MM-dd"); const ed = viewMode === "week" ? format(addDays(currentWeekStart, 4), "yyyy-MM-dd") : viewMode === "month" ? format(addDays(startOfMonth(currentDate), getDaysInMonth(currentDate) - 1), "yyyy-MM-dd") : format(currentDate, "yyyy-MM-dd"); sendScheduleMutation.mutate({ resourceId: sendScheduleResource.id, jobs, dateRange: { start: sd, end: ed } }); }, [sendScheduleResource, getResourceScheduleJobs, sendScheduleMutation, viewMode, currentWeekStart, currentDate, toast]);
+  const computeCurrentDateRange = useCallback(() => {
+    const sd = viewMode === "week" ? format(currentWeekStart, "yyyy-MM-dd") : format(currentDate, "yyyy-MM-dd");
+    const ed = viewMode === "week"
+      ? format(addDays(currentWeekStart, 4), "yyyy-MM-dd")
+      : viewMode === "month"
+        ? format(addDays(startOfMonth(currentDate), getDaysInMonth(currentDate) - 1), "yyyy-MM-dd")
+        : format(currentDate, "yyyy-MM-dd");
+    return { start: sd, end: ed };
+  }, [viewMode, currentWeekStart, currentDate]);
+
+  const submitSendSchedule = useCallback((channels: { email: boolean; sms: boolean }) => {
+    if (!sendScheduleResource) return;
+    if (!channels.email && !channels.sms) {
+      toast({ title: "Välj minst en kanal", variant: "destructive" });
+      return;
+    }
+    const jobs = getResourceScheduleJobs(sendScheduleResource.id);
+    if (jobs.length === 0) {
+      toast({ title: "Inga jobb att skicka", description: "Resursen har inga planerade jobb för denna period.", variant: "destructive" });
+      return;
+    }
+    setSendLastResult(null);
+    sendScheduleMutation.mutate({
+      resourceId: sendScheduleResource.id,
+      jobs,
+      dateRange: computeCurrentDateRange(),
+      channels,
+    });
+  }, [sendScheduleResource, getResourceScheduleJobs, sendScheduleMutation, computeCurrentDateRange, toast]);
+
+  const handleSendScheduleEmail = useCallback(() => submitSendSchedule({ email: true, sms: false }), [submitSendSchedule]);
+
+  const openBulkSendDialog = useCallback(() => {
+    const dateRange = computeCurrentDateRange();
+    const eligible = resources.filter(r => workOrders.some(j => j.resourceId === r.id && j.scheduledDate && new Date(j.scheduledDate) >= new Date(dateRange.start) && new Date(j.scheduledDate) <= new Date(dateRange.end + "T23:59:59")));
+    setBulkSelectedIds(new Set(eligible.map(r => r.id)));
+    setBulkResults({});
+    setBulkChannelEmail(true);
+    setBulkChannelSms(true);
+    setBulkSendOpen(true);
+  }, [computeCurrentDateRange, resources, workOrders]);
+
+  const handleBulkSendSchedule = useCallback(async () => {
+    const dateRange = computeCurrentDateRange();
+    const ids = Array.from(bulkSelectedIds);
+    if (ids.length === 0) return;
+    if (!bulkChannelEmail && !bulkChannelSms) {
+      toast({ title: "Välj minst en kanal", variant: "destructive" });
+      return;
+    }
+    setBulkSending(true);
+    setBulkResults({});
+    let okCount = 0;
+    let failCount = 0;
+    for (const rid of ids) {
+      const resource = resources.find(r => r.id === rid);
+      if (!resource) continue;
+      const jobs = getResourceScheduleJobs(rid);
+      if (jobs.length === 0) {
+        setBulkResults(prev => ({ ...prev, [rid]: { ...(bulkChannelEmail ? { email: { success: false, error: "Inga jobb" } } : {}), ...(bulkChannelSms ? { sms: { success: false, error: "Inga jobb" } } : {}) } }));
+        failCount++;
+        continue;
+      }
+      try {
+        const smsAllowed = (resource as any).smsOnScheduleSend !== false;
+        const channels = {
+          email: bulkChannelEmail && !!resource.email,
+          sms: bulkChannelSms && !!resource.phone && smsAllowed,
+        };
+        if (!channels.email && !channels.sms) {
+          setBulkResults(prev => ({ ...prev, [rid]: { ...(bulkChannelEmail ? { email: { success: false, error: "Saknar e-post" } } : {}), ...(bulkChannelSms ? { sms: { success: false, error: !resource.phone ? "Saknar telefon" : "SMS avstängt" } } : {}) } }));
+          failCount++;
+          continue;
+        }
+        const res = await apiRequest("POST", `/api/notifications/send-schedule/${rid}`, { jobs, dateRange, fieldAppUrl: `${window.location.origin}/field`, channels });
+        const data = await res.json();
+        setBulkResults(prev => ({ ...prev, [rid]: { email: data.email, sms: data.sms } }));
+        const allOk = (!data.email || data.email.success) && (!data.sms || data.sms.success);
+        if (allOk) okCount++; else failCount++;
+      } catch (err) {
+        setBulkResults(prev => ({ ...prev, [rid]: { email: bulkChannelEmail ? { success: false, error: err instanceof Error ? err.message : "Fel" } : undefined, sms: bulkChannelSms ? { success: false, error: err instanceof Error ? err.message : "Fel" } : undefined } }));
+        failCount++;
+      }
+    }
+    setBulkSending(false);
+    queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
+    if (failCount === 0) {
+      toast({ title: "Schema publicerat", description: `Skickat till ${okCount} ${okCount === 1 ? "tekniker" : "tekniker"}.` });
+    } else {
+      toast({ title: "Delvis publicerat", description: `${okCount} OK, ${failCount} misslyckades.`, variant: failCount > okCount ? "destructive" : "default" });
+    }
+  }, [computeCurrentDateRange, bulkSelectedIds, bulkChannelEmail, bulkChannelSms, resources, getResourceScheduleJobs, toast]);
+
+  const resourceJobCountForCurrentPeriod = useMemo(() => {
+    const dateRange = computeCurrentDateRange();
+    const start = new Date(dateRange.start);
+    const end = new Date(dateRange.end + "T23:59:59");
+    const counts: Record<string, number> = {};
+    for (const j of workOrders) {
+      if (!j.resourceId || !j.scheduledDate) continue;
+      const d = new Date(j.scheduledDate);
+      if (d >= start && d <= end) counts[j.resourceId] = (counts[j.resourceId] || 0) + 1;
+    }
+    return counts;
+  }, [workOrders, computeCurrentDateRange]);
+
+  const currentPeriodRange = useMemo(() => computeCurrentDateRange(), [computeCurrentDateRange]);
 
   const handleCopyFieldAppLink = useCallback(async () => { try { await navigator.clipboard.writeText(`${window.location.origin}/field`); setSendScheduleCopied(true); toast({ title: "Länk kopierad!", description: "Klistra in i SMS eller meddelande." }); setTimeout(() => setSendScheduleCopied(false), 3000); } catch { toast({ title: "Kunde inte kopiera", variant: "destructive" }); } }, [toast]);
 
@@ -733,7 +883,12 @@ export function usePlannerData() {
     navigate, handleViewModeChange, goToToday, goToDay, getHeaderLabel,
     handleJobClick, handleOpenAssignDialog, handleQuickAssign,
     handleAcceptConflict, handleUnschedule, handleUndo, handleRedo,
-    handleResourceClick, handleSendSchedule, handleSendScheduleEmail, handleCopyFieldAppLink,
+    handleResourceClick, handleSendSchedule, handleSendScheduleEmail, submitSendSchedule, handleCopyFieldAppLink,
+    sendChannelEmail, setSendChannelEmail, sendChannelSms, setSendChannelSms, sendLastResult,
+    bulkSendOpen, setBulkSendOpen, bulkSelectedIds, setBulkSelectedIds,
+    bulkChannelEmail, setBulkChannelEmail, bulkChannelSms, setBulkChannelSms,
+    bulkResults, bulkSending, openBulkSendDialog, handleBulkSendSchedule,
+    resourceJobCountForCurrentPeriod, currentPeriodRange,
     handleOptimizeRoute, handleClearAllScheduled, handleAutoFillPreview, handleAutoFillApply, handleCarryOver,
     handleOpenDepChain, handleToggleSubStep,
     executeSchedule, detectConflictsForJob,

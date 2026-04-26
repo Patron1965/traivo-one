@@ -1242,27 +1242,118 @@ app.post("/api/notifications/send-schedule/:resourceId", asyncHandler(async (req
     const { sendScheduleToResource } = await import("../customer-notifications");
     const tenantId = getTenantIdWithFallback(req);
     const { resourceId } = req.params;
-    const { jobs, dateRange, fieldAppUrl } = req.body;
-    
+    const { dateRange, fieldAppUrl, channels } = req.body as {
+      dateRange: { start: string; end: string };
+      fieldAppUrl: string;
+      channels?: { email?: boolean; sms?: boolean };
+    };
+
+    if (!dateRange || typeof dateRange.start !== "string" || typeof dateRange.end !== "string") {
+      throw new ValidationError("Ogiltig datumperiod");
+    }
+    const parseStrictDate = (s: string): number | null => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+      if (!m) return null;
+      const y = Number(m[1]);
+      const mo = Number(m[2]);
+      const d = Number(m[3]);
+      if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+      const dt = new Date(Date.UTC(y, mo - 1, d));
+      if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+      return dt.getTime();
+    };
+    const startMs = parseStrictDate(dateRange.start);
+    const endMs = parseStrictDate(dateRange.end);
+    if (startMs === null || endMs === null) {
+      throw new ValidationError("Ogiltigt datumformat (YYYY-MM-DD)");
+    }
+    if (startMs > endMs) {
+      throw new ValidationError("Startdatum måste vara före eller lika med slutdatum");
+    }
+    const dayMs = 24 * 60 * 60 * 1000;
+    const daysInclusive = Math.round((endMs - startMs) / dayMs) + 1;
+    if (daysInclusive > 31) {
+      throw new ValidationError("Perioden får inte överstiga 31 dagar");
+    }
+
     const resource = await storage.getResource(resourceId);
     if (!resource || !verifyTenantOwnership(resource, tenantId)) {
       throw new NotFoundError("Resurs hittades inte");
     }
-    
-    if (!resource.email) {
+
+    const requestedChannels = channels && (channels.email !== undefined || channels.sms !== undefined)
+      ? { email: channels.email === true, sms: channels.sms === true }
+      : { email: true, sms: false };
+
+    if (!requestedChannels.email && !requestedChannels.sms) {
+      throw new ValidationError("Minst en kanal (e-post eller SMS) måste väljas");
+    }
+    if (requestedChannels.email && !resource.email) {
       throw new ValidationError("Resursen har ingen e-postadress registrerad");
     }
-    
+    if (requestedChannels.sms && !resource.phone) {
+      throw new ValidationError("Resursen har inget telefonnummer registrerat");
+    }
+
+    // Hämta jobben server-side så att klienten inte kan manipulera periodgränser
+    // eller smyga in jobb från andra resurser/tenants.
+    const dbWorkOrders = await storage.getWorkOrdersByResource(
+      resourceId,
+      new Date(startMs),
+      new Date(endMs + dayMs - 1)
+    );
+    const safeJobs = await Promise.all(
+      dbWorkOrders
+        .filter((wo) => wo.tenantId === tenantId && wo.scheduledDate)
+        .map(async (wo) => {
+          let objectName: string | undefined;
+          let objectAddress: string | undefined;
+          let accessCode: string | undefined;
+          let keyNumber: string | undefined;
+          if (wo.objectId) {
+            try {
+              const obj = await storage.getObject(wo.objectId);
+              if (obj) {
+                objectName = obj.name || undefined;
+                objectAddress = obj.address || undefined;
+                accessCode = (obj as any).accessCode || undefined;
+                keyNumber = (obj as any).keyNumber || undefined;
+              }
+            } catch { /* ignore */ }
+          }
+          const sd = wo.scheduledDate as Date | string;
+          const scheduledDate = typeof sd === "string"
+            ? sd.substring(0, 10)
+            : new Date(sd).toISOString().substring(0, 10);
+          return {
+            id: wo.id,
+            title: wo.title,
+            objectName,
+            objectAddress,
+            scheduledDate,
+            scheduledStartTime: wo.scheduledStartTime || undefined,
+            estimatedDuration: wo.estimatedDuration || undefined,
+            accessCode,
+            keyNumber,
+          };
+        })
+    );
+
     const result = await sendScheduleToResource(
       tenantId,
       resourceId,
       resource.name,
       resource.email,
-      jobs,
+      safeJobs,
       dateRange,
-      fieldAppUrl
+      fieldAppUrl,
+      {
+        channels: requestedChannels,
+        resourcePhone: resource.phone,
+        smsAllowed: resource.smsOnScheduleSend !== false,
+      }
     );
-    
+
     res.json(result);
 }));
 
