@@ -111,6 +111,56 @@ router.get('/me', async (req, res) => {
   }
 });
 
+router.patch('/me/notification-prefs', async (req, res) => {
+  const body = req.body || {};
+  const hasScheduleSend = typeof body.smsOnScheduleSend === 'boolean';
+  const hasExtraJob = typeof body.smsOnExtraJob === 'boolean';
+
+  if (!hasScheduleSend && !hasExtraJob) {
+    res.status(400).json({
+      success: false,
+      error: 'Minst ett av smsOnScheduleSend eller smsOnExtraJob måste anges som boolean.',
+    });
+    return;
+  }
+
+  if (IS_MOCK_MODE) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.includes(MOCK_TOKEN)) {
+      res.status(401).json({ success: false, error: 'Ej autentiserad' });
+      return;
+    }
+    if (hasScheduleSend) MOCK_RESOURCE.smsOnScheduleSend = body.smsOnScheduleSend;
+    if (hasExtraJob) MOCK_RESOURCE.smsOnExtraJob = body.smsOnExtraJob;
+    res.json({
+      smsOnScheduleSend: MOCK_RESOURCE.smsOnScheduleSend,
+      smsOnExtraJob: MOCK_RESOURCE.smsOnExtraJob,
+      lastSchedulePublishedAt: MOCK_RESOURCE.lastSchedulePublishedAt,
+      lastSchedulePeriodStart: MOCK_RESOURCE.lastSchedulePeriodStart,
+      lastSchedulePeriodEnd: MOCK_RESOURCE.lastSchedulePeriodEnd,
+    });
+    return;
+  }
+
+  try {
+    const patchBody: Record<string, boolean> = {};
+    if (hasScheduleSend) patchBody.smsOnScheduleSend = body.smsOnScheduleSend;
+    if (hasExtraJob) patchBody.smsOnExtraJob = body.smsOnExtraJob;
+    const { status, data } = await plannixFetch('/api/mobile/me/notification-prefs', {
+      method: 'PATCH',
+      headers: { ...getAuthHeader(req), 'Content-Type': 'application/json' },
+      body: JSON.stringify(patchBody),
+    });
+    res.status(status).json(data);
+  } catch (error: any) {
+    console.error('[LIVE] notification-prefs proxy error:', error.message);
+    res.status(503).json({
+      success: false,
+      error: 'Kunde inte spara notisinställningar. Försök igen.',
+    });
+  }
+});
+
 router.get('/my-profiles', async (req, res) => {
   if (IS_MOCK_MODE) {
     const authHeader = req.headers.authorization;

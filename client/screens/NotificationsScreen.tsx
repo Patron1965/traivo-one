@@ -82,6 +82,10 @@ export function NotificationsScreen({ navigation }: any) {
     if (!item.read) {
       markReadMutation.mutate(item.id);
     }
+    if (item.type === 'schedule_send_failed') {
+      navigation.navigate('Profile');
+      return;
+    }
     if (item.relatedOrderId) {
       navigation.navigate('OrderDetail', { orderId: item.relatedOrderId });
     } else if (item.type === 'team_invite') {
@@ -149,7 +153,7 @@ export function NotificationsScreen({ navigation }: any) {
             {isUnread ? <View style={styles.unreadDot} /> : null}
           </View>
         </View>
-        {item.relatedOrderId || item.type === 'team_invite' ? (
+        {item.relatedOrderId || item.type === 'team_invite' || item.type === 'schedule_send_failed' ? (
           <Feather name="chevron-right" size={16} color={Colors.textMuted} style={styles.chevron} />
         ) : null}
       </Pressable>

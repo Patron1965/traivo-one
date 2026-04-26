@@ -1,4 +1,4 @@
-const MOCK_RESOURCE = {
+const MOCK_RESOURCE: Record<string, any> = {
   id: 101,
   tenantId: 'plannix-demo',
   name: 'Erik Lindqvist',
@@ -11,6 +11,11 @@ const MOCK_RESOURCE = {
   homeLongitude: 17.6260,
   competencies: ['ADR', 'YKB', 'C-körkort'],
   executionCodes: ['TÖM', 'HÄMT', 'FARL'],
+  smsOnScheduleSend: true,
+  smsOnExtraJob: true,
+  lastSchedulePublishedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+  lastSchedulePeriodStart: '2026-04-27',
+  lastSchedulePeriodEnd: '2026-05-03',
 };
 
 const MOCK_TOKEN = 'mock-driver-token-001';
@@ -505,7 +510,7 @@ const MOCK_DISRUPTIONS: any[] = [];
 
 interface MockNotification {
   id: number;
-  type: 'order_assigned' | 'status_change' | 'team_invite' | 'schedule_change' | 'deviation_reviewed' | 'material_update' | 'sign_off_complete' | 'system';
+  type: 'order_assigned' | 'status_change' | 'team_invite' | 'schedule_change' | 'deviation_reviewed' | 'material_update' | 'sign_off_complete' | 'system' | 'schedule_published' | 'schedule_send_failed' | 'extra_job_sms' | 'cancel_job_sms';
   title: string;
   body: string;
   read: boolean;
@@ -529,6 +534,10 @@ const MOCK_NOTIFICATIONS: MockNotification[] = [
   { id: 8, type: 'system', title: 'Appuppdatering tillgänglig', body: 'Plannix Go v2.4 finns nu tillgänglig med förbättrad GPS-precision.', read: true, createdAt: h(48) },
   { id: 9, type: 'order_assigned', title: 'Nytt uppdrag tilldelat', body: 'WO-2026-0455 — Södertälje Hamn har tilldelats dig.', read: true, createdAt: h(50), relatedOrderId: 5 },
   { id: 10, type: 'schedule_change', title: 'Prioritet ändrad', body: 'WO-2026-0454 har fått högre prioritet.', read: true, createdAt: h(72), relatedOrderId: 4 },
+  { id: 11, type: 'schedule_published', title: 'Nytt veckoschema publicerat', body: 'Ditt schema för v18 (27 apr–3 maj) är publicerat. Första uppdraget mån 27 apr 07:30.', read: false, createdAt: h(0.2), metadata: { periodStart: '2026-04-27', periodEnd: '2026-05-03', jobCount: 18 } },
+  { id: 12, type: 'extra_job_sms', title: 'Extrajobb tillagt', body: 'Tisdag 28 apr 13:00 — Tömning kärl, BRF Sjöutsikten. SMS skickat.', read: false, createdAt: h(3), relatedOrderId: 1 },
+  { id: 13, type: 'cancel_job_sms', title: 'Jobb borttaget från rutten', body: 'Onsdag 29 apr 09:00 (Hämtning, Volvo Lundby) är borttaget från din rutt. SMS skickat.', read: true, createdAt: h(20), relatedOrderId: 4 },
+  { id: 14, type: 'schedule_send_failed', title: 'SMS kunde inte skickas', body: 'Vi kunde inte skicka veckoschemat via SMS — kontrollera ditt mobilnummer i profilen.', read: false, createdAt: h(0.1) },
 ];
 
 function findMockOrder(idParam: string) {

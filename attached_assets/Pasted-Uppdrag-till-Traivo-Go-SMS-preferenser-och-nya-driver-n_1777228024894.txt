@@ -1,0 +1,95 @@
+Uppdrag till Traivo Go: SMS-preferenser och nya driver-notifikationer
+Bakgrund
+Backend (Traivo One) har precis lagt till stöd för att teknikern själv ska kunna välja vilka SMS hen får från systemet, samt fyra nya notifikationstyper kopplade till schemautskick och extrajobb. Allt är klart server-side, men mobilappen behöver byggas ut för att verkligen synas för användaren.
+
+Fullt API-kontrakt finns i docs/api/TRAIVO_GO_SCHEMA_PUBLISHING_INTEGRATION.md i Traivo One-repot. Detta dokument är en kort sammanfattning.
+
+Autentisering (oförändrat — bara en påminnelse)
+Alla /api/mobile/*-anrop kräver:
+
+Authorization: Bearer <mobile-token>
+
+Token är en opaque sträng (ingen JWT) som man får från POST /api/mobile/login. TTL 24h. Vid 401 — rensa token och visa inloggningsskärmen.
+
+Använd /api/v1/...-prefixet för alla anrop framöver.
+
+1. Nya fält på GET /api/v1/mobile/me
+Profilen returnerar nu fem nya fält som ni behöver läsa in i appens state:
+
+Fält	Typ	Innebörd
+smsOnScheduleSend	boolean (default true)	Vill teknikern ha SMS när nytt veckoschema publiceras?
+smsOnExtraJob	boolean (default true)	Vill teknikern ha SMS när ett extrajobb läggs in i hens vecka?
+lastSchedulePublishedAt	string (ISO) eller null	När senaste schemat publicerades för hen
+lastSchedulePeriodStart	string ("YYYY-MM-DD") eller null	Första dagen i senast publicerade period
+lastSchedulePeriodEnd	string ("YYYY-MM-DD") eller null	Sista dagen i senast publicerade period
+De tre sista används för att visa "Ditt schema för v17 (22 apr–28 apr) publicerades 19 apr 14:32" i appens startvy.
+
+2. Ny endpoint: PATCH /api/v1/mobile/me/notification-prefs
+För att slå av/på SMS-preferenserna.
+
+Request:
+
+PATCH /api/v1/mobile/me/notification-prefs
+Authorization: Bearer <mobile-token>
+Content-Type: application/json
+{
+  "smsOnScheduleSend": false,
+  "smsOnExtraJob": true
+}
+
+Minst ett av de två fälten måste finnas i bodyn. Båda är valfria — skicka bara det som ändrats.
+
+Response 200:
+
+{
+  "smsOnScheduleSend": false,
+  "smsOnExtraJob": true,
+  "lastSchedulePublishedAt": "2026-04-19T14:32:00.000Z",
+  "lastSchedulePeriodStart": "2026-04-22",
+  "lastSchedulePeriodEnd": "2026-04-28"
+}
+
+Felkoder:
+
+400 — tomt body eller fel typ
+401 — saknar/ogiltig bearer-token
+404 — resursen kunde inte hittas
+3. Ny skärm i appen: "Aviseringar"
+Lägg en ny vy under profil/inställningar med rubriken Aviseringar (eller liknande). Den ska innehålla:
+
+Toggle 1: "SMS när nytt veckoschema publiceras"
+Läses från smsOnScheduleSend (från /me)
+Vid ändring: PATCH /notification-prefs med nya värdet
+Toggle 2: "SMS vid extrajobb i din vecka"
+Läses från smsOnExtraJob (från /me)
+Vid ändring: PATCH /notification-prefs med nya värdet
+En liten infotext: "Du får ändå alltid in-app-notifikationer i appen — det här styr bara SMS:en till din mobil."
+Visa en kort bekräftelse ("Sparat") när togglen slagits av/på.
+
+4. Fyra nya driver-notifikationstyper i GET /api/v1/mobile/notifications
+Notifikationslistan kan nu innehålla fyra nya type-värden. Lägg till hantering (ikon, text, ev. tap-action) för dessa:
+
+Type	Beskrivning	Föreslagen ikon
+schedule_published	Nytt veckoschema är publicerat åt teknikern	kalender
+schedule_send_failed	SMS:et med veckoschemat kunde inte skickas (telefon saknas, fel format etc.)	varning
+extra_job_sms	Ett extrajobb har lagts in i teknikerns vecka och SMS skickats	plus
+cancel_job_sms	Ett jobb har tagits bort från teknikerns rutt och SMS skickats	minus / kryss
+Payload-format per typ finns i TRAIVO_API_CONTRACTS.md §6.
+
+För schedule_send_failed: visa gärna en "Kontrollera mitt mobilnummer"-länk till profilen.
+
+5. SMS-texter (bara för referens — inget behöver göras)
+Så här ser SMS:en ut som backend skickar — bra att veta så att appens copy hänger ihop:
+
+Schemautskick: {Företag}: Hej {Förnamn}, ditt schema är publicerat (X jobb). Första {datum} {tid}. Öppna Traivo Go: {url}
+Extrajobb: {Företag}: Hej {Förnamn}, extrajobb tillagt {dag} {tid}. {Jobbtitel} – {Objekt}. Se Traivo Go.
+Borttaget jobb: {Företag}: Hej {Förnamn}, jobbet {dag} {tid} ({Jobbtitel}) är borttaget från din rutt. Se Traivo Go.
+Klart-kriterier
+ /me-svaret läser och cache:ar de fem nya fälten
+ Ny "Aviseringar"-skärm med två togglar som synkar mot PATCH /notification-prefs
+ De fyra nya notifikationstyperna har ikon + text i notifikationslistan
+ Tap på schedule_send_failed öppnar profilen så teknikern kan rätta numret
+ Manuell test: slå av smsOnScheduleSend, be planeraren publicera ett schema → bekräfta att SMS uteblir men in-app-notifikation kommer
+Frågor?
+Backend-kontrakt och felkoder: se docs/api/TRAIVO_GO_SCHEMA_PUBLISHING_INTEGRATION.md i Traivo One-repot. Hör av dig om något i payload eller flödet är oklart.
+

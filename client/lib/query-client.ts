@@ -93,7 +93,10 @@ export async function apiRequest(
       errBody = { error: errText };
     }
     const message = errBody?.error || errBody?.message || httpStatusMessage(res.status);
-    throw new Error(message);
+    const err = new Error(message) as Error & { status?: number; body?: any };
+    err.status = res.status;
+    err.body = errBody;
+    throw err;
   }
   return res.json();
 }

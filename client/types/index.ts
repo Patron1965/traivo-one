@@ -326,6 +326,11 @@ export interface Resource {
   competencies?: string[];
   executionCodes?: string[];
   trackingStatus?: 'idle' | 'traveling' | 'on_site' | 'offline';
+  smsOnScheduleSend?: boolean;
+  smsOnExtraJob?: boolean;
+  lastSchedulePublishedAt?: string | null;
+  lastSchedulePeriodStart?: string | null;
+  lastSchedulePeriodEnd?: string | null;
 }
 
 export interface ResourceProfile {
@@ -541,7 +546,11 @@ export type NotificationType =
   | 'deviation_reviewed'
   | 'material_update'
   | 'sign_off_complete'
-  | 'system';
+  | 'system'
+  | 'schedule_published'
+  | 'schedule_send_failed'
+  | 'extra_job_sms'
+  | 'cancel_job_sms';
 
 export interface AppNotification {
   id: number;
@@ -636,4 +645,8 @@ export const NOTIFICATION_TYPE_CONFIG: Record<NotificationType, { icon: string; 
   material_update: { icon: 'package', color: '#795548', label: 'Material' },
   sign_off_complete: { icon: 'file-text', color: '#009688', label: 'Kvittering' },
   system: { icon: 'info', color: '#607D8B', label: 'System' },
+  schedule_published: { icon: 'calendar', color: '#4A9B9B', label: 'Schema publicerat' },
+  schedule_send_failed: { icon: 'alert-triangle', color: '#E53935', label: 'SMS misslyckades' },
+  extra_job_sms: { icon: 'plus', color: '#7DBFB0', label: 'Extrajobb' },
+  cancel_job_sms: { icon: 'x-circle', color: '#9E9E9E', label: 'Borttaget jobb' },
 };

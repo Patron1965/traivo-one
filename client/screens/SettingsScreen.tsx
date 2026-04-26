@@ -19,7 +19,7 @@ const MAP_APP_OPTIONS: { value: MapApp; label: string; icon: string }[] = [
   { value: 'waze', label: 'Waze', icon: 'navigation' },
 ];
 
-export function SettingsScreen({ navigation }: { navigation: unknown }) {
+export function SettingsScreen({ navigation }: { navigation: any }) {
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -138,6 +138,25 @@ export function SettingsScreen({ navigation }: { navigation: unknown }) {
             testID="switch-notifications"
           />
         </View>
+        <View style={styles.divider} />
+        <Pressable
+          style={styles.clearCacheRow}
+          onPress={() => navigation.navigate('NotificationPrefs')}
+          testID="button-sms-prefs"
+        >
+          <View style={styles.settingLeft}>
+            <View style={[styles.iconCircle, { backgroundColor: Colors.accentLight }]}>
+              <Feather name="message-square" size={16} color={Colors.accent} />
+            </View>
+            <View style={styles.settingText}>
+              <ThemedText variant="body">SMS-inställningar</ThemedText>
+              <ThemedText variant="caption" color={Colors.textSecondary}>
+                Välj vilka SMS du får från systemet
+              </ThemedText>
+            </View>
+          </View>
+          <Feather name="chevron-right" size={18} color={Colors.textMuted} />
+        </Pressable>
       </Card>
 
       <ThemedText variant="caption" color={Colors.textSecondary} style={styles.sectionLabel}>

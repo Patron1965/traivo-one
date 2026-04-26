@@ -15,6 +15,7 @@ import { CustomerSignOffScreen } from '../screens/CustomerSignOffScreen';
 import { InspectionScreen } from '../screens/InspectionScreen';
 import { ScreenErrorBoundary } from '../components/ScreenErrorBoundary';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { NotificationPrefsScreen } from '../screens/NotificationPrefsScreen';
 import StatisticsScreen from '../screens/StatisticsScreen';
 import { RouteFeedbackScreen } from '../screens/RouteFeedbackScreen';
 import { TeamScreen } from '../screens/TeamScreen';
@@ -186,6 +187,11 @@ export function RootNavigator() {
               name="Notifications"
               component={NotificationsScreen}
               options={{ headerTitle: 'Aviseringar' }}
+            />
+            <Stack.Screen
+              name="NotificationPrefs"
+              component={NotificationPrefsScreen}
+              options={{ headerTitle: 'SMS-inställningar' }}
             />
             <Stack.Screen
               name="AIAssistant"
