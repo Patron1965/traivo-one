@@ -49,6 +49,22 @@ function buildExtraJobSmsBody(params: {
   return body.length > 320 ? body.substring(0, 317) + "..." : body;
 }
 
+function buildCancellationSmsBody(params: {
+  companyName: string;
+  resourceName: string;
+  jobTitle: string;
+  scheduledDate: string;
+  scheduledStartTime?: string | null;
+}): string {
+  const { companyName, resourceName, jobTitle, scheduledDate, scheduledStartTime } = params;
+  const firstName = resourceName.split(" ")[0] || resourceName;
+  const dateObj = new Date(scheduledDate + (scheduledDate.includes("T") ? "" : "T12:00:00"));
+  const dayStr = dateObj.toLocaleDateString("sv-SE", { weekday: "short", day: "numeric", month: "short" });
+  const timeStr = scheduledStartTime ? ` ${scheduledStartTime}` : "";
+  const body = `${companyName}: Hej ${firstName}, jobbet ${dayStr}${timeStr} (${jobTitle}) är borttaget från din rutt. Se Plannix Go.`;
+  return body.length > 320 ? body.substring(0, 317) + "..." : body;
+}
+
 /**
  * Trigger an "extra job" SMS to a technician when a work order is added or
  * moved into their already-published schedule period. Fire-and-forget, never
@@ -147,5 +163,90 @@ export async function maybeSendExtraJobSms(params: {
     }
   } catch (e) {
     console.error("[extra-job-sms] Unexpected error:", e);
+  }
+}
+
+/**
+ * Trigger a cancellation SMS to the previous technician when a job is moved
+ * to a different technician AND the job sits inside the previous technician's
+ * already-published period. Same opt-out as extra-job SMS (smsOnExtraJob),
+ * since the underlying rule is "tekniker har bett om att få besked om
+ * förändringar i sin publicerade vecka". Fire-and-forget.
+ */
+export async function maybeSendCancellationSms(params: {
+  workOrder: WorkOrder & { objectName?: string | null; objectAddress?: string | null };
+  previousResourceId: string;
+}): Promise<void> {
+  const { workOrder, previousResourceId } = params;
+  try {
+    const resource = await storage.getResource(previousResourceId);
+    if (!resource) return;
+    if (resource.tenantId !== workOrder.tenantId) return;
+    if (resource.smsOnExtraJob === false) return;
+    if (!resource.phone) return;
+
+    if (!isWithinPublishedPeriod(workOrder.scheduledDate, resource.lastSchedulePeriodStart, resource.lastSchedulePeriodEnd)) {
+      return;
+    }
+
+    const tenant = await storage.getTenant(workOrder.tenantId);
+    const companyName = tenant?.name || "Plannix";
+
+    const scheduledDateStr = workOrder.scheduledDate
+      ? (typeof workOrder.scheduledDate === "string"
+          ? workOrder.scheduledDate
+          : (workOrder.scheduledDate as Date).toISOString())
+      : "";
+
+    const body = buildCancellationSmsBody({
+      companyName,
+      resourceName: resource.name,
+      jobTitle: workOrder.title,
+      scheduledDate: scheduledDateStr,
+      scheduledStartTime: workOrder.scheduledStartTime,
+    });
+
+    const { sendSms, isTwilioConfigured } = await import("./replit_integrations/twilio");
+    const configured = await isTwilioConfigured();
+    if (!configured) {
+      console.log(`[cancel-job-sms] Twilio not configured, skipping SMS to ${resource.name}`);
+      return;
+    }
+
+    const to = formatPhoneE164(resource.phone);
+    if (!to) {
+      console.warn(`[cancel-job-sms] Invalid phone for resource ${resource.id} (${resource.phone})`);
+      return;
+    }
+    const smsResult = await sendSms({ to, body });
+
+    try {
+      await storage.createDriverNotification({
+        tenantId: workOrder.tenantId,
+        resourceId: previousResourceId,
+        type: "cancel_job_sms",
+        title: smsResult.success ? "Jobbet borttaget – SMS skickat" : "Jobbet borttaget – SMS misslyckades",
+        message: smsResult.success
+          ? `SMS skickades till ${to} om att "${workOrder.title}" tagits bort från rutten`
+          : `Kunde inte skicka SMS till ${to}: ${smsResult.error || "okänt fel"}`,
+        orderId: workOrder.id,
+        data: {
+          phone: to,
+          messageId: smsResult.messageId,
+          error: smsResult.error,
+        },
+        isRead: false,
+      });
+    } catch (e) {
+      console.error("[cancel-job-sms] Failed to log notification:", e);
+    }
+
+    if (smsResult.success) {
+      console.log(`[cancel-job-sms] Sent to ${resource.name} (${to}) for work order ${workOrder.id}`);
+    } else {
+      console.error(`[cancel-job-sms] Failed for ${resource.name}: ${smsResult.error}`);
+    }
+  } catch (e) {
+    console.error("[cancel-job-sms] Unexpected error:", e);
   }
 }

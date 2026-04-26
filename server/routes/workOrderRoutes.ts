@@ -278,8 +278,11 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
       notificationService.notifyJobCancelled(existingOrder, oldResourceId);
     }
     try {
-      const { maybeSendExtraJobSms } = await import("../extra-job-sms");
+      const { maybeSendExtraJobSms, maybeSendCancellationSms } = await import("../extra-job-sms");
       void maybeSendExtraJobSms({ workOrder, resourceId: newResourceId, reason: "assigned" });
+      if (oldResourceId) {
+        void maybeSendCancellationSms({ workOrder: existingOrder, previousResourceId: oldResourceId });
+      }
     } catch (e) {
       console.error("[extra-job-sms] hook failed (reassign):", e);
     }

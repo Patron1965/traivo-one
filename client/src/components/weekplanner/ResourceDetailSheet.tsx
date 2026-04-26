@@ -41,7 +41,7 @@ export const ResourceDetailSheet = memo(function ResourceDetailSheet(props: Reso
 
   if (!resource) return null;
 
-  const lastPublishedAt = resource.lastSchedulePublishedAt ? new Date(resource.lastSchedulePublishedAt as any) : null;
+  const lastPublishedAt = resource.lastSchedulePublishedAt ? new Date(resource.lastSchedulePublishedAt) : null;
   const smsOnScheduleSend = resource.smsOnScheduleSend !== false;
   const smsOnExtraJob = resource.smsOnExtraJob !== false;
 

@@ -1316,8 +1316,8 @@ app.post("/api/notifications/send-schedule/:resourceId", asyncHandler(async (req
               if (obj) {
                 objectName = obj.name || undefined;
                 objectAddress = obj.address || undefined;
-                accessCode = (obj as any).accessCode || undefined;
-                keyNumber = (obj as any).keyNumber || undefined;
+                accessCode = obj.accessCode || undefined;
+                keyNumber = obj.keyNumber || undefined;
               }
             } catch { /* ignore */ }
           }

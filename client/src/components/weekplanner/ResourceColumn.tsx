@@ -83,14 +83,17 @@ export const ResourceColumn = memo(function ResourceColumn({ resource, summary, 
           && resource.lastSchedulePeriodStart === currentPeriod.start
           && resource.lastSchedulePeriodEnd === currentPeriod.end;
         const hoursAgo = lastPublishedAt ? differenceInHours(new Date(), lastPublishedAt) : null;
-        const fresh = lastPublishedAt && periodMatchesCurrent && (hoursAgo ?? 999) < 24;
-        const stale = lastPublishedAt && periodMatchesCurrent && !fresh;
+        const recent = lastPublishedAt && periodMatchesCurrent && (hoursAgo ?? 999) < 24;
+        const olderThanADay = lastPublishedAt && periodMatchesCurrent && !recent;
         const neverPublished = !lastPublishedAt || !periodMatchesCurrent;
 
-        const indicatorClass = fresh
-          ? "text-green-600 dark:text-green-400"
-          : stale
-            ? "text-amber-600 dark:text-amber-400"
+        // Färg enligt spec: grå om publicerat inom dygnet, röd om aldrig
+        // publicerat för pågående period. Äldre publiceringar för aktuell
+        // period markeras dämpat (foreground/60).
+        const indicatorClass = recent
+          ? "text-muted-foreground"
+          : olderThanADay
+            ? "text-foreground/60"
             : "text-red-600 dark:text-red-400";
 
         const labelText = lastPublishedAt && periodMatchesCurrent
