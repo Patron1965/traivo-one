@@ -4,7 +4,8 @@ import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../ThemedText';
 import { SyncStatusDot } from '../OfflineIndicator';
 import { Colors } from '../../constants/theme';
-import styles from '../../screens/HomeScreen.styles';
+import { createHomeStyles } from '../../screens/HomeScreen.styles';
+import { useThemedStyles } from '../../context/BrandingContext';
 
 interface SyncStatusRowProps {
   pendingCount: number;
@@ -12,6 +13,7 @@ interface SyncStatusRowProps {
 }
 
 export function SyncStatusRow({ pendingCount, syncBadgeOpacity }: SyncStatusRowProps) {
+  const styles = useThemedStyles(createHomeStyles);
   return (
     <View style={styles.syncStatusRow}>
       <SyncStatusDot />

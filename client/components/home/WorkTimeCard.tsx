@@ -4,7 +4,8 @@ import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../ThemedText';
 import { Card } from '../Card';
 import { Colors } from '../../constants/theme';
-import styles from '../../screens/HomeScreen.styles';
+import { createHomeStyles } from '../../screens/HomeScreen.styles';
+import { useThemedStyles } from '../../context/BrandingContext';
 
 interface TimeSummary {
   totalSeconds: number;
@@ -20,6 +21,7 @@ interface WorkTimeCardProps {
 }
 
 export function WorkTimeCard({ timeSummary, formatWorkTime }: WorkTimeCardProps) {
+  const styles = useThemedStyles(createHomeStyles);
   if (!timeSummary || timeSummary.totalSeconds <= 0) return null;
 
   return (

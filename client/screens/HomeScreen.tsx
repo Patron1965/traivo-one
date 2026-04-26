@@ -26,7 +26,8 @@ import { TeamPartnerBanner } from '../components/home/TeamPartnerBanner';
 import { BreakSuggestionCard } from '../components/home/BreakSuggestionCard';
 import { TenMinWarningCard } from '../components/home/TenMinWarningCard';
 import { StatisticsButton } from '../components/home/StatisticsButton';
-import styles from './HomeScreen.styles';
+import { createHomeStyles } from './HomeScreen.styles';
+import { useThemedStyles } from '../context/BrandingContext';
 import { formatWorkTime, computeBreakSuggestion } from './HomeScreen.utils';
 import type { TimeSummary } from './HomeScreen.utils';
 import type { Order, DaySummary, WeatherData } from '../types';
@@ -37,6 +38,7 @@ interface HomeNavigation {
 }
 
 export function HomeScreen({ navigation }: { navigation: HomeNavigation }) {
+  const styles = useThemedStyles(createHomeStyles);
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { user, isOnline, setIsOnline } = useAuth();

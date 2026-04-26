@@ -3,7 +3,8 @@ import { View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../ThemedText';
 import { Colors } from '../../constants/theme';
-import styles from '../../screens/HomeScreen.styles';
+import { createHomeStyles } from '../../screens/HomeScreen.styles';
+import { useThemedStyles } from '../../context/BrandingContext';
 import type { WeatherData } from '../../types';
 
 type FeatherIconName = React.ComponentProps<typeof Feather>['name'];
@@ -13,6 +14,7 @@ interface WeatherWidgetProps {
 }
 
 export function WeatherWidget({ weather }: WeatherWidgetProps) {
+  const styles = useThemedStyles(createHomeStyles);
   if (!weather) return null;
 
   return (

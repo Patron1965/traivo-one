@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode, Fragment } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiRequest } from '../lib/query-client';
 import { setBrandColors, resetBrandColors, PLANNIX_DEFAULT_BRAND_COLORS, BrandColors } from '../constants/theme';
@@ -49,6 +49,18 @@ export function useThemeColors(): TenantBrandingColors {
   return useContext(BrandingContext).branding.colors;
 }
 
+/**
+ * Memoized themed StyleSheet factory. The factory is re-run whenever the
+ * tenant's brand colors change, so any style that reads from `Colors.primary`
+ * etc. inside the factory will reflect the current tenant without remounting
+ * the screen. Use this for primary screens that should react instantly to
+ * branding switches (Home, Orders, Map, Login, TabNavigator).
+ */
+export function useThemedStyles<T>(factory: (colors: TenantBrandingColors) => T): T {
+  const colors = useThemeColors();
+  return useMemo(() => factory(colors), [colors, factory]);
+}
+
 function colorsEqual(a: TenantBrandingColors, b: TenantBrandingColors): boolean {
   return (
     a.primary === b.primary &&
@@ -91,12 +103,6 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   const { user, token } = useAuth();
   const [branding, setBrandingState] = useState<TenantBranding>(PLANNIX_DEFAULT_BRANDING);
   const [isLoading, setIsLoading] = useState(false);
-  // Bumped only when brand colors actually change. Used as `key` on the
-  // children subtree so any module-scoped StyleSheet.create snapshots are
-  // recreated with the new Colors values, giving real app-wide runtime
-  // theming on every brand switch (paired with getter-backed Colors so even
-  // already-evaluated reads stay correct).
-  const [themeVersion, setThemeVersion] = useState(0);
   const lastAppliedColorsRef = useRef<TenantBrandingColors>(PLANNIX_DEFAULT_BRAND_COLORS);
   // Monotonically increasing request id; in-flight responses for older
   // tenants are discarded to avoid cross-tenant branding flicker on
@@ -106,13 +112,20 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   const tenantId = user?.tenantId || null;
 
   const applyBranding = useCallback((b: TenantBranding) => {
-    setBrandingState(b);
+    // Always push to the mutable theme store so components reading
+    // `Colors.primary` directly (without a hook) still see fresh values
+    // on next evaluation.
+    setBrandColors(b.colors);
     if (!colorsEqual(b.colors, lastAppliedColorsRef.current)) {
-      setBrandColors(b.colors);
       lastAppliedColorsRef.current = b.colors;
-      setThemeVersion(v => v + 1);
+      // New colors object reference -> hooks (useThemeColors /
+      // useThemedStyles) re-run and primary screens update in place
+      // without losing scroll/state.
+      setBrandingState(b);
     } else {
-      setBrandColors(b.colors);
+      // Keep object identity stable when nothing changed so memoized
+      // styles don't get recomputed unnecessarily.
+      setBrandingState(prev => (prev.tenantId === b.tenantId && prev.companyName === b.companyName && prev.logoUrl === b.logoUrl ? prev : { ...prev, ...b, colors: prev.colors }));
     }
   }, []);
 
@@ -188,7 +201,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
 
   return (
     <BrandingContext.Provider value={{ branding, isLoading, refresh: loadBranding }}>
-      <Fragment key={themeVersion}>{children}</Fragment>
+      {children}
     </BrandingContext.Provider>
   );
 }

@@ -3,7 +3,8 @@ import { View } from 'react-native';
 import { ThemedText } from '../ThemedText';
 import { Card } from '../Card';
 import { Colors } from '../../constants/theme';
-import styles from '../../screens/HomeScreen.styles';
+import { createHomeStyles } from '../../screens/HomeScreen.styles';
+import { useThemedStyles } from '../../context/BrandingContext';
 import type { DaySummary } from '../../types';
 
 interface ProgressCardProps {
@@ -15,6 +16,7 @@ interface ProgressCardProps {
 }
 
 export function ProgressCard({ completedCount, totalCount, progress, summary, lockedCount }: ProgressCardProps) {
+  const styles = useThemedStyles(createHomeStyles);
   return (
     <Card style={styles.progressCard}>
       <View style={styles.progressHeader}>

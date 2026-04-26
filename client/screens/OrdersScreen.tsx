@@ -22,6 +22,7 @@ import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { apiRequest } from '../lib/query-client';
 import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
 import { formatDuration } from '../lib/format';
@@ -43,6 +44,7 @@ function getStatusProgress(status: OrderStatus): number {
 }
 
 function PulsingSwipeHint({ label }: { label: string }) {
+  const styles = useThemedStyles(createOrdersStyles);
   const pulseAnim = useRef(new RNAnimated.Value(1)).current;
 
   useEffect(() => {
@@ -67,6 +69,7 @@ function PulsingSwipeHint({ label }: { label: string }) {
 }
 
 function TimelineSeparator() {
+  const styles = useThemedStyles(createOrdersStyles);
   return (
     <View style={styles.timelineSeparator}>
       <View style={styles.timelineLine} />
@@ -168,6 +171,7 @@ function SwipeableOrderCard({
   isFirstSwipeable?: boolean;
   isEscalatedUrgent?: boolean;
 }) {
+  const styles = useThemedStyles(createOrdersStyles);
   const translateX = useSharedValue(0);
   const swipeable = canSwipe(order);
   const nextStatus = getNextStatus(order.status);
@@ -325,6 +329,7 @@ function OrderCardContent({
   isFirstSwipeable?: boolean;
   isEscalatedUrgent?: boolean;
 }) {
+  const styles = useThemedStyles(createOrdersStyles);
   const finished = isFinishedOrder(order.status);
   const terminalStatuses: OrderStatus[] = ['failed', 'cancelled', 'impossible'];
   const showProgress = !terminalStatuses.includes(order.status);
@@ -512,6 +517,7 @@ function shiftDate(dateStr: string, days: number): string {
 }
 
 export function OrdersScreen({ navigation }: any) {
+  const styles = useThemedStyles(createOrdersStyles);
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const queryClient = useQueryClient();
@@ -769,7 +775,10 @@ export function OrdersScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+// Themed style factory: re-evaluated by useThemedStyles whenever the
+// tenant's brand colors change so primary brand fields update in place
+// without remounting the screen.
+const createOrdersStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

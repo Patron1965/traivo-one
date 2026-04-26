@@ -11,7 +11,7 @@ import { DayReportScreen } from '../screens/DayReportScreen';
 import { ScreenErrorBoundary } from '../components/ScreenErrorBoundary';
 import { HamburgerMenuButton } from '../components/HamburgerMenu';
 import { useScreenOptions } from '../hooks/useScreenOptions';
-import { useBranding, useThemeColors } from '../context/BrandingContext';
+import { useBranding, useThemeColors, useThemedStyles } from '../context/BrandingContext';
 import { Colors, FontSize, Spacing, BorderRadius } from '../constants/theme';
 import { hapticLight } from '../utils/haptics';
 
@@ -32,6 +32,7 @@ function HeaderTitle() {
 }
 
 function TabIcon({ name, color, focused }: { name: string; color: string; focused: boolean }) {
+  const styles = useThemedStyles(createTabStyles);
   return (
     <View style={[styles.tabIconWrap, focused ? styles.tabIconWrapActive : null]}>
       <Feather name={name as any} size={24} color={color} />
@@ -50,6 +51,7 @@ function TodoBadgeWrapper({ children }: { children: React.ReactNode }) {
 }
 
 export function TabNavigator() {
+  const styles = useThemedStyles(createTabStyles);
   const screenOptions = useScreenOptions();
   const themeColors = useThemeColors();
   const [todoBadge, setTodoBadge] = useState<number>(0);
@@ -150,7 +152,10 @@ export function TabNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
+// Themed style factory: re-evaluated by useThemedStyles whenever the
+// tenant's brand colors change so the tab bar/icon backgrounds reflect
+// the active tenant without remount.
+const createTabStyles = () => StyleSheet.create({
   tabBar: {
     backgroundColor: Colors.surface,
     borderTopColor: Colors.border,

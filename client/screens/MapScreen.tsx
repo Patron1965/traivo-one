@@ -7,6 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../components/ThemedText';
 import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { apiRequest } from '../lib/query-client';
 import { formatDuration } from '../lib/format';
 import { useGpsTracking } from '../hooks/useGpsTracking';
@@ -92,6 +93,7 @@ function getMarkerColor(order: Order): string {
 }
 
 function CustomMarker({ order, index, onDetailPress }: { order: Order; index: number; onDetailPress: () => void }) {
+  const styles = useThemedStyles(createMapStyles);
   const color = getMarkerColor(order);
   return (
     <Marker
@@ -144,6 +146,7 @@ function CustomMarker({ order, index, onDetailPress }: { order: Order; index: nu
 }
 
 export function MapScreen({ navigation }: any) {
+  const styles = useThemedStyles(createMapStyles);
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const mapRef = useRef<any>(null);
@@ -677,7 +680,8 @@ export function MapScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+// Themed style factory: see useThemedStyles in BrandingContext.
+const createMapStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

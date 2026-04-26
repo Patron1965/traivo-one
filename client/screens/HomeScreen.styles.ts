@@ -1,7 +1,10 @@
 import { StyleSheet } from 'react-native';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../constants/theme';
 
-export default StyleSheet.create({
+// Factory so styles can be re-built when tenant brand colors change.
+// Reading `Colors.*` inside the function evaluates the getter-backed
+// values at call-time, so each invocation reflects the current tenant.
+export const createHomeStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

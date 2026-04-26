@@ -6,7 +6,8 @@ import { Card } from '../Card';
 import { StatusBadge } from '../StatusBadge';
 import { Colors } from '../../constants/theme';
 import { estimateTravelMinutes, formatTravelTime } from '../../lib/travel-time';
-import styles from '../../screens/HomeScreen.styles';
+import { createHomeStyles } from '../../screens/HomeScreen.styles';
+import { useThemedStyles } from '../../context/BrandingContext';
 import type { Order, OrderStatus } from '../../types';
 
 function getStatusBorderColor(status: OrderStatus): string {
@@ -37,6 +38,7 @@ interface OrderPreviewListProps {
 }
 
 export function OrderPreviewList({ orders, ordersLoading, navigation, currentPosition }: OrderPreviewListProps) {
+  const styles = useThemedStyles(createHomeStyles);
   return (
     <>
       <View style={styles.sectionHeader}>

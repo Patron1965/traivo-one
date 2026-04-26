@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import { useBranding, useThemeColors } from '../context/BrandingContext';
+import { useBranding, useThemeColors, useThemedStyles } from '../context/BrandingContext';
 import { ThemedText } from '../components/ThemedText';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 
@@ -22,6 +22,7 @@ const FALLBACK_LOGO = require('../../assets/plannix-logo.png');
 type LoginMode = 'pin' | 'email_pin' | 'credentials';
 
 export function LoginScreen() {
+  const styles = useThemedStyles(createLoginStyles);
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
   const { branding } = useBranding();
@@ -289,7 +290,8 @@ export function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+// Themed style factory: see useThemedStyles in BrandingContext.
+const createLoginStyles = () => StyleSheet.create({
   gradient: {
     flex: 1,
   },

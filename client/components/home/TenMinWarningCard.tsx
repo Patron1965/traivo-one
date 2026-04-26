@@ -4,7 +4,8 @@ import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../ThemedText';
 import { Card } from '../Card';
 import { Colors } from '../../constants/theme';
-import styles from '../../screens/HomeScreen.styles';
+import { createHomeStyles } from '../../screens/HomeScreen.styles';
+import { useThemedStyles } from '../../context/BrandingContext';
 import type { Order } from '../../types';
 
 interface TenMinWarning {
@@ -19,6 +20,7 @@ interface TenMinWarningCardProps {
 }
 
 export function TenMinWarningCard({ tenMinWarning, tenMinWarningDismissed, setTenMinWarningDismissed }: TenMinWarningCardProps) {
+  const styles = useThemedStyles(createHomeStyles);
   if (!tenMinWarning || tenMinWarningDismissed) return null;
 
   return (

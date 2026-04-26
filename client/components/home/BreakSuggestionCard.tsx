@@ -4,7 +4,8 @@ import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../ThemedText';
 import { Card } from '../Card';
 import { Colors } from '../../constants/theme';
-import styles from '../../screens/HomeScreen.styles';
+import { createHomeStyles } from '../../screens/HomeScreen.styles';
+import { useThemedStyles } from '../../context/BrandingContext';
 
 interface BreakSuggestion {
   message: string;
@@ -17,6 +18,7 @@ interface BreakSuggestionCardProps {
 }
 
 export function BreakSuggestionCard({ breakSuggestion, breakDismissed, setBreakDismissed }: BreakSuggestionCardProps) {
+  const styles = useThemedStyles(createHomeStyles);
   if (!breakSuggestion || breakDismissed) return null;
 
   return (

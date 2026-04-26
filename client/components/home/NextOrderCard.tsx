@@ -4,7 +4,8 @@ import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../ThemedText';
 import { Colors } from '../../constants/theme';
 import { openMapNavigation } from '../../lib/navigation-links';
-import styles from '../../screens/HomeScreen.styles';
+import { createHomeStyles } from '../../screens/HomeScreen.styles';
+import { useThemedStyles } from '../../context/BrandingContext';
 import type { Order } from '../../types';
 import type { DistanceResult } from '../../lib/travel-time';
 
@@ -17,6 +18,7 @@ interface NextOrderCardProps {
 }
 
 export function NextOrderCard({ nextOrder, nextOrderDistance, navigation, ordersLoading, activeOrdersLength }: NextOrderCardProps) {
+  const styles = useThemedStyles(createHomeStyles);
   if (ordersLoading || activeOrdersLength === 0 || !nextOrder) return null;
 
   return (

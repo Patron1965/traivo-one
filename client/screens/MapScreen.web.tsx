@@ -7,6 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../components/ThemedText';
 import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import type { Order } from '../types';
 
 function getMarkerColor(order: Order): string {
@@ -19,6 +20,7 @@ function getMarkerColor(order: Order): string {
 }
 
 export function MapScreen({ navigation }: any) {
+  const styles = useThemedStyles(createMapWebStyles);
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
 
@@ -66,7 +68,8 @@ export function MapScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+// Themed style factory: see useThemedStyles in BrandingContext.
+const createMapWebStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

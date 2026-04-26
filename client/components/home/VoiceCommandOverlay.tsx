@@ -3,7 +3,8 @@ import { View, Pressable, Animated, Modal, ActivityIndicator } from 'react-nativ
 import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../ThemedText';
 import { Colors } from '../../constants/theme';
-import styles from '../../screens/HomeScreen.styles';
+import { createHomeStyles } from '../../screens/HomeScreen.styles';
+import { useThemedStyles } from '../../context/BrandingContext';
 
 interface VoiceCommandOverlayProps {
   voiceRecording: boolean;
@@ -48,6 +49,7 @@ export function VoiceCommandOverlay({
   silenceTimerRef,
   HELP_TEXT,
 }: VoiceCommandOverlayProps) {
+  const styles = useThemedStyles(createHomeStyles);
   return (
     <>
       <Modal

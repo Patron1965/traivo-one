@@ -3,13 +3,15 @@ import { View, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../ThemedText';
 import { Colors } from '../../constants/theme';
-import styles from '../../screens/HomeScreen.styles';
+import { createHomeStyles } from '../../screens/HomeScreen.styles';
+import { useThemedStyles } from '../../context/BrandingContext';
 
 interface StatisticsButtonProps {
   onPress: () => void;
 }
 
 export function StatisticsButton({ onPress }: StatisticsButtonProps) {
+  const styles = useThemedStyles(createHomeStyles);
   return (
     <Pressable
       style={styles.statisticsButton}

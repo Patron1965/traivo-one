@@ -4,7 +4,8 @@ import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../ThemedText';
 import { Card } from '../Card';
 import { Colors, Spacing } from '../../constants/theme';
-import styles from '../../screens/HomeScreen.styles';
+import { createHomeStyles } from '../../screens/HomeScreen.styles';
+import { useThemedStyles } from '../../context/BrandingContext';
 import type { UseMutationResult } from '@tanstack/react-query';
 
 interface CarryOverBannerProps {
@@ -16,6 +17,7 @@ interface CarryOverBannerProps {
 }
 
 export function CarryOverBanner({ carryOverOrders, carryOverDismissed, setCarryOverDismissed, carryOverMutation, carryOverError }: CarryOverBannerProps) {
+  const styles = useThemedStyles(createHomeStyles);
   if (carryOverOrders.length === 0 || carryOverDismissed) return null;
 
   return (
