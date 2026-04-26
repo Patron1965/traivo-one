@@ -1,7 +1,8 @@
-# Traivo On (Mobilapp) — Integrationsinstruktioner
+# Traivo Go (Mobilapp) — Integrationsinstruktioner
 
-**Senast uppdaterad:** 2026-04-12
+**Senast uppdaterad:** 2026-04-26
 **Avser backend-version:** API v1
+**Tidigare titel:** "Traivo On" — namnändrat till "Traivo Go" 2026-04-26 (task #271). Innehållet är detsamma plus ny endpoint i §9.
 
 ---
 
@@ -10,11 +11,17 @@
 ### Vad som ändrats
 Alla REST-API-endpoints har nu ett versionsprefix: `/api/v1/`.
 
-### Vad Traivo On måste göra
+### Vad Traivo Go måste göra
 - **Ändra alla API-anrop** från `/api/...` till `/api/v1/...`
 - Exempel: `/api/mobile/login` → `/api/v1/mobile/login`
 - Exempel: `/api/mobile/my-orders` → `/api/v1/mobile/orders/:id`
 - Alla endpoints under `/api/mobile/`, `/api/portal/`, `/api/notifications/` berörs
+
+### Autentisering (mobil)
+Mobil-endpoints kräver `Authorization: Bearer <mobile-token>` där token
+är en opaque sträng (in-memory token-store, 24h TTL — inte en JWT).
+Token erhålls via `POST /api/mobile/login`. Inga andra header-varianter
+stöds av `isMobileAuthenticated`-middleware.
 
 ### Bakåtkompatibilitet
 - Gamla `/api/...`-anrop fungerar fortfarande, men returnerar deprecation-headers:
@@ -290,7 +297,7 @@ HTTP-statuskoder att hantera:
 
 ---
 
-## 8. Checklista — Åtgärder för Traivo On-teamet
+## 8. Checklista — Åtgärder för Traivo Go-teamet
 
 ### Högt prioritet (måste göras)
 - [ ] Migrera alla API-anrop till `/api/v1/`-prefix
@@ -316,7 +323,38 @@ HTTP-statuskoder att hantera:
 
 ---
 
-## 9. Testscenarier
+## 9. SMS-preferenser i mobilappen (NY 2026-04-26)
+
+För det kompletta flödet runt schemautskick, extrajobb-SMS och cancellation-SMS,
+se det dedikerade dokumentet `TRAIVO_GO_SCHEMA_PUBLISHING_INTEGRATION.md`.
+
+### Ny endpoint
+
+```
+PATCH /api/v1/mobile/me/notification-prefs
+Authorization: Bearer <mobile-token>
+Body: { "smsOnScheduleSend"?: boolean, "smsOnExtraJob"?: boolean }
+```
+
+Minst ett av fälten måste finnas. Skriver direkt till `resources`-tabellens
+`smsOnScheduleSend` / `smsOnExtraJob`-kolumner för den inloggade resursen.
+
+### Nya fält på `GET /api/v1/mobile/me`
+
+- `smsOnScheduleSend: boolean` (default `true`)
+- `smsOnExtraJob: boolean` (default `true`)
+- `lastSchedulePublishedAt: string (ISO) | null`
+- `lastSchedulePeriodStart: string ("YYYY-MM-DD") | null`
+- `lastSchedulePeriodEnd: string ("YYYY-MM-DD") | null`
+
+### Nya driver-notifikationstyper i `GET /api/v1/mobile/notifications`
+
+`schedule_published`, `schedule_send_failed`, `extra_job_sms`, `cancel_job_sms`.
+Se `TRAIVO_API_CONTRACTS.md` §6 för payload-format per typ.
+
+---
+
+## 10. Testscenarier
 
 Följande scenarier bör testas mot staging-miljön:
 

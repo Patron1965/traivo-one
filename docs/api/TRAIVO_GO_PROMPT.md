@@ -7,7 +7,9 @@ BAKGRUND
 ========
 Traivo är en AI-driven fältserviceplattform (SaaS) för nordiska företag inom
 avfallshantering och fastighetsservice. Plattformen har en fullständig backend
-med 446 API-endpoints, 117 databastabeller och komplett mobilapp-API.
+med ca 995 API-endpoints (varav 94 dedikerade `/api/mobile/*`-endpoints för
+mobilappen), 138 databastabeller och komplett mobilapp-API. Alla endpoints är
+tillgängliga både utan prefix och via versions-prefixet `/api/v1/`.
 
 Traivo Go är den fristående mobilappen som fältarbetare (chaufförer, tekniker,
 servicepersonal) använder dagligen. Appen ersätter papper, telefonsamtal och

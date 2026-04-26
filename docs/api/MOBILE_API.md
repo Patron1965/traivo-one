@@ -1,432 +1,110 @@
-# Unicorn - Mobil Fältapp API-dokumentation
+# Traivo One — Mobil-API (kort referens)
 
-*Senast uppdaterad: 2026-02-21*
+*Senast uppdaterad: 2026-04-26*
 
-## Översikt
-
-Detta dokument beskriver REST API:et som Unicorn-plattformen exponerar för integration med det externa **Fältapp**-projektet. API:et stöder två autentiseringsvägar och ger fältarbetare tillgång till uppgifter, beroendekedjor, fotouppladdning, besiktning och metadata.
-
-**Base URL:** `https://<unicorn-host>`
+> **Detta dokument är en kortreferens.** Den fullständiga datamodellen och
+> kontrakten lever i `TRAIVO_API_CONTRACTS.md`. Integrationsguiden för
+> Traivo Go-mobilappen ligger i `TRAIVO_GO_INTEGRATION_GUIDE.md`. Börja
+> där om du integrerar mobilappen från grunden.
+>
+> Denna fil ersätter den tidigare "Unicorn Fältapp"-dokumentationen.
+> All information som var unik här (foto-upload, beroendekedjor,
+> inspektion) har migrerats in i `TRAIVO_API_CONTRACTS.md` och
+> sprintdokumenten under `docs/api/TRAIVO_GO_*`.
 
 ---
 
-## 1. Autentisering
+## 1. Autentisering — Bearer-token i header
 
-### 1.1 PIN-baserad Mobilinloggning
+Mobilappen skickar inga cookies. Alla `/api/mobile/*`-endpoints kräver
+en opaque bearer-token (genererad av `POST /api/mobile/login`) i
+`Authorization`-headern:
 
-Fältarbetare loggar in med e-post + PIN-kod. Sessionen hanteras via cookie.
-
-#### POST `/api/mobile/login`
-**Request Body:**
-```json
-{
-  "email": "anna@kinab.se",
-  "pin": "1234"
-}
 ```
+Authorization: Bearer <mobile-token>
+```
+
+Token är en opaque sträng (slumpmässig hex), inte en JWT. Den valideras
+mot en in-memory token-store på servern (`mobileTokens` i
+`server/routes/helpers.ts`) och har 24 timmars TTL. Vid 401: rensa
+token och visa inloggningsskärmen.
+
+### POST /api/mobile/login
+
+```json
+{ "email": "anna@kinab.se", "pin": "1234" }
+```
+
+Alternativ inloggning: `{ "username": "anna", "password": "1234" }` eller
+endast `{ "pin": "1234" }` om PIN är unik per tenant.
 
 **Response (200):**
+
 ```json
 {
-  "resource": {
-    "id": "res_abc123",
-    "name": "Anna Andersson",
-    "tenantId": "tenant_kinab",
-    "phone": "0701234567",
-    "email": "anna@kinab.se"
-  },
-  "token": "session_token_xyz"
+  "token": "5e2a...hex",
+  "user": { "id": "res-abc", "name": "Anna", "role": "driver", ... },
+  "resource": { "id": "res-abc", "tenantId": "...", "smsOnScheduleSend": true, ... }
 }
 ```
 
-**Felkoder:**
-- `401` - Ogiltigt e-post/PIN-kombination
+Token är giltig 24 timmar. Vid 401 från en endpoint: rensa token, visa
+inloggningsskärmen.
 
-#### POST `/api/mobile/logout`
-**Headers:** Cookie med session-token (från login)
+### POST /api/mobile/logout
 
-**Response (200):**
-```json
-{ "success": true }
-```
+Auth: bearer-token. Invalidates the token. Response: `{ "success": true }`.
 
-#### GET `/api/mobile/me`
-Hämtar info om inloggad resurs.
+### GET /api/mobile/me
 
-**Response (200):**
-```json
-{
-  "id": "res_abc123",
-  "name": "Anna Andersson",
-  "tenantId": "tenant_kinab",
-  "resourceType": "person",
-  "phone": "0701234567",
-  "executionCodes": ["KB", "TV"]
-}
-```
+Returnerar inloggad resurs (alla fält från `resources`-tabellen,
+inklusive de nya publicerings-/SMS-fälten — se
+`TRAIVO_GO_SCHEMA_PUBLISHING_INTEGRATION.md`).
 
 ---
 
-## 2. Uppgiftshantering
+## 2. API-versionering
 
-### 2.1 Hämta dagens uppgifter (PIN-auth)
+Alla mobil-endpoints är tillgängliga både utan prefix (`/api/mobile/...`)
+och med versions-prefix (`/api/v1/mobile/...`). Nya klienter ska
+använda `/api/v1/`. Det oprefixade alternativet skickar
+`Deprecation: true` och `Sunset: 2027-06-01` i response-headers.
 
-#### GET `/api/mobile/my-orders`
-Returnerar alla ordrar för inloggad resurs, filtrerat på dagens datum.
-
-**Response (200):** Array av WorkOrder-objekt.
-
-#### GET `/api/mobile/orders/:id`
-Hämtar specifik arbetsorder med orderrader och objektinfo.
-
-### 2.2 Hämta uppgifter med beroendeinformation (tenant-auth)
-
-#### GET `/api/field-worker/tasks`
-**Query Parameters:**
-| Parameter | Typ | Beskrivning |
-|-----------|-----|-------------|
-| `date` | string (ISO date) | Datum att filtrera på (default: idag) |
-| `resourceId` | string | Filtera på specifik resurs |
-
-**Response (200):**
-```json
-[
-  {
-    "id": "wo_123",
-    "title": "Tvätt rum 201",
-    "objectId": "obj_456",
-    "resourceId": "res_abc",
-    "scheduledDate": "2026-02-21T08:00:00Z",
-    "scheduledStartTime": "08:00",
-    "estimatedDuration": 30,
-    "executionStatus": "scheduled",
-    "status": "in_progress",
-    "metadata": {},
-    "dependsOn": [
-      {
-        "parentId": "wo_120",
-        "type": "before",
-        "completed": false
-      }
-    ],
-    "isLocked": true,
-    "isDependentTask": true
-  }
-]
-```
-
-**Viktiga fält:**
-- `isLocked` (boolean) - `true` om uppgiften har olösta beroenden av typ "before"
-- `dependsOn` (array) - Lista av beroenden med `parentId`, `type` ("before"/"after"/"same_day"), och `completed`
-- `isDependentTask` (boolean) - `true` om uppgiften har något beroende
+Versions-discovery: `GET /api/version` →
+`{ "current": "v1", "supported": ["v1"] }`.
 
 ---
 
-## 3. Uppgiftsflöde (Statusändringar)
+## 3. Endpoint-översikt (förkortad)
 
-### 3.1 Starta uppgift
+För fullständig lista — inklusive payload, statusövergångar och felkoder —
+se `TRAIVO_GO_INTEGRATION_GUIDE.md` §3 och `TRAIVO_API_CONTRACTS.md`.
 
-#### POST `/api/field-worker/tasks/:id/start`
-Sätter `executionStatus = "travel"` och `status = "in_progress"`.
-
-**Response (200):** Uppdaterat WorkOrder-objekt.
-
-**Notera:** Appen bör kontrollera `isLocked` flaggan innan start-anrop. Backend validerar tenant-tillhörighet men inte beroendelåsning - det är klientens ansvar att visa lås-indikering.
-
-### 3.2 Slutföra uppgift
-
-#### POST `/api/field-worker/tasks/:id/complete`
-Sätter `executionStatus = "completed"`, `status = "completed"`, och `completedAt`.
-
-**Beroendekedje-effekt:** Markerar automatiskt alla `task_dependency_instances` där denna order är `parentWorkOrderId` som `completed = true`, vilket kan låsa upp beroende uppgifter.
-
-**Response (200):** Uppdaterat WorkOrder-objekt.
-
-### 3.3 Uppdatera orderstatus (PIN-auth)
-
-#### PATCH `/api/mobile/orders/:id/status`
-**Request Body:**
-```json
-{
-  "executionStatus": "on_site"
-}
-```
-
-**Tillåtna executionStatus-värden:**
-1. `scheduled` - Schemalagd
-2. `travel` - På väg
-3. `on_site` - På plats
-4. `work_started` - Arbete påbörjat
-5. `work_done` - Arbete klart
-6. `reporting` - Rapporterar
-7. `completed` - Slutförd
-8. `cancelled` - Avbruten
-
-### 3.4 Lägg till anteckning
-
-#### POST `/api/mobile/orders/:id/notes`
-**Request Body:**
-```json
-{
-  "note": "Kunde inte nå bakdörren, kontaktade fastighetsägare."
-}
-```
+| Område | Endpoints |
+|--------|-----------|
+| Auth | `POST /api/mobile/login`, `POST /api/mobile/logout`, `GET /api/mobile/me` |
+| Profil | `GET/PUT/PATCH /api/mobile/preferences`, `PATCH /api/mobile/me/notification-prefs` |
+| Ordrar | `GET /api/mobile/my-orders`, `GET /api/mobile/orders/:id`, `PATCH /api/mobile/orders/:id/status` |
+| Rapportering | `POST /api/mobile/orders/:id/notes`, `/photos`, `/deviations`, `/materials`, `/signature`, `/inspections` |
+| Sync | `POST /api/mobile/sync`, `GET /api/mobile/sync/status` |
+| GPS | `POST /api/mobile/position`, `POST /api/mobile/gps` |
+| Arbetspass | `/api/mobile/work-sessions/start|stop|pause|resume|active|:id/entries` |
+| AI | `POST /api/mobile/ai/chat|transcribe|analyze-image` |
+| Notiser | `GET /api/mobile/notifications`, `PATCH .../read`, `PATCH .../read-all`, `GET .../count` |
+| Akut | `POST /api/mobile/jobs/urgent/accept|decline`, `POST .../:id/status`, `GET .../active` |
+| Övrigt | `GET /api/mobile/summary`, `/weather`, `/articles`, `/terminology`, `/route-feedback/*` |
 
 ---
 
-## 4. Metadata-uppdatering
+## 4. Vidare läsning
 
-#### POST `/api/field-worker/tasks/:id/update-metadata`
-Skriver metadata tillbaka till objektet kopplat till arbetsordern.
-
-**Request Body:**
-```json
-{
-  "metadata": {
-    "senaste_tvatt": "2026-02-21",
-    "status_dorr": "ok",
-    "antal_besok": "15"
-  }
-}
-```
-
-Varje nyckel-värde-par sparas som en metadatapost på objektet med metod `field:{workOrderId}`.
-
----
-
-## 5. Fotouppladdning
-
-Tvåstegsprocess med presigned URL:er via Replit Object Storage.
-
-### Steg 1: Hämta uppladdnings-URL
-
-#### POST `/api/field-worker/tasks/:id/upload-photo`
-**Request Body:** Tomt (`{}`)
-
-**Response (200):**
-```json
-{
-  "uploadURL": "https://storage.googleapis.com/...?X-Goog-Signature=...",
-  "objectPath": "private/photos/abc123.jpg",
-  "workOrderId": "wo_123"
-}
-```
-
-### Steg 2: Ladda upp filen
-
-Gör en `PUT`-request direkt till `uploadURL` med bildfilen som body:
-```
-PUT <uploadURL>
-Content-Type: image/jpeg
-Body: <binärdata>
-```
-
-### Steg 3: Bekräfta uppladdning
-
-#### POST `/api/field-worker/tasks/:id/confirm-photo`
-**Request Body:**
-```json
-{
-  "objectPath": "private/photos/abc123.jpg",
-  "category": "before"
-}
-```
-
-**Tillåtna kategorier:**
-- `before` - Före-bild
-- `after` - Efter-bild
-- `damage` - Skadedokumentation
-- `general` - Övrig bild (default)
-
-**Response (200):**
-```json
-{
-  "success": true,
-  "photoCount": 3
-}
-```
-
-Fotot sparas i `workOrder.metadata.photos` som:
-```json
-{
-  "path": "private/photos/abc123.jpg",
-  "category": "before",
-  "uploadedAt": "2026-02-21T10:30:00Z"
-}
-```
-
----
-
-## 6. Besiktning (Inspection)
-
-### 6.1 Spara besiktningsresultat
-
-#### POST `/api/inspection-metadata`
-**Request Body:**
-```json
-{
-  "workOrderId": "wo_123",
-  "objectId": "obj_456",
-  "inspectionType": "door",
-  "status": "warning",
-  "issues": ["Knarrar", "Stängs inte"],
-  "comment": "Dörren behöver justeras",
-  "photoUrls": [],
-  "inspectedBy": "Anna Andersson"
-}
-```
-
-**Inspektionstyper och predefined issues:**
-
-| inspectionType | Svenska | Problem-alternativ |
-|----------------|---------|-------------------|
-| `door` | Dörr | Knarrar, Stängs inte, Skadad, Saknar stängare |
-| `lock` | Lås | Slitet, Fastnar, Saknas, Fel nyckel |
-| `window` | Fönster | Sprucket, Öppnas inte, Trasig spanjolette, Kondens |
-| `lighting` | Belysning | Ur funktion, Blinkar, Saknas, Felaktig armatur |
-| `floor` | Golv | Skadat, Halt, Smutsigt, Sprickor |
-| `ventilation` | Ventilation | Ur funktion, Oljud, Dålig luft, Blockerad |
-
-**Status-värden:**
-- `ok` - Godkänt
-- `warning` - Varning
-- `error` - Fel
-
-**Response (201):** Skapad InspectionMetadata-post.
-
-### 6.2 Hämta besiktningshistorik
-
-#### GET `/api/inspection-metadata`
-**Query Parameters:**
-| Parameter | Typ | Beskrivning |
-|-----------|-----|-------------|
-| `objectId` | string | Filtrera på objekt |
-
-### 6.3 Sök i besiktningar
-
-#### GET `/api/inspection-metadata/search`
-**Query Parameters:**
-| Parameter | Typ | Beskrivning |
-|-----------|-----|-------------|
-| `inspectionType` | string | Typ (door/lock/window/lighting/floor/ventilation) |
-| `status` | string | Status (ok/warning/error) |
-| `objectId` | string | Objekt-ID |
-
----
-
-## 7. GPS-positionsrapportering
-
-#### POST `/api/mobile/position`
-Rapporterar fältarbetarens GPS-position.
-
-**Request Body:**
-```json
-{
-  "latitude": 59.3293,
-  "longitude": 18.0686,
-  "accuracy": 10.5,
-  "heading": 180,
-  "speed": 5.2
-}
-```
-
----
-
-## 8. Datamodeller
-
-### WorkOrder (Arbetsorder)
-```typescript
-{
-  id: string;
-  tenantId: string;
-  customerId: string | null;
-  objectId: string | null;
-  resourceId: string | null;
-  title: string;
-  description: string | null;
-  orderType: string;       // "service", "felanmalan", etc.
-  priority: string;        // "low", "medium", "high", "urgent"
-  status: string;          // "pending", "in_progress", "completed", "cancelled"
-  executionStatus: string; // Se statusflöde ovan
-  scheduledDate: Date | null;
-  scheduledStartTime: string | null;
-  estimatedDuration: number | null;  // minuter
-  actualDuration: number | null;     // minuter
-  completedAt: Date | null;
-  metadata: {
-    photos?: Array<{
-      path: string;
-      category: string;
-      uploadedAt: string;
-    }>;
-    [key: string]: any;
-  };
-  notes: string | null;
-}
-```
-
-### InspectionMetadata (Besiktning)
-```typescript
-{
-  id: string;
-  tenantId: string;
-  workOrderId: string | null;
-  objectId: string | null;
-  inspectionType: string;      // "door", "lock", etc.
-  status: string;              // "ok", "warning", "error"
-  issues: string[];            // Predefined issue strings
-  comment: string | null;
-  photoUrls: string[];
-  inspectedBy: string | null;
-  inspectedAt: Date;
-  createdAt: Date;
-}
-```
-
-### TaskDependency (Beroendeinfo i tasks-response)
-```typescript
-{
-  parentId: string;       // ID på uppgift som detta beror på
-  type: string;           // "before", "after", "same_day"
-  completed: boolean;     // true om beroendet är löst
-}
-```
-
----
-
-## 9. Felhantering
-
-Alla endpoints returnerar svenska felmeddelanden:
-
-| HTTP-kod | Betydelse | Exempel |
-|----------|-----------|---------|
-| 400 | Ogiltig request | `{ "error": "objectPath krävs" }` |
-| 401 | Ej autentiserad | `{ "error": "Ej inloggad" }` |
-| 404 | Resurs hittades inte | `{ "error": "Uppgift hittades inte" }` |
-| 500 | Serverfel | `{ "error": "Kunde inte hämta uppgifter" }` |
-
----
-
-## 10. Integrationsflöde för Fältappen
-
-### Rekommenderat startflöde:
-1. `POST /api/mobile/login` → Logga in med PIN
-2. `GET /api/field-worker/tasks?date=YYYY-MM-DD&resourceId=X` → Hämta dagens uppgifter
-3. Visa uppgiftslista med lås/upplåst-indikatorer
-4. För varje uppgift:
-   a. `POST /api/field-worker/tasks/:id/start` → Starta
-   b. Utför arbete + ta foton + besiktiga
-   c. `POST /api/field-worker/tasks/:id/upload-photo` → Ladda upp foton
-   d. `POST /api/field-worker/tasks/:id/confirm-photo` → Bekräfta foton
-   e. `POST /api/inspection-metadata` → Spara besiktning
-   f. `POST /api/field-worker/tasks/:id/update-metadata` → Skriv metadata
-   g. `POST /api/field-worker/tasks/:id/complete` → Slutför (upplåser beroende)
-5. `POST /api/mobile/position` → Rapportera GPS periodiskt
-
-### Offline-hantering:
-Appen bör cacha uppgifter lokalt och köa ändringar (outbox pattern) för att synka vid uppkoppling.
-Statusändringar, foton, metadata och besiktningar kan köas och synkas sekventiellt.
-
----
-
-*Se även: `docs/product/SYSTEM_DOCUMENTATION.md` för fullständig systemöversikt.*
+| Dokument | Innehåll |
+|----------|----------|
+| `TRAIVO_GO_INTEGRATION_GUIDE.md` | Komplett integrationsguide för mobilappen — auth, WebSocket, alla endpoints, feature flags, statushantering. |
+| `TRAIVO_API_CONTRACTS.md` | Datamodell, statusflöden, WebSocket-eventkatalog, prismodell, sync-batchformat. |
+| `TRAIVO_GO_SCHEMA_PUBLISHING_INTEGRATION.md` | Schemautskick + extrajobb-SMS (task #264). |
+| `TRAIVO_GO_AKUT_JOBB_INTEGRATION.md` | Akut jobbhantering (urgent jobs). |
+| `TRAIVO_GO_INTEGRATION_R1-R6.md` | Ruttoptimerings-sprinten R1–R6 (Geoapify, disruption, raster, kund-ETA). |
+| `TRAIVO_GO_PROMPT.md` | Översikt och tech-stack för mobilappen. |
+| `TRAIVO_GO_SYNC_INSTRUCTIONS.md` | Att-göra-lista + dagsrapport-funktioner i mobilappen. |
+| `README.md` | Indexet — börja här. |

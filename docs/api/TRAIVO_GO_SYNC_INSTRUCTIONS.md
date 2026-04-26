@@ -2,6 +2,10 @@
 
 > Kopiera denna instruktion till agenten i det separata Traivo Go-projektet (React Native/Expo).
 > Instruktionen är anpassad till Traivo Go:s tech-stack: React Native 0.79, Expo SDK 54, React Navigation, AsyncStorage, Feather-ikoner, Card-komponent, ThemedText/ThemedView, @shopify/flash-list.
+>
+> **Senast granskat:** 2026-04-26. Dokumentet är fortsatt aktuellt — endast
+> klient-sidiga AsyncStorage-funktioner, inga backend-anrop. Inga ändringar
+> behövs efter audit.
 
 ---
 

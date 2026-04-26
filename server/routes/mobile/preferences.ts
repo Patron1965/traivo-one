@@ -7,7 +7,7 @@ import {
   asyncHandler,
   NotFoundError, ValidationError,
 } from "./shared";
-import { mobileUserPreferences } from "@shared/schema";
+import { mobileUserPreferences, resources } from "@shared/schema";
 
 const VALID_FONT_SIZES = ["small", "medium", "large"] as const;
 const VALID_MAP_TYPES = ["standard", "satellite", "hybrid"] as const;
@@ -149,6 +149,53 @@ export function registerPreferencesRoutes(app: Express) {
     }
 
     res.json({ preferences: formatPrefs(result) });
+  }));
+
+  // Mobile-safe SMS / publishing notification preferences. These two flags
+  // live on the resources-table (not on mobile_user_preferences) because
+  // the SMS pipeline reads them directly from the resource. We expose a
+  // dedicated mobile endpoint so technicians can toggle their own opt-in
+  // from the app without touching the admin /api/resources/:id route.
+  const notificationPrefsSchema = z.object({
+    smsOnScheduleSend: z.boolean().optional(),
+    smsOnExtraJob: z.boolean().optional(),
+  }).refine(
+    (data) => data.smsOnScheduleSend !== undefined || data.smsOnExtraJob !== undefined,
+    { message: "Minst ett av smsOnScheduleSend eller smsOnExtraJob krävs" },
+  );
+
+  app.patch("/api/mobile/me/notification-prefs", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const parseResult = notificationPrefsSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      throw new ValidationError(formatZodError(parseResult.error));
+    }
+
+    const data = parseResult.data;
+    const updateFields: Record<string, unknown> = {};
+    if (data.smsOnScheduleSend !== undefined) updateFields.smsOnScheduleSend = data.smsOnScheduleSend;
+    if (data.smsOnExtraJob !== undefined) updateFields.smsOnExtraJob = data.smsOnExtraJob;
+
+    const [updated] = await db.update(resources)
+      .set(updateFields)
+      .where(eq(resources.id, resourceId))
+      .returning();
+
+    if (!updated) throw new NotFoundError("Resurs hittades inte");
+
+    console.log(`[mobile] Notification prefs updated for resource ${resourceId}: ${JSON.stringify(updateFields)}`);
+
+    res.json({
+      success: true,
+      smsOnScheduleSend: updated.smsOnScheduleSend,
+      smsOnExtraJob: updated.smsOnExtraJob,
+      lastSchedulePublishedAt: updated.lastSchedulePublishedAt,
+      lastSchedulePeriodStart: updated.lastSchedulePeriodStart,
+      lastSchedulePeriodEnd: updated.lastSchedulePeriodEnd,
+    });
   }));
 }
 

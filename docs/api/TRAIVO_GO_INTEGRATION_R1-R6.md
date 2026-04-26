@@ -1,8 +1,13 @@
 # Traivo GO — Integrationsinstruktion: Ruttoptimeringssprint R1–R6
 
-**Version:** 1.0  
-**Datum:** 2026-03-25  
+**Version:** 1.1
+**Datum:** 2026-04-26 (granskat och versionsmärkt)
 **Gäller:** Traivo One backend-ändringar som påverkar Traivo GO (mobilappen)
+
+> **API-versionering:** Alla endpoints i detta dokument är tillgängliga både
+> utan prefix (`/api/...`) och med versions-prefix (`/api/v1/...`). Nya
+> klienter ska använda `/api/v1/`. Det oprefixade alternativet svarar
+> fortfarande men returnerar `Deprecation`- och `Sunset`-headers.
 
 ---
 
@@ -10,7 +15,7 @@
 
 Sex funktionsområden har implementerats i Traivo One som kräver uppdateringar i Traivo GO för att systemet ska synkronisera korrekt. Dokumentet beskriver varje område med API-kontrakt, datamodeller, och rekommenderade integrationspunkter i mobilappen.
 
-**Autentisering:** Alla `/api/mobile/*`-endpoints kräver header `x-mobile-token` (JWT). Alla andra admin-endpoints kräver Replit Auth-session. Portal-endpoints kräver header `x-portal-token`.
+**Autentisering:** Alla `/api/mobile/*`-endpoints kräver header `Authorization: Bearer <mobile-token>` (opaque token från `POST /api/mobile/login`, in-memory token-store, 24h TTL — inte en JWT). Alla andra admin-endpoints kräver Replit Auth-session. Portal-endpoints kräver header `x-portal-token`.
 
 ---
 

@@ -1,7 +1,14 @@
 # Traivo API-kontrakt
 
 > Gemensamt kontraktsdokument för Traivo One (webb) och Traivo Go (mobil).
-> Version: 1.0 · Senast uppdaterad: 2026-04-12
+> Version: 1.1 · Senast uppdaterad: 2026-04-26
+
+## Versionshistorik
+
+| Version | Datum | Ändring |
+|---------|-------|---------|
+| 1.1 | 2026-04-26 | Resource utökad med publicerings-/SMS-fält (task #264). Nytt avsnitt §6 om driver-notifikationstyper med fyra nya typer. |
+| 1.0 | 2026-04-12 | Första versionen. Kärntyper, statusflöden, WS-eventkatalog, prismodell, sync. |
 
 ---
 
@@ -12,6 +19,7 @@
 3. [WebSocket-eventkatalog](#3-websocket-eventkatalog)
 4. [Prismodell](#4-prismodell)
 5. [Sync-batchformat](#5-sync-batchformat-mobil)
+6. [Driver-notifikationstyper](#6-driver-notifikationstyper)
 
 ---
 
@@ -150,8 +158,17 @@ Utförare (person eller enhet).
 | `projectCode` | `string \| null` | | |
 | `isOnline` | `boolean` | | |
 | `status` | `string` | ✓ | `"active"`, `"inactive"` |
+| `smsOnScheduleSend` | `boolean` | ✓ | Default `true`. Får resursen SMS när planeraren publicerar veckoschema. (task #264) |
+| `smsOnExtraJob` | `boolean` | ✓ | Default `true`. Får resursen SMS vid extrajobb/cancellation inom redan publicerad vecka. (task #264) |
+| `lastSchedulePublishedAt` | `timestamp \| null` | | Senaste lyckade schemautskick till resursen. (task #264) |
+| `lastSchedulePeriodStart` | `string ("YYYY-MM-DD") \| null` | | Startdatum för senast publicerade period. |
+| `lastSchedulePeriodEnd` | `string ("YYYY-MM-DD") \| null` | | Slutdatum för senast publicerade period. |
 | `createdAt` | `timestamp` | ✓ | |
 | `deletedAt` | `timestamp \| null` | | |
+
+> Mobil-toggling av `smsOnScheduleSend` och `smsOnExtraJob` görs via
+> `PATCH /api/mobile/me/notification-prefs`. Detaljer finns i
+> `TRAIVO_GO_SCHEMA_PUBLISHING_INTEGRATION.md` §5.
 
 ### 1.4 Article
 
@@ -615,3 +632,52 @@ Work Session-objekt (in-memory på resource.metadata):
   totalPauseMinutes: number;
 }
 ```
+
+
+---
+
+## 6. Driver-notifikationstyper
+
+`driver_notifications`-tabellen är en in-app feed som mobilappen läser via
+`GET /api/mobile/notifications`. Varje rad har en `type`-sträng som styr
+hur appen ska rendera notisen (ikon, färg, deeplink).
+
+### 6.1 type-enum (förväntade värden)
+
+| `type` | Källa (server-fil) | Trigger | `data`-payload |
+|--------|--------------------|---------|----------------|
+| `job_assigned` | `routes.ts`, `customer-notifications.ts` | Order tilldelas resurs | `{ scheduledDate?, scheduledStartTime?, objectName?, objectAddress?, priority? }` |
+| `job_updated` | `routes.ts` | Tilldelad order ändras | `{ scheduledDate?, scheduledStartTime?, status? }` |
+| `job_cancelled` | `routes.ts` | Order tas bort eller flyttas till annan resurs | `{}` |
+| `schedule_changed` | `routes.ts` | Datum eller tid ändras | `{ oldDate, newDate, scheduledStartTime? }` |
+| `priority_changed` | `routes.ts` | Prioritet ändras | `{ oldPriority, newPriority }` |
+| `urgent_assigned` | `urgent-jobs.ts` | Akut jobb tilldelas (parallellt event med `data.isUrgent=true` på `job_assigned`) | Se `TRAIVO_GO_AKUT_JOBB_INTEGRATION.md` |
+| `schedule_published` | `customer-notifications.ts:583` | Veckoschema lyckades skickas (e-post och/eller SMS) | `{ dateRange, totalJobs, channels: { email?, sms? } }` |
+| `schedule_send_failed` | `customer-notifications.ts:583` | Veckoschema misslyckades på alla kanaler | `{ dateRange, totalJobs, channels: { email?, sms? } }` |
+| `extra_job_sms` | `extra-job-sms.ts:141` | SMS skickat om extrajobb i redan publicerad vecka | `{ reason: "assigned" \| "rescheduled", phone, messageId?, error? }` |
+| `cancel_job_sms` | `extra-job-sms.ts:227` | SMS skickat om borttaget jobb i redan publicerad vecka | `{ phone, messageId?, error? }` |
+| `system` | diverse | Övriga systemnotiser (uppgraderingar, varningar) | Fritt |
+
+### 6.2 Gemensamt fältformat
+
+```typescript
+interface DriverNotification {
+  id: string;
+  tenantId: string;
+  resourceId: string;
+  type: string;
+  title: string;        // Svensk rubrik (max ~80 tecken)
+  message: string;      // Svensk text (max ~240 tecken)
+  orderId: string | null;
+  data: Record<string, unknown>;
+  isRead: boolean;
+  createdAt: string;    // ISO 8601
+}
+```
+
+### 6.3 Vidare läsning
+
+- Schemautskick + extrajobb-flödet detaljbeskrivs i
+  `TRAIVO_GO_SCHEMA_PUBLISHING_INTEGRATION.md`.
+- Akutjobb-flödet (`urgent_assigned`, `job_assigned` med `isUrgent`) finns
+  i `TRAIVO_GO_AKUT_JOBB_INTEGRATION.md`.

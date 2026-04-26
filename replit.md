@@ -32,6 +32,9 @@ Clusters are automatically generated based on customer ownership when objects ar
 ### API Versioning
 All REST API endpoints support versioned access via `/api/v1/` prefix. A URL-rewrite middleware strips the prefix internally. Unversioned `/api/` calls are backward compatible but receive deprecation headers and server-side logging. The frontend automatically prefixes API calls with `/api/v1/`. A version discovery endpoint `GET /api/version` is available.
 
+### Traivo Go (Mobile App) Integration
+The Traivo Go mobile app integrates with Traivo One via 94 `/api/mobile/*` endpoints (auth, orders, sync, GPS, work-sessions, AI, notifications, urgent jobs, preferences). Drivers can toggle SMS preferences from the app via `PATCH /api/mobile/me/notification-prefs` (writes `smsOnScheduleSend` / `smsOnExtraJob` directly on the resource record). Schedule publishing logs `schedule_published` / `schedule_send_failed` driver-notifications and stamps `lastSchedulePublishedAt` / `lastSchedulePeriodStart` / `lastSchedulePeriodEnd` on the resource. Subsequent assignments inside an already-published period trigger `extra_job_sms` or `cancel_job_sms` SMS + driver-notifications via Twilio. Full integration documentation lives under `docs/api/` (start with `docs/api/README.md`).
+
 ### System Design Choices
 An AI-first approach guides all functionalities. Route optimization is offloaded to a separate Plannix optimization service, and external DataClean service handles data validation and geocoding. A complete REST API supports the Driver Core mobile field app. The system includes configurable status message templates, a resource availability service, portal chat auto-responses, and mobile API endpoints for team functions and statistics. A server-driven mobile app configuration and version check system are in place, alongside an AI Sales Intelligence Report.
 
