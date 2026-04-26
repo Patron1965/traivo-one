@@ -78,7 +78,7 @@ export const ResourceColumn = memo(function ResourceColumn({ resource, summary, 
         </div>
       )}
       {(() => {
-        const lastPublishedAt = resource.lastSchedulePublishedAt ? new Date(resource.lastSchedulePublishedAt as any) : null;
+        const lastPublishedAt = resource.lastSchedulePublishedAt ? new Date(resource.lastSchedulePublishedAt) : null;
         const periodMatchesCurrent = currentPeriod
           && resource.lastSchedulePeriodStart === currentPeriod.start
           && resource.lastSchedulePeriodEnd === currentPeriod.end;

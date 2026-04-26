@@ -596,7 +596,7 @@ export function usePlannerData() {
     setSendScheduleCopied(false);
     setSendLastResult(null);
     setSendChannelEmail(!!r.email);
-    const smsEnabled = (r as any).smsOnScheduleSend !== false;
+    const smsEnabled = r.smsOnScheduleSend !== false;
     setSendChannelSms(!!r.phone && smsEnabled);
     setSendScheduleDialogOpen(true);
   }, []);
@@ -666,7 +666,7 @@ export function usePlannerData() {
         continue;
       }
       try {
-        const smsAllowed = (resource as any).smsOnScheduleSend !== false;
+        const smsAllowed = resource.smsOnScheduleSend !== false;
         const channels = {
           email: bulkChannelEmail && !!resource.email,
           sms: bulkChannelSms && !!resource.phone && smsAllowed,

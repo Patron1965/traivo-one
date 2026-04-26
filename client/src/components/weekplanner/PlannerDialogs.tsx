@@ -162,7 +162,7 @@ export const SendScheduleDialog = memo(function SendScheduleDialog(props: SendSc
   const hasPhone = !!resource?.phone;
   const smsAllowedByPref = resource?.smsOnScheduleSend !== false;
   const lastPublishedAt = resource?.lastSchedulePublishedAt
-    ? new Date(resource.lastSchedulePublishedAt as any)
+    ? new Date(resource.lastSchedulePublishedAt)
     : null;
 
   const canSend = (channelEmail && hasEmail) || (channelSms && hasPhone && smsAllowedByPref);
@@ -367,7 +367,7 @@ export const BulkSendScheduleDialog = memo(function BulkSendScheduleDialog(props
                 )}
                 {eligibleResources.map(r => {
                   const res = results[r.id];
-                  const lastPublishedAt = r.lastSchedulePublishedAt ? new Date(r.lastSchedulePublishedAt as any) : null;
+                  const lastPublishedAt = r.lastSchedulePublishedAt ? new Date(r.lastSchedulePublishedAt) : null;
                   return (
                     <label
                       key={r.id}

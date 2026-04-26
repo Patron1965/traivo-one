@@ -554,38 +554,48 @@ export async function sendScheduleToResource(
     if (anySuccess) {
       try {
         await storage.updateResource(resourceId, {
-          lastSchedulePublishedAt: new Date() as any,
+          lastSchedulePublishedAt: new Date(),
           lastSchedulePeriodStart: dateRange.start,
           lastSchedulePeriodEnd: dateRange.end,
-        } as any);
+        });
       } catch (e) {
         console.error("[notification] Failed to persist last published period:", e);
       }
+    }
 
-      const channelsLog: string[] = [];
-      if (result.email?.success) channelsLog.push(`e-post → ${result.email.recipient}`);
-      if (result.sms?.success) channelsLog.push(`SMS → ${result.sms.recipient}`);
-      try {
-        await storage.createDriverNotification({
-          tenantId,
-          resourceId,
-          type: "schedule_published",
-          title: "Schema publicerat",
-          message: `Schemat för ${dateRange.start} – ${dateRange.end} skickades via ${channelsLog.join(", ") || "ingen kanal"} (${totalJobs} jobb)`,
-          orderId: null,
-          data: {
-            dateRange,
-            totalJobs,
-            channels: {
-              email: result.email ? { success: result.email.success, error: result.email.error } : undefined,
-              sms: result.sms ? { success: result.sms.success, error: result.sms.error } : undefined,
-            },
+    // Logga ALLA försök (lyckade + misslyckade) så att planeraren kan följa
+    // upp varje SMS/e-post med mottagare, tid och status.
+    const channelsLog: string[] = [];
+    if (result.email) {
+      channelsLog.push(
+        `e-post ${result.email.success ? "→" : "✗"} ${result.email.recipient || "?"}${result.email.success ? "" : ` (${result.email.error || "fel"})`}`
+      );
+    }
+    if (result.sms) {
+      channelsLog.push(
+        `SMS ${result.sms.success ? "→" : "✗"} ${result.sms.recipient || "?"}${result.sms.success ? "" : ` (${result.sms.error || "fel"})`}`
+      );
+    }
+    try {
+      await storage.createDriverNotification({
+        tenantId,
+        resourceId,
+        type: anySuccess ? "schedule_published" : "schedule_send_failed",
+        title: anySuccess ? "Schema skickat" : "Schemautskick misslyckades",
+        message: `Schemat för ${dateRange.start} – ${dateRange.end}: ${channelsLog.join(", ") || "ingen kanal"} (${totalJobs} jobb)`,
+        orderId: null,
+        data: {
+          dateRange,
+          totalJobs,
+          channels: {
+            email: result.email ? { success: result.email.success, error: result.email.error, recipient: result.email.recipient } : undefined,
+            sms: result.sms ? { success: result.sms.success, error: result.sms.error, recipient: result.sms.recipient } : undefined,
           },
-          isRead: false,
-        });
-      } catch (e) {
-        console.error("[notification] Failed to log schedule send:", e);
-      }
+        },
+        isRead: false,
+      });
+    } catch (e) {
+      console.error("[notification] Failed to log schedule send:", e);
     }
 
     return result;

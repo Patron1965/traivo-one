@@ -10,8 +10,11 @@ import {
   HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X,
   Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
   User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share,
-  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText, ListTodo, Eye, EyeOff
+  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText, ListTodo, Eye, EyeOff, Settings
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import type { Resource } from "@shared/schema";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -228,6 +231,27 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [changeRequestPhoto, setChangeRequestPhoto] = useState<string | null>(null);
   const [isUploadingChangePhoto, setIsUploadingChangePhoto] = useState(false);
   const [showMyReportsPanel, setShowMyReportsPanel] = useState(false);
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+
+  const { data: myResource } = useQuery<Resource>({
+    queryKey: ["/api/resources", resourceId],
+    enabled: !!resourceId && showSettingsPanel,
+  });
+
+  const updateResourcePrefsMutation = useMutation({
+    mutationFn: async (patch: { smsOnScheduleSend?: boolean; smsOnExtraJob?: boolean }) => {
+      if (!resourceId) throw new Error("Ingen resurs");
+      return await apiRequest("PATCH", `/api/resources/${resourceId}`, patch);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/resources", resourceId] });
+      toast({ title: "Sparat", description: "Dina aviseringsval har uppdaterats." });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Okänt fel";
+      toast({ title: "Kunde inte spara", description: msg, variant: "destructive" });
+    },
+  });
 
   const mobileTokenRef = useRef<string | null>(null);
 
@@ -2462,6 +2486,17 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             >
               <Flag className={`h-4 w-4 ${showMyReportsPanel ? "text-orange-500" : "text-muted-foreground"}`} />
             </Button>
+            {resourceId && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 gap-1"
+                onClick={() => setShowSettingsPanel(!showSettingsPanel)}
+                data-testid="button-toggle-field-settings"
+              >
+                <Settings className={`h-4 w-4 ${showSettingsPanel ? "text-primary" : "text-muted-foreground"}`} />
+              </Button>
+            )}
             <Button 
               variant="ghost" 
               size="icon"
@@ -2494,6 +2529,56 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
 
         {showMyReportsPanel && (
           <MyReportsPanel mobileApiCall={mobileApiCall} />
+        )}
+
+        {showSettingsPanel && (
+          <Card className="border-primary/20" data-testid="panel-field-settings">
+            <CardHeader className="py-2 px-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Settings className="h-4 w-4" />
+                Mina aviseringar
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="py-3 px-3 space-y-3">
+              {!myResource ? (
+                <div className="text-xs text-muted-foreground">Laddar dina inställningar...</div>
+              ) : (
+                <>
+                  {!myResource.phone && (
+                    <div className="text-xs text-muted-foreground border border-dashed rounded px-2 py-1.5">
+                      Inget telefonnummer registrerat – be planeraren lägga till ditt nummer för att kunna ta emot SMS.
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="pref-sms-schedule" className="text-sm">SMS när veckans schema publiceras</Label>
+                      <p className="text-[11px] text-muted-foreground">Du får ett kort SMS med antal jobb och första starttid.</p>
+                    </div>
+                    <Switch
+                      id="pref-sms-schedule"
+                      checked={myResource.smsOnScheduleSend !== false}
+                      disabled={!myResource.phone || updateResourcePrefsMutation.isPending}
+                      onCheckedChange={(v) => updateResourcePrefsMutation.mutate({ smsOnScheduleSend: v })}
+                      data-testid="switch-pref-sms-schedule"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="pref-sms-extra" className="text-sm">SMS vid extrajobb under publicerad period</Label>
+                      <p className="text-[11px] text-muted-foreground">Du varnas direkt om planeraren lägger till eller flyttar in jobb i din vecka.</p>
+                    </div>
+                    <Switch
+                      id="pref-sms-extra"
+                      checked={myResource.smsOnExtraJob !== false}
+                      disabled={!myResource.phone || updateResourcePrefsMutation.isPending}
+                      onCheckedChange={(v) => updateResourcePrefsMutation.mutate({ smsOnExtraJob: v })}
+                      data-testid="switch-pref-sms-extra"
+                    />
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         <DailyProgressCard 
