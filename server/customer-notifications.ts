@@ -363,7 +363,7 @@ function buildScheduleSmsBody(params: {
   const { companyName, resourceName, totalJobs, firstJobTime, fieldAppUrl } = params;
   const firstName = resourceName.split(" ")[0] || resourceName;
   const startStr = firstJobTime ? ` Första pass ${firstJobTime}.` : "";
-  const body = `${companyName}: Hej ${firstName}, ditt schema är publicerat (${totalJobs} jobb).${startStr} Öppna Plannix Go: ${fieldAppUrl}`;
+  const body = `${companyName}: Hej ${firstName}, ditt schema är publicerat (${totalJobs} jobb).${startStr} Öppna Traivo Go: ${fieldAppUrl}`;
   return body.length > 320 ? body.substring(0, 317) + "..." : body;
 }
 

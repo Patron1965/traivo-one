@@ -196,22 +196,20 @@ respektive `server/customer-notifications.ts`. De följer dessa regler:
 - **Språk:** Svenska. Tilltal med teknikerns förnamn.
 - **Avsändare:** Tenantens namn (t.ex. "Kinab").
 - **Längd:** Max 320 tecken (trunkeras med `...` om längre).
-- **Avslut:** Alltid hänvisning till "Se Plannix Go" (mobilappens varumärke
-  förblir "Plannix Go" tills annat beslut tas — ändras i `extra-job-sms.ts`
-  vid behov).
+- **Avslut:** Alltid hänvisning till "Se Traivo Go" (mobilappens varumärke).
 
 ### 4.1 Extrajobb (assigned/rescheduled)
 
 ```
 {Företag}: Hej {Förnamn}, extrajobb tillagt {dag DD MMM} {HH:MM?}.
-{Jobbtitel} – {Objektnamn} • {Objektadress}. Se Plannix Go.
+{Jobbtitel} – {Objektnamn} • {Objektadress}. Se Traivo Go.
 ```
 
 ### 4.2 Cancellation
 
 ```
 {Företag}: Hej {Förnamn}, jobbet {dag DD MMM} {HH:MM?} ({Jobbtitel})
-är borttaget från din rutt. Se Plannix Go.
+är borttaget från din rutt. Se Traivo Go.
 ```
 
 ### 4.3 Schemautskick (vecka)

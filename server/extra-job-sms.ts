@@ -45,7 +45,7 @@ function buildExtraJobSmsBody(params: {
   const dayStr = dateObj.toLocaleDateString("sv-SE", { weekday: "short", day: "numeric", month: "short" });
   const timeStr = scheduledStartTime ? ` ${scheduledStartTime}` : "";
   const where = [objectName, objectAddress].filter(Boolean).join(" • ");
-  const body = `${companyName}: Hej ${firstName}, extrajobb tillagt ${dayStr}${timeStr}. ${jobTitle}${where ? ` – ${where}` : ""}. Se Plannix Go.`;
+  const body = `${companyName}: Hej ${firstName}, extrajobb tillagt ${dayStr}${timeStr}. ${jobTitle}${where ? ` – ${where}` : ""}. Se Traivo Go.`;
   return body.length > 320 ? body.substring(0, 317) + "..." : body;
 }
 
@@ -61,7 +61,7 @@ function buildCancellationSmsBody(params: {
   const dateObj = new Date(scheduledDate + (scheduledDate.includes("T") ? "" : "T12:00:00"));
   const dayStr = dateObj.toLocaleDateString("sv-SE", { weekday: "short", day: "numeric", month: "short" });
   const timeStr = scheduledStartTime ? ` ${scheduledStartTime}` : "";
-  const body = `${companyName}: Hej ${firstName}, jobbet ${dayStr}${timeStr} (${jobTitle}) är borttaget från din rutt. Se Plannix Go.`;
+  const body = `${companyName}: Hej ${firstName}, jobbet ${dayStr}${timeStr} (${jobTitle}) är borttaget från din rutt. Se Traivo Go.`;
   return body.length > 320 ? body.substring(0, 317) + "..." : body;
 }
 
