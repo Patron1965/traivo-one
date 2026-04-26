@@ -270,7 +270,7 @@ export function usePlannerData() {
 
   const sendScheduleMutation = useMutation({
     mutationFn: async ({ resourceId, jobs, dateRange, channels }: { resourceId: string; jobs: Array<{ id: string; title: string; objectName?: string; objectAddress?: string; scheduledDate: string; scheduledStartTime?: string; estimatedDuration?: number; accessCode?: string; keyNumber?: string }>; dateRange: { start: string; end: string }; channels: { email: boolean; sms: boolean } }) => (await apiRequest("POST", `/api/notifications/send-schedule/${resourceId}`, { jobs, dateRange, fieldAppUrl: `${window.location.origin}/field`, channels })).json(),
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       const result = {
         email: data.email as { success: boolean; recipient?: string; error?: string } | undefined,
         sms: data.sms as { success: boolean; recipient?: string; error?: string } | undefined,
@@ -294,6 +294,7 @@ export function usePlannerData() {
         toast({ title: "Kunde inte skicka", description: `Misslyckades: ${failParts.join(", ")}.`, variant: "destructive" });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/resources", variables.resourceId, "sms-history"] });
     },
     onError: (err) => { toast({ title: "Kunde inte skicka schema", description: err instanceof Error ? err.message : "Försök igen senare.", variant: "destructive" }); },
   });

@@ -43,6 +43,26 @@ app.get("/api/resources/:id", asyncHandler(async (req, res) => {
   res.json(verified);
 }));
 
+app.get("/api/resources/:id/sms-history", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const resource = await storage.getResource(req.params.id);
+  if (!verifyTenantOwnership(resource, tenantId)) {
+    throw new NotFoundError("Resurs");
+  }
+  const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+  const SCHEDULE_HISTORY_TYPES = [
+    "schedule_published",
+    "schedule_send_failed",
+    "extra_job_sms",
+    "cancel_job_sms",
+  ];
+  const history = await storage.listDriverNotificationsByResource(req.params.id, tenantId, {
+    types: SCHEDULE_HISTORY_TYPES,
+    limit,
+  });
+  res.json(history);
+}));
+
 app.post("/api/resources", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const data = insertResourceSchema.parse({ ...req.body, tenantId });

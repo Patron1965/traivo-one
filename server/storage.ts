@@ -766,6 +766,7 @@ export interface IStorage {
 
   // Driver Notifications
   getDriverNotifications(resourceId: string, options?: { unreadOnly?: boolean; limit?: number }): Promise<DriverNotification[]>;
+  listDriverNotificationsByResource(resourceId: string, tenantId: string, options?: { types?: string[]; limit?: number }): Promise<DriverNotification[]>;
   createDriverNotification(notification: InsertDriverNotification): Promise<DriverNotification>;
   markDriverNotificationRead(id: string, resourceId: string): Promise<DriverNotification | undefined>;
   markAllDriverNotificationsRead(resourceId: string): Promise<number>;
@@ -5968,6 +5969,23 @@ export class DatabaseStorage implements IStorage {
     let query = db.select().from(driverNotifications).where(and(...conditions)).orderBy(desc(driverNotifications.createdAt));
     if (options?.limit) query = query.limit(options.limit) as any;
     return query;
+  }
+
+  async listDriverNotificationsByResource(resourceId: string, tenantId: string, options?: { types?: string[]; limit?: number }): Promise<DriverNotification[]> {
+    const conditions = [
+      eq(driverNotifications.resourceId, resourceId),
+      eq(driverNotifications.tenantId, tenantId),
+    ];
+    if (options?.types && options.types.length > 0) {
+      conditions.push(inArray(driverNotifications.type, options.types));
+    }
+    const limit = options?.limit ?? 20;
+    return db
+      .select()
+      .from(driverNotifications)
+      .where(and(...conditions))
+      .orderBy(desc(driverNotifications.createdAt))
+      .limit(limit);
   }
 
   async createDriverNotification(notification: InsertDriverNotification): Promise<DriverNotification> {
