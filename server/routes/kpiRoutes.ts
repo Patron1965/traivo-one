@@ -601,6 +601,12 @@ app.post("/api/system/tenant-branding/publish", requireAdmin, asyncHandler(async
     res.json(result);
 }));
 
+// Dashboard cache stats — used during rollout to verify hit/miss behaviour
+app.get("/api/system/dashboard-cache/stats", requireAdmin, asyncHandler(async (req, res) => {
+    const { dashboardCache } = await import("../services/dashboardCache");
+    res.json(dashboardCache.getStats());
+}));
+
 // SMS Configuration - Get current SMS settings (admin only)
 app.get("/api/system/sms-config", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
