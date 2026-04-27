@@ -126,7 +126,7 @@ export function CustomerSignOffScreen({ route, navigation }: any) {
   const deviations = order.deviations || [];
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="screen-CustomerSignOff">
       <ScrollView
         contentContainerStyle={[
           styles.content,

@@ -13,6 +13,7 @@ import {
 } from '@expo-google-fonts/inter';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { ErrorBoundary } from './client/components/ErrorBoundary';
+import { TestCrashTrigger } from './client/components/TestCrashTrigger';
 import { AuthProvider } from './client/context/AuthContext';
 import { BrandingProvider } from './client/context/BrandingContext';
 import { UrgentJobProvider } from './client/context/UrgentJobContext';
@@ -38,6 +39,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
+      <TestCrashTrigger eventName="plannix:test-crash-app" />
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <KeyboardProvider>

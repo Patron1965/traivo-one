@@ -166,7 +166,7 @@ function HamburgerMenuModal({ visible, onClose }: { visible: boolean; onClose: (
 
   return (
     <Modal transparent visible={isRendered} statusBarTranslucent onRequestClose={onClose}>
-      <View style={{ flex: 1, flexDirection: 'row' }}>
+      <View style={{ flex: 1, flexDirection: 'row' }} testID="screen-HamburgerMenu">
         <Animated.View
           style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)', opacity: overlayAnim }]}
         >

@@ -228,7 +228,7 @@ export function TodoScreen() {
   ];
 
   return (
-    <View style={s.container}>
+    <View style={s.container} testID="screen-Todo">
       <View style={[s.inputRow, { marginTop: headerHeight + Spacing.sm }]}>
         <TextInput
           style={s.input}

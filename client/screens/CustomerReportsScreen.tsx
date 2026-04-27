@@ -92,7 +92,7 @@ export function CustomerReportsScreen({ navigation }: any) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="screen-CustomerReports">
       <ScrollView
         contentContainerStyle={{ paddingTop: headerHeight + Spacing.md, paddingBottom: insets.bottom + Spacing.xl, paddingHorizontal: Spacing.lg }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}

@@ -606,7 +606,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
   const execCodes = order.executionCodes || [];
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="screen-OrderDetail">
       <ScrollView
         contentContainerStyle={[
           styles.content,

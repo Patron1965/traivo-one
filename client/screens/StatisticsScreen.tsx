@@ -183,7 +183,7 @@ export default function StatisticsScreen() {
   const cp = data?.currentPeriod;
 
   return (
-    <View style={styles.flex}>
+    <View style={styles.flex} testID="screen-Statistics">
       <ScrollView
         style={styles.flex}
         contentContainerStyle={[

@@ -102,6 +102,7 @@ export function MaterialLogScreen({ route, navigation }: any) {
         { paddingTop: headerHeight + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl },
       ]}
       keyboardShouldPersistTaps="handled"
+      testID="screen-MaterialLog"
     >
       <ThemedText variant="heading" style={styles.title}>
         Materiallogg

@@ -51,7 +51,7 @@ export function MyDeviationsScreen({ navigation }: any) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="screen-MyDeviations">
       <ScrollView
         contentContainerStyle={{ paddingTop: headerHeight + Spacing.md, paddingBottom: insets.bottom + Spacing.xl, paddingHorizontal: Spacing.lg }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}

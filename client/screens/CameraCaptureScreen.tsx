@@ -141,6 +141,7 @@ export function CameraCaptureScreen({ route, navigation }: any) {
     <ScrollView
       style={styles.container}
       contentContainerStyle={{ paddingTop: headerHeight + Spacing.xl, paddingBottom: insets.bottom + Spacing.xxl }}
+      testID="screen-CameraCapture"
     >
       <ThemedText variant="heading" style={styles.title}>
         Foton

@@ -9,6 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
+import { TestCrashTrigger } from '../components/TestCrashTrigger';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { useThemedStyles } from '../context/BrandingContext';
 import { apiRequest } from '../lib/query-client';
@@ -435,7 +436,8 @@ export function InspectionScreen({ route, navigation }: any) {
   const canSave = missingPhotos.length === 0;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="screen-Inspection">
+      <TestCrashTrigger eventName="plannix:test-crash-screen-inspection" />
       <ScrollView
         contentContainerStyle={[
           styles.content,

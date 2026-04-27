@@ -241,6 +241,7 @@ export function ReportDeviationScreen({ route, navigation }: any) {
         styles.content,
         { paddingTop: headerHeight + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl },
       ]}
+      testID="screen-ReportDeviation"
     >
       <ThemedText variant="heading" style={styles.title}>
         Rapportera avvikelse

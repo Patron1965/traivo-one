@@ -89,6 +89,7 @@ export function SettingsScreen({ navigation }: { navigation: any }) {
         styles.content,
         { paddingTop: headerHeight + Spacing.md, paddingBottom: insets.bottom + Spacing.xl },
       ]}
+      testID="screen-Settings"
     >
       <ThemedText variant="caption" color={Colors.textSecondary} style={styles.sectionLabel}>
         SPÅRNING

@@ -192,6 +192,7 @@ export function TeamScreen() {
       style={styles.container}
       contentContainerStyle={{ paddingTop: headerHeight + Spacing.md, paddingBottom: insets.bottom + Spacing.xl }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+      testID="screen-Team"
     >
       {team && team.status === 'active' ? (
         <>

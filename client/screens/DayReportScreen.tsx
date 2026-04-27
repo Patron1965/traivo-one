@@ -157,6 +157,7 @@ export function DayReportScreen() {
     <ScrollView
       style={s.container}
       contentContainerStyle={{ paddingTop: headerHeight + Spacing.sm, paddingBottom: tabBarHeight + Spacing.xl, paddingHorizontal: Spacing.lg }}
+      testID="screen-DayReport"
     >
       <View style={s.headerRow}>
         <View>

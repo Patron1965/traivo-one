@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo, ReactNode } from 'react';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiRequest } from '../lib/query-client';
 import { setBrandColors, resetBrandColors, PLANNIX_DEFAULT_BRAND_COLORS, BrandColors } from '../constants/theme';
@@ -11,6 +12,20 @@ export interface TenantBranding {
   companyName: string;
   logoUrl: string | null;
   colors: TenantBrandingColors;
+}
+
+/**
+ * Name of the DOM event the dev/web test bridge listens for. Tests dispatch
+ * `new CustomEvent(TEST_BRANDING_EVENT, { detail: { colors } })` to switch
+ * the active brand colors in-place without hitting the server.
+ */
+export const TEST_BRANDING_EVENT = 'plannix:set-branding';
+
+export interface TestBrandingEventDetail {
+  colors: Partial<TenantBrandingColors>;
+  tenantId?: string;
+  companyName?: string;
+  logoUrl?: string | null;
 }
 
 const PLANNIX_DEFAULT_BRANDING: TenantBranding = {
@@ -198,6 +213,35 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (token) loadBranding();
   }, [token, tenantId, loadBranding]);
+
+  // Test-only branding switch bridge. Lets automated UI tests on the web
+  // build push a new branding object via a DOM event without depending on
+  // the server, so we can verify all converted screens react in place.
+  // Active only on web in __DEV__ so it never ships in production bundles.
+  useEffect(() => {
+    if (!__DEV__) return;
+    if (Platform.OS !== 'web') return;
+    const w: Window | undefined =
+      typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
+    if (!w) return;
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<TestBrandingEventDetail>).detail;
+      const colors = detail?.colors;
+      if (!colors || typeof colors !== 'object') return;
+      const next: TenantBranding = {
+        tenantId: detail.tenantId ?? `test-${Date.now()}`,
+        companyName: detail.companyName ?? 'Test Tenant',
+        logoUrl: detail.logoUrl ?? null,
+        colors: { ...PLANNIX_DEFAULT_BRAND_COLORS, ...colors },
+      };
+      // Bypass server fetch / cache: apply directly so the test sees an
+      // immediate, in-place re-render across all live-themed screens.
+      requestIdRef.current++; // discard any in-flight loadBranding response
+      applyBranding(next);
+    };
+    w.addEventListener(TEST_BRANDING_EVENT, handler as EventListener);
+    return () => w.removeEventListener(TEST_BRANDING_EVENT, handler as EventListener);
+  }, [applyBranding]);
 
   return (
     <BrandingContext.Provider value={{ branding, isLoading, refresh: loadBranding }}>

@@ -210,7 +210,7 @@ export function NotificationsScreen({ navigation }: any) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="screen-Notifications">
       {unreadCount > 0 ? (
         <View style={[styles.unreadBanner, { marginTop: headerHeight + Spacing.md }]}>
           <Feather name="bell" size={16} color={Colors.primary} />

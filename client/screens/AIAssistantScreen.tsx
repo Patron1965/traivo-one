@@ -441,7 +441,7 @@ export function AIAssistantScreen() {
   }, [isOnlyWelcome]);
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="screen-AIAssistant">
       <FlatList
         ref={flatListRef}
         inverted={messages.length > 0}

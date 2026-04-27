@@ -82,6 +82,7 @@ export function ProfileScreen() {
         styles.content,
         { paddingTop: headerHeight + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl },
       ]}
+      testID="screen-Profile"
     >
       <View style={styles.avatarSection}>
         <View style={styles.avatar}>

@@ -93,7 +93,7 @@ export function SignatureScreen({ route, navigation }: any) {
   }, [paths, mutation]);
 
   return (
-    <View style={[styles.container, { paddingTop: headerHeight + Spacing.md }]}>
+    <View style={[styles.container, { paddingTop: headerHeight + Spacing.md }]} testID="screen-Signature">
       <ThemedText variant="heading" style={styles.title}>
         Digital signatur
       </ThemedText>

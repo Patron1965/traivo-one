@@ -163,3 +163,14 @@ Tilldelad (planerad_resurs/planerad_las) → Starta resa (dispatched) → På pl
 - **GitHub:** `git push github main --force` → `Patron1965/plannix-one.git`
 - **Bundle-cache:** Servern skickar no-cache headers — stäng appen helt på telefonen för att få ny version
 - **Felhantering:** Matchar mot HTTP-statuskoder (401, 403, 404, 500), inte felmeddelande-strängar
+
+## Live-tema (BrandingContext)
+- **Hook:** Skärmar/komponenter använder `useThemedStyles(factory)` från `client/context/BrandingContext.tsx` så att stilar räknas om i samma render när tenant-branding ändras (ingen unmount/remount).
+- **Konverterade skärmar/komponenter:** Settings, Profile, Statistics, MaterialLog, Inspection, Notifications, Todo, Team, AIAssistant, MyDeviations, CustomerReports, ReportDeviation, RouteFeedback, CustomerSignOff, CameraCapture, Signature, OrderDetail, DayReport, HamburgerMenu, ErrorBoundary, ScreenErrorBoundary (samt Home, Orders, Map, Login, TabNavigator).
+- **Test-brygga (endast `__DEV__` + web):** `BrandingProvider` lyssnar på fönsterhändelsen `plannix:set-branding` och tillämpar färger direkt utan server-anrop. Använd i Playwright/runTest:
+  ```js
+  window.dispatchEvent(new CustomEvent('plannix:set-branding', {
+    detail: { colors: { primary: '#C0392B', primaryLight: '#E74C3C', primaryDark: '#922B21', secondary: '#E67E22', secondaryLight: '#F39C12', accent: '#F1C40F', accentLight: '#F9E79F' } }
+  }));
+  ```
+  Bryggan finns inte i produktionsbundlar (skyddad av `__DEV__`).

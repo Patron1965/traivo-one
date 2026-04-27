@@ -116,6 +116,7 @@ export function RouteFeedbackScreen({ navigation }: any) {
         styles.content,
         { paddingTop: headerHeight + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl },
       ]}
+      testID="screen-RouteFeedback"
     >
       <ThemedText variant="title" style={styles.heading}>
         Betygsätt dagens rutt
