@@ -92,8 +92,9 @@ export async function registerCapacityForecastRoutes(app: Express) {
   app.post("/api/capacity-forecast/recompute", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const windowWeeks = parseWindow(req.body?.weeks ?? req.query.weeks ?? 26);
-    const result = await computeAndCacheForecast(tenantId, Math.max(windowWeeks, 26));
+    // Invalidate first so the freshly computed value below is the one that gets cached
     dashboardCache.invalidateTenant(tenantId, "capacity:");
+    const result = await computeAndCacheForecast(tenantId, Math.max(windowWeeks, 26));
     const suggestions = generateRebalanceSuggestions(result);
     const { understaffed, overstaffed } = summarize(result.clusters);
     res.json({
