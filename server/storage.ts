@@ -270,6 +270,7 @@ export interface IStorage {
   deleteResource(id: string): Promise<void>;
   
   getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrderWithObject[]>;
+  getWorkOrdersByExternalRefs(tenantId: string, refs: string[]): Promise<Array<{ id: string; externalReference: string | null; modusId: string | null; metadata: unknown }>>;
   getUnscheduledWorkOrders(tenantId: string, limit?: number): Promise<WorkOrderWithObject[]>;
   getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }>;
   getWorkOrdersPaginated(tenantId: string, limit: number, offset: number, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, status?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }>;
@@ -2236,6 +2237,37 @@ export class DatabaseStorage implements IStorage {
   async getWorkOrder(id: string): Promise<WorkOrder | undefined> {
     const [workOrder] = await db.select().from(workOrders).where(and(eq(workOrders.id, id), isNull(workOrders.deletedAt)));
     return workOrder || undefined;
+  }
+
+  async getWorkOrdersByExternalRefs(
+    tenantId: string,
+    refs: string[],
+  ): Promise<Array<{ id: string; externalReference: string | null; modusId: string | null; metadata: unknown }>> {
+    if (!refs || refs.length === 0) return [];
+    const dedup = Array.from(new Set(refs.filter(Boolean).map(r => String(r))));
+    if (dedup.length === 0) return [];
+    const CHUNK = 1000;
+    const out: Array<{ id: string; externalReference: string | null; modusId: string | null; metadata: unknown }> = [];
+    for (let i = 0; i < dedup.length; i += CHUNK) {
+      const chunk = dedup.slice(i, i + CHUNK);
+      const rows = await db.select({
+        id: workOrders.id,
+        externalReference: workOrders.externalReference,
+        modusId: sql<string | null>`(${workOrders.metadata}->>'modusId')`,
+        metadata: workOrders.metadata,
+      }).from(workOrders).where(
+        and(
+          eq(workOrders.tenantId, tenantId),
+          isNull(workOrders.deletedAt),
+          or(
+            inArray(workOrders.externalReference, chunk),
+            sql`(${workOrders.metadata}->>'modusId') IN (${sql.join(chunk.map(v => sql`${v}`), sql`, `)})`
+          )!
+        )
+      );
+      out.push(...rows);
+    }
+    return out;
   }
 
   async getWorkOrdersByResource(resourceId: string, startDate?: Date, endDate?: Date): Promise<WorkOrder[]> {

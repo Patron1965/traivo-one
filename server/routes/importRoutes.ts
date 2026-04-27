@@ -1522,11 +1522,17 @@ app.post("/api/import/modus/tasks/validate", upload.single("file"), asyncHandler
       if (c.customerNumber) customersByModusId.set(c.customerNumber, c.id);
     }
 
-    const existingWorkOrders = await storage.getWorkOrders(tenantId);
+    // Riktad SQL-dedup: hämta endast work orders som matchar uppgiftsId i denna batch
+    // (undviker OOM på stora tenants med 100k+ historiska ordrar).
+    const candidateRefs: string[] = [];
+    for (const row of rows) {
+      const u = (row["Uppgifts Id"] || "").trim();
+      if (u) candidateRefs.push(u);
+    }
+    const matchingWorkOrders = await storage.getWorkOrdersByExternalRefs(tenantId, candidateRefs);
     const existingExternalRefs = new Set<string>();
-    for (const wo of existingWorkOrders) {
-      const meta = (wo.metadata ?? {}) as { modusId?: string };
-      if (meta.modusId) existingExternalRefs.add(String(meta.modusId));
+    for (const wo of matchingWorkOrders) {
+      if (wo.modusId) existingExternalRefs.add(String(wo.modusId));
       if (wo.externalReference) existingExternalRefs.add(String(wo.externalReference));
     }
 
@@ -1667,17 +1673,18 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
     const resources = await storage.getResources(tenantId);
     const resourceMap = new Map(resources.map(r => [r.name.toLowerCase(), r.id]));
 
-    // Preload existing work orders and index by modusId/externalReference to avoid N queries
-    const existingWorkOrders = await storage.getWorkOrders(tenantId);
+    // Riktad SQL-hämtning av befintliga ordrar som kan kollidera med batchen.
+    // Tidigare laddades hela work_orders-tabellen för tenanten (OOM-risk på 100k+ ordrar).
+    const candidateRefs: string[] = [];
+    for (const row of result.data as Record<string, string>[]) {
+      const u = (row["Uppgifts Id"] || "").trim();
+      if (u) candidateRefs.push(u);
+    }
+    const matchingWorkOrders = await storage.getWorkOrdersByExternalRefs(tenantId, candidateRefs);
     const workOrderByModusId = new Map<string, { id: string }>();
-    for (const wo of existingWorkOrders) {
-      const meta = (wo.metadata ?? {}) as { modusId?: string };
-      if (meta.modusId) {
-        workOrderByModusId.set(String(meta.modusId), wo);
-      }
-      if (wo.externalReference) {
-        workOrderByModusId.set(String(wo.externalReference), wo);
-      }
+    for (const wo of matchingWorkOrders) {
+      if (wo.modusId) workOrderByModusId.set(String(wo.modusId), wo);
+      if (wo.externalReference) workOrderByModusId.set(String(wo.externalReference), wo);
     }
 
     const created: string[] = [];
@@ -1687,7 +1694,7 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
     
     for (const row of result.data as Record<string, string>[]) {
       try {
-        const uppgiftsId = row["Uppgifts Id"];
+        const uppgiftsId = (row["Uppgifts Id"] || "").trim();
         const objekt = (row["Objekt"] || "").replace(/\s/g, "");
         const kundRaw = row["Kund"] || "";
         let uppgiftsnamn = row["Uppgiftsnamn"] || "";
@@ -1955,13 +1962,17 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(
     const tenantId = getTenantIdWithFallback(req);
     const invoiceBatchId = crypto.randomUUID();
     
-    const allWorkOrders = await storage.getWorkOrders(tenantId);
+    // Riktad SQL-hämtning: bara work orders som matchar Uppgift Id i denna fakturarad-batch.
+    const candidateRefs: string[] = [];
+    for (const row of result.data as Record<string, string>[]) {
+      const u = (row["Uppgift Id"] || "").replace(/\s/g, "");
+      if (u) candidateRefs.push(u);
+    }
+    const matchingWorkOrders = await storage.getWorkOrdersByExternalRefs(tenantId, candidateRefs);
     const woByModusId = new Map<string, any>();
-    for (const wo of allWorkOrders) {
-      const meta = wo.metadata as any;
-      if (meta?.modusId) {
-        woByModusId.set(String(meta.modusId), wo);
-      }
+    for (const wo of matchingWorkOrders) {
+      if (wo.modusId) woByModusId.set(String(wo.modusId), wo);
+      if (wo.externalReference) woByModusId.set(String(wo.externalReference), wo);
     }
     
     const existingArticles = await storage.getArticles(tenantId);

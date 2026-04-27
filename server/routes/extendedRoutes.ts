@@ -1009,25 +1009,34 @@ app.get("/api/field-worker/tasks", asyncHandler(async (req, res) => {
       return aTime - bTime;
     });
     
-    const tasksWithDeps = await Promise.all(filtered.map(async (wo) => {
-      const deps = await db.select().from(taskDependencyInstances)
-        .where(eq(taskDependencyInstances.childWorkOrderId, wo.id));
-      
+    // Batch: hämta alla task-dependencies i en enda fråga istället för en per order (N+1 → 1).
+    const childIds = filtered.map(wo => wo.id);
+    const allDeps = childIds.length > 0
+      ? await db.select().from(taskDependencyInstances)
+          .where(inArray(taskDependencyInstances.childWorkOrderId, childIds))
+      : [];
+    const depsByChildId = new Map<string, typeof allDeps>();
+    for (const d of allDeps) {
+      const arr = depsByChildId.get(d.childWorkOrderId) ?? [];
+      arr.push(d);
+      depsByChildId.set(d.childWorkOrderId, arr);
+    }
+
+    const tasksWithDeps = filtered.map((wo) => {
+      const deps = depsByChildId.get(wo.id) ?? [];
       const dependsOn = deps.map(d => ({
         parentId: d.parentWorkOrderId,
         type: d.dependencyType,
         completed: d.completed,
       }));
-      
       const isLocked = dependsOn.some(d => d.type === 'before' && !d.completed);
-      
       return {
         ...wo,
         dependsOn,
         isLocked,
         isDependentTask: dependsOn.length > 0,
       };
-    }));
+    });
     
     res.json(tasksWithDeps);
 }));

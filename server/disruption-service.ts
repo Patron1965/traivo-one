@@ -203,7 +203,7 @@ export async function triggerResourceUnavailable(
     message: event.description,
     resourceId,
     metadata: { disruptionId: event.id, disruptionType: event.type },
-  });
+  }, tenantId);
 
   return event;
 }
@@ -303,7 +303,7 @@ export async function triggerEmergencyJob(
     title: event.title,
     message: event.description,
     metadata: { disruptionId: event.id, disruptionType: event.type },
-  });
+  }, tenantId);
 
   return event;
 }
@@ -395,7 +395,7 @@ export async function triggerSignificantDelay(
     message: event.description,
     resourceId,
     metadata: { disruptionId: event.id, disruptionType: event.type },
-  });
+  }, tenantId);
 
   return event;
 }
@@ -485,7 +485,7 @@ export async function triggerEarlyCompletion(
     message: event.description,
     resourceId,
     metadata: { disruptionId: event.id, disruptionType: event.type },
-  });
+  }, tenantId);
 
   return event;
 }

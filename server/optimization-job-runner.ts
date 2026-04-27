@@ -354,27 +354,27 @@ async function updateProgress(jobId: string, progress: number) {
   }
 }
 
-function broadcastJobComplete(_tenantId: string, jobId: string, _result: VRPOptimizationResult) {
+function broadcastJobComplete(tenantId: string, jobId: string, _result: VRPOptimizationResult) {
   import("./notifications").then(({ notificationService }) => {
     notificationService.broadcastToAll({
       type: "optimization_complete",
       title: "Ruttoptimering klar",
       message: "Ruttoptimering slutförd. Hämta resultat via jobbstatus.",
       data: { jobId },
-    });
+    }, tenantId);
   }).catch(err => {
     console.warn("[optimization-job] WebSocket broadcast failed:", err instanceof Error ? err.message : err);
   });
 }
 
-function broadcastJobFailed(_tenantId: string, jobId: string, _error: string) {
+function broadcastJobFailed(tenantId: string, jobId: string, _error: string) {
   import("./notifications").then(({ notificationService }) => {
     notificationService.broadcastToAll({
       type: "optimization_failed",
       title: "Ruttoptimering misslyckades",
       message: "Ruttoptimering kunde inte slutföras. Kontrollera jobbstatus.",
       data: { jobId },
-    });
+    }, tenantId);
   }).catch(err => {
     console.warn("[optimization-job] WebSocket broadcast failed:", err instanceof Error ? err.message : err);
   });

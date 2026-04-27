@@ -306,7 +306,8 @@ export async function registerRoutes(
     try {
       const userId = req.user?.claims?.sub;
       if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
-      const token = notificationService.generateUserAuthToken(userId);
+      const tenantId = (req as any).tenantId as string | undefined;
+      const token = notificationService.generateUserAuthToken(userId, tenantId);
       res.json({ token, expiresIn: 300, userId });
     } catch (error) {
       console.error("Failed to issue user notification token:", error);

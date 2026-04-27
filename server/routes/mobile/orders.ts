@@ -50,10 +50,20 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
       return a.scheduledStartTime.localeCompare(b.scheduledStartTime);
     });
     
-    const enrichedOrders = await Promise.all(orders.map(async (order) => {
-      const object = order.objectId ? await storage.getObject(order.objectId) : null;
-      const customer = order.customerId ? await storage.getCustomer(order.customerId) : null;
-      
+    // Batcha objects + customers i två frågor istället för 2*N (N+1 → 2).
+    const objectIds = Array.from(new Set(orders.map(o => o.objectId).filter((v): v is string => !!v)));
+    const customerIds = Array.from(new Set(orders.map(o => o.customerId).filter((v): v is string => !!v)));
+    const [objectList, customerList] = await Promise.all([
+      objectIds.length > 0 ? storage.getObjectsByIds(tenantId, objectIds) : Promise.resolve([]),
+      customerIds.length > 0 ? storage.getCustomersByIds(tenantId, customerIds) : Promise.resolve([]),
+    ]);
+    const objectsById = new Map(objectList.map(o => [o.id, o]));
+    const customersById = new Map(customerList.map(c => [c.id, c]));
+
+    const enrichedOrders = orders.map((order) => {
+      const object = order.objectId ? objectsById.get(order.objectId) ?? null : null;
+      const customer = order.customerId ? customersById.get(order.customerId) ?? null : null;
+
       const metadata = (order.metadata as Record<string, unknown>) || {};
       const executionCodes = order.executionCode
         ? [{ id: order.executionCode, code: (order.executionCode as string).toUpperCase().substring(0, 4), name: order.executionCode }]
@@ -88,7 +98,7 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
         object: object ? { id: object.id, name: object.name, address: object.address, latitude: object.latitude, longitude: object.longitude } : null,
         customer: customer ? { id: customer.id, name: customer.name, customerNumber: customer.customerNumber } : null,
       };
-    }));
+    });
     
     const syncLogs = await storage.getOfflineSyncLogs(resourceId);
     const processingSync = syncLogs.filter(l => l.status === "processing").length;

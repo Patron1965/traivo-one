@@ -5,6 +5,7 @@ const DEFAULT_TENANT_ID = "default-tenant";
 
 interface AnomalyAlert {
   id: string;
+  tenantId?: string;
   type: "setup_time" | "cost" | "delay" | "position_stale" | "route_deviation";
   severity: "low" | "medium" | "high" | "critical";
   title: string;
@@ -88,6 +89,7 @@ class AnomalyMonitor {
           const staleMins = Math.round(staleDuration / 60000);
           alerts.push({
             id: `stale-position-${resource.id}`,
+            tenantId: (resource as any).tenantId,
             type: "position_stale",
             severity: staleDuration > 60 * 60 * 1000 ? "high" : "medium",
             title: "Inaktuell position",
@@ -148,6 +150,7 @@ class AnomalyMonitor {
                 const delayMins = Math.round(delayMs / 60000);
                 alerts.push({
                   id: `delayed-order-${order.id}`,
+                  tenantId: (order as any).tenantId,
                   type: "delay",
                   severity: delayMs > 2 * 60 * 60 * 1000 ? "high" : "medium",
                   title: "Försenad order",
@@ -207,6 +210,7 @@ class AnomalyMonitor {
             const obj = await storage.getObject(objectId);
             alerts.push({
               id: `setup-time-anomaly-${log.id}`,
+              tenantId: (obj as any)?.tenantId ?? (log as any).tenantId,
               type: "setup_time",
               severity: deviation > 1 ? "high" : "medium",
               title: "Avvikande ställtid",
@@ -250,7 +254,7 @@ class AnomalyMonitor {
           value: alert.value,
           expectedValue: alert.expectedValue
         }
-      });
+      }, alert.tenantId);
     }
 
     return true;

@@ -109,7 +109,7 @@ app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, asyncHandler(
       title: "Arbetspass startat",
       message: `${resource.name || resourceId} har startat sitt arbetspass`,
       data: { resourceId, sessionId: session.id, event: "work_session_started" }
-    });
+    }, resource.tenantId);
 }));
 
 app.get("/api/mobile/work-sessions/active", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
@@ -157,7 +157,7 @@ const workSessionStopHandler = asyncHandler(async (req: MobileAuthenticatedReque
       title: "Arbetspass avslutat",
       message: `${resource.name || resourceId} har avslutat sitt arbetspass`,
       data: { resourceId, event: "work_session_stopped" }
-    });
+    }, resource.tenantId);
 });
 app.patch("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, workSessionStopHandler);
 app.post("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, workSessionStopHandler);

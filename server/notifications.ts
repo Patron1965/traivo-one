@@ -42,18 +42,21 @@ export interface Notification {
 interface ConnectedClient {
   ws: WebSocket;
   resourceId: string;
+  tenantId: string | null;
   connectedAt: Date;
 }
 
 interface AuthToken {
   resourceId?: string;
   userId?: string;
+  tenantId?: string | null;
   expiresAt: number;
 }
 
 interface UserClient {
   ws: WebSocket;
   userId: string;
+  tenantId: string | null;
   connectedAt: Date;
 }
 
@@ -68,23 +71,25 @@ class NotificationService {
   private positionBroadcastTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private positionBroadcastIntervalMs = 30_000;
 
-  generateAuthToken(resourceId: string): string {
+  generateAuthToken(resourceId: string, tenantId?: string | null): string {
     const token = crypto.randomBytes(32).toString("hex");
     this.authTokens.set(token, {
       resourceId,
+      tenantId: tenantId ?? null,
       expiresAt: Date.now() + this.tokenExpiryMs,
     });
-    
+
     // Clean up expired tokens periodically
     this.cleanupExpiredTokens();
-    
+
     return token;
   }
 
-  generateUserAuthToken(userId: string): string {
+  generateUserAuthToken(userId: string, tenantId?: string | null): string {
     const token = crypto.randomBytes(32).toString("hex");
     this.authTokens.set(token, {
       userId,
+      tenantId: tenantId ?? null,
       expiresAt: Date.now() + this.tokenExpiryMs,
     });
     this.cleanupExpiredTokens();
@@ -101,7 +106,7 @@ class NotificationService {
     }
   }
 
-  private validateAuthToken(token: string): { resourceId?: string; userId?: string } | null {
+  private validateAuthToken(token: string): { resourceId?: string; userId?: string; tenantId?: string | null } | null {
     const data = this.authTokens.get(token);
     if (!data) return null;
     if (data.expiresAt < Date.now()) {
@@ -110,7 +115,7 @@ class NotificationService {
     }
     // Token is single-use - remove after validation
     this.authTokens.delete(token);
-    return { resourceId: data.resourceId, userId: data.userId };
+    return { resourceId: data.resourceId, userId: data.userId, tenantId: data.tenantId ?? null };
   }
   
   initialize(server: Server) {
@@ -139,13 +144,24 @@ class NotificationService {
 
       const resourceId = binding.resourceId;
       const userId = binding.userId;
+      let tenantId = binding.tenantId ?? null;
+
+      // Fallback: härled tenantId från resource/user om token saknar det (bakåtkompatibilitet).
+      if (!tenantId && resourceId) {
+        try {
+          const r = await storage.getResource(resourceId);
+          if (r?.tenantId) tenantId = r.tenantId;
+        } catch (e) {
+          console.warn(`[ws] Could not resolve tenant for resource ${resourceId}:`, e);
+        }
+      }
 
       if (resourceId) {
-        this.addClient(resourceId, ws);
-        console.log(`[ws] Resource ${resourceId} connected (token auth). Total clients: ${this.getTotalClients()}`);
+        this.addClient(resourceId, ws, tenantId);
+        console.log(`[ws] Resource ${resourceId} connected (tenant=${tenantId ?? "?"}). Total clients: ${this.getTotalClients()}`);
       } else if (userId) {
-        this.addUserClient(userId, ws);
-        console.log(`[ws] User ${userId} connected (token auth). Total user clients: ${this.getTotalUserClients()}`);
+        this.addUserClient(userId, ws, tenantId);
+        console.log(`[ws] User ${userId} connected (tenant=${tenantId ?? "?"}). Total user clients: ${this.getTotalUserClients()}`);
       }
 
       ws.send(JSON.stringify({
@@ -208,9 +224,9 @@ class NotificationService {
     console.log("[ws] Notification service initialized on /ws/notifications");
   }
 
-  private addClient(resourceId: string, ws: WebSocket) {
+  private addClient(resourceId: string, ws: WebSocket, tenantId: string | null) {
     const existing = this.clients.get(resourceId) || [];
-    existing.push({ ws, resourceId, connectedAt: new Date() });
+    existing.push({ ws, resourceId, tenantId, connectedAt: new Date() });
     this.clients.set(resourceId, existing);
   }
 
@@ -230,9 +246,9 @@ class NotificationService {
     return total;
   }
 
-  private addUserClient(userId: string, ws: WebSocket) {
+  private addUserClient(userId: string, ws: WebSocket, tenantId: string | null) {
     const existing = this.userClients.get(userId) || [];
-    existing.push({ ws, userId, connectedAt: new Date() });
+    existing.push({ ws, userId, tenantId, connectedAt: new Date() });
     this.userClients.set(userId, existing);
   }
 
@@ -360,7 +376,10 @@ class NotificationService {
     });
   }
 
-  broadcastToAll(notification: Omit<Notification, "id" | "timestamp" | "resourceId">) {
+  broadcastToAll(
+    notification: Omit<Notification, "id" | "timestamp" | "resourceId">,
+    tenantId?: string | null,
+  ) {
     const fullNotification = {
       ...notification,
       id: this.generateId(),
@@ -373,16 +392,27 @@ class NotificationService {
     }
 
     const message = JSON.stringify(fullNotification);
-    
-    this.clients.forEach((clients, resourceId) => {
+    let sent = 0;
+
+    this.clients.forEach((clients) => {
       clients.forEach(client => {
-        if (client.ws.readyState === WebSocket.OPEN) {
-          client.ws.send(message);
-        }
+        if (client.ws.readyState !== WebSocket.OPEN) return;
+        // Tenant-isolation: skicka bara om klientens tenant matchar (eller inget filter angetts).
+        if (tenantId && client.tenantId !== tenantId) return;
+        client.ws.send(message);
+        sent++;
       });
     });
-    
-    console.log(`[ws] Broadcast ${notification.type} to ${this.getTotalClients()} clients`);
+    this.userClients.forEach((clients) => {
+      clients.forEach(client => {
+        if (client.ws.readyState !== WebSocket.OPEN) return;
+        if (tenantId && client.tenantId !== tenantId) return;
+        client.ws.send(message);
+        sent++;
+      });
+    });
+
+    console.log(`[ws] Broadcast ${notification.type} to ${sent} clients${tenantId ? ` (tenant=${tenantId})` : ""}`);
   }
 
   async sendCustomerNotification(
@@ -541,7 +571,7 @@ class NotificationService {
         const timerId = setTimeout(() => {
           const current = this.lastPositionBroadcast.get(position.resourceId);
           if (current?.pending) {
-            this.doBroadcastPosition(current.pending);
+            void this.doBroadcastPosition(current.pending);
             current.timestamp = Date.now();
             current.pending = null;
           }
@@ -552,11 +582,11 @@ class NotificationService {
       return;
     }
 
-    this.doBroadcastPosition(position);
+    void this.doBroadcastPosition(position);
     this.lastPositionBroadcast.set(position.resourceId, { timestamp: now, pending: null });
   }
 
-  private doBroadcastPosition(position: PositionUpdate) {
+  private async doBroadcastPosition(position: PositionUpdate) {
     const payload = {
       type: "position_update" as const,
       resourceId: position.resourceId,
@@ -576,14 +606,41 @@ class NotificationService {
 
     const message = JSON.stringify(payload);
 
-    this.clients.forEach((clients, resourceId) => {
-      if (resourceId !== position.resourceId) {
-        clients.forEach(client => {
-          if (client.ws.readyState === WebSocket.OPEN) {
-            client.ws.send(message);
-          }
-        });
+    // Härled tenantId från sändarens connectade klient (om vi inte redan vet det).
+    let senderTenantId: string | null = null;
+    const senderClients = this.clients.get(position.resourceId);
+    if (senderClients && senderClients.length > 0) {
+      senderTenantId = senderClients[0].tenantId;
+    }
+    if (!senderTenantId) {
+      try {
+        const r = await storage.getResource(position.resourceId);
+        senderTenantId = r?.tenantId ?? null;
+      } catch {
+        // tyst — om vi inte kan slå upp tenant skickar vi inte alls (säkrast)
+        senderTenantId = null;
       }
+    }
+    if (!senderTenantId) {
+      console.warn(`[ws] Position broadcast skipped: no tenant for resource ${position.resourceId}`);
+      return;
+    }
+
+    // Skicka bara till klienter inom samma tenant (utom till själva sändaren).
+    this.clients.forEach((clients, resourceId) => {
+      if (resourceId === position.resourceId) return;
+      clients.forEach(client => {
+        if (client.ws.readyState !== WebSocket.OPEN) return;
+        if (client.tenantId !== senderTenantId) return;
+        client.ws.send(message);
+      });
+    });
+    this.userClients.forEach((clients) => {
+      clients.forEach(client => {
+        if (client.ws.readyState !== WebSocket.OPEN) return;
+        if (client.tenantId !== senderTenantId) return;
+        client.ws.send(message);
+      });
     });
   }
 
@@ -593,7 +650,11 @@ class NotificationService {
   }
 
   // Broadcast system-wide alert to ALL connected clients (planners + resources)
-  broadcastSystemAlert(notification: Omit<Notification, "id" | "timestamp">) {
+  // within a tenant. Pass tenantId to isolate; omit only for global system messages.
+  broadcastSystemAlert(
+    notification: Omit<Notification, "id" | "timestamp">,
+    tenantId?: string | null,
+  ) {
     const fullNotification: Notification = {
       ...notification,
       id: this.generateId(),
@@ -608,18 +669,25 @@ class NotificationService {
     const message = JSON.stringify(fullNotification);
     let sentCount = 0;
 
-    // Send to all connected clients
     this.clients.forEach((clients) => {
       clients.forEach(client => {
-        if (client.ws.readyState === WebSocket.OPEN) {
-          client.ws.send(message);
-          sentCount++;
-        }
+        if (client.ws.readyState !== WebSocket.OPEN) return;
+        if (tenantId && client.tenantId !== tenantId) return;
+        client.ws.send(message);
+        sentCount++;
+      });
+    });
+    this.userClients.forEach((clients) => {
+      clients.forEach(client => {
+        if (client.ws.readyState !== WebSocket.OPEN) return;
+        if (tenantId && client.tenantId !== tenantId) return;
+        client.ws.send(message);
+        sentCount++;
       });
     });
 
     if (sentCount > 0) {
-      console.log(`[ws] System alert broadcasted to ${sentCount} clients: ${notification.title}`);
+      console.log(`[ws] System alert broadcasted to ${sentCount} clients${tenantId ? ` (tenant=${tenantId})` : ""}: ${notification.title}`);
     }
     return fullNotification;
   }

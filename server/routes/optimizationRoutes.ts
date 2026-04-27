@@ -284,7 +284,7 @@ export async function registerOptimizationRoutes(app: Express) {
       title: "Ruttoptimering klar",
       message: "Ruttoptimering slutförd",
       data: { jobId: job.id },
-    });
+    }, tenantId);
 
     res.json(job.result);
   }));
@@ -336,7 +336,7 @@ export async function registerOptimizationRoutes(app: Express) {
       title: "Schema uppdaterat",
       message: `${applied} ordrar omfördelade efter optimering`,
       data: { jobId: job.id, applied, failed },
-    });
+    }, tenantId);
 
     res.json({
       applied,

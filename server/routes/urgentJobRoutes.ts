@@ -105,7 +105,7 @@ router.post("/urgent-jobs/assign", async (req: Request, res: Response) => {
         resourceName: resource?.name,
         status: "pending",
       },
-    });
+    }, tenantId);
 
     setTimeout(async () => {
       const current = await db.query.urgentJobAssignments.findFirst({
@@ -122,7 +122,7 @@ router.post("/urgent-jobs/assign", async (req: Request, res: Response) => {
             resourceName: resource?.name,
             status: "no_response",
           },
-        });
+        }, tenantId);
       }
     }, 60000);
 
@@ -281,7 +281,7 @@ router.post("/mobile/jobs/urgent/accept", async (req: Request, res: Response) =>
       title: "Akut jobb accepterat",
       message: `Tekniker accepterade akut uppdrag`,
       data: { urgentJobId: jobId, resourceId: assignment?.resourceId, status: "accepted" },
-    });
+    }, assignment?.tenantId);
 
     res.json({ success: true, status: "accepted", jobId });
   } catch (error: unknown) {
@@ -307,7 +307,7 @@ router.post("/mobile/jobs/urgent/decline", async (req: Request, res: Response) =
       title: "Akut jobb avböjt",
       message: `Tekniker avböjde: ${reason || "Ingen anledning angiven"}`,
       data: { urgentJobId: jobId, resourceId: assignment?.resourceId, status: "declined", reason },
-    });
+    }, assignment?.tenantId);
 
     res.json({ success: true, status: "declined", jobId });
   } catch (error: unknown) {
@@ -338,7 +338,7 @@ router.post("/mobile/jobs/urgent/:id/status", async (req: Request, res: Response
       title: "Akut jobb statusuppdatering",
       message: `Status ändrad till: ${status}`,
       data: { urgentJobId: req.params.id, resourceId: assignment?.resourceId, status },
-    });
+    }, assignment?.tenantId);
 
     res.json({ success: true, jobId: req.params.id, status });
   } catch (error: unknown) {

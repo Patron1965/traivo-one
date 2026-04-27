@@ -170,10 +170,21 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
       return a.scheduledStartTime.localeCompare(b.scheduledStartTime);
     });
     
-    const enrichedOrders = await Promise.all(orders.map(async (order) => {
-      const object = order.objectId ? await storage.getObject(order.objectId) : null;
-      const customer = order.customerId ? await storage.getCustomer(order.customerId) : null;
-      
+    // Batcha objects + customers i två frågor istället för 2*N (N+1 → 2).
+    const objectIds = Array.from(new Set(orders.map(o => o.objectId).filter((v): v is string => !!v)));
+    const customerIds = Array.from(new Set(orders.map(o => o.customerId).filter((v): v is string => !!v)));
+    const tenantIdForBatch = (req as any).tenantId || (resource as any)?.tenantId;
+    const [objectList, customerList] = await Promise.all([
+      objectIds.length > 0 && tenantIdForBatch ? storage.getObjectsByIds(tenantIdForBatch, objectIds) : Promise.resolve([]),
+      customerIds.length > 0 && tenantIdForBatch ? storage.getCustomersByIds(tenantIdForBatch, customerIds) : Promise.resolve([]),
+    ]);
+    const objectsById = new Map(objectList.map(o => [o.id, o]));
+    const customersById = new Map(customerList.map(c => [c.id, c]));
+
+    const enrichedOrders = orders.map((order) => {
+      const object = order.objectId ? objectsById.get(order.objectId) ?? null : null;
+      const customer = order.customerId ? customersById.get(order.customerId) ?? null : null;
+
       return {
         ...order,
         objectName: object?.name,
@@ -196,7 +207,7 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
         object: object ? { id: object.id, name: object.name, address: object.address, latitude: object.latitude, longitude: object.longitude } : null,
         customer: customer ? { id: customer.id, name: customer.name, customerNumber: customer.customerNumber } : null,
       };
-    }));
+    });
     
     const syncLogs = await storage.getOfflineSyncLogs(resourceId);
     const processingSync = syncLogs.filter(l => l.status === "processing").length;
@@ -521,7 +532,7 @@ app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, asyncHandler(
       title: "Arbetspass startat",
       message: `${resource.name || resourceId} har startat sitt arbetspass`,
       data: { resourceId, sessionId: session.id, event: "work_session_started" }
-    });
+    }, resource.tenantId);
 }));
 
 app.get("/api/mobile/work-sessions/active", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
@@ -569,7 +580,7 @@ const workSessionStopHandler = asyncHandler(async (req: MobileAuthenticatedReque
       title: "Arbetspass avslutat",
       message: `${resource.name || resourceId} har avslutat sitt arbetspass`,
       data: { resourceId, event: "work_session_stopped" }
-    });
+    }, resource.tenantId);
 });
 app.patch("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, workSessionStopHandler);
 app.post("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, workSessionStopHandler);

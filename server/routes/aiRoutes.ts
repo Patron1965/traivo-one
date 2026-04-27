@@ -2868,7 +2868,7 @@ app.post("/api/notifications/token", isAuthenticated, asyncHandler(async (req: a
     }
     
     // Generate token for this resource
-    const token = notificationService.generateAuthToken(resourceId);
+    const token = notificationService.generateAuthToken(resourceId, tenantId);
     
     console.log(`[notifications] Token generated for resource ${resourceId} by user ${req.user?.claims?.sub || "unknown"}`);
     
