@@ -1,10 +1,9 @@
 import { useMemo } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Wand2, Link2 } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Article } from "@shared/schema";
 
 interface ConceptArticle {
@@ -25,7 +24,8 @@ interface Step7Props {
   conceptId: string;
   conceptArticles: ConceptArticle[];
   mappings: Mapping[];
-  onMappingsUpdated: () => void;
+  onAutoMap: () => void;
+  isAutoMapping: boolean;
 }
 
 interface EnrichedObject {
@@ -41,7 +41,8 @@ export default function Step7ArticleMapping({
   conceptId,
   conceptArticles,
   mappings,
-  onMappingsUpdated,
+  onAutoMap,
+  isAutoMapping,
 }: Step7Props) {
   const { data: articles = [] } = useQuery<Article[]>({ queryKey: ["/api/articles"] });
 
@@ -75,16 +76,6 @@ export default function Step7ArticleMapping({
     return map;
   }, [mappings]);
 
-  const autoMapMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest("POST", `/api/order-concepts/${conceptId}/article-mappings/auto`);
-    },
-    onSuccess: () => {
-      onMappingsUpdated();
-      queryClient.invalidateQueries({ queryKey: ["/api/order-concepts", conceptId] });
-    },
-  });
-
   return (
     <div className="space-y-4" data-testid="step7-article-mapping">
       <div className="flex items-center justify-between">
@@ -95,11 +86,11 @@ export default function Step7ArticleMapping({
           </p>
         </div>
         <Button
-          onClick={() => autoMapMutation.mutate()}
-          disabled={autoMapMutation.isPending}
+          onClick={onAutoMap}
+          disabled={isAutoMapping}
           data-testid="button-auto-map"
         >
-          {autoMapMutation.isPending ? (
+          {isAutoMapping ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
             <Wand2 className="h-4 w-4 mr-2" />

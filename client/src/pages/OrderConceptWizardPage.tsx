@@ -8,10 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, ArrowRight, Save, Check, Loader2, AlertTriangle, PlayCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Save, Check, Loader2, AlertTriangle, PlayCircle, Wand2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import type {
@@ -258,7 +259,9 @@ export default function OrderConceptWizardPage() {
     }
   }, [currentStep, conceptName, selectedObjectIds, invoiceLevel, invoiceModel, conceptArticles, mappings, deliveryModel]);
 
-  const validateCurrentStep = useCallback(async (): Promise<string | null> => {
+  type ValidationResult = { message: string; reason?: "needs_mapping" } | null;
+
+  const validateCurrentStep = useCallback(async (): Promise<ValidationResult> => {
     const fields = stepFieldsToValidate[currentStep];
     if (fields) {
       const valid = await form.trigger(fields);
@@ -266,7 +269,7 @@ export default function OrderConceptWizardPage() {
         const firstError = fields
           .map(f => form.formState.errors[f]?.message)
           .filter(Boolean)[0];
-        if (firstError) return firstError;
+        if (firstError) return { message: String(firstError) };
       }
     }
 
@@ -274,17 +277,22 @@ export default function OrderConceptWizardPage() {
       case 1:
       case 2:
         if (selectedObjectIds.size === 0) {
-          return currentStep === 1
-            ? "Välj minst ett objekt."
-            : "Inga objekt valda. Gå tillbaka och välj objekt.";
+          return {
+            message: currentStep === 1
+              ? "Välj minst ett objekt."
+              : "Inga objekt valda. Gå tillbaka och välj objekt.",
+          };
         }
         break;
       case 6:
-        if (conceptArticles.length === 0) return "Lägg till minst en artikel.";
+        if (conceptArticles.length === 0) return { message: "Lägg till minst en artikel." };
         break;
       case 7: {
         if (conceptArticles.length > 0 && mappings.length === 0) {
-          return "Koppla artiklar till objekt innan du fortsätter.";
+          return {
+            message: "Koppla artiklar till objekt innan du fortsätter.",
+            reason: "needs_mapping",
+          };
         }
         break;
       }
@@ -383,13 +391,94 @@ export default function OrderConceptWizardPage() {
     },
   });
 
+  const autoMapMutation = useMutation({
+    mutationFn: async () => {
+      if (!conceptId) throw new Error("Inget orderkoncept att koppla.");
+      const res = await apiRequest("POST", `/api/order-concepts/${conceptId}/article-mappings/auto`);
+      return res.json();
+    },
+    onSuccess: async () => {
+      if (!conceptId) return;
+      try {
+        const res = await fetch(`/api/order-concepts/${conceptId}/article-mappings`);
+        if (res.ok) setMappings(await res.json());
+      } catch {}
+      queryClient.invalidateQueries({ queryKey: ["/api/order-concepts", conceptId] });
+    },
+  });
+
+  const showNeedsMappingToast = useCallback((message: string) => {
+    const baseProps = {
+      title: "Ofullständigt steg",
+      description: message,
+      variant: "destructive" as const,
+      duration: Infinity,
+    };
+
+    let toastRef: ReturnType<typeof toast> | null = null;
+
+    const buildAction = (loading: boolean): React.ReactElement<typeof ToastAction> => (
+      <ToastAction
+        altText="Koppla artiklar automatiskt"
+        disabled={loading}
+        onClick={(e) => {
+          e.preventDefault();
+          if (loading || !toastRef) return;
+          const ref = toastRef;
+          ref.update({
+            id: ref.id,
+            ...baseProps,
+            open: true,
+            action: buildAction(true),
+          });
+          autoMapMutation.mutate(undefined, {
+            onSuccess: () => {
+              ref.dismiss();
+              toast({ title: "Artiklar kopplade", description: "Du kan nu trycka Nästa." });
+            },
+            onError: (err: unknown) => {
+              const errMsg = err instanceof Error ? err.message : "Försök igen.";
+              ref.update({
+                id: ref.id,
+                title: "Kunde inte koppla automatiskt",
+                description: errMsg,
+                variant: "destructive",
+                duration: Infinity,
+                open: true,
+                action: buildAction(false),
+              });
+            },
+          });
+        }}
+        data-testid="toast-action-auto-map"
+      >
+        {loading ? (
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        ) : (
+          <Wand2 className="h-4 w-4 mr-2" />
+        )}
+        Koppla automatiskt nu
+      </ToastAction>
+    );
+
+    toastRef = toast({ ...baseProps, action: buildAction(false) });
+  }, [toast, autoMapMutation]);
+
+  const showValidationToast = useCallback((result: { message: string; reason?: "needs_mapping" }) => {
+    if (result.reason === "needs_mapping") {
+      showNeedsMappingToast(result.message);
+    } else {
+      toast({ title: "Ofullständigt steg", description: result.message, variant: "destructive" });
+    }
+  }, [toast, showNeedsMappingToast]);
+
   const handleNext = useCallback(async () => {
     if (processingNextRef.current) return;
     processingNextRef.current = true;
 
     const validationError = await validateCurrentStep();
     if (validationError) {
-      toast({ title: "Ofullständigt steg", description: validationError, variant: "destructive" });
+      showValidationToast(validationError);
       processingNextRef.current = false;
       return;
     }
@@ -422,7 +511,7 @@ export default function OrderConceptWizardPage() {
     } finally {
       processingNextRef.current = false;
     }
-  }, [conceptId, currentStep, conceptName, createConceptMutation, saveStepMutation, validateCurrentStep]);
+  }, [conceptId, currentStep, conceptName, createConceptMutation, saveStepMutation, validateCurrentStep, showValidationToast, toast]);
 
   const handleBack = useCallback(async () => {
     if (currentStep > 1) {
@@ -525,17 +614,6 @@ export default function OrderConceptWizardPage() {
     setConceptArticles(prev => prev.map(a => a.id === id ? { ...a, quantity } : a));
   }, []);
 
-  const refreshMappings = useCallback(async () => {
-    if (!conceptId) return;
-    try {
-      const res = await fetch(`/api/order-concepts/${conceptId}/article-mappings`);
-      if (res.ok) {
-        const data = await res.json();
-        setMappings(data);
-      }
-    } catch {}
-  }, [conceptId]);
-
   const isSaving = createConceptMutation.isPending || saveStepMutation.isPending;
 
   if (isEditing && wizardLoading) {
@@ -606,7 +684,7 @@ export default function OrderConceptWizardPage() {
                     if (step.num > currentStep) {
                       const validationError = await validateCurrentStep();
                       if (validationError) {
-                        toast({ title: "Ofullständigt steg", description: validationError, variant: "destructive" });
+                        showValidationToast(validationError);
                         return;
                       }
                     }
@@ -779,7 +857,8 @@ export default function OrderConceptWizardPage() {
                 conceptId={conceptId}
                 conceptArticles={conceptArticles}
                 mappings={mappings}
-                onMappingsUpdated={refreshMappings}
+                onAutoMap={() => autoMapMutation.mutate()}
+                isAutoMapping={autoMapMutation.isPending}
               />
             )}
 

@@ -66,3 +66,9 @@ id = "E-rzvKLoYFJHN8vaf0JMO"
 uri = "file://docs/PROJEKTSAMMANFATTNING.md"
 type = "text"
 title = "Plannix – Sammanställning av alla projekttasks"
+
+[[outputs]]
+id = "sY4ywF5mQ558j2nqiVCjx"
+uri = "file://docs/DATABASE.md"
+type = "text"
+title = "Databasstruktur — översikt över alla tabeller"
