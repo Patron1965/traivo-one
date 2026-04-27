@@ -13,6 +13,7 @@ import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '../components/ThemedText';
 import { Colors, Spacing, BorderRadius, FontSize } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../lib/query-client';
 
@@ -30,6 +31,7 @@ const REASON_OPTIONS = [
 ] as const;
 
 export function RouteFeedbackScreen({ navigation }: any) {
+  const styles = useThemedStyles(createRouteFeedbackStyles);
   const { token } = useAuth();
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
@@ -214,7 +216,7 @@ export function RouteFeedbackScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const createRouteFeedbackStyles = () => StyleSheet.create({
   scroll: {
     flex: 1,
     backgroundColor: Colors.background,

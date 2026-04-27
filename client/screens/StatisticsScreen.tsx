@@ -13,6 +13,7 @@ import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, BorderRadius, FontSize } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 
 type Period = 'week' | 'month';
 
@@ -52,6 +53,7 @@ interface StatisticsResponse {
 }
 
 export default function StatisticsScreen() {
+  const styles = useThemedStyles(createStatsStyles);
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const [period, setPeriod] = useState<Period>('week');
@@ -365,7 +367,7 @@ export default function StatisticsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStatsStyles = () => StyleSheet.create({
   flex: {
     flex: 1,
   },

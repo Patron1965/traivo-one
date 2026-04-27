@@ -10,6 +10,7 @@ import * as FileSystem from 'expo-file-system';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { apiRequest } from '../lib/query-client';
 import {
   INSPECTION_CATEGORIES,
@@ -34,6 +35,7 @@ interface CategoryState {
 }
 
 export function InspectionScreen({ route, navigation }: any) {
+  const styles = useThemedStyles(createInspectionStyles);
   const { orderId } = route.params;
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
@@ -605,7 +607,7 @@ export function InspectionScreen({ route, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const createInspectionStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

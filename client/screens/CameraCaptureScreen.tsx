@@ -8,6 +8,7 @@ import { triggerNotification, NotificationFeedbackType } from '../lib/haptics';
 import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../components/ThemedText';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { apiRequest, getApiUrl } from '../lib/query-client';
 
 type PhotoItem = {
@@ -17,6 +18,7 @@ type PhotoItem = {
 };
 
 export function CameraCaptureScreen({ route, navigation }: any) {
+  const styles = useThemedStyles(createCameraCaptureStyles);
   const { orderId } = route.params;
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
@@ -222,7 +224,7 @@ export function CameraCaptureScreen({ route, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const createCameraCaptureStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

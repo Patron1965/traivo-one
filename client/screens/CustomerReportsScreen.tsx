@@ -8,6 +8,7 @@ import { triggerNotification, NotificationFeedbackType } from '../lib/haptics';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { apiRequest } from '../lib/query-client';
 import {
   CHANGE_REQUEST_CATEGORIES, CHANGE_REQUEST_STATUS_LABELS,
@@ -40,6 +41,7 @@ function formatDate(dateStr: string): string {
 }
 
 export function CustomerReportsScreen({ navigation }: any) {
+  const styles = useThemedStyles(createCustomerReportsStyles);
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
@@ -342,7 +344,7 @@ export function CustomerReportsScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const createCustomerReportsStyles = () => StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   kpiRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md },
   kpiCard: {

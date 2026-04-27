@@ -8,11 +8,13 @@ import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { apiRequest, getApiUrl } from '../lib/query-client';
 import { useResourceProfiles } from '../hooks/useResourceProfiles';
 import type { Article } from '../types';
 
 export function MaterialLogScreen({ route, navigation }: any) {
+  const styles = useThemedStyles(createMaterialLogStyles);
   const { orderId, articles } = route.params;
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
@@ -270,7 +272,7 @@ export function MaterialLogScreen({ route, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const createMaterialLogStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

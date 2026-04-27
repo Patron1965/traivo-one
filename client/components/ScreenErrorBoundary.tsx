@@ -2,6 +2,7 @@ import React, { Component, ReactNode } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 
 type FeatherIconName = React.ComponentProps<typeof Feather>['name'];
 
@@ -14,6 +15,41 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+}
+
+interface ScreenErrorFallbackProps {
+  fallbackTitle?: string;
+  fallbackIcon?: FeatherIconName;
+  resetError: () => void;
+}
+
+function ScreenErrorFallback({ fallbackTitle, fallbackIcon, resetError }: ScreenErrorFallbackProps) {
+  const styles = useThemedStyles(createScreenErrorStyles);
+  return (
+    <View style={styles.container}>
+      <View style={styles.iconContainer}>
+        <Feather
+          name={fallbackIcon ?? 'alert-circle'}
+          size={40}
+          color={Colors.warning}
+        />
+      </View>
+      <Text style={styles.title}>
+        {fallbackTitle || 'Kunde inte visa vyn'}
+      </Text>
+      <Text style={styles.message}>
+        Något gick fel. Tryck nedan för att försöka igen.
+      </Text>
+      <Pressable
+        style={styles.retryButton}
+        onPress={resetError}
+        testID="button-screen-retry"
+      >
+        <Feather name="refresh-cw" size={18} color={Colors.textInverse} />
+        <Text style={styles.retryText}>Försök igen</Text>
+      </Pressable>
+    </View>
+  );
 }
 
 export class ScreenErrorBoundary extends Component<Props, State> {
@@ -38,36 +74,18 @@ export class ScreenErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       const { fallbackTitle, fallbackIcon } = this.props;
       return (
-        <View style={styles.container}>
-          <View style={styles.iconContainer}>
-            <Feather
-              name={fallbackIcon ?? 'alert-circle'}
-              size={40}
-              color={Colors.warning}
-            />
-          </View>
-          <Text style={styles.title}>
-            {fallbackTitle || 'Kunde inte visa vyn'}
-          </Text>
-          <Text style={styles.message}>
-            Något gick fel. Tryck nedan för att försöka igen.
-          </Text>
-          <Pressable
-            style={styles.retryButton}
-            onPress={this.resetError}
-            testID="button-screen-retry"
-          >
-            <Feather name="refresh-cw" size={18} color={Colors.textInverse} />
-            <Text style={styles.retryText}>Försök igen</Text>
-          </Pressable>
-        </View>
+        <ScreenErrorFallback
+          fallbackTitle={fallbackTitle}
+          fallbackIcon={fallbackIcon}
+          resetError={this.resetError}
+        />
       );
     }
     return this.props.children;
   }
 }
 
-const styles = StyleSheet.create({
+const createScreenErrorStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

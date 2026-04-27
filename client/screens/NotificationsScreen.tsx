@@ -8,6 +8,7 @@ import { triggerNotification, NotificationFeedbackType } from '../lib/haptics';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, BorderRadius, FontSize } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { apiRequest } from '../lib/query-client';
 import { NOTIFICATION_TYPE_CONFIG, type AppNotification, type NotificationType } from '../types';
 
@@ -41,6 +42,7 @@ interface NotificationGroup {
 }
 
 export function NotificationsScreen({ navigation }: any) {
+  const styles = useThemedStyles(createNotificationsStyles);
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
@@ -245,7 +247,7 @@ export function NotificationsScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const createNotificationsStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

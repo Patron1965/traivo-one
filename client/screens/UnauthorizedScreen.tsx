@@ -4,10 +4,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { useThemeColors } from '../context/BrandingContext';
 import { ThemedText } from '../components/ThemedText';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 
 export function UnauthorizedScreen() {
+  useThemeColors();
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
 

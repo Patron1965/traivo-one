@@ -23,6 +23,7 @@ import { Card } from '../components/Card';
 import { ThemedText } from '../components/ThemedText';
 import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, BorderRadius, FontSize } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import type { TeamMember, Order } from '../types';
 
 const TEAM_COLORS = [
@@ -35,6 +36,7 @@ const TEAM_COLORS = [
 ];
 
 export function TeamScreen() {
+  const styles = useThemedStyles(createTeamStyles);
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
@@ -505,7 +507,7 @@ export function TeamScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createTeamStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

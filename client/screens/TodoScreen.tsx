@@ -11,6 +11,7 @@ import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, BorderRadius, FontSize } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { hapticLight, hapticSuccess } from '../utils/haptics';
 import { apiRequest } from '../lib/query-client';
 
@@ -42,6 +43,7 @@ export async function getUncompletedTodoCount(): Promise<number> {
 }
 
 export function TodoScreen() {
+  const s = useThemedStyles(createTodoStyles);
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const [todos, setTodos] = useState<TodoItem[]>([]);
@@ -304,7 +306,7 @@ export function TodoScreen() {
   );
 }
 
-const s = StyleSheet.create({
+const createTodoStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

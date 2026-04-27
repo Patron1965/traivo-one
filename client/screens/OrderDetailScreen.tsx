@@ -12,6 +12,7 @@ import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { apiRequest } from '../lib/query-client';
 import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
 import { openMapNavigation } from '../lib/navigation-links';
@@ -106,6 +107,7 @@ const SubStepsList = React.memo(function SubStepsList({
   completedSteps: number;
   onToggle: (stepId: number, completed: boolean) => void;
 }) {
+  const styles = useThemedStyles(createOrderDetailStyles);
   if (subSteps.length === 0) return null;
   return (
     <Card>
@@ -161,6 +163,7 @@ const ContactInfo = React.memo(function ContactInfo({
   contacts: Order['contacts'];
   onCall: (phone: string) => void;
 }) {
+  const styles = useThemedStyles(createOrderDetailStyles);
   if (contacts.length === 0) return null;
   return (
     <Card>
@@ -211,6 +214,7 @@ const ActionButtons = React.memo(function ActionButtons({
   onSendEta: () => void;
   etaSending: boolean;
 }) {
+  const styles = useThemedStyles(createOrderDetailStyles);
   return (
     <Card>
       <ThemedText variant="label" style={styles.sectionLabel}>Åtgärder</ThemedText>
@@ -308,6 +312,7 @@ const ActionButtons = React.memo(function ActionButtons({
 });
 
 export function OrderDetailScreen({ route, navigation }: any) {
+  const styles = useThemedStyles(createOrderDetailStyles);
   const { orderId } = route.params;
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
@@ -1186,7 +1191,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const createOrderDetailStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

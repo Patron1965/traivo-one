@@ -10,6 +10,7 @@ import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { apiRequest } from '../lib/query-client';
 import { DEVIATION_CATEGORIES, DeviationCategory } from '../types';
 
@@ -62,6 +63,7 @@ function SkeletonLine({ width, height = 14, style }: { width: number | string; h
 }
 
 function AnalysisSkeleton() {
+  const styles = useThemedStyles(createReportDeviationStyles);
   return (
     <View style={styles.skeletonContainer}>
       <View style={styles.skeletonHeader}>
@@ -82,6 +84,7 @@ function AnalysisSkeleton() {
 }
 
 function ConfidenceBadge({ confidence }: { confidence: number }) {
+  const styles = useThemedStyles(createReportDeviationStyles);
   const pct = Math.round(confidence * 100);
   let color = Colors.danger;
   if (pct >= 80) color = Colors.success;
@@ -99,6 +102,7 @@ function ConfidenceBadge({ confidence }: { confidence: number }) {
 }
 
 export function ReportDeviationScreen({ route, navigation }: any) {
+  const styles = useThemedStyles(createReportDeviationStyles);
   const { orderId } = route.params;
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
@@ -408,7 +412,7 @@ export function ReportDeviationScreen({ route, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const createReportDeviationStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

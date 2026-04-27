@@ -10,6 +10,7 @@ import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
 import { hapticLight } from '../utils/haptics';
 import { useAuth } from '../context/AuthContext';
+import { useThemeColors } from '../context/BrandingContext';
 import type { Resource } from '../types';
 
 interface MeResponse {
@@ -56,6 +57,7 @@ function formatPeriod(start?: string | null, end?: string | null): string | null
 }
 
 export function NotificationPrefsScreen() {
+  useThemeColors();
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();

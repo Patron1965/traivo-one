@@ -11,6 +11,7 @@ import * as FileSystem from 'expo-file-system';
 import { fetch as expoFetch } from 'expo/fetch';
 import { ThemedText } from '../components/ThemedText';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { apiRequest, getApiUrl } from '../lib/query-client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Order } from '../types';
@@ -38,6 +39,7 @@ const QUICK_ACTIONS = [
 ];
 
 function TypingIndicator() {
+  const styles = useThemedStyles(createAiAssistantStyles);
   const dot1 = useRef(new Animated.Value(0.3)).current;
   const dot2 = useRef(new Animated.Value(0.3)).current;
   const dot3 = useRef(new Animated.Value(0.3)).current;
@@ -68,6 +70,7 @@ function TypingIndicator() {
 }
 
 function SuggestionCards({ onSend }: { onSend: (text: string) => void }) {
+  const styles = useThemedStyles(createAiAssistantStyles);
   return (
     <View style={styles.suggestionsContainer}>
       <View style={styles.suggestionsGrid}>
@@ -97,6 +100,7 @@ function SuggestionCards({ onSend }: { onSend: (text: string) => void }) {
 }
 
 const MessageBubble = React.memo(function MessageBubble({ msg, index, formatTime, isStreamingMsg }: { msg: Message; index: number; formatTime: (date: Date) => string; isStreamingMsg?: boolean }) {
+  const styles = useThemedStyles(createAiAssistantStyles);
   const showTypingDots = isStreamingMsg && msg.content.length === 0;
   const showCursor = isStreamingMsg && msg.content.length > 0;
 
@@ -146,6 +150,7 @@ const MessageBubble = React.memo(function MessageBubble({ msg, index, formatTime
 });
 
 export function AIAssistantScreen() {
+  const styles = useThemedStyles(createAiAssistantStyles);
   const tabBarHeight = useBottomTabBarHeight();
   const flatListRef = useRef<FlatList>(null);
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
@@ -511,7 +516,7 @@ export function AIAssistantScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createAiAssistantStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

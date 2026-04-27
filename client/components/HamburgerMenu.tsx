@@ -11,6 +11,7 @@ import { useUnreadCount } from '../hooks/useNotifications';
 import { useQuery } from '@tanstack/react-query';
 import { ThemedText } from './ThemedText';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { hapticLight, hapticSelection } from '../utils/haptics';
 import type { ComponentProps } from 'react';
 import type { Order } from '../types';
@@ -73,6 +74,7 @@ const qStyles = StyleSheet.create({
 });
 
 function HamburgerMenuModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const styles = useThemedStyles(createHamburgerMenuStyles);
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { user, logout, isOnline, setIsOnline } = useAuth();
@@ -302,6 +304,7 @@ function HamburgerMenuModal({ visible, onClose }: { visible: boolean; onClose: (
 }
 
 export function HamburgerMenuButton() {
+  const styles = useThemedStyles(createHamburgerMenuStyles);
   const [visible, setVisible] = useState(false);
   const unreadCount = useUnreadCount();
 
@@ -324,7 +327,7 @@ export function HamburgerMenuButton() {
   );
 }
 
-const styles = StyleSheet.create({
+const createHamburgerMenuStyles = () => StyleSheet.create({
   menuButton: {
     position: 'relative',
     padding: 4,

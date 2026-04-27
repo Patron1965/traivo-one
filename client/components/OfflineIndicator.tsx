@@ -4,10 +4,12 @@ import { Feather } from '@expo/vector-icons';
 import { ThemedText } from './ThemedText';
 import { Colors, Spacing, BorderRadius, FontSize } from '../constants/theme';
 import { useOfflinePendingCount } from '../hooks/useOfflineSync';
+import { useThemeColors } from '../context/BrandingContext';
 
 type SyncState = 'online' | 'syncing' | 'offline';
 
 export function OfflineIndicator() {
+  useThemeColors();
   const [isOffline, setIsOffline] = useState(false);
   const pendingCount = useOfflinePendingCount();
 
@@ -74,6 +76,7 @@ export function OfflineIndicator() {
 }
 
 export function SyncStatusDot() {
+  useThemeColors();
   const [isOffline, setIsOffline] = useState(false);
   const pendingCount = useOfflinePendingCount();
 

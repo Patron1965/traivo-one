@@ -2,6 +2,7 @@ import React, { Component, ReactNode } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { reloadAppAsync } from 'expo';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { Feather } from '@expo/vector-icons';
 
 interface ErrorFallbackProps {
@@ -10,6 +11,7 @@ interface ErrorFallbackProps {
 }
 
 function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
+  const styles = useThemedStyles(createErrorBoundaryStyles);
   return (
     <View style={styles.container}>
       <View style={styles.iconContainer}>
@@ -71,7 +73,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-const styles = StyleSheet.create({
+const createErrorBoundaryStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

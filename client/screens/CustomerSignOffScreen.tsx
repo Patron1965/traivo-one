@@ -13,6 +13,7 @@ import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { apiRequest } from '../lib/query-client';
 import type { Order } from '../types';
 
@@ -22,6 +23,7 @@ interface PathData {
 }
 
 export function CustomerSignOffScreen({ route, navigation }: any) {
+  const styles = useThemedStyles(createCustomerSignOffStyles);
   const { orderId } = route.params;
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
@@ -310,7 +312,7 @@ export function CustomerSignOffScreen({ route, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const createCustomerSignOffStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

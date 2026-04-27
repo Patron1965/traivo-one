@@ -12,6 +12,7 @@ import { triggerHaptic } from '../utils/haptics';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 
 const MAP_APP_OPTIONS: { value: MapApp; label: string; icon: string }[] = [
   { value: 'google', label: 'Google Maps', icon: 'map' },
@@ -20,6 +21,7 @@ const MAP_APP_OPTIONS: { value: MapApp; label: string; icon: string }[] = [
 ];
 
 export function SettingsScreen({ navigation }: { navigation: any }) {
+  const styles = useThemedStyles(createSettingsStyles);
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -365,7 +367,7 @@ export function SettingsScreen({ navigation }: { navigation: any }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createSettingsStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

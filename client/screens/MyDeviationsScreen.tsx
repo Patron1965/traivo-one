@@ -7,6 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { DEVIATION_CATEGORIES, type DeviationWithOrder, type DeviationCategory } from '../types';
 
 function formatDate(dateStr: string): string {
@@ -26,6 +27,7 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 export function MyDeviationsScreen({ navigation }: any) {
+  const styles = useThemedStyles(createMyDeviationsStyles);
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
@@ -152,7 +154,7 @@ export function MyDeviationsScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const createMyDeviationsStyles = () => StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   summaryCard: { marginBottom: Spacing.lg },
   summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xl },

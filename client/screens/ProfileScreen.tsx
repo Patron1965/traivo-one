@@ -12,6 +12,7 @@ import { useDisruptionMonitor } from '../hooks/useDisruptionMonitor';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import type { ComponentProps } from 'react';
 import type { Order, ResourceProfile, TeamMember } from '../types';
 
@@ -42,6 +43,7 @@ function getInitials(name?: string): string {
 }
 
 export function ProfileScreen() {
+  const styles = useThemedStyles(createProfileStyles);
   const navigation = useNavigation<any>();
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
@@ -483,7 +485,7 @@ export function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createProfileStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

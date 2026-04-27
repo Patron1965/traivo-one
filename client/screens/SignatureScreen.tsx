@@ -8,6 +8,7 @@ import { Feather } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { ThemedText } from '../components/ThemedText';
 import { Colors, Spacing, BorderRadius } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { apiRequest } from '../lib/query-client';
 
 interface PathData {
@@ -16,6 +17,7 @@ interface PathData {
 }
 
 export function SignatureScreen({ route, navigation }: any) {
+  const styles = useThemedStyles(createSignatureStyles);
   const { orderId } = route.params;
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
@@ -167,7 +169,7 @@ export function SignatureScreen({ route, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const createSignatureStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

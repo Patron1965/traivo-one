@@ -7,6 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, BorderRadius, FontSize } from '../constants/theme';
+import { useThemedStyles } from '../context/BrandingContext';
 import { formatDuration } from '../lib/format';
 import type { Order } from '../types';
 
@@ -77,6 +78,7 @@ function statusIcon(status: string): { name: string; color: string } {
 }
 
 export function DayReportScreen() {
+  const s = useThemedStyles(createDayReportStyles);
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const today = new Date().toISOString().split('T')[0];
@@ -247,7 +249,7 @@ export function DayReportScreen() {
   );
 }
 
-const s = StyleSheet.create({
+const createDayReportStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
