@@ -18,44 +18,58 @@ import {
   getSlaRiskSettings,
   upsertSlaRiskSettings,
 } from "../services/sla-risk-engine";
+import { dashboardCache, DASHBOARD_CACHE_TTL } from "../services/dashboardCache";
 
 export function registerSlaRiskRoutes(app: Express) {
   // GET aggregated risk summary (counts + cluster breakdown for next 7 days)
   app.get("/api/sla-risk/summary", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const counts = await db
-      .select({
-        riskLevel: slaRiskSnapshots.riskLevel,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(slaRiskSnapshots)
-      .where(eq(slaRiskSnapshots.tenantId, tenantId))
-      .groupBy(slaRiskSnapshots.riskLevel);
+    const payload = await dashboardCache.getOrCompute(
+      tenantId,
+      "sla:summary",
+      DASHBOARD_CACHE_TTL.SLA_SUMMARY_MS,
+      async () => {
+        const counts = await db
+          .select({
+            riskLevel: slaRiskSnapshots.riskLevel,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(slaRiskSnapshots)
+          .where(eq(slaRiskSnapshots.tenantId, tenantId))
+          .groupBy(slaRiskSnapshots.riskLevel);
 
-    const summary = { ok: 0, warning: 0, critical: 0, total: 0 };
-    for (const c of counts) {
-      const lvl = c.riskLevel as "ok" | "warning" | "critical";
-      summary[lvl] = c.count;
-      summary.total += c.count;
-    }
+        const summary = { ok: 0, warning: 0, critical: 0, total: 0 };
+        for (const c of counts) {
+          const lvl = c.riskLevel as "ok" | "warning" | "critical";
+          summary[lvl] = c.count;
+          summary.total += c.count;
+        }
 
-    const lastRow = await db
-      .select({ calculatedAt: slaRiskSnapshots.calculatedAt })
-      .from(slaRiskSnapshots)
-      .where(eq(slaRiskSnapshots.tenantId, tenantId))
-      .orderBy(desc(slaRiskSnapshots.calculatedAt))
-      .limit(1);
+        const lastRow = await db
+          .select({ calculatedAt: slaRiskSnapshots.calculatedAt })
+          .from(slaRiskSnapshots)
+          .where(eq(slaRiskSnapshots.tenantId, tenantId))
+          .orderBy(desc(slaRiskSnapshots.calculatedAt))
+          .limit(1);
 
-    res.json({
-      summary,
-      calculatedAt: lastRow[0]?.calculatedAt || null,
-    });
+        return {
+          summary,
+          calculatedAt: lastRow[0]?.calculatedAt || null,
+        };
+      },
+    );
+    res.json(payload);
   }));
 
   // GET cluster-level risk aggregate for next 7 days
   app.get("/api/sla-risk/clusters", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const days = Math.min(Math.max(parseInt(req.query.days as string) || 7, 1), 30);
+    const payload = await dashboardCache.getOrCompute(
+      tenantId,
+      `sla:clusters:${days}`,
+      DASHBOARD_CACHE_TTL.SLA_CLUSTERS_MS,
+      async () => {
     const horizon = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
     const rows = await db
@@ -122,7 +136,10 @@ export function registerSlaRiskRoutes(app: Express) {
       return b.critical - a.critical || b.warning - a.warning;
     });
 
-    res.json({ clusters: result, days, horizon: horizon.toISOString() });
+        return { clusters: result, days, horizon: horizon.toISOString() };
+      },
+    );
+    res.json(payload);
   }));
 
   // GET detailed risky jobs
@@ -238,6 +255,7 @@ export function registerSlaRiskRoutes(app: Express) {
   app.post("/api/sla-risk/recompute", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const result = await computeTenantSlaRisk(tenantId);
+    dashboardCache.invalidateTenant(tenantId, "sla:");
     res.json({
       computed: result.snapshots.length,
       transitions: result.transitions.length,

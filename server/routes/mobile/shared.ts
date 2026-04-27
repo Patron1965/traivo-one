@@ -15,6 +15,7 @@ import { triggerETANotification } from "../../eta-notification-service";
 import OpenAI from "openai";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "../../metadata-queries";
 import { handleWorkOrderStatusChange } from "../../ai-communication";
+import { invalidateWorkflowCaches } from "../../services/dashboardCache";
 import { validatePlannerEvent } from "@shared/ws-events";
 
 export interface MobileAuthenticatedRequest extends Request {
@@ -271,6 +272,7 @@ export {
   OpenAI,
   getArticleMetadataForObject, writeArticleMetadataOnObject,
   handleWorkOrderStatusChange,
+  invalidateWorkflowCaches,
 };
 
 export type { ServiceObject, WorkOrder, Resource, Request, Response };

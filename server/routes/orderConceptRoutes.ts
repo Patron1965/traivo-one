@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage";
+import { invalidateWorkflowCaches } from "../services/dashboardCache";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -1576,6 +1577,7 @@ app.post("/api/work-orders/:workOrderId/auto-eta-sms", asyncHandler(async (req, 
       await db.update(workOrders)
         .set({ etaSmsSent: true })
         .where(eq(workOrders.id, workOrderId));
+      invalidateWorkflowCaches(tenantId);
     }
 
     res.json({

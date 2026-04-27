@@ -8,6 +8,7 @@ import { ValidationError } from "../errors";
 import { predictiveForecasts, iotSignals, iotDevices, objects, customers, workOrders, tenants } from "@shared/schema";
 import OpenAI from "openai";
 import { trackOpenAIResponse } from "../api-usage-tracker";
+import { invalidateWorkflowCaches } from "../services/dashboardCache";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -362,6 +363,7 @@ export async function registerPredictiveRoutes(app: Express) {
       creationMethod: "automatic",
       metadata: { generatedBy: "predictive-maintenance", analyzedAt: new Date().toISOString() },
     }).returning({ id: workOrders.id });
+    invalidateWorkflowCaches(tenantId);
 
     res.json({ orderId: order.id, message: "Arbetsorder skapad fr\u00e5n prediktiv analys" });
   }));

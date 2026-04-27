@@ -32,6 +32,7 @@ import { trackOpenAIResponse } from "../api-usage-tracker";
 import { db } from "../db";
 import { tenants } from "@shared/schema";
 import { isNull } from "drizzle-orm";
+import { dashboardCache, DASHBOARD_CACHE_TTL } from "../services/dashboardCache";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -56,29 +57,43 @@ export async function registerCapacityForecastRoutes(app: Express) {
     const windowWeeks = parseWindow(req.query.weeks);
     const forceRecompute = req.query.refresh === "true";
 
-    let result = forceRecompute ? null : await loadCachedForecast(tenantId, windowWeeks);
-    if (!result) {
-      result = await computeAndCacheForecast(tenantId, Math.max(windowWeeks, 26));
-      // narrow to the requested window
-      result = (await loadCachedForecast(tenantId, windowWeeks)) ?? result;
+    if (forceRecompute) {
+      dashboardCache.invalidateTenant(tenantId, "capacity:");
     }
 
-    const suggestions = generateRebalanceSuggestions(result);
-    const { understaffed, overstaffed } = summarize(result.clusters);
-    res.json({
-      windowWeeks,
-      computedAt: result.computedAt,
-      clusters: result.clusters,
-      understaffed,
-      overstaffed,
-      suggestions,
-    });
+    const payload = await dashboardCache.getOrCompute(
+      tenantId,
+      `capacity:fc:${windowWeeks}`,
+      DASHBOARD_CACHE_TTL.CAPACITY_FORECAST_MS,
+      async () => {
+        let result = forceRecompute ? null : await loadCachedForecast(tenantId, windowWeeks);
+        if (!result) {
+          result = await computeAndCacheForecast(tenantId, Math.max(windowWeeks, 26));
+          // narrow to the requested window
+          result = (await loadCachedForecast(tenantId, windowWeeks)) ?? result;
+        }
+
+        const suggestions = generateRebalanceSuggestions(result);
+        const { understaffed, overstaffed } = summarize(result.clusters);
+        return {
+          windowWeeks,
+          computedAt: result.computedAt,
+          clusters: result.clusters,
+          understaffed,
+          overstaffed,
+          suggestions,
+        };
+      },
+    );
+
+    res.json(payload);
   }));
 
   app.post("/api/capacity-forecast/recompute", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const windowWeeks = parseWindow(req.body?.weeks ?? req.query.weeks ?? 26);
     const result = await computeAndCacheForecast(tenantId, Math.max(windowWeeks, 26));
+    dashboardCache.invalidateTenant(tenantId, "capacity:");
     const suggestions = generateRebalanceSuggestions(result);
     const { understaffed, overstaffed } = summarize(result.clusters);
     res.json({

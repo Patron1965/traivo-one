@@ -130,6 +130,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray } from "drizzle-orm";
+import { invalidateWorkflowCaches } from "./services/dashboardCache";
 
 export interface ResolvedArticlePrice {
   articleId: string;
@@ -2124,6 +2125,7 @@ export class DatabaseStorage implements IStorage {
       })
       .where(and(...conditions))
       .returning({ id: workOrders.id });
+    if (result.length > 0) invalidateWorkflowCaches(tenantId);
     return result.length;
   }
 
@@ -2330,6 +2332,7 @@ export class DatabaseStorage implements IStorage {
       }
     }
     const [workOrder] = await db.insert(workOrders).values(values).returning();
+    if (workOrder?.tenantId) invalidateWorkflowCaches(workOrder.tenantId);
     return workOrder;
   }
 
@@ -2350,11 +2353,16 @@ export class DatabaseStorage implements IStorage {
       }
     }
     const [workOrder] = await db.update(workOrders).set(updates).where(eq(workOrders.id, id)).returning();
+    if (workOrder?.tenantId) invalidateWorkflowCaches(workOrder.tenantId);
     return workOrder || undefined;
   }
 
   async deleteWorkOrder(id: string): Promise<void> {
-    await db.update(workOrders).set({ deletedAt: new Date() }).where(eq(workOrders.id, id));
+    const [row] = await db.update(workOrders)
+      .set({ deletedAt: new Date() })
+      .where(eq(workOrders.id, id))
+      .returning({ tenantId: workOrders.tenantId });
+    if (row?.tenantId) invalidateWorkflowCaches(row.tenantId);
   }
 
   async getWorkOrderByModusId(tenantId: string, modusId: string): Promise<WorkOrder | undefined> {
@@ -3216,6 +3224,7 @@ export class DatabaseStorage implements IStorage {
     }
     
     const [wo] = await db.update(workOrders).set(updates).where(eq(workOrders.id, id)).returning();
+    if (wo?.tenantId) invalidateWorkflowCaches(wo.tenantId);
     return wo || undefined;
   }
 
@@ -3241,7 +3250,11 @@ export class DatabaseStorage implements IStorage {
       cachedCost: totalCost,
       cachedProductionMinutes: totalMinutes
     }).where(eq(workOrders.id, workOrderId)).returning();
-    
+
+    if (wo?.tenantId) {
+      invalidateWorkflowCaches(wo.tenantId);
+    }
+
     return wo || undefined;
   }
 
@@ -4795,6 +4808,7 @@ export class DatabaseStorage implements IStorage {
 
   async createAssignment(assignment: InsertAssignment): Promise<Assignment> {
     const [result] = await db.insert(assignments).values(assignment).returning();
+    if (result?.tenantId) invalidateWorkflowCaches(result.tenantId);
     return result;
   }
 
@@ -4807,6 +4821,7 @@ export class DatabaseStorage implements IStorage {
         isNull(assignments.deletedAt)
       ))
       .returning();
+    if (result) invalidateWorkflowCaches(tenantId);
     return result || undefined;
   }
 
@@ -4817,6 +4832,7 @@ export class DatabaseStorage implements IStorage {
         eq(assignments.id, id),
         eq(assignments.tenantId, tenantId)
       ));
+    invalidateWorkflowCaches(tenantId);
   }
 
   // ============================================

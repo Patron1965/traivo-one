@@ -10,6 +10,7 @@ import { NotFoundError, ValidationError } from "../errors";
 import { generateScheduleDates, isDateInSeason, convertLegacyPeriodicity } from "../scheduling-utils";
 import OpenAI from "openai";
 import { trackOpenAIResponse } from "../api-usage-tracker";
+import { invalidateWorkflowCaches } from "../services/dashboardCache";
 
 function buildGoalScopeConditions(
   tenantId: string,
@@ -1118,6 +1119,7 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
       }
     }
 
+    let didMutateWorkOrders = false;
     for (let mi = 0; mi < 12; mi++) {
       let moveAttempt = 0;
       while (neededByMonth[mi] > 0 && excessOrders.length > 0) {
@@ -1145,6 +1147,7 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
           .where(eq(workOrders.id, orderToMove.id));
         totalMoved++;
         neededByMonth[mi]--;
+        didMutateWorkOrders = true;
       }
     }
 
@@ -1186,6 +1189,7 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
 
         const [created] = await db.insert(workOrders).values(orderData).returning();
         totalCreated++;
+        didMutateWorkOrders = true;
 
         if (matchingArticles.length > 0) {
           await db.insert(workOrderLines).values({
@@ -1204,6 +1208,9 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
 
     if (goalDeficit > 0) {
       totalDeficit += goalDeficit;
+    }
+    if (didMutateWorkOrders) {
+      invalidateWorkflowCaches(tenantId);
     }
     appliedGoals.push(goalId);
   }

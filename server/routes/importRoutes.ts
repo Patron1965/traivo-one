@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage";
+import { invalidateWorkflowCaches } from "../services/dashboardCache";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, isNotNull, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -4089,6 +4090,10 @@ app.post("/api/import/repair/work-order-status", requireAdmin, asyncHandler(asyn
       eq(workOrders.orderStatus, "skapad"),
       isNull(workOrders.scheduledDate),
     ));
+
+    if (pastCount > 0 || noDateCount > 0) {
+      invalidateWorkflowCaches(tenantId);
+    }
 
     res.json({
       pastOrdersUpdated: pastCount,

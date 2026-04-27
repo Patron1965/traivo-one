@@ -1,5 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
+import { invalidateWorkflowCaches } from "../services/dashboardCache";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -2550,6 +2551,7 @@ app.post("/api/clusters/auto-generate/apply", asyncHandler(async (req, res) => {
               .returning({ id: workOrders.id });
             totalWorkOrdersLinked += woResult.length;
           }
+          invalidateWorkflowCaches(tenantId);
         }
         
         // Update all cached stats from actual DB counts
@@ -2687,6 +2689,7 @@ app.post("/api/ai/auto-cluster/apply", asyncHandler(async (req, res) => {
                 .returning({ id: workOrders.id });
               totalWorkOrdersLinked += woResult.length;
             }
+            invalidateWorkflowCaches(tenantId);
           }
         }
 

@@ -11,6 +11,7 @@ import { requireAdmin } from "../tenant-middleware";
 import { objects, workOrders, objectMetadata, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { sendEmail } from "../replit_integrations/resend";
+import { dashboardCache, DASHBOARD_CACHE_TTL } from "../services/dashboardCache";
 
 export async function registerKPIRoutes(app: Express) {
 // ============================================
@@ -21,69 +22,77 @@ app.get("/api/kpis/daily", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const dateParam = req.query.date as string;
     const date = dateParam ? new Date(dateParam) : new Date();
-    
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
+    const dateKey = date.toISOString().split("T")[0];
+    const todayKey = new Date().toISOString().split("T")[0];
+    const ttl = dateKey === todayKey
+      ? DASHBOARD_CACHE_TTL.KPI_TODAY_MS
+      : DASHBOARD_CACHE_TTL.KPI_HISTORICAL_MS;
 
-    const orders = await storage.getWorkOrdersByDate(tenantId, date);
-    const resources = await storage.getResources(tenantId);
+    const payload = await dashboardCache.getOrCompute(
+      tenantId,
+      `kpi:daily:${dateKey}`,
+      ttl,
+      async () => {
+        const orders = await storage.getWorkOrdersByDate(tenantId, date);
+        const resources = await storage.getResources(tenantId);
 
-    const completed = orders.filter(o => 
-      o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed"
+        const completed = orders.filter(o =>
+          o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed"
+        );
+        const remaining = orders.filter(o =>
+          !o.completedAt && o.orderStatus !== "utford" && o.executionStatus !== "completed"
+        );
+
+        const durationsMinutes = completed
+          .map(o => o.actualDuration || o.estimatedDuration || 0)
+          .filter(d => d > 0);
+        const avgTimePerTask = durationsMinutes.length > 0
+          ? Math.round(durationsMinutes.reduce((a, b) => a + b, 0) / durationsMinutes.length)
+          : 0;
+
+        const activeResources = resources.filter(r =>
+          orders.some(o => o.resourceId === r.id)
+        );
+
+        const resourceKpis = activeResources.map(r => {
+          const resourceOrders = orders.filter(o => o.resourceId === r.id);
+          const resourceCompleted = resourceOrders.filter(o =>
+            o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed"
+          );
+          const resourceDurations = resourceCompleted
+            .map(o => o.actualDuration || o.estimatedDuration || 0)
+            .filter(d => d > 0);
+          return {
+            resourceId: r.id,
+            resourceName: r.name,
+            totalTasks: resourceOrders.length,
+            completedTasks: resourceCompleted.length,
+            remainingTasks: resourceOrders.length - resourceCompleted.length,
+            avgTimeMinutes: resourceDurations.length > 0
+              ? Math.round(resourceDurations.reduce((a, b) => a + b, 0) / resourceDurations.length)
+              : 0,
+          };
+        });
+
+        return {
+          date: dateKey,
+          totalTasks: orders.length,
+          completedTasks: completed.length,
+          remainingTasks: remaining.length,
+          completionRate: orders.length > 0 ? Math.round((completed.length / orders.length) * 100) : 0,
+          avgTimePerTaskMinutes: avgTimePerTask,
+          activeResources: activeResources.length,
+          resourceKpis,
+        };
+      },
     );
-    const remaining = orders.filter(o => 
-      !o.completedAt && o.orderStatus !== "utford" && o.executionStatus !== "completed"
-    );
-
-    const durationsMinutes = completed
-      .map(o => o.actualDuration || o.estimatedDuration || 0)
-      .filter(d => d > 0);
-    const avgTimePerTask = durationsMinutes.length > 0
-      ? Math.round(durationsMinutes.reduce((a, b) => a + b, 0) / durationsMinutes.length)
-      : 0;
-
-    const activeResources = resources.filter(r => 
-      orders.some(o => o.resourceId === r.id)
-    );
-
-    const resourceKpis = activeResources.map(r => {
-      const resourceOrders = orders.filter(o => o.resourceId === r.id);
-      const resourceCompleted = resourceOrders.filter(o => 
-        o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed"
-      );
-      const resourceDurations = resourceCompleted
-        .map(o => o.actualDuration || o.estimatedDuration || 0)
-        .filter(d => d > 0);
-      return {
-        resourceId: r.id,
-        resourceName: r.name,
-        totalTasks: resourceOrders.length,
-        completedTasks: resourceCompleted.length,
-        remainingTasks: resourceOrders.length - resourceCompleted.length,
-        avgTimeMinutes: resourceDurations.length > 0
-          ? Math.round(resourceDurations.reduce((a, b) => a + b, 0) / resourceDurations.length)
-          : 0,
-      };
-    });
-
-    res.json({
-      date: date.toISOString().split("T")[0],
-      totalTasks: orders.length,
-      completedTasks: completed.length,
-      remainingTasks: remaining.length,
-      completionRate: orders.length > 0 ? Math.round((completed.length / orders.length) * 100) : 0,
-      avgTimePerTaskMinutes: avgTimePerTask,
-      activeResources: activeResources.length,
-      resourceKpis,
-    });
+    res.json(payload);
 }));
 
 app.get("/api/kpis/weekly", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const weekParam = req.query.week as string;
-    
+
     let startOfWeek: Date;
     if (weekParam) {
       startOfWeek = new Date(weekParam);
@@ -98,41 +107,56 @@ app.get("/api/kpis/weekly", asyncHandler(async (req, res) => {
     endOfWeek.setDate(endOfWeek.getDate() + 6);
     endOfWeek.setHours(23, 59, 59, 999);
 
-    const prevStart = new Date(startOfWeek);
-    prevStart.setDate(prevStart.getDate() - 7);
-    const prevEnd = new Date(startOfWeek);
-    prevEnd.setMilliseconds(-1);
+    const weekKey = startOfWeek.toISOString().split("T")[0];
+    const now = new Date();
+    const isCurrentWeek = now >= startOfWeek && now <= endOfWeek;
+    const ttl = isCurrentWeek
+      ? DASHBOARD_CACHE_TTL.KPI_TODAY_MS
+      : DASHBOARD_CACHE_TTL.KPI_HISTORICAL_MS;
 
-    const thisWeekOrders = await storage.getWorkOrders(tenantId, startOfWeek, endOfWeek, true);
-    const prevWeekOrders = await storage.getWorkOrders(tenantId, prevStart, prevEnd, true);
-    const thisWeek = thisWeekOrders;
-    const prevWeek = prevWeekOrders;
+    const payload = await dashboardCache.getOrCompute(
+      tenantId,
+      `kpi:weekly:${weekKey}`,
+      ttl,
+      async () => {
+        const prevStart = new Date(startOfWeek);
+        prevStart.setDate(prevStart.getDate() - 7);
+        const prevEnd = new Date(startOfWeek);
+        prevEnd.setMilliseconds(-1);
 
-    const calcStats = (orders: typeof thisWeek) => {
-      const completed = orders.filter(o => o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed");
-      const durations = completed.map(o => o.actualDuration || o.estimatedDuration || 0).filter(d => d > 0);
-      return {
-        totalTasks: orders.length,
-        completedTasks: completed.length,
-        completionRate: orders.length > 0 ? Math.round((completed.length / orders.length) * 100) : 0,
-        avgTimeMinutes: durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0,
-      };
-    };
+        const [thisWeek, prevWeek] = await Promise.all([
+          storage.getWorkOrders(tenantId, startOfWeek, endOfWeek, true),
+          storage.getWorkOrders(tenantId, prevStart, prevEnd, true),
+        ]);
 
-    const current = calcStats(thisWeek);
-    const previous = calcStats(prevWeek);
+        const calcStats = (orders: typeof thisWeek) => {
+          const completed = orders.filter(o => o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed");
+          const durations = completed.map(o => o.actualDuration || o.estimatedDuration || 0).filter(d => d > 0);
+          return {
+            totalTasks: orders.length,
+            completedTasks: completed.length,
+            completionRate: orders.length > 0 ? Math.round((completed.length / orders.length) * 100) : 0,
+            avgTimeMinutes: durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0,
+          };
+        };
 
-    res.json({
-      weekStart: startOfWeek.toISOString().split("T")[0],
-      weekEnd: endOfWeek.toISOString().split("T")[0],
-      current,
-      previous,
-      trends: {
-        tasksDelta: current.totalTasks - previous.totalTasks,
-        completionRateDelta: current.completionRate - previous.completionRate,
-        avgTimeDelta: current.avgTimeMinutes - previous.avgTimeMinutes,
+        const current = calcStats(thisWeek);
+        const previous = calcStats(prevWeek);
+
+        return {
+          weekStart: weekKey,
+          weekEnd: endOfWeek.toISOString().split("T")[0],
+          current,
+          previous,
+          trends: {
+            tasksDelta: current.totalTasks - previous.totalTasks,
+            completionRateDelta: current.completionRate - previous.completionRate,
+            avgTimeDelta: current.avgTimeMinutes - previous.avgTimeMinutes,
+          },
+        };
       },
-    });
+    );
+    res.json(payload);
 }));
 
 app.post("/api/system/weekly-report/trigger", requireAdmin, asyncHandler(async (req, res) => {

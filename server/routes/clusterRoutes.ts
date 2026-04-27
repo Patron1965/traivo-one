@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage";
+import { invalidateWorkflowCaches } from "../services/dashboardCache";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -240,6 +241,7 @@ app.post("/api/clusters", asyncHandler(async (req, res) => {
     }
 
     await storage.updateClusterCaches(cluster.id);
+    invalidateWorkflowCaches(tenantId);
     const updated = await storage.getCluster(cluster.id);
     res.status(201).json(updated || cluster);
 }));
@@ -342,6 +344,7 @@ app.post("/api/objects/bulk-assign-cluster", asyncHandler(async (req, res) => {
         .where(and(inArray(workOrders.objectId, batch), eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt)));
     }
     await storage.updateClusterCaches(clusterId);
+    invalidateWorkflowCaches(tenantId);
     res.json({ success: true, count: objectIds.length });
 }));
 

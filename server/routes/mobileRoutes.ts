@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
+import { invalidateWorkflowCaches } from "../services/dashboardCache";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -3340,6 +3341,7 @@ app.post("/api/mobile/work-orders/carry-over", isMobileAuthenticated, asyncHandl
 
     let movedCount = 0;
     const targetDate = new Date(parsed.data.targetDate);
+    const touchedTenants = new Set<string>();
 
     for (const orderId of parsed.data.orderIds) {
       const order = await storage.getWorkOrder(orderId);
@@ -3351,7 +3353,10 @@ app.post("/api/mobile/work-orders/carry-over", isMobileAuthenticated, asyncHandl
         .set({ scheduledDate: targetDate })
         .where(eq(workOrders.id, orderId));
       movedCount++;
+      if (order.tenantId) touchedTenants.add(order.tenantId);
     }
+
+    for (const tid of touchedTenants) invalidateWorkflowCaches(tid);
 
     res.json({ success: true, movedCount });
 
