@@ -68,6 +68,8 @@ export const customers = pgTable("customers", {
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
   index("idx_customers_tenant").on(table.tenantId),
+  index("idx_customers_tenant_name").on(table.tenantId, table.name),
+  index("idx_customers_tenant_created").on(table.tenantId, table.createdAt),
 ]);
 
 // Hierarkinivåer för objekt (Mats klusterfilosofi)
@@ -172,6 +174,7 @@ export const objects = pgTable("objects", {
   index("idx_objects_interim").on(table.tenantId, table.isInterimObject),
   index("idx_objects_tenant_deleted").on(table.tenantId, table.deletedAt),
   index("idx_objects_tenant_objnumber").on(table.tenantId, table.objectNumber),
+  index("idx_objects_tenant_name").on(table.tenantId, table.name),
 ]);
 
 export const resources = pgTable("resources", {
@@ -476,6 +479,8 @@ export const articles = pgTable("articles", {
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
   index("idx_articles_tenant").on(table.tenantId),
+  index("idx_articles_tenant_article_number").on(table.tenantId, table.articleNumber),
+  index("idx_articles_tenant_created").on(table.tenantId, table.createdAt),
 ]);
 
 // Prislistor - generella, kundunikt eller rabattbrev
@@ -1346,6 +1351,7 @@ export const auditLogs = pgTable("audit_logs", {
   index("idx_audit_logs_user").on(table.userId),
   index("idx_audit_logs_action").on(table.action),
   index("idx_audit_logs_created").on(table.createdAt),
+  index("idx_audit_logs_tenant_created").on(table.tenantId, table.createdAt),
 ]);
 
 // Relations
@@ -2168,6 +2174,10 @@ export const assignments = pgTable("assignments", {
   index("idx_assignments_resource").on(table.resourceId),
   index("idx_assignments_status").on(table.status),
   index("idx_assignments_scheduled").on(table.scheduledDate),
+  index("idx_assignments_tenant_status").on(table.tenantId, table.status),
+  index("idx_assignments_tenant_scheduled").on(table.tenantId, table.scheduledDate),
+  index("idx_assignments_tenant_resource_date").on(table.tenantId, table.resourceId, table.scheduledDate),
+  index("idx_assignments_tenant_deleted").on(table.tenantId, table.deletedAt),
 ]);
 
 export const insertAssignmentSchema = createInsertSchema(assignments).omit({

@@ -22,7 +22,9 @@ const l1Cache = new Map<string, L1CacheEntry>();
 const L1_TTL = 2 * 60 * 60 * 1000;
 const L1_MAX_SIZE = 50_000;
 const L1_EVICT_BATCH = 5_000;
-const L2_TTL_HOURS = 24;
+// 30 dagar — avstånd mellan två koordinater är statiska, så längre TTL minskar
+// onödiga externa Geoapify-anrop utan att göra cachen mindre korrekt.
+const L2_TTL_HOURS = 24 * 30;
 
 function encodeGeohash(lat: number, lng: number, precision: number = 9): string {
   const BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz";
