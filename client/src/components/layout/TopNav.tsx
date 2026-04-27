@@ -145,7 +145,7 @@ function NavDropdown({ label, items, icon: Icon, colorClass, badges, isFavorite,
         <Button
           variant="ghost"
           size="sm"
-          className={`gap-1 h-8 px-2 text-xs ${isActive ? "bg-accent" : ""}`}
+          className={`gap-1 h-8 px-2 text-xs ${isActive ? "bg-muted text-foreground" : ""}`}
           data-testid={`nav-dropdown-${label.toLowerCase()}`}
         >
           <Icon className={`h-3.5 w-3.5 ${colorClass}`} />
