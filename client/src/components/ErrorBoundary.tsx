@@ -41,22 +41,38 @@ function tryAutoReload(): boolean {
   return true;
 }
 
-if (typeof window !== "undefined" && !(window as any).__chunkReloadHandlerInstalled) {
-  (window as any).__chunkReloadHandlerInstalled = true;
-  window.addEventListener("unhandledrejection", (event) => {
-    const reason: any = event.reason;
-    const msg = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : reason?.message;
-    if (isStaleAssetError(msg)) {
-      console.warn("[chunk-reload] Stale asset detected, reloading:", msg);
-      tryAutoReload();
-    }
-  });
-  window.addEventListener("error", (event) => {
-    if (isStaleAssetError(event.message)) {
-      console.warn("[chunk-reload] Stale asset error event, reloading:", event.message);
-      tryAutoReload();
-    }
-  });
+interface ChunkReloadWindow extends Window {
+  __chunkReloadHandlerInstalled?: boolean;
+}
+
+function extractErrorMessage(reason: unknown): string | undefined {
+  if (reason instanceof Error) return reason.message;
+  if (typeof reason === "string") return reason;
+  if (reason && typeof reason === "object" && "message" in reason) {
+    const msg = (reason as { message: unknown }).message;
+    return typeof msg === "string" ? msg : undefined;
+  }
+  return undefined;
+}
+
+if (typeof window !== "undefined") {
+  const w = window as ChunkReloadWindow;
+  if (!w.__chunkReloadHandlerInstalled) {
+    w.__chunkReloadHandlerInstalled = true;
+    window.addEventListener("unhandledrejection", (event) => {
+      const msg = extractErrorMessage(event.reason);
+      if (isStaleAssetError(msg)) {
+        console.warn("[chunk-reload] Stale asset detected, reloading:", msg);
+        tryAutoReload();
+      }
+    });
+    window.addEventListener("error", (event) => {
+      if (isStaleAssetError(event.message)) {
+        console.warn("[chunk-reload] Stale asset error event, reloading:", event.message);
+        tryAutoReload();
+      }
+    });
+  }
 }
 
 export class ErrorBoundary extends Component<Props, State> {

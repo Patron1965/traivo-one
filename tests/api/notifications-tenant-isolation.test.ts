@@ -10,38 +10,47 @@ class MockWebSocket {
   }
 }
 
+// Test-only view of the notification service's internal client maps. The
+// service intentionally keeps these private; tests reach in through this
+// narrow typed surface rather than `any` casts. The shapes mirror the
+// runtime structure in server/notifications.ts (arrays, not sets) so a
+// future signature change there will surface here as a compile error.
+interface ResourceClientEntry {
+  ws: MockWebSocket;
+  resourceId: string;
+  connectedAt: Date;
+  tenantId: string | null;
+}
+interface UserClientEntry {
+  ws: MockWebSocket;
+  userId: string;
+  connectedAt: Date;
+  tenantId: string | null;
+}
+interface NotificationServiceTestView {
+  clients: Map<string, ResourceClientEntry[]>;
+  userClients: Map<string, UserClientEntry[]>;
+}
+
+const svc = notificationService as unknown as NotificationServiceTestView;
+
 function addMockClient(resourceId: string, tenantId: string | null): MockWebSocket {
   const ws = new MockWebSocket();
-  const svc = notificationService as any;
-  if (!svc.clients.has(resourceId)) {
-    svc.clients.set(resourceId, new Set());
-  }
-  svc.clients.get(resourceId).add({
-    ws,
-    resourceId,
-    connectedAt: new Date(),
-    tenantId,
-  });
+  const existing = svc.clients.get(resourceId) ?? [];
+  existing.push({ ws, resourceId, connectedAt: new Date(), tenantId });
+  svc.clients.set(resourceId, existing);
   return ws;
 }
 
 function addMockUserClient(userId: string, tenantId: string | null): MockWebSocket {
   const ws = new MockWebSocket();
-  const svc = notificationService as any;
-  if (!svc.userClients.has(userId)) {
-    svc.userClients.set(userId, new Set());
-  }
-  svc.userClients.get(userId).add({
-    ws,
-    userId,
-    connectedAt: new Date(),
-    tenantId,
-  });
+  const existing = svc.userClients.get(userId) ?? [];
+  existing.push({ ws, userId, connectedAt: new Date(), tenantId });
+  svc.userClients.set(userId, existing);
   return ws;
 }
 
 function clearAllClients() {
-  const svc = notificationService as any;
   svc.clients.clear();
   svc.userClients.clear();
 }
