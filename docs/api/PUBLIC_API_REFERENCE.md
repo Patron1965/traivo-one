@@ -197,8 +197,8 @@ Content-Type: application/json
 }
 ```
 
-E-postmeddelandet innehåller `https://<host>/portal?token=<token>` där
-token är giltig i 15 minuter och kan endast användas en gång.
+E-postmeddelandet innehåller `https://<host>/portal/verify?token=<token>`
+där token är giltig i 15 minuter och kan endast användas en gång.
 
 **Steg 2 — verifiera:**
 
@@ -213,11 +213,18 @@ Content-Type: application/json
 
 ```json
 {
-  "sessionToken": "ZGVmYXVsdC1zZXNzaW9uLXRva2Vu...",
-  "customer": { "id": "cust_...", "name": "BRF Ekorren" },
-  "tenant":   { "id": "tenant_xyz", "name": "Acme Service AB" },
-  "expiresAt": "2026-05-28T13:32:00.000Z"
-}
+    "success": true,
+    "sessionToken": "ZGVmYXVsdC1zZXNzaW9uLXRva2Vu...",
+    "customer": {
+      "id":    "cust_abc",
+      "name":  "BRF Ekorren",
+      "email": "kontakt@brfekorren.se"
+    },
+    "tenant": {
+      "id":   "tenant_xyz",
+      "name": "Acme Service AB"
+    }
+  }
 ```
 
 **Användning:** Skicka `Authorization: Bearer <sessionToken>` på alla
@@ -343,29 +350,27 @@ beteendet är konventionellt.
 
 ### 8.1 Tenant och organisation
 
-| Metod & path | Beskrivning |
-|--------------|-------------|
-| `GET /api/v1/tenant` | Aktuell tenants grunddata. |
-| `PATCH /api/v1/tenant` | Uppdatera namn, kontakt, organisationsnummer. |
-| `GET /api/v1/tenant/settings` | Konfiguration (industry, SMS, modul-flaggor). |
-| `PATCH /api/v1/tenant/settings` | Uppdatera inställningar. |
-| `GET /api/v1/me/tenant` | Inloggad användares tenant och roll. |
-| `GET /api/v1/tenant/features` | Aktiverade modul-flaggor (feature flags). |
-| `PATCH /api/v1/tenant/features` | Slå på/av modulflaggor (admin). |
-| `GET /api/v1/tenant/features/audit` | Logg över ändringar i flaggor. |
+| Metod & path | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `GET /api/v1/tenant` | Aktuell tenants grunddata. | Web-session |
+| `PATCH /api/v1/tenant` | Uppdatera namn, kontakt, organisationsnummer. | Web-session |
+| `GET /api/v1/tenant/settings` | Konfiguration (industry, SMS, modul-flaggor). | Web-session |
+| `PATCH /api/v1/tenant/settings` | Uppdatera inställningar. | Web-session |
+| `GET /api/v1/me/tenant` | Inloggad användares tenant och roll. | Web-session |
+| `GET /api/v1/tenant/features` | Aktiverade modul-flaggor (feature flags). | Web-session |
+| `PATCH /api/v1/tenant/features` | Slå på/av modulflaggor (admin). | Web-session (admin) |
+| `GET /api/v1/tenant/features/audit` | Logg över ändringar i flaggor. | Web-session (admin) |
 
 ### 8.2 Kunder
 
-| Metod & path | Beskrivning |
-|--------------|-------------|
-| `GET /api/v1/customers` | Lista kunder. Stöder `?search=` och `?limit=`. |
-| `GET /api/v1/customers/:id` | Hämta kund. |
-| `POST /api/v1/customers` | Skapa kund. |
-| `PATCH /api/v1/customers/:id` | Uppdatera kund. |
-| `DELETE /api/v1/customers/:id` | Mjuk-radera kund (sätter `deletedAt`). |
-| `GET /api/v1/customers/:id/objects` | Lista alla objekt för kund. |
-| `GET /api/v1/customers/:id/work-orders` | Lista alla ordrar för kund. |
-| `POST /api/v1/customers/:id/merge` | Slå ihop dubbletter. |
+| Metod & path | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `GET /api/v1/customers` | Lista kunder. Stöder `?search=` och `?limit=`. | Web-session |
+| `GET /api/v1/customers/:id` | Hämta kund. | Web-session |
+| `POST /api/v1/customers` | Skapa kund. | Web-session |
+| `PATCH /api/v1/customers/:id` | Uppdatera kund. | Web-session |
+| `DELETE /api/v1/customers/:id` | Mjuk-radera kund (sätter `deletedAt`). | Web-session |
+| `GET /api/v1/customers/:id/objects` | Lista alla objekt för kund. | Web-session |
 
 **Kund-skapande exempel:**
 
@@ -391,61 +396,61 @@ Content-Type: application/json
 Objekt kan vara hierarkiska — koncern → BRF → fastighet → rum → kärl —
 och ärver åtkomstkod, nyckel och tidspreferenser från sin förälder.
 
-| Metod & path | Beskrivning |
-|--------------|-------------|
-| `GET /api/v1/objects` | Lista objekt. `?customerId=`, `?clusterId=`, `?level=`. |
-| `GET /api/v1/objects/:id` | Hämta objekt med beräknade (resolved) ärvda värden. |
-| `POST /api/v1/objects` | Skapa objekt. |
-| `PATCH /api/v1/objects/:id` | Uppdatera. |
-| `DELETE /api/v1/objects/:id` | Mjuk-radera. |
-| `GET /api/v1/objects?parentId=...` | Barn i hierarkin (filtrera på parent). |
-| `GET /api/v1/objects/:objectId/images` | Bilder kopplade till objekt. |
-| `POST /api/v1/objects/:objectId/images` | Ladda upp bild (tvåstegs — se 8.10). |
-| `GET /api/v1/objects/:objectId/contacts` | Kontaktpersoner för objekt. |
-| `POST /api/v1/objects/:objectId/contacts` | Skapa kontakt. |
-| `GET /api/v1/objects/:id/matching-articles` | Artiklar som hookar på objektet (legacy). |
-| `GET /api/v1/objects/:objectId/applicable-articles` | Tillämpbara artiklar (rekommenderas). |
-| `GET /api/v1/objects/:objectId/time-restrictions` | Tidsbegränsningar (när arbete får ske). |
+| Metod & path | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `GET /api/v1/objects` | Lista objekt. `?customerId=`, `?clusterId=`, `?level=`. | Web-session |
+| `GET /api/v1/objects/:id` | Hämta objekt med beräknade (resolved) ärvda värden. | Web-session |
+| `POST /api/v1/objects` | Skapa objekt. | Web-session |
+| `PATCH /api/v1/objects/:id` | Uppdatera. | Web-session |
+| `DELETE /api/v1/objects/:id` | Mjuk-radera. | Web-session |
+| `GET /api/v1/objects?parentId=...` | Barn i hierarkin (filtrera på parent). | Web-session |
+| `GET /api/v1/objects/:objectId/images` | Bilder kopplade till objekt. | Web-session |
+| `POST /api/v1/objects/:objectId/images` | Ladda upp bild (tvåstegs — se 8.10). | Web-session |
+| `GET /api/v1/objects/:objectId/contacts` | Kontaktpersoner för objekt. | Web-session |
+| `POST /api/v1/objects/:objectId/contacts` | Skapa kontakt. | Web-session |
+| `GET /api/v1/objects/:id/matching-articles` | Artiklar som hookar på objektet (legacy). | Web-session |
+| `GET /api/v1/objects/:objectId/applicable-articles` | Tillämpbara artiklar (rekommenderas). | Web-session |
+| `GET /api/v1/objects/:objectId/time-restrictions` | Tidsbegränsningar (när arbete får ske). | Web-session |
 
 **Hierarkinivåer:** `koncern`, `brf`, `fastighet`, `rum`, `karl`.
 
 ### 8.4 Resurser, team och tilldelning
 
-| Metod & path | Beskrivning |
-|--------------|-------------|
-| `GET /api/v1/resources` | Lista resurser (tekniker, fordon m.m.). |
-| `GET /api/v1/resources/:id` | Hämta resurs. |
-| `POST /api/v1/resources` | Skapa resurs. |
-| `PATCH /api/v1/resources/:id` | Uppdatera. |
-| `DELETE /api/v1/resources/:id` | Mjuk-radera. |
-| `GET /api/v1/resources/active-positions` | Senaste GPS för alla aktiva resurser. |
-| `GET /api/v1/resources/:id/positions` | Position­historik. |
-| `GET /api/v1/resources/availability` | Tillgänglighet per dag/vecka. |
-| `GET /api/v1/resources/:resourceId/work-orders` | Tilldelade ordrar. |
-| `GET /api/v1/resources/:id/sms-history` | SMS-historik till resursen. |
-| `GET /api/v1/teams` | Lista team. |
-| `POST /api/v1/teams` | Skapa team. |
-| `GET /api/v1/assignments` | Tilldelningar (resurs ↔ order). |
-| `POST /api/v1/assignments` | Skapa tilldelning. |
-| `GET /api/v1/assignments/:id/candidates` | Kandidater (resurser som matchar krav). |
-| `POST /api/v1/assignments/:id/assign` | Bekräfta tilldelning. |
+| Metod & path | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `GET /api/v1/resources` | Lista resurser (tekniker, fordon m.m.). | Web-session |
+| `GET /api/v1/resources/:id` | Hämta resurs. | Web-session |
+| `POST /api/v1/resources` | Skapa resurs. | Web-session |
+| `PATCH /api/v1/resources/:id` | Uppdatera. | Web-session |
+| `DELETE /api/v1/resources/:id` | Mjuk-radera. | Web-session |
+| `GET /api/v1/resources/active-positions` | Senaste GPS för alla aktiva resurser. | Web-session |
+| `GET /api/v1/resources/:id/positions` | Position­historik. | Web-session |
+| `GET /api/v1/resources/availability` | Tillgänglighet per dag/vecka. | Web-session |
+| `GET /api/v1/resources/:resourceId/work-orders` | Tilldelade ordrar. | Web-session |
+| `GET /api/v1/resources/:id/sms-history` | SMS-historik till resursen. | Web-session |
+| `GET /api/v1/teams` | Lista team. | Web-session |
+| `POST /api/v1/teams` | Skapa team. | Web-session |
+| `GET /api/v1/assignments` | Tilldelningar (resurs ↔ order). | Web-session |
+| `POST /api/v1/assignments` | Skapa tilldelning. | Web-session |
+| `GET /api/v1/assignments/:id/candidates` | Kandidater (resurser som matchar krav). | Web-session |
+| `POST /api/v1/assignments/:id/assign` | Bekräfta tilldelning. | Web-session |
 
 ### 8.5 Artiklar och prislistor
 
-| Metod & path | Beskrivning |
-|--------------|-------------|
-| `GET /api/v1/articles` | Lista artiklar (tjänster, varor, kontroller). |
-| `GET /api/v1/articles/:id` | Hämta artikel. |
-| `POST /api/v1/articles` | Skapa artikel. |
-| `PATCH /api/v1/articles/:id` | Uppdatera. |
-| `DELETE /api/v1/articles/:id` | Mjuk-radera. |
-| `GET /api/v1/articles/:id/matched-objects` | Objekt som artikeln hookar på. |
-| `POST /api/v1/articles/:id/test-association` | Testa hook-villkor. |
-| `GET /api/v1/structural-articles` | Strukturartiklar (paket av sub-uppgifter). |
-| `POST /api/v1/structural-articles/:parentArticleId/preview-tasks` | Förhandsgranska expansion. |
-| `GET /api/v1/price-lists` | Lista prislistor (generella, kundunika, rabattbrev). |
-| `POST /api/v1/price-lists` | Skapa prislista. |
-| `GET /api/v1/resolve-price?articleId=...&customerId=...&objectId=...` | Beräkna pris från hierarkin. |
+| Metod & path | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `GET /api/v1/articles` | Lista artiklar (tjänster, varor, kontroller). | Web-session |
+| `GET /api/v1/articles/:id` | Hämta artikel. | Web-session |
+| `POST /api/v1/articles` | Skapa artikel. | Web-session |
+| `PATCH /api/v1/articles/:id` | Uppdatera. | Web-session |
+| `DELETE /api/v1/articles/:id` | Mjuk-radera. | Web-session |
+| `GET /api/v1/articles/:id/matched-objects` | Objekt som artikeln hookar på. | Web-session |
+| `POST /api/v1/articles/:id/test-association` | Testa hook-villkor. | Web-session |
+| `GET /api/v1/structural-articles` | Strukturartiklar (paket av sub-uppgifter). | Web-session |
+| `POST /api/v1/structural-articles/:parentArticleId/preview-tasks` | Förhandsgranska expansion. | Web-session |
+| `GET /api/v1/price-lists` | Lista prislistor (generella, kundunika, rabattbrev). | Web-session |
+| `POST /api/v1/price-lists` | Skapa prislista. | Web-session |
+| `GET /api/v1/resolve-price?articleId=...&customerId=...&objectId=...` | Beräkna pris från hierarkin. | Web-session |
 
 ### 8.6 Arbetsordrar
 
@@ -454,36 +459,36 @@ parallella statusfält — använd `orderStatus` för Modus-flödet:
 
 `skapad → planerad_pre → planerad_resurs → planerad_las → utford → fakturerad`
 
-| Metod & path | Beskrivning |
-|--------------|-------------|
-| `GET /api/v1/work-orders` | Lista. Stöder `?status=`, `?startDate=`, `?endDate=`, `?resourceId=`, `?customerId=`. Datum som `YYYY-MM-DD` eller ISO 8601. |
-| `GET /api/v1/work-orders/:id` | Hämta order med rader. |
-| `POST /api/v1/work-orders` | Skapa order. |
-| `PATCH /api/v1/work-orders/:id` | Uppdatera. |
-| `DELETE /api/v1/work-orders/:id` | Mjuk-radera. |
-| `POST /api/v1/work-orders/:id/status` | Byt status (med validering). |
-| `POST /api/v1/work-orders/:id/promote` | Promovera simulerad order till skarp. |
-| `POST /api/v1/work-orders/bulk-unschedule` | Avplanera flera. |
-| `POST /api/v1/work-orders/carry-over` | Flytta över oavslutade till nästa dag. |
-| `POST /api/v1/work-orders/bulk-apply-lines` | Applicera artikelrader på flera ordrar. |
-| `GET /api/v1/work-orders/:workOrderId/lines` | Orderrader (artiklar). |
-| `POST /api/v1/work-orders/:workOrderId/lines` | Lägg till rad. |
-| `PATCH /api/v1/work-order-lines/:id` | Uppdatera rad. |
-| `DELETE /api/v1/work-order-lines/:id` | Ta bort rad. |
-| `GET /api/v1/work-orders/:workOrderId/objects` | Kopplade objekt (om flera). |
-| `POST /api/v1/work-orders/:workOrderId/objects` | Lägg till objekt. |
-| `GET /api/v1/work-orders/:workOrderId/timewindows` | Tidsfönster. |
-| `POST /api/v1/work-orders/:workOrderId/timewindows` | Lägg till tidsfönster. |
-| `GET /api/v1/work-orders/:workOrderId/dependencies` | Beroenden (förkrav). |
-| `POST /api/v1/work-orders/:workOrderId/dependencies` | Lägg till beroende. |
-| `GET /api/v1/work-orders/:workOrderId/dependents` | Ordrar som beror på denna. |
-| `GET /api/v1/work-orders/:workOrderId/dependency-chain` | Hela kedjan. |
-| `POST /api/v1/work-orders/:id/expand-structural` | Expandera strukturartikel till sub-uppgifter. |
-| `GET /api/v1/work-orders/:id/sub-steps` | Sub-uppgifter från expansion. |
-| `GET /api/v1/work-orders/:workOrderId/communications` | SMS/e-post-historik för ordern. |
-| `POST /api/v1/work-orders/:workOrderId/send-sms` | Skicka manuell SMS-uppdatering. |
-| `POST /api/v1/work-orders/:workOrderId/auto-eta-sms` | Trigga automatisk ETA-SMS. |
-| `POST /api/v1/work-orders/:workOrderId/generate-pickup-tasks` | Skapa hämtuppdrag baserat på order. |
+| Metod & path | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `GET /api/v1/work-orders` | Lista. Stöder `?status=`, `?startDate=`, `?endDate=`, `?resourceId=`, `?customerId=`. Datum som `YYYY-MM-DD` eller ISO 8601. | Web-session |
+| `GET /api/v1/work-orders/:id` | Hämta order med rader. | Web-session |
+| `POST /api/v1/work-orders` | Skapa order. | Web-session |
+| `PATCH /api/v1/work-orders/:id` | Uppdatera. | Web-session |
+| `DELETE /api/v1/work-orders/:id` | Mjuk-radera. | Web-session |
+| `POST /api/v1/work-orders/:id/status` | Byt status (med validering). | Web-session |
+| `POST /api/v1/work-orders/:id/promote` | Promovera simulerad order till skarp. | Web-session |
+| `POST /api/v1/work-orders/bulk-unschedule` | Avplanera flera. | Web-session (planerare) |
+| `POST /api/v1/work-orders/carry-over` | Flytta över oavslutade till nästa dag. | Web-session |
+| `POST /api/v1/work-orders/bulk-apply-lines` | Applicera artikelrader på flera ordrar. | Web-session (planerare) |
+| `GET /api/v1/work-orders/:workOrderId/lines` | Orderrader (artiklar). | Web-session |
+| `POST /api/v1/work-orders/:workOrderId/lines` | Lägg till rad. | Web-session |
+| `PATCH /api/v1/work-order-lines/:id` | Uppdatera rad. | Web-session |
+| `DELETE /api/v1/work-order-lines/:id` | Ta bort rad. | Web-session |
+| `GET /api/v1/work-orders/:workOrderId/objects` | Kopplade objekt (om flera). | Web-session |
+| `POST /api/v1/work-orders/:workOrderId/objects` | Lägg till objekt. | Web-session |
+| `GET /api/v1/work-orders/:workOrderId/timewindows` | Tidsfönster. | Web-session |
+| `POST /api/v1/work-orders/:workOrderId/timewindows` | Lägg till tidsfönster. | Web-session |
+| `GET /api/v1/work-orders/:workOrderId/dependencies` | Beroenden (förkrav). | Web-session |
+| `POST /api/v1/work-orders/:workOrderId/dependencies` | Lägg till beroende. | Web-session |
+| `GET /api/v1/work-orders/:workOrderId/dependents` | Ordrar som beror på denna. | Web-session |
+| `GET /api/v1/work-orders/:workOrderId/dependency-chain` | Hela kedjan. | Web-session |
+| `POST /api/v1/work-orders/:id/expand-structural` | Expandera strukturartikel till sub-uppgifter. | Web-session |
+| `GET /api/v1/work-orders/:id/sub-steps` | Sub-uppgifter från expansion. | Web-session |
+| `GET /api/v1/work-orders/:workOrderId/communications` | SMS/e-post-historik för ordern. | Web-session |
+| `POST /api/v1/work-orders/:workOrderId/send-sms` | Skicka manuell SMS-uppdatering. | Web-session |
+| `POST /api/v1/work-orders/:workOrderId/auto-eta-sms` | Trigga automatisk ETA-SMS. | Web-session |
+| `POST /api/v1/work-orders/:workOrderId/generate-pickup-tasks` | Skapa hämtuppdrag baserat på order. | Web-session |
 
 **Skapa order — minimalt exempel:**
 
@@ -511,63 +516,63 @@ Content-Type: application/json
 Orderkoncept genererar ordrar automatiskt enligt mönster (t.ex. "varje
 tisdag jämn vecka" eller "tre gånger per år, mars/juli/november").
 
-| Metod & path | Beskrivning |
-|--------------|-------------|
-| `GET /api/v1/order-concepts` | Lista koncept. |
-| `GET /api/v1/order-concepts/:id` | Hämta koncept. |
-| `POST /api/v1/order-concepts` | Skapa. |
-| `PATCH /api/v1/order-concepts/:id` | Uppdatera. |
-| `DELETE /api/v1/order-concepts/:id` | Mjuk-radera. |
-| `POST /api/v1/order-concepts/:id/preview` | Förhandsgranska kommande ordrar utan att skapa. |
-| `POST /api/v1/order-concepts/:id/execute` | Generera ordrar för en period. |
-| `POST /api/v1/order-concepts/:id/run-rolling` | Rullande generering (löpande). |
-| `POST /api/v1/order-concepts/:id/rerun` | Kör om misslyckad körning. |
-| `GET /api/v1/order-concepts/:id/subscription-calc` | Beräkna abonnemangsavgift. |
-| `POST /api/v1/order-concepts/:id/detect-changes` | Detektera ändringar i underlaget. |
-| `GET /api/v1/order-concepts/:conceptId/filters` | Aktiva objektsfilter. |
-| `POST /api/v1/order-concepts/:conceptId/filters` | Lägg till filter. |
-| `GET /api/v1/order-concept-run-logs` | Körhistorik. |
-| `GET /api/v1/subscription-changes` | Detekterade förändringar (för godkännande). |
-| `PATCH /api/v1/subscription-changes/:id` | Godkänn eller avvisa. |
+| Metod & path | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `GET /api/v1/order-concepts` | Lista koncept. | Web-session |
+| `GET /api/v1/order-concepts/:id` | Hämta koncept. | Web-session |
+| `POST /api/v1/order-concepts` | Skapa. | Web-session |
+| `PATCH /api/v1/order-concepts/:id` | Uppdatera. | Web-session |
+| `DELETE /api/v1/order-concepts/:id` | Mjuk-radera. | Web-session |
+| `POST /api/v1/order-concepts/:id/preview` | Förhandsgranska kommande ordrar utan att skapa. | Web-session |
+| `POST /api/v1/order-concepts/:id/execute` | Generera ordrar för en period. | Web-session |
+| `POST /api/v1/order-concepts/:id/run-rolling` | Rullande generering (löpande). | Web-session |
+| `POST /api/v1/order-concepts/:id/rerun` | Kör om misslyckad körning. | Web-session |
+| `GET /api/v1/order-concepts/:id/subscription-calc` | Beräkna abonnemangsavgift. | Web-session |
+| `POST /api/v1/order-concepts/:id/detect-changes` | Detektera ändringar i underlaget. | Web-session |
+| `GET /api/v1/order-concepts/:conceptId/filters` | Aktiva objektsfilter. | Web-session |
+| `POST /api/v1/order-concepts/:conceptId/filters` | Lägg till filter. | Web-session |
+| `GET /api/v1/order-concept-run-logs` | Körhistorik. | Web-session |
+| `GET /api/v1/subscription-changes` | Detekterade förändringar (för godkännande). | Web-session |
+| `PATCH /api/v1/subscription-changes/:id` | Godkänn eller avvisa. | Web-session |
 
 ### 8.8 Schema, planering och rutt
 
-| Metod & path | Beskrivning |
-|--------------|-------------|
-| `GET /api/v1/schedule` | Schemavy. `?from=`, `?to=`, `?resourceId=`. |
-| `GET /api/v1/planner/orders` | Ordrar i planeringsläge med extra metadata. |
-| `GET /api/v1/planner/routes` | Beräknade rutter per resurs och dag. |
-| `GET /api/v1/planner/events` | SSE-ström med planeringsuppdateringar. |
-| `GET /api/v1/planner/drivers/locations` | Realtidsposition för alla förare. |
-| `PATCH /api/v1/planner/orders/:id/reassign` | Flytta order mellan resurser. |
-| `POST /api/v1/auto-plan-week` | Automatisk planering av vecka (förhandsgranskning). |
-| `POST /api/v1/auto-plan-week/apply` | Applicera autoplan. |
-| `POST /api/v1/route/optimize` | Optimera rutt för en lista ordrar. |
-| `POST /api/v1/route/google-maps-url` | Bygg Google Maps-länk för rutt. |
-| `POST /api/v1/route/send-to-mobile` | Skicka rutt till tekniker. |
-| `POST /api/v1/routes/optimize` | Alternativ optimerings-endpoint (legacy). |
-| `POST /api/v1/routes/directions` | Hämta vägbeskrivning. |
-| `POST /api/v1/route-geometry` | Hämta polyline för karta. |
-| `POST /api/v1/planning/what-if` | Simulera planeringsscenario. |
-| `GET /api/v1/planning/constraints` | Aktiva planeringsregler. |
-| `GET /api/v1/planning/heatmap` | Beläggnings-heatmap. |
+| Metod & path | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `GET /api/v1/schedule` | Schemavy. `?from=`, `?to=`, `?resourceId=`. | Web-session |
+| `GET /api/v1/planner/orders` | Ordrar i planeringsläge med extra metadata. | Web-session |
+| `GET /api/v1/planner/routes` | Beräknade rutter per resurs och dag. | Web-session |
+| `GET /api/v1/planner/events` | SSE-ström med planeringsuppdateringar. | Web-session |
+| `GET /api/v1/planner/drivers/locations` | Realtidsposition för alla förare. | Web-session |
+| `PATCH /api/v1/planner/orders/:id/reassign` | Flytta order mellan resurser. | Web-session |
+| `POST /api/v1/auto-plan-week` | Automatisk planering av vecka (förhandsgranskning). | Web-session |
+| `POST /api/v1/auto-plan-week/apply` | Applicera autoplan. | Web-session |
+| `POST /api/v1/route/optimize` | Optimera rutt för en lista ordrar. | Web-session |
+| `POST /api/v1/route/google-maps-url` | Bygg Google Maps-länk för rutt. | Web-session |
+| `POST /api/v1/route/send-to-mobile` | Skicka rutt till tekniker. | Web-session |
+| `POST /api/v1/routes/optimize` | Alternativ optimerings-endpoint (legacy). | Web-session |
+| `POST /api/v1/routes/directions` | Hämta vägbeskrivning. | Web-session |
+| `POST /api/v1/route-geometry` | Hämta polyline för karta. | Web-session |
+| `POST /api/v1/planning/what-if` | Simulera planeringsscenario. | Web-session |
+| `GET /api/v1/planning/constraints` | Aktiva planeringsregler. | Web-session |
+| `GET /api/v1/planning/heatmap` | Beläggnings-heatmap. | Web-session |
 
 ### 8.9 Notiser, SMS och kommunikation
 
-| Metod & path | Beskrivning |
-|--------------|-------------|
-| `GET /api/v1/notifications` | Lista notiser för inloggad användare. |
-| `PATCH /api/v1/notifications/:id/read` | Markera som läst. |
-| `PATCH /api/v1/notifications/read-all` | Markera alla som lästa. |
-| `GET /api/v1/notifications/types` | Tillgängliga notistyper. |
-| `POST /api/v1/notifications/send` | Skicka manuell notis. |
-| `POST /api/v1/notifications/technician-on-way/:workOrderId` | "Tekniker på väg"-SMS. |
-| `POST /api/v1/notifications/job-completed/:workOrderId` | "Klart"-SMS. |
-| `POST /api/v1/notifications/send-schedule/:resourceId` | Skicka veckoschema till tekniker. |
-| `GET /api/v1/status-message-templates` | Mallar för statusmeddelanden. |
-| `POST /api/v1/status-message-templates` | Skapa mall. |
-| `GET /api/v1/telephony/lookup?phone=...` | Slå upp inkommande nummer mot kund/objekt. |
-| `GET /api/v1/telephony/lookup-with-status` | Som ovan, med aktuell orderstatus. |
+| Metod & path | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `GET /api/v1/notifications` | Lista notiser för inloggad användare. | Web-session |
+| `PATCH /api/v1/notifications/:id/read` | Markera som läst. | Web-session |
+| `PATCH /api/v1/notifications/read-all` | Markera alla som lästa. | Web-session |
+| `GET /api/v1/notifications/types` | Tillgängliga notistyper. | Web-session |
+| `POST /api/v1/notifications/send` | Skicka manuell notis. | Web-session |
+| `POST /api/v1/notifications/technician-on-way/:workOrderId` | "Tekniker på väg"-SMS. | Web-session |
+| `POST /api/v1/notifications/job-completed/:workOrderId` | "Klart"-SMS. | Web-session |
+| `POST /api/v1/notifications/send-schedule/:resourceId` | Skicka veckoschema till tekniker. | Web-session |
+| `GET /api/v1/status-message-templates` | Mallar för statusmeddelanden. | Web-session |
+| `POST /api/v1/status-message-templates` | Skapa mall. | Web-session |
+| `GET /api/v1/telephony/lookup?phone=...` | Slå upp inkommande nummer mot kund/objekt. | Web-session |
+| `GET /api/v1/telephony/lookup-with-status` | Som ovan, med aktuell orderstatus. | Web-session |
 
 ### 8.10 Mobil-API (Traivo Go)
 
@@ -577,30 +582,30 @@ djupare exempel.
 
 **Auth och profil**
 
-| Endpoint | Beskrivning |
-|----------|-------------|
-| `POST /api/v1/mobile/login` | Logga in med e-post + PIN (se 3.2 för fallback-varianter). |
-| `POST /api/v1/mobile/logout` | Logga ut. |
-| `GET /api/v1/mobile/me` | Profil för inloggad tekniker. |
-| `GET /api/v1/mobile/preferences` | Klientpreferenser. |
-| `PUT /api/v1/mobile/preferences` | Skriv preferenser. |
-| `PATCH /api/v1/mobile/me/notification-prefs` | Notispreferenser. |
+| Endpoint | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `POST /api/v1/mobile/login` | Logga in med e-post + PIN (se 3.2 för fallback-varianter). | Publik |
+| `POST /api/v1/mobile/logout` | Logga ut. | Mobil-bearer |
+| `GET /api/v1/mobile/me` | Profil för inloggad tekniker. | Mobil-bearer |
+| `GET /api/v1/mobile/preferences` | Klientpreferenser. | Mobil-bearer |
+| `PUT /api/v1/mobile/preferences` | Skriv preferenser. | Mobil-bearer |
+| `PATCH /api/v1/mobile/me/notification-prefs` | Notispreferenser. | Mobil-bearer |
 
 **Mina ordrar**
 
-| Endpoint | Beskrivning |
-|----------|-------------|
-| `GET /api/v1/mobile/my-orders` | Dagens/veckans tilldelade ordrar. |
-| `GET /api/v1/mobile/orders` | Alternativ lista (filter via query). |
-| `GET /api/v1/mobile/orders/:id` | Orderdetaljer. |
-| `PATCH /api/v1/mobile/orders/:id/status` | Byt status — se enum nedan. |
-| `POST /api/v1/mobile/orders/:id/notes` | Skapa anteckning. |
-| `POST /api/v1/mobile/orders/:id/deviations` | Rapportera avvikelse. |
-| `POST /api/v1/mobile/orders/:id/materials` | Registrera förbrukade material. |
-| `POST /api/v1/mobile/orders/:id/signature` | Lagra kundsignatur (base64). |
-| `POST /api/v1/mobile/orders/:id/customer-signoff` | Slutgodkännande. |
-| `POST /api/v1/mobile/orders/:id/inspections` | Spara checklist-svar. |
-| `PATCH /api/v1/mobile/orders/:id/substeps/:stepId` | Bocka av sub-uppgift. |
+| Endpoint | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `GET /api/v1/mobile/my-orders` | Dagens/veckans tilldelade ordrar. | Mobil-bearer |
+| `GET /api/v1/mobile/orders` | Alternativ lista (filter via query). | Mobil-bearer |
+| `GET /api/v1/mobile/orders/:id` | Orderdetaljer. | Mobil-bearer |
+| `PATCH /api/v1/mobile/orders/:id/status` | Byt status — se enum nedan. | Mobil-bearer |
+| `POST /api/v1/mobile/orders/:id/notes` | Skapa anteckning. | Mobil-bearer |
+| `POST /api/v1/mobile/orders/:id/deviations` | Rapportera avvikelse. | Mobil-bearer |
+| `POST /api/v1/mobile/orders/:id/materials` | Registrera förbrukade material. | Mobil-bearer |
+| `POST /api/v1/mobile/orders/:id/signature` | Lagra kundsignatur (base64). | Mobil-bearer |
+| `POST /api/v1/mobile/orders/:id/customer-signoff` | Slutgodkännande. | Mobil-bearer |
+| `POST /api/v1/mobile/orders/:id/inspections` | Spara checklist-svar. | Mobil-bearer |
+| `PATCH /api/v1/mobile/orders/:id/substeps/:stepId` | Bocka av sub-uppgift. | Mobil-bearer |
 
 **Status-enum för `PATCH /api/v1/mobile/orders/:id/status`**
 
@@ -628,103 +633,105 @@ POST /api/v1/mobile/orders/:id/confirm-photo  { photoKey, caption }
 
 **Tid och GPS**
 
-| Endpoint | Beskrivning |
-|----------|-------------|
-| `POST /api/v1/mobile/work-sessions/start` | Starta arbetspass. |
-| `POST /api/v1/mobile/work-sessions/:id/pause` | Pausa. |
-| `POST /api/v1/mobile/work-sessions/:id/resume` | Återuppta. |
-| `POST /api/v1/mobile/work-sessions/:id/stop` | Avsluta. |
-| `GET /api/v1/mobile/work-sessions/active` | Aktivt pass. |
-| `POST /api/v1/mobile/work-sessions/:id/entries` | Logga tidspost. |
-| `GET /api/v1/mobile/time-summary` | Sammanställning av timmar. |
-| `POST /api/v1/mobile/gps` | Rapportera GPS-position. |
-| `POST /api/v1/mobile/position` | Alias för GPS-rapportering. |
+| Endpoint | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `POST /api/v1/mobile/work-sessions/start` | Starta arbetspass. | Mobil-bearer |
+| `POST /api/v1/mobile/work-sessions/:id/pause` | Pausa. | Mobil-bearer |
+| `POST /api/v1/mobile/work-sessions/:id/resume` | Återuppta. | Mobil-bearer |
+| `POST /api/v1/mobile/work-sessions/:id/stop` | Avsluta. | Mobil-bearer |
+| `GET /api/v1/mobile/work-sessions/active` | Aktivt pass. | Mobil-bearer |
+| `POST /api/v1/mobile/work-sessions/:id/entries` | Logga tidspost. | Mobil-bearer |
+| `GET /api/v1/mobile/time-summary` | Sammanställning av timmar. | Mobil-bearer |
+| `POST /api/v1/mobile/gps` | Rapportera GPS-position. | Mobil-bearer |
+| `POST /api/v1/mobile/position` | Alias för GPS-rapportering. | Mobil-bearer |
 
 **Sync (offline-first)**
 
-| Endpoint | Beskrivning |
-|----------|-------------|
-| `POST /api/v1/mobile/sync` | Batchsynk av lokala ändringar (status, foton, anteckningar). |
-| `GET /api/v1/mobile/sync/status` | Senaste synkstatus. |
+| Endpoint | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `POST /api/v1/mobile/sync` | Batchsynk av lokala ändringar (status, foton, anteckningar). | Mobil-bearer |
+| `GET /api/v1/mobile/sync/status` | Senaste synkstatus. | Mobil-bearer |
 
 Sync-batchformat dokumenteras i
 [`TRAIVO_API_CONTRACTS.md`](TRAIVO_API_CONTRACTS.md#sync-batchformat).
 
 **Övrigt**
 
-| Endpoint | Beskrivning |
-|----------|-------------|
-| `GET /api/v1/mobile/route` | Dagens rutt. |
-| `GET /api/v1/mobile/route-optimized` | Optimerad rutt. |
-| `POST /api/v1/mobile/disruptions/trigger/delay` | Rapportera försening. |
-| `POST /api/v1/mobile/disruptions/trigger/early-completion` | Tidigare klart. |
-| `POST /api/v1/mobile/customer-change-requests` | Skapa kunds ändringsförfrågan från fält. |
-| `POST /api/v1/mobile/push-token` | Registrera FCM/APNS-token. |
-| `DELETE /api/v1/mobile/push-token` | Avregistrera. |
-| `POST /api/v1/mobile/ai/chat` | AI-assistent (kvoterad). |
-| `POST /api/v1/mobile/ai/transcribe` | Tal-till-text. |
-| `POST /api/v1/mobile/ai/analyze-image` | Bildanalys. |
+| Endpoint | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `GET /api/v1/mobile/route` | Dagens rutt. | Mobil-bearer |
+| `GET /api/v1/mobile/route-optimized` | Optimerad rutt. | Mobil-bearer |
+| `POST /api/v1/mobile/disruptions/trigger/delay` | Rapportera försening. | Mobil-bearer |
+| `POST /api/v1/mobile/disruptions/trigger/early-completion` | Tidigare klart. | Mobil-bearer |
+| `POST /api/v1/mobile/customer-change-requests` | Skapa kunds ändringsförfrågan från fält. | Mobil-bearer |
+| `POST /api/v1/mobile/push-token` | Registrera FCM/APNS-token. | Mobil-bearer |
+| `DELETE /api/v1/mobile/push-token` | Avregistrera. | Mobil-bearer |
+| `POST /api/v1/mobile/ai/chat` | AI-assistent (kvoterad). | Mobil-bearer |
+| `POST /api/v1/mobile/ai/transcribe` | Tal-till-text. | Mobil-bearer |
+| `POST /api/v1/mobile/ai/analyze-image` | Bildanalys. | Mobil-bearer |
 
 ### 8.11 Kundportalen
 
-Alla `/api/v1/portal/*`-endpoints kräver portal-session (3.3).
+De flesta `/api/v1/portal/*`-endpoints kräver portal-session (3.3).
+Undantag: `tenants`, `auth/request-link` och `auth/verify` är publika
+eftersom de behövs *innan* sessionen finns.
 
-| Endpoint | Beskrivning |
-|----------|-------------|
-| `GET /api/v1/portal/tenants` | Lista tenants kunden tillhör (för host-routing). |
-| `POST /api/v1/portal/auth/request-link` | Begär magic-link. |
-| `POST /api/v1/portal/auth/verify` | Verifiera token, få sessions-token. |
-| `POST /api/v1/portal/logout` | Logga ut. |
-| `GET /api/v1/portal/me` | Inloggad kund + tenant. |
-| `GET /api/v1/portal/orders` | Mina ordrar. |
-| `GET /api/v1/portal/objects` | Mina objekt. |
-| `GET /api/v1/portal/clusters` | Mina kluster. |
-| `GET /api/v1/portal/invoices` | Fakturor. |
-| `GET /api/v1/portal/messages` | Meddelandetråd med tjänsteleverantör. |
-| `POST /api/v1/portal/messages` | Skicka meddelande. |
-| `GET /api/v1/portal/messages/unread-count` | Olästa. |
-| `GET /api/v1/portal/booking-options` | Bokningsbara tider. |
-| `GET /api/v1/portal/booking-slots` | Tillgängliga slottar. |
-| `POST /api/v1/portal/booking-requests` | Begär bokning. |
-| `GET /api/v1/portal/self-bookings` | Mina självbokningar. |
-| `POST /api/v1/portal/self-bookings` | Boka själv. |
-| `DELETE /api/v1/portal/self-bookings/:id` | Avboka. |
-| `PATCH /api/v1/portal/self-bookings/:id/cancel` | Mjukavboka. |
-| `GET /api/v1/portal/issue-reports` | Mina felanmälningar. |
-| `POST /api/v1/portal/issue-reports` | Skapa felanmälan. |
-| `GET /api/v1/portal/visit-protocols` | Besöksprotokoll. |
-| `GET /api/v1/portal/completed-jobs` | Avslutade jobb. |
-| `GET /api/v1/portal/work-order-chat/:workOrderId` | Chat per order. |
-| `POST /api/v1/portal/work-order-chat/:workOrderId` | Skriv i chatten. |
-| `POST /api/v1/portal/visit-confirmations` | Bekräfta besök. |
-| `POST /api/v1/portal/technician-ratings` | Betygsätt tekniker. |
-| `GET /api/v1/portal/notification-settings` | Notispreferenser. |
-| `PUT /api/v1/portal/notification-settings` | Uppdatera. |
-| `GET /api/v1/portal/notifications/summary` | Sammanställning. |
-| `GET /api/v1/portal/service-contracts` | Aktiva avtal. |
-| `GET /api/v1/portal/roi-shared` | Delad ROI-rapport (om aktiverat). |
+| Endpoint | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `GET /api/v1/portal/tenants` | Lista tenants kunden tillhör (för host-routing). | Publik |
+| `POST /api/v1/portal/auth/request-link` | Begär magic-link. | Publik |
+| `POST /api/v1/portal/auth/verify` | Verifiera token, få sessions-token. | Publik (engångstoken i body) |
+| `POST /api/v1/portal/logout` | Logga ut. | Portal-bearer |
+| `GET /api/v1/portal/me` | Inloggad kund + tenant. | Portal-bearer |
+| `GET /api/v1/portal/orders` | Mina ordrar. | Portal-bearer |
+| `GET /api/v1/portal/objects` | Mina objekt. | Portal-bearer |
+| `GET /api/v1/portal/clusters` | Mina kluster. | Portal-bearer |
+| `GET /api/v1/portal/invoices` | Fakturor. | Portal-bearer |
+| `GET /api/v1/portal/messages` | Meddelandetråd med tjänsteleverantör. | Portal-bearer |
+| `POST /api/v1/portal/messages` | Skicka meddelande. | Portal-bearer |
+| `GET /api/v1/portal/messages/unread-count` | Olästa. | Portal-bearer |
+| `GET /api/v1/portal/booking-options` | Bokningsbara tider. | Portal-bearer |
+| `GET /api/v1/portal/booking-slots` | Tillgängliga slottar. | Portal-bearer |
+| `POST /api/v1/portal/booking-requests` | Begär bokning. | Portal-bearer |
+| `GET /api/v1/portal/self-bookings` | Mina självbokningar. | Portal-bearer |
+| `POST /api/v1/portal/self-bookings` | Boka själv. | Portal-bearer |
+| `DELETE /api/v1/portal/self-bookings/:id` | Avboka. | Portal-bearer |
+| `PATCH /api/v1/portal/self-bookings/:id/cancel` | Mjukavboka. | Portal-bearer |
+| `GET /api/v1/portal/issue-reports` | Mina felanmälningar. | Portal-bearer |
+| `POST /api/v1/portal/issue-reports` | Skapa felanmälan. | Portal-bearer |
+| `GET /api/v1/portal/visit-protocols` | Besöksprotokoll. | Portal-bearer |
+| `GET /api/v1/portal/completed-jobs` | Avslutade jobb. | Portal-bearer |
+| `GET /api/v1/portal/work-order-chat/:workOrderId` | Chat per order. | Portal-bearer |
+| `POST /api/v1/portal/work-order-chat/:workOrderId` | Skriv i chatten. | Portal-bearer |
+| `POST /api/v1/portal/visit-confirmations` | Bekräfta besök. | Portal-bearer |
+| `POST /api/v1/portal/technician-ratings` | Betygsätt tekniker. | Portal-bearer |
+| `GET /api/v1/portal/notification-settings` | Notispreferenser. | Portal-bearer |
+| `PUT /api/v1/portal/notification-settings` | Uppdatera. | Portal-bearer |
+| `GET /api/v1/portal/notifications/summary` | Sammanställning. | Portal-bearer |
+| `GET /api/v1/portal/service-contracts` | Aktiva avtal. | Portal-bearer |
+| `GET /api/v1/portal/roi-shared` | Delad ROI-rapport (om aktiverat). | Portal-bearer |
 
 ### 8.12 Importer
 
 CSV/XLSX-importer används för att massmigrera kunder, objekt och
 ordrar. De flesta tar en `multipart/form-data` med fält `file`.
 
-| Endpoint | Beskrivning |
-|----------|-------------|
-| `POST /api/v1/import/customers/validate` | Validera CSV/XLSX innan import. |
-| `POST /api/v1/import/customers/bulk` | Importera kunder. |
-| `POST /api/v1/import/objects` | Importera objekt. |
-| `POST /api/v1/import/objects/detect-duplicates` | Hitta dubbletter. |
-| `POST /api/v1/import/resources` | Importera resurser. |
-| `POST /api/v1/import/metadata/csv` | Importera objekts-metadata. |
-| `POST /api/v1/import/suggest-mapping` | AI-förslag för kolumnmappning. |
-| `POST /api/v1/import/column-mappings` | Spara mappningsmall. |
-| `POST /api/v1/import/hierarchy-preview` | Förhandsgranska hierarki innan import. |
-| `GET /api/v1/import/progress/:jobId` | SSE-stream för importprogress. |
-| `GET /api/v1/import/history` | Importhistorik. |
-| `GET /api/v1/import/health-stats` | Datakvalitets-KPI. |
-| `GET /api/v1/import/data-quality` | Detaljerad datakvalitetsrapport. |
-| `POST /api/v1/import/rollback/:batchId` | Rulla tillbaka import (admin). |
+| Endpoint | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `POST /api/v1/import/customers/validate` | Validera CSV/XLSX innan import. | Web-session |
+| `POST /api/v1/import/customers/bulk` | Importera kunder. | Web-session |
+| `POST /api/v1/import/objects` | Importera objekt. | Web-session |
+| `POST /api/v1/import/objects/detect-duplicates` | Hitta dubbletter. | Web-session |
+| `POST /api/v1/import/resources` | Importera resurser. | Web-session |
+| `POST /api/v1/import/metadata/csv` | Importera objekts-metadata. | Web-session |
+| `POST /api/v1/import/suggest-mapping` | AI-förslag för kolumnmappning. | Web-session |
+| `POST /api/v1/import/column-mappings` | Spara mappningsmall. | Web-session |
+| `POST /api/v1/import/hierarchy-preview` | Förhandsgranska hierarki innan import. | Web-session |
+| `GET /api/v1/import/progress/:jobId` | SSE-stream för importprogress. | Web-session |
+| `GET /api/v1/import/history` | Importhistorik. | Web-session |
+| `GET /api/v1/import/health-stats` | Datakvalitets-KPI. | Web-session |
+| `GET /api/v1/import/data-quality` | Detaljerad datakvalitetsrapport. | Web-session |
+| `POST /api/v1/import/rollback/:batchId` | Rulla tillbaka import (admin). | Web-session (admin) |
 
 Modus-specifika importer (`/api/v1/import/modus/*`) finns för migrering
 från Modus-systemet — se källan för exakta format.
@@ -734,96 +741,96 @@ från Modus-systemet — se källan för exakta format.
 OAuth2-koppling per tenant. Importerar och exporterar kunder, artiklar,
 fakturor, kostnadsställen och projekt.
 
-| Endpoint | Beskrivning |
-|----------|-------------|
-| `GET /api/v1/fortnox/authorize` | Påbörja OAuth-flöde. |
-| `GET /api/v1/fortnox/callback` | OAuth-callback. |
-| `GET /api/v1/fortnox/status` | Anslutningsstatus. |
-| `GET /api/v1/fortnox/config` | Inställningar (kontoplan, momssatser). |
-| `POST /api/v1/fortnox/config` | Skapa konfiguration. |
-| `PATCH /api/v1/fortnox/config` | Uppdatera. |
-| `GET /api/v1/fortnox/mappings` | Mappningar (artiklar, kunder). |
-| `POST /api/v1/fortnox/mappings` | Skapa mappning. |
-| `GET /api/v1/fortnox/customers/fetch` | Hämta kundlista från Fortnox. |
-| `POST /api/v1/fortnox/customers/import` | Importera valda kunder. |
-| `GET /api/v1/fortnox/articles/fetch` | Hämta artiklar. |
-| `POST /api/v1/fortnox/articles/import` | Importera artiklar. |
-| `GET /api/v1/fortnox/costcenters/fetch` | Kostnadsställen. |
-| `POST /api/v1/fortnox/costcenters/import` | Importera kostnadsställen. |
-| `GET /api/v1/fortnox/projects/fetch` | Projekt. |
-| `POST /api/v1/fortnox/projects/import` | Importera projekt. |
-| `POST /api/v1/fortnox/full-import` | Kör full import (kunder + artiklar + …). |
-| `GET /api/v1/fortnox/exports` | Exportkö (utgående fakturor). |
-| `POST /api/v1/fortnox/exports` | Skapa export. |
-| `POST /api/v1/fortnox/exports/:id/process` | Skicka till Fortnox. |
-| `POST /api/v1/fortnox/exports/:id/credit` | Skapa kreditfaktura. |
-| `POST /api/v1/invoice-preview/export-to-fortnox` | Förhandsgranska och exportera. |
-| `GET /api/v1/manual-invoice-lines` | Manuella fakturarader. |
-| `POST /api/v1/manual-invoice-lines` | Skapa manuell rad. |
+| Endpoint | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `GET /api/v1/fortnox/authorize` | Påbörja OAuth-flöde. | Web-session |
+| `GET /api/v1/fortnox/callback` | OAuth-callback. | Publik (Fortnox redirect) |
+| `GET /api/v1/fortnox/status` | Anslutningsstatus. | Web-session |
+| `GET /api/v1/fortnox/config` | Inställningar (kontoplan, momssatser). | Web-session |
+| `POST /api/v1/fortnox/config` | Skapa konfiguration. | Web-session |
+| `PATCH /api/v1/fortnox/config` | Uppdatera. | Web-session |
+| `GET /api/v1/fortnox/mappings` | Mappningar (artiklar, kunder). | Web-session |
+| `POST /api/v1/fortnox/mappings` | Skapa mappning. | Web-session |
+| `GET /api/v1/fortnox/customers/fetch` | Hämta kundlista från Fortnox. | Web-session |
+| `POST /api/v1/fortnox/customers/import` | Importera valda kunder. | Web-session |
+| `GET /api/v1/fortnox/articles/fetch` | Hämta artiklar. | Web-session |
+| `POST /api/v1/fortnox/articles/import` | Importera artiklar. | Web-session |
+| `GET /api/v1/fortnox/costcenters/fetch` | Kostnadsställen. | Web-session |
+| `POST /api/v1/fortnox/costcenters/import` | Importera kostnadsställen. | Web-session |
+| `GET /api/v1/fortnox/projects/fetch` | Projekt. | Web-session |
+| `POST /api/v1/fortnox/projects/import` | Importera projekt. | Web-session |
+| `POST /api/v1/fortnox/full-import` | Kör full import (kunder + artiklar + …). | Web-session |
+| `GET /api/v1/fortnox/exports` | Exportkö (utgående fakturor). | Web-session |
+| `POST /api/v1/fortnox/exports` | Skapa export. | Web-session |
+| `POST /api/v1/fortnox/exports/:id/process` | Skicka till Fortnox. | Web-session |
+| `POST /api/v1/fortnox/exports/:id/credit` | Skapa kreditfaktura. | Web-session |
+| `POST /api/v1/invoice-preview/export-to-fortnox` | Förhandsgranska och exportera. | Web-session |
+| `GET /api/v1/manual-invoice-lines` | Manuella fakturarader. | Web-session |
+| `POST /api/v1/manual-invoice-lines` | Skapa manuell rad. | Web-session |
 
 ### 8.14 Rapporter, KPI:er och AI
 
-| Endpoint | Beskrivning |
-|----------|-------------|
-| `GET /api/v1/dashboard/stats` | Översikts-KPI:er. |
-| `GET /api/v1/dashboard/alerts` | Aktiva varningar. |
-| `GET /api/v1/dashboard/capacity/:dateParam?` | Kapacitet för dag/vecka. |
-| `GET /api/v1/reports/roi/:customerId` | ROI-rapport per kund. |
-| `GET /api/v1/reports/roi-customers` | Kunder med ROI-data. |
-| `POST /api/v1/reports/roi/:customerId/share` | Dela ROI med kunden. |
-| `GET /api/v1/sla-risk/summary` | SLA-risköversikt. |
-| `GET /api/v1/sla-risk/jobs` | Jobb i riskzon. |
-| `GET /api/v1/sla-risk/clusters` | Kluster i riskzon. |
-| `GET /api/v1/sla-risk/settings` | Trösklar. |
-| `PUT /api/v1/sla-risk/settings` | Uppdatera trösklar. |
-| `POST /api/v1/sla-risk/recompute` | Räkna om risker. |
-| `GET /api/v1/feedback-loop/service-accuracy` | Hur väl planerad tid stämmer. |
-| `GET /api/v1/feedback-loop/article-accuracy` | Per artikel. |
-| `GET /api/v1/feedback-loop/resource-accuracy` | Per resurs. |
-| `GET /api/v1/feedback-loop/suggested-durations` | Föreslagna tidsjusteringar. |
-| `POST /api/v1/feedback-loop/apply-duration/:articleId` | Applicera förslag. |
-| `POST /api/v1/predictive/analyze` | Prediktiv analys (AI, kvoterad). |
-| `GET /api/v1/predictive/forecasts` | Befintliga prognoser. |
-| `POST /api/v1/predictive/create-order` | Skapa order från prognos. |
-| `GET /api/v1/ai/insights` | AI-genererade insikter. |
-| `POST /api/v1/ai/assisted-plan` | Planeringsassistent. |
-| `GET /api/v1/ai/eta-overview` | ETA-översikt. |
-| `POST /api/v1/ai/eta-check-delays` | Detektera försening. |
-| `GET /api/v1/ai/communications` | Kommunikationsförslag. |
-| `POST /api/v1/ai/communications/eta-update` | AI-genererat ETA-utskick. |
-| `POST /api/v1/ai/communications/send-manual` | Skicka manuellt. |
+| Endpoint | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `GET /api/v1/dashboard/stats` | Översikts-KPI:er. | Web-session |
+| `GET /api/v1/dashboard/alerts` | Aktiva varningar. | Web-session |
+| `GET /api/v1/dashboard/capacity/:dateParam?` | Kapacitet för dag/vecka. | Web-session |
+| `GET /api/v1/reports/roi/:customerId` | ROI-rapport per kund. | Web-session |
+| `GET /api/v1/reports/roi-customers` | Kunder med ROI-data. | Web-session |
+| `POST /api/v1/reports/roi/:customerId/share` | Dela ROI med kunden. | Web-session |
+| `GET /api/v1/sla-risk/summary` | SLA-risköversikt. | Web-session |
+| `GET /api/v1/sla-risk/jobs` | Jobb i riskzon. | Web-session |
+| `GET /api/v1/sla-risk/clusters` | Kluster i riskzon. | Web-session |
+| `GET /api/v1/sla-risk/settings` | Trösklar. | Web-session |
+| `PUT /api/v1/sla-risk/settings` | Uppdatera trösklar. | Web-session |
+| `POST /api/v1/sla-risk/recompute` | Räkna om risker. | Web-session |
+| `GET /api/v1/feedback-loop/service-accuracy` | Hur väl planerad tid stämmer. | Web-session |
+| `GET /api/v1/feedback-loop/article-accuracy` | Per artikel. | Web-session |
+| `GET /api/v1/feedback-loop/resource-accuracy` | Per resurs. | Web-session |
+| `GET /api/v1/feedback-loop/suggested-durations` | Föreslagna tidsjusteringar. | Web-session |
+| `POST /api/v1/feedback-loop/apply-duration/:articleId` | Applicera förslag. | Web-session |
+| `POST /api/v1/predictive/analyze` | Prediktiv analys (AI, kvoterad). | Web-session |
+| `GET /api/v1/predictive/forecasts` | Befintliga prognoser. | Web-session |
+| `POST /api/v1/predictive/create-order` | Skapa order från prognos. | Web-session |
+| `GET /api/v1/ai/insights` | AI-genererade insikter. | Web-session |
+| `POST /api/v1/ai/assisted-plan` | Planeringsassistent. | Web-session |
+| `GET /api/v1/ai/eta-overview` | ETA-översikt. | Web-session |
+| `POST /api/v1/ai/eta-check-delays` | Detektera försening. | Web-session |
+| `GET /api/v1/ai/communications` | Kommunikationsförslag. | Web-session |
+| `POST /api/v1/ai/communications/eta-update` | AI-genererat ETA-utskick. | Web-session |
+| `POST /api/v1/ai/communications/send-manual` | Skicka manuellt. | Web-session |
 
 ### 8.15 Akut-jobb
 
-| Endpoint | Beskrivning |
-|----------|-------------|
-| `POST /api/v1/urgent-jobs/assign` | Skapa och bjuda ut akut-jobb. |
-| `GET /api/v1/urgent-jobs` | Lista. |
-| `GET /api/v1/urgent-jobs/:id` | Hämta. |
-| `POST /api/v1/urgent-jobs/:id/reassign` | Bjud ut igen. |
-| `POST /api/v1/urgent-jobs/find-nearest` | Hitta närmaste resurs. |
-| `POST /api/v1/mobile/jobs/urgent/accept` | Acceptera (mobil). |
-| `POST /api/v1/mobile/jobs/urgent/decline` | Tacka nej (mobil). |
-| `POST /api/v1/mobile/jobs/urgent/:id/status` | Status-uppdatering. |
-| `GET /api/v1/mobile/jobs/urgent/active` | Aktiva akut-jobb. |
+| Endpoint | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `POST /api/v1/urgent-jobs/assign` | Skapa och bjuda ut akut-jobb. | Web-session |
+| `GET /api/v1/urgent-jobs` | Lista. | Web-session |
+| `GET /api/v1/urgent-jobs/:id` | Hämta. | Web-session |
+| `POST /api/v1/urgent-jobs/:id/reassign` | Bjud ut igen. | Web-session |
+| `POST /api/v1/urgent-jobs/find-nearest` | Hitta närmaste resurs. | Web-session |
+| `POST /api/v1/mobile/jobs/urgent/accept` | Acceptera (mobil). | Mobil-bearer |
+| `POST /api/v1/mobile/jobs/urgent/decline` | Tacka nej (mobil). | Mobil-bearer |
+| `POST /api/v1/mobile/jobs/urgent/:id/status` | Status-uppdatering. | Mobil-bearer |
+| `GET /api/v1/mobile/jobs/urgent/active` | Aktiva akut-jobb. | Mobil-bearer |
 
 Se [`TRAIVO_GO_AKUT_JOBB_INTEGRATION.md`](TRAIVO_GO_AKUT_JOBB_INTEGRATION.md)
 för flödesdiagram.
 
 ### 8.16 Administration och system
 
-| Endpoint | Beskrivning |
-|----------|-------------|
-| `GET /api/v1/admin/users` | Lista tenant-användare. |
-| `POST /api/v1/admin/users` | Bjud in användare. |
-| `PATCH /api/v1/admin/users/:id` | Uppdatera roll. |
-| `PATCH /api/v1/admin/users/bulk` | Bulkuppdatering. |
-| `DELETE /api/v1/admin/users/:id` | Ta bort. |
-| `GET /api/v1/system/api-costs/pricing` | AI/extern API-prisinfo. |
-| `GET /api/v1/system/budget-status` | Budgetstatus för aktuell tenant. |
-| `GET /api/v1/system/budget-status/all-tenants` | (system-admin) Alla tenants. |
-| `POST /api/v1/admin/notifications/cleanup` | Rensa gamla notiser. |
-| `GET /api/v1/version` | API-version. |
+| Endpoint | Beskrivning | Behörighet |
+|--------------|-------------|------------|
+| `GET /api/v1/admin/users` | Lista tenant-användare. | Web-session (admin) |
+| `POST /api/v1/admin/users` | Bjud in användare. | Web-session (admin) |
+| `PATCH /api/v1/admin/users/:id` | Uppdatera roll. | Web-session (admin) |
+| `PATCH /api/v1/admin/users/bulk` | Bulkuppdatering. | Web-session (admin) |
+| `DELETE /api/v1/admin/users/:id` | Ta bort. | Web-session (admin) |
+| `GET /api/v1/system/api-costs/pricing` | AI/extern API-prisinfo. | Web-session (admin) |
+| `GET /api/v1/system/budget-status` | Budgetstatus för aktuell tenant. | Web-session (admin) |
+| `GET /api/v1/system/budget-status/all-tenants` | (system-admin) Alla tenants. | Web-session (system-admin) |
+| `POST /api/v1/admin/notifications/cleanup` | Rensa gamla notiser. | Web-session (admin) |
+| `GET /api/v1/version` | API-version. | Publik |
 
 ---
 
