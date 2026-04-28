@@ -149,9 +149,11 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
 
   const bodyData = { ...req.body };
-  if (bodyData.scheduledDate && typeof bodyData.scheduledDate === 'string') {
-    const dateStr = bodyData.scheduledDate;
-    bodyData.scheduledDate = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T12:00:00Z');
+  for (const field of ['scheduledDate', 'desiredDeliveryStart', 'desiredDeliveryEnd'] as const) {
+    if (bodyData[field] && typeof bodyData[field] === 'string') {
+      const dateStr = bodyData[field] as string;
+      bodyData[field] = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T12:00:00Z');
+    }
   }
 
   const data = insertWorkOrderSchema.parse({
@@ -257,9 +259,13 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
     }
   }
 
-  if (updateData.scheduledDate && typeof updateData.scheduledDate === 'string') {
-    const dateStr = updateData.scheduledDate;
-    updateData.scheduledDate = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T12:00:00Z');
+  for (const field of ['scheduledDate', 'desiredDeliveryStart', 'desiredDeliveryEnd'] as const) {
+    if (updateData[field] && typeof updateData[field] === 'string') {
+      const dateStr = updateData[field] as string;
+      updateData[field] = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T12:00:00Z');
+    } else if (updateData[field] === null || updateData[field] === '') {
+      updateData[field] = null;
+    }
   }
 
   if (updateData.lockedAt && typeof updateData.lockedAt === 'string') {

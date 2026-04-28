@@ -34,7 +34,8 @@ import {
   Package, 
   Filter, 
   ChevronRight, 
-  Calendar, 
+  Calendar,
+  Calendar as CalendarIcon, 
   CircleDollarSign, 
   Clock, 
   TestTube2,
@@ -993,6 +994,14 @@ export default function OrderStockPage() {
                         <span>{customer?.name || "-"}</span>
                         <ChevronRight className="h-3 w-3" />
                         <span>{object?.name || "-"}</span>
+                        {(order.desiredDeliveryStart || order.desiredDeliveryEnd) && (
+                          <Badge variant="outline" className="text-xs gap-1" data-testid={`badge-desired-period-${order.id}`}>
+                            <CalendarIcon className="h-3 w-3" />
+                            Önskas: {order.desiredDeliveryStart ? new Date(order.desiredDeliveryStart).toLocaleDateString("sv-SE", { day: "numeric", month: "short" }) : "?"}
+                            {" – "}
+                            {order.desiredDeliveryEnd ? new Date(order.desiredDeliveryEnd).toLocaleDateString("sv-SE", { day: "numeric", month: "short" }) : "?"}
+                          </Badge>
+                        )}
                       </div>
                       {status === "omojlig" && order.impossibleReason && (
                         <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded-md text-xs" data-testid={`impossible-details-${order.id}`}>

@@ -40,6 +40,8 @@ interface JobFormData {
   estimatedDuration: string;
   resourceId: string;
   scheduledDate: Date | undefined;
+  desiredDeliveryStart: Date | undefined;
+  desiredDeliveryEnd: Date | undefined;
   teamResourceIds: string[];
   priceListId: string;
 }
@@ -57,6 +59,8 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     estimatedDuration: "60",
     resourceId: "",
     scheduledDate: undefined,
+    desiredDeliveryStart: undefined,
+    desiredDeliveryEnd: undefined,
     teamResourceIds: [],
     priceListId: "",
   });
@@ -189,6 +193,8 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       estimatedDuration: number;
       resourceId: string | null;
       scheduledDate: Date | null;
+      desiredDeliveryStart: Date | null;
+      desiredDeliveryEnd: Date | null;
       status: string;
       articlesToAdd: Array<{ id: string; name: string; price: number | null }>;
       priceListId: string;
@@ -288,6 +294,8 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       estimatedDuration: "60",
       resourceId: "",
       scheduledDate: undefined,
+      desiredDeliveryStart: undefined,
+      desiredDeliveryEnd: undefined,
       teamResourceIds: [],
       priceListId: "",
     });
@@ -325,6 +333,8 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       estimatedDuration: parseInt(formData.estimatedDuration) || 60,
       resourceId: formData.resourceId || null,
       scheduledDate: formData.scheduledDate || null,
+      desiredDeliveryStart: formData.desiredDeliveryStart || null,
+      desiredDeliveryEnd: formData.desiredDeliveryEnd || null,
       orderStatus: formData.resourceId && formData.scheduledDate ? "planerad_resurs" : "skapad",
       articlesToAdd,
       priceListId: formData.priceListId,
@@ -798,6 +808,86 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                 />
               </PopoverContent>
             </Popover>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1.5">
+              <CalendarIcon className="h-3.5 w-3.5" />
+              Önskad leveransperiod (valfritt)
+            </Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal" data-testid="button-select-desired-start">
+                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                    <span className="truncate">
+                      {formData.desiredDeliveryStart ? format(formData.desiredDeliveryStart, "PPP", { locale: sv }) : "Tidigast"}
+                    </span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={formData.desiredDeliveryStart}
+                    onSelect={(d) => setFormData({...formData, desiredDeliveryStart: d})}
+                    locale={sv}
+                  />
+                  {formData.desiredDeliveryStart && (
+                    <div className="p-2 border-t">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => setFormData({...formData, desiredDeliveryStart: undefined})}
+                        data-testid="button-clear-desired-start"
+                      >
+                        Rensa
+                      </Button>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal" data-testid="button-select-desired-end">
+                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                    <span className="truncate">
+                      {formData.desiredDeliveryEnd ? format(formData.desiredDeliveryEnd, "PPP", { locale: sv }) : "Senast"}
+                    </span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={formData.desiredDeliveryEnd}
+                    onSelect={(d) => setFormData({...formData, desiredDeliveryEnd: d})}
+                    locale={sv}
+                  />
+                  {formData.desiredDeliveryEnd && (
+                    <div className="p-2 border-t">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => setFormData({...formData, desiredDeliveryEnd: undefined})}
+                        data-testid="button-clear-desired-end"
+                      >
+                        Rensa
+                      </Button>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+            </div>
+            {formData.desiredDeliveryStart && formData.desiredDeliveryEnd && formData.desiredDeliveryEnd < formData.desiredDeliveryStart && (
+              <p className="text-xs text-orange-600 dark:text-orange-400 flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                Senaste datum ligger före tidigaste — kontrollera ordningen.
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Mjuk preferens som visas för planeraren — blockerar inte planering.
+            </p>
           </div>
 
           {formData.objectId && (

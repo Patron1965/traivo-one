@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -10,12 +10,15 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, MapPin, User, Calendar, Clock, Package, Check, ChevronsUpDown, Tag, ShoppingCart, DollarSign, MessageSquare, Send, CheckCircle2, XCircle, AlertCircle, Search, Copy } from "lucide-react";
+import { Loader2, Plus, Trash2, MapPin, User, Calendar as CalendarIcon, Clock, Package, Check, ChevronsUpDown, Tag, ShoppingCart, DollarSign, MessageSquare, Send, CheckCircle2, XCircle, AlertCircle, Search, Copy, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Calendar } from "@/components/ui/calendar";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { TaskTimewindowsEditor } from "@/components/TaskTimewindowsEditor";
 import type { WorkOrder, ServiceObject, Customer, Resource, WorkOrderObject, MetadataKatalog, WorkOrderLine, CustomerCommunication } from "@shared/schema";
 
 interface JobDetailModalProps {
@@ -80,6 +83,9 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
   const [showSmsDialog, setShowSmsDialog] = useState(false);
   const [smsMessage, setSmsMessage] = useState("");
   const [smsPhone, setSmsPhone] = useState("");
+  const [desiredStart, setDesiredStart] = useState<Date | undefined>(undefined);
+  const [desiredEnd, setDesiredEnd] = useState<Date | undefined>(undefined);
+  const [desiredDirty, setDesiredDirty] = useState(false);
 
   const { data: workOrder, isLoading: workOrderLoading } = useQuery<WorkOrderWithDetails>({
     queryKey: ["/api/work-orders", workOrderId],
@@ -247,6 +253,53 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
     },
     enabled: !!workOrder?.customerId && open,
   });
+
+  useEffect(() => {
+    if (!open) {
+      setDesiredStart(undefined);
+      setDesiredEnd(undefined);
+      setDesiredDirty(false);
+      return;
+    }
+    if (workOrder) {
+      setDesiredStart(workOrder.desiredDeliveryStart ? new Date(workOrder.desiredDeliveryStart) : undefined);
+      setDesiredEnd(workOrder.desiredDeliveryEnd ? new Date(workOrder.desiredDeliveryEnd) : undefined);
+      setDesiredDirty(false);
+    }
+  }, [open, workOrder?.id, workOrder?.desiredDeliveryStart, workOrder?.desiredDeliveryEnd]);
+
+  const updateDesiredPeriodMutation = useMutation({
+    mutationFn: async ({ start, end }: { start: Date | null; end: Date | null }) => {
+      return apiRequest("PATCH", `/api/work-orders/${workOrderId}`, {
+        desiredDeliveryStart: start ? start.toISOString() : null,
+        desiredDeliveryEnd: end ? end.toISOString() : null,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
+      setDesiredDirty(false);
+      toast({ title: "Önskad period sparad" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Kunde inte spara önskad period", description: error?.message || "Försök igen senare.", variant: "destructive" });
+    },
+  });
+
+  const isScheduledOutsideDesired = useMemo(() => {
+    if (!workOrder?.scheduledDate) return false;
+    const sd = new Date(workOrder.scheduledDate);
+    if (desiredStart) {
+      const lowerBound = new Date(desiredStart.getFullYear(), desiredStart.getMonth(), desiredStart.getDate(), 0, 0, 0, 0);
+      if (sd < lowerBound) return true;
+    }
+    if (desiredEnd) {
+      const upperBound = new Date(desiredEnd.getFullYear(), desiredEnd.getMonth(), desiredEnd.getDate(), 23, 59, 59, 999);
+      if (sd > upperBound) return true;
+    }
+    return false;
+  }, [workOrder?.scheduledDate, desiredStart, desiredEnd]);
 
   const handleOpenSmsDialog = () => {
     const resource = workOrder?.resourceName || "Tekniker";
@@ -479,7 +532,7 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                 </div>
                 {workOrder.scheduledDate && (
                   <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                     <span>{format(new Date(workOrder.scheduledDate), "PPP", { locale: sv })}</span>
                   </div>
                 )}
@@ -491,6 +544,120 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                 )}
               </div>
             </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium flex items-center gap-2">
+                  <CalendarIcon className="h-4 w-4" />
+                  Önskad leveransperiod
+                </h4>
+                {desiredDirty && (
+                  <Button
+                    size="sm"
+                    onClick={() => updateDesiredPeriodMutation.mutate({ start: desiredStart || null, end: desiredEnd || null })}
+                    disabled={updateDesiredPeriodMutation.isPending}
+                    data-testid="button-save-desired-period"
+                  >
+                    {updateDesiredPeriodMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+                    Spara period
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left font-normal" data-testid="button-detail-desired-start">
+                      <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                      <span className="truncate">
+                        {desiredStart ? format(desiredStart, "PPP", { locale: sv }) : "Tidigast"}
+                      </span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={desiredStart}
+                      onSelect={(d) => { setDesiredStart(d); setDesiredDirty(true); }}
+                      locale={sv}
+                    />
+                    {desiredStart && (
+                      <div className="p-2 border-t">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full"
+                          onClick={() => { setDesiredStart(undefined); setDesiredDirty(true); }}
+                          data-testid="button-clear-detail-desired-start"
+                        >
+                          Rensa
+                        </Button>
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left font-normal" data-testid="button-detail-desired-end">
+                      <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                      <span className="truncate">
+                        {desiredEnd ? format(desiredEnd, "PPP", { locale: sv }) : "Senast"}
+                      </span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={desiredEnd}
+                      onSelect={(d) => { setDesiredEnd(d); setDesiredDirty(true); }}
+                      locale={sv}
+                    />
+                    {desiredEnd && (
+                      <div className="p-2 border-t">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full"
+                          onClick={() => { setDesiredEnd(undefined); setDesiredDirty(true); }}
+                          data-testid="button-clear-detail-desired-end"
+                        >
+                          Rensa
+                        </Button>
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              </div>
+              {desiredStart && desiredEnd && desiredEnd < desiredStart && (
+                <Alert variant="default" className="border-orange-300 dark:border-orange-700" data-testid="alert-desired-range-invalid">
+                  <AlertTriangle className="h-4 w-4 text-orange-500" />
+                  <AlertDescription className="text-sm">
+                    Senaste datum ligger före tidigaste — kontrollera ordningen.
+                  </AlertDescription>
+                </Alert>
+              )}
+              {isScheduledOutsideDesired && (
+                <Alert variant="default" className="border-orange-300 dark:border-orange-700" data-testid="alert-scheduled-outside-desired">
+                  <AlertTriangle className="h-4 w-4 text-orange-500" />
+                  <AlertDescription className="text-sm">
+                    Planerat datum ligger utanför kundens önskade period.
+                  </AlertDescription>
+                </Alert>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Mjuk preferens — blockerar inte planering eller optimering.
+              </p>
+            </div>
+
+            <Separator />
+
+            {workOrder.tenantId && (
+              <TaskTimewindowsEditor
+                workOrderId={workOrder.id}
+                tenantId={workOrder.tenantId}
+              />
+            )}
 
             <Separator />
 

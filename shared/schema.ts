@@ -263,6 +263,9 @@ export const workOrders = pgTable("work_orders", {
   orderStatus: text("order_status").default("skapad").notNull(),
   scheduledDate: timestamp("scheduled_date"),
   scheduledStartTime: text("scheduled_start_time"),
+  // Önskad leveransperiod (sätts av planerare/kund — mjuk preferens, ej hårt villkor)
+  desiredDeliveryStart: timestamp("desired_delivery_start"),
+  desiredDeliveryEnd: timestamp("desired_delivery_end"),
   // Planerat tidsfönster för optimering
   plannedWindowStart: timestamp("planned_window_start"),
   plannedWindowEnd: timestamp("planned_window_end"),
