@@ -372,11 +372,11 @@ beteendet är konventionellt.
 | `DELETE /api/v1/customers/:id` | Mjuk-radera kund (sätter `deletedAt`). | Web-session |
 | `GET /api/v1/customers/:id/objects` | Lista alla objekt för kund. | Web-session |
 
-**Kund-skapande exempel:**
+**Kund-skapande exempel** (web-session med cookie):
 
 ```http
 POST /api/v1/customers
-Authorization: Bearer <session-cookie eller mobil-token>
+Cookie: connect.sid=<session-cookie>
 Content-Type: application/json
 
 {
@@ -809,10 +809,10 @@ fakturor, kostnadsställen och projekt.
 | `GET /api/v1/urgent-jobs/:id` | Hämta. | Web-session |
 | `POST /api/v1/urgent-jobs/:id/reassign` | Bjud ut igen. | Web-session |
 | `POST /api/v1/urgent-jobs/find-nearest` | Hitta närmaste resurs. | Web-session |
-| `POST /api/v1/mobile/jobs/urgent/accept` | Acceptera (mobil). | Mobil-bearer |
-| `POST /api/v1/mobile/jobs/urgent/decline` | Tacka nej (mobil). | Mobil-bearer |
-| `POST /api/v1/mobile/jobs/urgent/:id/status` | Status-uppdatering. | Mobil-bearer |
-| `GET /api/v1/mobile/jobs/urgent/active` | Aktiva akut-jobb. | Mobil-bearer |
+| `POST /api/v1/mobile/jobs/urgent/accept` | Acceptera (mobil). Tekniker-id i body (`resourceId`). | Publik (saknar auth-middleware) |
+| `POST /api/v1/mobile/jobs/urgent/decline` | Tacka nej (mobil). Tekniker-id i body (`resourceId`). | Publik (saknar auth-middleware) |
+| `POST /api/v1/mobile/jobs/urgent/:id/status` | Status-uppdatering. Tekniker-id i body. | Publik (saknar auth-middleware) |
+| `GET /api/v1/mobile/jobs/urgent/active` | Aktiva akut-jobb. | Publik (saknar auth-middleware) |
 
 Se [`TRAIVO_GO_AKUT_JOBB_INTEGRATION.md`](TRAIVO_GO_AKUT_JOBB_INTEGRATION.md)
 för flödesdiagram.
