@@ -13,6 +13,52 @@ interface State {
   error?: Error;
 }
 
+const RELOAD_GUARD_KEY = "__chunk_reload_attempted_at";
+const RELOAD_GUARD_WINDOW_MS = 10_000;
+
+function isStaleAssetError(message: string | undefined | null): boolean {
+  if (!message) return false;
+  return (
+    /Unable to preload CSS/i.test(message) ||
+    /Failed to fetch dynamically imported module/i.test(message) ||
+    /error loading dynamically imported module/i.test(message) ||
+    /Importing a module script failed/i.test(message) ||
+    /ChunkLoadError/i.test(message) ||
+    /Loading chunk \d+ failed/i.test(message)
+  );
+}
+
+function tryAutoReload(): boolean {
+  try {
+    const last = Number(sessionStorage.getItem(RELOAD_GUARD_KEY) || 0);
+    if (Date.now() - last < RELOAD_GUARD_WINDOW_MS) {
+      return false;
+    }
+    sessionStorage.setItem(RELOAD_GUARD_KEY, String(Date.now()));
+  } catch {
+  }
+  window.location.reload();
+  return true;
+}
+
+if (typeof window !== "undefined" && !(window as any).__chunkReloadHandlerInstalled) {
+  (window as any).__chunkReloadHandlerInstalled = true;
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason: any = event.reason;
+    const msg = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : reason?.message;
+    if (isStaleAssetError(msg)) {
+      console.warn("[chunk-reload] Stale asset detected, reloading:", msg);
+      tryAutoReload();
+    }
+  });
+  window.addEventListener("error", (event) => {
+    if (isStaleAssetError(event.message)) {
+      console.warn("[chunk-reload] Stale asset error event, reloading:", event.message);
+      tryAutoReload();
+    }
+  });
+}
+
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
@@ -25,6 +71,10 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("ErrorBoundary caught an error:", error, errorInfo);
+    if (isStaleAssetError(error?.message)) {
+      console.warn("[chunk-reload] ErrorBoundary caught stale asset, reloading");
+      tryAutoReload();
+    }
   }
 
   handleRetry = () => {
@@ -32,6 +82,10 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   handleReload = () => {
+    try {
+      sessionStorage.removeItem(RELOAD_GUARD_KEY);
+    } catch {
+    }
     window.location.reload();
   };
 
