@@ -306,7 +306,7 @@ export async function registerRoutes(
     try {
       const userId = req.user?.claims?.sub;
       if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
-      const tenantId = (req as any).tenantId as string | undefined;
+      const tenantId = getTenantIdWithFallback(req);
       const token = notificationService.generateUserAuthToken(userId, tenantId);
       res.json({ token, expiresIn: 300, userId });
     } catch (error) {

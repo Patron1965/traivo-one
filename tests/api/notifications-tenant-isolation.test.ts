@@ -27,9 +27,16 @@ interface UserClientEntry {
   connectedAt: Date;
   tenantId: string | null;
 }
+interface PositionPayload {
+  resourceId: string;
+  latitude: number;
+  longitude: number;
+  status?: "traveling" | "on_site" | "idle";
+}
 interface NotificationServiceTestView {
   clients: Map<string, ResourceClientEntry[]>;
   userClients: Map<string, UserClientEntry[]>;
+  doBroadcastPosition: (position: PositionPayload) => Promise<void>;
 }
 
 const svc = notificationService as unknown as NotificationServiceTestView;
@@ -152,5 +159,36 @@ describe("WebSocket tenant-isolation (Stabilitetspaket)", () => {
 
     expect(wsLegacy.sent.length).toBe(1);
     expect(wsTenanted.sent.length).toBe(1);
+  });
+
+  it("position_update läcker inte över tenants (planner i tenant B får inte tenant A:s positioner)", async () => {
+    const tenantA = "tenant-a";
+    const tenantB = "tenant-b";
+    const senderResourceId = "resource-a-sender";
+
+    // Sändaren (mobil) är ansluten i tenant A — det styr senderTenantId utan
+    // att broadcastflödet behöver slå upp resursen i databasen.
+    addMockClient(senderResourceId, tenantA);
+
+    // Mottagare: en planner i tenant A (ska ta emot), en planner i tenant B
+    // (ska INTE ta emot), och en till resursklient i tenant B (ska INTE ta emot).
+    const wsPlannerA = addMockUserClient("planner-a", tenantA);
+    const wsPlannerB = addMockUserClient("planner-b", tenantB);
+    const wsResourceB = addMockClient("resource-b-other", tenantB);
+
+    await svc.doBroadcastPosition({
+      resourceId: senderResourceId,
+      latitude: 59.33,
+      longitude: 18.06,
+      status: "traveling",
+    });
+
+    expect(wsPlannerA.sent.length).toBe(1);
+    const payload = JSON.parse(wsPlannerA.sent[0]);
+    expect(payload.type).toBe("position_update");
+    expect(payload.resourceId).toBe(senderResourceId);
+
+    expect(wsPlannerB.sent.length).toBe(0);
+    expect(wsResourceB.sent.length).toBe(0);
   });
 });
