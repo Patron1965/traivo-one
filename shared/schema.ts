@@ -335,6 +335,8 @@ export const workOrders = pgTable("work_orders", {
   index("idx_work_orders_tenant_deleted").on(table.tenantId, table.deletedAt),
   index("idx_work_orders_tenant_resource_date").on(table.tenantId, table.resourceId, table.scheduledDate),
   index("idx_work_orders_tenant_customer").on(table.tenantId, table.customerId),
+  index("idx_work_orders_tenant_desired_start").on(table.tenantId, table.desiredDeliveryStart),
+  index("idx_work_orders_tenant_desired_end").on(table.tenantId, table.desiredDeliveryEnd),
 ]);
 
 // Orderrader - artiklar kopplade till en order med beräknade priser

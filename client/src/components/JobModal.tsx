@@ -887,6 +887,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
             )}
             <p className="text-xs text-muted-foreground">
               Mjuk preferens som visas för planeraren — blockerar inte planering.
+              Önskade veckodagar och tider lägger du till i orderns detaljvy efter att ordern sparats.
             </p>
           </div>
 
