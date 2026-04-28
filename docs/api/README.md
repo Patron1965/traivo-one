@@ -1,6 +1,6 @@
 # Traivo One — API-dokumentation
 
-*Senast uppdaterad: 2026-04-26*
+*Senast uppdaterad: 2026-04-28*
 
 Detta är index över all API- och integrationsdokumentation som rör
 Traivo One (backend) och Traivo Go (mobilappen). Alla dokument är
@@ -12,6 +12,7 @@ skrivna på svenska och bör läsas i den ordning som föreslås nedan.
 
 | Fil | Vem | Innehåll |
 |-----|-----|----------|
+| [`PUBLIC_API_REFERENCE.md`](PUBLIC_API_REFERENCE.md) | **Externa partners och kunder** | **Publik REST-referens — bas-URL, versionering, autentisering, endpoint-katalog per domän, end-to-end-exempel.** Börja här om du integrerar utifrån. |
 | [`TRAIVO_GO_PROMPT.md`](TRAIVO_GO_PROMPT.md) | Den som bygger Traivo Go från noll | Översikt, tech-stack, fullständig endpoint-lista, designprinciper |
 | [`TRAIVO_API_CONTRACTS.md`](TRAIVO_API_CONTRACTS.md) | Båda team | Kärndatamodeller, statusflöden, WebSocket-event, prismodell, sync-batchformat, driver-notifikationstyper |
 | [`TRAIVO_GO_INTEGRATION_GUIDE.md`](TRAIVO_GO_INTEGRATION_GUIDE.md) | Den som integrerar Traivo Go | Detaljerad integrationsguide — auth, alla `/api/mobile/*`-endpoints, exempel |
