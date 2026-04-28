@@ -173,7 +173,7 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
     // Batcha objects + customers i två frågor istället för 2*N (N+1 → 2).
     const objectIds = Array.from(new Set(orders.map(o => o.objectId).filter((v): v is string => !!v)));
     const customerIds = Array.from(new Set(orders.map(o => o.customerId).filter((v): v is string => !!v)));
-    const tenantIdForBatch = (req as any).tenantId || (resource as any)?.tenantId;
+    const tenantIdForBatch = req.mobileTenantId;
     const [objectList, customerList] = await Promise.all([
       objectIds.length > 0 && tenantIdForBatch ? storage.getObjectsByIds(tenantIdForBatch, objectIds) : Promise.resolve([]),
       customerIds.length > 0 && tenantIdForBatch ? storage.getCustomersByIds(tenantIdForBatch, customerIds) : Promise.resolve([]),
