@@ -6,25 +6,23 @@
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- ============================================================
--- Trigram GIN indexes on RAW columns so raw `ILIKE %x%` matches
--- (existing 0029/0030 indexes use LOWER(...) and only help when
--- the query is rewritten to LOWER(...) LIKE LOWER(...)).
--- pg_trgm's gin_trgm_ops handles ILIKE directly on the raw column.
+-- NOTE on raw-column GIN trigram indexes:
+-- Earlier revisions of this file created plain GIN indexes on raw
+-- text columns (e.g. `gin (name gin_trgm_ops)`). Those bare-column
+-- GIN indexes are introspected by drizzle-kit without the operator
+-- class metadata, so the deploy validator generates broken DDL
+-- (`gin (name)`) and migrations fail with
+-- "data type text has no default operator class for access method gin".
+--
+-- The LOWER(...) expression GIN indexes from 0029/0030 are
+-- introspected correctly because the full SQL expression is
+-- preserved. All raw-ILIKE callsites have been switched to
+-- `LOWER(col) LIKE LOWER(q)` so they hit the existing expression
+-- indexes — see server/routes/customerRoutes.ts.
+--
+-- The drop block in migration 0033 removes the legacy bare-column
+-- indexes from any environment that already has them.
 -- ============================================================
-CREATE INDEX IF NOT EXISTS idx_work_orders_title_trgm
-  ON work_orders USING gin (title gin_trgm_ops);
-
-CREATE INDEX IF NOT EXISTS idx_objects_name_raw_trgm
-  ON objects USING gin (name gin_trgm_ops);
-
-CREATE INDEX IF NOT EXISTS idx_objects_address_raw_trgm
-  ON objects USING gin (address gin_trgm_ops);
-
-CREATE INDEX IF NOT EXISTS idx_objects_object_number_raw_trgm
-  ON objects USING gin (object_number gin_trgm_ops);
-
-CREATE INDEX IF NOT EXISTS idx_customers_name_raw_trgm
-  ON customers USING gin (name gin_trgm_ops);
 
 -- ============================================================
 -- Expression indexes for tenant-scoped JSONB ->>'key' lookups.

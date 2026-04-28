@@ -1579,8 +1579,14 @@ export class DatabaseStorage implements IStorage {
     const trimmed = query.trim();
     if (!trimmed) return [];
     const safeLimit = Math.max(1, Math.min(100, limit));
-    const like = `%${trimmed}%`;
+    const lower = trimmed.toLowerCase();
+    const like = `%${lower}%`;
+    const prefix = `${lower}%`;
 
+    // Use LOWER(col) LIKE pattern so the existing 0030 LOWER(...) gin_trgm_ops
+    // expression indexes (idx_objects_name_trgm / address_trgm / object_number_trgm)
+    // accelerate the search. ILIKE on raw columns would require bare-column
+    // GIN trgm indexes which drizzle-kit's introspection cannot represent.
     const matches = await db.execute(sql`
       SELECT
         o.id,
@@ -1595,12 +1601,12 @@ export class DatabaseStorage implements IStorage {
         AND o.tenant_id = ${tenantId}
         AND o.deleted_at IS NULL
         AND (
-          o.name ILIKE ${like}
-          OR o.address ILIKE ${like}
-          OR o.object_number ILIKE ${like}
+          LOWER(o.name) LIKE ${like}
+          OR LOWER(o.address) LIKE ${like}
+          OR LOWER(o.object_number) LIKE ${like}
         )
       ORDER BY
-        CASE WHEN o.name ILIKE ${trimmed + '%'} THEN 0 ELSE 1 END,
+        CASE WHEN LOWER(o.name) LIKE ${prefix} THEN 0 ELSE 1 END,
         o.name
       LIMIT ${safeLimit}
     `);

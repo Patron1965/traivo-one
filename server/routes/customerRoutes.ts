@@ -7,7 +7,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { db } from "../db";
-import { eq, and, isNull, sql, ilike, or, inArray } from "drizzle-orm";
+import { eq, and, isNull, sql, or, inArray } from "drizzle-orm";
 import { ensureClusterAndAssign } from "../auto-cluster";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 
@@ -272,7 +272,7 @@ app.get("/api/objects/tree", asyncHandler(async (req, res) => {
   const { customerId, search, parentId } = req.query;
 
   if (search && typeof search === "string" && search.trim().length > 0) {
-    const q = `%${search.trim()}%`;
+    const q = `%${search.trim().toLowerCase()}%`;
     const rows = await db
       .select({
         id: objects.id,
@@ -289,9 +289,9 @@ app.get("/api/objects/tree", asyncHandler(async (req, res) => {
         eq(objects.tenantId, tenantId),
         isNull(objects.deletedAt),
         or(
-          ilike(objects.name, q),
-          ilike(objects.address, q),
-          ilike(objects.objectNumber, q)
+          sql`LOWER(${objects.name}) LIKE ${q}`,
+          sql`LOWER(${objects.address}) LIKE ${q}`,
+          sql`LOWER(${objects.objectNumber}) LIKE ${q}`
         )
       ))
       .limit(100);
