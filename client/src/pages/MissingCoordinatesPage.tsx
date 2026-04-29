@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { AlertTriangle, MapPin, Loader2, RefreshCw, Building2, Layers, ExternalLink, Save, X, Play, Bell, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, MapPin, Loader2, RefreshCw, Building2, Layers, ExternalLink, Save, X, Play, Bell, Plus, Trash2, Check } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 
 interface MissingItem {
@@ -51,6 +51,28 @@ interface EditDraft {
   address: string;
   postalCode: string;
   city: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+interface AddressSuggestion {
+  formattedAddress: string;
+  street?: string;
+  houseNumber?: string;
+  address?: string;
+  postalCode?: string;
+  city?: string;
+  latitude: number;
+  longitude: number;
+  placeId?: string;
+  resultType?: string;
+}
+
+interface SuggestionState {
+  items: AddressSuggestion[];
+  loading: boolean;
+  open: boolean;
+  query: string;
 }
 
 interface NotificationSettings {
@@ -69,6 +91,16 @@ export default function MissingCoordinatesPage() {
   const [bulkRunning, setBulkRunning] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [newRecipient, setNewRecipient] = useState("");
+  const [suggestState, setSuggestState] = useState<Record<string, SuggestionState>>({});
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const suggestRequestSeq = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    const timers = debounceTimers.current;
+    return () => {
+      Object.values(timers).forEach((t) => clearTimeout(t));
+    };
+  }, []);
 
   const { data, isLoading } = useQuery<MissingResponse>({
     queryKey: ["/api/objects/missing-coordinates"],
@@ -154,20 +186,46 @@ export default function MissingCoordinatesPage() {
     },
   });
 
+  const buildSavePayload = (draft: EditDraft): Record<string, unknown> => {
+    const payload: Record<string, unknown> = {
+      address: draft.address || null,
+      postalCode: draft.postalCode || null,
+      city: draft.city || null,
+    };
+    if (
+      typeof draft.latitude === "number" &&
+      typeof draft.longitude === "number" &&
+      Number.isFinite(draft.latitude) &&
+      Number.isFinite(draft.longitude)
+    ) {
+      payload.latitude = draft.latitude;
+      payload.longitude = draft.longitude;
+    }
+    return payload;
+  };
+
   const saveAddressMutation = useMutation({
     mutationFn: async ({ id, draft }: { id: string; draft: EditDraft }) => {
-      const res = await apiRequest("PATCH", `/api/objects/${id}`, {
-        address: draft.address || null,
-        postalCode: draft.postalCode || null,
-        city: draft.city || null,
-      });
+      const res = await apiRequest("PATCH", `/api/objects/${id}`, buildSavePayload(draft));
       return await res.json();
     },
     onMutate: ({ id }) => setSavingId(id),
     onSettled: () => setSavingId(null),
-    onSuccess: (_res, { id }) => {
-      toast({ title: "Adress sparad", description: "Geokodning körs i bakgrunden." });
+    onSuccess: (_res, { id, draft }) => {
+      const usedSuggestion =
+        typeof draft.latitude === "number" && typeof draft.longitude === "number";
+      toast({
+        title: "Adress sparad",
+        description: usedSuggestion
+          ? "Koordinater satta direkt från valt förslag."
+          : "Geokodning körs i bakgrunden.",
+      });
       setDrafts((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setSuggestState((prev) => {
         const next = { ...prev };
         delete next[id];
         return next;
@@ -208,6 +266,14 @@ export default function MissingCoordinatesPage() {
   const isDirty = (item: MissingItem): boolean => {
     const d = drafts[item.id];
     if (!d) return false;
+    if (
+      typeof d.latitude === "number" &&
+      typeof d.longitude === "number" &&
+      Number.isFinite(d.latitude) &&
+      Number.isFinite(d.longitude)
+    ) {
+      return true;
+    }
     return (
       d.address !== (item.address ?? "") ||
       d.postalCode !== (item.postalCode ?? "") ||
@@ -222,8 +288,105 @@ export default function MissingCoordinatesPage() {
     }));
   };
 
+  const fetchSuggestionsFor = (id: string, text: string) => {
+    const trimmed = text.trim();
+    if (trimmed.length < 3) {
+      setSuggestState((prev) => ({
+        ...prev,
+        [id]: { items: [], loading: false, open: false, query: trimmed },
+      }));
+      return;
+    }
+    const seq = (suggestRequestSeq.current[id] ?? 0) + 1;
+    suggestRequestSeq.current[id] = seq;
+    setSuggestState((prev) => ({
+      ...prev,
+      [id]: {
+        items: prev[id]?.items ?? [],
+        loading: true,
+        open: true,
+        query: trimmed,
+      },
+    }));
+    fetch(`/api/geocode/autocomplete?text=${encodeURIComponent(trimmed)}&limit=6`, {
+      credentials: "include",
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return (await res.json()) as { suggestions: AddressSuggestion[] };
+      })
+      .then((data) => {
+        if (suggestRequestSeq.current[id] !== seq) return;
+        setSuggestState((prev) => ({
+          ...prev,
+          [id]: {
+            items: data.suggestions || [],
+            loading: false,
+            open: true,
+            query: trimmed,
+          },
+        }));
+      })
+      .catch(() => {
+        if (suggestRequestSeq.current[id] !== seq) return;
+        setSuggestState((prev) => ({
+          ...prev,
+          [id]: { items: [], loading: false, open: false, query: trimmed },
+        }));
+      });
+  };
+
+  const handleAddressInputChange = (item: MissingItem, value: string) => {
+    updateDraft(item, {
+      address: value,
+      latitude: undefined,
+      longitude: undefined,
+    });
+    if (debounceTimers.current[item.id]) {
+      clearTimeout(debounceTimers.current[item.id]);
+    }
+    debounceTimers.current[item.id] = setTimeout(() => {
+      fetchSuggestionsFor(item.id, value);
+    }, 250);
+  };
+
+  const selectSuggestion = (item: MissingItem, suggestion: AddressSuggestion) => {
+    if (debounceTimers.current[item.id]) {
+      clearTimeout(debounceTimers.current[item.id]);
+    }
+    suggestRequestSeq.current[item.id] = (suggestRequestSeq.current[item.id] ?? 0) + 1;
+    const street = suggestion.address || suggestion.street || suggestion.formattedAddress.split(",")[0]?.trim() || "";
+    updateDraft(item, {
+      address: street,
+      postalCode: suggestion.postalCode ?? "",
+      city: suggestion.city ?? "",
+      latitude: suggestion.latitude,
+      longitude: suggestion.longitude,
+    });
+    setSuggestState((prev) => ({
+      ...prev,
+      [item.id]: { items: [], loading: false, open: false, query: street },
+    }));
+  };
+
+  const closeSuggestions = (id: string) => {
+    setSuggestState((prev) => {
+      const cur = prev[id];
+      if (!cur) return prev;
+      return { ...prev, [id]: { ...cur, open: false } };
+    });
+  };
+
   const cancelDraft = (id: string) => {
+    if (debounceTimers.current[id]) {
+      clearTimeout(debounceTimers.current[id]);
+    }
     setDrafts((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setSuggestState((prev) => {
       const next = { ...prev };
       delete next[id];
       return next;
@@ -260,16 +423,19 @@ export default function MissingCoordinatesPage() {
     setBulkRunning(true);
 
     const dirtyTargets = targets.filter((t) => isDirty(t));
+    const dirtyWithCoords = new Set<string>();
     if (dirtyTargets.length > 0) {
       setBulkProgress({ done: 0, total: targets.length + dirtyTargets.length });
       let saveFailed = 0;
       for (const t of dirtyTargets) {
+        const draft = drafts[t.id];
         try {
-          await apiRequest("PATCH", `/api/objects/${t.id}`, {
-            address: drafts[t.id]?.address || null,
-            postalCode: drafts[t.id]?.postalCode || null,
-            city: drafts[t.id]?.city || null,
-          });
+          if (draft) {
+            await apiRequest("PATCH", `/api/objects/${t.id}`, buildSavePayload(draft));
+            if (typeof draft.latitude === "number" && typeof draft.longitude === "number") {
+              dirtyWithCoords.add(t.id);
+            }
+          }
           setDrafts((prev) => {
             const next = { ...prev };
             delete next[t.id];
@@ -294,12 +460,19 @@ export default function MissingCoordinatesPage() {
     const ids = targets.map((t) => t.id);
     let success = 0;
     let failed = 0;
+    let skippedFromSuggestion = 0;
     const concurrency = 4;
     let cursor = 0;
     const worker = async () => {
       while (cursor < ids.length) {
         const idx = cursor++;
         const id = ids[idx];
+        if (dirtyWithCoords.has(id)) {
+          skippedFromSuggestion++;
+          success++;
+          setBulkProgress((p) => p ? { ...p, done: p.done + 1 } : p);
+          continue;
+        }
         try {
           const res = await apiRequest("POST", `/api/objects/${id}/geocode`, { force: true });
           const result = (await res.json()) as GeocodeResult;
@@ -315,9 +488,12 @@ export default function MissingCoordinatesPage() {
     setBulkProgress(null);
     setSelected(new Set());
     invalidate();
+    const skippedSuffix = skippedFromSuggestion > 0
+      ? ` (${skippedFromSuggestion} satt direkt från valt förslag)`
+      : "";
     toast({
       title: "Massgeokodning klar",
-      description: `${success} lyckades, ${failed} misslyckades av ${ids.length}.`,
+      description: `${success} lyckades, ${failed} misslyckades av ${ids.length}.${skippedSuffix}`,
       variant: failed > 0 && success === 0 ? "destructive" : "default",
     });
   };
@@ -466,6 +642,8 @@ export default function MissingCoordinatesPage() {
             const draft = getDraft(item);
             const dirty = isDirty(item);
             const isSaving = savingId === item.id;
+            const sugg = suggestState[item.id];
+            const hasCoords = typeof draft.latitude === "number" && typeof draft.longitude === "number";
             return (
               <Card key={item.id} data-testid={`card-missing-${item.id}`}>
                 <CardContent className="p-4 flex flex-col gap-3">
@@ -484,25 +662,81 @@ export default function MissingCoordinatesPage() {
                         {item.customerName && <Badge variant="secondary" data-testid={`badge-customer-${item.id}`}><Building2 className="h-3 w-3 mr-1" />{item.customerName}</Badge>}
                         {item.clusterName && <Badge variant="secondary" data-testid={`badge-cluster-${item.id}`}><Layers className="h-3 w-3 mr-1" />{item.clusterName}</Badge>}
                         {dirty && <Badge variant="destructive" data-testid={`badge-dirty-${item.id}`}>Ändrad</Badge>}
+                        {hasCoords && (
+                          <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-700" data-testid={`badge-suggestion-${item.id}`}>
+                            <Check className="h-3 w-3 mr-1" />Förslag valt
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_auto] gap-2 items-end">
-                    <div>
+                    <div className="relative">
                       <label className="text-xs text-muted-foreground">Adress</label>
                       <Input
                         value={draft.address}
-                        onChange={(e) => updateDraft(item, { address: e.target.value })}
+                        onChange={(e) => handleAddressInputChange(item, e.target.value)}
+                        onFocus={() => {
+                          if ((suggestState[item.id]?.items.length ?? 0) > 0) {
+                            setSuggestState((prev) => ({
+                              ...prev,
+                              [item.id]: { ...prev[item.id], open: true } as SuggestionState,
+                            }));
+                          }
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => closeSuggestions(item.id), 150);
+                        }}
                         placeholder="Gatuadress"
+                        autoComplete="off"
                         data-testid={`input-address-${item.id}`}
                       />
+                      {sugg?.open && (sugg.loading || sugg.items.length > 0) && (
+                        <div
+                          className="absolute z-30 mt-1 w-full max-w-[480px] rounded-md border bg-popover text-popover-foreground shadow-lg"
+                          data-testid={`suggestions-${item.id}`}
+                        >
+                          {sugg.loading && sugg.items.length === 0 ? (
+                            <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground" data-testid={`suggestions-loading-${item.id}`}>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Söker adresser…
+                            </div>
+                          ) : (
+                            <ul className="max-h-64 overflow-y-auto py-1" role="listbox">
+                              {sugg.items.map((s, idx) => (
+                                <li key={`${s.placeId ?? idx}-${s.formattedAddress}`}>
+                                  <button
+                                    type="button"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => selectSuggestion(item, s)}
+                                    className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover-elevate active-elevate-2"
+                                    data-testid={`suggestion-${item.id}-${idx}`}
+                                  >
+                                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-medium truncate">{s.address || s.formattedAddress.split(",")[0]}</div>
+                                      <div className="text-xs text-muted-foreground truncate">
+                                        {[s.postalCode, s.city].filter(Boolean).join(" ") || s.formattedAddress}
+                                      </div>
+                                    </div>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div>
                       <label className="text-xs text-muted-foreground">Postnummer</label>
                       <Input
                         value={draft.postalCode}
-                        onChange={(e) => updateDraft(item, { postalCode: e.target.value })}
+                        onChange={(e) => updateDraft(item, {
+                          postalCode: e.target.value,
+                          latitude: undefined,
+                          longitude: undefined,
+                        })}
                         placeholder="123 45"
                         data-testid={`input-postal-${item.id}`}
                       />
@@ -511,7 +745,11 @@ export default function MissingCoordinatesPage() {
                       <label className="text-xs text-muted-foreground">Ort</label>
                       <Input
                         value={draft.city}
-                        onChange={(e) => updateDraft(item, { city: e.target.value })}
+                        onChange={(e) => updateDraft(item, {
+                          city: e.target.value,
+                          latitude: undefined,
+                          longitude: undefined,
+                        })}
                         placeholder="Ort"
                         data-testid={`input-city-${item.id}`}
                       />

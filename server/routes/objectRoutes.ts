@@ -3,7 +3,7 @@ import { storage } from "../storage";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
-import { geocodeAddress, searchDestinations, batchGeocode, isGoogleGeocodingAvailable, reverseGeocode, lookupCityFromPostalCode } from "../google-geocoding";
+import { geocodeAddress, searchDestinations, batchGeocode, isGoogleGeocodingAvailable, reverseGeocode, lookupCityFromPostalCode, autocompleteAddress } from "../google-geocoding";
 import { createInheritanceProcessor } from "../inheritance-processor";
 import { insertObjectParentSchema, objects, workOrders, workOrderObjects, objectArticles, objectContacts, objectImages, objectMetadata, objectParents, objectPayers, objectTimeRestrictions, geocodingMissingSnapshots } from "@shared/schema";
 import { asyncHandler } from "../asyncHandler";
@@ -67,6 +67,17 @@ app.post("/api/geocode/search-destinations", asyncHandler(async (req, res) => {
   const result = await searchDestinations(address, tenantId);
   if (!result) throw new NotFoundError("Destination");
   res.json(result);
+}));
+
+app.get("/api/geocode/autocomplete", asyncHandler(async (req, res) => {
+  const text = typeof req.query.text === "string" ? req.query.text : "";
+  if (text.trim().length < 3) {
+    return res.json({ suggestions: [] });
+  }
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "5"), 10) || 5, 1), 10);
+  const tenantId = getTenantIdWithFallback(req);
+  const suggestions = await autocompleteAddress(text, tenantId, limit);
+  res.json({ suggestions });
 }));
 
 app.get("/api/geocode/status", (_req, res) => {

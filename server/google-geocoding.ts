@@ -2,6 +2,7 @@ import { trackApiUsage } from "./api-usage-tracker";
 
 const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
 const GEOAPIFY_GEOCODE_URL = "https://api.geoapify.com/v1/geocode/search";
+const GEOAPIFY_AUTOCOMPLETE_URL = "https://api.geoapify.com/v1/geocode/autocomplete";
 const NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/search";
 const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse";
 const GEOAPIFY_REVERSE_URL = "https://api.geoapify.com/v1/geocode/reverse";
@@ -35,6 +36,19 @@ export interface SearchDestinationsResult extends GeocodingResult {
     type: string;
     text: string;
   }>;
+}
+
+export interface AddressSuggestion {
+  formattedAddress: string;
+  street?: string;
+  houseNumber?: string;
+  address?: string;
+  postalCode?: string;
+  city?: string;
+  latitude: number;
+  longitude: number;
+  placeId?: string;
+  resultType?: string;
 }
 
 async function nominatimFallback(address: string): Promise<GeocodingResult | null> {
@@ -239,6 +253,112 @@ export async function searchDestinations(
     console.error("[geocoding] SearchDestinations failed, falling back to Nominatim:", error);
     const fallback = await nominatimFallback(address);
     return fallback ? { ...fallback } : null;
+  }
+}
+
+export async function autocompleteAddress(
+  text: string,
+  tenantId?: string,
+  limit = 5
+): Promise<AddressSuggestion[]> {
+  const trimmed = text.trim();
+  if (trimmed.length < 3) return [];
+
+  if (!GEOAPIFY_API_KEY) {
+    try {
+      const params = new URLSearchParams({
+        q: trimmed,
+        format: "json",
+        countrycodes: "se",
+        addressdetails: "1",
+        limit: String(Math.min(limit, 10)),
+      });
+      const res = await fetch(`${NOMINATIM_BASE_URL}?${params.toString()}`, {
+        headers: { "User-Agent": "Plannix-FieldService/1.0" },
+      });
+      if (!res.ok) return [];
+      const data = (await res.json()) as Array<Record<string, any>>;
+      await trackApiUsage({
+        service: "nominatim",
+        endpoint: "/search",
+        method: "autocompleteAddress",
+        units: 1,
+        statusCode: res.status,
+        durationMs: 0,
+      });
+      return data.map((row) => {
+        const addr = row.address || {};
+        const street = addr.road || addr.pedestrian || addr.path;
+        const houseNumber = addr.house_number;
+        return {
+          formattedAddress: row.display_name as string,
+          street,
+          houseNumber,
+          address: street ? (houseNumber ? `${street} ${houseNumber}` : street) : undefined,
+          postalCode: addr.postcode,
+          city: addr.city || addr.town || addr.village,
+          latitude: parseFloat(row.lat),
+          longitude: parseFloat(row.lon),
+        } satisfies AddressSuggestion;
+      }).filter((s) => Number.isFinite(s.latitude) && Number.isFinite(s.longitude));
+    } catch (error) {
+      console.error("[geocoding] Nominatim autocomplete failed:", error);
+      return [];
+    }
+  }
+
+  const startTime = Date.now();
+  try {
+    const params = new URLSearchParams({
+      text: trimmed,
+      apiKey: GEOAPIFY_API_KEY,
+      lang: "sv",
+      filter: "countrycode:se",
+      limit: String(Math.min(limit, 10)),
+      format: "json",
+    });
+
+    const res = await fetch(`${GEOAPIFY_AUTOCOMPLETE_URL}?${params.toString()}`);
+    const data = await res.json();
+    const durationMs = Date.now() - startTime;
+
+    await trackApiUsage({
+      tenantId,
+      service: "geoapify-geocoding",
+      endpoint: "/geocode/autocomplete",
+      method: "autocompleteAddress",
+      units: 1,
+      statusCode: res.status,
+      durationMs,
+    });
+
+    const rows: any[] = Array.isArray(data?.results) ? data.results : [];
+    return rows
+      .map((row) => {
+        const street = row.street;
+        const houseNumber = row.housenumber;
+        const address = street
+          ? (houseNumber ? `${street} ${houseNumber}` : street)
+          : undefined;
+        const lat = typeof row.lat === "number" ? row.lat : parseFloat(row.lat);
+        const lon = typeof row.lon === "number" ? row.lon : parseFloat(row.lon);
+        return {
+          formattedAddress: row.formatted as string,
+          street,
+          houseNumber,
+          address,
+          postalCode: row.postcode,
+          city: row.city || row.town || row.village,
+          latitude: lat,
+          longitude: lon,
+          placeId: row.place_id,
+          resultType: row.result_type,
+        } satisfies AddressSuggestion;
+      })
+      .filter((s) => s.formattedAddress && Number.isFinite(s.latitude) && Number.isFinite(s.longitude));
+  } catch (error) {
+    console.error("[geocoding] Geoapify autocomplete failed:", error);
+    return [];
   }
 }
 
