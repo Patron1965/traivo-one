@@ -340,9 +340,9 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                     )}
                     {!missingDateLoading && missingDateJobs.map((job) => {
                       const customer = customerMap.get(job.customerId);
-                      const customerLabel = customer && /[\p{L}\p{N}]/u.test(customer.name) ? customer.name : null;
+                      const hasRealCustomer = customer && /[\p{L}\p{N}]/u.test(customer.name);
+                      const customerLabel = hasRealCustomer ? customer!.name : "Okänd kund";
                       const addressLabel = job.objectName || "Okänt objekt";
-                      const primaryLabel = customerLabel || addressLabel;
                       return (
                         <DraggableJobCard key={job.id} id={job.id}>
                           <Card
@@ -353,11 +353,14 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             <div className="space-y-0.5">
                               <div className="flex items-center gap-1.5">
                                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priorityDotColors[job.priority]}`} />
-                                <span className="text-xs font-medium truncate" title={primaryLabel}>{primaryLabel}</span>
+                                <span
+                                  className={`text-xs font-medium truncate ${hasRealCustomer ? "" : "italic text-muted-foreground"}`}
+                                  title={customerLabel}
+                                >
+                                  {customerLabel}
+                                </span>
                               </div>
-                              {customerLabel && (
-                                <div className="text-[10px] text-muted-foreground truncate" title={addressLabel}>{addressLabel}</div>
-                              )}
+                              <div className="text-[10px] text-muted-foreground truncate" title={addressLabel}>{addressLabel}</div>
                               <Button
                                 size="sm"
                                 variant="default"
@@ -549,9 +552,9 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
               {unscheduledJobs.map((job) => {
                 const customer = customerMap.get(job.customerId);
                 const jobCluster = job.clusterId ? clusterMap.get(job.clusterId) : null;
-                const customerLabel = customer && /[\p{L}\p{N}]/u.test(customer.name) ? customer.name : null;
+                const hasRealCustomer = customer && /[\p{L}\p{N}]/u.test(customer.name);
+                const customerLabel = hasRealCustomer ? customer!.name : "Okänd kund";
                 const addressLabel = job.objectName || "Okänt objekt";
-                const primaryLabel = customerLabel || addressLabel;
                 return (
                   <DraggableJobCard key={job.id} id={job.id}>
                     <Card
@@ -562,14 +565,18 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                       <div className="space-y-1">
                         <div className="flex items-center gap-1.5">
                           <span className={`w-2 h-2 rounded-full shrink-0 ${priorityDotColors[job.priority]}`} />
-                          <span className="text-sm font-medium truncate" title={primaryLabel} data-testid={`unscheduled-job-customer-${job.id}`}>{primaryLabel}</span>
+                          <span
+                            className={`text-sm font-medium truncate ${hasRealCustomer ? "" : "italic text-muted-foreground"}`}
+                            title={customerLabel}
+                            data-testid={`unscheduled-job-customer-${job.id}`}
+                          >
+                            {customerLabel}
+                          </span>
                           {job.priority === "urgent" && (
                             <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
                           )}
                         </div>
-                        {customerLabel && (
-                          <div className="text-xs text-muted-foreground truncate" title={addressLabel} data-testid={`unscheduled-job-address-${job.id}`}>{addressLabel}</div>
-                        )}
+                        <div className="text-xs text-muted-foreground truncate" title={addressLabel} data-testid={`unscheduled-job-address-${job.id}`}>{addressLabel}</div>
                         {jobCluster && (
                           <div className="flex items-center gap-1 text-[10px] text-muted-foreground" data-testid={`unscheduled-job-cluster-${job.id}`}>
                             <MapPin className="h-2.5 w-2.5" />
