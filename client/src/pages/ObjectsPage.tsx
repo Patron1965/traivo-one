@@ -672,12 +672,35 @@ export default function ObjectsPage() {
         const text = await file.text();
         setCsvData(text);
       } else {
-        const XLSX = await import("xlsx");
+        const ExcelJS = (await import("exceljs")).default;
         const buf = await file.arrayBuffer();
-        const wb = XLSX.read(buf, { type: "array" });
-        const firstSheet = wb.Sheets[wb.SheetNames[0]];
-        if (!firstSheet) throw new Error("Hittade inget kalkylblad");
-        const csv = XLSX.utils.sheet_to_csv(firstSheet);
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(buf);
+        const sheet = wb.worksheets[0];
+        if (!sheet) throw new Error("Hittade inget kalkylblad");
+        type RichTextCell = { richText: Array<{ text?: string }> };
+        type FormulaCell = { result?: string | number | boolean | Date | null; formula: string };
+        type HyperlinkCell = { text: string; hyperlink: string };
+        function excelCellToString(val: unknown): string {
+          if (val === null || val === undefined) return "";
+          if (val instanceof Date) return val.toISOString().split("T")[0];
+          if (typeof val === "object" && val !== null) {
+            if ("richText" in val) return (val as RichTextCell).richText.map((r) => r.text ?? "").join("");
+            if ("formula" in val) return String((val as FormulaCell).result ?? "");
+            if ("hyperlink" in val) return (val as HyperlinkCell).text;
+          }
+          return String(val);
+        }
+        const rows: string[][] = [];
+        sheet.eachRow({ includeEmpty: false }, (row) => {
+          const rowData: string[] = [];
+          const colCount = sheet.columnCount || row.cellCount;
+          for (let c = 1; c <= colCount; c++) {
+            rowData.push(excelCellToString(row.getCell(c).value));
+          }
+          rows.push(rowData);
+        });
+        const csv = rows.map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(",")).join("\n");
         setCsvData(csv);
       }
       toast({ title: "Fil inläst", description: `${file.name} är klar att importeras.` });

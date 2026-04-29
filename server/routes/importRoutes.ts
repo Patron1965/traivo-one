@@ -10,7 +10,7 @@ import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
 import multer from "multer";
 import Papa from "papaparse";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { importJobs, notifyImportProgress } from "./helpers";
 import { geocodeAddress, reverseGeocode } from "../google-geocoding";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
@@ -47,21 +47,41 @@ function isXlsxFile(file: Express.Multer.File): boolean {
   );
 }
 
+function cellValueToString(value: ExcelJS.CellValue): string {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) return value.toISOString().split("T")[0];
+  if (typeof value === "object") {
+    if ("richText" in value) return (value as ExcelJS.CellRichTextValue).richText.map((r) => r.text || "").join("");
+    if ("result" in value) return String((value as ExcelJS.CellFormulaValue).result ?? "");
+    if ("text" in value) return String((value as ExcelJS.CellHyperlinkValue).text || "");
+  }
+  return String(value);
+}
+
+async function readSheetAOA(buffer: Buffer): Promise<{ sheetName: string | null; aoa: string[][] }> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  const sheet = wb.worksheets[0];
+  if (!sheet) return { sheetName: null, aoa: [] };
+  const aoa: string[][] = [];
+  sheet.eachRow({ includeEmpty: false }, (row) => {
+    const colCount = sheet.columnCount || row.cellCount;
+    const rowData: string[] = [];
+    for (let c = 1; c <= colCount; c++) {
+      rowData.push(cellValueToString(row.getCell(c).value));
+    }
+    aoa.push(rowData);
+  });
+  return { sheetName: sheet.name, aoa };
+}
+
 // Enhetlig parser för Modus-uppladdningar – stödjer både CSV (semikolon) och XLSX.
 // Returnerar { rows, errors } där rows är Record<string,string>[] med tomma celler som "".
-function parseModusUpload(file: Express.Multer.File): { rows: Record<string, string>[]; errors: string[] } {
+async function parseModusUpload(file: Express.Multer.File): Promise<{ rows: Record<string, string>[]; errors: string[] }> {
   if (isXlsxFile(file)) {
     try {
-      const wb = XLSX.read(file.buffer, { type: "buffer" });
-      const sheetName = wb.SheetNames[0];
+      const { sheetName, aoa } = await readSheetAOA(file.buffer);
       if (!sheetName) return { rows: [], errors: ["Excel-filen saknar blad"] };
-      const sheet = wb.Sheets[sheetName];
-      const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
-        header: 1,
-        defval: "",
-        raw: false,
-        blankrows: false,
-      });
       if (aoa.length === 0) return { rows: [], errors: [] };
       const headers = (aoa[0] || []).map((c) => String(c ?? "").trim());
       const out: Record<string, string>[] = [];
@@ -113,16 +133,8 @@ const xlsxUpload = multer({
   },
 });
 
-function parseFortnoxXlsx(buffer: Buffer): Record<string, string>[] {
-  const wb = XLSX.read(buffer, { type: "buffer" });
-  const sheetName = wb.SheetNames[0];
-  if (!sheetName) return [];
-  const sheet = wb.Sheets[sheetName];
-  const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
-    header: 1,
-    defval: "",
-    raw: false,
-  });
+async function parseFortnoxXlsx(buffer: Buffer): Promise<Record<string, string>[]> {
+  const { aoa } = await readSheetAOA(buffer);
   if (aoa.length === 0) return [];
 
   // Hitta rubrikraden - den som innehåller "customer_number" eller "name"
@@ -693,7 +705,7 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
       throw new ValidationError("Ingen fil uppladdad");
     }
 
-    const parsed = parseModusUpload(req.file);
+    const parsed = await parseModusUpload(req.file);
     if (parsed.errors.length > 0) {
       return res.status(400).json({ error: "Filfel", details: parsed.errors });
     }
@@ -1028,7 +1040,7 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
       throw new ValidationError("Ingen fil uppladdad");
     }
 
-    const parsed = parseModusUpload(req.file);
+    const parsed = await parseModusUpload(req.file);
     if (parsed.errors.length > 0) {
       return res.status(400).json({ error: "Filfel", details: parsed.errors });
     }
@@ -1543,7 +1555,7 @@ app.post("/api/import/modus/tasks/validate", upload.single("file"), asyncHandler
     if (!req.file) {
       throw new ValidationError("Ingen fil uppladdad");
     }
-    const parsed = parseModusUpload(req.file);
+    const parsed = await parseModusUpload(req.file);
     if (parsed.errors.length > 0) {
       return res.status(400).json({ error: "Filfel", details: parsed.errors });
     }
@@ -1672,7 +1684,7 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
       throw new ValidationError("Ingen fil uppladdad");
     }
 
-    const parsed = parseModusUpload(req.file);
+    const parsed = await parseModusUpload(req.file);
     if (parsed.errors.length > 0) {
       return res.status(400).json({ error: "Filfel", details: parsed.errors });
     }
@@ -2232,7 +2244,7 @@ app.post("/api/import/modus/events", upload.single("file"), asyncHandler(async (
       throw new ValidationError("Ingen fil uppladdad");
     }
 
-    const parsed = parseModusUpload(req.file);
+    const parsed = await parseModusUpload(req.file);
     if (parsed.errors.length > 0) {
       return res.status(400).json({ error: "Filfel", details: parsed.errors });
     }
@@ -2361,7 +2373,7 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(
       throw new ValidationError("Ingen fil uppladdad");
     }
 
-    const parsed = parseModusUpload(req.file);
+    const parsed = await parseModusUpload(req.file);
     if (parsed.errors.length > 0) {
       return res.status(400).json({ error: "Filfel", details: parsed.errors });
     }
@@ -2842,7 +2854,7 @@ app.post("/api/import/fortnox-customers/validate", xlsxUpload.single("file"), as
   if (!req.file) throw new ValidationError("Ingen fil uppladdad");
   const tenantId = await getTenantIdWithFallback(req);
 
-  const rawRows = parseFortnoxXlsx(req.file.buffer);
+  const rawRows = await parseFortnoxXlsx(req.file.buffer);
   if (rawRows.length === 0) throw new ValidationError("Excel-filen är tom eller saknar rubriker");
 
   const mapped = rawRows.map((r) => mapFortnoxRow(r, parseInt(r.__rowNum || "0", 10)));
@@ -2929,7 +2941,7 @@ app.post("/api/import/fortnox-customers/bulk", xlsxUpload.single("file"), asyncH
     ? new Set(selectedRaw.split(",").map(s => s.trim()).filter(Boolean))
     : null;
 
-  const rawRows = parseFortnoxXlsx(req.file.buffer);
+  const rawRows = await parseFortnoxXlsx(req.file.buffer);
   if (rawRows.length === 0) throw new ValidationError("Excel-filen är tom");
   const mapped = rawRows.map((r) => mapFortnoxRow(r, parseInt(r.__rowNum || "0", 10)));
 
