@@ -30,6 +30,10 @@ interface PlannerToolbarProps {
   visibleResources: Resource[];
   hiddenResourceIds: Set<string>;
   setHiddenResourceIds: (v: Set<string>) => void;
+  weekRowMode?: "team" | "resource";
+  teamsData?: Array<{ id: string; name: string; color: string | null }>;
+  selectedTeamIds?: string[];
+  setSelectedTeamIds?: (ids: string[]) => void;
   onAddJob?: () => void;
   onAutoFill: () => void;
   onClearAll: () => void;
@@ -72,6 +76,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
     undoCount, redoCount, onUndo, onRedo,
     zoomLevel, setZoomLevel,
     resources, visibleResources, hiddenResourceIds, setHiddenResourceIds,
+    weekRowMode, teamsData = [], selectedTeamIds = [], setSelectedTeamIds,
     onAddJob, onAutoFill, onClearAll, onCarryOver, onUrgentJob, showAIPanel, onToggleAIPanel,
     weekGoals, weekTravelTotal,
     visibleDates, getResourceDayHours,
@@ -100,6 +105,24 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
     resources.forEach(r => { if (!assignedResourceIds.includes(r.id)) newHidden.add(r.id); });
     setHiddenResourceIds(newHidden);
   };
+
+  const isTeamFilterMode = viewMode === "week" && weekRowMode === "team" && teamsData.length > 0 && !!setSelectedTeamIds;
+  const allTeamIds = teamsData.map(t => t.id);
+  const teamIsVisible = (id: string) => selectedTeamIds.length === 0 || selectedTeamIds.includes(id);
+  const visibleTeamCount = teamsData.filter(t => teamIsVisible(t.id)).length;
+  const teamFilterActive = selectedTeamIds.length > 0 && selectedTeamIds.length < teamsData.length;
+
+  const toggleTeamVisibility = (teamId: string, checked: boolean) => {
+    if (!setSelectedTeamIds) return;
+    const effective = selectedTeamIds.length === 0 ? allTeamIds : selectedTeamIds;
+    let next = checked
+      ? Array.from(new Set([...effective, teamId]))
+      : effective.filter(id => id !== teamId);
+    if (next.length === allTeamIds.length) next = [];
+    setSelectedTeamIds(next);
+  };
+
+  const showAllTeams = () => setSelectedTeamIds && setSelectedTeamIds([]);
 
   const zoom = zoomLevels[zoomLevel];
 
@@ -187,59 +210,92 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                 <PopoverTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8 relative" data-testid="button-resource-filter">
                     <UsersRound className="h-4 w-4" />
-                    {hiddenResourceIds.size > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 rounded-full bg-primary text-[9px] text-primary-foreground flex items-center justify-center px-0.5">{visibleResources.length}/{resources.length}</span>
-                    )}
+                    {isTeamFilterMode
+                      ? teamFilterActive && (
+                          <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 rounded-full bg-primary text-[9px] text-primary-foreground flex items-center justify-center px-0.5">{visibleTeamCount}/{teamsData.length}</span>
+                        )
+                      : hiddenResourceIds.size > 0 && (
+                          <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 rounded-full bg-primary text-[9px] text-primary-foreground flex items-center justify-center px-0.5">{visibleResources.length}/{resources.length}</span>
+                        )}
                   </Button>
                 </PopoverTrigger>
               </TooltipTrigger>
-              <TooltipContent side="top">Filtrera resurser</TooltipContent>
+              <TooltipContent side="top">{isTeamFilterMode ? "Filtrera team" : "Filtrera resurser"}</TooltipContent>
             </Tooltip>
             <PopoverContent className="w-64 p-3" align="end" data-testid="popover-resource-filter">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Filtrera resurser</span>
-                {hiddenResourceIds.size > 0 && (
-                  <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => setHiddenResourceIds(new Set())} data-testid="button-show-all-resources">
-                    Visa alla
-                  </Button>
-                )}
-              </div>
-              {profiles.length > 0 && (
+              {isTeamFilterMode ? (
                 <>
-                  <div className="text-xs text-muted-foreground mb-1">Filtrera per profil</div>
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {profiles.map(p => (
-                      <Badge key={p.id} variant="outline" className="cursor-pointer text-[10px] px-1.5 py-0.5 hover:bg-accent" style={{ borderColor: p.color || undefined }} onClick={() => filterByProfile(p.id)} data-testid={`button-filter-profile-${p.id}`}>
-                        <span className="w-2 h-2 rounded-full mr-1 inline-block" style={{ backgroundColor: p.color || "#3B82F6" }} />
-                        {p.name}
-                      </Badge>
-                    ))}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">Filtrera team</span>
+                    {teamFilterActive && (
+                      <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={showAllTeams} data-testid="button-show-all-teams">
+                        Visa alla
+                      </Button>
+                    )}
                   </div>
-                  <Separator className="mb-2" />
+                  <div className="max-h-64 overflow-y-auto">
+                    <div className="space-y-1">
+                      {teamsData.map((team) => (
+                        <label key={team.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer" data-testid={`team-filter-${team.id}`}>
+                          <Checkbox
+                            checked={teamIsVisible(team.id)}
+                            onCheckedChange={(checked) => toggleTeamVisibility(team.id, !!checked)}
+                          />
+                          {team.color && <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: team.color }} />}
+                          <span className="text-xs truncate">{team.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">Filtrera resurser</span>
+                    {hiddenResourceIds.size > 0 && (
+                      <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => setHiddenResourceIds(new Set())} data-testid="button-show-all-resources">
+                        Visa alla
+                      </Button>
+                    )}
+                  </div>
+                  {profiles.length > 0 && (
+                    <>
+                      <div className="text-xs text-muted-foreground mb-1">Filtrera per profil</div>
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {profiles.map(p => (
+                          <Badge key={p.id} variant="outline" className="cursor-pointer text-[10px] px-1.5 py-0.5 hover:bg-accent" style={{ borderColor: p.color || undefined }} onClick={() => filterByProfile(p.id)} data-testid={`button-filter-profile-${p.id}`}>
+                            <span className="w-2 h-2 rounded-full mr-1 inline-block" style={{ backgroundColor: p.color || "#3B82F6" }} />
+                            {p.name}
+                          </Badge>
+                        ))}
+                      </div>
+                      <Separator className="mb-2" />
+                    </>
+                  )}
+                  <div className="max-h-64 overflow-y-auto">
+                    <div className="space-y-1">
+                      {resources.map((resource) => (
+                        <label key={resource.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer" data-testid={`resource-filter-${resource.id}`}>
+                          <Checkbox
+                            checked={!hiddenResourceIds.has(resource.id)}
+                            onCheckedChange={(checked) => {
+                              setHiddenResourceIds((() => {
+                                const next = new Set(hiddenResourceIds);
+                                if (checked) { next.delete(resource.id); } else { next.add(resource.id); }
+                                return next;
+                              })());
+                            }}
+                          />
+                          <Avatar className="h-5 w-5 shrink-0">
+                            <AvatarFallback className="text-[10px]">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                          </Avatar>
+                          <span className="text-xs truncate">{resource.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </>
               )}
-              <div className="max-h-64 overflow-y-auto">
-                <div className="space-y-1">
-                  {resources.map((resource) => (
-                    <label key={resource.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer" data-testid={`resource-filter-${resource.id}`}>
-                      <Checkbox
-                        checked={!hiddenResourceIds.has(resource.id)}
-                        onCheckedChange={(checked) => {
-                          setHiddenResourceIds((() => {
-                            const next = new Set(hiddenResourceIds);
-                            if (checked) { next.delete(resource.id); } else { next.add(resource.id); }
-                            return next;
-                          })());
-                        }}
-                      />
-                      <Avatar className="h-5 w-5 shrink-0">
-                        <AvatarFallback className="text-[10px]">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
-                      </Avatar>
-                      <span className="text-xs truncate">{resource.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
             </PopoverContent>
           </Popover>
 

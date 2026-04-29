@@ -177,6 +177,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             zoomLevel={d.zoomLevel} setZoomLevel={d.setZoomLevel}
             resources={d.resources} visibleResources={d.visibleResources}
             hiddenResourceIds={d.hiddenResourceIds} setHiddenResourceIds={d.setHiddenResourceIds}
+            weekRowMode={d.weekRowMode} teamsData={d.teamsData}
+            selectedTeamIds={d.selectedTeamIds} setSelectedTeamIds={d.setSelectedTeamIds}
             onAddJob={onAddJob} onAutoFill={() => { d.setAutoFillDialogOpen(true); }}
             onClearAll={() => d.setClearDialogOpen(true)}
             onCarryOver={d.handleCarryOver}
