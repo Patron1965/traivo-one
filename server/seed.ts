@@ -46,7 +46,7 @@ export async function seedDatabase() {
 
   const [tenant] = await db.insert(tenants).values({
     id: DEFAULT_TENANT_ID,
-    name: "Plannix",
+    name: "Kinab",
     orgNumber: "556789-1234",
     contactEmail: "info@traivo.se",
     contactPhone: "+46701234567",
@@ -722,8 +722,8 @@ export async function seedDatabase() {
       primaryColor: "#3B82F6",
       secondaryColor: "#6366F1",
       accentColor: "#F59E0B",
-      companyName: "Plannix",
-      headingText: "Plannix Field Service",
+      companyName: "Kinab",
+      headingText: "Kinab Field Service",
       subheadingText: "Planering som funkar",
       isPublished: true,
     });
@@ -1054,4 +1054,34 @@ async function migrateDefaultTenantToKinab() {
     await tx.execute(sql`DELETE FROM tenants WHERE id = ${OLD_ID}`);
     console.log(`[migration] Tenant rename complete — ${totalRows} child rows moved across ${childTables.length} tables`);
   });
+
+  await rebrandPlannixToKinab();
+}
+
+/**
+ * Idempotent: rewrite any leftover "Plannix" labels (tenant name + branding)
+ * for the kinab tenant so the visible UI matches the tenant rename.
+ */
+async function rebrandPlannixToKinab() {
+  const NEW_ID = "kinab";
+  try {
+    const tenantRes = await db.execute(sql`
+      UPDATE tenants SET name = 'Kinab' WHERE id = ${NEW_ID} AND name = 'Plannix'
+    `);
+    if (((tenantRes as any).rowCount ?? 0) > 0) {
+      console.log(`[migration] Renamed tenant '${NEW_ID}' display name 'Plannix' → 'Kinab'`);
+    }
+
+    const brandingRes = await db.execute(sql`
+      UPDATE tenant_branding
+      SET company_name = 'Kinab',
+          heading_text = CASE WHEN heading_text = 'Plannix Field Service' THEN 'Kinab Field Service' ELSE heading_text END
+      WHERE tenant_id = ${NEW_ID} AND company_name = 'Plannix'
+    `);
+    if (((brandingRes as any).rowCount ?? 0) > 0) {
+      console.log(`[migration] Rebranded tenant_branding for '${NEW_ID}' from 'Plannix' to 'Kinab'`);
+    }
+  } catch (err) {
+    console.warn(`[migration] rebrandPlannixToKinab skipped:`, err);
+  }
 }

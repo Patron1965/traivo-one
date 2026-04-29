@@ -371,7 +371,7 @@ function UserMenu() {
 function TenantLogo() {
   const { logoUrl, companyName } = useTenantBranding();
   const displayLogo = logoUrl || traivoLogo;
-  const displayName = companyName || "Plannix";
+  const displayName = companyName || "Kinab";
   const isDefaultLogo = !logoUrl;
 
   return (
