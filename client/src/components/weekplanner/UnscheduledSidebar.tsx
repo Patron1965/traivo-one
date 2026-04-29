@@ -73,7 +73,7 @@ interface UnscheduledSidebarProps {
   visibleResources?: Array<{ serviceArea?: string[] | null }>;
 }
 
-function SuggestPlacementButton({ job, currentWeekStart }: { job: WorkOrderWithObject; currentWeekStart?: Date }) {
+function SuggestPlacementButton({ job, currentWeekStart, className }: { job: WorkOrderWithObject; currentWeekStart?: Date; className?: string }) {
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<Array<{ resourceId: string; resourceName: string; date: string; startTime: string; score: number; reasons: string[] }> | null>(null);
   const { toast } = useToast();
@@ -102,7 +102,7 @@ function SuggestPlacementButton({ job, currentWeekStart }: { job: WorkOrderWithO
         <Button
           size="sm"
           variant="outline"
-          className="w-full mt-1"
+          className={className ?? "w-full mt-1"}
           onClick={handleSuggest}
           data-testid={`button-suggest-placement-${job.id}`}
         >
@@ -648,22 +648,24 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             </Badge>
                           )}
                         </div>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="default"
-                              className="w-full mt-1.5"
-                              onClick={(e) => onOpenAssignDialog(job, e)}
-                              data-testid={`button-assign-job-${job.id}`}
-                            >
-                              <UserPlus className="h-3.5 w-3.5 mr-1" />
-                              Tilldela
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Tilldela resurs och datum</TooltipContent>
-                        </Tooltip>
-                        <SuggestPlacementButton job={job} currentWeekStart={currentWeekStart} />
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <SuggestPlacementButton job={job} currentWeekStart={currentWeekStart} className="flex-1 h-7" />
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="h-7 px-2 shrink-0"
+                                onClick={(e) => onOpenAssignDialog(job, e)}
+                                data-testid={`button-assign-job-${job.id}`}
+                              >
+                                <UserPlus className="h-3.5 w-3.5 mr-1" />
+                                Tilldela
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Tilldela resurs och datum</TooltipContent>
+                          </Tooltip>
+                        </div>
                       </div>
                     </Card>
                   </DraggableJobCard>
