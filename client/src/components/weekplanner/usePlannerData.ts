@@ -477,6 +477,10 @@ export function usePlannerData() {
 
   // Team-row infrastructure (week view, weekRowMode === "team")
   const UNCATEGORIZED_TEAM_ID = "__uncategorized__";
+  const RESOURCE_FALLBACK_PREFIX = "__resource__";
+  const resourceFallbackId = useCallback((rid: string) => `${RESOURCE_FALLBACK_PREFIX}${rid}`, []);
+  const isResourceFallbackRow = useCallback((rowId: string) => rowId.startsWith(RESOURCE_FALLBACK_PREFIX), []);
+  const extractResourceId = useCallback((rowId: string) => rowId.slice(RESOURCE_FALLBACK_PREFIX.length), []);
   // Resource → list of team ids (a resource can belong to multiple teams)
   const resourceTeamMap = useMemo(() => {
     const m = new Map<string, string[]>();
@@ -502,7 +506,9 @@ export function usePlannerData() {
   // Job → list of team-row ids it should appear in. A job appears in:
   //  - its workOrder.teamId row (if set), AND
   //  - every team its resourceId is a member of (if no workOrder.teamId)
-  //  - "Okategoriserade" if neither yields a row
+  //  - a resource-fallback row when it has a resource but the resource has no team membership
+  //  - "Okategoriserade" when neither team nor resource is set, or when the referenced resource no longer exists
+  const resourceIdSet = useMemo(() => new Set(resources.map(r => r.id)), [resources]);
   const teamRowAssignments = useMemo(() => {
     const map = new Map<string, string[]>();
     for (const job of workOrders) {
@@ -510,20 +516,21 @@ export function usePlannerData() {
       const rows: string[] = [];
       if (job.teamId) {
         rows.push(job.teamId);
-      } else if (job.resourceId) {
+      } else if (job.resourceId && resourceIdSet.has(job.resourceId)) {
         const teamIds = resourceTeamMap.get(job.resourceId);
         if (teamIds && teamIds.length > 0) {
           for (const tid of teamIds) rows.push(tid);
         } else {
-          rows.push(UNCATEGORIZED_TEAM_ID);
+          rows.push(resourceFallbackId(job.resourceId));
         }
       } else {
+        // No team, no resource — or resource no longer exists (deleted). Always show somewhere.
         rows.push(UNCATEGORIZED_TEAM_ID);
       }
       map.set(job.id, rows);
     }
     return map;
-  }, [workOrders, resourceTeamMap]);
+  }, [workOrders, resourceTeamMap, resourceFallbackId, resourceIdSet]);
 
   const teamDayJobMap = useMemo(() => {
     const jobs: Record<string, Record<string, WorkOrderWithObject[]>> = {};
@@ -553,21 +560,43 @@ export function usePlannerData() {
   const getTeamDayHours = useCallback((rowId: string, day: Date) => teamDayJobMap.hours[rowId]?.[format(day, "yyyy-MM-dd")] || 0, [teamDayJobMap]);
 
   const teamRows = useMemo(() => {
-    const rows: Array<{ id: string; name: string; color: string | null; isUncategorized: boolean; memberCount: number }> = [];
+    const rows: Array<{ id: string; name: string; color: string | null; isUncategorized: boolean; isResourceFallback: boolean; resourceId: string | null; memberCount: number }> = [];
     const allowed = selectedTeamIds.length > 0 ? new Set(selectedTeamIds) : null;
     for (const t of teamsData) {
       if (allowed && !allowed.has(t.id)) continue;
-      rows.push({ id: t.id, name: t.name, color: t.color, isUncategorized: false, memberCount: teamSizeMap.get(t.id) || 0 });
+      rows.push({ id: t.id, name: t.name, color: t.color, isUncategorized: false, isResourceFallback: false, resourceId: null, memberCount: teamSizeMap.get(t.id) || 0 });
+    }
+    // Resource-fallback rows: one per resource that has scheduled jobs but no team membership.
+    // Only show when no team filter is active (mirrors UX for Okategoriserade).
+    if (!allowed) {
+      const fallbackRowIds = Object.keys(teamDayJobMap.jobs).filter(rid => isResourceFallbackRow(rid));
+      const fallbackRows: typeof rows = [];
+      for (const rowId of fallbackRowIds) {
+        const rid = extractResourceId(rowId);
+        const r = resources.find(rr => rr.id === rid);
+        if (!r) continue;
+        fallbackRows.push({
+          id: rowId,
+          name: r.name,
+          color: null,
+          isUncategorized: false,
+          isResourceFallback: true,
+          resourceId: rid,
+          memberCount: 1,
+        });
+      }
+      fallbackRows.sort((a, b) => a.name.localeCompare(b.name, "sv"));
+      rows.push(...fallbackRows);
     }
     const showUncategorized = !allowed || allowed.has(UNCATEGORIZED_TEAM_ID);
     if (showUncategorized) {
       const hasUncategorized = Object.keys(teamDayJobMap.jobs[UNCATEGORIZED_TEAM_ID] || {}).length > 0;
       if (hasUncategorized) {
-        rows.push({ id: UNCATEGORIZED_TEAM_ID, name: "Okategoriserade", color: null, isUncategorized: true, memberCount: 0 });
+        rows.push({ id: UNCATEGORIZED_TEAM_ID, name: "Okategoriserade", color: null, isUncategorized: true, isResourceFallback: false, resourceId: null, memberCount: 0 });
       }
     }
     return rows;
-  }, [teamsData, selectedTeamIds, teamDayJobMap, teamSizeMap]);
+  }, [teamsData, selectedTeamIds, teamDayJobMap, teamSizeMap, resources, isResourceFallbackRow, extractResourceId]);
 
   const teamWeekSummary = useMemo(() => {
     const s: Record<string, { totalHours: number; weeklyCapacity: number; pct: number }> = {};
@@ -576,8 +605,12 @@ export function usePlannerData() {
       let th = 0;
       for (const d of wd) th += teamDayJobMap.hours[row.id]?.[format(d, "yyyy-MM-dd")] || 0;
       // Capacity = sum of weeklyHours of team members (resources). For uncategorized: 0 (no implicit capacity).
+      // For resource-fallback rows: capacity = weeklyHours of that single resource.
       let cap = 0;
-      if (!row.isUncategorized) {
+      if (row.isResourceFallback && row.resourceId) {
+        const r = resources.find(rr => rr.id === row.resourceId);
+        if (r) cap = r.weeklyHours || 40;
+      } else if (!row.isUncategorized) {
         const memberIds = teamMembersData.filter(tm => tm.teamId === row.id).map(tm => tm.resourceId);
         for (const rid of memberIds) {
           const r = resources.find(rr => rr.id === rid);

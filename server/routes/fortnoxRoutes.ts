@@ -780,22 +780,66 @@ app.post("/api/auto-plan-week/apply", asyncHandler(async (req, res) => {
       throw new ValidationError("assignments[] required");
     }
 
+    // Pre-fetch tenant resources, team memberships, and teams so we can:
+    //  (a) validate that any assignment.resourceId belongs to this tenant, and
+    //  (b) infer team_id from the resource's team membership (cluster-match preferred).
+    const tenantResources = await storage.getResources(tenantId);
+    const tenantResourceIds = new Set(tenantResources.map(r => r.id));
+    const allMembers = await storage.getAllTeamMembers(tenantId);
+    const teams = await storage.getTeams(tenantId);
+    const teamClusterMap = new Map<string, string | null>();
+    for (const t of teams) teamClusterMap.set(t.id, t.clusterId ?? null);
+    const resourceTeamsMap = new Map<string, string[]>();
+    for (const tm of allMembers) {
+      const arr = resourceTeamsMap.get(tm.resourceId);
+      if (arr) {
+        if (!arr.includes(tm.teamId)) arr.push(tm.teamId);
+      } else {
+        resourceTeamsMap.set(tm.resourceId, [tm.teamId]);
+      }
+    }
+    const inferTeamId = (resourceId: string, clusterId: string | null | undefined): string | null => {
+      const teamIds = resourceTeamsMap.get(resourceId);
+      if (!teamIds || teamIds.length === 0) return null;
+      if (clusterId) {
+        const matching = teamIds.find(tid => teamClusterMap.get(tid) === clusterId);
+        if (matching) return matching;
+      }
+      return teamIds[0];
+    };
+
     const results = [];
+    const skipped: Array<{ workOrderId: string; reason: string }> = [];
     for (const assignment of assignments) {
       const workOrder = await storage.getWorkOrder(assignment.workOrderId);
-      if (!verifyTenantOwnership(workOrder, tenantId)) continue;
+      if (!verifyTenantOwnership(workOrder, tenantId)) {
+        skipped.push({ workOrderId: assignment.workOrderId, reason: "wo_not_in_tenant" });
+        continue;
+      }
+      // Validate resource belongs to same tenant — prevent cross-tenant assignment.
+      if (!assignment.resourceId || !tenantResourceIds.has(assignment.resourceId)) {
+        skipped.push({ workOrderId: assignment.workOrderId, reason: "resource_not_in_tenant" });
+        continue;
+      }
 
-      const updated = await storage.updateWorkOrder(assignment.workOrderId, {
+      const inferredTeamId = inferTeamId(assignment.resourceId, workOrder?.clusterId ?? null);
+      const updatePayload: Record<string, unknown> = {
         resourceId: assignment.resourceId,
         scheduledDate: new Date(assignment.scheduledDate),
         scheduledStartTime: assignment.scheduledStartTime,
         orderStatus: "planerad_pre",
         executionStatus: "planned_rough",
-      });
+      };
+      // Only set team_id when we can infer one; never overwrite an explicit team_id with null here.
+      if (inferredTeamId) {
+        updatePayload.teamId = inferredTeamId;
+      }
+
+      const updated = await storage.updateWorkOrder(assignment.workOrderId, updatePayload);
       results.push(updated);
     }
 
-    res.json({ applied: results.length });
+    res.json({ applied: results.length, skipped });
 }));
 
 // ============================================

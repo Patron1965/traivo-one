@@ -16,6 +16,8 @@ interface TeamRow {
   name: string;
   color: string | null;
   isUncategorized: boolean;
+  isResourceFallback?: boolean;
+  resourceId?: string | null;
   memberCount: number;
 }
 
@@ -78,6 +80,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
 
   const isTeamMode = rowMode === "team";
   const headerLabel = isTeamMode ? "Team" : "Resurser";
+  const firstFallbackIdx = useMemo(() => isTeamMode ? teamRows.findIndex(r => r.isResourceFallback) : -1, [isTeamMode, teamRows]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -127,88 +130,113 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
           })}
         </div>
 
-        {isTeamMode && teamRows.map((team) => {
+        {isTeamMode && teamRows.map((team, rowIdx) => {
           const summary = teamWeekSummary?.[team.id];
           const pct = summary?.pct ?? 0;
+          const isFallback = !!team.isResourceFallback;
+          const showFallbackHeader = isFallback && rowIdx === firstFallbackIdx;
+          // For fallback rows: drop on plain `${resourceId}|${dayStr}` so existing dnd routes via executeSchedule.
+          // For team rows: drop on `team:${teamId}|${dayStr}` so dnd routes via executeTeamSchedule.
+          const dayCapacity = isFallback ? HOURS_IN_DAY : (team.memberCount || 1) * HOURS_IN_DAY;
           return (
-            <div key={team.id} className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] border-b" data-testid={`team-row-${team.id}`}>
-              <div className="sticky left-0 bg-background z-10 p-3 border-r flex flex-col justify-between" style={{ minHeight: `${zoom.weekH}px` }}>
-                <div className="flex items-center gap-2">
-                  {team.color ? (
-                    <span className="h-6 w-6 rounded-full shrink-0 flex items-center justify-center" style={{ backgroundColor: team.color }} data-testid={`avatar-team-color-${team.id}`} />
-                  ) : !team.isUncategorized ? (
-                    <span
-                      className="h-6 w-6 rounded-full shrink-0 flex items-center justify-center bg-primary/15 text-primary text-[10px] font-semibold"
-                      data-testid={`avatar-team-initials-${team.id}`}
-                    >
-                      {team.name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() || "").join("") || team.name.slice(0, 2).toUpperCase()}
-                    </span>
-                  ) : null}
-                  <div className="flex-1 min-w-0">
-                    <div className={`text-sm font-medium truncate ${team.isUncategorized ? "text-muted-foreground italic" : ""}`} data-testid={`text-team-name-${team.id}`}>{team.name}</div>
-                    {!team.isUncategorized && <div className="text-[10px] text-muted-foreground">{team.memberCount} medlem{team.memberCount === 1 ? "" : "mar"}</div>}
+            <div key={team.id}>
+              {showFallbackHeader && (
+                <div
+                  className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] bg-muted/30 border-b border-t border-dashed"
+                  data-testid="section-resource-fallback"
+                >
+                  <div className="sticky left-0 bg-muted/30 z-10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-r col-span-1">
+                    Resurser utan team
+                  </div>
+                  <div className="col-span-5 px-3 py-1.5 text-[10px] text-muted-foreground italic">
+                    Order ligger på dessa resurser men de saknar teamtillhörighet
                   </div>
                 </div>
-                {summary && (
-                  <div className="mt-2">
-                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full ${getCapacityColor(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+              )}
+              <div className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] border-b" data-testid={`team-row-${team.id}`}>
+                <div className="sticky left-0 bg-background z-10 p-3 border-r flex flex-col justify-between" style={{ minHeight: `${zoom.weekH}px` }}>
+                  <div className="flex items-center gap-2">
+                    {team.color ? (
+                      <span className="h-6 w-6 rounded-full shrink-0 flex items-center justify-center" style={{ backgroundColor: team.color }} data-testid={`avatar-team-color-${team.id}`} />
+                    ) : !team.isUncategorized ? (
+                      <span
+                        className={`h-6 w-6 rounded-full shrink-0 flex items-center justify-center text-[10px] font-semibold ${isFallback ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" : "bg-primary/15 text-primary"}`}
+                        data-testid={`avatar-team-initials-${team.id}`}
+                      >
+                        {team.name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() || "").join("") || team.name.slice(0, 2).toUpperCase()}
+                      </span>
+                    ) : null}
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-sm font-medium truncate ${team.isUncategorized ? "text-muted-foreground italic" : ""}`} data-testid={`text-team-name-${team.id}`}>{team.name}</div>
+                      {isFallback ? (
+                        <div className="text-[10px] text-amber-600 dark:text-amber-400">Saknar team</div>
+                      ) : !team.isUncategorized ? (
+                        <div className="text-[10px] text-muted-foreground">{team.memberCount} medlem{team.memberCount === 1 ? "" : "mar"}</div>
+                      ) : null}
                     </div>
-                    <div className="text-[10px] text-muted-foreground mt-1 tabular-nums">{summary.totalHours.toFixed(1)}h / {summary.weeklyCapacity}h</div>
                   </div>
-                )}
-              </div>
-              {visibleDates.map((day, dayIndex) => {
-                const jobs = getJobsForTeamAndDay ? getJobsForTeamAndDay(team.id, day) : [];
-                const dayHours = getTeamDayHours ? getTeamDayHours(team.id, day) : 0;
-                const dayStr = format(day, "yyyy-MM-dd");
-                const droppableId = `team:${team.id}|${dayStr}`;
-                const teamCapacity = (team.memberCount || 1) * HOURS_IN_DAY;
-                const capacityPct = teamCapacity > 0 ? Math.round((dayHours / teamCapacity) * 100) : 0;
-                const isOverbooked = dayHours > teamCapacity;
-                let teamDropFit: { bg: string; label: string; color: string } | null = null;
-                if (activeDragJob && !team.isUncategorized && team.memberCount > 0) {
-                  const newHours = dayHours + (activeDragJob.estimatedDuration || 60) / 60;
-                  const projectedPct = teamCapacity > 0 ? (newHours / teamCapacity) * 100 : 0;
-                  if (projectedPct > 110) teamDropFit = { bg: "bg-red-100 dark:bg-red-950/40 ring-red-400", label: "Överbokar teamet", color: "text-red-600" };
-                  else if (projectedPct > 85) teamDropFit = { bg: "bg-orange-100 dark:bg-orange-950/40 ring-orange-400", label: "Tight", color: "text-orange-600" };
-                  else if (projectedPct > 65) teamDropFit = { bg: "bg-yellow-100 dark:bg-yellow-950/40 ring-yellow-400", label: "Belastad", color: "text-yellow-600" };
-                  else teamDropFit = { bg: "bg-green-100 dark:bg-green-950/40 ring-green-400", label: "Fri kapacitet", color: "text-green-600" };
-                }
-                return (
-                  <DroppableCell
-                    key={dayIndex}
-                    id={droppableId}
-                    className={`${zoomPadClass} border-r last:border-r-0 transition-colors overflow-hidden min-w-0 ${getCapacityBgColor(capacityPct)}`}
-                    style={{ minHeight: `${zoom.weekH}px` }}
-                    dragOverConflicts={dragOverConflicts?.[droppableId]}
-                    dropFitInfo={teamDropFit}
-                  >
-                    <div className="min-w-0 overflow-hidden" data-testid={`drop-zone-team-${team.id}-${dayStr}`}>
-                      <div className="flex items-center gap-1 mb-2">
-                        <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full transition-all ${getCapacityColor(capacityPct)}`} style={{ width: `${Math.min(capacityPct, 100)}%` }} />
-                        </div>
-                        <span className={`text-[10px] tabular-nums ${isOverbooked ? "text-red-600 dark:text-red-400 font-semibold" : capacityPct >= 85 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
-                          {dayHours.toFixed(1).replace(".", ",")}h
-                        </span>
+                  {summary && (
+                    <div className="mt-2">
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${getCapacityColor(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
                       </div>
-                      <div className={zoomGapClass}>
-                        {jobs.length === 0 && (
-                          <div className="flex items-center justify-center py-4 text-muted-foreground/40">
-                            <Plus className="h-4 w-4" />
-                          </div>
-                        )}
-                        {jobs.map((job) => (
-                          <DraggableJobCard key={job.id} id={job.id}>
-                            <JobCard job={job} compact {...jobCardProps} />
-                          </DraggableJobCard>
-                        ))}
-                      </div>
+                      <div className="text-[10px] text-muted-foreground mt-1 tabular-nums">{summary.totalHours.toFixed(1)}h / {summary.weeklyCapacity}h</div>
                     </div>
-                  </DroppableCell>
-                );
-              })}
+                  )}
+                </div>
+                {visibleDates.map((day, dayIndex) => {
+                  const jobs = getJobsForTeamAndDay ? getJobsForTeamAndDay(team.id, day) : [];
+                  const dayHours = getTeamDayHours ? getTeamDayHours(team.id, day) : 0;
+                  const dayStr = format(day, "yyyy-MM-dd");
+                  const droppableId = isFallback && team.resourceId
+                    ? `${team.resourceId}|${dayStr}`
+                    : `team:${team.id}|${dayStr}`;
+                  const capacityPct = dayCapacity > 0 ? Math.round((dayHours / dayCapacity) * 100) : 0;
+                  const isOverbooked = dayHours > dayCapacity;
+                  let teamDropFit: { bg: string; label: string; color: string } | null = null;
+                  if (activeDragJob && !team.isUncategorized && (isFallback || team.memberCount > 0)) {
+                    const newHours = dayHours + (activeDragJob.estimatedDuration || 60) / 60;
+                    const projectedPct = dayCapacity > 0 ? (newHours / dayCapacity) * 100 : 0;
+                    if (projectedPct > 110) teamDropFit = { bg: "bg-red-100 dark:bg-red-950/40 ring-red-400", label: isFallback ? "Överbokar resursen" : "Överbokar teamet", color: "text-red-600" };
+                    else if (projectedPct > 85) teamDropFit = { bg: "bg-orange-100 dark:bg-orange-950/40 ring-orange-400", label: "Tight", color: "text-orange-600" };
+                    else if (projectedPct > 65) teamDropFit = { bg: "bg-yellow-100 dark:bg-yellow-950/40 ring-yellow-400", label: "Belastad", color: "text-yellow-600" };
+                    else teamDropFit = { bg: "bg-green-100 dark:bg-green-950/40 ring-green-400", label: "Fri kapacitet", color: "text-green-600" };
+                  }
+                  return (
+                    <DroppableCell
+                      key={dayIndex}
+                      id={droppableId}
+                      className={`${zoomPadClass} border-r last:border-r-0 transition-colors overflow-hidden min-w-0 ${getCapacityBgColor(capacityPct)}`}
+                      style={{ minHeight: `${zoom.weekH}px` }}
+                      dragOverConflicts={dragOverConflicts?.[droppableId]}
+                      dropFitInfo={teamDropFit}
+                    >
+                      <div className="min-w-0 overflow-hidden" data-testid={isFallback ? `drop-zone-resource-fallback-${team.resourceId}-${dayStr}` : `drop-zone-team-${team.id}-${dayStr}`}>
+                        <div className="flex items-center gap-1 mb-2">
+                          <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${getCapacityColor(capacityPct)}`} style={{ width: `${Math.min(capacityPct, 100)}%` }} />
+                          </div>
+                          <span className={`text-[10px] tabular-nums ${isOverbooked ? "text-red-600 dark:text-red-400 font-semibold" : capacityPct >= 85 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
+                            {dayHours.toFixed(1).replace(".", ",")}h
+                          </span>
+                        </div>
+                        <div className={zoomGapClass}>
+                          {jobs.length === 0 && (
+                            <div className="flex items-center justify-center py-4 text-muted-foreground/40">
+                              <Plus className="h-4 w-4" />
+                            </div>
+                          )}
+                          {jobs.map((job) => (
+                            <DraggableJobCard key={job.id} id={job.id}>
+                              <JobCard job={job} compact {...jobCardProps} />
+                            </DraggableJobCard>
+                          ))}
+                        </div>
+                      </div>
+                    </DroppableCell>
+                  );
+                })}
+              </div>
             </div>
           );
         })}
