@@ -65,7 +65,7 @@ export default function LoginPage() {
 
             <div className="mt-10 pt-6 border-t border-slate-200 dark:border-slate-700 space-y-3">
               <a
-                href="/field-login"
+                href="/field"
                 className="flex items-center gap-3 px-4 py-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors group"
                 data-testid="link-field-login"
               >
