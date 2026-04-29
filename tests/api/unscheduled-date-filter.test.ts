@@ -130,13 +130,13 @@ describe("getUnscheduledWorkOrdersPaginated — datumfilter", () => {
     expect(result.missingDateFieldCount).toBe(3);
   });
 
-  it("filtrerar på deadline (planned_window_end) och räknar saknade fält", async () => {
+  it("filtrerar på SLA-deadline (planned_window_end) och räknar saknade fält", async () => {
     const result = await storage.getUnscheduledWorkOrdersPaginated(
       TEST_TENANT,
       50,
       0,
       undefined,
-      { field: "deadline", from: "2026-05-01", to: "2026-05-31" }
+      { field: "sla", from: "2026-05-01", to: "2026-05-31" }
     );
 
     const titles = result.workOrders.map((w) => w.title);

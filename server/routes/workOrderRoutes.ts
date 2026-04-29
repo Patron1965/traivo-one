@@ -25,15 +25,26 @@ app.get("/api/work-orders", asyncHandler(async (req, res) => {
   const status = req.query.status as string || undefined;
   const paginated = req.query.paginated === 'true';
   const search = req.query.search as string || undefined;
-  const dateFieldRaw = req.query.dateField as string | undefined;
-  const dateFromRaw = req.query.dateFrom as string | undefined;
-  const dateToRaw = req.query.dateTo as string | undefined;
-  const isoDate = /^\d{4}-\d{2}-\d{2}$/;
-  let dateFilter: { field: 'desired' | 'created' | 'deadline'; from?: string; to?: string } | undefined;
-  if (dateFieldRaw === 'desired' || dateFieldRaw === 'created' || dateFieldRaw === 'deadline') {
-    const from = dateFromRaw && isoDate.test(dateFromRaw) ? dateFromRaw : undefined;
-    const to = dateToRaw && isoDate.test(dateToRaw) ? dateToRaw : undefined;
-    if (from || to) dateFilter = { field: dateFieldRaw, from, to };
+  const dateFilterSchema = z.object({
+    dateField: z.enum(["desired", "created", "sla"]).optional(),
+    dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  });
+  const dateParse = dateFilterSchema.safeParse({
+    dateField: req.query.dateField,
+    dateFrom: req.query.dateFrom,
+    dateTo: req.query.dateTo,
+  });
+  if (!dateParse.success) {
+    throw new ValidationError("Ogiltiga datumfilter-parametrar");
+  }
+  let dateFilter: { field: 'desired' | 'created' | 'sla'; from?: string; to?: string } | undefined;
+  if (dateParse.data.dateField && (dateParse.data.dateFrom || dateParse.data.dateTo)) {
+    dateFilter = {
+      field: dateParse.data.dateField,
+      from: dateParse.data.dateFrom,
+      to: dateParse.data.dateTo,
+    };
   }
 
   if (!allDates && status !== 'unscheduled') {

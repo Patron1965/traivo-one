@@ -272,7 +272,7 @@ export interface IStorage {
   getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrderWithObject[]>;
   getWorkOrdersByExternalRefs(tenantId: string, refs: string[]): Promise<Array<{ id: string; externalReference: string | null; modusId: string | null; metadata: unknown }>>;
   getUnscheduledWorkOrders(tenantId: string, limit?: number): Promise<WorkOrderWithObject[]>;
-  getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string, dateFilter?: { field: 'desired' | 'created' | 'deadline'; from?: string; to?: string }): Promise<{ workOrders: WorkOrderWithObject[]; total: number; missingDateFieldCount?: number }>;
+  getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string, dateFilter?: { field: 'desired' | 'created' | 'sla'; from?: string; to?: string }): Promise<{ workOrders: WorkOrderWithObject[]; total: number; missingDateFieldCount?: number }>;
   getWorkOrdersPaginated(tenantId: string, limit: number, offset: number, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, status?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }>;
   bulkUnscheduleWorkOrders(tenantId: string, startDate: Date, endDate: Date, resourceIds?: string[]): Promise<number>;
   getWorkOrder(id: string): Promise<WorkOrder | undefined>;
@@ -2016,7 +2016,7 @@ export class DatabaseStorage implements IStorage {
     .limit(limit);
   }
 
-  async getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string, dateFilter?: { field: 'desired' | 'created' | 'deadline'; from?: string; to?: string }): Promise<{ workOrders: WorkOrderWithObject[]; total: number; missingDateFieldCount?: number }> {
+  async getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string, dateFilter?: { field: 'desired' | 'created' | 'sla'; from?: string; to?: string }): Promise<{ workOrders: WorkOrderWithObject[]; total: number; missingDateFieldCount?: number }> {
     const baseConditions: any[] = [
       eq(workOrders.tenantId, tenantId),
       isNull(workOrders.deletedAt),
@@ -2047,7 +2047,7 @@ export class DatabaseStorage implements IStorage {
           if (fromDate) parts.push(sql`COALESCE(${workOrders.desiredDeliveryEnd}, ${workOrders.desiredDeliveryStart}) >= ${fromDate}`);
           dateCondition = and(...parts);
           missingFieldCondition = isNull(workOrders.desiredDeliveryStart);
-        } else if (dateFilter.field === 'deadline') {
+        } else if (dateFilter.field === 'sla') {
           const parts: any[] = [isNotNull(workOrders.plannedWindowEnd)];
           if (fromDate) parts.push(gte(workOrders.plannedWindowEnd, fromDate));
           if (toDate) parts.push(lte(workOrders.plannedWindowEnd, toDate));

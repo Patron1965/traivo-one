@@ -7,6 +7,7 @@ import { RESTRICTION_TYPE_LABELS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { ViewMode, PlannerAction, WeatherForecastData, WeatherImpactDay, ConstraintData, ConstraintCell } from "./types";
+import { computeDateFilterParams, buildUnscheduledQueryString } from "./dateFilterUtils";
 import { HOURS_IN_DAY, DAY_START_HOUR, DAY_END_HOUR } from "./types";
 import type { WhatIfResult } from "./WhatIfPreview";
 
@@ -71,7 +72,7 @@ export function usePlannerData() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sidebarFiltersOpen, setSidebarFiltersOpen] = useState(false);
   const [unscheduledPage, setUnscheduledPage] = useState(0);
-  const [filterDateField, setFilterDateField] = useState<"none" | "desired" | "created" | "deadline">("none");
+  const [filterDateField, setFilterDateField] = useState<"none" | "desired" | "created" | "sla">("none");
   const [filterDatePeriod, setFilterDatePeriod] = useState<"all" | "week" | "two_weeks" | "month" | "custom">("all");
   const [filterDateCustomFrom, setFilterDateCustomFrom] = useState<string>("");
   const [filterDateCustomTo, setFilterDateCustomTo] = useState<string>("");
@@ -178,40 +179,24 @@ export function usePlannerData() {
 
   useEffect(() => { const t = setTimeout(() => { setDebouncedSearch(orderstockSearch); setUnscheduledPage(0); }, 300); return () => clearTimeout(t); }, [orderstockSearch]);
 
-  const dateFilterParams = useMemo(() => {
-    if (filterDateField === "none" || filterDatePeriod === "all") return null;
-    let from: string | null = null;
-    let to: string | null = null;
-    if (filterDatePeriod === "custom") {
-      from = filterDateCustomFrom || null;
-      to = filterDateCustomTo || null;
-    } else {
-      const start = currentWeekStart;
-      const days = filterDatePeriod === "week" ? 6 : filterDatePeriod === "two_weeks" ? 13 : 27;
-      from = format(start, "yyyy-MM-dd");
-      to = format(addDays(start, days), "yyyy-MM-dd");
-    }
-    if (!from && !to) return null;
-    return { field: filterDateField as "desired" | "created" | "deadline", from, to };
-  }, [filterDateField, filterDatePeriod, filterDateCustomFrom, filterDateCustomTo, currentWeekStart]);
+  const dateFilterParams = useMemo(() => computeDateFilterParams({
+    field: filterDateField,
+    period: filterDatePeriod,
+    customFrom: filterDateCustomFrom,
+    customTo: filterDateCustomTo,
+    weekStart: currentWeekStart,
+  }), [filterDateField, filterDatePeriod, filterDateCustomFrom, filterDateCustomTo, currentWeekStart]);
 
   const dateFilterActive = dateFilterParams !== null;
 
   useEffect(() => { setUnscheduledPage(0); }, [filterDateField, filterDatePeriod, filterDateCustomFrom, filterDateCustomTo]);
 
-  const buildUnscheduledParams = useCallback((offset: number) => {
-    const p = new URLSearchParams();
-    p.set("status", "unscheduled");
-    p.set("limit", String(UNSCHEDULED_PAGE_SIZE));
-    p.set("offset", String(offset));
-    if (debouncedSearch.trim()) p.set("search", debouncedSearch.trim());
-    if (dateFilterParams) {
-      p.set("dateField", dateFilterParams.field);
-      if (dateFilterParams.from) p.set("dateFrom", dateFilterParams.from);
-      if (dateFilterParams.to) p.set("dateTo", dateFilterParams.to);
-    }
-    return p.toString();
-  }, [debouncedSearch, dateFilterParams]);
+  const buildUnscheduledParams = useCallback((offset: number) => buildUnscheduledQueryString({
+    search: debouncedSearch,
+    offset,
+    limit: UNSCHEDULED_PAGE_SIZE,
+    dateFilter: dateFilterParams,
+  }), [debouncedSearch, dateFilterParams]);
 
   const unscheduledQueryParams = useMemo(() => buildUnscheduledParams(0), [buildUnscheduledParams]);
 
