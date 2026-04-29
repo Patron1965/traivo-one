@@ -458,21 +458,21 @@ app.post("/api/order-stock/recalculate", asyncHandler(async (req, res) => {
   const PAGE = 5000;
   const allIds: string[] = [];
   let page = 1;
-  let totalPages = 1;
-  do {
-    const result = await storage.getOrderStock(tenantId, {
+  while (true) {
+    const pageResult = await storage.getOrderStock(tenantId, {
       includeSimulated, scenarioId, orderStatus, activeOnly, startDate, endDate,
       page, pageSize: PAGE, search, metadataFilters,
     });
-    for (const o of result.orders) allIds.push(o.id);
-    totalPages = result.pagination?.totalPages ?? 1;
+    for (const o of pageResult.orders) allIds.push(o.id);
+    // Sluta när vi nått totalantalet eller fått en delsida.
+    if (allIds.length >= pageResult.total || pageResult.orders.length < PAGE) break;
     page++;
     // Safety-guard: bryt vid orimligt många sidor (≈500k ordrar).
     if (page > 100) break;
-  } while (page <= totalPages);
+  }
 
-  const result = await storage.recalculateWorkOrderTotalsBulk(allIds);
-  res.json({ matched: allIds.length, recalculated: result.recalculated, changed: result.changed });
+  const recalcResult = await storage.recalculateWorkOrderTotalsBulk(allIds);
+  res.json({ matched: allIds.length, recalculated: recalcResult.recalculated, changed: recalcResult.changed });
 }));
 
 app.post("/api/work-orders/:id/status", asyncHandler(async (req, res) => {
