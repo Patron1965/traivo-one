@@ -99,7 +99,7 @@ function NavBadge({ count }: { count: number }) {
   if (count === 0) return null;
   return (
     <span
-      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none"
+      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none flex-shrink-0"
       data-testid="badge-count"
     >
       {count > 99 ? "99+" : count}
@@ -639,12 +639,14 @@ export function TopNav() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-12 items-center justify-between gap-2 px-3 md:px-4">
-        <div className="flex items-center gap-2 md:gap-3 min-w-0">
-          <MobileNav />
-          <TenantLogo />
+      <div className="flex h-12 items-center gap-2 px-3 md:px-4">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+          <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
+            <MobileNav />
+            <TenantLogo />
+          </div>
 
-          <nav className="hidden md:flex items-center gap-0.5">
+          <nav className="hidden md:flex items-center gap-0.5 min-w-0 overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none] [&>*]:flex-shrink-0">
             <Button
               variant="ghost"
               size="icon"
@@ -694,7 +696,7 @@ export function TopNav() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           <div className="hidden 2xl:block">
             <GlobalSearch />
           </div>
@@ -713,10 +715,7 @@ export function TopNav() {
           </Button>
 
           <NotificationsBell />
-
-
           <TourMenu />
-
           <GlobalAIButton />
           <LanguageSwitcher />
           <ThemeToggle />

@@ -2,10 +2,10 @@ import { users, userTenantRoles, invitations, tenants, type User, type UpsertUse
 import { db } from "../../db";
 import { eq, and } from "drizzle-orm";
 
-const DEFAULT_TENANT_ID = "default-tenant";
+const DEFAULT_TENANT_ID = "kinab";
 
 async function resolveFallbackTenantId(): Promise<string | null> {
-  // Auto-assign new authenticated users only to the legacy demo "default-tenant"
+  // Auto-assign new authenticated users only to the legacy demo "kinab"
   // when it exists. In production single-tenant setups (e.g. Kinab) we never
   // auto-assign — every member must be invited explicitly via the invitation
   // flow to avoid broken-access-control where any signed-in Replit user would
@@ -115,13 +115,13 @@ class AuthStorage implements IAuthStorage {
         .set({ status: "used", usedBy: userId, usedAt: new Date() })
         .where(eq(invitations.id, invite.id));
 
-      if (invite.tenantId !== "default-tenant") {
+      if (invite.tenantId !== "kinab") {
         await db
           .delete(userTenantRoles)
           .where(
             and(
               eq(userTenantRoles.userId, userId),
-              eq(userTenantRoles.tenantId, "default-tenant"),
+              eq(userTenantRoles.tenantId, "kinab"),
               eq(userTenantRoles.role, "user")
             )
           );

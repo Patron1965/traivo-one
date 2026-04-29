@@ -2,7 +2,7 @@ import { db } from "./db";
 import { tenants, customers, objects, resources, workOrders, brandingTemplates, tenantBranding, userTenantRoles, users, metadataKatalog, clusters, teams } from "@shared/schema";
 import { sql, eq, and } from "drizzle-orm";
 
-const DEFAULT_TENANT_ID = "default-tenant";
+const DEFAULT_TENANT_ID = "kinab";
 
 function getCurrentWeekDates() {
   const now = new Date();
@@ -22,6 +22,9 @@ function getCurrentWeekDates() {
 export async function seedDatabase() {
   console.log("Starting database seed...");
 
+  // Rename legacy "default-tenant" → "kinab" if applicable (production migration).
+  await migrateDefaultTenantToKinab();
+
   // Skip seed entirely if any tenant already exists (production / customer setup).
   // Demo seed only runs against a completely empty tenants table.
   const defaultRows = await db
@@ -33,7 +36,6 @@ export async function seedDatabase() {
     console.log("Default demo tenant present, refreshing demo dates...");
     await refreshDemoWorkOrderDates();
     await seedSystemMetadataLabels();
-    await migrateKinabTeamsToDefaultTenant();
     return;
   }
   const anyTenant = await db.select({ id: tenants.id }).from(tenants).limit(1);
@@ -967,29 +969,89 @@ async function seedSystemMetadataLabels() {
   }
 }
 
-async function migrateKinabTeamsToDefaultTenant() {
-  const KINAB_TEAMS = [
-    { id: 'f49dac45-0158-4758-aa2f-f9bf3afff575', name: 'ADO 237',  description: 'Örsköldsvik.Östersund-Söderhamn', color: '#3bf748', createdAt: new Date('2026-04-29T15:48:42.650Z') },
-    { id: '1329eac5-b792-437d-b13d-f237530dbcb4', name: 'DSU',      description: 'Örnsköldsvik - Boden',           color: '#3B82F6', createdAt: new Date('2026-04-29T15:49:20.497Z') },
-    { id: '038b8657-f8e9-4157-8c1a-5d29105679a7', name: 'OJK-BÖ',   description: 'Sverige',                         color: '#f73b45', createdAt: new Date('2026-04-29T15:50:06.975Z') },
-    { id: '66d620e7-ab1f-47cb-8d9d-2f677fed9f90', name: 'IFA',      description: 'Stockholm',                       color: '#eaf73b', createdAt: new Date('2026-04-29T15:50:48.338Z') },
-    { id: 'e476013b-9aa7-4322-92e1-7ca8e5711ffa', name: 'BHO',      description: 'Enköping -Västerås- Uppsala',     color: '#f73bbb', createdAt: new Date('2026-04-29T15:51:50.576Z') },
-    { id: '5e1f8029-67f6-44b7-9415-260e12ba95cc', name: 'ZML - BÖ', description: 'Sverige',                         color: '#3bf7c8', createdAt: new Date('2026-04-29T15:52:47.930Z') },
-  ];
+/**
+ * Idempotent migration: renames the legacy "default-tenant" row to "kinab".
+ *
+ * Handles all idempotency states:
+ *   - Only "default-tenant" exists → insert "kinab", move children, delete old.
+ *   - Both exist (partial/aborted prior run) → move remaining children, delete old.
+ *   - Only "kinab" exists, no orphans → no-op.
+ *   - Neither exists → no-op.
+ *
+ * Uses a transaction-scoped advisory lock to prevent races on concurrent startups.
+ */
+async function migrateDefaultTenantToKinab() {
+  const OLD_ID = "default-tenant";
+  const NEW_ID = "kinab";
+  const LOCK_KEY = 7349821; // arbitrary constant for this migration
 
-  let inserted = 0;
-  for (const t of KINAB_TEAMS) {
-    const result = await db.execute(sql`
-      INSERT INTO teams (id, tenant_id, name, description, color, status, service_area, profile_ids, created_at)
-      VALUES (${t.id}, ${DEFAULT_TENANT_ID}, ${t.name}, ${t.description}, ${t.color}, 'active', '{}', '{}', ${t.createdAt.toISOString()}::timestamp)
-      ON CONFLICT (id) DO NOTHING
-      RETURNING id
-    `);
-    if ((result as any).rowCount && (result as any).rowCount > 0) inserted++;
+  const colRes = await db.execute(sql`
+    SELECT column_name FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'tenants'
+    ORDER BY ordinal_position
+  `);
+  const tenantCols = ((colRes as any).rows ?? []).map((r: any) => r.column_name as string);
+  if (tenantCols.length === 0) {
+    console.warn("[migration] tenants table has no columns, aborting");
+    return;
   }
-  if (inserted > 0) {
-    console.log(`[migration] Inserted ${inserted} kinab teams under ${DEFAULT_TENANT_ID}`);
-  } else {
-    console.log(`[migration] kinab→${DEFAULT_TENANT_ID} teams: nothing to insert (already present)`);
-  }
+  const colList = tenantCols.map((c: string) => `"${c}"`).join(", ");
+  const selectList = tenantCols
+    .map((c: string) => (c === "id" ? `'${NEW_ID}'` : `"${c}"`))
+    .join(", ");
+
+  const childRes = await db.execute(sql`
+    SELECT table_name FROM information_schema.columns
+    WHERE column_name = 'tenant_id' AND table_schema = 'public'
+  `);
+  const childTables = ((childRes as any).rows ?? []).map((r: any) => r.table_name as string);
+
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${LOCK_KEY})`);
+
+    const oldRow = await tx.execute(sql`SELECT 1 FROM tenants WHERE id = ${OLD_ID} LIMIT 1`);
+    const oldExists = ((oldRow as any).rows?.length ?? 0) > 0;
+    const newRow = await tx.execute(sql`SELECT 1 FROM tenants WHERE id = ${NEW_ID} LIMIT 1`);
+    const newExists = ((newRow as any).rows?.length ?? 0) > 0;
+
+    if (!oldExists && newExists) return;
+
+    if (!oldExists && !newExists) {
+      let orphans = 0;
+      for (const table of childTables) {
+        const r = await tx.execute(sql.raw(
+          `SELECT 1 FROM "${table}" WHERE tenant_id = '${OLD_ID}' LIMIT 1`
+        ));
+        if (((r as any).rows?.length ?? 0) > 0) orphans++;
+      }
+      if (orphans > 0) {
+        console.warn(`[migration] WARNING: ${orphans} child tables still reference '${OLD_ID}' but no parent row exists. Manual cleanup required.`);
+      }
+      return;
+    }
+
+    console.log(`[migration] Renaming tenant '${OLD_ID}' → '${NEW_ID}' (oldExists=${oldExists}, newExists=${newExists})`);
+
+    if (oldExists && !newExists) {
+      await tx.execute(sql.raw(`
+        INSERT INTO tenants (${colList})
+        SELECT ${selectList} FROM tenants WHERE id = '${OLD_ID}'
+      `));
+    }
+
+    let totalRows = 0;
+    for (const table of childTables) {
+      const result = await tx.execute(sql.raw(
+        `UPDATE "${table}" SET tenant_id = '${NEW_ID}' WHERE tenant_id = '${OLD_ID}'`
+      ));
+      const rows = (result as any).rowCount ?? 0;
+      if (rows > 0) {
+        totalRows += rows;
+        console.log(`[migration]   updated ${rows} rows in ${table}`);
+      }
+    }
+
+    await tx.execute(sql`DELETE FROM tenants WHERE id = ${OLD_ID}`);
+    console.log(`[migration] Tenant rename complete — ${totalRows} child rows moved across ${childTables.length} tables`);
+  });
 }

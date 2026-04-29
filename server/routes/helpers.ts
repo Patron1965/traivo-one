@@ -12,7 +12,7 @@ declare global {
   }
 }
 
-export const DEFAULT_TENANT_ID = "default-tenant";
+export const DEFAULT_TENANT_ID = "kinab";
 
 export function getErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;

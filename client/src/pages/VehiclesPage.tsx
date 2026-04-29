@@ -198,7 +198,7 @@ export default function VehiclesPage() {
         ...data,
         capacityTons: data.capacityTons ? parseFloat(data.capacityTons) : null,
         capacityVolume: data.capacityVolume ? parseFloat(data.capacityVolume) : null,
-        tenantId: "default-tenant",
+        tenantId: "kinab",
       };
       return apiRequest("POST", "/api/vehicles", payload);
     },
@@ -245,7 +245,7 @@ export default function VehiclesPage() {
     mutationFn: (data: EquipmentFormValues) => {
       const payload = {
         ...data,
-        tenantId: "default-tenant",
+        tenantId: "kinab",
       };
       return apiRequest("POST", "/api/equipment", payload);
     },

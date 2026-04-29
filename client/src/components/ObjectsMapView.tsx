@@ -433,7 +433,7 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
 
   const createClusterMutation = useMutation({
     mutationFn: async ({ name, objectIds }: { name: string; objectIds: string[] }) => {
-      const cluster = await apiRequest("POST", "/api/clusters", { name, tenantId: "default-tenant" });
+      const cluster = await apiRequest("POST", "/api/clusters", { name, tenantId: "kinab" });
       const clusterData = await cluster.json();
       await apiRequest("POST", "/api/objects/bulk-assign-cluster", { objectIds, clusterId: clusterData.id });
       return clusterData;

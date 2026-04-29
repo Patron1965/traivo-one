@@ -109,7 +109,7 @@ export default function PlanningParametersPage() {
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      tenantId: "default-tenant",
+      tenantId: "kinab",
       slaLevel: "standard",
       maxDaysToComplete: 14,
       advanceNotificationDays: 0,
@@ -175,7 +175,7 @@ export default function PlanningParametersPage() {
 
   const resetForm = () => {
     form.reset({
-      tenantId: "default-tenant",
+      tenantId: "kinab",
       slaLevel: "standard",
       maxDaysToComplete: 14,
       advanceNotificationDays: 0,

@@ -130,7 +130,7 @@ export async function registerRoutes(
     try {
       const user = req.user;
       if (!user?.claims?.sub) {
-        return res.json({ tenantId: "default-tenant", role: "user", tenants: [] });
+        return res.json({ tenantId: "kinab", role: "user", tenants: [] });
       }
       
       const tenants = await getUserTenants(user.claims.sub);

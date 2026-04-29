@@ -3,7 +3,7 @@ import { userTenantRoles } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 
 const TOMAS_USER_ID = "42556180";
-const DEFAULT_TENANT_ID = "default-tenant";
+const DEFAULT_TENANT_ID = "kinab";
 
 export async function fixInitialOwnerRole(): Promise<void> {
   const existing = await db

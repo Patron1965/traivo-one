@@ -61,7 +61,7 @@ async function getUserTenantRole(userId: string): Promise<TenantContext | null> 
     return null;
   }
 
-  const preferred = result.find(r => r.tenantId !== "default-tenant")
+  const preferred = result.find(r => r.tenantId !== "kinab")
     || result.find(r => r.assignedBy !== null)
     || result.find(r => r.role !== "user")
     || result[0];
@@ -217,7 +217,7 @@ export const requireTenantWithFallback: RequestHandler = async (req, res, next) 
     });
   }
 
-  if (tenantContext.tenantId === "default-tenant" && tenantContext.role === "user") {
+  if (tenantContext.tenantId === "kinab" && tenantContext.role === "user") {
     const isProduction = process.env.NODE_ENV === "production";
     if (isProduction) {
       return res.status(403).json({
@@ -236,7 +236,7 @@ export const requireTenantWithFallback: RequestHandler = async (req, res, next) 
       .where(eq(userTenantRoles.userId, userId));
 
     const hasAccess = allRoles.some(
-      r => r.tenantId !== "default-tenant" || r.assignedBy !== null || r.role !== "user"
+      r => r.tenantId !== "kinab" || r.assignedBy !== null || r.role !== "user"
     );
 
     if (!hasAccess) {
@@ -264,7 +264,7 @@ export function getTenantIdWithFallback(req: Request): string {
         "This indicates the requireTenantWithFallback middleware was not properly applied. " +
         "In production, this would return 401 Unauthorized."
       );
-      return "default-tenant";
+      return "kinab";
     } else {
       throw new Error("Tenant ID missing - Access denied");
     }

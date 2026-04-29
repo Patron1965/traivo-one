@@ -861,7 +861,7 @@ export default function ObjectsPage() {
       const accessMap: Record<string, string> = { "öppet": "open", "kod": "code", "nyckel/bricka": "key", "personligt möte": "meeting" };
       
       const newObj = {
-        tenantId: "default-tenant",
+        tenantId: "kinab",
         customerId: "",
         name,
         objectType: typeIdx >= 0 ? (typeMap[values[typeIdx]?.toLowerCase()] || "fastighet") : "fastighet",

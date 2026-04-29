@@ -1,7 +1,7 @@
 import { storage } from "./storage";
 import { notificationService } from "./notifications";
 
-const DEFAULT_TENANT_ID = "default-tenant";
+const DEFAULT_TENANT_ID = "kinab";
 
 interface AnomalyAlert {
   id: string;

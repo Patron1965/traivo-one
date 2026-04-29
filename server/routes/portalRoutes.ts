@@ -791,7 +791,7 @@ app.post("/api/portal/auth/demo-login", asyncHandler(async (req, res) => {
       return res.status(404).json({ error: "Demo-inloggning är inte tillgänglig i produktion" });
     }
     const demoEmail = "demo@traivo.se";
-    const tenantId = "default-tenant";
+    const tenantId = "kinab";
     
     const customer = await storage.getCustomerByEmail(demoEmail, tenantId);
     if (!customer) {

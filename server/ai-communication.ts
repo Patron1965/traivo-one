@@ -55,7 +55,7 @@ export async function generateAICompletionSummary(
   workOrder: { title: string; description?: string | null; notes?: string | null },
   object: { name: string; address?: string | null },
   notes?: string | null,
-  tenantId: string = "default-tenant"
+  tenantId: string = "kinab"
 ): Promise<AICompletionSummary> {
   try {
     const { enforceBudgetAndRateLimit, withRetry } = await import("./ai-budget-service");

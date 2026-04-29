@@ -13,7 +13,7 @@ mcpServer.resource(
   "work-orders",
   new ResourceTemplate("work-orders://{status?}", { list: undefined }),
   async (uri, { status }) => {
-    const workOrders = await storage.getWorkOrders("default-tenant");
+    const workOrders = await storage.getWorkOrders("kinab");
     const filtered = status 
       ? workOrders.filter(wo => wo.orderStatus === status)
       : workOrders;
@@ -32,7 +32,7 @@ mcpServer.resource(
   "resources",
   new ResourceTemplate("resources://list", { list: undefined }),
   async (uri) => {
-    const resources = await storage.getResources("default-tenant");
+    const resources = await storage.getResources("kinab");
     return {
       contents: [{
         uri: uri.href,
@@ -47,7 +47,7 @@ mcpServer.resource(
   "clusters",
   new ResourceTemplate("clusters://list", { list: undefined }),
   async (uri) => {
-    const clusters = await storage.getClusters("default-tenant");
+    const clusters = await storage.getClusters("kinab");
     return {
       contents: [{
         uri: uri.href,
@@ -67,7 +67,7 @@ mcpServer.tool(
     limit: z.number().optional().describe("Max antal ordrar att returnera (default 20)"),
   },
   async ({ date, status, limit = 20 }) => {
-    const workOrders = await storage.getWorkOrders("default-tenant");
+    const workOrders = await storage.getWorkOrders("kinab");
     let filtered = workOrders;
     
     if (date) {
@@ -98,7 +98,7 @@ mcpServer.tool(
   "Hämta lista över alla resurser (fordon/personal)",
   {},
   async () => {
-    const resources = await storage.getResources("default-tenant");
+    const resources = await storage.getResources("kinab");
     return {
       content: [{
         type: "text" as const,
@@ -113,7 +113,7 @@ mcpServer.tool(
   "Hämta alla kluster med geografisk information",
   {},
   async () => {
-    const clusters = await storage.getClusters("default-tenant");
+    const clusters = await storage.getClusters("kinab");
     return {
       content: [{
         type: "text" as const,
@@ -165,8 +165,8 @@ mcpServer.tool(
   },
   async ({ date }) => {
     const targetDate = date || new Date().toISOString().split("T")[0];
-    const workOrders = await storage.getWorkOrders("default-tenant");
-    const resources = await storage.getResources("default-tenant");
+    const workOrders = await storage.getWorkOrders("kinab");
+    const resources = await storage.getResources("kinab");
     
     const todayOrders = workOrders.filter(wo => {
       if (!wo.scheduledDate) return false;
