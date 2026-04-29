@@ -141,16 +141,21 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
   const { isServiceAvailable, callOptimizationService, convertORToolsToVRPResult } = await import("./services/optimizationQueue");
   const { enrichVRPRequestWithConstraints } = await import("./vrp-constraints");
   const { storage } = await import("./storage");
+  const { buildTeamVehicles } = await import("./team-vehicles");
 
   const tenantId = input.tenantId;
   await updateProgress(jobId, 10);
 
-  const [workOrders, resources, objects, clusters] = await Promise.all([
+  const [workOrders, resources, objects, _clusters, teams, teamMembersAll] = await Promise.all([
     storage.getWorkOrders(tenantId),
     storage.getResources(tenantId),
     storage.getObjects(tenantId),
     storage.getClusters(tenantId),
+    storage.getTeams(tenantId),
+    storage.getAllTeamMembers(tenantId),
   ]);
+
+  const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources);
 
   await updateProgress(jobId, 20);
 
@@ -191,8 +196,7 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
     };
   });
 
-  const baseAgents = resources
-    .filter(r => r.resourceType === "person" || r.resourceType === "vehicle" || !r.resourceType)
+  const baseAgents = teamVehicles
     .map(r => ({
       start_location: [r.homeLongitude || 18.07, r.homeLatitude || 59.33] as [number, number],
       end_location: [r.homeLongitude || 18.07, r.homeLatitude || 59.33] as [number, number],
@@ -201,13 +205,17 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
       description: r.name,
     }));
 
+  if (baseAgents.length === 0) {
+    throw new Error("Inga aktiva team med medlemmar hittades. Skapa ett team med minst en medlem för att köra ruttoptimering.");
+  }
+
   await updateProgress(jobId, 40);
 
   const constraintResult = await enrichVRPRequestWithConstraints(
     baseJobs,
     baseAgents,
     validOrders,
-    resources,
+    teamVehicles,
     objects,
     input.constraintOptions,
   );
@@ -277,7 +285,7 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
       durationMin: Math.round(s.duration / 60),
     }];
   }));
-  const vehicleMap = new Map(resources.map(r => [r.id, r.name]));
+  const vehicleMap = new Map(teamVehicles.map(r => [r.id, r.name]));
 
   const vrpResult = convertORToolsToVRPResult(orResult, stopMap, vehicleMap);
   vrpResult.constraintsApplied = [
@@ -293,17 +301,25 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
 async function executeVRPJob(jobId: string, input: VRPJobInput): Promise<VRPOptimizationResult> {
   const { storage } = await import("./storage");
   const { optimizeRoutesVRP, DEFAULT_BREAK_CONFIG } = await import("./route-optimizer");
+  const { buildTeamVehicles } = await import("./team-vehicles");
 
   const tenantId = input.tenantId;
 
   await updateProgress(jobId, 10);
 
-  const [workOrders, resources, objects, clusters] = await Promise.all([
+  const [workOrders, resources, objects, clusters, teams, teamMembersAll] = await Promise.all([
     storage.getWorkOrders(tenantId),
     storage.getResources(tenantId),
     storage.getObjects(tenantId),
     storage.getClusters(tenantId),
+    storage.getTeams(tenantId),
+    storage.getAllTeamMembers(tenantId),
   ]);
+
+  const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources);
+  if (teamVehicles.length === 0) {
+    throw new Error("Inga aktiva team med medlemmar hittades. Skapa ett team med minst en medlem för att köra ruttoptimering.");
+  }
 
   await updateProgress(jobId, 25);
 
@@ -333,7 +349,7 @@ async function executeVRPJob(jobId: string, input: VRPJobInput): Promise<VRPOpti
 
   const result = await optimizeRoutesVRP(
     filteredOrders,
-    resources,
+    teamVehicles,
     objects,
     clusters,
     breakConfig,

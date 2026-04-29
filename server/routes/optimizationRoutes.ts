@@ -53,11 +53,16 @@ async function buildOptimizationPayload(
   tenantId: string,
   constraintOptions?: VRPConstraintOptions,
 ): Promise<{ stops: OptimizationStop[]; vehicles: OptimizationVehicle[]; constraintsApplied: string[] }> {
-  const [workOrders, resources, objects] = await Promise.all([
+  const { buildTeamVehicles } = await import("../team-vehicles");
+  const [workOrders, resources, objects, teams, teamMembersAll] = await Promise.all([
     storage.getWorkOrders(tenantId),
     storage.getResources(tenantId),
     storage.getObjects(tenantId),
+    storage.getTeams(tenantId),
+    storage.getAllTeamMembers(tenantId),
   ]);
+
+  const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources);
 
   const objectMap = new Map(objects.map(o => [o.id, o]));
 
@@ -92,8 +97,7 @@ async function buildOptimizationPayload(
     };
   });
 
-  const baseAgents = resources
-    .filter(r => r.resourceType === "person" || r.resourceType === "vehicle" || !r.resourceType)
+  const baseAgents = teamVehicles
     .map(r => ({
       start_location: [r.homeLongitude || 18.07, r.homeLatitude || 59.33] as [number, number],
       end_location: [r.homeLongitude || 18.07, r.homeLatitude || 59.33] as [number, number],
@@ -106,7 +110,7 @@ async function buildOptimizationPayload(
     baseJobs,
     baseAgents,
     filteredOrders,
-    resources,
+    teamVehicles,
     objects,
     options,
   );
@@ -223,12 +227,20 @@ export async function registerOptimizationRoutes(app: Express) {
     }
 
     const { optimizeRoutesVRP, DEFAULT_BREAK_CONFIG } = await import("../route-optimizer");
-    const [workOrders, resources, objects, clusters] = await Promise.all([
+    const { buildTeamVehicles } = await import("../team-vehicles");
+    const [workOrders, resources, objects, clusters, teams, teamMembersAll] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
       storage.getObjects(tenantId),
       storage.getClusters(tenantId),
+      storage.getTeams(tenantId),
+      storage.getAllTeamMembers(tenantId),
     ]);
+
+    const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources);
+    if (teamVehicles.length === 0) {
+      throw new ValidationError("Inga aktiva team med medlemmar hittades. Skapa ett team med minst en medlem för att köra ruttoptimering.");
+    }
 
     let filteredOrders = workOrders;
     if (req.body.date) {
@@ -244,7 +256,7 @@ export async function registerOptimizationRoutes(app: Express) {
       o.orderStatus !== "utford" && o.orderStatus !== "fakturerad"
     );
 
-    const result = await optimizeRoutesVRP(filteredOrders, resources, objects, clusters, DEFAULT_BREAK_CONFIG, constraints);
+    const result = await optimizeRoutesVRP(filteredOrders, teamVehicles, objects, clusters, DEFAULT_BREAK_CONFIG, constraints);
 
     res.json(result);
   }));
@@ -318,11 +330,14 @@ export async function registerOptimizationRoutes(app: Express) {
     let applied = 0;
     let failed = 0;
 
+    // route.resourceId är teamId (team-baserad ruttoptimering).
+    // Tilldela ordern till teamet och nollställ ev. tidigare individuell resurs.
     for (const route of result.routes) {
       for (const stop of route.stops) {
         try {
           await storage.updateWorkOrder(stop.orderId, {
-            resourceId: route.resourceId,
+            teamId: route.resourceId,
+            resourceId: null,
           });
           applied++;
         } catch {

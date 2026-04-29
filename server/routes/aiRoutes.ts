@@ -1139,16 +1139,28 @@ app.post("/api/ai/optimize-routes", asyncHandler(async (req, res) => {
 app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
     const { optimizeRoutesVRP, DEFAULT_BREAK_CONFIG } = await import("../route-optimizer");
     const { createOptimizationJob, ASYNC_THRESHOLD } = await import("../optimization-job-runner");
+    const { buildTeamVehicles } = await import("../team-vehicles");
     const { date, clusterId, breakConfig: reqBreakConfig, constraints } = req.body;
     
     const tenantId = getTenantIdWithFallback(req);
-    const [workOrders, resources, objects, clusters, tenant] = await Promise.all([
+    const [workOrders, resources, objects, clusters, tenant, teams, teamMembersAll] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
       storage.getObjects(tenantId),
       storage.getClusters(tenantId),
       storage.getTenant(tenantId),
+      storage.getTeams(tenantId),
+      storage.getAllTeamMembers(tenantId),
     ]);
+
+    const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources);
+    if (teamVehicles.length === 0) {
+      res.status(400).json({
+        success: false,
+        error: "Inga aktiva team med medlemmar hittades. Skapa ett team med minst en medlem för att kunna köra ruttoptimering.",
+      });
+      return;
+    }
     
     let filteredOrders = workOrders;
     
@@ -1199,7 +1211,7 @@ app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
       return;
     }
     
-    const result = await optimizeRoutesVRP(filteredOrders, resources, objects, clusters, breakConfig, constraintOptions);
+    const result = await optimizeRoutesVRP(filteredOrders, teamVehicles, objects, clusters, breakConfig, constraintOptions);
     res.json(result);
 }));
 
@@ -1480,13 +1492,14 @@ app.post("/api/ai/optimize-vrp/apply", asyncHandler(async (req, res) => {
     
     const results: Array<{ orderId: string; success: boolean; error?: string }> = [];
     
+    // route.resourceId är teamId (team-baserad ruttoptimering).
+    // Tilldela ordern till teamet och nollställ ev. tidigare individuell resurs.
     for (const route of routes) {
       for (const stop of route.stops) {
         try {
-          // Update work order with resource assignment only
-          // (sequenceOrder is tracked on assignment_articles, not work_orders)
           const updated = await storage.updateWorkOrder(stop.orderId, {
-            resourceId: route.resourceId,
+            teamId: route.resourceId,
+            resourceId: null,
           });
           results.push({ orderId: stop.orderId, success: !!updated });
         } catch (err) {
@@ -1499,7 +1512,7 @@ app.post("/api/ai/optimize-vrp/apply", asyncHandler(async (req, res) => {
     res.json({ 
       applied: successCount, 
       total: results.length,
-      message: `${successCount} ordrar uppdaterade med optimerad sekvens`,
+      message: `${successCount} ordrar tilldelade till team enligt optimerad rutt`,
       results 
     });
 }));
