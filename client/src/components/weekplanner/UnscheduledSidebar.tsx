@@ -661,8 +661,8 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             <TooltipTrigger asChild>
                               <Button
                                 size="sm"
-                                variant="default"
-                                className="h-7 px-2 shrink-0"
+                                variant="outline"
+                                className="flex-1 h-7"
                                 onClick={(e) => onOpenAssignDialog(job, e)}
                                 data-testid={`button-assign-job-${job.id}`}
                               >
