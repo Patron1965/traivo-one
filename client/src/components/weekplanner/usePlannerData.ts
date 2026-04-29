@@ -38,6 +38,7 @@ function loadSavedFilters(): {
   viewMode: ViewMode;
   weekRowMode: "team" | "resource";
   selectedTeamIds?: string[];
+  showUntiedTeamRows?: boolean;
 } | null {
   try {
     const stored = localStorage.getItem(PLANNER_FILTERS_KEY);
@@ -121,15 +122,16 @@ export function usePlannerData() {
   const [activeDragJob, setActiveDragJob] = useState<WorkOrderWithObject | null>(null);
   const [weekRowMode, setWeekRowMode] = useState<"team" | "resource">(saved?.weekRowMode ?? "team");
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(Array.isArray(saved?.selectedTeamIds) ? saved!.selectedTeamIds! : []);
+  const [showUntiedTeamRows, setShowUntiedTeamRows] = useState<boolean>(saved?.showUntiedTeamRows ?? false);
   const { toast } = useToast();
 
   useEffect(() => {
     savePlannerFilters({
       filterCustomer, filterPriority, filterCluster, filterTeam,
       filterExecutionCode, hiddenResourceIds: Array.from(hiddenResourceIds),
-      zoomLevel, showUnscheduled, viewMode, weekRowMode, selectedTeamIds,
+      zoomLevel, showUnscheduled, viewMode, weekRowMode, selectedTeamIds, showUntiedTeamRows,
     });
-  }, [filterCustomer, filterPriority, filterCluster, filterTeam, filterExecutionCode, hiddenResourceIds, zoomLevel, showUnscheduled, viewMode, weekRowMode, selectedTeamIds]);
+  }, [filterCustomer, filterPriority, filterCluster, filterTeam, filterExecutionCode, hiddenResourceIds, zoomLevel, showUnscheduled, viewMode, weekRowMode, selectedTeamIds, showUntiedTeamRows]);
 
   const { data: teamsData = [] } = useQuery<Array<{ id: string; name: string; clusterId: string | null; color: string | null }>>({ queryKey: ["/api/teams"] });
   const { data: teamMembersData = [] } = useQuery<Array<{ teamId: string; resourceId: string }>>({ queryKey: ["/api/team-members"] });
@@ -567,8 +569,9 @@ export function usePlannerData() {
       rows.push({ id: t.id, name: t.name, color: t.color, isUncategorized: false, isResourceFallback: false, resourceId: null, memberCount: teamSizeMap.get(t.id) || 0 });
     }
     // Resource-fallback rows: one per resource that has scheduled jobs but no team membership.
-    // Only show when no team filter is active (mirrors UX for Okategoriserade).
-    if (!allowed) {
+    // Show when no team filter is active, OR when filter active and the user opted in via showUntiedTeamRows.
+    const includeUntied = !allowed || showUntiedTeamRows;
+    if (includeUntied) {
       const fallbackRowIds = Object.keys(teamDayJobMap.jobs).filter(rid => isResourceFallbackRow(rid));
       const fallbackRows: typeof rows = [];
       for (const rowId of fallbackRowIds) {
@@ -588,7 +591,7 @@ export function usePlannerData() {
       fallbackRows.sort((a, b) => a.name.localeCompare(b.name, "sv"));
       rows.push(...fallbackRows);
     }
-    const showUncategorized = !allowed || allowed.has(UNCATEGORIZED_TEAM_ID);
+    const showUncategorized = !allowed || allowed.has(UNCATEGORIZED_TEAM_ID) || showUntiedTeamRows;
     if (showUncategorized) {
       const hasUncategorized = Object.keys(teamDayJobMap.jobs[UNCATEGORIZED_TEAM_ID] || {}).length > 0;
       if (hasUncategorized) {
@@ -596,7 +599,40 @@ export function usePlannerData() {
       }
     }
     return rows;
-  }, [teamsData, selectedTeamIds, teamDayJobMap, teamSizeMap, resources, isResourceFallbackRow, extractResourceId]);
+  }, [teamsData, selectedTeamIds, showUntiedTeamRows, teamDayJobMap, teamSizeMap, resources, isResourceFallbackRow, extractResourceId]);
+
+  // When team filter is active and the user has not opted in to showing untied rows,
+  // compute how many fallback resources / jobs and uncategorized jobs are hidden in the
+  // currently visible week so the planner knows that more work exists outside the filter.
+  const hiddenUntiedTeamSummary = useMemo(() => {
+    const filterActive = selectedTeamIds.length > 0;
+    if (!filterActive || showUntiedTeamRows) return null;
+    if (viewMode !== "week") return null;
+    const dateKeys = visibleDates.map(d => format(d, "yyyy-MM-dd"));
+    let fallbackResources = 0;
+    let fallbackJobs = 0;
+    const fallbackRowIds = Object.keys(teamDayJobMap.jobs).filter(rid => isResourceFallbackRow(rid));
+    for (const rowId of fallbackRowIds) {
+      let rowJobs = 0;
+      for (const dk of dateKeys) {
+        rowJobs += teamDayJobMap.jobs[rowId]?.[dk]?.length || 0;
+      }
+      if (rowJobs > 0) {
+        fallbackResources += 1;
+        fallbackJobs += rowJobs;
+      }
+    }
+    const includeUncategorizedInHidden = !selectedTeamIds.includes(UNCATEGORIZED_TEAM_ID);
+    let uncategorizedJobs = 0;
+    if (includeUncategorizedInHidden) {
+      for (const dk of dateKeys) {
+        uncategorizedJobs += teamDayJobMap.jobs[UNCATEGORIZED_TEAM_ID]?.[dk]?.length || 0;
+      }
+    }
+    const totalJobs = fallbackJobs + uncategorizedJobs;
+    if (fallbackResources === 0 && totalJobs === 0) return null;
+    return { fallbackResources, fallbackJobs, uncategorizedJobs, totalJobs };
+  }, [selectedTeamIds, showUntiedTeamRows, viewMode, visibleDates, teamDayJobMap, isResourceFallbackRow]);
 
   const teamWeekSummary = useMemo(() => {
     const s: Record<string, { totalHours: number; weeklyCapacity: number; pct: number }> = {};
@@ -1137,6 +1173,7 @@ export function usePlannerData() {
     customers, clusters, clusterMap, customerMap, teamsData, teamMembersData,
     weekRowMode, setWeekRowMode,
     selectedTeamIds, setSelectedTeamIds,
+    showUntiedTeamRows, setShowUntiedTeamRows, hiddenUntiedTeamSummary,
     teamRows, getJobsForTeamAndDay, getTeamDayHours, teamWeekSummary,
     executeTeamSchedule,
     workOrders, workOrdersLoading,

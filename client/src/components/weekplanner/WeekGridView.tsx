@@ -1,6 +1,7 @@
 import { memo, useMemo } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertTriangle, Plus, Navigation, Cloud, Sun, CloudRain, Snowflake, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { AlertTriangle, Plus, Navigation, Cloud, Sun, CloudRain, Snowflake, ShieldAlert, ShieldCheck, ShieldX, EyeOff } from "lucide-react";
 import { format, isSameDay } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject, ObjectTimeRestriction } from "@shared/schema";
@@ -49,6 +50,10 @@ interface WeekGridViewProps {
   getJobsForTeamAndDay?: (teamId: string, day: Date) => WorkOrderWithObject[];
   getTeamDayHours?: (teamId: string, day: Date) => number;
   teamWeekSummary?: Record<string, { totalHours: number; weeklyCapacity: number; pct: number }>;
+  hiddenUntiedTeamSummary?: { fallbackResources: number; fallbackJobs: number; uncategorizedJobs: number; totalJobs: number } | null;
+  showingUntiedUnderFilter?: boolean;
+  onShowUntiedTeamRows?: () => void;
+  onHideUntiedTeamRows?: () => void;
 }
 
 function getWeatherIcon(code: number) {
@@ -73,6 +78,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
     onResourceClick, onSendSchedule, jobCardProps, dragOverConflicts, clusterMatchedResourceIds,
     showConstraintLayer, constraintMap,
     rowMode = "resource", teamRows = [], getJobsForTeamAndDay, getTeamDayHours, teamWeekSummary,
+    hiddenUntiedTeamSummary, showingUntiedUnderFilter, onShowUntiedTeamRows, onHideUntiedTeamRows,
   } = props;
 
   const zoomPadClass = zoom.scale <= 0.5 ? "p-0.5" : zoom.scale >= 2 ? "p-4" : "p-2";
@@ -129,6 +135,76 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
             );
           })}
         </div>
+
+        {isTeamMode && showingUntiedUnderFilter && onHideUntiedTeamRows && (
+          <div
+            className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] bg-blue-50 dark:bg-blue-950/20 border-b"
+            data-testid="banner-showing-untied-team"
+          >
+            <div className="sticky left-0 z-10 px-3 py-2 border-r flex items-center gap-2 bg-blue-50 dark:bg-blue-950/20">
+              <EyeOff className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">Filter + utan team</span>
+            </div>
+            <div className="col-span-5 px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
+              <span className="text-xs text-blue-800 dark:text-blue-200">
+                Visar även rader utan teamtillhörighet trots aktivt team-filter.
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                onClick={onHideUntiedTeamRows}
+                data-testid="button-hide-untied-team-rows"
+              >
+                Dölj igen
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {isTeamMode && hiddenUntiedTeamSummary && (
+          <div
+            className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] bg-amber-50 dark:bg-amber-950/20 border-b"
+            data-testid="banner-hidden-untied-team"
+          >
+            <div className="sticky left-0 z-10 px-3 py-2 border-r flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20">
+              <EyeOff className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Dolt av filter</span>
+            </div>
+            <div className="col-span-5 px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
+              <span className="text-xs text-amber-800 dark:text-amber-200" data-testid="text-hidden-untied-summary">
+                Team-filtret döljer{" "}
+                <strong className="font-semibold tabular-nums">{hiddenUntiedTeamSummary.totalJobs}</strong>{" "}
+                jobb
+                {hiddenUntiedTeamSummary.fallbackResources > 0 && (
+                  <>
+                    {" "}på{" "}
+                    <strong className="font-semibold tabular-nums">{hiddenUntiedTeamSummary.fallbackResources}</strong>{" "}
+                    resurs{hiddenUntiedTeamSummary.fallbackResources === 1 ? "" : "er"} utan team
+                  </>
+                )}
+                {hiddenUntiedTeamSummary.uncategorizedJobs > 0 && (
+                  <>
+                    {hiddenUntiedTeamSummary.fallbackResources > 0 ? " och " : " under "}
+                    <strong className="font-semibold tabular-nums">{hiddenUntiedTeamSummary.uncategorizedJobs}</strong>{" "}
+                    okategoriserade jobb
+                  </>
+                )}.
+              </span>
+              {onShowUntiedTeamRows && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                  onClick={onShowUntiedTeamRows}
+                  data-testid="button-show-untied-team-rows"
+                >
+                  Visa ändå
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
 
         {isTeamMode && teamRows.map((team, rowIdx) => {
           const summary = teamWeekSummary?.[team.id];
