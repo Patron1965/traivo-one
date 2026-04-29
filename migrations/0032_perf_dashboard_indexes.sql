@@ -2,8 +2,16 @@
 -- All statements are idempotent (CREATE ... IF NOT EXISTS) and safe to re-apply.
 -- Applied automatically via scripts/post-merge.sh.
 
--- Trigram extension (already enabled by 0029/0030, kept for safety).
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- Trigram extension (already attempted by 0029/0030, kept for safety).
+-- Best-effort install; ignore permission errors on managed Postgres.
+DO $$
+BEGIN
+  BEGIN
+    EXECUTE 'CREATE EXTENSION IF NOT EXISTS pg_trgm';
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'pg_trgm extension not available: %', SQLERRM;
+  END;
+END$$;
 
 -- ============================================================
 -- NOTE on raw-column GIN trigram indexes:
