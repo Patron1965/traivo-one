@@ -395,7 +395,6 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                   const next = v as "none" | "desired" | "created" | "sla";
                   setFilterDateField(next);
                   if (next === "none") { setFilterDatePeriod("all"); setFilterDateCustomFrom(""); setFilterDateCustomTo(""); }
-                  else if (filterDatePeriod === "all") { setFilterDatePeriod("week"); }
                 }}>
                   <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-date-field">
                     <SelectValue placeholder="Inget datumfilter" />

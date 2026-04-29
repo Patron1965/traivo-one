@@ -25,10 +25,17 @@ app.get("/api/work-orders", asyncHandler(async (req, res) => {
   const status = req.query.status as string || undefined;
   const paginated = req.query.paginated === 'true';
   const search = req.query.search as string || undefined;
+  const isValidIsoDate = (s: string): boolean => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    const [y, m, d] = s.split("-").map(Number);
+    if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+  };
   const dateFilterSchema = z.object({
     dateField: z.enum(["desired", "created", "sla"]).optional(),
-    dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    dateFrom: z.string().refine(isValidIsoDate, { message: "Ogiltigt datum (YYYY-MM-DD)" }).optional(),
+    dateTo: z.string().refine(isValidIsoDate, { message: "Ogiltigt datum (YYYY-MM-DD)" }).optional(),
   });
   const dateParse = dateFilterSchema.safeParse({
     dateField: req.query.dateField,
