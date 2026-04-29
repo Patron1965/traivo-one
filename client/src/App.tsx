@@ -368,7 +368,7 @@ function AppContent() {
     );
   }
 
-  if (location === "/field" || location === "/mobile" || location === "/simple") {
+  if (location === "/field" || location === "/field-login" || location === "/mobile" || location === "/simple") {
     if (isLoading) {
       return (
         <div className="flex items-center justify-center min-h-screen bg-background">

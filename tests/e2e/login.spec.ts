@@ -50,8 +50,7 @@ test.describe("Focused login page (/)", () => {
 
     const loginBtn = page.locator('[data-testid="button-login"]');
     await expect(loginBtn).toBeVisible({ timeout: 10000 });
-    const href = await loginBtn.locator("a").getAttribute("href");
-    expect(href).toBe("/api/login");
+    await expect(loginBtn).toHaveAttribute("href", "/api/login");
   });
 
   test("marketing link opens external Traivo site in new tab", async ({ page }) => {
@@ -73,7 +72,7 @@ test.describe("Focused login page (/)", () => {
     await page.goto("/");
     await page.waitForLoadState("networkidle");
 
-    await expect(page.locator('[data-testid="link-field-login"]')).toHaveAttribute("href", "/field");
+    await expect(page.locator('[data-testid="link-field-login"]')).toHaveAttribute("href", "/field-login");
     await expect(page.locator('[data-testid="link-portal-login"]')).toHaveAttribute("href", "/portal");
   });
 
