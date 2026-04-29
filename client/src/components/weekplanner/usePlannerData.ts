@@ -644,6 +644,21 @@ export function usePlannerData() {
     return reasons;
   }, [scheduledJobs, timewindowMap, restrictionsByObject, dependenciesData, workOrders, clusterMap, resources, hardClusterBlocking]);
 
+  const detectTeamConflictsForJob = useCallback((job: WorkOrderWithObject, teamId: string, dateStr: string): string[] => {
+    const base = detectConflictsForJob(job, "__team__", dateStr, null);
+    const teamJobs = teamDayJobMap.jobs[teamId]?.[dateStr] || [];
+    if (job.objectId) {
+      for (const other of teamJobs) {
+        if (other.id === job.id) continue;
+        if (other.objectId === job.objectId) {
+          base.push(`Samma objekt redan inplanerat hos teamet (${other.title || other.objectName || ""})`);
+          break;
+        }
+      }
+    }
+    return base;
+  }, [detectConflictsForJob, teamDayJobMap]);
+
   const activeStatuses = useMemo(() => new Set(["skapad", "planerad_pre", "planerad_resurs", "planerad_las"]), []);
   const jobConflicts = useMemo(() => { const c: Record<string, string[]> = {}; for (const j of scheduledJobs) { if (!j.scheduledDate || !j.resourceId) continue; if (!activeStatuses.has(j.orderStatus)) continue; const r = detectConflictsForJob(j, j.resourceId, format(new Date(j.scheduledDate), "yyyy-MM-dd"), j.scheduledStartTime || null); if (r.length > 0) c[j.id] = r; } return c; }, [scheduledJobs, detectConflictsForJob, activeStatuses]);
 
@@ -1077,7 +1092,7 @@ export function usePlannerData() {
     resourceJobCountForCurrentPeriod, currentPeriodRange,
     handleOptimizeRoute, handleClearAllScheduled, handleAutoFillPreview, handleAutoFillApply, handleCarryOver,
     handleOpenDepChain, handleToggleSubStep,
-    executeSchedule, detectConflictsForJob,
+    executeSchedule, detectConflictsForJob, detectTeamConflictsForJob,
     selectedJobIds, toggleJobSelection, clearSelection, selectAllVisible,
     whatIfOpen, setWhatIfOpen, whatIfLoading, whatIfResult, whatIfPending, setWhatIfPending,
     fetchWhatIf, handleWhatIfConfirm, handleWhatIfCancel,

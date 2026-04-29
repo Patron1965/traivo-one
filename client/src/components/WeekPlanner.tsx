@@ -61,6 +61,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     setRouteJobOrder: d.setRouteJobOrder,
     updateWorkOrderMutation: d.updateWorkOrderMutation,
     detectConflictsForJob: d.detectConflictsForJob,
+    detectTeamConflictsForJob: d.detectTeamConflictsForJob,
     setPendingSchedule: d.setPendingSchedule,
     setConflictDialogOpen: d.setConflictDialogOpen,
     executeSchedule: d.executeSchedule,

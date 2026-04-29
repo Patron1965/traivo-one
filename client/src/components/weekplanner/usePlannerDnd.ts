@@ -16,6 +16,7 @@ interface UsePlannerDndOptions {
   setRouteJobOrder: (order: string[]) => void;
   updateWorkOrderMutation: { mutate: (data: Record<string, unknown>) => void };
   detectConflictsForJob: (job: WorkOrderWithObject, resourceId: string, dateStr: string, startTime: string | null) => string[];
+  detectTeamConflictsForJob?: (job: WorkOrderWithObject, teamId: string, dateStr: string) => string[];
   setPendingSchedule: (schedule: { jobId: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; conflicts: string[] } | null) => void;
   setConflictDialogOpen: (open: boolean) => void;
   executeSchedule: (jobId: string, resourceId: string, dateStr: string, startTime?: string, clusterOverride?: boolean) => void;
@@ -31,7 +32,7 @@ interface UsePlannerDndOptions {
 export function usePlannerDnd({
   workOrders, viewMode, currentDate, routeJobsForView, routeJobOrder,
   resourceDayJobMap, setActiveDragJob, setRouteJobOrder, updateWorkOrderMutation,
-  detectConflictsForJob, setPendingSchedule, setConflictDialogOpen, executeSchedule, executeTeamSchedule, toast,
+  detectConflictsForJob, detectTeamConflictsForJob, setPendingSchedule, setConflictDialogOpen, executeSchedule, executeTeamSchedule, toast,
   selectedJobIds, clearSelection,
   setWhatIfPending, setWhatIfOpen, fetchWhatIf,
 }: UsePlannerDndOptions) {
@@ -101,7 +102,23 @@ export function usePlannerDnd({
     lastOverIdRef.current = dropId;
 
     if (dropId.startsWith("team:")) {
-      setDragOverConflicts({});
+      const job = workOrders.find(j => String(j.id) === String(active.id));
+      if (!job || !detectTeamConflictsForJob) {
+        setDragOverConflicts({});
+        return;
+      }
+      const rest = dropId.slice(5);
+      const [teamId, dateStr] = rest.split("|");
+      if (!teamId || !dateStr) {
+        setDragOverConflicts({});
+        return;
+      }
+      const conflicts = detectTeamConflictsForJob(job, teamId, dateStr);
+      if (conflicts.length > 0) {
+        setDragOverConflicts({ [dropId]: conflicts });
+      } else {
+        setDragOverConflicts({});
+      }
       return;
     }
 
@@ -137,7 +154,7 @@ export function usePlannerDnd({
     } else {
       setDragOverConflicts({});
     }
-  }, [workOrders, detectConflictsForJob, computeStartTime, selectedJobIds, resolveDropTarget]);
+  }, [workOrders, detectConflictsForJob, detectTeamConflictsForJob, computeStartTime, selectedJobIds, resolveDropTarget]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     setActiveDragJob(null);

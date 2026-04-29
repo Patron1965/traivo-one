@@ -166,6 +166,15 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                 const teamCapacity = (team.memberCount || 1) * HOURS_IN_DAY;
                 const capacityPct = teamCapacity > 0 ? Math.round((dayHours / teamCapacity) * 100) : 0;
                 const isOverbooked = dayHours > teamCapacity;
+                let teamDropFit: { bg: string; label: string; color: string } | null = null;
+                if (activeDragJob && !team.isUncategorized && team.memberCount > 0) {
+                  const newHours = dayHours + (activeDragJob.estimatedDuration || 60) / 60;
+                  const projectedPct = teamCapacity > 0 ? (newHours / teamCapacity) * 100 : 0;
+                  if (projectedPct > 110) teamDropFit = { bg: "bg-red-100 dark:bg-red-950/40 ring-red-400", label: "Överbokar teamet", color: "text-red-600" };
+                  else if (projectedPct > 85) teamDropFit = { bg: "bg-orange-100 dark:bg-orange-950/40 ring-orange-400", label: "Tight", color: "text-orange-600" };
+                  else if (projectedPct > 65) teamDropFit = { bg: "bg-yellow-100 dark:bg-yellow-950/40 ring-yellow-400", label: "Belastad", color: "text-yellow-600" };
+                  else teamDropFit = { bg: "bg-green-100 dark:bg-green-950/40 ring-green-400", label: "Fri kapacitet", color: "text-green-600" };
+                }
                 return (
                   <DroppableCell
                     key={dayIndex}
@@ -173,6 +182,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                     className={`${zoomPadClass} border-r last:border-r-0 transition-colors overflow-hidden min-w-0 ${getCapacityBgColor(capacityPct)}`}
                     style={{ minHeight: `${zoom.weekH}px` }}
                     dragOverConflicts={dragOverConflicts?.[droppableId]}
+                    dropFitInfo={teamDropFit}
                   >
                     <div className="min-w-0 overflow-hidden" data-testid={`drop-zone-team-${team.id}-${dayStr}`}>
                       <div className="flex items-center gap-1 mb-2">
