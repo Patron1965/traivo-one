@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -104,41 +103,34 @@ export function TaskTimewindowsEditor({ workOrderId, tenantId, readOnly = false 
 
   if (isLoading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            Önskade tidsfönster
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="animate-pulse space-y-2">
-            <div className="h-10 bg-muted rounded" />
-            <div className="h-10 bg-muted rounded" />
-          </div>
-        </CardContent>
-      </Card>
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Clock className="h-3.5 w-3.5" />
+          Önskade tidsfönster
+        </div>
+        <div className="animate-pulse h-10 bg-muted rounded" />
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Clock className="h-4 w-4" />
-          Önskade tidsfönster
-          <Badge variant="secondary" className="ml-1">{timewindows.length}</Badge>
-        </CardTitle>
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+          <Clock className="h-3.5 w-3.5" />
+          Önskade tidsfönster {timewindows.length > 0 && <span className="text-xs">({timewindows.length})</span>}
+        </h4>
         {!readOnly && timewindows.length < 3 && (
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button
                 size="sm"
-                variant="outline"
+                variant="ghost"
+                className="h-7 text-xs"
                 onClick={resetForm}
                 data-testid="button-add-timewindow"
               >
-                <Plus className="h-4 w-4 mr-1" />
+                <Plus className="h-3.5 w-3.5 mr-1" />
                 Lägg till
               </Button>
             </DialogTrigger>
@@ -230,14 +222,10 @@ export function TaskTimewindowsEditor({ workOrderId, tenantId, readOnly = false 
             </DialogContent>
           </Dialog>
         )}
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {sortedTimewindows.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">
-            Inga önskade tidsfönster angivna
-          </p>
-        ) : (
-          sortedTimewindows.map((tw) => (
+      </div>
+      {sortedTimewindows.length > 0 && (
+        <div className="space-y-2">
+          {sortedTimewindows.map((tw) => (
             <div
               key={tw.id}
               className="flex items-center justify-between gap-2 p-3 rounded-md bg-muted/50"
@@ -269,14 +257,14 @@ export function TaskTimewindowsEditor({ workOrderId, tenantId, readOnly = false 
                 </Button>
               )}
             </div>
-          ))
-        )}
-        {timewindows.length >= 3 && !readOnly && (
-          <p className="text-xs text-muted-foreground text-center pt-2">
-            Max 3 alternativa tidsfönster kan anges
-          </p>
-        )}
-      </CardContent>
-    </Card>
+          ))}
+        </div>
+      )}
+      {timewindows.length >= 3 && !readOnly && (
+        <p className="text-xs text-muted-foreground text-center pt-1">
+          Max 3 alternativa tidsfönster kan anges
+        </p>
+      )}
+    </div>
   );
 }

@@ -6,7 +6,6 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -496,8 +495,8 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
               </Badge>
             )}
           </DialogTitle>
-          <DialogDescription>
-            Visa och hantera objekt kopplade till detta jobb.
+          <DialogDescription className="sr-only">
+            Detaljer och åtgärder för jobbet
           </DialogDescription>
           {hasBulkTargets && (
             <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-md bg-primary/10 border border-primary/20" data-testid="banner-bulk-selection">
@@ -514,43 +513,37 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
             <Loader2 className="h-6 w-6 animate-spin" />
           </div>
         ) : workOrder ? (
-          <div className="space-y-6 py-4">
-            <div className="space-y-3">
-              <h3 className="font-semibold text-lg">{workOrder.title}</h3>
-              {workOrder.description && (
-                <p className="text-muted-foreground text-sm">{workOrder.description}</p>
-              )}
-              
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  <span>{workOrder.customerName || "Okänd kund"}</span>
+          <div className="space-y-5 py-3">
+            <div className="space-y-2">
+              <h3 className="font-semibold text-base leading-tight">{workOrder.title}</h3>
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5" />
+                  <span className="text-foreground">{workOrder.customerName || "Okänd kund"}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                <div className="flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5" />
                   <span>{workOrder.objectAddress || workOrder.objectName || "Ingen adress"}</span>
                 </div>
-                {workOrder.scheduledDate && (
-                  <div className="flex items-center gap-2">
-                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                    <span>{format(new Date(workOrder.scheduledDate), "PPP", { locale: sv })}</span>
+                {workOrder.estimatedDuration && (
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5" />
+                    <span>{workOrder.estimatedDuration} min</span>
                   </div>
                 )}
-                {workOrder.estimatedDuration && (
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span>{workOrder.estimatedDuration} min</span>
+                {workOrder.scheduledDate && (
+                  <div className="flex items-center gap-1.5">
+                    <CalendarIcon className="h-3.5 w-3.5" />
+                    <span>{format(new Date(workOrder.scheduledDate), "PPP", { locale: sv })}</span>
                   </div>
                 )}
               </div>
             </div>
 
-            <Separator />
-
-            <div className="space-y-3">
+            <div className="space-y-2 pt-3 border-t">
               <div className="flex items-center justify-between">
-                <h4 className="font-medium flex items-center gap-2">
-                  <CalendarIcon className="h-4 w-4" />
+                <h4 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                  <CalendarIcon className="h-3.5 w-3.5" />
                   Önskad leveransperiod
                 </h4>
                 {desiredDirty && (
@@ -561,7 +554,7 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                     data-testid="button-save-desired-period"
                   >
                     {updateDesiredPeriodMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-                    Spara period
+                    Spara
                   </Button>
                 )}
               </div>
@@ -645,36 +638,32 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                   </AlertDescription>
                 </Alert>
               )}
-              <p className="text-xs text-muted-foreground">
-                Mjuk preferens — blockerar inte planering eller optimering.
-              </p>
             </div>
 
-            <Separator />
-
             {workOrder.tenantId && (
-              <TaskTimewindowsEditor
-                workOrderId={workOrder.id}
-                tenantId={workOrder.tenantId}
-              />
+              <div className="pt-3 border-t">
+                <TaskTimewindowsEditor
+                  workOrderId={workOrder.id}
+                  tenantId={workOrder.tenantId}
+                />
+              </div>
             )}
 
-            <Separator />
-
-            <div className="space-y-3">
+            <div className="space-y-2 pt-3 border-t">
               <div className="flex items-center justify-between">
-                <h4 className="font-medium flex items-center gap-2">
-                  <ShoppingCart className="h-4 w-4" />
-                  Artiklar
+                <h4 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                  <ShoppingCart className="h-3.5 w-3.5" />
+                  Artiklar {workOrderLines.length > 0 && <span className="text-xs">({workOrderLines.length})</span>}
                 </h4>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
                   onClick={() => setShowAddArticleDialog(true)}
                   data-testid="button-add-article"
                 >
-                  <Plus className="h-4 w-4 mr-1" />
-                  Lägg till artikel
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Lägg till
                 </Button>
               </div>
 
@@ -682,11 +671,7 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="h-4 w-4 animate-spin" />
                 </div>
-              ) : workOrderLines.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-4 text-center border rounded-md">
-                  Inga artiklar kopplade till detta jobb.
-                </div>
-              ) : (
+              ) : workOrderLines.length === 0 ? null : (
                 <div className="space-y-2">
                   {workOrderLines.map((line) => (
                     <div 
@@ -756,18 +741,16 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
               )}
             </div>
 
-            <Separator />
-
-            <div className="space-y-3">
+            <div className="space-y-2 pt-3 border-t">
               <div className="flex items-center justify-between">
-                <h4 className="font-medium flex items-center gap-2">
-                  <Package className="h-4 w-4" />
-                  Kopplade objekt {linkedObjects.length > 0 && `(${linkedObjects.length})`}
+                <h4 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                  <Package className="h-3.5 w-3.5" />
+                  Kopplade objekt {linkedObjects.length > 0 && <span className="text-xs">({linkedObjects.length})</span>}
                 </h4>
                 <div className="relative">
-                  <Button size="sm" variant="outline" data-testid="button-add-object" onClick={() => setObjectPopoverOpen(!objectPopoverOpen)}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    Lägg till objekt
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" data-testid="button-add-object" onClick={() => setObjectPopoverOpen(!objectPopoverOpen)}>
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    Lägg till
                   </Button>
                   {objectPopoverOpen && (
                     <div className="absolute z-50 mt-1 right-0 w-[350px] rounded-md border bg-popover shadow-md">
@@ -837,13 +820,7 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="h-4 w-4 animate-spin" />
                 </div>
-              ) : linkedObjects.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-4 text-center border rounded-md">
-                  Inga objekt kopplade till detta jobb ännu.
-                  <br />
-                  <span className="text-xs">Klicka "Lägg till objekt" för att koppla objekt.</span>
-                </div>
-              ) : (
+              ) : linkedObjects.length === 0 ? null : (
                 <ScrollArea className="h-[200px]">
                   <div className="space-y-2">
                     {linkedObjects.map((obj) => (
@@ -887,17 +864,15 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
               )}
             </div>
 
-            <Separator />
-
-            <div className="space-y-3">
+            <div className="space-y-2 pt-3 border-t">
               <div className="flex items-center justify-between">
-                <h4 className="font-medium flex items-center gap-2">
-                  <Tag className="h-4 w-4" />
-                  Metadata
+                <h4 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                  <Tag className="h-3.5 w-3.5" />
+                  Metadata {workOrderMetadata.length > 0 && <span className="text-xs">({workOrderMetadata.length})</span>}
                 </h4>
-                <Button size="sm" variant="outline" data-testid="button-add-metadata" onClick={() => setMetadataPopoverOpen(!metadataPopoverOpen)}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Lägg till metadata
+                <Button size="sm" variant="ghost" className="h-7 text-xs" data-testid="button-add-metadata" onClick={() => setMetadataPopoverOpen(!metadataPopoverOpen)}>
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Lägg till
                 </Button>
               </div>
 
@@ -985,13 +960,7 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="h-4 w-4 animate-spin" />
                 </div>
-              ) : workOrderMetadata.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-4 text-center border rounded-md">
-                  Ingen metadata kopplad till detta jobb ännu.
-                  <br />
-                  <span className="text-xs">Klicka "Lägg till metadata" för att lägga till.</span>
-                </div>
-              ) : (
+              ) : workOrderMetadata.length === 0 ? null : (
                 <ScrollArea className="h-[150px]">
                   <div className="space-y-2">
                     {workOrderMetadata.map((meta) => (
@@ -1045,21 +1014,20 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
               )}
             </div>
 
-            <Separator />
-
-            <div className="space-y-3">
+            <div className="space-y-2 pt-3 border-t">
               <div className="flex items-center justify-between">
-                <h4 className="font-medium flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4" />
-                  SMS & Kommunikation
+                <h4 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Kommunikation {communications.length > 0 && <span className="text-xs">({communications.length})</span>}
                 </h4>
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
+                  className="h-7 text-xs"
                   onClick={handleOpenSmsDialog}
                   data-testid="button-send-sms"
                 >
-                  <Send className="h-4 w-4 mr-1" />
+                  <Send className="h-3.5 w-3.5 mr-1" />
                   Skicka SMS
                 </Button>
               </div>
@@ -1068,11 +1036,7 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="h-4 w-4 animate-spin" />
                 </div>
-              ) : communications.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-4 text-center border rounded-md">
-                  Ingen kommunikation skickad för detta jobb ännu.
-                </div>
-              ) : (
+              ) : communications.length === 0 ? null : (
                 <ScrollArea className="h-[200px]">
                   <div className="space-y-2">
                     {communications.map((comm) => (
