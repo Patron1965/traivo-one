@@ -25,6 +25,7 @@ import {
   PriceListsTab,
   ResourcesExecutionTab,
   ResourceProfilesTab,
+  TeamMembersTab,
   IoTTab,
   TerminologyTab,
   BrandingTab,
@@ -80,7 +81,7 @@ export default function TenantConfigPage() {
       </Card>
 
       <Tabs defaultValue="company" className="w-full">
-        <TabsList className="grid w-full grid-cols-10">
+        <TabsList className="grid w-full grid-cols-11">
           <TabsTrigger value="company" data-testid="tab-company" className="flex items-center gap-2">
             <Building2 className="h-4 w-4" />
             <span className="hidden sm:inline">Företagsinfo</span>
@@ -108,6 +109,10 @@ export default function TenantConfigPage() {
           <TabsTrigger value="profiles" data-testid="tab-profiles" className="flex items-center gap-2">
             <Wrench className="h-4 w-4" />
             <span className="hidden sm:inline">Utföranderoller</span>
+          </TabsTrigger>
+          <TabsTrigger value="teams" data-testid="tab-teams" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            <span className="hidden sm:inline">Team</span>
           </TabsTrigger>
           <TabsTrigger value="metadata" data-testid="tab-metadata" className="flex items-center gap-2">
             <Tag className="h-4 w-4" />
@@ -143,6 +148,9 @@ export default function TenantConfigPage() {
         </TabsContent>
         <TabsContent value="profiles">
           <ResourceProfilesTab />
+        </TabsContent>
+        <TabsContent value="teams">
+          <TeamMembersTab />
         </TabsContent>
         <TabsContent value="metadata">
           <MetadataLabelsTab />
