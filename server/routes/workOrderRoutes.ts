@@ -554,7 +554,6 @@ app.post("/api/work-orders/:workOrderId/lines", asyncHandler(async (req, res) =>
   });
 
   const line = await storage.createWorkOrderLine(lineData);
-  await storage.recalculateWorkOrderTotals(req.params.workOrderId);
   res.status(201).json(line);
 }));
 
@@ -577,10 +576,6 @@ app.patch("/api/work-order-lines/:id", asyncHandler(async (req, res) => {
   const line = await storage.updateWorkOrderLine(req.params.id, updateData);
   if (!line) throw new NotFoundError("Orderrad");
 
-  if (line.workOrderId) {
-    await storage.recalculateWorkOrderTotals(line.workOrderId);
-  }
-
   res.json(line);
 }));
 
@@ -595,10 +590,6 @@ app.delete("/api/work-order-lines/:id", asyncHandler(async (req, res) => {
   }
 
   await storage.deleteWorkOrderLine(req.params.id);
-
-  if (line?.workOrderId) {
-    await storage.recalculateWorkOrderTotals(line.workOrderId);
-  }
 
   res.status(204).send();
 }));
@@ -787,7 +778,7 @@ app.post("/api/simulation-scenarios/:id/clone-orders", asyncHandler(async (req, 
         priceListIdUsed: line.priceListIdUsed,
         isOptional: line.isOptional,
         notes: line.notes
-      });
+      }, { skipRecalc: true });
     }
 
     await storage.recalculateWorkOrderTotals(clonedOrder.id);
@@ -891,7 +882,7 @@ app.post("/api/work-orders/bulk-apply-lines", asyncHandler(async (req, res) => {
 
     const existingLines = await storage.getWorkOrderLines(targetId);
     for (const existing of existingLines) {
-      await storage.deleteWorkOrderLine(existing.id);
+      await storage.deleteWorkOrderLine(existing.id, { skipRecalc: true });
     }
 
     for (const line of sourceLines) {
@@ -915,7 +906,7 @@ app.post("/api/work-orders/bulk-apply-lines", asyncHandler(async (req, res) => {
         isOptional: line.isOptional,
         notes: line.notes,
       });
-      await storage.createWorkOrderLine(lineData);
+      await storage.createWorkOrderLine(lineData, { skipRecalc: true });
     }
 
     await storage.recalculateWorkOrderTotals(targetId);

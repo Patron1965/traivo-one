@@ -2515,7 +2515,7 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(
           resolvedProductionMinutes: 0,
           priceSource: "modus_import",
           notes: beskrivning || null,
-        });
+        }, { skipRecalc: true });
         affectedWorkOrderIds.add(workOrder.id);
         
         created.push(`${uppgiftId}/${rad}: ${beskrivning.substring(0, 40)}`);
@@ -2646,7 +2646,7 @@ async function runModusInvoiceLinesImportJob(params: {
           resolvedProductionMinutes: 0,
           priceSource: "modus_import",
           notes: beskrivning || null,
-        });
+        }, { skipRecalc: true });
         affectedWorkOrderIds.add(workOrder.id);
 
         created.push(`${uppgiftId}/${rad}: ${beskrivning.substring(0, 40)}`);

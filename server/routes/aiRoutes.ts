@@ -2780,7 +2780,8 @@ app.delete("/api/import/batch/:batchId", asyncHandler(async (req, res) => {
       if (wo.importBatchId === batchId) {
         const lines = await storage.getWorkOrderLines(wo.id);
         for (const line of lines) {
-          await storage.deleteWorkOrderLine(line.id);
+          // Skippa per-rad recalc — hela arbetsordern raderas direkt efter.
+          await storage.deleteWorkOrderLine(line.id, { skipRecalc: true });
           deletedWorkOrderLines++;
         }
         await storage.deleteWorkOrder(wo.id);

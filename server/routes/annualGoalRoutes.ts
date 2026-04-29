@@ -7,6 +7,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { annualGoals, workOrders, workOrderLines, subscriptions, orderConcepts, customers, objects, articles, clusters, resources, objectTimeRestrictions, insertAnnualGoalSchema, insertWorkOrderSchema, type FlexibleFrequency, type Season } from "@shared/schema";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
+import { storage } from "../storage";
 import { generateScheduleDates, isDateInSeason, convertLegacyPeriodicity } from "../scheduling-utils";
 import OpenAI from "openai";
 import { trackOpenAIResponse } from "../api-usage-tracker";
@@ -1192,7 +1193,9 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
         didMutateWorkOrders = true;
 
         if (matchingArticles.length > 0) {
-          await db.insert(workOrderLines).values({
+          // Använd storage-metoden så cachedValue/cost/minutes räknas om
+          // automatiskt på den nya arbetsordern.
+          await storage.createWorkOrderLine({
             tenantId,
             workOrderId: created.id,
             articleId: matchingArticles[0].id,

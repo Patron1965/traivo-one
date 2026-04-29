@@ -336,9 +336,9 @@ export interface IStorage {
   
   // Work Order Lines
   getWorkOrderLines(workOrderId: string): Promise<WorkOrderLine[]>;
-  createWorkOrderLine(line: InsertWorkOrderLine): Promise<WorkOrderLine>;
-  updateWorkOrderLine(id: string, data: Partial<InsertWorkOrderLine>): Promise<WorkOrderLine | undefined>;
-  deleteWorkOrderLine(id: string): Promise<void>;
+  createWorkOrderLine(line: InsertWorkOrderLine, options?: { skipRecalc?: boolean }): Promise<WorkOrderLine>;
+  updateWorkOrderLine(id: string, data: Partial<InsertWorkOrderLine>, options?: { skipRecalc?: boolean }): Promise<WorkOrderLine | undefined>;
+  deleteWorkOrderLine(id: string, options?: { skipRecalc?: boolean }): Promise<void>;
   getWorkOrderLine(id: string): Promise<WorkOrderLine | undefined>;
   
   // Work Order Objects
@@ -2852,18 +2852,42 @@ export class DatabaseStorage implements IStorage {
     return line || undefined;
   }
 
-  async createWorkOrderLine(line: InsertWorkOrderLine): Promise<WorkOrderLine> {
+  async createWorkOrderLine(line: InsertWorkOrderLine, options?: { skipRecalc?: boolean }): Promise<WorkOrderLine> {
     const [wol] = await db.insert(workOrderLines).values(line).returning();
+    if (!options?.skipRecalc && wol?.workOrderId) {
+      await this.recalculateWorkOrderTotals(wol.workOrderId);
+    }
     return wol;
   }
 
-  async updateWorkOrderLine(id: string, data: Partial<InsertWorkOrderLine>): Promise<WorkOrderLine | undefined> {
+  async updateWorkOrderLine(id: string, data: Partial<InsertWorkOrderLine>, options?: { skipRecalc?: boolean }): Promise<WorkOrderLine | undefined> {
+    let oldWorkOrderId: string | null = null;
+    if (!options?.skipRecalc) {
+      const existing = await this.getWorkOrderLine(id);
+      oldWorkOrderId = existing?.workOrderId ?? null;
+    }
     const [wol] = await db.update(workOrderLines).set(data).where(eq(workOrderLines.id, id)).returning();
+    if (!options?.skipRecalc) {
+      const ids = new Set<string>();
+      if (oldWorkOrderId) ids.add(oldWorkOrderId);
+      if (wol?.workOrderId) ids.add(wol.workOrderId);
+      for (const woId of ids) {
+        await this.recalculateWorkOrderTotals(woId);
+      }
+    }
     return wol || undefined;
   }
 
-  async deleteWorkOrderLine(id: string): Promise<void> {
+  async deleteWorkOrderLine(id: string, options?: { skipRecalc?: boolean }): Promise<void> {
+    let workOrderId: string | null = null;
+    if (!options?.skipRecalc) {
+      const existing = await this.getWorkOrderLine(id);
+      workOrderId = existing?.workOrderId ?? null;
+    }
     await db.delete(workOrderLines).where(eq(workOrderLines.id, id));
+    if (!options?.skipRecalc && workOrderId) {
+      await this.recalculateWorkOrderTotals(workOrderId);
+    }
   }
 
   // Work Order Objects
