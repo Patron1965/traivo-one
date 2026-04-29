@@ -19,6 +19,7 @@ interface UsePlannerDndOptions {
   setPendingSchedule: (schedule: { jobId: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; conflicts: string[] } | null) => void;
   setConflictDialogOpen: (open: boolean) => void;
   executeSchedule: (jobId: string, resourceId: string, dateStr: string, startTime?: string, clusterOverride?: boolean) => void;
+  executeTeamSchedule?: (jobId: string, teamId: string, dateStr: string) => void;
   toast: (opts: { title: string; description?: string }) => void;
   selectedJobIds?: Set<string>;
   clearSelection?: () => void;
@@ -30,7 +31,7 @@ interface UsePlannerDndOptions {
 export function usePlannerDnd({
   workOrders, viewMode, currentDate, routeJobsForView, routeJobOrder,
   resourceDayJobMap, setActiveDragJob, setRouteJobOrder, updateWorkOrderMutation,
-  detectConflictsForJob, setPendingSchedule, setConflictDialogOpen, executeSchedule, toast,
+  detectConflictsForJob, setPendingSchedule, setConflictDialogOpen, executeSchedule, executeTeamSchedule, toast,
   selectedJobIds, clearSelection,
   setWhatIfPending, setWhatIfOpen, fetchWhatIf,
 }: UsePlannerDndOptions) {
@@ -98,6 +99,11 @@ export function usePlannerDnd({
     const dropId = over.id as string;
     if (dropId === lastOverIdRef.current) return;
     lastOverIdRef.current = dropId;
+
+    if (dropId.startsWith("team:")) {
+      setDragOverConflicts({});
+      return;
+    }
 
     const job = workOrders.find(j => String(j.id) === String(active.id));
     if (!job) return;
@@ -171,6 +177,22 @@ export function usePlannerDnd({
       console.warn("[dnd] handleDragEnd: dragged job not found in workOrders", { jobId, workOrderCount: workOrders.length });
       return;
     }
+
+    if (dropId.startsWith("team:")) {
+      const rest = dropId.slice(5);
+      const [teamId, dateStr] = rest.split("|");
+      if (!teamId || !dateStr) {
+        console.warn("[dnd] team drop: malformed id", { dropId });
+        return;
+      }
+      if (!executeTeamSchedule) {
+        console.warn("[dnd] team drop: executeTeamSchedule not provided");
+        return;
+      }
+      executeTeamSchedule(jobId, teamId, dateStr);
+      return;
+    }
+
     const target = resolveDropTarget(dropId);
     if (!target) {
       console.warn("[dnd] handleDragEnd: could not resolve drop target", { dropId });
@@ -270,7 +292,7 @@ export function usePlannerDnd({
       executeSchedule(jobId, resourceId, dateStr, scheduledStartTime);
       if (scheduledStartTime) toast({ title: "Schemalagt", description: `Starttid ${scheduledStartTime} tilldelad automatiskt` });
     }
-  }, [workOrders, viewMode, currentDate, routeJobsForView, resourceDayJobMap, setActiveDragJob, setRouteJobOrder, updateWorkOrderMutation, detectConflictsForJob, setPendingSchedule, setConflictDialogOpen, executeSchedule, toast, selectedJobIds, clearSelection, computeStartTime, resolveDropTarget, setWhatIfPending, setWhatIfOpen, fetchWhatIf]);
+  }, [workOrders, viewMode, currentDate, routeJobsForView, resourceDayJobMap, setActiveDragJob, setRouteJobOrder, updateWorkOrderMutation, detectConflictsForJob, setPendingSchedule, setConflictDialogOpen, executeSchedule, executeTeamSchedule, toast, selectedJobIds, clearSelection, computeStartTime, resolveDropTarget, setWhatIfPending, setWhatIfOpen, fetchWhatIf]);
 
   return {
     sensors,

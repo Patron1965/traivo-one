@@ -11,6 +11,14 @@ import { DroppableCell, DraggableJobCard } from "./DndComponents";
 import { JobCard } from "./JobCard";
 import { ResourceColumn } from "./ResourceColumn";
 
+interface TeamRow {
+  id: string;
+  name: string;
+  color: string | null;
+  isUncategorized: boolean;
+  memberCount: number;
+}
+
 interface WeekGridViewProps {
   visibleDates: Date[];
   visibleResources: Resource[];
@@ -34,6 +42,11 @@ interface WeekGridViewProps {
   showConstraintLayer?: boolean;
   constraintMap?: Map<string, ConstraintCell>;
   currentPeriod?: { start: string; end: string };
+  rowMode?: "team" | "resource";
+  teamRows?: TeamRow[];
+  getJobsForTeamAndDay?: (teamId: string, day: Date) => WorkOrderWithObject[];
+  getTeamDayHours?: (teamId: string, day: Date) => number;
+  teamWeekSummary?: Record<string, { totalHours: number; weeklyCapacity: number; pct: number }>;
 }
 
 function getWeatherIcon(code: number) {
@@ -57,10 +70,14 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
     activeDragJob, restrictionsByObject, resourceWeekSummary, zoom, weatherByDate,
     onResourceClick, onSendSchedule, jobCardProps, dragOverConflicts, clusterMatchedResourceIds,
     showConstraintLayer, constraintMap,
+    rowMode = "resource", teamRows = [], getJobsForTeamAndDay, getTeamDayHours, teamWeekSummary,
   } = props;
 
   const zoomPadClass = zoom.scale <= 0.5 ? "p-0.5" : zoom.scale >= 2 ? "p-4" : "p-2";
   const zoomGapClass = zoom.scale <= 0.5 ? "space-y-0" : zoom.scale >= 2 ? "space-y-3" : "space-y-1";
+
+  const isTeamMode = rowMode === "team";
+  const headerLabel = isTeamMode ? "Team" : "Resurser";
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -68,7 +85,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
     <div className="flex-1 overflow-y-auto overflow-x-auto">
       <div className="w-full min-w-[700px]">
         <div className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] border-b sticky top-0 bg-background z-20">
-          <div className="p-2 font-medium text-sm text-muted-foreground border-r sticky left-0 bg-background z-30">Resurser</div>
+          <div className="p-2 font-medium text-sm text-muted-foreground border-r sticky left-0 bg-background z-30" data-testid="week-grid-row-header">{headerLabel}</div>
           {visibleDates.map((day, i) => {
             const isToday = isSameDay(day, new Date());
             const dayStr = format(day, "yyyy-MM-dd");
@@ -110,7 +127,83 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
           })}
         </div>
 
-        {visibleResources.map((resource) => {
+        {isTeamMode && teamRows.map((team) => {
+          const summary = teamWeekSummary?.[team.id];
+          const pct = summary?.pct ?? 0;
+          return (
+            <div key={team.id} className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] border-b" data-testid={`team-row-${team.id}`}>
+              <div className="sticky left-0 bg-background z-10 p-3 border-r flex flex-col justify-between" style={{ minHeight: `${zoom.weekH}px` }}>
+                <div className="flex items-center gap-2">
+                  {team.color ? (
+                    <span className="h-6 w-6 rounded-full shrink-0 flex items-center justify-center" style={{ backgroundColor: team.color }} data-testid={`avatar-team-color-${team.id}`} />
+                  ) : !team.isUncategorized ? (
+                    <span
+                      className="h-6 w-6 rounded-full shrink-0 flex items-center justify-center bg-primary/15 text-primary text-[10px] font-semibold"
+                      data-testid={`avatar-team-initials-${team.id}`}
+                    >
+                      {team.name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() || "").join("") || team.name.slice(0, 2).toUpperCase()}
+                    </span>
+                  ) : null}
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-sm font-medium truncate ${team.isUncategorized ? "text-muted-foreground italic" : ""}`} data-testid={`text-team-name-${team.id}`}>{team.name}</div>
+                    {!team.isUncategorized && <div className="text-[10px] text-muted-foreground">{team.memberCount} medlem{team.memberCount === 1 ? "" : "mar"}</div>}
+                  </div>
+                </div>
+                {summary && (
+                  <div className="mt-2">
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${getCapacityColor(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-1 tabular-nums">{summary.totalHours.toFixed(1)}h / {summary.weeklyCapacity}h</div>
+                  </div>
+                )}
+              </div>
+              {visibleDates.map((day, dayIndex) => {
+                const jobs = getJobsForTeamAndDay ? getJobsForTeamAndDay(team.id, day) : [];
+                const dayHours = getTeamDayHours ? getTeamDayHours(team.id, day) : 0;
+                const dayStr = format(day, "yyyy-MM-dd");
+                const droppableId = `team:${team.id}|${dayStr}`;
+                const teamCapacity = (team.memberCount || 1) * HOURS_IN_DAY;
+                const capacityPct = teamCapacity > 0 ? Math.round((dayHours / teamCapacity) * 100) : 0;
+                const isOverbooked = dayHours > teamCapacity;
+                return (
+                  <DroppableCell
+                    key={dayIndex}
+                    id={droppableId}
+                    className={`${zoomPadClass} border-r last:border-r-0 transition-colors overflow-hidden min-w-0 ${getCapacityBgColor(capacityPct)}`}
+                    style={{ minHeight: `${zoom.weekH}px` }}
+                    dragOverConflicts={dragOverConflicts?.[droppableId]}
+                  >
+                    <div className="min-w-0 overflow-hidden" data-testid={`drop-zone-team-${team.id}-${dayStr}`}>
+                      <div className="flex items-center gap-1 mb-2">
+                        <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${getCapacityColor(capacityPct)}`} style={{ width: `${Math.min(capacityPct, 100)}%` }} />
+                        </div>
+                        <span className={`text-[10px] tabular-nums ${isOverbooked ? "text-red-600 dark:text-red-400 font-semibold" : capacityPct >= 85 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
+                          {dayHours.toFixed(1).replace(".", ",")}h
+                        </span>
+                      </div>
+                      <div className={zoomGapClass}>
+                        {jobs.length === 0 && (
+                          <div className="flex items-center justify-center py-4 text-muted-foreground/40">
+                            <Plus className="h-4 w-4" />
+                          </div>
+                        )}
+                        {jobs.map((job) => (
+                          <DraggableJobCard key={job.id} id={job.id}>
+                            <JobCard job={job} compact {...jobCardProps} />
+                          </DraggableJobCard>
+                        ))}
+                      </div>
+                    </div>
+                  </DroppableCell>
+                );
+              })}
+            </div>
+          );
+        })}
+
+        {!isTeamMode && visibleResources.map((resource) => {
           const summary = resourceWeekSummary[resource.id];
           return (
             <div key={resource.id} className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] border-b">

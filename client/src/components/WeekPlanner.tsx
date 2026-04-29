@@ -64,6 +64,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     setPendingSchedule: d.setPendingSchedule,
     setConflictDialogOpen: d.setConflictDialogOpen,
     executeSchedule: d.executeSchedule,
+    executeTeamSchedule: d.executeTeamSchedule,
     toast: d.toast,
     selectedJobIds: d.selectedJobIds,
     clearSelection: d.clearSelection,
@@ -224,6 +225,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
               allExecutionCodes={d.allExecutionCodes}
               resourceActiveFilterCount={d.resourceActiveFilterCount}
               clearResourceFilters={d.clearResourceFilters}
+              showRowModeToggle={d.viewMode === "week"}
+              weekRowMode={d.weekRowMode}
+              setWeekRowMode={d.setWeekRowMode}
+              selectedTeamIds={d.selectedTeamIds}
+              setSelectedTeamIds={d.setSelectedTeamIds}
             />
           )}
 
@@ -258,6 +264,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
               showConstraintLayer={d.showConstraintLayer}
               constraintMap={d.constraintMap}
               currentPeriod={d.currentPeriodRange}
+              rowMode={d.weekRowMode}
+              teamRows={d.teamRows}
+              getJobsForTeamAndDay={d.getJobsForTeamAndDay}
+              getTeamDayHours={d.getTeamDayHours}
+              teamWeekSummary={d.teamWeekSummary}
             />
           )}
           {d.viewMode === "month" && (

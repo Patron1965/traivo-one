@@ -35,6 +35,8 @@ function loadSavedFilters(): {
   zoomLevel: number;
   showUnscheduled: boolean;
   viewMode: ViewMode;
+  weekRowMode: "team" | "resource";
+  selectedTeamIds?: string[];
 } | null {
   try {
     const stored = localStorage.getItem(PLANNER_FILTERS_KEY);
@@ -112,15 +114,17 @@ export function usePlannerData() {
   const [zoomLevel, setZoomLevel] = useState<number>(saved?.zoomLevel ?? 0);
   const [expandedSubSteps, setExpandedSubSteps] = useState<Record<string, boolean>>({});
   const [activeDragJob, setActiveDragJob] = useState<WorkOrderWithObject | null>(null);
+  const [weekRowMode, setWeekRowMode] = useState<"team" | "resource">(saved?.weekRowMode ?? "team");
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(Array.isArray(saved?.selectedTeamIds) ? saved!.selectedTeamIds! : []);
   const { toast } = useToast();
 
   useEffect(() => {
     savePlannerFilters({
       filterCustomer, filterPriority, filterCluster, filterTeam,
       filterExecutionCode, hiddenResourceIds: Array.from(hiddenResourceIds),
-      zoomLevel, showUnscheduled, viewMode,
+      zoomLevel, showUnscheduled, viewMode, weekRowMode, selectedTeamIds,
     });
-  }, [filterCustomer, filterPriority, filterCluster, filterTeam, filterExecutionCode, hiddenResourceIds, zoomLevel, showUnscheduled, viewMode]);
+  }, [filterCustomer, filterPriority, filterCluster, filterTeam, filterExecutionCode, hiddenResourceIds, zoomLevel, showUnscheduled, viewMode, weekRowMode, selectedTeamIds]);
 
   const { data: teamsData = [] } = useQuery<Array<{ id: string; name: string; clusterId: string | null; color: string | null }>>({ queryKey: ["/api/teams"] });
   const { data: teamMembersData = [] } = useQuery<Array<{ teamId: string; resourceId: string }>>({ queryKey: ["/api/team-members"] });
@@ -255,6 +259,30 @@ export function usePlannerData() {
     onError: (err, _vars, ctx) => { if (ctx?.previousData) queryClient.setQueryData(workOrdersQueryKey, ctx.previousData); toast({ title: "Kunde inte uppdatera jobbet", description: err instanceof Error ? err.message : "Försök igen", variant: "destructive" }); },
   });
 
+  const assignTeamMutation = useMutation({
+    mutationFn: async ({ id, teamId, scheduledDate }: { id: string; teamId: string | null; scheduledDate: string }) => {
+      const payload: Record<string, unknown> = { teamId, resourceId: null, scheduledDate, orderStatus: "planerad_resurs" };
+      return (await apiRequest("PATCH", `/api/work-orders/${id}`, payload)).json() as Promise<WorkOrderWithObject>;
+    },
+    onMutate: async ({ id, teamId, scheduledDate }) => {
+      await queryClient.cancelQueries({ queryKey: workOrdersQueryKey });
+      const prev = queryClient.getQueryData<WorkOrderWithObject[]>(workOrdersQueryKey);
+      const jobInScheduled = prev?.find(j => j.id === id);
+      if (jobInScheduled) {
+        queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === id ? { ...j, teamId, resourceId: null, scheduledDate: new Date(scheduledDate + "T12:00:00Z"), orderStatus: "planerad_resurs" as const } : j));
+      } else {
+        const unscheduledJob = accumulatedUnscheduled.find(j => j.id === id);
+        if (unscheduledJob) {
+          queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => [...(old || []), { ...unscheduledJob, teamId, resourceId: null, scheduledDate: new Date(scheduledDate + "T12:00:00Z"), orderStatus: "planerad_resurs" as const }]);
+          setAccumulatedUnscheduled(prev => prev.filter(j => j.id !== id));
+        }
+      }
+      return { previousData: prev };
+    },
+    onSuccess: (updated, vars) => { queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === vars.id ? { ...j, ...updated } : j)); queryClient.invalidateQueries({ queryKey: ["/api/work-orders", "unscheduled-paginated"] }); setUnscheduledPage(0); },
+    onError: (err, _vars, ctx) => { if (ctx?.previousData) queryClient.setQueryData(workOrdersQueryKey, ctx.previousData); toast({ title: "Kunde inte tilldela team", description: err instanceof Error ? err.message : "Försök igen", variant: "destructive" }); },
+  });
+
   const unscheduleWorkOrderMutation = useMutation({
     mutationFn: async (id: string) => (await apiRequest("PATCH", `/api/work-orders/${id}`, { resourceId: null, scheduledDate: null, scheduledStartTime: null, orderStatus: "skapad" })).json() as Promise<WorkOrderWithObject>,
     onMutate: async (id) => { await queryClient.cancelQueries({ queryKey: workOrdersQueryKey }); const prev = queryClient.getQueryData<WorkOrderWithObject[]>(workOrdersQueryKey); queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === id ? { ...j, resourceId: null, scheduledDate: null, scheduledStartTime: null, orderStatus: "skapad" as const } : j)); return { previousData: prev }; },
@@ -302,7 +330,7 @@ export function usePlannerData() {
   const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
 
   const unscheduledJobs = useMemo(() => {
-    const jobs = workOrders.filter(j => !j.scheduledDate || !j.resourceId);
+    const jobs = workOrders.filter(j => !j.scheduledDate || (!j.resourceId && !j.teamId));
     const sl = orderstockSearch.toLowerCase().trim();
     return jobs.filter(j => {
       if (filterCustomer !== "all" && j.customerId !== filterCustomer) return false;
@@ -317,7 +345,7 @@ export function usePlannerData() {
 
   const sidebarActiveFilterCount = [filterCustomer !== "all", filterPriority !== "all", filterCluster !== "all", filterTeam !== "all", filterExecutionCode !== "all"].filter(Boolean).length;
   const clearAllSidebarFilters = () => { setFilterCustomer("all"); setFilterPriority("all"); setFilterCluster("all"); setFilterTeam("all"); setFilterExecutionCode("all"); setOrderstockSearch(""); };
-  const sidebarQuickStats = useMemo(() => { const all = workOrders.filter(j => !j.scheduledDate || !j.resourceId); return { urgentCount: all.filter(j => j.priority === "urgent").length, highCount: all.filter(j => j.priority === "high").length, overdueCount: all.filter(j => j.plannedWindowEnd && new Date(j.plannedWindowEnd) < new Date()).length, totalHours: Math.round(all.reduce((s, j) => s + (j.estimatedDuration || 0) / 60, 0) * 10) / 10 }; }, [workOrders]);
+  const sidebarQuickStats = useMemo(() => { const all = workOrders.filter(j => !j.scheduledDate || (!j.resourceId && !j.teamId)); return { urgentCount: all.filter(j => j.priority === "urgent").length, highCount: all.filter(j => j.priority === "high").length, overdueCount: all.filter(j => j.plannedWindowEnd && new Date(j.plannedWindowEnd) < new Date()).length, totalHours: Math.round(all.reduce((s, j) => s + (j.estimatedDuration || 0) / 60, 0) * 10) / 10 }; }, [workOrders]);
 
   const scheduledJobs = useMemo(() => workOrders.filter(j => j.scheduledDate && j.resourceId), [workOrders]);
   const filteredScheduledJobs = useMemo(() => scheduledJobs.filter(j => { if (filterCustomer !== "all" && j.customerId !== filterCustomer) return false; if (filterPriority !== "all" && j.priority !== filterPriority) return false; return true; }), [scheduledJobs, filterCustomer, filterPriority]);
@@ -400,6 +428,120 @@ export function usePlannerData() {
     for (const r of resources) { let th = 0; for (const d of wd) th += resourceDayJobMap.hours[r.id]?.[format(d, "yyyy-MM-dd")] || 0; const cap = r.weeklyHours || 40; s[r.id] = { totalHours: th, weeklyCapacity: cap, pct: cap > 0 ? Math.round((th / cap) * 100) : 0 }; }
     return s;
   }, [resources, visibleDates, viewMode, resourceDayJobMap]);
+
+  // Team-row infrastructure (week view, weekRowMode === "team")
+  const UNCATEGORIZED_TEAM_ID = "__uncategorized__";
+  // Resource → list of team ids (a resource can belong to multiple teams)
+  const resourceTeamMap = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const tm of teamMembersData) {
+      const arr = m.get(tm.resourceId);
+      if (arr) {
+        if (!arr.includes(tm.teamId)) arr.push(tm.teamId);
+      } else {
+        m.set(tm.resourceId, [tm.teamId]);
+      }
+    }
+    return m;
+  }, [teamMembersData]);
+
+  const teamSizeMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const tm of teamMembersData) {
+      m.set(tm.teamId, (m.get(tm.teamId) || 0) + 1);
+    }
+    return m;
+  }, [teamMembersData]);
+
+  // Job → list of team-row ids it should appear in. A job appears in:
+  //  - its workOrder.teamId row (if set), AND
+  //  - every team its resourceId is a member of (if no workOrder.teamId)
+  //  - "Okategoriserade" if neither yields a row
+  const teamRowAssignments = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const job of workOrders) {
+      if (!job.scheduledDate) continue;
+      const rows: string[] = [];
+      if (job.teamId) {
+        rows.push(job.teamId);
+      } else if (job.resourceId) {
+        const teamIds = resourceTeamMap.get(job.resourceId);
+        if (teamIds && teamIds.length > 0) {
+          for (const tid of teamIds) rows.push(tid);
+        } else {
+          rows.push(UNCATEGORIZED_TEAM_ID);
+        }
+      } else {
+        rows.push(UNCATEGORIZED_TEAM_ID);
+      }
+      map.set(job.id, rows);
+    }
+    return map;
+  }, [workOrders, resourceTeamMap]);
+
+  const teamDayJobMap = useMemo(() => {
+    const jobs: Record<string, Record<string, WorkOrderWithObject[]>> = {};
+    const hours: Record<string, Record<string, number>> = {};
+    for (const job of workOrders) {
+      if (!job.scheduledDate) continue;
+      if (filterCustomer !== "all" && job.customerId !== filterCustomer) continue;
+      if (filterPriority !== "all" && job.priority !== filterPriority) continue;
+      const rowIds = teamRowAssignments.get(job.id);
+      if (!rowIds || rowIds.length === 0) continue;
+      const ds = typeof job.scheduledDate === "string" ? job.scheduledDate : (job.scheduledDate as Date).toISOString();
+      const dk = ds.includes("T") ? ds.split("T")[0] : ds.split(" ")[0];
+      const dur = (job.estimatedDuration || 0) / 60;
+      const mult = weatherByDate.get(dk)?.impact.capacityMultiplier ?? 1;
+      const adj = mult > 0 && mult < 1 ? dur / mult : dur;
+      for (const rowId of rowIds) {
+        if (!jobs[rowId]) { jobs[rowId] = {}; hours[rowId] = {}; }
+        if (!jobs[rowId][dk]) { jobs[rowId][dk] = []; hours[rowId][dk] = 0; }
+        jobs[rowId][dk].push(job);
+        hours[rowId][dk] += adj;
+      }
+    }
+    return { jobs, hours };
+  }, [workOrders, teamRowAssignments, weatherByDate, filterCustomer, filterPriority]);
+
+  const getJobsForTeamAndDay = useCallback((rowId: string, day: Date) => teamDayJobMap.jobs[rowId]?.[format(day, "yyyy-MM-dd")] || [], [teamDayJobMap]);
+  const getTeamDayHours = useCallback((rowId: string, day: Date) => teamDayJobMap.hours[rowId]?.[format(day, "yyyy-MM-dd")] || 0, [teamDayJobMap]);
+
+  const teamRows = useMemo(() => {
+    const rows: Array<{ id: string; name: string; color: string | null; isUncategorized: boolean; memberCount: number }> = [];
+    const allowed = selectedTeamIds.length > 0 ? new Set(selectedTeamIds) : null;
+    for (const t of teamsData) {
+      if (allowed && !allowed.has(t.id)) continue;
+      rows.push({ id: t.id, name: t.name, color: t.color, isUncategorized: false, memberCount: teamSizeMap.get(t.id) || 0 });
+    }
+    const showUncategorized = !allowed || allowed.has(UNCATEGORIZED_TEAM_ID);
+    if (showUncategorized) {
+      const hasUncategorized = Object.keys(teamDayJobMap.jobs[UNCATEGORIZED_TEAM_ID] || {}).length > 0;
+      if (hasUncategorized) {
+        rows.push({ id: UNCATEGORIZED_TEAM_ID, name: "Okategoriserade", color: null, isUncategorized: true, memberCount: 0 });
+      }
+    }
+    return rows;
+  }, [teamsData, selectedTeamIds, teamDayJobMap, teamSizeMap]);
+
+  const teamWeekSummary = useMemo(() => {
+    const s: Record<string, { totalHours: number; weeklyCapacity: number; pct: number }> = {};
+    const wd = viewMode === "week" ? visibleDates : [];
+    for (const row of teamRows) {
+      let th = 0;
+      for (const d of wd) th += teamDayJobMap.hours[row.id]?.[format(d, "yyyy-MM-dd")] || 0;
+      // Capacity = sum of weeklyHours of team members (resources). For uncategorized: 0 (no implicit capacity).
+      let cap = 0;
+      if (!row.isUncategorized) {
+        const memberIds = teamMembersData.filter(tm => tm.teamId === row.id).map(tm => tm.resourceId);
+        for (const rid of memberIds) {
+          const r = resources.find(rr => rr.id === rid);
+          if (r) cap += r.weeklyHours || 40;
+        }
+      }
+      s[row.id] = { totalHours: th, weeklyCapacity: cap, pct: cap > 0 ? Math.round((th / cap) * 100) : 0 };
+    }
+    return s;
+  }, [teamRows, visibleDates, viewMode, teamDayJobMap, teamMembersData, resources]);
 
   const visibleResources = useMemo(() => {
     if (resourceOccupancyFilter === "all") return baseVisibleResources;
@@ -488,6 +630,16 @@ export function usePlannerData() {
     addToUndoStack({ type: "schedule", jobId, previousState: { resourceId: job.resourceId || null, scheduledDate: job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd") : null, scheduledStartTime: job.scheduledStartTime || null, orderStatus: job.orderStatus }, newState: { resourceId, scheduledDate, scheduledStartTime: scheduledStartTime || null, orderStatus: "planerad_resurs" } });
     updateWorkOrderMutation.mutate({ id: jobId, resourceId, scheduledDate, scheduledStartTime, clusterOverride });
   }, [workOrders, addToUndoStack, updateWorkOrderMutation]);
+
+  const executeTeamSchedule = useCallback((jobId: string, teamId: string, scheduledDate: string) => {
+    const job = workOrders.find(j => j.id === jobId);
+    if (!job) return;
+    if (teamId === UNCATEGORIZED_TEAM_ID) {
+      toast({ title: "Kan inte tilldela till Okategoriserade", description: "Välj ett team eller en resurs." });
+      return;
+    }
+    assignTeamMutation.mutate({ id: jobId, teamId, scheduledDate });
+  }, [workOrders, assignTeamMutation, toast]);
 
   const navigate = (direction: "prev" | "next") => {
     if (viewMode === "day" || viewMode === "route") { const d = addDays(currentDate, direction === "next" ? 1 : -1); setCurrentDate(d); setCurrentWeekStart(startOfWeek(d, { weekStartsOn: 1 })); }
@@ -868,7 +1020,11 @@ export function usePlannerData() {
     resourceExecutionCodeFilter, setResourceExecutionCodeFilter,
     resourceOccupancyFilter, setResourceOccupancyFilter,
     allExecutionCodes, resourceActiveFilterCount, clearResourceFilters,
-    customers, clusters, clusterMap, customerMap, teamsData,
+    customers, clusters, clusterMap, customerMap, teamsData, teamMembersData,
+    weekRowMode, setWeekRowMode,
+    selectedTeamIds, setSelectedTeamIds,
+    teamRows, getJobsForTeamAndDay, getTeamDayHours, teamWeekSummary,
+    executeTeamSchedule,
     workOrders, workOrdersLoading,
     dependenciesData, timeRestrictions, restrictionsByObject, timewindowMap,
     weatherByDate,
