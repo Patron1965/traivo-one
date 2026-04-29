@@ -656,13 +656,12 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                           )}
                         </div>
                         <div className="flex items-center gap-1.5 mt-1.5">
-                          <SuggestPlacementButton job={job} currentWeekStart={currentWeekStart} className="flex-1 h-7" />
+                          <SuggestPlacementButton job={job} currentWeekStart={currentWeekStart} className="flex-1 h-7 text-xs" />
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
                                 size="sm"
-                                variant="outline"
-                                className="flex-1 h-7"
+                                className="flex-1 h-7 text-xs bg-green-600 hover:bg-green-700 text-white border border-green-700/40 dark:bg-green-600 dark:hover:bg-green-500 dark:text-white dark:border-green-500/40"
                                 onClick={(e) => onOpenAssignDialog(job, e)}
                                 data-testid={`button-assign-job-${job.id}`}
                               >
