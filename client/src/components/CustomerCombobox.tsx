@@ -85,7 +85,7 @@ export function CustomerCombobox({
   const selectedName = value ? lookup.get(value) : undefined;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -191,7 +191,7 @@ export function CustomerMultiCombobox({
   const selectedSet = useMemo(() => new Set(selected), [selected]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <Button
           type="button"
