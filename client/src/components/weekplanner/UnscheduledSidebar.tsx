@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Inbox, AlertTriangle, Clock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, X, UserPlus, Key, DoorOpen, Filter, XCircle, Loader2, Sparkles, CheckCircle2 } from "lucide-react";
+import { Inbox, AlertTriangle, Clock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, X, UserPlus, Key, DoorOpen, Filter, XCircle, Loader2, Sparkles, CheckCircle2, CalendarRange, Info } from "lucide-react";
 import { format, addDays, startOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { WorkOrderWithObject, Customer, Cluster } from "@shared/schema";
@@ -43,6 +43,16 @@ interface UnscheduledSidebarProps {
   setFilterTeam: (v: string) => void;
   filterExecutionCode: string;
   setFilterExecutionCode: (v: string) => void;
+  filterDateField: "none" | "desired" | "created" | "deadline";
+  setFilterDateField: (v: "none" | "desired" | "created" | "deadline") => void;
+  filterDatePeriod: "all" | "week" | "two_weeks" | "month" | "custom";
+  setFilterDatePeriod: (v: "all" | "week" | "two_weeks" | "month" | "custom") => void;
+  filterDateCustomFrom: string;
+  setFilterDateCustomFrom: (v: string) => void;
+  filterDateCustomTo: string;
+  setFilterDateCustomTo: (v: string) => void;
+  dateFilterActive: boolean;
+  unscheduledMissingDateCount: number;
   customers: Customer[];
   clusters: Cluster[];
   teamsData: Array<{ id: string; name: string; clusterId: string | null; color: string | null }>;
@@ -141,6 +151,9 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
     filterCustomer, setFilterCustomer, filterPriority, setFilterPriority,
     filterCluster, setFilterCluster, filterTeam, setFilterTeam,
     filterExecutionCode, setFilterExecutionCode,
+    filterDateField, setFilterDateField, filterDatePeriod, setFilterDatePeriod,
+    filterDateCustomFrom, setFilterDateCustomFrom, filterDateCustomTo, setFilterDateCustomTo, dateFilterActive,
+    unscheduledMissingDateCount,
     customers, clusters, teamsData, customerMap, clusterMap,
     selectedJob, onJobClick, onOpenAssignDialog, timewindowMap, currentWeekStart,
     activeDragJob, clusterMatchedResourceIds, visibleResources,
@@ -256,6 +269,33 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                   <X className="h-2.5 w-2.5" />
                 </Badge>
               )}
+              {dateFilterActive && (() => {
+                const fieldLabel = filterDateField === "desired" ? "Önskat datum" : filterDateField === "deadline" ? "Deadline" : "Skapad";
+                let periodLabel: string;
+                if (filterDatePeriod === "custom") {
+                  if (filterDateCustomFrom && filterDateCustomTo) periodLabel = `${filterDateCustomFrom} → ${filterDateCustomTo}`;
+                  else if (filterDateCustomFrom) periodLabel = `från ${filterDateCustomFrom}`;
+                  else if (filterDateCustomTo) periodLabel = `till ${filterDateCustomTo}`;
+                  else periodLabel = "egen period";
+                } else {
+                  periodLabel = filterDatePeriod === "week" ? "vald vecka" : filterDatePeriod === "two_weeks" ? "två veckor" : "fyra veckor";
+                }
+                return (
+                  <Badge variant="secondary" className="text-[10px] gap-0.5 cursor-pointer" onClick={() => { setFilterDateField("none"); setFilterDatePeriod("all"); setFilterDateCustomFrom(""); setFilterDateCustomTo(""); }} data-testid="badge-sidebar-filter-date">
+                    <CalendarRange className="h-2.5 w-2.5" />
+                    {fieldLabel}: {periodLabel}
+                    <X className="h-2.5 w-2.5" />
+                  </Badge>
+                );
+              })()}
+            </div>
+          )}
+          {dateFilterActive && unscheduledMissingDateCount > 0 && (
+            <div className="flex items-start gap-1.5 p-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800" data-testid="sidebar-missing-date-info">
+              <Info className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+              <span className="text-[10px] text-blue-700 dark:text-blue-300 leading-tight">
+                {unscheduledMissingDateCount} ordrar saknar {filterDateField === "desired" ? "önskat datum" : "deadline"} och visas inte med detta filter.
+              </span>
             </div>
           )}
           {sidebarFiltersOpen && (
@@ -333,6 +373,61 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                   ))}
                 </SelectContent>
               </Select>
+              <div className="space-y-1.5 pt-1 border-t" data-testid="sidebar-date-filter-section">
+                <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wide pt-1">
+                  <CalendarRange className="h-3 w-3" />
+                  Datumfilter
+                </div>
+                <Select value={filterDateField} onValueChange={(v) => {
+                  const next = v as "none" | "desired" | "created" | "deadline";
+                  setFilterDateField(next);
+                  if (next === "none") { setFilterDatePeriod("all"); setFilterDateCustomFrom(""); setFilterDateCustomTo(""); }
+                  else if (filterDatePeriod === "all") { setFilterDatePeriod("week"); }
+                }}>
+                  <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-date-field">
+                    <SelectValue placeholder="Inget datumfilter" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Inget datumfilter</SelectItem>
+                    <SelectItem value="desired">Önskat datum</SelectItem>
+                    <SelectItem value="deadline">Deadline</SelectItem>
+                    <SelectItem value="created">Skapad</SelectItem>
+                  </SelectContent>
+                </Select>
+                {filterDateField !== "none" && (
+                  <Select value={filterDatePeriod} onValueChange={(v) => setFilterDatePeriod(v as "all" | "week" | "two_weeks" | "month" | "custom")}>
+                    <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-date-period">
+                      <SelectValue placeholder="Period" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Alla datum</SelectItem>
+                      <SelectItem value="week">Vald vecka</SelectItem>
+                      <SelectItem value="two_weeks">Två veckor framåt</SelectItem>
+                      <SelectItem value="month">Fyra veckor framåt</SelectItem>
+                      <SelectItem value="custom">Egen period</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+                {filterDateField !== "none" && filterDatePeriod === "custom" && (
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type="date"
+                      value={filterDateCustomFrom}
+                      onChange={(e) => setFilterDateCustomFrom(e.target.value)}
+                      className="h-8 text-xs flex-1"
+                      data-testid="input-unscheduled-date-from"
+                    />
+                    <span className="text-xs text-muted-foreground">→</span>
+                    <Input
+                      type="date"
+                      value={filterDateCustomTo}
+                      onChange={(e) => setFilterDateCustomTo(e.target.value)}
+                      className="h-8 text-xs flex-1"
+                      data-testid="input-unscheduled-date-to"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

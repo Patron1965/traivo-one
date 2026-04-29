@@ -272,7 +272,7 @@ export interface IStorage {
   getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrderWithObject[]>;
   getWorkOrdersByExternalRefs(tenantId: string, refs: string[]): Promise<Array<{ id: string; externalReference: string | null; modusId: string | null; metadata: unknown }>>;
   getUnscheduledWorkOrders(tenantId: string, limit?: number): Promise<WorkOrderWithObject[]>;
-  getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }>;
+  getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string, dateFilter?: { field: 'desired' | 'created' | 'deadline'; from?: string; to?: string }): Promise<{ workOrders: WorkOrderWithObject[]; total: number; missingDateFieldCount?: number }>;
   getWorkOrdersPaginated(tenantId: string, limit: number, offset: number, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, status?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }>;
   bulkUnscheduleWorkOrders(tenantId: string, startDate: Date, endDate: Date, resourceIds?: string[]): Promise<number>;
   getWorkOrder(id: string): Promise<WorkOrder | undefined>;
@@ -2016,8 +2016,8 @@ export class DatabaseStorage implements IStorage {
     .limit(limit);
   }
 
-  async getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }> {
-    const conditions: any[] = [
+  async getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string, dateFilter?: { field: 'desired' | 'created' | 'deadline'; from?: string; to?: string }): Promise<{ workOrders: WorkOrderWithObject[]; total: number; missingDateFieldCount?: number }> {
+    const baseConditions: any[] = [
       eq(workOrders.tenantId, tenantId),
       isNull(workOrders.deletedAt),
       notInArray(workOrders.orderStatus, ['utford', 'fakturerad', 'avbruten', 'omojlig']),
@@ -2026,7 +2026,7 @@ export class DatabaseStorage implements IStorage {
 
     if (search && search.trim()) {
       const searchTerm = `%${search.trim().toLowerCase()}%`;
-      conditions.push(
+      baseConditions.push(
         or(
           sql`LOWER(${workOrders.title}) LIKE ${searchTerm}`,
           sql`${workOrders.objectId} IN (SELECT id FROM ${objects} WHERE ${objects.tenantId} = ${tenantId} AND LOWER(name) LIKE ${searchTerm})`,
@@ -2035,12 +2035,49 @@ export class DatabaseStorage implements IStorage {
       );
     }
 
+    let dateCondition: any = null;
+    let missingFieldCondition: any = null;
+    if (dateFilter && (dateFilter.from || dateFilter.to)) {
+      const fromDate = dateFilter.from ? new Date(`${dateFilter.from}T00:00:00.000Z`) : null;
+      const toDate = dateFilter.to ? new Date(`${dateFilter.to}T23:59:59.999Z`) : null;
+      if (fromDate && !isNaN(fromDate.getTime()) || toDate && !isNaN(toDate.getTime())) {
+        if (dateFilter.field === 'desired') {
+          const parts: any[] = [isNotNull(workOrders.desiredDeliveryStart)];
+          if (toDate) parts.push(lte(workOrders.desiredDeliveryStart, toDate));
+          if (fromDate) parts.push(sql`COALESCE(${workOrders.desiredDeliveryEnd}, ${workOrders.desiredDeliveryStart}) >= ${fromDate}`);
+          dateCondition = and(...parts);
+          missingFieldCondition = isNull(workOrders.desiredDeliveryStart);
+        } else if (dateFilter.field === 'deadline') {
+          const parts: any[] = [isNotNull(workOrders.plannedWindowEnd)];
+          if (fromDate) parts.push(gte(workOrders.plannedWindowEnd, fromDate));
+          if (toDate) parts.push(lte(workOrders.plannedWindowEnd, toDate));
+          dateCondition = and(...parts);
+          missingFieldCondition = isNull(workOrders.plannedWindowEnd);
+        } else if (dateFilter.field === 'created') {
+          const parts: any[] = [];
+          if (fromDate) parts.push(gte(workOrders.createdAt, fromDate));
+          if (toDate) parts.push(lte(workOrders.createdAt, toDate));
+          if (parts.length > 0) dateCondition = and(...parts);
+        }
+      }
+    }
+
+    const conditions = dateCondition ? [...baseConditions, dateCondition] : baseConditions;
     const whereClause = and(...conditions);
 
     const [countResult] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(workOrders)
       .where(whereClause);
+
+    let missingDateFieldCount: number | undefined;
+    if (missingFieldCondition && dateCondition) {
+      const [missingResult] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(workOrders)
+        .where(and(...baseConditions, missingFieldCondition));
+      missingDateFieldCount = missingResult?.count || 0;
+    }
 
     const rows = await db.select({
       id: workOrders.id,
@@ -2110,7 +2147,7 @@ export class DatabaseStorage implements IStorage {
     .limit(limit)
     .offset(offset);
 
-    return { workOrders: rows, total: countResult?.count || 0 };
+    return { workOrders: rows, total: countResult?.count || 0, missingDateFieldCount };
   }
 
   async bulkUnscheduleWorkOrders(tenantId: string, startDate: Date, endDate: Date, resourceIds?: string[]): Promise<number> {

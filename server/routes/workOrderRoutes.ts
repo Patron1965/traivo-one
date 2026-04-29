@@ -25,6 +25,16 @@ app.get("/api/work-orders", asyncHandler(async (req, res) => {
   const status = req.query.status as string || undefined;
   const paginated = req.query.paginated === 'true';
   const search = req.query.search as string || undefined;
+  const dateFieldRaw = req.query.dateField as string | undefined;
+  const dateFromRaw = req.query.dateFrom as string | undefined;
+  const dateToRaw = req.query.dateTo as string | undefined;
+  const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+  let dateFilter: { field: 'desired' | 'created' | 'deadline'; from?: string; to?: string } | undefined;
+  if (dateFieldRaw === 'desired' || dateFieldRaw === 'created' || dateFieldRaw === 'deadline') {
+    const from = dateFromRaw && isoDate.test(dateFromRaw) ? dateFromRaw : undefined;
+    const to = dateToRaw && isoDate.test(dateToRaw) ? dateToRaw : undefined;
+    if (from || to) dateFilter = { field: dateFieldRaw, from, to };
+  }
 
   if (!allDates && status !== 'unscheduled') {
     if (!startDate && !endDate) {
@@ -45,8 +55,8 @@ app.get("/api/work-orders", asyncHandler(async (req, res) => {
   }
 
   if (status === 'unscheduled') {
-    if (search || offset !== undefined) {
-      const result = await storage.getUnscheduledWorkOrdersPaginated(tenantId, limit || 50, offset || 0, search);
+    if (search || offset !== undefined || dateFilter) {
+      const result = await storage.getUnscheduledWorkOrdersPaginated(tenantId, limit || 50, offset || 0, search, dateFilter);
       res.json(result);
     } else {
       const workOrders = await storage.getUnscheduledWorkOrders(tenantId, limit || 500);

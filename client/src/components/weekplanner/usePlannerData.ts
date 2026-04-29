@@ -71,6 +71,10 @@ export function usePlannerData() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sidebarFiltersOpen, setSidebarFiltersOpen] = useState(false);
   const [unscheduledPage, setUnscheduledPage] = useState(0);
+  const [filterDateField, setFilterDateField] = useState<"none" | "desired" | "created" | "deadline">("none");
+  const [filterDatePeriod, setFilterDatePeriod] = useState<"all" | "week" | "two_weeks" | "month" | "custom">("all");
+  const [filterDateCustomFrom, setFilterDateCustomFrom] = useState<string>("");
+  const [filterDateCustomTo, setFilterDateCustomTo] = useState<string>("");
   const [activeResourceId, setActiveResourceId] = useState<string | null>(null);
   const [undoStack, setUndoStack] = useState<PlannerAction[]>([]);
   const [redoStack, setRedoStack] = useState<PlannerAction[]>([]);
@@ -174,23 +178,59 @@ export function usePlannerData() {
 
   useEffect(() => { const t = setTimeout(() => { setDebouncedSearch(orderstockSearch); setUnscheduledPage(0); }, 300); return () => clearTimeout(t); }, [orderstockSearch]);
 
-  const unscheduledQueryParams = useMemo(() => { const p = new URLSearchParams(); p.set("status", "unscheduled"); p.set("limit", String(UNSCHEDULED_PAGE_SIZE)); p.set("offset", "0"); if (debouncedSearch.trim()) p.set("search", debouncedSearch.trim()); return p.toString(); }, [debouncedSearch]);
+  const dateFilterParams = useMemo(() => {
+    if (filterDateField === "none" || filterDatePeriod === "all") return null;
+    let from: string | null = null;
+    let to: string | null = null;
+    if (filterDatePeriod === "custom") {
+      from = filterDateCustomFrom || null;
+      to = filterDateCustomTo || null;
+    } else {
+      const start = currentWeekStart;
+      const days = filterDatePeriod === "week" ? 6 : filterDatePeriod === "two_weeks" ? 13 : 27;
+      from = format(start, "yyyy-MM-dd");
+      to = format(addDays(start, days), "yyyy-MM-dd");
+    }
+    if (!from && !to) return null;
+    return { field: filterDateField as "desired" | "created" | "deadline", from, to };
+  }, [filterDateField, filterDatePeriod, filterDateCustomFrom, filterDateCustomTo, currentWeekStart]);
 
-  const { data: unscheduledData, isLoading: unscheduledLoading } = useQuery<{ workOrders: WorkOrderWithObject[]; total: number }>({
-    queryKey: ["/api/work-orders", "unscheduled-paginated", debouncedSearch],
+  const dateFilterActive = dateFilterParams !== null;
+
+  useEffect(() => { setUnscheduledPage(0); }, [filterDateField, filterDatePeriod, filterDateCustomFrom, filterDateCustomTo]);
+
+  const buildUnscheduledParams = useCallback((offset: number) => {
+    const p = new URLSearchParams();
+    p.set("status", "unscheduled");
+    p.set("limit", String(UNSCHEDULED_PAGE_SIZE));
+    p.set("offset", String(offset));
+    if (debouncedSearch.trim()) p.set("search", debouncedSearch.trim());
+    if (dateFilterParams) {
+      p.set("dateField", dateFilterParams.field);
+      if (dateFilterParams.from) p.set("dateFrom", dateFilterParams.from);
+      if (dateFilterParams.to) p.set("dateTo", dateFilterParams.to);
+    }
+    return p.toString();
+  }, [debouncedSearch, dateFilterParams]);
+
+  const unscheduledQueryParams = useMemo(() => buildUnscheduledParams(0), [buildUnscheduledParams]);
+
+  const { data: unscheduledData, isLoading: unscheduledLoading } = useQuery<{ workOrders: WorkOrderWithObject[]; total: number; missingDateFieldCount?: number }>({
+    queryKey: ["/api/work-orders", "unscheduled-paginated", debouncedSearch, dateFilterParams],
     queryFn: async () => { const res = await fetch(`/api/work-orders?${unscheduledQueryParams}`, { credentials: "include" }); if (!res.ok) throw new Error("Failed"); return res.json(); },
     staleTime: 120000,
   });
 
   const [accumulatedUnscheduled, setAccumulatedUnscheduled] = useState<WorkOrderWithObject[]>([]);
   const [unscheduledTotal, setUnscheduledTotal] = useState(0);
-  useEffect(() => { if (unscheduledData) { if (unscheduledPage === 0) { setAccumulatedUnscheduled(unscheduledData.workOrders); } else { setAccumulatedUnscheduled(prev => { const ids = new Set(prev.map(wo => wo.id)); return [...prev, ...unscheduledData.workOrders.filter(wo => !ids.has(wo.id))]; }); } setUnscheduledTotal(unscheduledData.total); } }, [unscheduledData, unscheduledPage]);
+  const [unscheduledMissingDateCount, setUnscheduledMissingDateCount] = useState(0);
+  useEffect(() => { if (unscheduledData) { if (unscheduledPage === 0) { setAccumulatedUnscheduled(unscheduledData.workOrders); } else { setAccumulatedUnscheduled(prev => { const ids = new Set(prev.map(wo => wo.id)); return [...prev, ...unscheduledData.workOrders.filter(wo => !ids.has(wo.id))]; }); } setUnscheduledTotal(unscheduledData.total); setUnscheduledMissingDateCount(unscheduledData.missingDateFieldCount || 0); } }, [unscheduledData, unscheduledPage]);
 
   const [loadMoreLoading, setLoadMoreLoading] = useState(false);
   const loadMoreUnscheduled = useCallback(async () => {
     const np = unscheduledPage + 1; setLoadMoreLoading(true);
-    try { const p = new URLSearchParams(); p.set("status", "unscheduled"); p.set("limit", String(UNSCHEDULED_PAGE_SIZE)); p.set("offset", String(np * UNSCHEDULED_PAGE_SIZE)); if (debouncedSearch.trim()) p.set("search", debouncedSearch.trim()); const res = await fetch(`/api/work-orders?${p.toString()}`, { credentials: "include" }); if (!res.ok) throw new Error("Failed"); const data: { workOrders: WorkOrderWithObject[]; total: number } = await res.json(); setAccumulatedUnscheduled(prev => { const ids = new Set(prev.map(wo => wo.id)); return [...prev, ...data.workOrders.filter(wo => !ids.has(wo.id))]; }); setUnscheduledTotal(data.total); setUnscheduledPage(np); } finally { setLoadMoreLoading(false); }
-  }, [unscheduledPage, debouncedSearch]);
+    try { const params = buildUnscheduledParams(np * UNSCHEDULED_PAGE_SIZE); const res = await fetch(`/api/work-orders?${params}`, { credentials: "include" }); if (!res.ok) throw new Error("Failed"); const data: { workOrders: WorkOrderWithObject[]; total: number; missingDateFieldCount?: number } = await res.json(); setAccumulatedUnscheduled(prev => { const ids = new Set(prev.map(wo => wo.id)); return [...prev, ...data.workOrders.filter(wo => !ids.has(wo.id))]; }); setUnscheduledTotal(data.total); setUnscheduledMissingDateCount(data.missingDateFieldCount || 0); setUnscheduledPage(np); } finally { setLoadMoreLoading(false); }
+  }, [unscheduledPage, buildUnscheduledParams]);
   const hasMoreUnscheduled = accumulatedUnscheduled.length < unscheduledTotal;
 
   const workOrders = useMemo(() => { const ids = new Set(scheduledWorkOrders.map(wo => wo.id)); return [...scheduledWorkOrders, ...accumulatedUnscheduled.filter(wo => !ids.has(wo.id))]; }, [scheduledWorkOrders, accumulatedUnscheduled]);
@@ -343,8 +383,8 @@ export function usePlannerData() {
     }).sort((a, b) => { const ap = priorityOrder[a.priority] ?? 99; const bp = priorityOrder[b.priority] ?? 99; if (ap !== bp) return ap - bp; return (a.plannedWindowEnd ? new Date(a.plannedWindowEnd).getTime() : Infinity) - (b.plannedWindowEnd ? new Date(b.plannedWindowEnd).getTime() : Infinity); });
   }, [workOrders, filterCustomer, filterPriority, filterCluster, filterTeam, teamResourceIds, filterExecutionCode, orderstockSearch, customerMap]);
 
-  const sidebarActiveFilterCount = [filterCustomer !== "all", filterPriority !== "all", filterCluster !== "all", filterTeam !== "all", filterExecutionCode !== "all"].filter(Boolean).length;
-  const clearAllSidebarFilters = () => { setFilterCustomer("all"); setFilterPriority("all"); setFilterCluster("all"); setFilterTeam("all"); setFilterExecutionCode("all"); setOrderstockSearch(""); };
+  const sidebarActiveFilterCount = [filterCustomer !== "all", filterPriority !== "all", filterCluster !== "all", filterTeam !== "all", filterExecutionCode !== "all", dateFilterActive].filter(Boolean).length;
+  const clearAllSidebarFilters = () => { setFilterCustomer("all"); setFilterPriority("all"); setFilterCluster("all"); setFilterTeam("all"); setFilterExecutionCode("all"); setOrderstockSearch(""); setFilterDateField("none"); setFilterDatePeriod("all"); setFilterDateCustomFrom(""); setFilterDateCustomTo(""); };
   const sidebarQuickStats = useMemo(() => { const all = workOrders.filter(j => !j.scheduledDate || (!j.resourceId && !j.teamId)); return { urgentCount: all.filter(j => j.priority === "urgent").length, highCount: all.filter(j => j.priority === "high").length, overdueCount: all.filter(j => j.plannedWindowEnd && new Date(j.plannedWindowEnd) < new Date()).length, totalHours: Math.round(all.reduce((s, j) => s + (j.estimatedDuration || 0) / 60, 0) * 10) / 10 }; }, [workOrders]);
 
   const scheduledJobs = useMemo(() => workOrders.filter(j => j.scheduledDate && j.resourceId), [workOrders]);
@@ -1029,6 +1069,10 @@ export function usePlannerData() {
     dependenciesData, timeRestrictions, restrictionsByObject, timewindowMap,
     weatherByDate,
     unscheduledJobs, unscheduledTotal, accumulatedUnscheduled, hasMoreUnscheduled, loadMoreLoading, loadMoreUnscheduled,
+    unscheduledMissingDateCount,
+    filterDateField, setFilterDateField, filterDatePeriod, setFilterDatePeriod,
+    filterDateCustomFrom, setFilterDateCustomFrom, filterDateCustomTo, setFilterDateCustomTo,
+    dateFilterActive,
     sidebarActiveFilterCount, clearAllSidebarFilters, sidebarQuickStats,
     scheduledJobs, filteredScheduledJobs, currentViewScheduledJobs,
     resourceDayJobMap, routeJobsForView,

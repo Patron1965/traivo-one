@@ -150,6 +150,12 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
           filterCluster={d.filterCluster} setFilterCluster={d.setFilterCluster}
           filterTeam={d.filterTeam} setFilterTeam={d.setFilterTeam}
           filterExecutionCode={d.filterExecutionCode} setFilterExecutionCode={d.setFilterExecutionCode}
+          filterDateField={d.filterDateField} setFilterDateField={d.setFilterDateField}
+          filterDatePeriod={d.filterDatePeriod} setFilterDatePeriod={d.setFilterDatePeriod}
+          filterDateCustomFrom={d.filterDateCustomFrom} setFilterDateCustomFrom={d.setFilterDateCustomFrom}
+          filterDateCustomTo={d.filterDateCustomTo} setFilterDateCustomTo={d.setFilterDateCustomTo}
+          dateFilterActive={d.dateFilterActive}
+          unscheduledMissingDateCount={d.unscheduledMissingDateCount}
           customers={d.customers} clusters={d.clusters} teamsData={d.teamsData}
           customerMap={d.customerMap} clusterMap={d.clusterMap}
           selectedJob={d.selectedJob} onJobClick={handleJobClickWithCallback} onOpenAssignDialog={d.handleOpenAssignDialog}
