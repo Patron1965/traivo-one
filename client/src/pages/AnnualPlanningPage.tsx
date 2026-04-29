@@ -73,7 +73,8 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Customer, Article } from "@shared/schema";
+import { CustomerCombobox } from "@/components/CustomerCombobox";
+import { ObjectCombobox, ClusterCombobox } from "@/components/AnnualPlanningCombos";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { CapacityForecastTab } from "@/components/dashboard/CapacityForecastTab";
 
@@ -201,29 +202,11 @@ export default function AnnualPlanningPage() {
     },
   });
 
-  const { data: customers = [] } = useQuery<Customer[]>({
-    queryKey: ["/api/customers"],
-  });
-
-  const { data: articlesList = [] } = useQuery<Article[]>({
-    queryKey: ["/api/articles"],
-  });
-
-  const { data: objectsList = [] } = useQuery<{ id: string; name: string; customerId: string }[]>({
-    queryKey: ["/api/objects"],
-    select: (data: { id: string; name: string; customerId: string }[]) => data.map((o) => ({ id: o.id, name: o.name, customerId: o.customerId })),
-  });
-
-  const { data: clustersList = [] } = useQuery<{ id: string; name: string }[]>({
-    queryKey: ["/api/clusters"],
-    select: (data: { id: string; name: string }[]) => data.map((c) => ({ id: c.id, name: c.name })),
-  });
-
   const uniqueArticleTypes = useMemo(() => {
-    const types = new Set(goals.map(g => g.articleType));
-    articlesList.forEach(a => types.add(a.articleType));
+    const types = new Set<string>(Object.keys(ARTICLE_TYPE_LABELS));
+    goals.forEach(g => types.add(g.articleType));
     return Array.from(types);
-  }, [goals, articlesList]);
+  }, [goals]);
 
   const filteredGoals = useMemo(() => {
     let result = goals;
@@ -273,14 +256,15 @@ export default function AnnualPlanningPage() {
     avgProgress: goals.length > 0 ? Math.round(goals.reduce((sum, g) => sum + g.progressPercent, 0) / goals.length) : 0,
   }), [goals, onTrackGoals, atRiskGoals, behindGoals]);
 
+  type GoalSubmitPayload = Omit<GoalFormValues, "customerId" | "objectId" | "clusterId"> & {
+    customerId: string | null;
+    objectId: string | null;
+    clusterId: string | null;
+  };
+
   const createMutation = useMutation({
-    mutationFn: (data: GoalFormValues) =>
-      apiRequest("POST", "/api/annual-goals", {
-        ...data,
-        customerId: data.customerId || null,
-        objectId: data.objectId || null,
-        clusterId: data.clusterId || null,
-      }),
+    mutationFn: (data: GoalSubmitPayload) =>
+      apiRequest("POST", "/api/annual-goals", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/annual-goals"] });
       setDialogOpen(false);
@@ -291,7 +275,7 @@ export default function AnnualPlanningPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: GoalFormValues }) =>
+    mutationFn: ({ id, data }: { id: string; data: GoalSubmitPayload }) =>
       apiRequest("PUT", `/api/annual-goals/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/annual-goals"] });
@@ -407,12 +391,6 @@ export default function AnnualPlanningPage() {
       createMutation.mutate(normalized);
     }
   };
-
-  const filteredObjects = useMemo(() => {
-    const custId = form.watch("customerId");
-    if (!custId) return objectsList;
-    return objectsList.filter(o => o.customerId === custId);
-  }, [objectsList, form.watch("customerId")]);
 
   return (
     <div className="p-6 space-y-6">
@@ -530,17 +508,14 @@ export default function AnnualPlanningPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={customerFilter} onValueChange={setCustomerFilter}>
-              <SelectTrigger className="w-[180px]" data-testid="select-customer-filter">
-                <SelectValue placeholder="Kund" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alla kunder</SelectItem>
-                {customers.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CustomerCombobox
+              value={customerFilter === "all" ? null : customerFilter}
+              onChange={(id) => setCustomerFilter(id || "all")}
+              placeholder="Alla kunder"
+              emptyOptionLabel="Alla kunder"
+              className="w-[180px]"
+              testId="select-customer-filter"
+            />
             <Select value={sortField} onValueChange={setSortField}>
               <SelectTrigger className="w-[150px]" data-testid="select-sort">
                 <ArrowUpDown className="h-4 w-4 mr-2" />
@@ -908,22 +883,43 @@ export default function AnnualPlanningPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
+            <div className="space-y-2">
               <label className="text-sm font-medium">Omfattning</label>
-              <Select value={aiScope} onValueChange={setAiScope}>
-                <SelectTrigger data-testid="select-ai-scope">
+              <Select
+                value={aiScope.startsWith("customer:") ? "customer" : aiScope.startsWith("cluster:") ? "cluster" : "all"}
+                onValueChange={(v) => {
+                  if (v === "all") setAiScope("all");
+                  else if (v === "customer") setAiScope("customer:");
+                  else if (v === "cluster") setAiScope("cluster:");
+                }}
+              >
+                <SelectTrigger data-testid="select-ai-scope-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Alla mål</SelectItem>
-                  {customers.map(c => (
-                    <SelectItem key={c.id} value={`customer:${c.id}`}>Kund: {c.name}</SelectItem>
-                  ))}
-                  {clustersList.map(c => (
-                    <SelectItem key={c.id} value={`cluster:${c.id}`}>Kluster: {c.name}</SelectItem>
-                  ))}
+                  <SelectItem value="customer">Specifik kund</SelectItem>
+                  <SelectItem value="cluster">Specifikt kluster</SelectItem>
                 </SelectContent>
               </Select>
+              {aiScope.startsWith("customer:") && (
+                <CustomerCombobox
+                  value={aiScope.slice("customer:".length) || null}
+                  onChange={(id) => setAiScope(id ? `customer:${id}` : "customer:")}
+                  placeholder="Välj kund"
+                  className="w-full"
+                  testId="select-ai-scope-customer"
+                />
+              )}
+              {aiScope.startsWith("cluster:") && (
+                <ClusterCombobox
+                  value={aiScope.slice("cluster:".length) || null}
+                  onChange={(id) => setAiScope(id ? `cluster:${id}` : "cluster:")}
+                  placeholder="Välj kluster"
+                  className="w-full"
+                  testId="select-ai-scope-cluster"
+                />
+              )}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -960,7 +956,15 @@ export default function AnnualPlanningPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAiDistributeDialogOpen(false)}>Avbryt</Button>
-            <Button onClick={() => aiDistributeMutation.mutate()} disabled={aiDistributeMutation.isPending} data-testid="button-run-ai-distribute">
+            <Button
+              onClick={() => aiDistributeMutation.mutate()}
+              disabled={
+                aiDistributeMutation.isPending ||
+                aiScope === "customer:" ||
+                aiScope === "cluster:"
+              }
+              data-testid="button-run-ai-distribute"
+            >
               {aiDistributeMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               <Sparkles className="h-4 w-4 mr-2" />
               Analysera
@@ -1009,19 +1013,20 @@ export default function AnnualPlanningPage() {
               <FormField control={form.control} name="customerId" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Kund</FormLabel>
-                  <Select value={field.value || "__none__"} onValueChange={(v) => { const val = v === "__none__" ? "" : v; field.onChange(val); if (val) { form.setValue("objectId", ""); form.setValue("clusterId", ""); } }}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-goal-customer">
-                        <SelectValue placeholder="Välj kund" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="__none__">Ingen</SelectItem>
-                      {customers.map(c => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <CustomerCombobox
+                      value={field.value || null}
+                      onChange={(id) => {
+                        const val = id || "";
+                        field.onChange(val);
+                        if (val) { form.setValue("objectId", ""); form.setValue("clusterId", ""); }
+                      }}
+                      placeholder="Välj kund"
+                      emptyOptionLabel="Ingen"
+                      className="w-full"
+                      testId="select-goal-customer"
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -1029,19 +1034,21 @@ export default function AnnualPlanningPage() {
               <FormField control={form.control} name="objectId" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Objekt</FormLabel>
-                  <Select value={field.value || "__none__"} onValueChange={(v) => { const val = v === "__none__" ? "" : v; field.onChange(val); if (val) { form.setValue("customerId", ""); form.setValue("clusterId", ""); } }}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-goal-object">
-                        <SelectValue placeholder="Välj objekt" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="__none__">Inget</SelectItem>
-                      {filteredObjects.map(o => (
-                        <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <ObjectCombobox
+                      value={field.value || null}
+                      onChange={(id) => {
+                        const val = id || "";
+                        field.onChange(val);
+                        if (val) { form.setValue("customerId", ""); form.setValue("clusterId", ""); }
+                      }}
+                      customerId={form.watch("customerId") || null}
+                      placeholder="Välj objekt"
+                      emptyOptionLabel="Inget"
+                      className="w-full"
+                      testId="select-goal-object"
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -1049,19 +1056,20 @@ export default function AnnualPlanningPage() {
               <FormField control={form.control} name="clusterId" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Kluster / Objektgrupp</FormLabel>
-                  <Select value={field.value || "__none__"} onValueChange={(v) => { const val = v === "__none__" ? "" : v; field.onChange(val); if (val) { form.setValue("customerId", ""); form.setValue("objectId", ""); } }}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-goal-cluster">
-                        <SelectValue placeholder="Välj kluster" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="__none__">Inget</SelectItem>
-                      {clustersList.map(c => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <ClusterCombobox
+                      value={field.value || null}
+                      onChange={(id) => {
+                        const val = id || "";
+                        field.onChange(val);
+                        if (val) { form.setValue("customerId", ""); form.setValue("objectId", ""); }
+                      }}
+                      placeholder="Välj kluster"
+                      emptyOptionLabel="Inget"
+                      className="w-full"
+                      testId="select-goal-cluster"
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
