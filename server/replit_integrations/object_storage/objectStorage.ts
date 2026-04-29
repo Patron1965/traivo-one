@@ -11,6 +11,48 @@ import {
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
+// Allowed MIME types for file uploads. Only safe, non-executable types are permitted.
+export const ALLOWED_UPLOAD_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+  "image/tiff",
+  "image/bmp",
+  // SVG/ICO are included for logo mirroring. SVG cannot execute scripts when loaded
+  // via an <img> tag (the browser restricts scripting in that context) and is always
+  // served with X-Content-Type-Options: nosniff to prevent MIME sniffing attacks.
+  "image/svg+xml",
+  "image/x-icon",
+  "image/vnd.microsoft.icon",
+  "application/pdf",
+]);
+
+// Maximum allowed upload size in bytes (50 MB).
+export const MAX_UPLOAD_SIZE_BYTES = 52_428_800;
+
+// MIME types that are safe to serve inline (without Content-Disposition: attachment).
+// These cannot execute scripts in a browser context.
+const SAFE_INLINE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+  "image/tiff",
+  "image/bmp",
+  // SVG is safe to serve inline when loaded through <img> tags (JS is blocked).
+  "image/svg+xml",
+  "image/x-icon",
+  "image/vnd.microsoft.icon",
+  "application/pdf",
+]);
+
 // The object storage client is used to interact with the object storage service.
 export const objectStorageClient = new Storage({
   credentials: {
@@ -102,13 +144,25 @@ export class ObjectStorageService {
       // Get the ACL policy for the object.
       const aclPolicy = await getObjectAclPolicy(file);
       const isPublic = aclPolicy?.visibility === "public";
+
+      // Sanitize content type: only allow safe, non-executable MIME types inline.
+      // Anything that could be executed by a browser is replaced with octet-stream.
+      const rawContentType = (metadata.contentType as string | undefined) || "application/octet-stream";
+      const safeContentType = SAFE_INLINE_MIME_TYPES.has(rawContentType)
+        ? rawContentType
+        : "application/octet-stream";
+
       // Set appropriate headers
       res.set({
-        "Content-Type": metadata.contentType || "application/octet-stream",
+        "Content-Type": safeContentType,
         "Content-Length": metadata.size,
         "Cache-Control": `${
           isPublic ? "public" : "private"
         }, max-age=${cacheTtlSec}`,
+        // Prevent browsers from MIME-sniffing the response
+        "X-Content-Type-Options": "nosniff",
+        // Force download rather than inline rendering to prevent script execution
+        "Content-Disposition": "attachment",
       });
 
       // Stream the file to the response
@@ -128,6 +182,20 @@ export class ObjectStorageService {
         res.status(500).json({ error: "Error downloading file" });
       }
     }
+  }
+
+  // Gets a short-lived signed GET URL for an object entity path.
+  // Use this to generate temporary read URLs for portal or mobile clients
+  // that cannot attach session cookies to image requests.
+  async getSignedObjectReadURL(objectPath: string, ttlSec: number = 300): Promise<string> {
+    const objectFile = await this.getObjectEntityFile(objectPath);
+    const { bucketName, objectName } = { bucketName: objectFile.bucket.name, objectName: objectFile.name };
+    return signObjectURL({ bucketName, objectName, method: "GET", ttlSec });
+  }
+
+  // Alias: returns a time-limited download URL for an entity object path.
+  async getObjectEntityDownloadURL(objectPath: string, ttlSec: number = 300): Promise<string> {
+    return this.getSignedObjectReadURL(objectPath, ttlSec);
   }
 
   // Gets the upload URL for an object entity.
@@ -206,6 +274,114 @@ export class ObjectStorageService {
     return `/objects/${entityId}`;
   }
 
+  // Validates the uploaded file's actual content-type and sets its ACL policy.
+  // This MUST be called from every confirm-upload endpoint to enforce server-side
+  // type restrictions and to bind ownership so that ACL checks work.
+  //
+  // If the stored content-type is not in ALLOWED_UPLOAD_MIME_TYPES the file is
+  // deleted from storage and an error is thrown (post-upload quarantine).
+  //
+  // visibility:
+  //   "public"  – Any authenticated user can read (used for intra-app content
+  //               where multiple users need access, e.g. work-order photos).
+  //   "private" – Only the owner can access; portal customers should use this
+  //               and retrieve content via short-lived signed URLs.
+  async validateUploadedFileAndSetAcl(
+    objectPath: string,
+    owner: string,
+    visibility: "public" | "private" = "private"
+  ): Promise<void> {
+    const objectFile = await this.getObjectEntityFile(objectPath);
+    const [metadata] = await objectFile.getMetadata();
+    const storedContentType = (metadata.contentType as string | undefined) || "";
+
+    // One-time-confirm guard: prevent ACL ownership rebinding (IDOR).
+    // If a policy already exists for a DIFFERENT owner, reject the request.
+    // Same-owner re-confirmation is idempotent (returns without error).
+    const existingPolicy = await getObjectAclPolicy(objectFile);
+    if (existingPolicy) {
+      if (existingPolicy.owner === owner) {
+        // Idempotent: same owner re-confirming is a no-op.
+        return;
+      }
+      throw new Error(
+        "ACL ownership conflict: object already confirmed by a different owner."
+      );
+    }
+
+    // Server-side size enforcement using actual GCS object metadata.
+    // Rejects uploads that exceed the limit even when the client lied about size.
+    const storedSize = metadata.size !== undefined ? Number(metadata.size) : 0;
+    if (storedSize > MAX_UPLOAD_SIZE_BYTES) {
+      try {
+        await objectFile.delete();
+      } catch {
+        console.error(`Failed to delete oversized file at ${objectPath}`);
+      }
+      throw new Error(
+        `Uploaded file (${storedSize} bytes) exceeds the maximum allowed size of ${MAX_UPLOAD_SIZE_BYTES} bytes. File removed.`
+      );
+    }
+
+    if (!ALLOWED_UPLOAD_MIME_TYPES.has(storedContentType)) {
+      // Delete the file immediately to prevent it from being accessible at all
+      try {
+        await objectFile.delete();
+      } catch {
+        // best-effort delete; log but don't mask the primary error
+        console.error(`Failed to delete disallowed file at ${objectPath}`);
+      }
+      throw new Error(
+        `Uploaded file has disallowed content-type "${storedContentType}". File removed.`
+      );
+    }
+
+    await setObjectAclPolicy(objectFile, {
+      owner,
+      visibility,
+    });
+  }
+
+  // Deletes unconfirmed uploads (no ACL policy set) that are older than ttlMs.
+  // Call this on a schedule (e.g., hourly) to prevent storage-cost abuse from
+  // malicious or abandoned uploads that were never confirmed.
+  async cleanupUnconfirmedUploads(
+    ttlMs: number = 60 * 60 * 1000
+  ): Promise<{ deleted: number; errors: number }> {
+    const privateObjectDir = this.getPrivateObjectDir();
+    const uploadsGcsPath = `${privateObjectDir}/uploads/`;
+    const { bucketName, objectName: prefix } = parseObjectPath(uploadsGcsPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    const [files] = await bucket.getFiles({ prefix });
+
+    const ACL_METADATA_KEY = "custom:aclPolicy";
+    let deleted = 0;
+    let errors = 0;
+    const now = Date.now();
+
+    for (const file of files) {
+      try {
+        const [metadata] = await file.getMetadata();
+        const timeCreated = metadata.timeCreated
+          ? new Date(metadata.timeCreated as string).getTime()
+          : 0;
+        if (now - timeCreated < ttlMs) continue; // Still within quarantine window
+
+        // If the file already has an ACL policy it was confirmed — leave it.
+        const customMeta = metadata.metadata as Record<string, unknown> | undefined;
+        if (customMeta?.[ACL_METADATA_KEY]) continue;
+
+        await file.delete();
+        deleted++;
+      } catch (err) {
+        console.error(`[upload-cleanup] Failed to process ${file.name}:`, err);
+        errors++;
+      }
+    }
+
+    return { deleted, errors };
+  }
+
   // Tries to set the ACL policy for the object entity and return the normalized path.
   async trySetObjectEntityAclPolicy(
     rawPath: string,
@@ -224,15 +400,18 @@ export class ObjectStorageService {
   // Checks if the user can access the object entity.
   async canAccessObjectEntity({
     userId,
+    tenantId,
     objectFile,
     requestedPermission,
   }: {
     userId?: string;
+    tenantId?: string;
     objectFile: File;
     requestedPermission?: ObjectPermission;
   }): Promise<boolean> {
     return canAccessObject({
       userId,
+      tenantId,
       objectFile,
       requestedPermission: requestedPermission ?? ObjectPermission.READ,
     });

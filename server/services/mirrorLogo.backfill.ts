@@ -61,7 +61,7 @@ export async function mirrorAllExternalTenantLogos(
     processed++;
 
     console.log(`[mirror-backfill] tenant=${row.tenantId} fetching ${logoUrl}`);
-    const result = await mirrorExternalLogo(logoUrl);
+    const result = await mirrorExternalLogo(logoUrl, `tenant:${row.tenantId}`);
 
     if (!result.ok) {
       summary.failed++;

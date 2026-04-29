@@ -28,7 +28,9 @@ const EXT_MAP: Record<string, string> = {
   ico: "image/x-icon",
 };
 
-export async function mirrorExternalLogo(sourceUrl: string): Promise<MirrorLogoResult> {
+// owner: set as ACL owner (e.g. "tenant:{tenantId}") so the serve route can enforce access.
+// Logos are typically public-readable (shown on login/branding pages), so visibility: "public" is used.
+export async function mirrorExternalLogo(sourceUrl: string, owner?: string): Promise<MirrorLogoResult> {
   if (!sourceUrl || typeof sourceUrl !== "string") {
     return { ok: false, status: 400, error: "sourceUrl krävs" };
   }
@@ -112,6 +114,12 @@ export async function mirrorExternalLogo(sourceUrl: string): Promise<MirrorLogoR
     }
 
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+
+    // Set ACL so the file is accessible via /api/storage/serve/objects/*.
+    // Logos are public-readable (branding pages may be unauthenticated).
+    const aclOwner = owner ?? "system";
+    await objectStorageService.validateUploadedFileAndSetAcl(objectPath, aclOwner, "public");
+
     const serveUrl = `/api/storage/serve${objectPath}`;
     return { ok: true, url: serveUrl, objectPath, contentType, bytes: buffer.length };
   } catch (err) {

@@ -1,5 +1,7 @@
 import type { Express } from "express";
-import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { ObjectStorageService, ObjectNotFoundError, ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES } from "./objectStorage";
+import { isAuthenticated } from "../auth";
+import { getTenantIdWithFallback, requireTenantWithFallback } from "../../tenant-middleware";
 
 /**
  * Register object storage routes for file uploads.
@@ -35,13 +37,27 @@ export function registerObjectStorageRoutes(app: Express): void {
    * IMPORTANT: The client should NOT send the file to this endpoint.
    * Send JSON metadata only, then upload the file directly to uploadURL.
    */
-  app.post("/api/uploads/request-url", async (req, res) => {
+  app.post("/api/uploads/request-url", isAuthenticated, async (req, res) => {
     try {
       const { name, size, contentType } = req.body;
 
       if (!name) {
         return res.status(400).json({
           error: "Missing required field: name",
+        });
+      }
+
+      // Validate MIME type against allowlist to prevent upload of active content
+      if (!contentType || !ALLOWED_UPLOAD_MIME_TYPES.has(contentType)) {
+        return res.status(400).json({
+          error: "File type not allowed. Only images and PDFs are permitted.",
+        });
+      }
+
+      // Enforce maximum upload size
+      if (size !== undefined && size !== null && Number(size) > MAX_UPLOAD_SIZE_BYTES) {
+        return res.status(400).json({
+          error: `File too large. Maximum allowed size is ${MAX_UPLOAD_SIZE_BYTES} bytes.`,
         });
       }
 
@@ -63,14 +79,56 @@ export function registerObjectStorageRoutes(app: Express): void {
   });
 
   /**
+   * Confirm an uploaded file and set its ACL policy.
+   *
+   * POST /api/uploads/confirm
+   *
+   * Must be called after a PUT upload completes. Validates the uploaded file's
+   * actual content-type against the allowlist (server-side enforcement), deletes
+   * the file if the type is disallowed, and sets an ACL policy so the file is
+   * accessible only to the uploading user or any authenticated tenant member.
+   */
+  app.post("/api/uploads/confirm", isAuthenticated, async (req, res) => {
+    try {
+      const { objectPath } = req.body;
+      if (!objectPath || typeof objectPath !== "string") {
+        return res.status(400).json({ error: "objectPath is required" });
+      }
+      const safePathRegex = /^\/objects\/[a-zA-Z0-9/_-]+$/;
+      if (!safePathRegex.test(objectPath)) {
+        return res.status(400).json({ error: "Invalid object path" });
+      }
+
+      const userId = (req as any).user?.claims?.sub as string;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      // Tenant-scoped ownership: all members of the same tenant can read the
+      // object, but cross-tenant reads are blocked (requireTenantWithFallback runs
+      // on all /api/* routes so req.tenantId is always set here).
+      // validateUploadedFileAndSetAcl() enforces the one-time-confirm guard internally:
+      // it rejects ACL rebinding for a different owner and is idempotent for the same owner.
+      const tenantId = getTenantIdWithFallback(req);
+      const owner = `tenant:${tenantId}`;
+
+      await objectStorageService.validateUploadedFileAndSetAcl(objectPath, owner, "private");
+      res.json({ confirmed: true, objectPath });
+    } catch (error) {
+      console.error("Error confirming upload:", error);
+      const message = error instanceof Error ? error.message : "Failed to confirm upload";
+      res.status(400).json({ error: message });
+    }
+  });
+
+  /**
    * Serve uploaded objects.
    *
    * GET /objects/:objectPath(*)
    *
-   * This serves files from object storage. For public files, no auth needed.
-   * For protected files, add authentication middleware and ACL checks.
+   * Requires authentication. Private files are never served anonymously.
    */
-  app.get("/objects/:objectPath(*)", async (req, res, next) => {
+  app.get("/objects/:objectPath(*)", isAuthenticated, requireTenantWithFallback, async (req, res, next) => {
     // Only handle multi-segment paths (e.g. /objects/uploads/abc123).
     // Single-segment /objects/<id> belongs to the SPA (object detail page).
     const objectPath = req.params.objectPath ?? "";
@@ -79,6 +137,19 @@ export function registerObjectStorageRoutes(app: Express): void {
     }
     try {
       const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+
+      // Strictly enforce ACL: deny if canAccessObjectEntity returns false.
+      // Files without an ACL policy (no confirm-upload step completed) are
+      // inaccessible by design — the confirm step must be called after each upload.
+      const canAccess = await objectStorageService.canAccessObjectEntity({
+        userId: (req as any).user?.claims?.sub,
+        tenantId: getTenantIdWithFallback(req),
+        objectFile,
+      });
+      if (!canAccess) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
       await objectStorageService.downloadObject(objectFile, res);
     } catch (error) {
       console.error("Error serving object:", error);
@@ -88,5 +159,28 @@ export function registerObjectStorageRoutes(app: Express): void {
       return res.status(500).json({ error: "Failed to serve object" });
     }
   });
-}
 
+  // Scheduled cleanup: delete unconfirmed (no ACL policy) uploads older than 1 hour.
+  // This limits storage-cost abuse from malicious or abandoned uploads that were
+  // never followed up with a confirm call.
+  const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // every hour
+  const UNCONFIRMED_TTL_MS   = 60 * 60 * 1000; // orphans older than 1 h
+  const runCleanup = async () => {
+    try {
+      const result = await objectStorageService.cleanupUnconfirmedUploads(UNCONFIRMED_TTL_MS);
+      if (result.deleted > 0 || result.errors > 0) {
+        console.log(
+          `[upload-cleanup] deleted=${result.deleted} errors=${result.errors}`
+        );
+      }
+    } catch (err) {
+      console.error("[upload-cleanup] Cleanup run failed:", err);
+    }
+  };
+  // Initial delay of 5 minutes so startup is not blocked, then run every hour.
+  setTimeout(() => {
+    runCleanup();
+    setInterval(runCleanup, CLEANUP_INTERVAL_MS);
+  }, 5 * 60 * 1000);
+  console.log("[upload-cleanup] Unconfirmed-upload cleanup scheduled (hourly, starts in 5 min)");
+}

@@ -134,10 +134,16 @@ export async function getObjectAclPolicy(
 // Checks if the user can access the object.
 export async function canAccessObject({
   userId,
+  tenantId,
   objectFile,
   requestedPermission,
 }: {
   userId?: string;
+  // The authenticated caller's tenant identifier. Used to authorize access
+  // to objects whose ACL owner is set to "tenant:{tenantId}" — this allows
+  // any member of the same tenant to read the object while preventing
+  // cross-tenant disclosure.
+  tenantId?: string;
   objectFile: File;
   requestedPermission: ObjectPermission;
 }): Promise<boolean> {
@@ -147,7 +153,8 @@ export async function canAccessObject({
     return false;
   }
 
-  // Public objects are always accessible for read.
+  // Legacy: public objects are always accessible for read.
+  // Prefer using tenant-scoped ownership ("tenant:{id}") for new uploads.
   if (
     aclPolicy.visibility === "public" &&
     requestedPermission === ObjectPermission.READ
@@ -163,6 +170,31 @@ export async function canAccessObject({
   // The owner of the object can always access it.
   if (aclPolicy.owner === userId) {
     return true;
+  }
+
+  // Tenant-scoped ownership: allow any authenticated member of the same tenant
+  // to read the object. Owner format: "tenant:{tenantId}".
+  // This prevents cross-tenant disclosure while allowing intra-tenant sharing.
+  if (
+    requestedPermission === ObjectPermission.READ &&
+    tenantId &&
+    aclPolicy.owner === `tenant:${tenantId}`
+  ) {
+    return true;
+  }
+
+  // Portal-owned objects (format "portal:{tenantId}:{customerId}") are accessible
+  // to tenant staff of the same tenant (e.g. admins reviewing customer reports).
+  // Portal customers access via short-lived signed URLs (separate code path).
+  if (
+    requestedPermission === ObjectPermission.READ &&
+    tenantId &&
+    aclPolicy.owner.startsWith("portal:")
+  ) {
+    const ownerTenantId = aclPolicy.owner.split(":")[1];
+    if (ownerTenantId === tenantId) {
+      return true;
+    }
   }
 
   // Go through the ACL rules to check if the user has the required permission.

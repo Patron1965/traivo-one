@@ -148,6 +148,17 @@ export function SignatureCapture({
 
       if (!uploadResponse.ok) throw new Error("Uppladdning misslyckades");
 
+      // Confirm the upload server-side: validates content-type and sets ACL.
+      const confirmRes = await fetch("/api/uploads/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ objectPath }),
+      });
+      if (!confirmRes.ok) {
+        const err = await confirmRes.json().catch(() => ({}));
+        throw new Error(err.error || "Signaturen kunde inte bekräftas");
+      }
+
       toast({
         title: "Signatur sparad",
         description: signerName ? `Signatur från ${signerName} har registrerats.` : "Kundens signatur har registrerats.",

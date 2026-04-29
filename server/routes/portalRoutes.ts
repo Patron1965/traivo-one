@@ -1876,12 +1876,52 @@ app.post("/api/portal/field/upload-photo", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
-    const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+    const { contentType, size } = req.body;
+    const { ObjectStorageService, ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES } = await import("../replit_integrations/object_storage/objectStorage");
+
+    if (!contentType || !ALLOWED_UPLOAD_MIME_TYPES.has(contentType)) {
+      return res.status(400).json({ error: "File type not allowed. Only images and PDFs are permitted." });
+    }
+    if (size !== undefined && size !== null && Number(size) > MAX_UPLOAD_SIZE_BYTES) {
+      return res.status(400).json({ error: `File too large. Maximum allowed size is ${MAX_UPLOAD_SIZE_BYTES} bytes.` });
+    }
+
     const objectStorageService = new ObjectStorageService();
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
 
     res.json({ uploadURL, objectPath });
+}));
+
+app.post("/api/portal/media/signed-url", asyncHandler(async (req, res) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+
+    const { objectPath } = req.body;
+    if (!objectPath || typeof objectPath !== "string") {
+      return res.status(400).json({ error: "objectPath krävs" });
+    }
+    const safePathRegex = /^\/objects\/[a-zA-Z0-9/_-]+$/;
+    if (!safePathRegex.test(objectPath)) {
+      return res.status(400).json({ error: "Ogiltig objektsökväg" });
+    }
+
+    const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+    const { getObjectAclPolicy } = await import("../replit_integrations/object_storage/objectAcl");
+    const objectStorageService = new ObjectStorageService();
+
+    // Verify that the requesting portal customer owns the object before issuing
+    // a signed URL. This prevents any authenticated portal user from obtaining
+    // signed URLs for media uploaded by other customers.
+    const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+    const policy = await getObjectAclPolicy(objectFile);
+    const expectedOwner = `portal:${session.tenantId}:${session.customerId}`;
+    if (!policy || policy.owner !== expectedOwner) {
+      return res.status(403).json({ error: "Åtkomst nekad" });
+    }
+
+    const signedUrl = await objectStorageService.getSignedObjectReadURL(objectPath, 300);
+    res.json({ signedUrl });
 }));
 
 app.post("/api/portal/field/confirm-photo", asyncHandler(async (req, res) => {
@@ -1898,12 +1938,16 @@ app.post("/api/portal/field/confirm-photo", asyncHandler(async (req, res) => {
       throw new ValidationError("Ogiltig fotosökväg");
     }
 
+    const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+    const oss = new ObjectStorageService();
+
+    // Validate file type server-side and bind ownership for portal customer.
+    // Visibility is "private" — portal photos are only accessible via signed URLs.
+    const owner = `portal:${session.tenantId}:${session.customerId}`;
     try {
-      const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
-      const oss = new ObjectStorageService();
-      await oss.getObjectEntityFile(objectPath);
-    } catch {
-      throw new ValidationError("Fotot kunde inte verifieras i lagringen");
+      await oss.validateUploadedFileAndSetAcl(objectPath, owner, "private");
+    } catch (err: any) {
+      throw new ValidationError(err.message || "Fotot kunde inte verifieras i lagringen");
     }
 
     res.json({ success: true, photoPath: objectPath });

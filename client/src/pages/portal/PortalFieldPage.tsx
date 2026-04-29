@@ -118,7 +118,8 @@ export default function PortalFieldPage() {
 
   const [reportCategory, setReportCategory] = useState("");
   const [reportDescription, setReportDescription] = useState("");
-  const [reportPhotos, setReportPhotos] = useState<string[]>([]);
+  interface PhotoEntry { objectPath: string; displayUrl: string; }
+  const [reportPhotos, setReportPhotos] = useState<PhotoEntry[]>([]);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [gpsPosition, setGpsPosition] = useState<{ lat: number; lng: number } | null>(null);
@@ -228,6 +229,7 @@ export default function PortalFieldPage() {
     try {
       const { uploadURL, objectPath } = await portalFetch("/api/portal/field/upload-photo", {
         method: "POST",
+        body: JSON.stringify({ contentType: file.type || "image/jpeg", size: file.size }),
       });
 
       const uploadRes = await fetch(uploadURL, {
@@ -245,7 +247,14 @@ export default function PortalFieldPage() {
         body: JSON.stringify({ objectPath }),
       });
 
-      setReportPhotos(prev => [...prev, objectPath]);
+      // Fetch a short-lived signed URL so the photo can be displayed
+      // without relying on the unauthenticated /objects/ route.
+      const { signedUrl } = await portalFetch("/api/portal/media/signed-url", {
+        method: "POST",
+        body: JSON.stringify({ objectPath }),
+      });
+
+      setReportPhotos(prev => [...prev, { objectPath, displayUrl: signedUrl }]);
     } catch (err: any) {
       setErrorMessage(err.message || "Fel vid fotouppladdning");
     } finally {
@@ -269,7 +278,7 @@ export default function PortalFieldPage() {
           objectId: selectedObject.id,
           category: reportCategory,
           description: reportDescription,
-          photos: reportPhotos,
+          photos: reportPhotos.map(p => p.objectPath),
           latitude: gpsPosition?.lat || null,
           longitude: gpsPosition?.lng || null,
         }),
@@ -655,9 +664,9 @@ export default function PortalFieldPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Foton</label>
               <div className="flex flex-wrap gap-2">
-                {reportPhotos.filter(p => p.startsWith("/objects/")).map((photo, i) => (
+                {reportPhotos.filter(p => p.objectPath.startsWith("/objects/")).map((photo, i) => (
                   <div key={i} className="relative w-20 h-20 rounded-lg border bg-muted overflow-hidden" data-testid={`photo-${i}`}>
-                    <img src={photo} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    <img src={photo.displayUrl} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                       <Image className="h-6 w-6 text-muted-foreground opacity-30" />
                     </div>

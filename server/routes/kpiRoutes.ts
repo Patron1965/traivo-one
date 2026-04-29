@@ -489,7 +489,14 @@ app.post("/api/system/scrape-branding", requireAdmin, asyncHandler(async (req, r
 }));
 
 app.post("/api/system/tenant-branding/upload-logo", requireAdmin, asyncHandler(async (req, res) => {
-    const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+    const { ObjectStorageService, ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES } = await import("../replit_integrations/object_storage/objectStorage");
+    const { contentType, size } = req.body;
+    if (!contentType || !ALLOWED_UPLOAD_MIME_TYPES.has(contentType)) {
+      return res.status(400).json({ error: "File type not allowed. Only images and PDFs are permitted." });
+    }
+    if (size !== undefined && size !== null && Number(size) > MAX_UPLOAD_SIZE_BYTES) {
+      return res.status(400).json({ error: `File too large. Maximum allowed size is ${MAX_UPLOAD_SIZE_BYTES} bytes.` });
+    }
     const objectStorageService = new ObjectStorageService();
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
@@ -503,6 +510,12 @@ app.post("/api/system/tenant-branding/confirm-logo", requireAdmin, asyncHandler(
       throw new ValidationError("objectPath krävs");
     }
 
+    const tenantId = getTenantIdWithFallback(req);
+    const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+    const objectStorageService = new ObjectStorageService();
+    // Logos use visibility:"public" so they can render on unauthenticated branding pages.
+    await objectStorageService.validateUploadedFileAndSetAcl(objectPath, `tenant:${tenantId}`, "public");
+
     const serveUrl = `/api/storage/serve${objectPath}`;
     res.json({ url: serveUrl, objectPath });
 }));
@@ -511,8 +524,9 @@ app.post("/api/system/tenant-branding/confirm-logo", requireAdmin, asyncHandler(
 // even if the remote site goes down or changes its layout.
 app.post("/api/system/tenant-branding/mirror-logo", requireAdmin, asyncHandler(async (req, res) => {
     const { mirrorExternalLogo } = await import("../services/mirrorLogo");
+    const tenantId = getTenantIdWithFallback(req);
     const { sourceUrl } = req.body;
-    const result = await mirrorExternalLogo(sourceUrl);
+    const result = await mirrorExternalLogo(sourceUrl, `tenant:${tenantId}`);
     if (!result.ok) {
       return res.status(result.status).json({ error: result.error });
     }
@@ -532,6 +546,19 @@ app.get("/api/storage/serve/objects/*", asyncHandler(async (req, res) => {
     const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
     const objectStorageService = new ObjectStorageService();
     const file = await objectStorageService.getObjectEntityFile(objectPath);
+
+    // Strictly enforce ACL: deny if canAccessObjectEntity returns false.
+    // Files without an ACL policy are inaccessible — the confirm-upload step
+    // must be completed after each upload to set the policy.
+    const canAccess = await objectStorageService.canAccessObjectEntity({
+      userId: (req as any).user?.claims?.sub,
+      tenantId: getTenantIdWithFallback(req),
+      objectFile: file,
+    });
+    if (!canAccess) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
     await objectStorageService.downloadObject(file, res, 86400);
 }));
 

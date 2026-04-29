@@ -125,6 +125,20 @@ export function useUpload(options: UseUploadOptions = {}) {
         setProgress(30);
         await uploadToPresignedUrl(file, uploadResponse.uploadURL);
 
+        // Step 3: Confirm the upload — validates actual stored MIME type,
+        // deletes the file if disallowed, and sets ACL ownership so the
+        // file is accessible to same-tenant users.
+        setProgress(80);
+        const confirmRes = await fetch("/api/uploads/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ objectPath: uploadResponse.objectPath }),
+        });
+        if (!confirmRes.ok) {
+          const errData = await confirmRes.json().catch(() => ({}));
+          throw new Error(errData.error || "Upload confirmation failed");
+        }
+
         setProgress(100);
         options.onSuccess?.(uploadResponse);
         return uploadResponse;

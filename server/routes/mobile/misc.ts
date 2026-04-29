@@ -503,7 +503,14 @@ app.get("/api/mobile/customer-change-requests/mine", isMobileAuthenticated, asyn
 }));
 
 app.post("/api/mobile/customer-change-requests/upload-photo", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
-    const { ObjectStorageService } = await import("../../replit_integrations/object_storage/objectStorage");
+    const { contentType, size } = req.body;
+    const { ObjectStorageService, ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES } = await import("../../replit_integrations/object_storage/objectStorage");
+    if (!contentType || !ALLOWED_UPLOAD_MIME_TYPES.has(contentType)) {
+      return res.status(400).json({ error: "File type not allowed. Only images and PDFs are permitted." });
+    }
+    if (size !== undefined && size !== null && Number(size) > MAX_UPLOAD_SIZE_BYTES) {
+      return res.status(400).json({ error: `File too large. Maximum allowed size is ${MAX_UPLOAD_SIZE_BYTES} bytes.` });
+    }
     const objectStorageService = new ObjectStorageService();
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
@@ -521,16 +528,19 @@ app.post("/api/mobile/customer-change-requests/confirm-photo", isMobileAuthentic
       throw new ValidationError("Ogiltig fotosökväg");
     }
 
-    try {
-      const { ObjectStorageService } = await import("../../replit_integrations/object_storage/objectStorage");
-      const oss = new ObjectStorageService();
-      await oss.getObjectEntityFile(objectPath);
-    } catch {
-      throw new ValidationError("Filen hittades inte eller kunde inte verifieras");
-    }
-
     const { ObjectStorageService } = await import("../../replit_integrations/object_storage/objectStorage");
     const oss = new ObjectStorageService();
+
+    // Tenant-scoped ownership so all members of this tenant can read the
+    // photo while cross-tenant access is blocked.
+    const miscMobileTenantId = (req as any).mobileTenantId as string | undefined;
+    const miscOwner = miscMobileTenantId ? `tenant:${miscMobileTenantId}` : req.mobileResourceId;
+    try {
+      await oss.validateUploadedFileAndSetAcl(objectPath, miscOwner, "private");
+    } catch (err: any) {
+      throw new ValidationError(err.message || "Filen hittades inte eller kunde inte verifieras");
+    }
+
     const downloadURL = await oss.getObjectEntityDownloadURL(objectPath);
     res.json({ confirmed: true, objectPath, downloadURL });
 }));

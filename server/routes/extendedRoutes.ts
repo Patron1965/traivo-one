@@ -1121,8 +1121,16 @@ app.post("/api/field-worker/tasks/:id/upload-photo", asyncHandler(async (req, re
     if (!workOrder || workOrder.tenantId !== tenantId) {
       throw new NotFoundError("Uppgift hittades inte");
     }
-    
-    const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+
+    const { contentType, size } = req.body;
+    const { ObjectStorageService, ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES } = await import("../replit_integrations/object_storage/objectStorage");
+    if (!contentType || !ALLOWED_UPLOAD_MIME_TYPES.has(contentType)) {
+      return res.status(400).json({ error: "File type not allowed. Only images and PDFs are permitted." });
+    }
+    if (size !== undefined && size !== null && Number(size) > MAX_UPLOAD_SIZE_BYTES) {
+      return res.status(400).json({ error: `File too large. Maximum allowed size is ${MAX_UPLOAD_SIZE_BYTES} bytes.` });
+    }
+
     const objectStorageService = new ObjectStorageService();
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
@@ -1145,7 +1153,18 @@ app.post("/api/field-worker/tasks/:id/confirm-photo", asyncHandler(async (req, r
     if (!objectPath) {
       throw new ValidationError("objectPath krävs");
     }
-    
+
+    const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+    const oss = new ObjectStorageService();
+
+    // Tenant-scoped ownership so all members of this tenant can read the
+    // photo while cross-tenant access is blocked.
+    try {
+      await oss.validateUploadedFileAndSetAcl(objectPath, `tenant:${tenantId}`, "private");
+    } catch (err: any) {
+      throw new ValidationError(err.message || "Fotot kunde inte verifieras i lagringen");
+    }
+
     const metadata = (workOrder.metadata as Record<string, any>) || {};
     const photos = metadata.photos || [];
     photos.push({
