@@ -456,7 +456,8 @@ export interface IStorage {
   updateResourcePosition(resourceId: string, position: { currentLatitude: number; currentLongitude: number; lastPositionUpdate: Date; trackingStatus: string }): Promise<Resource | undefined>;
   createResourcePosition(position: InsertResourcePosition): Promise<ResourcePosition>;
   getResourcePositions(resourceId: string, startDate?: Date, endDate?: Date): Promise<ResourcePosition[]>;
-  getActiveResourcePositions(): Promise<Resource[]>;
+  getActiveResourcePositions(tenantId: string): Promise<Resource[]>;
+  getAllActiveResourcePositions(): Promise<Resource[]>;
   
   // Metadata Definitions
   getMetadataDefinitions(tenantId: string): Promise<MetadataDefinition[]>;
@@ -4159,8 +4160,20 @@ export class DatabaseStorage implements IStorage {
       .orderBy(resourcePositions.recordedAt);
   }
 
-  async getActiveResourcePositions(): Promise<Resource[]> {
-    // Get resources with recent position updates (within last 5 minutes)
+  async getActiveResourcePositions(tenantId: string): Promise<Resource[]> {
+    // Get resources with recent position updates (within last 5 minutes) for a specific tenant
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    return db.select()
+      .from(resources)
+      .where(and(
+        eq(resources.tenantId, tenantId),
+        isNull(resources.deletedAt),
+        gte(resources.lastPositionUpdate, fiveMinutesAgo)
+      ));
+  }
+
+  async getAllActiveResourcePositions(): Promise<Resource[]> {
+    // Internal server use only: returns active positions across all tenants (e.g. anomaly monitoring)
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     return db.select()
       .from(resources)

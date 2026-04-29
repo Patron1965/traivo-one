@@ -23,8 +23,9 @@ app.get("/api/resources", asyncHandler(async (req, res) => {
   res.json(resources);
 }));
 
-app.get("/api/resources/active-positions", asyncHandler(async (_req, res) => {
-  const resources = await storage.getActiveResourcePositions();
+app.get("/api/resources/active-positions", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const resources = await storage.getActiveResourcePositions(tenantId);
   res.json(resources.map(r => ({
     id: r.id,
     name: r.name,

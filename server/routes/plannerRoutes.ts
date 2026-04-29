@@ -4,13 +4,16 @@ import { db } from "../db";
 import { eq, sql, desc, and, gte, lte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, isMobileAuthenticated } from "./helpers";
-import { getTenantIdWithFallback, requireTenantWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, requireTenantWithFallback, requireRole } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { workSessions, workEntries, equipmentBookings, deviationReports, teamMembers } from "@shared/schema";
+
 import { notificationService } from "../notifications";
 import { validateSchedule, type ConstraintContext, type ScheduleMove } from "../planning/constraintEngine";
+
+const requirePlannerAccess = requireRole("owner", "admin", "planner");
 
 export async function registerPlannerRoutes(app: Express) {
 // ============================================
@@ -116,8 +119,9 @@ app.post("/api/mobile/work-sessions/:id/entries", isMobileAuthenticated, asyncHa
 // PLANNER VIEW API ENDPOINTS (Driver Core)
 // ============================================
 
-app.get("/api/planner/drivers/locations", requireTenantWithFallback, asyncHandler(async (req, res) => {
-    const resources = await storage.getActiveResourcePositions();
+app.get("/api/planner/drivers/locations", requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const resources = await storage.getActiveResourcePositions(tenantId);
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const locations = resources
@@ -139,7 +143,7 @@ app.get("/api/planner/drivers/locations", requireTenantWithFallback, asyncHandle
     res.json(locations);
 }));
 
-app.get("/api/planner/orders", requireTenantWithFallback, asyncHandler(async (req, res) => {
+app.get("/api/planner/orders", requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req, res) => {
     const range = req.query.range as string || "today";
     const tenantId = getTenantIdWithFallback(req);
     const allOrders = await storage.getWorkOrders(tenantId);
@@ -185,17 +189,18 @@ app.get("/api/planner/orders", requireTenantWithFallback, asyncHandler(async (re
     res.json(enriched);
 }));
 
-// Helper to broadcast planner events via SSE
-function broadcastPlannerEvent(event: { type: string; data: any }) {
+// Helper to broadcast planner events via SSE (tenant-scoped)
+function broadcastPlannerEvent(event: { type: string; data: any }, tenantId: string) {
   const clients: Map<string, any> = (global as any).__plannerEventClients || new Map();
   const msg = `data: ${JSON.stringify(event)}\n\n`;
   clients.forEach((res, id) => {
+    if ((res as any).__tenantId !== tenantId) return;
     try { res.write(msg); } catch(e) { clients.delete(id); }
   });
 }
 
 // SSE endpoint for real-time planner events
-app.get("/api/planner/events", requireTenantWithFallback, (req, res) => {
+app.get("/api/planner/events", requireTenantWithFallback, requirePlannerAccess, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -218,7 +223,7 @@ app.get("/api/planner/events", requireTenantWithFallback, (req, res) => {
   });
 });
 
-app.get("/api/planner/routes", requireTenantWithFallback, asyncHandler(async (req, res) => {
+app.get("/api/planner/routes", requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const allOrders = await storage.getWorkOrders(tenantId);
     const now = new Date();
@@ -274,7 +279,7 @@ app.get("/api/planner/routes", requireTenantWithFallback, asyncHandler(async (re
     res.json(routes);
 }));
 
-app.patch("/api/planner/orders/:id/reassign", requireTenantWithFallback, asyncHandler(async (req, res) => {
+app.patch("/api/planner/orders/:id/reassign", requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req, res) => {
     const orderId = req.params.id;
     const { resourceId } = req.body;
     if (!resourceId) throw new ValidationError("resourceId krävs");
@@ -282,6 +287,9 @@ app.patch("/api/planner/orders/:id/reassign", requireTenantWithFallback, asyncHa
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
+    if (resource.tenantId !== tenantId) {
+      throw new ForbiddenError("Åtkomst nekad");
+    }
 
     const existingOrder = await storage.getWorkOrder(orderId);
     if (!existingOrder) throw new NotFoundError("Order hittades inte");
@@ -301,7 +309,7 @@ app.patch("/api/planner/orders/:id/reassign", requireTenantWithFallback, asyncHa
         newResourceName: resource.name,
         timestamp: new Date().toISOString(),
       }
-    });
+    }, tenantId);
 
     res.json({ success: true, orderId, resourceId, resourceName: resource.name });
 }));

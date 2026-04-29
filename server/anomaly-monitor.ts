@@ -75,7 +75,7 @@ class AnomalyMonitor {
     const alerts: AnomalyAlert[] = [];
     
     try {
-      const resources = await storage.getActiveResourcePositions();
+      const resources = await storage.getAllActiveResourcePositions();
       const now = Date.now();
       const staleThresholdMs = 30 * 60 * 1000; // 30 minutes
 
