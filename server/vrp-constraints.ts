@@ -41,6 +41,13 @@ export interface VRPConstraintOptions {
   respectCapacity?: boolean;
   respectDependencies?: boolean;
   tenantId: string;
+  /**
+   * När agent.id är ett teamId (team-baserad ruttoptimering): map från
+   * teamId → lista av medlemmars resourceIds. Används för att aggregera
+   * fordonskapacitet och artikel-effektivitet över alla team-medlemmar.
+   * Tomt/utelämnat = klassisk per-resurs-läge.
+   */
+  teamMemberMap?: Map<string, string[]>;
 }
 
 export interface EnrichedGeoapifyJob {
@@ -101,7 +108,16 @@ export async function enrichVRPRequestWithConstraints(
 
   const objectMap = new Map(objects.map(o => [o.id, o]));
   const workOrderIds = workOrders.map(o => o.id);
-  const resourceIds = resources.map(r => r.id);
+  // För team-baserad ruttoptimering: utöka resurslistan till att även
+  // inkludera alla team-medlemmars resourceIds, så artikel- och fordons-
+  // uppslagningar nedan får träff.
+  const resourceIdSet = new Set<string>(resources.map(r => r.id));
+  if (options.teamMemberMap) {
+    for (const memberIds of options.teamMemberMap.values()) {
+      for (const id of memberIds) resourceIdSet.add(id);
+    }
+  }
+  const resourceIds = [...resourceIdSet];
   const objectIds = [...new Set(workOrders.map(o => o.objectId).filter(Boolean))];
   const dependencySequences: Array<{ beforeOrderId: string; afterOrderId: string }> = [];
 
@@ -151,7 +167,7 @@ export async function enrichVRPRequestWithConstraints(
   }
 
   if (options.respectCapacity !== false) {
-    const applied = await applyCapacityConstraints(agents, resources, resourceVehicleLinks, options.tenantId, jobs);
+    const applied = await applyCapacityConstraints(agents, resources, resourceVehicleLinks, options.tenantId, jobs, options.teamMemberMap);
     if (applied) constraintsApplied.push("capacity");
   }
 
@@ -162,7 +178,7 @@ export async function enrichVRPRequestWithConstraints(
   }
 
   if (resourceArticlesAll.length > 0) {
-    const applied = applyEfficiencyFactors(jobs, agents, workOrders, resources, resourceArticlesAll);
+    const applied = applyEfficiencyFactors(jobs, agents, workOrders, resources, resourceArticlesAll, options.teamMemberMap);
     if (applied) constraintsApplied.push("efficiency_factors");
   }
 
@@ -387,6 +403,7 @@ async function applyCapacityConstraints(
   resourceVehicleLinks: ResourceVehicle[],
   tenantId: string,
   jobs: EnrichedGeoapifyJob[],
+  teamMemberMap?: Map<string, string[]>,
 ): Promise<boolean> {
   if (resourceVehicleLinks.length === 0) return false;
 
@@ -396,23 +413,43 @@ async function applyCapacityConstraints(
   const allVehicles = await storage.getVehicles(tenantId);
   const vehicleMap = new Map(allVehicles.map(v => [v.id, v]));
 
+  // Hjälp: hämta primärt fordon för en resurs (resourceId).
+  function primaryVehicleForResource(resourceId: string): Vehicle | undefined {
+    const primary = resourceVehicleLinks.find(rv => rv.resourceId === resourceId && rv.isPrimary)
+      || resourceVehicleLinks.find(rv => rv.resourceId === resourceId);
+    if (!primary) return undefined;
+    return vehicleMap.get(primary.vehicleId);
+  }
+
   let anyAgentHasCapacity = false;
 
   for (const agent of agents) {
-    const resource = resources.find(r => r.id === agent.id);
-    if (!resource) continue;
+    if (!agent.id) continue;
 
-    const primaryLink = resourceVehicleLinks.find(
-      rv => rv.resourceId === resource.id && rv.isPrimary
-    ) || resourceVehicleLinks.find(rv => rv.resourceId === resource.id);
+    let capacityTons = 0;
+    let capacityVolume = 0;
 
-    if (!primaryLink) continue;
-
-    const vehicle = vehicleMap.get(primaryLink.vehicleId);
-    if (!vehicle) continue;
-
-    const capacityTons = vehicle.capacityTons || 0;
-    const capacityVolume = vehicle.capacityVolume || 0;
+    const memberIds = teamMemberMap?.get(agent.id);
+    if (memberIds && memberIds.length > 0) {
+      // Team-läge: summera kapacitet från alla medlemmars primära fordon.
+      // Samma fordon räknas bara en gång (om flera i teamet delar bil).
+      const seenVehicleIds = new Set<string>();
+      for (const memberId of memberIds) {
+        const vehicle = primaryVehicleForResource(memberId);
+        if (!vehicle || seenVehicleIds.has(vehicle.id)) continue;
+        seenVehicleIds.add(vehicle.id);
+        capacityTons += vehicle.capacityTons || 0;
+        capacityVolume += vehicle.capacityVolume || 0;
+      }
+    } else {
+      // Klassiskt per-resurs-läge.
+      const resource = resources.find(r => r.id === agent.id);
+      if (!resource) continue;
+      const vehicle = primaryVehicleForResource(resource.id);
+      if (!vehicle) continue;
+      capacityTons = vehicle.capacityTons || 0;
+      capacityVolume = vehicle.capacityVolume || 0;
+    }
 
     if (capacityTons > 0 || capacityVolume > 0) {
       agent.capacity = [
@@ -552,6 +589,7 @@ function applyEfficiencyFactors(
   workOrders: WorkOrder[],
   resources: Resource[],
   resourceArticles: ResourceArticle[],
+  teamMemberMap?: Map<string, string[]>,
 ): boolean {
   if (resourceArticles.length === 0) return false;
   if (agents.length === 0) return false;
@@ -575,6 +613,28 @@ function applyEfficiencyFactors(
     orderArticleMap.set(order.id, order.articleId || null);
   }
 
+  // Returnerar effektiv faktor för en specifik agent (resurs ELLER team) givet artikel.
+  function effectiveFactorForAgent(agentId: string, articleId: string | null): number {
+    const memberIds = teamMemberMap?.get(agentId);
+    if (memberIds && memberIds.length > 0) {
+      // Team-läge: medelvärde av medlemmarnas effektivitet (base * artikel).
+      const memberFactors: number[] = [];
+      for (const memberId of memberIds) {
+        const baseEff = resourceBaseEff.get(memberId) || 1.0;
+        const artMap = articleEffByResource.get(memberId);
+        const articleEff = (articleId && artMap?.get(articleId)) || 1.0;
+        memberFactors.push(baseEff * articleEff);
+      }
+      if (memberFactors.length === 0) return 1.0;
+      return memberFactors.reduce((a, b) => a + b, 0) / memberFactors.length;
+    }
+    // Klassiskt per-resurs-läge.
+    const baseEff = resourceBaseEff.get(agentId) || 1.0;
+    const artMap = articleEffByResource.get(agentId);
+    const articleEff = (articleId && artMap?.get(articleId)) || 1.0;
+    return baseEff * articleEff;
+  }
+
   let anyAdjusted = false;
 
   for (const job of jobs) {
@@ -583,10 +643,7 @@ function applyEfficiencyFactors(
 
     for (const agent of agents) {
       if (!agent.id) continue;
-      const baseEff = resourceBaseEff.get(agent.id) || 1.0;
-      const artMap = articleEffByResource.get(agent.id);
-      const articleEff = (articleId && artMap?.get(articleId)) || 1.0;
-      perAgentFactors.push(baseEff * articleEff);
+      perAgentFactors.push(effectiveFactorForAgent(agent.id, articleId ?? null));
     }
 
     if (perAgentFactors.length === 0) continue;

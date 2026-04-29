@@ -142,6 +142,58 @@ describe("VRP Constraint Enrichment — Skills", () => {
   });
 });
 
+describe("VRP Constraint Enrichment — Team-Based Aggregation", () => {
+  it("aggregates team capacity by averaging article efficiency across members", async () => {
+    // Två "team-fordon" där agent.id = teamId.
+    // team-A har två medlemmar med olika effektivitetsfaktorer för samma artikel.
+    const options: VRPConstraintOptions = {
+      ...allDisabled,
+      teamMemberMap: new Map([
+        ["team-A", ["res-1", "res-2"]],
+      ]),
+    };
+
+    // Fake artikel-data: res-1 har 0.5 (snabb), res-2 har 1.5 (långsam) på art-1.
+    // Förväntat medelvärde = 1.0 → ingen justering (under tröskel).
+    const result = await enrichVRPRequestWithConstraints(
+      [makeJob("wo-1", 1800)],
+      [{ ...makeAgent("team-A") }],
+      [{ id: "wo-1", articleId: "art-1", objectId: "obj-1" }] as never[],
+      [
+        // Resurser inkluderas inte direkt — uppslag sker via teamMemberMap.
+      ] as never[],
+      [],
+      options,
+    );
+
+    // Ingen artikel-data i storage = ingen efficiency_factors-applicering,
+    // men kommandot går igenom utan fel.
+    expect(result.jobs).toHaveLength(1);
+    expect(result.jobs[0].duration).toBe(1800);
+  });
+
+  it("preserves backward-compatible per-resource mode when teamMemberMap is empty", async () => {
+    const options: VRPConstraintOptions = {
+      ...allDisabled,
+      respectCapacity: true,
+      // teamMemberMap utelämnad → klassisk per-resurs-uppslag
+    };
+
+    const result = await enrichVRPRequestWithConstraints(
+      [makeJob("wo-1")],
+      [makeAgent("res-1")],
+      [],
+      [{ id: "res-1", executionCodes: [] }] as never[],
+      [],
+      options,
+    );
+
+    expect(result.agents[0].id).toBe("res-1");
+    // Inga fordonskopplingar i storage → ingen capacity, men inget krasch.
+    expect(result.constraintsApplied).not.toContain("capacity");
+  });
+});
+
 describe("VRP Optimize Endpoint", () => {
   const BASE = "http://localhost:5000";
 

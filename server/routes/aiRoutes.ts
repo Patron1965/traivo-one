@@ -1139,7 +1139,7 @@ app.post("/api/ai/optimize-routes", asyncHandler(async (req, res) => {
 app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
     const { optimizeRoutesVRP, DEFAULT_BREAK_CONFIG } = await import("../route-optimizer");
     const { createOptimizationJob, ASYNC_THRESHOLD } = await import("../optimization-job-runner");
-    const { buildTeamVehicles } = await import("../team-vehicles");
+    const { buildTeamVehicles, buildTeamMemberMap } = await import("../team-vehicles");
     const { date, clusterId, breakConfig: reqBreakConfig, constraints } = req.body;
     
     const tenantId = getTenantIdWithFallback(req);
@@ -1154,6 +1154,7 @@ app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
     ]);
 
     const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources);
+    const teamMemberMap = buildTeamMemberMap(teams, teamMembersAll);
     if (teamVehicles.length === 0) {
       res.status(400).json({
         success: false,
@@ -1211,7 +1212,7 @@ app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
       return;
     }
     
-    const result = await optimizeRoutesVRP(filteredOrders, teamVehicles, objects, clusters, breakConfig, constraintOptions);
+    const result = await optimizeRoutesVRP(filteredOrders, teamVehicles, objects, clusters, breakConfig, { ...constraintOptions, teamMemberMap });
     res.json(result);
 }));
 

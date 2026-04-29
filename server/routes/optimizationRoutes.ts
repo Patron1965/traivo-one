@@ -53,7 +53,7 @@ async function buildOptimizationPayload(
   tenantId: string,
   constraintOptions?: VRPConstraintOptions,
 ): Promise<{ stops: OptimizationStop[]; vehicles: OptimizationVehicle[]; constraintsApplied: string[] }> {
-  const { buildTeamVehicles } = await import("../team-vehicles");
+  const { buildTeamVehicles, buildTeamMemberMap } = await import("../team-vehicles");
   const [workOrders, resources, objects, teams, teamMembersAll] = await Promise.all([
     storage.getWorkOrders(tenantId),
     storage.getResources(tenantId),
@@ -63,6 +63,7 @@ async function buildOptimizationPayload(
   ]);
 
   const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources);
+  const teamMemberMap = buildTeamMemberMap(teams, teamMembersAll);
 
   const objectMap = new Map(objects.map(o => [o.id, o]));
 
@@ -112,7 +113,7 @@ async function buildOptimizationPayload(
     filteredOrders,
     teamVehicles,
     objects,
-    options,
+    { ...options, teamMemberMap },
   );
 
   const stops: OptimizationStop[] = constraintResult.jobs.map(j => {
@@ -227,7 +228,7 @@ export async function registerOptimizationRoutes(app: Express) {
     }
 
     const { optimizeRoutesVRP, DEFAULT_BREAK_CONFIG } = await import("../route-optimizer");
-    const { buildTeamVehicles } = await import("../team-vehicles");
+    const { buildTeamVehicles, buildTeamMemberMap } = await import("../team-vehicles");
     const [workOrders, resources, objects, clusters, teams, teamMembersAll] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
@@ -238,6 +239,7 @@ export async function registerOptimizationRoutes(app: Express) {
     ]);
 
     const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources);
+    const teamMemberMap = buildTeamMemberMap(teams, teamMembersAll);
     if (teamVehicles.length === 0) {
       throw new ValidationError("Inga aktiva team med medlemmar hittades. Skapa ett team med minst en medlem för att köra ruttoptimering.");
     }
@@ -256,7 +258,7 @@ export async function registerOptimizationRoutes(app: Express) {
       o.orderStatus !== "utford" && o.orderStatus !== "fakturerad"
     );
 
-    const result = await optimizeRoutesVRP(filteredOrders, teamVehicles, objects, clusters, DEFAULT_BREAK_CONFIG, constraints);
+    const result = await optimizeRoutesVRP(filteredOrders, teamVehicles, objects, clusters, DEFAULT_BREAK_CONFIG, { ...constraints, teamMemberMap });
 
     res.json(result);
   }));
