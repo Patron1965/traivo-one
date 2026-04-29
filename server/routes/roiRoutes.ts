@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { db } from "../db";
 import { eq, and, gte, lte, sql, count, sum, avg, desc, inArray, or } from "drizzle-orm";
-import { getTenantIdWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, requireRole } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { ValidationError } from "../errors";
 import { workOrders, environmentalData, deviationReports, customers, objects, roiShareTokens } from "@shared/schema";
@@ -23,9 +23,11 @@ interface MonthlyMetrics {
   productivityPerResource: number;
 }
 
+const requirePlanner = requireRole("owner", "admin", "planner");
+
 export async function registerRoiRoutes(app: Express) {
 
-  app.get("/api/reports/roi/:customerId", asyncHandler(async (req, res) => {
+  app.get("/api/reports/roi/:customerId", requirePlanner, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { customerId } = req.params;
     const monthsBack = parseInt(req.query.months as string) || 12;
@@ -256,7 +258,7 @@ export async function registerRoiRoutes(app: Express) {
     });
   }));
 
-  app.get("/api/reports/roi-customers", asyncHandler(async (req, res) => {
+  app.get("/api/reports/roi-customers", requirePlanner, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
 
     const customerList = await db
@@ -277,7 +279,7 @@ export async function registerRoiRoutes(app: Express) {
     res.json(customerList);
   }));
 
-  app.post("/api/reports/roi/:customerId/share", asyncHandler(async (req, res) => {
+  app.post("/api/reports/roi/:customerId/share", requirePlanner, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { customerId } = req.params;
 
