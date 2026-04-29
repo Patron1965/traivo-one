@@ -114,6 +114,13 @@ export async function triggerETANotification(
       return { sent: false, reason: "Order eller kund saknas" };
     }
 
+    if (order.resourceId !== resourceId) {
+      return { sent: false, reason: "Resurs matchar inte ordern" };
+    }
+    if (order.tenantId !== tenantId) {
+      return { sent: false, reason: "Tenant matchar inte ordern" };
+    }
+
     const existingNotifs = await db.select()
       .from(etaNotifications)
       .where(and(

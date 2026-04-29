@@ -257,6 +257,12 @@ app.post("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, workSess
 
 app.get("/api/mobile/orders/:id/time-entries", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
+    const resourceId = req.mobileResourceId;
+
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+
     const entries = await db.select().from(workEntries)
       .where(eq(workEntries.workOrderId, orderId))
       .orderBy(desc(workEntries.startTime));

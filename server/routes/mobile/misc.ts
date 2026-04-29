@@ -1387,6 +1387,8 @@ app.post("/api/mobile/work-orders/:id/auto-eta-sms", isMobileAuthenticated, asyn
 
     const order = await storage.getWorkOrder(orderId);
     if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+    if (order.tenantId !== resource.tenantId) throw new ForbiddenError("Ej behörig");
 
     try {
       const result = await triggerETANotification(orderId, resourceId, resource.tenantId);
