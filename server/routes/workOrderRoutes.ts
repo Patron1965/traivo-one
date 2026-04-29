@@ -431,6 +431,50 @@ app.get("/api/order-stock", asyncHandler(async (req, res) => {
   res.json({ orders, summary, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } });
 }));
 
+// Bulk-räkna om cachedValue/cachedCost/cachedProductionMinutes på alla ordrar
+// som matchar samma filter som GET /api/order-stock. Returnerar antal omräknade
+// och antal vars värde faktiskt ändrades.
+app.post("/api/order-stock/recalculate", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const includeSimulated = req.body?.includeSimulated === true || req.body?.includeSimulated === "true";
+  const scenarioId = (req.body?.scenarioId as string | undefined) || undefined;
+  const orderStatus = (req.body?.orderStatus as OrderStatus | undefined) || undefined;
+  const activeOnly = req.body?.activeOnly !== false && req.body?.activeOnly !== "false";
+  const startDate = req.body?.startDate ? new Date(req.body.startDate as string) : undefined;
+  const endDate = req.body?.endDate ? new Date(req.body.endDate as string) : undefined;
+  const search = (req.body?.search as string | undefined) || undefined;
+
+  let metadataFilters: { metadataName: string; operator: string; value: string }[] | undefined;
+  const metadataFilterRaw = req.body?.metadataFilter as string | undefined;
+  if (metadataFilterRaw) {
+    metadataFilters = metadataFilterRaw.split(",").map((f: string) => {
+      const parts = f.split(":");
+      return { metadataName: parts[0], operator: parts[1] || 'eq', value: parts.slice(2).join(":") };
+    }).filter((f: { metadataName: string; value: string }) => f.metadataName && f.value);
+  }
+
+  // Hämta alla matchande order-IDs genom att paginera. 5000/sida räcker för
+  // att hålla varje fråga snabb och funkar oavsett tenantstorlek.
+  const PAGE = 5000;
+  const allIds: string[] = [];
+  let page = 1;
+  let totalPages = 1;
+  do {
+    const result = await storage.getOrderStock(tenantId, {
+      includeSimulated, scenarioId, orderStatus, activeOnly, startDate, endDate,
+      page, pageSize: PAGE, search, metadataFilters,
+    });
+    for (const o of result.orders) allIds.push(o.id);
+    totalPages = result.pagination?.totalPages ?? 1;
+    page++;
+    // Safety-guard: bryt vid orimligt många sidor (≈500k ordrar).
+    if (page > 100) break;
+  } while (page <= totalPages);
+
+  const result = await storage.recalculateWorkOrderTotalsBulk(allIds);
+  res.json({ matched: allIds.length, recalculated: result.recalculated, changed: result.changed });
+}));
+
 app.post("/api/work-orders/:id/status", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const existing = await storage.getWorkOrder(req.params.id);

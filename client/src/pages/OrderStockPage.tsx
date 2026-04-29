@@ -64,8 +64,11 @@ import {
   Mail,
   ClipboardList,
   CalendarPlus,
-  Link2
+  Link2,
+  RefreshCw,
+  Info
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuth } from "@/hooks/use-auth";
 import { AICard } from "@/components/AICard";
@@ -253,6 +256,31 @@ export default function OrderStockPage() {
     },
     onError: (err: Error) => {
       toast({ title: err?.message || tl("toast.analysis-error"), variant: "destructive" });
+    }
+  });
+
+  const recalculateMutation = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, unknown> = {
+        includeSimulated,
+        scenarioId: selectedScenario || undefined,
+        orderStatus: statusFilter === "all" ? undefined : statusFilter,
+        activeOnly: statusFilter === "all",
+        search: debouncedSearch || undefined,
+        metadataFilter: metadataFilterString || undefined,
+      };
+      const res = await apiRequest("POST", "/api/order-stock/recalculate", body);
+      return res.json() as Promise<{ matched: number; recalculated: number; changed: number }>;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: tl("page.orderstock.recalculate-success"),
+        description: `${data.recalculated} ${tl("page.orderstock.recalculate-of")} ${data.matched} ${tl("page.orderstock.recalculate-orders")} · ${data.changed} ${tl("page.orderstock.recalculate-changed")}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: err?.message || tl("page.orderstock.recalculate-error"), variant: "destructive" });
     }
   });
 
@@ -694,7 +722,21 @@ export default function OrderStockPage() {
           <Download className="h-4 w-4" />
           {tl("page.orderstock.export-csv")}
         </Button>
-        
+
+        <Button
+          variant="outline"
+          onClick={() => recalculateMutation.mutate()}
+          disabled={recalculateMutation.isPending}
+          className="gap-2"
+          title={tl("page.orderstock.recalculate-tooltip")}
+          data-testid="button-recalculate-totals"
+        >
+          {recalculateMutation.isPending
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <RefreshCw className="h-4 w-4" />}
+          {tl("page.orderstock.recalculate-button")}
+        </Button>
+
         <Button 
           onClick={() => { setSalesEmail(user?.email || ""); setSalesScope("all"); setShowSalesIntelDialog(true); }} 
           className="gap-2 bg-gradient-to-r from-[#1B4B6B] to-[#4A9B9B] hover:from-[#2C3E50] hover:to-[#3d8585] text-white"
@@ -1033,7 +1075,24 @@ export default function OrderStockPage() {
                     </div>
 
                     <div className="text-right text-sm">
-                      <div>{formatCurrency(order.cachedValue)}</div>
+                      <div className="flex items-center justify-end gap-1">
+                        <span>{formatCurrency(order.cachedValue)}</span>
+                        {(order.cachedValue ?? 0) === 0 && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info
+                                  className="h-3.5 w-3.5 text-muted-foreground cursor-help"
+                                  data-testid={`icon-zero-value-${order.id}`}
+                                />
+                              </TooltipTrigger>
+                              <TooltipContent side="left" className="max-w-xs">
+                                <p className="text-xs">{tl("page.orderstock.zero-value-tooltip")}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                      </div>
                       <div className="text-muted-foreground">{formatMinutes(order.cachedProductionMinutes)}</div>
                     </div>
 

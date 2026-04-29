@@ -390,6 +390,9 @@ export interface IStorage {
   
   // Recalculate work order totals from lines
   recalculateWorkOrderTotals(workOrderId: string): Promise<WorkOrder | undefined>;
+
+  // Recalculate work order totals for many orders at once
+  recalculateWorkOrderTotalsBulk(workOrderIds: string[]): Promise<{ recalculated: number; changed: number }>;
   
   // Clusters - navet i verksamheten
   getClusters(tenantId: string): Promise<Cluster[]>;
@@ -3294,6 +3297,90 @@ export class DatabaseStorage implements IStorage {
     }
 
     return wo || undefined;
+  }
+
+  // Recalculate work order totals for many orders at once.
+  // Använder en enda CTE-baserad UPDATE så även 6000+ ordrar går på sub-sekund.
+  // recalculated = antal ordrar som finns i db (alltså processade); changed = antal vars värden faktiskt ändrades.
+  async recalculateWorkOrderTotalsBulk(workOrderIds: string[]): Promise<{ recalculated: number; changed: number }> {
+    if (workOrderIds.length === 0) {
+      return { recalculated: 0, changed: 0 };
+    }
+
+    // Postgres ROW-uttryck (som drivern bygger när vi passar JS-array) klarar max
+    // 1664 entries per call. Vi chunkar i 500 åt gången så CTE:n blir snabb och säker.
+    const CHUNK = 500;
+    let totalChanged = 0;
+    const tenantsTouched = new Set<string>();
+
+    for (let i = 0; i < workOrderIds.length; i += CHUNK) {
+      const chunk = workOrderIds.slice(i, i + CHUNK);
+      try {
+        const updated = await db.execute<{ id: string; tenant_id: string | null }>(sql`
+          WITH new_totals AS (
+            SELECT
+              w.id,
+              COALESCE(SUM(l.quantity * COALESCE(l.resolved_price, 0)), 0)::int AS new_value,
+              COALESCE(SUM(l.quantity * COALESCE(l.resolved_cost, 0)), 0)::int AS new_cost,
+              COALESCE(SUM(l.quantity * COALESCE(l.resolved_production_minutes, 0)), 0)::int AS new_minutes
+            FROM ${workOrders} w
+            LEFT JOIN ${workOrderLines} l
+              ON l.work_order_id = w.id AND COALESCE(l.is_optional, false) = false
+            WHERE w.id IN ${chunk}
+            GROUP BY w.id
+          )
+          UPDATE ${workOrders} w
+          SET cached_value = nt.new_value,
+              cached_cost = nt.new_cost,
+              cached_production_minutes = nt.new_minutes
+          FROM new_totals nt
+          WHERE w.id = nt.id
+            AND (w.cached_value IS DISTINCT FROM nt.new_value
+                 OR w.cached_cost IS DISTINCT FROM nt.new_cost
+                 OR w.cached_production_minutes IS DISTINCT FROM nt.new_minutes)
+          RETURNING w.id, w.tenant_id
+        `);
+
+        const rows = (updated as unknown as { rows?: Array<{ id: string; tenant_id: string | null }> }).rows
+          ?? (updated as unknown as Array<{ id: string; tenant_id: string | null }>);
+        const changedRows = Array.isArray(rows) ? rows : [];
+
+        totalChanged += changedRows.length;
+        for (const r of changedRows) {
+          if (r.tenant_id) tenantsTouched.add(r.tenant_id);
+        }
+      } catch (err) {
+        console.error(`[recalculateWorkOrderTotalsBulk] CTE chunk failed (chunk ${i / CHUNK + 1}), fallback per-order:`, err);
+        for (const id of chunk) {
+          try {
+            const before = await db.select({
+              cachedValue: workOrders.cachedValue,
+              cachedCost: workOrders.cachedCost,
+              cachedProductionMinutes: workOrders.cachedProductionMinutes,
+            }).from(workOrders).where(eq(workOrders.id, id));
+            const wo = await this.recalculateWorkOrderTotals(id);
+            if (wo) {
+              if (wo.tenantId) tenantsTouched.add(wo.tenantId);
+              if (
+                (before[0]?.cachedValue || 0) !== (wo.cachedValue || 0) ||
+                (before[0]?.cachedCost || 0) !== (wo.cachedCost || 0) ||
+                (before[0]?.cachedProductionMinutes || 0) !== (wo.cachedProductionMinutes || 0)
+              ) {
+                totalChanged++;
+              }
+            }
+          } catch (innerErr) {
+            console.error(`[recalculateWorkOrderTotalsBulk] per-order fallback failed for ${id}:`, innerErr);
+          }
+        }
+      }
+    }
+
+    for (const tenantId of tenantsTouched) {
+      invalidateWorkflowCaches(tenantId);
+    }
+
+    return { recalculated: workOrderIds.length, changed: totalChanged };
   }
 
   // ============== VEHICLES ==============

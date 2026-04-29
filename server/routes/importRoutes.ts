@@ -2451,6 +2451,7 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(
     const errors: string[] = [];
     let articlesAutoCreated = 0;
     let skippedExistingCount = 0;
+    const affectedWorkOrderIds = new Set<string>();
 
     for (const row of parsed.rows) {
       try {
@@ -2515,6 +2516,7 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(
           priceSource: "modus_import",
           notes: beskrivning || null,
         });
+        affectedWorkOrderIds.add(workOrder.id);
         
         created.push(`${uppgiftId}/${rad}: ${beskrivning.substring(0, 40)}`);
       } catch (err) {
@@ -2522,6 +2524,10 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(
       }
     }
     
+    // Räkna om cachedValue/cachedCost/cachedProductionMinutes på alla berörda ordrar
+    // så orderstock-summan stämmer direkt efter importen.
+    const recalcResult = await storage.recalculateWorkOrderTotalsBulk(Array.from(affectedWorkOrderIds));
+
     res.json({ 
       importBatchId: invoiceBatchId,
       imported: created.length,
@@ -2531,6 +2537,8 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(
       mode: skipExisting ? "skip_existing" : "upsert",
       errors: errors.slice(0, 50),
       totalRows: parsed.rows.length,
+      ordersRecalculated: recalcResult.recalculated,
+      ordersValueChanged: recalcResult.changed,
     });
 }));
 
@@ -2580,6 +2588,7 @@ async function runModusInvoiceLinesImportJob(params: {
     let articlesAutoCreated = 0;
     let skippedExistingCount = 0;
     let processed = 0;
+    const affectedWorkOrderIds = new Set<string>();
 
     for (const row of rows) {
       processed++;
@@ -2638,6 +2647,7 @@ async function runModusInvoiceLinesImportJob(params: {
           priceSource: "modus_import",
           notes: beskrivning || null,
         });
+        affectedWorkOrderIds.add(workOrder.id);
 
         created.push(`${uppgiftId}/${rad}: ${beskrivning.substring(0, 40)}`);
       } catch (err) {
@@ -2662,6 +2672,10 @@ async function runModusInvoiceLinesImportJob(params: {
       }
     }
 
+    // Räkna om cachedValue/cachedCost/cachedProductionMinutes på alla berörda ordrar
+    // så orderstock-summan stämmer direkt efter importen.
+    const recalcResult = await storage.recalculateWorkOrderTotalsBulk(Array.from(affectedWorkOrderIds));
+
     await db.update(importBatches).set({
       created: created.length,
       errors: errors.length,
@@ -2677,6 +2691,8 @@ async function runModusInvoiceLinesImportJob(params: {
         skippedExisting: skippedExistingCount,
         mode: skipExisting ? "skip_existing" : "upsert",
         errorSamples: errors.slice(0, 50),
+        ordersRecalculated: recalcResult.recalculated,
+        ordersValueChanged: recalcResult.changed,
         completedAt: new Date().toISOString(),
       },
     }).where(eq(importBatches.batchId, invoiceBatchId));
