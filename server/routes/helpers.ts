@@ -1,6 +1,9 @@
 import type { Request as ExpressRequest, Response as ExpressResponse, NextFunction } from "express";
 import { z } from "zod";
 import { getTenantIdWithFallback } from "../tenant-middleware";
+import { storage } from "../storage";
+import { NotFoundError } from "../errors";
+import type { Resource, Team, Customer, ServiceObject } from "@shared/schema";
 
 declare global {
   namespace Express {
@@ -38,6 +41,63 @@ export function verifyTenantOwnership<T extends { tenantId: string }>(
     return null;
   }
   return resource;
+}
+
+/**
+ * Hjälpare för att verifiera att ett klient-skickat resurs-id tillhör den
+ * aktiva tenanten. Används av planeringsendpoints (assign, bulk-update,
+ * drag-and-drop, auto-fill, send-schedule) för att förhindra att en planerare
+ * i tenant A av misstag — eller med flit — skriver mot data i tenant B.
+ *
+ * Returnerar entiteten om den finns och tillhör tenant; kastar annars
+ * NotFoundError så svaret inte avslöjar om id:t finns i en annan tenant.
+ */
+export async function ensureTenantOwnership<T extends { tenantId: string }>(
+  fetcher: (id: string) => Promise<T | undefined>,
+  id: string | null | undefined,
+  tenantId: string,
+  resourceLabel: string,
+): Promise<T> {
+  if (!id) throw new NotFoundError(resourceLabel);
+  const item = await fetcher(id);
+  if (!item || item.tenantId !== tenantId) {
+    throw new NotFoundError(resourceLabel);
+  }
+  return item;
+}
+
+export function ensureResourceInTenant(id: string | null | undefined, tenantId: string): Promise<Resource> {
+  return ensureTenantOwnership((rid: string) => storage.getResource(rid), id, tenantId, "Resurs");
+}
+
+export function ensureTeamInTenant(id: string | null | undefined, tenantId: string): Promise<Team> {
+  return ensureTenantOwnership((tid: string) => storage.getTeam(tid), id, tenantId, "Team");
+}
+
+export function ensureCustomerInTenant(id: string | null | undefined, tenantId: string): Promise<Customer> {
+  return ensureTenantOwnership((cid: string) => storage.getCustomer(cid), id, tenantId, "Kund");
+}
+
+export function ensureObjectInTenant(id: string | null | undefined, tenantId: string): Promise<ServiceObject> {
+  return ensureTenantOwnership((oid: string) => storage.getObject(oid), id, tenantId, "Objekt");
+}
+
+/**
+ * Bulk-variant för endpoints som tar emot flera resurs-id:n (t.ex.
+ * bulk-unschedule, carry-over). Hämtar tenantens resurser i en query
+ * och kastar NotFoundError om något id ligger utanför tenant.
+ */
+export async function ensureResourceIdsInTenant(
+  ids: string[] | null | undefined,
+  tenantId: string,
+): Promise<void> {
+  if (!ids || ids.length === 0) return;
+  const tenantResources = await storage.getResources(tenantId);
+  const validIds = new Set(tenantResources.map((r) => r.id));
+  const invalid = ids.filter((id) => !validIds.has(id));
+  if (invalid.length > 0) {
+    throw new NotFoundError(`Resurs (${invalid.join(", ")})`);
+  }
 }
 
 export function getISOWeek(date: Date): number {

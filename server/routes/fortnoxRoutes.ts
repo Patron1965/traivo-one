@@ -3,7 +3,7 @@ import { storage } from "../storage";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
+import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, ensureResourceInTenant, ensureResourceIdsInTenant } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
@@ -389,6 +389,11 @@ app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
     if (!weekStartDate || !resourceIds || !Array.isArray(resourceIds)) {
       throw new ValidationError("weekStartDate and resourceIds[] required");
     }
+
+    // Cross-tenant skydd: avvisa hela förfrågan om något resurs-id inte
+    // tillhör tenanten (kastar NotFoundError -> 404). Tidigare filtrerade
+    // vi tyst bort främmande id:n vilket dolde tenant-läckage.
+    await ensureResourceIdsInTenant(resourceIds, tenantId);
 
     const weekStart = new Date(weekStartDate);
     const weekDays: Date[] = [];
@@ -780,11 +785,23 @@ app.post("/api/auto-plan-week/apply", asyncHandler(async (req, res) => {
       throw new ValidationError("assignments[] required");
     }
 
-    // Pre-fetch tenant resources, team memberships, and teams so we can:
-    //  (a) validate that any assignment.resourceId belongs to this tenant, and
-    //  (b) infer team_id from the resource's team membership (cluster-match preferred).
-    const tenantResources = await storage.getResources(tenantId);
-    const tenantResourceIds = new Set(tenantResources.map(r => r.id));
+    // Validering: varje assignment måste innehålla ett icke-tomt resourceId
+    // (sträng). Tidigare filtrerades saknade id:n tyst bort.
+    for (let i = 0; i < assignments.length; i++) {
+      const a = assignments[i];
+      if (!a || typeof a.resourceId !== "string" || a.resourceId.trim() === "") {
+        throw new ValidationError(`assignments[${i}].resourceId krävs (icke-tom sträng)`);
+      }
+    }
+
+    // Cross-tenant skydd: avvisa hela request:en om något resourceId i
+    // assignments inte tillhör tenanten. Tidigare hoppade vi tyst över
+    // främmande id:n vilket dolde tenant-läckage.
+    const assignmentResourceIds = assignments.map((a: { resourceId: string }) => a.resourceId);
+    await ensureResourceIdsInTenant(assignmentResourceIds, tenantId);
+
+    // Pre-fetch team memberships och teams så vi kan härleda team_id från
+    // resursens medlemskap (cluster-match först).
     const allMembers = await storage.getAllTeamMembers(tenantId);
     const teams = await storage.getTeams(tenantId);
     const teamClusterMap = new Map<string, string | null>();
@@ -813,14 +830,12 @@ app.post("/api/auto-plan-week/apply", asyncHandler(async (req, res) => {
     for (const assignment of assignments) {
       const workOrder = await storage.getWorkOrder(assignment.workOrderId);
       if (!verifyTenantOwnership(workOrder, tenantId)) {
-        skipped.push({ workOrderId: assignment.workOrderId, reason: "wo_not_in_tenant" });
-        continue;
+        // Hård avvisning för cross-tenant arbetsorder — undviker tyst läckage
+        // och är konsistent med övriga planeringsendpoints (404 NotFoundError).
+        throw new NotFoundError("Arbetsorder hittades inte");
       }
-      // Validate resource belongs to same tenant — prevent cross-tenant assignment.
-      if (!assignment.resourceId || !tenantResourceIds.has(assignment.resourceId)) {
-        skipped.push({ workOrderId: assignment.workOrderId, reason: "resource_not_in_tenant" });
-        continue;
-      }
+      // Resource-tenant kontrolleras redan i pre-checken ovan via
+      // ensureResourceIdsInTenant — ingen ytterligare check behövs här.
 
       const inferredTeamId = inferTeamId(assignment.resourceId, workOrder?.clusterId ?? null);
       const updatePayload: Record<string, unknown> = {
@@ -1499,12 +1514,17 @@ app.post("/api/route/google-maps-url", asyncHandler(async (req, res) => {
 
 // Send route to mobile app via WebSocket
 app.post("/api/route/send-to-mobile", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
     const { resourceId, stops, date, googleMapsUrl } = req.body;
     
     if (!resourceId || !stops) {
       throw new ValidationError("ResourceId och stops krävs");
     }
-    
+
+    // Avvisa cross-tenant resourceId så att en planerare i tenant A inte kan
+    // pusha en rutt direkt till en mobil i tenant B via WebSocket.
+    await ensureResourceInTenant(resourceId, tenantId);
+
     // Send notification to the specific resource's mobile app
     notificationService.sendToResource(resourceId, {
       type: "route_update",

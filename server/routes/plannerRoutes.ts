@@ -3,7 +3,7 @@ import { storage } from "../storage";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, lte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, isMobileAuthenticated } from "./helpers";
+import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, isMobileAuthenticated, ensureResourceInTenant } from "./helpers";
 import { getTenantIdWithFallback, requireTenantWithFallback, requireRole } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
@@ -285,16 +285,13 @@ app.patch("/api/planner/orders/:id/reassign", requireTenantWithFallback, require
     if (!resourceId) throw new ValidationError("resourceId krävs");
 
     const tenantId = getTenantIdWithFallback(req);
-    const resource = await storage.getResource(resourceId);
-    if (!resource) throw new NotFoundError("Resurs hittades inte");
-    if (resource.tenantId !== tenantId) {
-      throw new ForbiddenError("Åtkomst nekad");
-    }
+    // Avvisar 404 om resursen tillhör en annan tenant — matchar resten av
+    // planeringsendpoints och hindrar drag-and-drop över tenants.
+    const resource = await ensureResourceInTenant(resourceId, tenantId);
 
     const existingOrder = await storage.getWorkOrder(orderId);
-    if (!existingOrder) throw new NotFoundError("Order hittades inte");
-    if (existingOrder.tenantId && existingOrder.tenantId !== tenantId) {
-      throw new ForbiddenError("Åtkomst nekad");
+    if (!existingOrder || !verifyTenantOwnership(existingOrder, tenantId)) {
+      throw new NotFoundError("Order hittades inte");
     }
 
     const updated = await storage.updateWorkOrder(orderId, { resourceId });
@@ -1221,8 +1218,10 @@ app.post("/api/planning/what-if", requireTenantWithFallback, asyncHandler(async 
     const workOrder = await storage.getWorkOrder(workOrderId);
     if (!workOrder || workOrder.tenantId !== tenantId) throw new NotFoundError("Arbetsorder hittades inte");
 
-    const resource = await storage.getResource(toResourceId);
-    if (!resource || resource.tenantId !== tenantId) throw new NotFoundError("Resurs hittades inte");
+    // Avvisa cross-tenant resourceId även för dry-run/what-if så analysen inte
+    // exponerar att en resurs finns i en annan tenant.
+    const resource = await ensureResourceInTenant(toResourceId, tenantId);
+    if (fromResourceId) await ensureResourceInTenant(fromResourceId, tenantId);
 
     const allOrders = await storage.getWorkOrders(tenantId);
     const resources = await storage.getResources(tenantId);

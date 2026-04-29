@@ -3,7 +3,15 @@ import { storage } from "../storage";
 import { db } from "../db";
 import { eq, and, desc } from "drizzle-orm";
 import { z } from "zod";
-import { formatZodError, verifyTenantOwnership } from "./helpers";
+import {
+  formatZodError,
+  verifyTenantOwnership,
+  ensureResourceInTenant,
+  ensureTeamInTenant,
+  ensureCustomerInTenant,
+  ensureObjectInTenant,
+  ensureResourceIdsInTenant,
+} from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, type OrderConcept } from "@shared/schema";
 import { handleWorkOrderStatusChange } from "../ai-communication";
@@ -145,6 +153,8 @@ app.post("/api/work-orders/bulk-unschedule", asyncHandler(async (req, res) => {
   if (isNaN(parsedStart.getTime()) || isNaN(parsedEnd.getTime())) {
     throw new ValidationError("Ogiltigt datumformat");
   }
+  // Avvisa cross-tenant resourceIds innan vi rör några ordrar.
+  await ensureResourceIdsInTenant(resourceIds, tenantId);
   const count = await storage.bulkUnscheduleWorkOrders(tenantId, parsedStart, parsedEnd, resourceIds);
   res.json({ count });
 }));
@@ -153,6 +163,9 @@ app.post("/api/work-orders/carry-over", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const { fromDate, toDate, resourceIds } = req.body;
   if (!fromDate || !toDate) throw new ValidationError("fromDate och toDate krävs");
+  // Avvisa cross-tenant resourceIds även om filterlogiken längre ned redan
+  // skär bort främmande tenants — felet ska bubbla upp så klienten ser det.
+  await ensureResourceIdsInTenant(Array.isArray(resourceIds) ? resourceIds : undefined, tenantId);
   
   const from = new Date(fromDate);
   const to = new Date(toDate);
@@ -197,6 +210,13 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
     ...bodyData,
     tenantId
   });
+
+  // Validera alla refererade id:n mot tenant så att en planerare inte kan
+  // skapa en order som pekar på resurser/kunder/objekt/team i en annan tenant.
+  if (data.resourceId) await ensureResourceInTenant(data.resourceId, tenantId);
+  if (data.teamId) await ensureTeamInTenant(data.teamId, tenantId);
+  if (data.customerId) await ensureCustomerInTenant(data.customerId, tenantId);
+  if (data.objectId) await ensureObjectInTenant(data.objectId, tenantId);
 
   if (data.articleId && data.objectId) {
     const article = await storage.getArticle(data.articleId);
@@ -258,6 +278,13 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
   if (!existingOrder || !verifyTenantOwnership(existingOrder, tenantId)) {
     throw new NotFoundError("Arbetsorder");
   }
+
+  // Validera klient-skickade refererade id:n mot tenant så att en planerare
+  // inte kan flytta en order till en resurs/team/kund/objekt i en annan tenant.
+  if (updateData.resourceId) await ensureResourceInTenant(updateData.resourceId, tenantId);
+  if (updateData.teamId) await ensureTeamInTenant(updateData.teamId, tenantId);
+  if (updateData.customerId) await ensureCustomerInTenant(updateData.customerId, tenantId);
+  if (updateData.objectId) await ensureObjectInTenant(updateData.objectId, tenantId);
 
   const isResourceChange = updateData.resourceId && updateData.resourceId !== existingOrder.resourceId;
   const assignedResourceId = updateData.resourceId || existingOrder.resourceId;
@@ -651,10 +678,7 @@ app.post("/api/work-orders/:workOrderId/objects", asyncHandler(async (req, res) 
     throw new ValidationError("objectId is required");
   }
 
-  const object = await storage.getObject(objectId);
-  if (!verifyTenantOwnership(object, tenantId)) {
-    throw new NotFoundError("Objekt");
-  }
+  await ensureObjectInTenant(objectId, tenantId);
 
   const existingObjects = await storage.getWorkOrderObjects(req.params.workOrderId);
   const isDuplicate = existingObjects.some(o => o.objectId === objectId);

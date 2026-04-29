@@ -6,7 +6,10 @@ export class AppError extends Error {
     super(message);
     this.statusCode = statusCode;
     this.isOperational = isOperational;
-    Object.setPrototypeOf(this, AppError.prototype);
+    // Bevara den faktiska underklassens prototyp så `instanceof NotFoundError`
+    // (och andra subklasser) fungerar — annars sätter Object.setPrototypeOf
+    // alltid prototypen till AppError.prototype.
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
