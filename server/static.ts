@@ -1,6 +1,23 @@
-import express, { type Express } from "express";
+import express, { type Express, type Response } from "express";
 import fs from "fs";
 import path from "path";
+
+const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
+
+function setCacheHeadersForBuildAsset(res: Response, filePath: string) {
+  // Vite emits hashed filenames in /assets/, so they are safe to cache forever.
+  // Everything else (notably index.html, manifest.json, sw.js, favicon.png) must
+  // be revalidated on every request so a fresh deploy is picked up immediately
+  // and we don't load a stale index.html that points to a deleted JS chunk
+  // (which causes "Failed to fetch dynamically imported module" errors).
+  if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+    res.setHeader("Cache-Control", `public, max-age=${ONE_YEAR_SECONDS}, immutable`);
+    return;
+  }
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+}
 
 export function serveStatic(app: Express) {
   const distPath = path.resolve(__dirname, "public");
@@ -10,10 +27,18 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  app.use(
+    express.static(distPath, {
+      setHeaders: setCacheHeadersForBuildAsset,
+    }),
+  );
 
-  // fall through to index.html if the file doesn't exist
+  // SPA fallback: serve index.html for unknown routes, never cached so a fresh
+  // deploy is reflected on the next navigation.
   app.use("*", (_req, res) => {
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
