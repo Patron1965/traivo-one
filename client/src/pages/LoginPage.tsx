@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import traivoLogo from "@assets/traivo_logo_dark_mode.png";
-import { ArrowRight, ExternalLink, Smartphone, UserCircle2 } from "lucide-react";
+import { ArrowRight, Smartphone, UserCircle2 } from "lucide-react";
 
 const MARKETING_URL = "https://www-traivo-se.lovable.app";
 
@@ -55,11 +55,10 @@ export default function LoginPage() {
                 href={MARKETING_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-5 inline-flex items-center gap-1.5 text-sm text-[#4A9B9B] hover:text-[#1B4B6B] dark:text-teal-300 dark:hover:text-teal-200 font-medium transition-colors"
+                className="mt-5 inline-flex items-center gap-1 text-sm text-[#4A9B9B] hover:text-[#1B4B6B] dark:text-teal-300 dark:hover:text-teal-200 font-medium transition-colors"
                 data-testid="link-marketing"
               >
-                Läs mer om Traivo
-                <ExternalLink className="h-3.5 w-3.5" />
+                Läs mer om Traivo →
               </a>
             </div>
 
@@ -77,7 +76,7 @@ export default function LoginPage() {
                     Är du tekniker?
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400">
-                    Mobilinloggning för fältpersonal
+                    Mobilinloggning
                   </div>
                 </div>
                 <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
@@ -96,7 +95,7 @@ export default function LoginPage() {
                     Har du fått en kundportal-länk?
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400">
-                    Öppna kundportalen
+                    Öppna kundportal
                   </div>
                 </div>
                 <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
