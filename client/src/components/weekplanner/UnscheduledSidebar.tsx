@@ -106,8 +106,8 @@ function SuggestPlacementButton({ job, currentWeekStart, className }: { job: Wor
           onClick={handleSuggest}
           data-testid={`button-suggest-placement-${job.id}`}
         >
-          {loading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
-          Föreslå optimal tid
+          {loading ? <Loader2 className="h-3.5 w-3.5 mr-1 shrink-0 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1 shrink-0" />}
+          <span className="truncate">Föreslå optimal tid</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-3" side="right" align="start">
@@ -655,18 +655,18 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             </Badge>
                           )}
                         </div>
-                        <div className="flex items-center gap-1.5 mt-1.5">
-                          <SuggestPlacementButton job={job} currentWeekStart={currentWeekStart} className="flex-1 h-7 text-xs" />
+                        <div className="flex items-stretch gap-1.5 mt-1.5 w-full min-w-0">
+                          <SuggestPlacementButton job={job} currentWeekStart={currentWeekStart} className="flex-1 min-w-0 h-7 text-xs px-2 overflow-hidden" />
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
                                 size="sm"
-                                className="flex-1 h-7 text-xs bg-green-600 hover:bg-green-700 text-white border border-green-700/40 dark:bg-green-600 dark:hover:bg-green-500 dark:text-white dark:border-green-500/40"
+                                className="flex-1 min-w-0 h-7 text-xs px-2 overflow-hidden bg-green-600 hover:bg-green-700 text-white border border-green-700/40 dark:bg-green-600 dark:hover:bg-green-500 dark:text-white dark:border-green-500/40"
                                 onClick={(e) => onOpenAssignDialog(job, e)}
                                 data-testid={`button-assign-job-${job.id}`}
                               >
-                                <UserPlus className="h-3.5 w-3.5 mr-1" />
-                                Tilldela
+                                <UserPlus className="h-3.5 w-3.5 mr-1 shrink-0" />
+                                <span className="truncate">Tilldela</span>
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>Tilldela resurs och datum</TooltipContent>
