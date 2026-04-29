@@ -24,13 +24,76 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (req: any, file: any, cb: any) => {
-    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+    const name = (file.originalname || "").toLowerCase();
+    const isCsv = file.mimetype === 'text/csv' || name.endsWith('.csv');
+    const isXlsx = name.endsWith('.xlsx') || name.endsWith('.xls') ||
+      file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      file.mimetype === 'application/vnd.ms-excel';
+    if (isCsv || isXlsx) {
       cb(null, true);
     } else {
-      cb(new Error('Endast CSV-filer är tillåtna'));
+      cb(new Error('Endast CSV- eller Excel-filer (xlsx/xls) är tillåtna'));
     }
   }
 });
+
+function isXlsxFile(file: Express.Multer.File): boolean {
+  const name = (file.originalname || "").toLowerCase();
+  return (
+    name.endsWith(".xlsx") ||
+    name.endsWith(".xls") ||
+    file.mimetype === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    file.mimetype === "application/vnd.ms-excel"
+  );
+}
+
+// Enhetlig parser för Modus-uppladdningar – stödjer både CSV (semikolon) och XLSX.
+// Returnerar { rows, errors } där rows är Record<string,string>[] med tomma celler som "".
+function parseModusUpload(file: Express.Multer.File): { rows: Record<string, string>[]; errors: string[] } {
+  if (isXlsxFile(file)) {
+    try {
+      const wb = XLSX.read(file.buffer, { type: "buffer" });
+      const sheetName = wb.SheetNames[0];
+      if (!sheetName) return { rows: [], errors: ["Excel-filen saknar blad"] };
+      const sheet = wb.Sheets[sheetName];
+      const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+        header: 1,
+        defval: "",
+        raw: false,
+        blankrows: false,
+      });
+      if (aoa.length === 0) return { rows: [], errors: [] };
+      const headers = (aoa[0] || []).map((c) => String(c ?? "").trim());
+      const out: Record<string, string>[] = [];
+      for (let i = 1; i < aoa.length; i++) {
+        const row = aoa[i] || [];
+        const obj: Record<string, string> = {};
+        let hasContent = false;
+        for (let j = 0; j < headers.length; j++) {
+          const key = headers[j];
+          if (!key) continue;
+          const val = row[j];
+          const str = val == null ? "" : String(val);
+          obj[key] = str;
+          if (str.trim() !== "") hasContent = true;
+        }
+        if (hasContent) out.push(obj);
+      }
+      return { rows: out, errors: [] };
+    } catch (err: any) {
+      return { rows: [], errors: [`Excel-fel: ${err?.message || String(err)}`] };
+    }
+  }
+  // CSV-fallback
+  const csvText = file.buffer.toString("utf-8");
+  const result = Papa.parse<Record<string, string>>(csvText, {
+    header: true,
+    skipEmptyLines: true,
+    delimiter: ";",
+  });
+  const errors = result.errors.slice(0, 10).map((e) => `${e.type}/${e.code}: ${e.message}`);
+  return { rows: result.data || [], errors };
+}
 
 const xlsxUpload = multer({
   storage: multer.memoryStorage(),
@@ -630,18 +693,12 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
       throw new ValidationError("Ingen fil uppladdad");
     }
 
-    const csvText = req.file.buffer.toString("utf-8");
-    const result = Papa.parse(csvText, {
-      header: true,
-      skipEmptyLines: true,
-      delimiter: ";",
-    });
-
-    if (result.errors.length > 0) {
-      return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+    const parsed = parseModusUpload(req.file);
+    if (parsed.errors.length > 0) {
+      return res.status(400).json({ error: "Filfel", details: parsed.errors });
     }
 
-    const rows = result.data as Record<string, string>[];
+    const rows = parsed.rows;
     const totalRows = rows.length;
     const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
 
@@ -971,20 +1028,14 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
       throw new ValidationError("Ingen fil uppladdad");
     }
 
-    const csvText = req.file.buffer.toString("utf-8");
-    const result = Papa.parse(csvText, {
-      header: true,
-      skipEmptyLines: true,
-      delimiter: ";",
-    });
-
-    if (result.errors.length > 0) {
-      return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+    const parsed = parseModusUpload(req.file);
+    if (parsed.errors.length > 0) {
+      return res.status(400).json({ error: "Filfel", details: parsed.errors });
     }
 
     const tenantId = getTenantIdWithFallback(req);
     const importBatchId = crypto.randomUUID();
-    const rows = result.data as Record<string, string>[];
+    const rows = parsed.rows;
     const totalRows = rows.length;
 
     let scorecardSummary: Record<string, number> | null = null;
@@ -1492,13 +1543,12 @@ app.post("/api/import/modus/tasks/validate", upload.single("file"), asyncHandler
     if (!req.file) {
       throw new ValidationError("Ingen fil uppladdad");
     }
-    const csvText = req.file.buffer.toString("utf-8");
-    const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true, delimiter: ";" });
+    const parsed = parseModusUpload(req.file);
     if (parsed.errors.length > 0) {
-      return res.status(400).json({ error: "CSV-fel", details: parsed.errors.slice(0, 10) });
+      return res.status(400).json({ error: "Filfel", details: parsed.errors });
     }
     const tenantId = getTenantIdWithFallback(req);
-    const rows = parsed.data as Record<string, string>[];
+    const rows = parsed.rows;
 
     const objects = await storage.getObjects(tenantId);
     // Build lookup map tolerant to both "MODUS-12345" and "12345" formats,
@@ -1621,20 +1671,17 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
     if (!req.file) {
       throw new ValidationError("Ingen fil uppladdad");
     }
-    
-    const csvText = req.file.buffer.toString("utf-8");
-    const result = Papa.parse(csvText, { 
-      header: true, 
-      skipEmptyLines: true,
-      delimiter: ";",
-    });
-    
-    if (result.errors.length > 0) {
-      return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+
+    const parsed = parseModusUpload(req.file);
+    if (parsed.errors.length > 0) {
+      return res.status(400).json({ error: "Filfel", details: parsed.errors });
     }
 
     const tenantId = getTenantIdWithFallback(req);
     const taskBatchId = crypto.randomUUID();
+    // mode=skip_existing: hoppa över rader vars Uppgifts Id redan finns som arbetsorder.
+    // Användbart vid omimport där bara nya uppgifter ska läggas till.
+    const skipExisting = (req.query?.mode === "skip_existing") || (req.body?.mode === "skip_existing");
 
     let resourceNameOverrides: Record<string, string> = {};
     try {
@@ -1652,6 +1699,46 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
     // Policy for rows where Kund in CSV doesn't match any known customer and no override is provided:
     //   "skip" (default) = skip the row, "object" = fall back to object.customerId
     const unresolvedCustomerPolicy: "object" | "skip" = req.body?.unresolvedCustomerPolicy === "object" ? "object" : "skip";
+
+    // Async-flagga: kör jobbet i bakgrund och returnera 202 + batchId omedelbart.
+    // Gör det möjligt att köra stora omimporter utan att HTTP-anslutningen timeoutar.
+    const asyncMode = (req.query?.async === "1") || (req.body?.async === "1");
+    if (asyncMode) {
+      await db.insert(importBatches).values({
+        tenantId,
+        batchId: taskBatchId,
+        totalRows: parsed.rows.length,
+        created: 0,
+        updated: 0,
+        errors: 0,
+        metadata: {
+          type: "modus-tasks",
+          status: "in_progress",
+          phase: "startar",
+          rowsProcessed: 0,
+          mode: skipExisting ? "skip_existing" : "upsert",
+          startedAt: new Date().toISOString(),
+        },
+      });
+      res.status(202).json({
+        batchId: taskBatchId,
+        importBatchId: taskBatchId,
+        status: "in_progress",
+        totalRows: parsed.rows.length,
+      });
+      runModusTasksImportJob({
+        tenantId,
+        taskBatchId,
+        rows: parsed.rows,
+        skipExisting,
+        resourceNameOverrides,
+        customerOverrides,
+        unresolvedCustomerPolicy,
+      }).catch((err) => {
+        console.error(`[modus-tasks ${taskBatchId}] bakgrundsjobb kraschade:`, err);
+      });
+      return;
+    }
 
     const objects = await storage.getObjects(tenantId);
     // Tolerant lookup: accept both "MODUS-12345" and plain "12345" object numbers,
@@ -1676,7 +1763,7 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
     // Riktad SQL-hämtning av befintliga ordrar som kan kollidera med batchen.
     // Tidigare laddades hela work_orders-tabellen för tenanten (OOM-risk på 100k+ ordrar).
     const candidateRefs: string[] = [];
-    for (const row of result.data as Record<string, string>[]) {
+    for (const row of parsed.rows) {
       const u = (row["Uppgifts Id"] || "").trim();
       if (u) candidateRefs.push(u);
     }
@@ -1691,8 +1778,9 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
     const updated: string[] = [];
     const errors: string[] = [];
     const skipped: string[] = [];
-    
-    for (const row of result.data as Record<string, string>[]) {
+    let skippedExistingCount = 0;
+
+    for (const row of parsed.rows) {
       try {
         const uppgiftsId = (row["Uppgifts Id"] || "").trim();
         const objekt = (row["Objekt"] || "").replace(/\s/g, "");
@@ -1714,8 +1802,14 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
         const sluttid = row["Sluttid"] || "";
         
         if (!uppgiftsId) continue;
+        // Skip-existing-läge: hoppa över rader vars Uppgifts Id redan finns som arbetsorder.
+        // Snabbare än full upsert-loop när bara nya uppgifter ska importeras.
+        if (skipExisting && workOrderByModusId.has(uppgiftsId)) {
+          skippedExistingCount++;
+          continue;
+        }
         if (!uppgiftsnamn) uppgiftsnamn = `Uppgift ${uppgiftsId}`;
-        
+
         // Resolve customer: prefer override (by Modus customer-id or name), else object.customerId
         let resolvedCustomerId: string | undefined;
         const kundModusIdMatch = kundRaw.match(/\((\d+)\)\s*$/);
@@ -1866,115 +1960,482 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
       updated: updated.length,
       skipped: skipped.length,
       skippedDetails: skipped.slice(0, 50),
+      skippedExisting: skippedExistingCount,
+      mode: skipExisting ? "skip_existing" : "upsert",
       errors: errors.slice(0, 50),
-      totalRows: (result.data as unknown[]).length,
+      totalRows: parsed.rows.length,
     });
 }));
+
+// Bakgrundsjobb för modus-tasks-import. Identisk logik som synkron-handlern ovan,
+// men uppdaterar import_batches-raden istället för att anropa res.json. Används bara
+// när /api/import/modus/tasks anropas med ?async=1 (admin-batchimporter).
+async function runModusTasksImportJob(params: {
+  tenantId: string;
+  taskBatchId: string;
+  rows: Record<string, string>[];
+  skipExisting: boolean;
+  resourceNameOverrides: Record<string, string>;
+  customerOverrides: Record<string, string>;
+  unresolvedCustomerPolicy: "object" | "skip";
+}): Promise<void> {
+  const { tenantId, taskBatchId, rows, skipExisting, resourceNameOverrides, customerOverrides, unresolvedCustomerPolicy } = params;
+  const totalRows = rows.length;
+  try {
+    const objects = await storage.getObjects(tenantId);
+    const objectMap = new Map<string, typeof objects[number]>();
+    for (const o of objects) {
+      if (!o.objectNumber) continue;
+      objectMap.set(o.objectNumber, o);
+      if (o.objectNumber.startsWith("MODUS-")) objectMap.set(o.objectNumber.substring(6), o);
+      else objectMap.set(`MODUS-${o.objectNumber}`, o);
+    }
+    const customers = await storage.getCustomers(tenantId);
+    const customerMap = new Map(customers.map(c => [c.name.toLowerCase(), c.id]));
+    const resources = await storage.getResources(tenantId);
+    const resourceMap = new Map(resources.map(r => [r.name.toLowerCase(), r.id]));
+    const candidateRefs: string[] = [];
+    for (const row of rows) {
+      const u = (row["Uppgifts Id"] || "").trim();
+      if (u) candidateRefs.push(u);
+    }
+    const matchingWorkOrders = await storage.getWorkOrdersByExternalRefs(tenantId, candidateRefs);
+    const workOrderByModusId = new Map<string, { id: string }>();
+    for (const wo of matchingWorkOrders) {
+      if (wo.modusId) workOrderByModusId.set(String(wo.modusId), wo);
+      if (wo.externalReference) workOrderByModusId.set(String(wo.externalReference), wo);
+    }
+
+    const created: string[] = [];
+    const updated: string[] = [];
+    const errors: string[] = [];
+    const skipped: string[] = [];
+    let skippedExistingCount = 0;
+    let processed = 0;
+
+    for (const row of rows) {
+      processed++;
+      try {
+        const uppgiftsId = (row["Uppgifts Id"] || "").trim();
+        const objekt = (row["Objekt"] || "").replace(/\s/g, "");
+        const kundRaw = row["Kund"] || "";
+        let uppgiftsnamn = row["Uppgiftsnamn"] || "";
+        const uppgiftstyp = row["Uppgiftstyp"] || "";
+        const status = row["Status"] || "draft";
+        const varaktighet = row["Varaktighet"] || "60";
+        const team = row["Team"] || "";
+        const planeradDagOTid = row["Planerad dag o tid"] || "";
+        const prislista = row["Prislista"] || "";
+        const kostnad = row["Kostnad"] || "0";
+        const pris = row["Pris"] || "0";
+        const fakturerad = row["Fakturerad"] || "0";
+        const resultat = row["Resultat"] || "";
+        const jobb = row["Jobb"] || "";
+        const bestallning = row["Beställning"] || "";
+        const starttid = row["Starttid"] || "";
+        const sluttid = row["Sluttid"] || "";
+        if (!uppgiftsId) continue;
+        if (skipExisting && workOrderByModusId.has(uppgiftsId)) {
+          skippedExistingCount++;
+          continue;
+        }
+        if (!uppgiftsnamn) uppgiftsnamn = `Uppgift ${uppgiftsId}`;
+
+        let resolvedCustomerId: string | undefined;
+        const kundModusIdMatch = kundRaw.match(/\((\d+)\)\s*$/);
+        const kundModusId = kundModusIdMatch ? kundModusIdMatch[1] : undefined;
+        const kundName = kundRaw.replace(/\s*\(\d+\)\s*$/, "").trim();
+        if (kundModusId && customerOverrides[kundModusId]) resolvedCustomerId = customerOverrides[kundModusId];
+        else if (kundName && customerOverrides[kundName]) resolvedCustomerId = customerOverrides[kundName];
+        else if (kundName && customerMap.has(kundName.toLowerCase())) resolvedCustomerId = customerMap.get(kundName.toLowerCase());
+        const kundReferenced = Boolean(kundRaw);
+        const kundUnresolved = kundReferenced && !resolvedCustomerId;
+
+        const objectNumber = `MODUS-${objekt}`;
+        const object = objectMap.get(objectNumber);
+        if (!object) {
+          errors.push(`Objekt ${objekt} hittades inte för uppgift ${uppgiftsId}`);
+          continue;
+        }
+
+        let resourceId: string | null = null;
+        if (team) {
+          const resolvedTeamName = resourceNameOverrides[team] || team;
+          resourceId = resourceMap.get(team.toLowerCase()) || resourceMap.get(resolvedTeamName.toLowerCase()) || null;
+          if (!resourceId) {
+            const newResource = await storage.createResource({
+              tenantId,
+              name: resolvedTeamName,
+              initials: resolvedTeamName.substring(0, 3).toUpperCase(),
+            });
+            resourceId = newResource.id;
+            resourceMap.set(team.toLowerCase(), resourceId);
+            resourceMap.set(resolvedTeamName.toLowerCase(), resourceId);
+          }
+        }
+
+        let scheduledDate: Date | null = null;
+        let scheduledStartTime: string | null = null;
+        if (planeradDagOTid) {
+          const dt = new Date(planeradDagOTid);
+          if (!isNaN(dt.getTime())) {
+            scheduledDate = dt;
+            scheduledStartTime = `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`;
+          }
+        }
+
+        let mappedStatus = "draft";
+        let mappedOrderStatus: "skapad" | "planerad_pre" | "planerad_resurs" | "planerad_las" | "utford" | "fakturerad" = "skapad";
+        let impossibleReason: string | null = null;
+        let completedAt: Date | null = null;
+        if (status === "done") {
+          mappedStatus = "completed";
+          mappedOrderStatus = "utford";
+          if (sluttid) {
+            const dt = new Date(sluttid);
+            if (!isNaN(dt.getTime())) completedAt = dt;
+          }
+        } else if (status === "in_progress") {
+          mappedStatus = "in_progress";
+          mappedOrderStatus = "planerad_resurs";
+        } else if (status === "not_started" || status === "scheduled") {
+          mappedStatus = "scheduled";
+          mappedOrderStatus = "skapad";
+        } else if (status === "not_feasible") {
+          mappedStatus = "cancelled";
+          mappedOrderStatus = "skapad";
+          impossibleReason = "not_feasible";
+        }
+        if (fakturerad === "1") mappedOrderStatus = "fakturerad";
+
+        const typLower = uppgiftstyp.toLowerCase();
+        let orderType = "hamtning";
+        if (typLower.includes("kärltvätt") || typLower.includes("karlttvatt")) orderType = "karlttvatt";
+        else if (typLower.includes("rumstvätt") || typLower.includes("rumstvatt")) orderType = "rumstvatt";
+        else if (typLower.includes("uj") || typLower.includes("underjord")) orderType = "uj_tvatt";
+        else if (typLower.includes("tvätt")) orderType = "karlttvatt";
+
+        const parsedKostnad = parseFloat(kostnad.replace(",", ".")) || 0;
+        const parsedPris = parseFloat(pris.replace(",", ".")) || 0;
+        const parsedVaraktighet = parseFloat(varaktighet.replace(",", ".")) || 60;
+
+        if (kundUnresolved && unresolvedCustomerPolicy === "skip") {
+          skipped.push(`Uppgift ${uppgiftsId} hoppades över: okänd kund "${kundName}"`);
+          continue;
+        }
+
+        const workOrderFields: Omit<InsertWorkOrder, "tenantId" | "importBatchId"> = {
+          customerId: resolvedCustomerId || object.customerId,
+          objectId: object.id,
+          resourceId,
+          title: uppgiftsnamn,
+          description: `Modus ID: ${uppgiftsId}, Typ: ${uppgiftstyp}`,
+          orderType,
+          priority: "normal",
+          status: mappedStatus,
+          orderStatus: mappedOrderStatus,
+          creationMethod: "import_modus",
+          externalReference: uppgiftsId,
+          scheduledDate,
+          scheduledStartTime,
+          estimatedDuration: Math.round(parsedVaraktighet),
+          cachedCost: Math.round(parsedKostnad * 100),
+          cachedValue: Math.round(parsedPris * 100),
+          notes: resultat || null,
+          completedAt,
+          impossibleReason,
+          metadata: {
+            modusId: uppgiftsId,
+            prislista: prislista || undefined,
+            jobb: jobb || undefined,
+            bestallning: bestallning || undefined,
+            fakturerad: fakturerad === "1",
+            starttid: starttid || undefined,
+            sluttid: sluttid || undefined,
+          },
+        };
+
+        const existingWo = workOrderByModusId.get(uppgiftsId);
+        if (existingWo) {
+          await storage.updateWorkOrder(existingWo.id, workOrderFields);
+          updated.push(uppgiftsnamn);
+        } else {
+          const newWo = await storage.createWorkOrder({ tenantId, ...workOrderFields, importBatchId: taskBatchId });
+          workOrderByModusId.set(uppgiftsId, newWo);
+          created.push(uppgiftsnamn);
+        }
+      } catch (err) {
+        errors.push(`Fel vid import av uppgift: ${err}`);
+      }
+      // Periodisk progress-uppdatering – var 500:e rad räcker för UI-polling.
+      if (processed % 500 === 0) {
+        try {
+          await db.update(importBatches).set({
+            metadata: {
+              type: "modus-tasks",
+              status: "in_progress",
+              phase: "uppgifter",
+              rowsProcessed: processed,
+              created: created.length,
+              updated: updated.length,
+              skippedExisting: skippedExistingCount,
+              skipped: skipped.length,
+              errors: errors.length,
+              mode: skipExisting ? "skip_existing" : "upsert",
+            },
+          }).where(eq(importBatches.batchId, taskBatchId));
+        } catch {}
+      }
+    }
+
+    await db.update(importBatches).set({
+      created: created.length,
+      updated: updated.length,
+      errors: errors.length,
+      metadata: {
+        type: "modus-tasks",
+        status: "completed",
+        phase: "klar",
+        rowsProcessed: totalRows,
+        totalRows,
+        imported: created.length + updated.length,
+        created: created.length,
+        updated: updated.length,
+        skipped: skipped.length,
+        skippedDetails: skipped.slice(0, 50),
+        skippedExisting: skippedExistingCount,
+        mode: skipExisting ? "skip_existing" : "upsert",
+        errorSamples: errors.slice(0, 50),
+        completedAt: new Date().toISOString(),
+      },
+    }).where(eq(importBatches.batchId, taskBatchId));
+  } catch (err) {
+    console.error(`[modus-tasks ${taskBatchId}] kraschade:`, err);
+    try {
+      await db.update(importBatches).set({
+        errors: 1,
+        metadata: {
+          type: "modus-tasks",
+          status: "failed",
+          phase: "fel",
+          error: String(err),
+          failedAt: new Date().toISOString(),
+        },
+      }).where(eq(importBatches.batchId, taskBatchId));
+    } catch {}
+  }
+}
 
 // Modus 2.0 Import - Task Events (for setup time analysis)
 app.post("/api/import/modus/events", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       throw new ValidationError("Ingen fil uppladdad");
     }
-    
-    const csvText = req.file.buffer.toString("utf-8");
-    const result = Papa.parse(csvText, { 
-      header: true, 
-      skipEmptyLines: true,
-      delimiter: ";",
-    });
-    
-    if (result.errors.length > 0) {
-      return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+
+    const parsed = parseModusUpload(req.file);
+    if (parsed.errors.length > 0) {
+      return res.status(400).json({ error: "Filfel", details: parsed.errors });
     }
 
-    // Group events by Uppgifts Id to calculate setup times
-    const eventsByTask = new Map<string, Array<{ type: string; time: Date }>>();
-    
-    for (const row of result.data as Record<string, string>[]) {
-      const uppgiftsId = row["Uppgifts Id"];
-      const eventTyp = row["Event Typ"];
-      const tid = row["Tid"];
-      
-      if (!uppgiftsId || !tid) continue;
-      
-      const time = new Date(tid);
-      if (isNaN(time.getTime())) continue;
-      
-      if (!eventsByTask.has(uppgiftsId)) {
-        eventsByTask.set(uppgiftsId, []);
-      }
-      eventsByTask.get(uppgiftsId)!.push({ type: eventTyp, time });
+    const tenantId = getTenantIdWithFallback(req);
+    const totalEvents = parsed.rows.length;
+    // Async-flagga: spara analysen i import_batches och returnera 202 + batchId direkt.
+    const asyncMode = (req.query?.async === "1") || (req.body?.async === "1");
+
+    if (asyncMode) {
+      const eventsBatchId = crypto.randomUUID();
+      await db.insert(importBatches).values({
+        tenantId,
+        batchId: eventsBatchId,
+        totalRows: totalEvents,
+        created: 0,
+        updated: 0,
+        errors: 0,
+        metadata: {
+          type: "modus-events",
+          status: "in_progress",
+          startedAt: new Date().toISOString(),
+        },
+      });
+      res.status(202).json({
+        batchId: eventsBatchId,
+        importBatchId: eventsBatchId,
+        status: "in_progress",
+        totalRows: totalEvents,
+      });
+      runModusEventsAnalysisJob({ tenantId, eventsBatchId, rows: parsed.rows }).catch((err) => {
+        console.error(`[modus-events ${eventsBatchId}] bakgrundsjobb kraschade:`, err);
+      });
+      return;
     }
-    
-    // Calculate setup times (time between in_progress events on same task)
-    // This approximates setup time as the gap between consecutive task starts
-    const setupTimes: Array<{ taskId: string; minutes: number }> = [];
-    
-    for (const [taskId, events] of Array.from(eventsByTask)) {
-      // Sort by time
-      events.sort((a: { type: string; time: Date }, b: { type: string; time: Date }) => a.time.getTime() - b.time.getTime());
-      
-      // Find in_progress -> done pairs
-      for (let i = 0; i < events.length - 1; i++) {
-        if (events[i].type === "in_progress" && events[i + 1].type === "done") {
-          const duration = (events[i + 1].time.getTime() - events[i].time.getTime()) / (1000 * 60);
-          if (duration > 0 && duration < 240) { // Max 4 hours
-            setupTimes.push({ taskId, minutes: Math.round(duration) });
-          }
-        }
-      }
-    }
-    
-    res.json({ 
-      totalEvents: (result.data as unknown[]).length,
-      uniqueTasks: eventsByTask.size,
-      calculatedSetupTimes: setupTimes.length,
-      averageSetupTime: setupTimes.length > 0 
-        ? Math.round(setupTimes.reduce((sum, s) => sum + s.minutes, 0) / setupTimes.length) 
-        : 0,
-      setupTimeDistribution: {
-        under5min: setupTimes.filter(s => s.minutes < 5).length,
-        "5to15min": setupTimes.filter(s => s.minutes >= 5 && s.minutes < 15).length,
-        "15to30min": setupTimes.filter(s => s.minutes >= 15 && s.minutes < 30).length,
-        over30min: setupTimes.filter(s => s.minutes >= 30).length,
-      },
+
+    const summary = analyseModusEvents(parsed.rows);
+    res.json({
+      totalEvents,
+      uniqueTasks: summary.uniqueTasks,
+      calculatedSetupTimes: summary.calculatedSetupTimes,
+      averageSetupTime: summary.averageSetupTime,
+      setupTimeDistribution: summary.setupTimeDistribution,
     });
 }));
+
+// Delad analysfunktion för Modus task_events.
+function analyseModusEvents(rows: Record<string, string>[]): {
+  uniqueTasks: number;
+  calculatedSetupTimes: number;
+  averageSetupTime: number;
+  setupTimeDistribution: { under5min: number; "5to15min": number; "15to30min": number; over30min: number };
+} {
+  const eventsByTask = new Map<string, Array<{ type: string; time: Date }>>();
+  for (const row of rows) {
+    const uppgiftsId = row["Uppgifts Id"];
+    const eventTyp = row["Event Typ"];
+    const tid = row["Tid"];
+    if (!uppgiftsId || !tid) continue;
+    const time = new Date(tid);
+    if (isNaN(time.getTime())) continue;
+    if (!eventsByTask.has(uppgiftsId)) eventsByTask.set(uppgiftsId, []);
+    eventsByTask.get(uppgiftsId)!.push({ type: eventTyp, time });
+  }
+  const setupTimes: Array<{ taskId: string; minutes: number }> = [];
+  for (const [taskId, events] of Array.from(eventsByTask)) {
+    events.sort((a, b) => a.time.getTime() - b.time.getTime());
+    for (let i = 0; i < events.length - 1; i++) {
+      if (events[i].type === "in_progress" && events[i + 1].type === "done") {
+        const duration = (events[i + 1].time.getTime() - events[i].time.getTime()) / (1000 * 60);
+        if (duration > 0 && duration < 240) setupTimes.push({ taskId, minutes: Math.round(duration) });
+      }
+    }
+  }
+  return {
+    uniqueTasks: eventsByTask.size,
+    calculatedSetupTimes: setupTimes.length,
+    averageSetupTime: setupTimes.length > 0
+      ? Math.round(setupTimes.reduce((sum, s) => sum + s.minutes, 0) / setupTimes.length)
+      : 0,
+    setupTimeDistribution: {
+      under5min: setupTimes.filter(s => s.minutes < 5).length,
+      "5to15min": setupTimes.filter(s => s.minutes >= 5 && s.minutes < 15).length,
+      "15to30min": setupTimes.filter(s => s.minutes >= 15 && s.minutes < 30).length,
+      over30min: setupTimes.filter(s => s.minutes >= 30).length,
+    },
+  };
+}
+
+async function runModusEventsAnalysisJob(params: {
+  tenantId: string;
+  eventsBatchId: string;
+  rows: Record<string, string>[];
+}): Promise<void> {
+  const { eventsBatchId, rows } = params;
+  try {
+    const summary = analyseModusEvents(rows);
+    await db.update(importBatches).set({
+      metadata: {
+        type: "modus-events",
+        status: "completed",
+        totalEvents: rows.length,
+        ...summary,
+        completedAt: new Date().toISOString(),
+      },
+    }).where(eq(importBatches.batchId, eventsBatchId));
+  } catch (err) {
+    console.error(`[modus-events ${eventsBatchId}] kraschade:`, err);
+    try {
+      await db.update(importBatches).set({
+        errors: 1,
+        metadata: {
+          type: "modus-events",
+          status: "failed",
+          error: String(err),
+          failedAt: new Date().toISOString(),
+        },
+      }).where(eq(importBatches.batchId, eventsBatchId));
+    } catch {}
+  }
+}
 
 // Modus 2.0 Import - Invoice Lines (fakturarader)
 app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       throw new ValidationError("Ingen fil uppladdad");
     }
-    
-    const csvText = req.file.buffer.toString("utf-8");
-    const result = Papa.parse(csvText, { 
-      header: true, 
-      skipEmptyLines: true,
-      delimiter: ";",
-    });
-    
-    if (result.errors.length > 0) {
-      return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+
+    const parsed = parseModusUpload(req.file);
+    if (parsed.errors.length > 0) {
+      return res.status(400).json({ error: "Filfel", details: parsed.errors });
     }
 
     const tenantId = getTenantIdWithFallback(req);
     const invoiceBatchId = crypto.randomUUID();
-    
+    // mode=skip_existing: hoppa över rader vars arbetsorder redan har minst en orderrad.
+    // Hindrar att fakturarader dubbleras vid omimport.
+    const skipExisting = (req.query?.mode === "skip_existing") || (req.body?.mode === "skip_existing");
+
+    // Async-flagga: kör jobbet i bakgrund och returnera 202 + batchId direkt (admin-batch-flöde).
+    const asyncMode = (req.query?.async === "1") || (req.body?.async === "1");
+    if (asyncMode) {
+      await db.insert(importBatches).values({
+        tenantId,
+        batchId: invoiceBatchId,
+        totalRows: parsed.rows.length,
+        created: 0,
+        updated: 0,
+        errors: 0,
+        metadata: {
+          type: "modus-invoice-lines",
+          status: "in_progress",
+          phase: "startar",
+          rowsProcessed: 0,
+          mode: skipExisting ? "skip_existing" : "upsert",
+          startedAt: new Date().toISOString(),
+        },
+      });
+      res.status(202).json({
+        batchId: invoiceBatchId,
+        importBatchId: invoiceBatchId,
+        status: "in_progress",
+        totalRows: parsed.rows.length,
+      });
+      runModusInvoiceLinesImportJob({
+        tenantId,
+        invoiceBatchId,
+        rows: parsed.rows,
+        skipExisting,
+      }).catch((err) => {
+        console.error(`[modus-invoice-lines ${invoiceBatchId}] bakgrundsjobb kraschade:`, err);
+      });
+      return;
+    }
+
     // Riktad SQL-hämtning: bara work orders som matchar Uppgift Id i denna fakturarad-batch.
     const candidateRefs: string[] = [];
-    for (const row of result.data as Record<string, string>[]) {
+    for (const row of parsed.rows) {
       const u = (row["Uppgift Id"] || "").replace(/\s/g, "");
       if (u) candidateRefs.push(u);
     }
     const matchingWorkOrders = await storage.getWorkOrdersByExternalRefs(tenantId, candidateRefs);
     const woByModusId = new Map<string, any>();
+    const matchedWoIds: string[] = [];
     for (const wo of matchingWorkOrders) {
       if (wo.modusId) woByModusId.set(String(wo.modusId), wo);
       if (wo.externalReference) woByModusId.set(String(wo.externalReference), wo);
+      matchedWoIds.push(wo.id);
     }
-    
+
+    // I skip-existing-läget bygger vi en lookup över vilka arbetsordrar som redan
+    // har orderrader i DB – då hoppar vi över hela uppgiften (alla dess rader).
+    const woIdsWithExistingLines = new Set<string>();
+    if (skipExisting && matchedWoIds.length > 0) {
+      const existingLines = await db
+        .select({ workOrderId: workOrderLines.workOrderId })
+        .from(workOrderLines)
+        .where(inArray(workOrderLines.workOrderId, matchedWoIds));
+      for (const l of existingLines) {
+        if (l.workOrderId) woIdsWithExistingLines.add(l.workOrderId);
+      }
+    }
+
     const existingArticles = await storage.getArticles(tenantId);
     const articleByFortnox = new Map<string, any>();
     for (const a of existingArticles) {
@@ -1985,12 +2446,13 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(
         articleByFortnox.set(a.name.toLowerCase(), a);
       }
     }
-    
+
     const created: string[] = [];
     const errors: string[] = [];
     let articlesAutoCreated = 0;
-    
-    for (const row of result.data as Record<string, string>[]) {
+    let skippedExistingCount = 0;
+
+    for (const row of parsed.rows) {
       try {
         const rawUppgiftId = row["Uppgift Id"];
         const rad = row["Rad"] || "1";
@@ -2008,7 +2470,13 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(
           errors.push(`Uppgift ${uppgiftId} hittades inte i systemet`);
           continue;
         }
-        
+        // Skip-existing-läge: hoppa över hela uppgiften om dess arbetsorder
+        // redan har minst en orderrad i DB (annars blir det dubbletter vid omimport).
+        if (skipExisting && woIdsWithExistingLines.has(workOrder.id)) {
+          skippedExistingCount++;
+          continue;
+        }
+
         const antal = Math.round(parseFloat(antalStr.replace(",", ".")) || 0);
         const pris = Math.round(parseFloat(prisStr.replace(",", ".")) * 100) || 0;
         
@@ -2059,10 +2527,174 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(
       imported: created.length,
       created: created.length,
       articlesAutoCreated,
+      skippedExisting: skippedExistingCount,
+      mode: skipExisting ? "skip_existing" : "upsert",
       errors: errors.slice(0, 50),
-      totalRows: (result.data as unknown[]).length,
+      totalRows: parsed.rows.length,
     });
 }));
+
+// Bakgrundsjobb för modus-invoice-lines-import. Identisk logik som synkron-handlern,
+// men uppdaterar import_batches istället för res.json. Används bara via ?async=1.
+async function runModusInvoiceLinesImportJob(params: {
+  tenantId: string;
+  invoiceBatchId: string;
+  rows: Record<string, string>[];
+  skipExisting: boolean;
+}): Promise<void> {
+  const { tenantId, invoiceBatchId, rows, skipExisting } = params;
+  const totalRows = rows.length;
+  try {
+    const candidateRefs: string[] = [];
+    for (const row of rows) {
+      const u = (row["Uppgift Id"] || "").replace(/\s/g, "");
+      if (u) candidateRefs.push(u);
+    }
+    const matchingWorkOrders = await storage.getWorkOrdersByExternalRefs(tenantId, candidateRefs);
+    const woByModusId = new Map<string, any>();
+    const matchedWoIds: string[] = [];
+    for (const wo of matchingWorkOrders) {
+      if (wo.modusId) woByModusId.set(String(wo.modusId), wo);
+      if (wo.externalReference) woByModusId.set(String(wo.externalReference), wo);
+      matchedWoIds.push(wo.id);
+    }
+    const woIdsWithExistingLines = new Set<string>();
+    if (skipExisting && matchedWoIds.length > 0) {
+      const existingLines = await db
+        .select({ workOrderId: workOrderLines.workOrderId })
+        .from(workOrderLines)
+        .where(inArray(workOrderLines.workOrderId, matchedWoIds));
+      for (const l of existingLines) {
+        if (l.workOrderId) woIdsWithExistingLines.add(l.workOrderId);
+      }
+    }
+    const existingArticles = await storage.getArticles(tenantId);
+    const articleByFortnox = new Map<string, any>();
+    for (const a of existingArticles) {
+      if ((a as any).fortnoxId) articleByFortnox.set((a as any).fortnoxId.toLowerCase(), a);
+      if (a.name) articleByFortnox.set(a.name.toLowerCase(), a);
+    }
+
+    const created: string[] = [];
+    const errors: string[] = [];
+    let articlesAutoCreated = 0;
+    let skippedExistingCount = 0;
+    let processed = 0;
+
+    for (const row of rows) {
+      processed++;
+      try {
+        const rawUppgiftId = row["Uppgift Id"];
+        const rad = row["Rad"] || "1";
+        const beskrivning = row["Beskrivning"] || "";
+        const antalStr = row["Antal"] || "0";
+        const prisStr = row["Pris"] || "0";
+        const fortnoxArtikelId = (row["Fortnox Artikel Id"] || "").trim();
+        if (!rawUppgiftId) continue;
+        const uppgiftId = rawUppgiftId.replace(/\s/g, "");
+
+        const workOrder = woByModusId.get(uppgiftId);
+        if (!workOrder) {
+          errors.push(`Uppgift ${uppgiftId} hittades inte i systemet`);
+          continue;
+        }
+        if (skipExisting && woIdsWithExistingLines.has(workOrder.id)) {
+          skippedExistingCount++;
+          continue;
+        }
+
+        const antal = Math.round(parseFloat(antalStr.replace(",", ".")) || 0);
+        const pris = Math.round(parseFloat(prisStr.replace(",", ".")) * 100) || 0;
+
+        let article = fortnoxArtikelId ? articleByFortnox.get(fortnoxArtikelId.toLowerCase()) : null;
+        if (!article && fortnoxArtikelId) {
+          let articleName = fortnoxArtikelId;
+          if (fortnoxArtikelId === "K100") articleName = "Kärltvätt Standard";
+          else if (fortnoxArtikelId === "UJ100") articleName = "Tvätt UJ-behållare";
+          article = await storage.createArticle({
+            tenantId,
+            name: articleName,
+            articleNumber: fortnoxArtikelId,
+            articleType: "tjanst",
+            listPrice: pris,
+            objectTypes: [],
+          });
+          articleByFortnox.set(fortnoxArtikelId.toLowerCase(), article);
+          articlesAutoCreated++;
+        }
+        if (!article) {
+          errors.push(`Ingen artikel kunde skapas för rad ${uppgiftId}/${rad}`);
+          continue;
+        }
+
+        await storage.createWorkOrderLine({
+          tenantId,
+          workOrderId: workOrder.id,
+          articleId: article.id,
+          quantity: antal,
+          resolvedPrice: pris,
+          resolvedCost: 0,
+          resolvedProductionMinutes: 0,
+          priceSource: "modus_import",
+          notes: beskrivning || null,
+        });
+
+        created.push(`${uppgiftId}/${rad}: ${beskrivning.substring(0, 40)}`);
+      } catch (err) {
+        errors.push(`Fel vid import av fakturarad ${row["Uppgift Id"] || "?"}/${row["Rad"] || "?"}: ${err}`);
+      }
+      if (processed % 500 === 0) {
+        try {
+          await db.update(importBatches).set({
+            metadata: {
+              type: "modus-invoice-lines",
+              status: "in_progress",
+              phase: "rader",
+              rowsProcessed: processed,
+              created: created.length,
+              skippedExisting: skippedExistingCount,
+              articlesAutoCreated,
+              errors: errors.length,
+              mode: skipExisting ? "skip_existing" : "upsert",
+            },
+          }).where(eq(importBatches.batchId, invoiceBatchId));
+        } catch {}
+      }
+    }
+
+    await db.update(importBatches).set({
+      created: created.length,
+      errors: errors.length,
+      metadata: {
+        type: "modus-invoice-lines",
+        status: "completed",
+        phase: "klar",
+        rowsProcessed: totalRows,
+        totalRows,
+        imported: created.length,
+        created: created.length,
+        articlesAutoCreated,
+        skippedExisting: skippedExistingCount,
+        mode: skipExisting ? "skip_existing" : "upsert",
+        errorSamples: errors.slice(0, 50),
+        completedAt: new Date().toISOString(),
+      },
+    }).where(eq(importBatches.batchId, invoiceBatchId));
+  } catch (err) {
+    console.error(`[modus-invoice-lines ${invoiceBatchId}] kraschade:`, err);
+    try {
+      await db.update(importBatches).set({
+        errors: 1,
+        metadata: {
+          type: "modus-invoice-lines",
+          status: "failed",
+          error: String(err),
+          failedAt: new Date().toISOString(),
+        },
+      }).where(eq(importBatches.batchId, invoiceBatchId));
+    } catch {}
+  }
+}
 
 app.post("/api/import/customers/validate", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
