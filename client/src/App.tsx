@@ -35,7 +35,7 @@ const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
 const ImportPage = lazy(() => import("@/pages/ImportPage"));
 const ProcurementsPage = lazy(() => import("@/pages/ProcurementsPage"));
 const OptimizationPrepPage = lazy(() => import("@/pages/OptimizationPrepPage"));
-const LandingPage = lazy(() => import("@/pages/LandingPage"));
+const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const ArticlesPage = lazy(() => import("@/pages/ArticlesPage"));
 const PriceListsPage = lazy(() => import("@/pages/PriceListsPage"));
 const OrderStockPage = lazy(() => import("@/pages/OrderStockPage"));
@@ -314,7 +314,7 @@ function AppContent() {
     if (!isAuthenticated) {
       return (
         <Suspense fallback={<PageLoader />}>
-          <LandingPage />
+          <LoginPage />
         </Suspense>
       );
     }
@@ -348,7 +348,7 @@ function AppContent() {
     if (!isAuthenticated) {
       return (
         <Suspense fallback={<PageLoader />}>
-          <LandingPage />
+          <LoginPage />
         </Suspense>
       );
     }
@@ -413,7 +413,7 @@ function AppContent() {
   if (!isAuthenticated) {
     return (
       <Suspense fallback={<PageLoader />}>
-        <LandingPage />
+        <LoginPage />
       </Suspense>
     );
   }
