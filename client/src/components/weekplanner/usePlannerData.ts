@@ -316,7 +316,7 @@ export function usePlannerData() {
   });
 
   const applyActionMutation = useMutation({
-    mutationFn: async ({ jobId, state }: { jobId: string; state: PlannerAction["previousState"] }) => (await apiRequest("PATCH", `/api/work-orders/${jobId}`, { resourceId: state.resourceId, scheduledDate: state.scheduledDate, scheduledStartTime: state.scheduledStartTime, orderStatus: state.orderStatus })).json() as Promise<WorkOrderWithObject>,
+    mutationFn: async ({ jobId, state }: { jobId: string; state: PlannerAction["previousState"] }) => (await apiRequest("PATCH", `/api/work-orders/${jobId}`, { resourceId: state.resourceId, teamId: state.teamId, scheduledDate: state.scheduledDate, scheduledStartTime: state.scheduledStartTime, orderStatus: state.orderStatus })).json() as Promise<WorkOrderWithObject>,
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: workOrdersQueryKey }); queryClient.invalidateQueries({ queryKey: ["/api/work-orders", "unscheduled-paginated"] }); setUnscheduledPage(0); },
     onError: (error: Error) => { toast({ title: "Kunde inte ångra/göra om ändringen", description: error.message, variant: "destructive" }); },
   });
@@ -667,7 +667,8 @@ export function usePlannerData() {
   const executeSchedule = useCallback((jobId: string, resourceId: string, scheduledDate: string, scheduledStartTime?: string, clusterOverride?: boolean) => {
     const job = workOrders.find(j => j.id === jobId);
     if (!job) return;
-    addToUndoStack({ type: "schedule", jobId, previousState: { resourceId: job.resourceId || null, scheduledDate: job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd") : null, scheduledStartTime: job.scheduledStartTime || null, orderStatus: job.orderStatus }, newState: { resourceId, scheduledDate, scheduledStartTime: scheduledStartTime || null, orderStatus: "planerad_resurs" } });
+    const previousTeamId = job.teamId ?? null;
+    addToUndoStack({ type: "schedule", jobId, previousState: { resourceId: job.resourceId || null, teamId: previousTeamId, scheduledDate: job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd") : null, scheduledStartTime: job.scheduledStartTime || null, orderStatus: job.orderStatus }, newState: { resourceId, teamId: previousTeamId, scheduledDate, scheduledStartTime: scheduledStartTime || null, orderStatus: "planerad_resurs" } });
     updateWorkOrderMutation.mutate({ id: jobId, resourceId, scheduledDate, scheduledStartTime, clusterOverride });
   }, [workOrders, addToUndoStack, updateWorkOrderMutation]);
 
@@ -678,8 +679,27 @@ export function usePlannerData() {
       toast({ title: "Kan inte tilldela till Okategoriserade", description: "Välj ett team eller en resurs." });
       return;
     }
+    const previousTeamId = job.teamId ?? null;
+    addToUndoStack({
+      type: "team-assign",
+      jobId,
+      previousState: {
+        resourceId: job.resourceId || null,
+        teamId: previousTeamId,
+        scheduledDate: job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd") : null,
+        scheduledStartTime: job.scheduledStartTime || null,
+        orderStatus: job.orderStatus,
+      },
+      newState: {
+        resourceId: null,
+        teamId,
+        scheduledDate,
+        scheduledStartTime: job.scheduledStartTime || null,
+        orderStatus: "planerad_resurs",
+      },
+    });
     assignTeamMutation.mutate({ id: jobId, teamId, scheduledDate });
-  }, [workOrders, assignTeamMutation, toast]);
+  }, [workOrders, addToUndoStack, assignTeamMutation, toast]);
 
   const navigate = (direction: "prev" | "next") => {
     if (viewMode === "day" || viewMode === "route") { const d = addDays(currentDate, direction === "next" ? 1 : -1); setCurrentDate(d); setCurrentWeekStart(startOfWeek(d, { weekStartsOn: 1 })); }
@@ -772,7 +792,7 @@ export function usePlannerData() {
     setPendingSchedule(null);
   }, [pendingSchedule, executeSchedule, toast]);
 
-  const handleUnschedule = useCallback((e: { stopPropagation: () => void }, jobId: string) => { e.stopPropagation(); const job = workOrders.find(j => j.id === jobId); if (job) addToUndoStack({ type: "unschedule", jobId, previousState: { resourceId: job.resourceId || null, scheduledDate: job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd") : null, scheduledStartTime: job.scheduledStartTime || null, orderStatus: job.orderStatus }, newState: { resourceId: null, scheduledDate: null, scheduledStartTime: null, orderStatus: "skapad" } }); unscheduleWorkOrderMutation.mutate(jobId); }, [workOrders, addToUndoStack, unscheduleWorkOrderMutation]);
+  const handleUnschedule = useCallback((e: { stopPropagation: () => void }, jobId: string) => { e.stopPropagation(); const job = workOrders.find(j => j.id === jobId); if (job) { const previousTeamId = job.teamId ?? null; addToUndoStack({ type: "unschedule", jobId, previousState: { resourceId: job.resourceId || null, teamId: previousTeamId, scheduledDate: job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd") : null, scheduledStartTime: job.scheduledStartTime || null, orderStatus: job.orderStatus }, newState: { resourceId: null, teamId: previousTeamId, scheduledDate: null, scheduledStartTime: null, orderStatus: "skapad" } }); } unscheduleWorkOrderMutation.mutate(jobId); }, [workOrders, addToUndoStack, unscheduleWorkOrderMutation]);
 
   const handleUndo = useCallback(() => { if (undoStack.length === 0) return; const last = undoStack[undoStack.length - 1]; setUndoStack(prev => prev.slice(0, -1)); setRedoStack(prev => [...prev, last]); applyActionMutation.mutate({ jobId: last.jobId, state: last.previousState }); toast({ title: "Ändring ångrad" }); }, [undoStack, applyActionMutation, toast]);
   const handleRedo = useCallback(() => { if (redoStack.length === 0) return; const last = redoStack[redoStack.length - 1]; setRedoStack(prev => prev.slice(0, -1)); setUndoStack(prev => [...prev, last]); applyActionMutation.mutate({ jobId: last.jobId, state: last.newState }); toast({ title: "Ändring återställd" }); }, [redoStack, applyActionMutation, toast]);

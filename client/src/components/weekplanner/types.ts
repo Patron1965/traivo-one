@@ -12,21 +12,19 @@ export interface WeatherForecastData {
   impacts: WeatherImpactDay[];
 }
 
+export interface PlannerActionState {
+  resourceId: string | null;
+  teamId: string | null;
+  scheduledDate: string | null;
+  scheduledStartTime: string | null;
+  orderStatus: string;
+}
+
 export interface PlannerAction {
-  type: "schedule" | "unschedule";
+  type: "schedule" | "unschedule" | "team-assign";
   jobId: string;
-  previousState: {
-    resourceId: string | null;
-    scheduledDate: string | null;
-    scheduledStartTime: string | null;
-    orderStatus: string;
-  };
-  newState: {
-    resourceId: string | null;
-    scheduledDate: string | null;
-    scheduledStartTime: string | null;
-    orderStatus: string;
-  };
+  previousState: PlannerActionState;
+  newState: PlannerActionState;
 }
 
 export interface WeekPlannerProps {
