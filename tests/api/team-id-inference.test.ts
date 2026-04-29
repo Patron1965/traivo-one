@@ -210,6 +210,30 @@ describe("Auto-inferens av teamId baserat på resourceId", () => {
     expect(updated?.teamId).toBe(teamA);
   });
 
+  it("updateWorkOrder rensar stale teamId när resurs byts till en utan team-medlemskap", async () => {
+    const orphan = await storage.createResource({
+      tenantId: TENANT,
+      name: `R-orphan-update-${randomId()}`,
+      resourceType: "person",
+    });
+    const created = await storage.createWorkOrder({
+      tenantId: TENANT,
+      customerId,
+      objectId,
+      title: "Stale-teamId rensning",
+      orderType: "service",
+      orderStatus: "ny",
+      resourceId,
+      teamId: teamA,
+    });
+    expect(created.teamId).toBe(teamA);
+
+    invalidateTeamInferenceCache(TENANT);
+    const updated = await storage.updateWorkOrder(created.id, { resourceId: orphan.id });
+    expect(updated?.resourceId).toBe(orphan.id);
+    expect(updated?.teamId).toBeNull();
+  });
+
   it("updateWorkOrder rör inte teamId när resourceId inte ändras", async () => {
     const created = await storage.createWorkOrder({
       tenantId: TENANT,

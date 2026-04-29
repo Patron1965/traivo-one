@@ -819,7 +819,10 @@ app.post("/api/auto-plan-week/apply", asyncHandler(async (req, res) => {
       // Resource-tenant kontrolleras redan i pre-checken ovan via
       // ensureResourceIdsInTenant — ingen ytterligare check behövs här.
 
-      const inferredTeamId = inferTeamId(assignment.resourceId, workOrder?.clusterId ?? null);
+      // Inferens sker nu i storage.updateWorkOrder via samma cache:ade helper.
+      // Vi skickar inte med teamId i payloaden här — det betyder att storage-
+      // lagret kommer härleda korrekt teamId (eller sätta null om resursen
+      // saknar team) baserat på den nya resourceId.
       const updatePayload: Record<string, unknown> = {
         resourceId: assignment.resourceId,
         scheduledDate: new Date(assignment.scheduledDate),
@@ -827,10 +830,6 @@ app.post("/api/auto-plan-week/apply", asyncHandler(async (req, res) => {
         orderStatus: "planerad_pre",
         executionStatus: "planned_rough",
       };
-      // Only set team_id when we can infer one; never overwrite an explicit team_id with null here.
-      if (inferredTeamId) {
-        updatePayload.teamId = inferredTeamId;
-      }
 
       const updated = await storage.updateWorkOrder(assignment.workOrderId, updatePayload);
       results.push(updated);

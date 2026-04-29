@@ -2518,7 +2518,9 @@ export class DatabaseStorage implements IStorage {
     //   - teamId-nyckeln saknas helt i input (Object.hasOwn === false), och
     //   - tenantId finns.
     // Respekterar explicita värden (även null) från caller och undviker
-    // overhead när jobbet inte har någon resurs.
+    // overhead när jobbet inte har någon resurs. När resursen saknar
+    // team-medlemskap sätts teamId explicit till null så att teamId blir
+    // en härledd egenskap av resourceId.
     const teamIdProvided = Object.prototype.hasOwnProperty.call(insertWorkOrder, "teamId");
     if (!teamIdProvided && values.tenantId && values.resourceId) {
       const inferred = await inferTeamIdForResource(
@@ -2526,7 +2528,7 @@ export class DatabaseStorage implements IStorage {
         values.resourceId,
         values.clusterId ?? null,
       );
-      if (inferred) values.teamId = inferred;
+      values.teamId = inferred;
     }
     const [workOrder] = await db.insert(workOrders).values(values).returning();
     if (workOrder?.tenantId) invalidateWorkflowCaches(workOrder.tenantId);
@@ -2552,7 +2554,9 @@ export class DatabaseStorage implements IStorage {
     // Auto-infer team_id på samma villkor som createWorkOrder. Triggas ENDAST
     // när resourceId-nyckeln finns i payloaden (med icke-null värde) och
     // teamId-nyckeln saknas helt. Vi måste läsa befintlig WO för tenantId
-    // och clusterId om något av dem inte finns i payloaden.
+    // och clusterId om något av dem inte finns i payloaden. När resursen
+    // saknar team-medlemskap sätts teamId explicit till null så att stale
+    // team-koppling rensas (teamId blir härledd egenskap av resourceId).
     const teamIdProvided = Object.prototype.hasOwnProperty.call(data, "teamId");
     const resourceIdProvided = Object.prototype.hasOwnProperty.call(data, "resourceId");
     if (!teamIdProvided && resourceIdProvided && updates.resourceId) {
@@ -2573,7 +2577,7 @@ export class DatabaseStorage implements IStorage {
       }
       if (tenantId) {
         const inferred = await inferTeamIdForResource(tenantId, updates.resourceId, clusterId ?? null);
-        if (inferred) updates.teamId = inferred;
+        updates.teamId = inferred;
       }
     }
     const [workOrder] = await db.update(workOrders).set(updates).where(eq(workOrders.id, id)).returning();
