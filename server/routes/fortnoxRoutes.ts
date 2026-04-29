@@ -10,7 +10,6 @@ import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingC
 import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts } from "@shared/schema";
 import { getISOWeek } from "./helpers";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
-import { inferTeamIdForResource } from "../utils/teamInference";
 
 async function verifyObjectTenant(objectId: string, tenantId: string): Promise<boolean> {
   try {
@@ -800,12 +799,6 @@ app.post("/api/auto-plan-week/apply", asyncHandler(async (req, res) => {
     // främmande id:n vilket dolde tenant-läckage.
     const assignmentResourceIds = assignments.map((a: { resourceId: string }) => a.resourceId);
     await ensureResourceIdsInTenant(assignmentResourceIds, tenantId);
-
-    // Använd den gemensamma cache:ade helpern. Samma logik som inline-version
-    // tidigare (cluster-match först, annars första teamet) men med per-tenant
-    // cache (~30 s TTL) så bulk-importer/auto-plan inte triggar N+1-queries.
-    const inferTeamId = (resourceId: string, clusterId: string | null | undefined) =>
-      inferTeamIdForResource(tenantId, resourceId, clusterId ?? null);
 
     const results = [];
     const skipped: Array<{ workOrderId: string; reason: string }> = [];
