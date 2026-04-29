@@ -189,7 +189,7 @@ export function usePlannerData() {
 
   const dateFilterActive = dateFilterParams !== null;
 
-  useEffect(() => { setUnscheduledPage(0); }, [filterDateField, filterDatePeriod, filterDateCustomFrom, filterDateCustomTo]);
+  useEffect(() => { setUnscheduledPage(0); }, [filterDateField, filterDatePeriod, filterDateCustomFrom, filterDateCustomTo, currentWeekStart]);
 
   const buildUnscheduledParams = useCallback((offset: number) => buildUnscheduledQueryString({
     search: debouncedSearch,
