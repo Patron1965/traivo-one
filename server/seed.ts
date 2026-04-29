@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { tenants, customers, objects, resources, workOrders, brandingTemplates, tenantBranding, userTenantRoles, users, metadataKatalog, clusters } from "@shared/schema";
+import { tenants, customers, objects, resources, workOrders, brandingTemplates, tenantBranding, userTenantRoles, users, metadataKatalog, clusters, teams } from "@shared/schema";
 import { sql, eq, and } from "drizzle-orm";
 
 const DEFAULT_TENANT_ID = "default-tenant";
@@ -33,6 +33,7 @@ export async function seedDatabase() {
     console.log("Default demo tenant present, refreshing demo dates...");
     await refreshDemoWorkOrderDates();
     await seedSystemMetadataLabels();
+    await migrateKinabTeamsToDefaultTenant();
     return;
   }
   const anyTenant = await db.select({ id: tenants.id }).from(tenants).limit(1);
@@ -963,5 +964,32 @@ async function seedSystemMetadataLabels() {
 
   if (created > 0) {
     console.log(`Seeded ${created} system metadata labels (etiketter)`);
+  }
+}
+
+async function migrateKinabTeamsToDefaultTenant() {
+  const KINAB_TEAMS = [
+    { id: 'f49dac45-0158-4758-aa2f-f9bf3afff575', name: 'ADO 237',  description: 'Örsköldsvik.Östersund-Söderhamn', color: '#3bf748', createdAt: new Date('2026-04-29T15:48:42.650Z') },
+    { id: '1329eac5-b792-437d-b13d-f237530dbcb4', name: 'DSU',      description: 'Örnsköldsvik - Boden',           color: '#3B82F6', createdAt: new Date('2026-04-29T15:49:20.497Z') },
+    { id: '038b8657-f8e9-4157-8c1a-5d29105679a7', name: 'OJK-BÖ',   description: 'Sverige',                         color: '#f73b45', createdAt: new Date('2026-04-29T15:50:06.975Z') },
+    { id: '66d620e7-ab1f-47cb-8d9d-2f677fed9f90', name: 'IFA',      description: 'Stockholm',                       color: '#eaf73b', createdAt: new Date('2026-04-29T15:50:48.338Z') },
+    { id: 'e476013b-9aa7-4322-92e1-7ca8e5711ffa', name: 'BHO',      description: 'Enköping -Västerås- Uppsala',     color: '#f73bbb', createdAt: new Date('2026-04-29T15:51:50.576Z') },
+    { id: '5e1f8029-67f6-44b7-9415-260e12ba95cc', name: 'ZML - BÖ', description: 'Sverige',                         color: '#3bf7c8', createdAt: new Date('2026-04-29T15:52:47.930Z') },
+  ];
+
+  let inserted = 0;
+  for (const t of KINAB_TEAMS) {
+    const result = await db.execute(sql`
+      INSERT INTO teams (id, tenant_id, name, description, color, status, service_area, profile_ids, created_at)
+      VALUES (${t.id}, ${DEFAULT_TENANT_ID}, ${t.name}, ${t.description}, ${t.color}, 'active', '{}', '{}', ${t.createdAt.toISOString()}::timestamp)
+      ON CONFLICT (id) DO NOTHING
+      RETURNING id
+    `);
+    if ((result as any).rowCount && (result as any).rowCount > 0) inserted++;
+  }
+  if (inserted > 0) {
+    console.log(`[migration] Inserted ${inserted} kinab teams under ${DEFAULT_TENANT_ID}`);
+  } else {
+    console.log(`[migration] kinab→${DEFAULT_TENANT_ID} teams: nothing to insert (already present)`);
   }
 }
