@@ -161,7 +161,7 @@ function generatePDF(data: ROIData) {
     ["Effektivitetsvinst", `${s.efficiencyGainPercent}%`],
     ["St\u00e4lltidsreduktion", `${s.setupTimeReductionPercent}%`],
     ["Total k\u00f6rstr\u00e4cka", `${s.totalDistanceKm} km`],
-    ["CO2-uts\u00e4pping", `${s.totalCo2Kg} kg`],
+    ["CO2-utsl\u00e4pp", `${s.totalCo2Kg} kg`],
     ["Br\u00e4nslef\u00f6rbrukning", `${s.totalFuelLiters} L`],
     ["Aktiva resurser", `${s.activeResources}`],
     ["Produktivitet/resurs", `${s.productivityPerResource} ordrar`],
@@ -185,7 +185,7 @@ function generatePDF(data: ROIData) {
 
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
-  const headers = ["M\u00e5nad", "Ordrar", "Utf\u00f6rda", "Rate", "Snittid", "Avvikelser"];
+  const headers = ["M\u00e5nad", "Ordrar", "Utf\u00f6rda", "Rate", "Snitt-tid", "Avvikelser"];
   const colX = [25, 55, 80, 105, 125, 155];
   headers.forEach((h, i) => doc.text(h, colX[i], y));
   y += 5;

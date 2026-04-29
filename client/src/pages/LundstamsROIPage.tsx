@@ -301,7 +301,7 @@ export default function LundstamsROIPage() {
     const envBenefits = [
       "Automatiska miljocertifikat per kund med CO2-berakningar",
       "Sparning av bransleforbrukning och kemikalieanvandning per fordon",
-      "Dokumenterad klimatpaverkan som starker Lundstams varumärke",
+      "Dokumenterad klimatpåverkan som stärker Lundstams varumärke",
       "Stod for frivillig hallbarhetsredovisning enligt ARL"
     ];
 
