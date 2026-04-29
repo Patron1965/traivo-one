@@ -10,6 +10,7 @@ import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingC
 import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts } from "@shared/schema";
 import { getISOWeek } from "./helpers";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
+import { inferTeamIdForResource } from "../utils/teamInference";
 
 async function verifyObjectTenant(objectId: string, tenantId: string): Promise<boolean> {
   try {
@@ -800,30 +801,11 @@ app.post("/api/auto-plan-week/apply", asyncHandler(async (req, res) => {
     const assignmentResourceIds = assignments.map((a: { resourceId: string }) => a.resourceId);
     await ensureResourceIdsInTenant(assignmentResourceIds, tenantId);
 
-    // Pre-fetch team memberships och teams så vi kan härleda team_id från
-    // resursens medlemskap (cluster-match först).
-    const allMembers = await storage.getAllTeamMembers(tenantId);
-    const teams = await storage.getTeams(tenantId);
-    const teamClusterMap = new Map<string, string | null>();
-    for (const t of teams) teamClusterMap.set(t.id, t.clusterId ?? null);
-    const resourceTeamsMap = new Map<string, string[]>();
-    for (const tm of allMembers) {
-      const arr = resourceTeamsMap.get(tm.resourceId);
-      if (arr) {
-        if (!arr.includes(tm.teamId)) arr.push(tm.teamId);
-      } else {
-        resourceTeamsMap.set(tm.resourceId, [tm.teamId]);
-      }
-    }
-    const inferTeamId = (resourceId: string, clusterId: string | null | undefined): string | null => {
-      const teamIds = resourceTeamsMap.get(resourceId);
-      if (!teamIds || teamIds.length === 0) return null;
-      if (clusterId) {
-        const matching = teamIds.find(tid => teamClusterMap.get(tid) === clusterId);
-        if (matching) return matching;
-      }
-      return teamIds[0];
-    };
+    // Använd den gemensamma cache:ade helpern. Samma logik som inline-version
+    // tidigare (cluster-match först, annars första teamet) men med per-tenant
+    // cache (~30 s TTL) så bulk-importer/auto-plan inte triggar N+1-queries.
+    const inferTeamId = (resourceId: string, clusterId: string | null | undefined) =>
+      inferTeamIdForResource(tenantId, resourceId, clusterId ?? null);
 
     const results = [];
     const skipped: Array<{ workOrderId: string; reason: string }> = [];

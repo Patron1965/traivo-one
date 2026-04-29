@@ -131,6 +131,7 @@ import {
 import { db } from "./db";
 import { eq, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray } from "drizzle-orm";
 import { invalidateWorkflowCaches } from "./services/dashboardCache";
+import { inferTeamIdForResource, invalidateTeamInferenceCache } from "./utils/teamInference";
 
 export interface ResolvedArticlePrice {
   articleId: string;
@@ -2512,6 +2513,21 @@ export class DatabaseStorage implements IStorage {
         if (values.taskLongitude == null && obj.longitude != null) values.taskLongitude = obj.longitude;
       }
     }
+    // Auto-infer team_id från resursens medlemskap. Triggas ENDAST när:
+    //   - resourceId är satt (icke-null) i input,
+    //   - teamId-nyckeln saknas helt i input (Object.hasOwn === false), och
+    //   - tenantId finns.
+    // Respekterar explicita värden (även null) från caller och undviker
+    // overhead när jobbet inte har någon resurs.
+    const teamIdProvided = Object.prototype.hasOwnProperty.call(insertWorkOrder, "teamId");
+    if (!teamIdProvided && values.tenantId && values.resourceId) {
+      const inferred = await inferTeamIdForResource(
+        values.tenantId,
+        values.resourceId,
+        values.clusterId ?? null,
+      );
+      if (inferred) values.teamId = inferred;
+    }
     const [workOrder] = await db.insert(workOrders).values(values).returning();
     if (workOrder?.tenantId) invalidateWorkflowCaches(workOrder.tenantId);
     return workOrder;
@@ -2531,6 +2547,33 @@ export class DatabaseStorage implements IStorage {
       if (obj) {
         if (!taskLatProvided && obj.latitude != null) updates.taskLatitude = obj.latitude;
         if (!taskLngProvided && obj.longitude != null) updates.taskLongitude = obj.longitude;
+      }
+    }
+    // Auto-infer team_id på samma villkor som createWorkOrder. Triggas ENDAST
+    // när resourceId-nyckeln finns i payloaden (med icke-null värde) och
+    // teamId-nyckeln saknas helt. Vi måste läsa befintlig WO för tenantId
+    // och clusterId om något av dem inte finns i payloaden.
+    const teamIdProvided = Object.prototype.hasOwnProperty.call(data, "teamId");
+    const resourceIdProvided = Object.prototype.hasOwnProperty.call(data, "resourceId");
+    if (!teamIdProvided && resourceIdProvided && updates.resourceId) {
+      const clusterIdProvided = Object.prototype.hasOwnProperty.call(data, "clusterId");
+      const tenantIdProvided = Object.prototype.hasOwnProperty.call(data, "tenantId");
+      let tenantId: string | undefined = tenantIdProvided ? updates.tenantId ?? undefined : undefined;
+      let clusterId: string | null | undefined = clusterIdProvided ? updates.clusterId : undefined;
+      if (!tenantId || clusterId === undefined) {
+        const [existing] = await db
+          .select({ tenantId: workOrders.tenantId, clusterId: workOrders.clusterId })
+          .from(workOrders)
+          .where(eq(workOrders.id, id))
+          .limit(1);
+        if (existing) {
+          if (!tenantId) tenantId = existing.tenantId;
+          if (clusterId === undefined) clusterId = existing.clusterId;
+        }
+      }
+      if (tenantId) {
+        const inferred = await inferTeamIdForResource(tenantId, updates.resourceId, clusterId ?? null);
+        if (inferred) updates.teamId = inferred;
       }
     }
     const [workOrder] = await db.update(workOrders).set(updates).where(eq(workOrders.id, id)).returning();
@@ -3755,16 +3798,20 @@ export class DatabaseStorage implements IStorage {
 
   async createTeam(team: InsertTeam): Promise<Team> {
     const [result] = await db.insert(teams).values(team).returning();
+    if (result?.tenantId) invalidateTeamInferenceCache(result.tenantId);
     return result;
   }
 
   async updateTeam(id: string, data: Partial<InsertTeam>): Promise<Team | undefined> {
     const [result] = await db.update(teams).set(data).where(eq(teams.id, id)).returning();
+    if (result?.tenantId) invalidateTeamInferenceCache(result.tenantId);
     return result || undefined;
   }
 
   async deleteTeam(id: string): Promise<void> {
+    const [team] = await db.select({ tenantId: teams.tenantId }).from(teams).where(eq(teams.id, id)).limit(1);
     await db.update(teams).set({ deletedAt: new Date() }).where(eq(teams.id, id));
+    if (team?.tenantId) invalidateTeamInferenceCache(team.tenantId);
   }
 
   // ============== TEAM MEMBERS ==============
@@ -3786,16 +3833,33 @@ export class DatabaseStorage implements IStorage {
 
   async createTeamMember(tm: InsertTeamMember): Promise<TeamMember> {
     const [result] = await db.insert(teamMembers).values(tm).returning();
+    // Rensa team-inferens-cachen för tenanten — slå upp via teams-relationen.
+    if (result?.teamId) {
+      const [team] = await db.select({ tenantId: teams.tenantId }).from(teams).where(eq(teams.id, result.teamId)).limit(1);
+      if (team?.tenantId) invalidateTeamInferenceCache(team.tenantId);
+    }
     return result;
   }
 
   async updateTeamMember(id: string, data: Partial<InsertTeamMember>): Promise<TeamMember | undefined> {
     const [result] = await db.update(teamMembers).set(data).where(eq(teamMembers.id, id)).returning();
+    if (result?.teamId) {
+      const [team] = await db.select({ tenantId: teams.tenantId }).from(teams).where(eq(teams.id, result.teamId)).limit(1);
+      if (team?.tenantId) invalidateTeamInferenceCache(team.tenantId);
+    }
     return result || undefined;
   }
 
   async deleteTeamMember(id: string): Promise<void> {
+    // Slå upp tenantId via team innan radering så cachen kan invalideras.
+    const [tm] = await db.select({ teamId: teamMembers.teamId }).from(teamMembers).where(eq(teamMembers.id, id)).limit(1);
+    let tenantId: string | undefined;
+    if (tm?.teamId) {
+      const [team] = await db.select({ tenantId: teams.tenantId }).from(teams).where(eq(teams.id, tm.teamId)).limit(1);
+      tenantId = team?.tenantId;
+    }
     await db.delete(teamMembers).where(eq(teamMembers.id, id));
+    if (tenantId) invalidateTeamInferenceCache(tenantId);
   }
 
   // ============== PLANNING PARAMETERS ==============
