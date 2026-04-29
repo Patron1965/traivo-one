@@ -54,6 +54,10 @@ interface UnscheduledSidebarProps {
   setFilterDateCustomTo: (v: string) => void;
   dateFilterActive: boolean;
   unscheduledMissingDateCount: number;
+  missingDateExpanded: boolean;
+  setMissingDateExpanded: (v: boolean) => void;
+  missingDateJobs: WorkOrderWithObject[];
+  missingDateLoading: boolean;
   customers: Customer[];
   clusters: Cluster[];
   teamsData: Array<{ id: string; name: string; clusterId: string | null; color: string | null }>;
@@ -155,6 +159,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
     filterDateField, setFilterDateField, filterDatePeriod, setFilterDatePeriod,
     filterDateCustomFrom, setFilterDateCustomFrom, filterDateCustomTo, setFilterDateCustomTo, dateFilterActive,
     unscheduledMissingDateCount,
+    missingDateExpanded, setMissingDateExpanded, missingDateJobs, missingDateLoading,
     customers, clusters, teamsData, customerMap, clusterMap,
     selectedJob, onJobClick, onOpenAssignDialog, timewindowMap, currentWeekStart,
     activeDragJob, clusterMatchedResourceIds, visibleResources,
@@ -295,21 +300,81 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
               })()}
             </div>
           )}
-          {dateFilterActive && filterDateField === "desired" && unscheduledMissingDateCount > 0 && (
-            <div className="flex items-start gap-1.5 p-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800" data-testid="sidebar-missing-date-info">
-              <Info className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-              <span className="text-[10px] text-blue-700 dark:text-blue-300 leading-tight">
-                {unscheduledMissingDateCount} ordrar saknar önskat datum och visas inte. Byt till 'Skapad' för att se dem.
-              </span>
-            </div>
-          )}
-          {dateFilterActive && filterDateField === "sla" && unscheduledMissingDateCount > 0 && (
-            <div className="flex items-start gap-1.5 p-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800" data-testid="sidebar-missing-date-info">
-              <Info className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-              <span className="text-[10px] text-blue-700 dark:text-blue-300 leading-tight">
-                {unscheduledMissingDateCount} ordrar saknar SLA-deadline och visas inte med detta filter.
-              </span>
-            </div>
+          {dateFilterActive && (filterDateField === "desired" || filterDateField === "sla") && unscheduledMissingDateCount > 0 && (
+            <Collapsible open={missingDateExpanded} onOpenChange={setMissingDateExpanded}>
+              <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800" data-testid="sidebar-missing-date-info">
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="w-full flex items-start gap-1.5 p-2 text-left hover-elevate active-elevate-2 rounded-md"
+                    data-testid="button-toggle-missing-date"
+                  >
+                    <Info className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                    <span className="text-[10px] text-blue-700 dark:text-blue-300 leading-tight flex-1">
+                      {filterDateField === "desired"
+                        ? `${unscheduledMissingDateCount} ordrar saknar önskat datum och visas inte i listan ovan.`
+                        : `${unscheduledMissingDateCount} ordrar saknar SLA-deadline och visas inte i listan ovan.`}
+                      <span className="block mt-0.5 font-medium">
+                        {missingDateExpanded ? "Dölj listan" : "Visa lista för att komplettera datum"}
+                      </span>
+                    </span>
+                    {missingDateExpanded
+                      ? <ChevronUp className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                      : <ChevronDown className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />}
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="px-2 pb-2 space-y-1.5" data-testid="sidebar-missing-date-list">
+                    {missingDateLoading && (
+                      <div className="flex items-center justify-center py-3">
+                        <Loader2 className="h-4 w-4 animate-spin text-blue-600 dark:text-blue-400" />
+                      </div>
+                    )}
+                    {!missingDateLoading && missingDateJobs.length === 0 && (
+                      <p className="text-[10px] text-blue-700 dark:text-blue-300 py-2">Inga ordrar att visa.</p>
+                    )}
+                    {!missingDateLoading && unscheduledMissingDateCount > missingDateJobs.length && missingDateJobs.length > 0 && (
+                      <p className="text-[10px] text-blue-700/80 dark:text-blue-300/80 italic" data-testid="text-missing-date-cap-info">
+                        Visar de första {missingDateJobs.length} av {unscheduledMissingDateCount}. Använd sökfältet för att filtrera vidare.
+                      </p>
+                    )}
+                    {!missingDateLoading && missingDateJobs.map((job) => {
+                      const customer = customerMap.get(job.customerId);
+                      return (
+                        <DraggableJobCard key={job.id} id={job.id}>
+                          <Card
+                            className="p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 touch-none bg-white dark:bg-card"
+                            onClick={() => onJobClick(job.id)}
+                            data-testid={`missing-date-job-${job.id}`}
+                          >
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priorityDotColors[job.priority]}`} />
+                                <span className="text-xs font-medium truncate">{job.title}</span>
+                              </div>
+                              <div className="text-[10px] text-muted-foreground truncate">{job.objectName || "Okänt objekt"}</div>
+                              {customer && (
+                                <div className="text-[10px] text-muted-foreground truncate">{customer.name}</div>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="w-full mt-1 h-6 text-[10px]"
+                                onClick={(e) => onOpenAssignDialog(job, e)}
+                                data-testid={`button-assign-missing-date-${job.id}`}
+                              >
+                                <CalendarIcon className="h-3 w-3 mr-1" />
+                                Lägg till datum
+                              </Button>
+                            </div>
+                          </Card>
+                        </DraggableJobCard>
+                      );
+                    })}
+                  </div>
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
           )}
           {sidebarFiltersOpen && (
             <div className="space-y-2 pt-1" data-testid="sidebar-filter-dropdowns">

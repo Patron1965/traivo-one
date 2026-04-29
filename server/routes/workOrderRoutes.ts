@@ -73,7 +73,14 @@ app.get("/api/work-orders", asyncHandler(async (req, res) => {
   }
 
   if (status === 'unscheduled') {
-    if (search || offset !== undefined || dateFilter) {
+    const missingDateOnly = req.query.missingDateOnly === 'true';
+    if (missingDateOnly) {
+      if (!dateParse.data.dateField || (dateParse.data.dateField !== 'desired' && dateParse.data.dateField !== 'sla')) {
+        throw new ValidationError("missingDateOnly kräver dateField=desired eller sla");
+      }
+      const workOrders = await storage.getUnscheduledMissingDateField(tenantId, dateParse.data.dateField, search, limit || 100);
+      res.json({ workOrders, total: workOrders.length });
+    } else if (search || offset !== undefined || dateFilter) {
       const result = await storage.getUnscheduledWorkOrdersPaginated(tenantId, limit || 50, offset || 0, search, dateFilter);
       res.json(result);
     } else {

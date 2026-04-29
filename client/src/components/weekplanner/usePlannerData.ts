@@ -211,6 +211,27 @@ export function usePlannerData() {
   const [unscheduledMissingDateCount, setUnscheduledMissingDateCount] = useState(0);
   useEffect(() => { if (unscheduledData) { if (unscheduledPage === 0) { setAccumulatedUnscheduled(unscheduledData.workOrders); } else { setAccumulatedUnscheduled(prev => { const ids = new Set(prev.map(wo => wo.id)); return [...prev, ...unscheduledData.workOrders.filter(wo => !ids.has(wo.id))]; }); } setUnscheduledTotal(unscheduledData.total); setUnscheduledMissingDateCount(unscheduledData.missingDateFieldCount || 0); } }, [unscheduledData, unscheduledPage]);
 
+  const [missingDateExpanded, setMissingDateExpanded] = useState(false);
+  const missingDateField = (filterDateField === "desired" || filterDateField === "sla") ? filterDateField : null;
+  const missingDateEnabled = missingDateExpanded && dateFilterActive && missingDateField !== null && unscheduledMissingDateCount > 0;
+  const { data: missingDateData, isLoading: missingDateLoading } = useQuery<{ workOrders: WorkOrderWithObject[]; total: number }>({
+    queryKey: ["/api/work-orders", "unscheduled-missing-date", missingDateField, debouncedSearch],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set("status", "unscheduled");
+      params.set("missingDateOnly", "true");
+      if (missingDateField) params.set("dateField", missingDateField);
+      if (debouncedSearch) params.set("search", debouncedSearch);
+      params.set("limit", "100");
+      const res = await fetch(`/api/work-orders?${params.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: missingDateEnabled,
+    staleTime: 60000,
+  });
+  const missingDateJobs = useMemo(() => missingDateData?.workOrders ?? [], [missingDateData]);
+
   const [loadMoreLoading, setLoadMoreLoading] = useState(false);
   const loadMoreUnscheduled = useCallback(async () => {
     const np = unscheduledPage + 1; setLoadMoreLoading(true);
@@ -1090,6 +1111,7 @@ export function usePlannerData() {
     weatherByDate,
     unscheduledJobs, unscheduledTotal, accumulatedUnscheduled, hasMoreUnscheduled, loadMoreLoading, loadMoreUnscheduled,
     unscheduledMissingDateCount,
+    missingDateExpanded, setMissingDateExpanded, missingDateJobs, missingDateLoading,
     filterDateField, setFilterDateField, filterDatePeriod, setFilterDatePeriod,
     filterDateCustomFrom, setFilterDateCustomFrom, filterDateCustomTo, setFilterDateCustomTo,
     dateFilterActive,

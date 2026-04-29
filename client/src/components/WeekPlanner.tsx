@@ -157,6 +157,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
           filterDateCustomTo={d.filterDateCustomTo} setFilterDateCustomTo={d.setFilterDateCustomTo}
           dateFilterActive={d.dateFilterActive}
           unscheduledMissingDateCount={d.unscheduledMissingDateCount}
+          missingDateExpanded={d.missingDateExpanded} setMissingDateExpanded={d.setMissingDateExpanded}
+          missingDateJobs={d.missingDateJobs} missingDateLoading={d.missingDateLoading}
           customers={d.customers} clusters={d.clusters} teamsData={d.teamsData}
           customerMap={d.customerMap} clusterMap={d.clusterMap}
           selectedJob={d.selectedJob} onJobClick={handleJobClickWithCallback} onOpenAssignDialog={d.handleOpenAssignDialog}
