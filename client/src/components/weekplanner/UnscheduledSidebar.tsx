@@ -340,6 +340,9 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                     )}
                     {!missingDateLoading && missingDateJobs.map((job) => {
                       const customer = customerMap.get(job.customerId);
+                      const customerLabel = customer && /[\p{L}\p{N}]/u.test(customer.name) ? customer.name : null;
+                      const addressLabel = job.objectName || "Okänt objekt";
+                      const primaryLabel = customerLabel || addressLabel;
                       return (
                         <DraggableJobCard key={job.id} id={job.id}>
                           <Card
@@ -350,11 +353,10 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             <div className="space-y-0.5">
                               <div className="flex items-center gap-1.5">
                                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priorityDotColors[job.priority]}`} />
-                                <span className="text-xs font-medium truncate">{job.title}</span>
+                                <span className="text-xs font-medium truncate" title={primaryLabel}>{primaryLabel}</span>
                               </div>
-                              <div className="text-[10px] text-muted-foreground truncate">{job.objectName || "Okänt objekt"}</div>
-                              {customer && (
-                                <div className="text-[10px] text-muted-foreground truncate">{customer.name}</div>
+                              {customerLabel && (
+                                <div className="text-[10px] text-muted-foreground truncate" title={addressLabel}>{addressLabel}</div>
                               )}
                               <Button
                                 size="sm"
@@ -547,6 +549,9 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
               {unscheduledJobs.map((job) => {
                 const customer = customerMap.get(job.customerId);
                 const jobCluster = job.clusterId ? clusterMap.get(job.clusterId) : null;
+                const customerLabel = customer && /[\p{L}\p{N}]/u.test(customer.name) ? customer.name : null;
+                const addressLabel = job.objectName || "Okänt objekt";
+                const primaryLabel = customerLabel || addressLabel;
                 return (
                   <DraggableJobCard key={job.id} id={job.id}>
                     <Card
@@ -557,14 +562,13 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                       <div className="space-y-1">
                         <div className="flex items-center gap-1.5">
                           <span className={`w-2 h-2 rounded-full shrink-0 ${priorityDotColors[job.priority]}`} />
-                          <span className="text-sm font-medium">{job.title}</span>
+                          <span className="text-sm font-medium truncate" title={primaryLabel} data-testid={`unscheduled-job-customer-${job.id}`}>{primaryLabel}</span>
                           {job.priority === "urgent" && (
                             <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
                           )}
                         </div>
-                        <div className="text-xs text-muted-foreground">{job.objectName || "Okänt objekt"}</div>
-                        {customer && (
-                          <div className="text-xs text-muted-foreground">{customer.name}</div>
+                        {customerLabel && (
+                          <div className="text-xs text-muted-foreground truncate" title={addressLabel} data-testid={`unscheduled-job-address-${job.id}`}>{addressLabel}</div>
                         )}
                         {jobCluster && (
                           <div className="flex items-center gap-1 text-[10px] text-muted-foreground" data-testid={`unscheduled-job-cluster-${job.id}`}>
