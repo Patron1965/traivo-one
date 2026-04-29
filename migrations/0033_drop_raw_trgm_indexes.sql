@@ -1,21 +1,31 @@
--- Drop legacy bare-column GIN trigram indexes that block deploy validation.
+-- Drop pg_trgm-based trigram indexes that block deploy validation.
 --
--- Drizzle-kit's introspect-based diff (used by Replit's deploy validator)
--- loses the `gin_trgm_ops` operator class on bare-column GIN indexes such as
--- `CREATE INDEX ... ON customers USING gin (name gin_trgm_ops)`. The
--- generated DDL becomes `... USING gin ("name")` which fails with
--- "data type text has no default operator class for access method gin".
+-- Replit's deploy validator does its own schema introspection of the dev
+-- database and generates the migration to apply against production. When
+-- the dev DB has GIN trigram indexes (either bare-column or LOWER(...) ),
+-- the validator emits CREATE INDEX statements that require the pg_trgm
+-- extension to be installed in production — which it usually is not on
+-- managed Postgres providers, causing
+-- "operator class \"gin_trgm_ops\" does not exist for access method \"gin\"".
 --
--- All ILIKE callsites have been switched to `LOWER(col) LIKE LOWER(q)`,
--- which uses the LOWER(...) expression GIN indexes from 0029/0030.
--- Those expression indexes are introspected correctly because the full
--- SQL expression is preserved in the diff.
+-- All ILIKE callsites use LOWER(col) LIKE LOWER(q) which still works
+-- correctly without these indexes (just slower on very large tables).
 --
--- This migration removes the bare-column indexes from any environment
--- that already has them. Safe and idempotent.
+-- Safe and idempotent.
 
+-- Bare-column trigram indexes (legacy)
 DROP INDEX IF EXISTS idx_customers_name_raw_trgm;
 DROP INDEX IF EXISTS idx_objects_name_raw_trgm;
 DROP INDEX IF EXISTS idx_objects_address_raw_trgm;
 DROP INDEX IF EXISTS idx_objects_object_number_raw_trgm;
 DROP INDEX IF EXISTS idx_work_orders_title_trgm;
+
+-- LOWER(...) expression trigram indexes (from old 0029/0030)
+DROP INDEX IF EXISTS idx_customers_name_trgm;
+DROP INDEX IF EXISTS idx_customers_customer_number_trgm;
+DROP INDEX IF EXISTS idx_customers_email_trgm;
+DROP INDEX IF EXISTS idx_customers_city_trgm;
+DROP INDEX IF EXISTS idx_objects_name_trgm;
+DROP INDEX IF EXISTS idx_objects_object_number_trgm;
+DROP INDEX IF EXISTS idx_objects_address_trgm;
+DROP INDEX IF EXISTS idx_objects_city_trgm;

@@ -2,16 +2,9 @@
 -- All statements are idempotent (CREATE ... IF NOT EXISTS) and safe to re-apply.
 -- Applied automatically via scripts/post-merge.sh.
 
--- Trigram extension (already attempted by 0029/0030, kept for safety).
--- Best-effort install; ignore permission errors on managed Postgres.
-DO $$
-BEGIN
-  BEGIN
-    EXECUTE 'CREATE EXTENSION IF NOT EXISTS pg_trgm';
-  EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'pg_trgm extension not available: %', SQLERRM;
-  END;
-END$$;
+-- NOTE: pg_trgm extension creation removed — see migration 0033 for context.
+-- The remaining indexes in this file (jsonb GIN and expression indexes for
+-- ->>'key' lookups) do NOT require pg_trgm.
 
 -- ============================================================
 -- NOTE on raw-column GIN trigram indexes:
