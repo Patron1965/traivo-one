@@ -50,7 +50,7 @@ export default function WeekPlannerPage() {
           <Badge variant="outline" className="text-xs border-amber-300 text-amber-600">Från import</Badge>
         </div>
       )}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 mx-3 mb-3 border border-border rounded-lg shadow-sm bg-background overflow-hidden">
       <div className="flex-1 min-w-0 overflow-auto">
         <WeekPlanner 
           onAddJob={() => setShowJobModal(true)}
@@ -62,7 +62,7 @@ export default function WeekPlannerPage() {
       </div>
 
       {showAIPanel && (
-        <div className="w-80 max-w-[320px] border-l bg-background flex flex-col shrink-0 overflow-hidden">
+        <div className="w-80 max-w-[320px] border-l border-border bg-background flex flex-col shrink-0 overflow-hidden">
           <div className="flex items-center justify-between p-3 border-b shrink-0">
             <div className="flex items-center gap-1">
               <Button
