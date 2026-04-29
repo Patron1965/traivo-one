@@ -1504,20 +1504,42 @@ app.post("/api/ai/optimize-vrp/apply", asyncHandler(async (req, res) => {
     });
 }));
 
-app.get("/api/admin/distance-cache", isAuthenticated, asyncHandler(async (_req, res) => {
+const requireSystemAdmin = async (req: any, res: any, next: any) => {
+  const replitUser = req.user;
+  const sessionUserId = (req.session as any)?.userId;
+  const userId = replitUser?.claims?.sub || sessionUserId;
+  if (!userId) {
+    return res.status(401).json({ error: "Ej autentiserad" });
+  }
+  try {
+    const dbUser = await storage.getUser(userId);
+    if (!dbUser) {
+      return res.status(401).json({ error: "Ej autentiserad" });
+    }
+    const role = dbUser.role || "user";
+    if (role !== "admin" && role !== "owner") {
+      return res.status(403).json({ error: "Ej behörig", message: "Systemadministratörsrättigheter krävs." });
+    }
+    return next();
+  } catch {
+    return res.status(500).json({ error: "Kunde inte verifiera behörighet" });
+  }
+};
+
+app.get("/api/admin/distance-cache", isAuthenticated, requireSystemAdmin, asyncHandler(async (_req, res) => {
     const { getDistanceCacheStats, getL2CacheStats } = await import("../distance-matrix-service");
     const l1Stats = getDistanceCacheStats();
     const l2Stats = await getL2CacheStats();
     res.json({ ...l1Stats, ...l2Stats });
 }));
 
-app.delete("/api/admin/distance-cache", isAuthenticated, asyncHandler(async (_req, res) => {
+app.delete("/api/admin/distance-cache", isAuthenticated, requireSystemAdmin, asyncHandler(async (_req, res) => {
     const { clearDistanceCache } = await import("../distance-matrix-service");
     const result = await clearDistanceCache();
     res.json({ message: "Distance cache cleared", ...result });
 }));
 
-app.post("/api/admin/distance-cache/cleanup", isAuthenticated, asyncHandler(async (_req, res) => {
+app.post("/api/admin/distance-cache/cleanup", isAuthenticated, requireSystemAdmin, asyncHandler(async (_req, res) => {
     const { cleanupExpiredL2 } = await import("../distance-matrix-service");
     const removed = await cleanupExpiredL2();
     res.json({ message: "Expired L2 entries removed", removed });

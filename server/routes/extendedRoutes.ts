@@ -1517,16 +1517,19 @@ const requireAdminAuth = async (req: any, res: any, next: any) => {
     if (!dbUser) {
       return res.status(401).json({ error: "Ej autentiserad", message: "Användaren hittades inte." });
     }
-    const role = dbUser.role || "user";
-    if (role !== "admin" && role !== "owner") {
-      return res.status(403).json({ error: "Ej behörig", message: "Administratörsrättigheter krävs." });
-    }
     req.userId = userId;
     if (!req.tenantId) {
       const userTenants = await getUserTenants(userId);
       if (userTenants.length > 0) {
         req.tenantId = userTenants[0].tenantId;
       }
+    }
+    if (!req.tenantId) {
+      return res.status(403).json({ error: "Ej behörig", message: "Ingen tenant-tillhörighet hittades." });
+    }
+    const tenantRole = await storage.getUserTenantRole(userId, req.tenantId);
+    if (!tenantRole || (tenantRole.role !== "admin" && tenantRole.role !== "owner")) {
+      return res.status(403).json({ error: "Ej behörig", message: "Administratörsrättigheter inom organisationen krävs." });
     }
     return next();
   } catch {
@@ -1535,8 +1538,9 @@ const requireAdminAuth = async (req: any, res: any, next: any) => {
 };
 
 app.get("/api/admin/users", requireAdminAuth, asyncHandler(async (req, res) => {
-    const allUsers = await storage.getAllUsers();
-    const safeUsers = allUsers.map(({ passwordHash, ...user }) => user);
+    const tenantId = (req as any).tenantId;
+    const tenantUsers = await storage.getUsersByTenant(tenantId);
+    const safeUsers = tenantUsers.map(({ passwordHash, ...user }) => user);
     res.json(safeUsers);
 }));
 
@@ -1563,7 +1567,7 @@ app.post("/api/admin/users", requireAdminAuth, asyncHandler(async (req, res) => 
       firstName: firstName || null,
       lastName: lastName || null,
       passwordHash: hashedPassword,
-      role: role || "user",
+      role: "user",
       resourceId: resourceId || null,
       isActive: true,
     });
@@ -1597,61 +1601,74 @@ app.patch("/api/admin/users/bulk", requireAdminAuth, asyncHandler(async (req, re
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       throw new ValidationError("Inga användare valda");
     }
-    const validUpdates: Record<string, any> = {};
+    let tenantRoleToAssign: string | undefined;
     if (updates.role !== undefined) {
       const validRoles = ["owner", "admin", "planner", "technician", "user", "viewer", "customer", "reporter"];
       if (!validRoles.includes(updates.role)) {
         return res.status(400).json({ error: `Ogiltig roll: ${updates.role}` });
       }
-      validUpdates.role = updates.role;
+      tenantRoleToAssign = updates.role;
     }
-    if (updates.isActive !== undefined) validUpdates.isActive = updates.isActive;
-    if (Object.keys(validUpdates).length === 0) {
+    const accountUpdates: Record<string, any> = {};
+    if (updates.isActive !== undefined) accountUpdates.isActive = updates.isActive;
+    if (tenantRoleToAssign === undefined && Object.keys(accountUpdates).length === 0) {
       throw new ValidationError("Inga uppdateringar angivna");
     }
     let updatedCount = 0;
     const tenantId = (req as any).tenantId;
     for (const id of ids) {
-      const result = await storage.updateUser(id, validUpdates);
-      if (result) {
-        updatedCount++;
-        if (validUpdates.role && tenantId) {
-          await assignUserToTenant(id, tenantId, validUpdates.role as UserRole, (req as any).userId);
-        }
+      const membership = await storage.getUserTenantRole(id, tenantId);
+      if (!membership) {
+        continue;
       }
+      if (Object.keys(accountUpdates).length > 0) {
+        await storage.updateUser(id, accountUpdates);
+      }
+      if (tenantRoleToAssign) {
+        await assignUserToTenant(id, tenantId, tenantRoleToAssign as UserRole, (req as any).userId);
+      }
+      updatedCount++;
     }
-    console.log(`[user-mgmt] Bulk update: ${updatedCount} users updated with`, validUpdates);
+    console.log(`[user-mgmt] Bulk update: ${updatedCount} users updated with`, { ...accountUpdates, tenantRole: tenantRoleToAssign });
     res.json({ success: true, updatedCount });
 }));
 
 app.patch("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, res) => {
-    const { email, firstName, lastName, password, role, resourceId, isActive } = req.body;
-    const updateData: Record<string, any> = {};
+    const tenantId = (req as any).tenantId;
+    const membership = await storage.getUserTenantRole(req.params.id, tenantId);
+    if (!membership) {
+      return res.status(403).json({ error: "Ej behörig", message: "Användaren tillhör inte din organisation." });
+    }
 
-    if (email !== undefined) updateData.email = email;
-    if (firstName !== undefined) updateData.firstName = firstName;
-    if (lastName !== undefined) updateData.lastName = lastName;
+    const { email, firstName, lastName, password, role, resourceId, isActive } = req.body;
+
     if (role !== undefined) {
       const validRoles = ["owner", "admin", "planner", "technician", "user", "viewer", "customer", "reporter"];
       if (!validRoles.includes(role)) {
         return res.status(400).json({ error: `Ogiltig roll: ${role}` });
       }
-      updateData.role = role;
-    }
-    if (resourceId !== undefined) updateData.resourceId = resourceId;
-    if (isActive !== undefined) updateData.isActive = isActive;
-    if (password) {
-      updateData.passwordHash = hashPassword(password);
     }
 
-    const user = await storage.updateUser(req.params.id, updateData);
+    const accountData: Record<string, any> = {};
+    if (email !== undefined) accountData.email = email;
+    if (firstName !== undefined) accountData.firstName = firstName;
+    if (lastName !== undefined) accountData.lastName = lastName;
+    if (resourceId !== undefined) accountData.resourceId = resourceId;
+    if (isActive !== undefined) accountData.isActive = isActive;
+    if (password) {
+      accountData.passwordHash = hashPassword(password);
+    }
+
+    let user = await storage.getUser(req.params.id);
     if (!user) throw new NotFoundError("Användaren hittades inte");
 
+    if (Object.keys(accountData).length > 0) {
+      const updated = await storage.updateUser(req.params.id, accountData);
+      if (updated) user = updated;
+    }
+
     if (role !== undefined) {
-      const tenantId = (req as any).tenantId;
-      if (tenantId) {
-        await assignUserToTenant(req.params.id, tenantId, role as UserRole, (req as any).userId);
-      }
+      await assignUserToTenant(req.params.id, tenantId, role as UserRole, (req as any).userId);
     }
 
     const { passwordHash: _, ...safeUser } = user;
@@ -1663,7 +1680,12 @@ app.delete("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, re
     if (req.params.id === currentUserId) {
       return res.status(400).json({ error: "Du kan inte ta bort ditt eget konto" });
     }
-    await storage.deleteUser(req.params.id);
+    const tenantId = (req as any).tenantId;
+    const membership = await storage.getUserTenantRole(req.params.id, tenantId);
+    if (!membership) {
+      return res.status(403).json({ error: "Ej behörig", message: "Användaren tillhör inte din organisation." });
+    }
+    await storage.deleteUserTenantRole(membership.id);
     res.json({ success: true });
 }));
 

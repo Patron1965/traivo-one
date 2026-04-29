@@ -197,6 +197,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
+  getUsersByTenant(tenantId: string): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: string): Promise<void>;
@@ -882,6 +883,16 @@ export class DatabaseStorage implements IStorage {
 
   async getAllUsers(): Promise<User[]> {
     return db.select().from(users).orderBy(desc(users.createdAt));
+  }
+
+  async getUsersByTenant(tenantId: string): Promise<User[]> {
+    const rows = await db
+      .select({ user: users })
+      .from(userTenantRoles)
+      .innerJoin(users, eq(userTenantRoles.userId, users.id))
+      .where(eq(userTenantRoles.tenantId, tenantId))
+      .orderBy(desc(users.createdAt));
+    return rows.map(r => r.user);
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
