@@ -308,8 +308,17 @@ app.patch("/api/planner/orders/:id/reassign", requireTenantWithFallback, asyncHa
 
 app.get("/planner/map", isAuthenticated, (req, res) => {
   const STATUS_COLORS: Record<string, string> = {
-    planned: "#8E44AD",
+    // Aktuella svenska orderstatusar (matchar shared/schema.ts ORDER_STATUSES)
+    skapad: "#3B82F6",
+    planerad_pre: "#9B59B6",
     planerad_resurs: "#6C3483",
+    planerad_las: "#5B2C6F",
+    utford: "#27AE60",
+    fakturerad: "#1B8553",
+    omojlig: "#E74C3C",
+    avbruten: "#95A5A6",
+    // Legacy/engelska statusar (bakåtkompatibilitet med äldre data)
+    planned: "#8E44AD",
     en_route: "#F39C12",
     in_progress: "#27AE60",
     paborjad: "#E67E22",
@@ -323,8 +332,15 @@ app.get("/planner/map", isAuthenticated, (req, res) => {
   };
 
   const STATUS_LABELS: Record<string, string> = {
-    planned: "Planerad",
+    skapad: "Skapad",
+    planerad_pre: "Planerad (pre)",
     planerad_resurs: "Planerad (resurs)",
+    planerad_las: "Planerad (låst)",
+    utford: "Utförd",
+    fakturerad: "Fakturerad",
+    omojlig: "Omöjlig",
+    avbruten: "Avbruten",
+    planned: "Planerad",
     en_route: "På väg",
     in_progress: "Pågår",
     paborjad: "Påbörjad",
@@ -547,7 +563,13 @@ let focusedRouteId = null;
 Object.keys(STATUS_COLORS).forEach(function(s) { statusFilters[s] = true; });
 try {
 var saved = sessionStorage.getItem('nf_status_filters');
-if(saved) statusFilters = JSON.parse(saved);
+if(saved) {
+  var savedObj = JSON.parse(saved);
+  // Merge: använd sparat val där det finns, annars default (synlig)
+  Object.keys(STATUS_COLORS).forEach(function(s) {
+    if(savedObj[s] !== undefined) statusFilters[s] = savedObj[s];
+  });
+}
 } catch(e) {}
 
 function saveStatusFilters() {
