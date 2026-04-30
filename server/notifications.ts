@@ -9,6 +9,7 @@ import {
   validateClientEvent,
   type WsEventType,
 } from "@shared/ws-events";
+import { socketIoBridge } from "./socket-io-bridge";
 
 interface WorkOrderWithDetails extends WorkOrder {
   objectName?: string;
@@ -117,11 +118,34 @@ class NotificationService {
     this.authTokens.delete(token);
     return { resourceId: data.resourceId, userId: data.userId, tenantId: data.tenantId ?? null };
   }
-  
+
+  // Reconnect-safe variant for Socket.io: a Socket.io client passes the
+  // same token through every transparent reconnect in `handshake.auth.token`,
+  // so consuming on first use breaks reconnect-after-disconnect on flaky
+  // mobile networks. We keep the token alive for the rest of its 5-min
+  // window but still honor expiry.
+  private peekAuthToken(token: string): { resourceId?: string; userId?: string; tenantId?: string | null } | null {
+    const data = this.authTokens.get(token);
+    if (!data) return null;
+    if (data.expiresAt < Date.now()) {
+      this.authTokens.delete(token);
+      return null;
+    }
+    return { resourceId: data.resourceId, userId: data.userId, tenantId: data.tenantId ?? null };
+  }
+
   initialize(server: Server) {
-    this.wss = new WebSocketServer({ 
+    this.wss = new WebSocketServer({
       server,
       path: "/ws/notifications"
+    });
+
+    // Initialize Socket.io v4 bridge in parallel — same auth tokens, same
+    // position-update handler. Mobile clients (Traivo Go) connect here;
+    // the raw-WS endpoint above stays alive for the existing web client.
+    socketIoBridge.initialize(server, {
+      validateToken: (token: string) => this.peekAuthToken(token),
+      onPositionUpdate: (position) => this.handlePositionUpdate(position),
     });
 
     this.wss.on("connection", async (ws, req) => {
@@ -290,9 +314,6 @@ class NotificationService {
       createdAt?: string;
     },
   ) {
-    const clients = this.userClients.get(userId);
-    if (!clients || clients.length === 0) return;
-
     const payload = {
       type: "notification" as const,
       id: notification.notificationId || this.generateId(),
@@ -311,6 +332,14 @@ class NotificationService {
     if (!validated) {
       console.warn(`[ws] User notification validation failed for type="${notification.type}", sending anyway`);
     }
+
+    // Mirror to Socket.io: emit to user:<id> room (Socket.io dashboard
+    // sessions) and as the named "notification" event so Go-style clients
+    // get it too.
+    socketIoBridge.emitToUser(userId, "notification", payload);
+
+    const clients = this.userClients.get(userId);
+    if (!clients || clients.length === 0) return;
 
     const message = JSON.stringify(payload);
     let sent = 0;
@@ -360,6 +389,10 @@ class NotificationService {
       console.error(`[ws] Failed to persist notification for ${resourceId}:`, e);
     }
 
+    // Mirror to Socket.io: per-resource room. Mobile (Traivo Go) clients
+    // listening on resource:<id> get this directly.
+    socketIoBridge.emitToResource(resourceId, notification.type, fullNotification);
+
     const clients = this.clients.get(resourceId);
     if (!clients || clients.length === 0) {
       console.log(`[ws] No connected clients for resource ${resourceId}, notification persisted for polling`);
@@ -367,7 +400,7 @@ class NotificationService {
     }
 
     const message = JSON.stringify(fullNotification);
-    
+
     clients.forEach(client => {
       if (client.ws.readyState === WebSocket.OPEN) {
         client.ws.send(message);
@@ -389,6 +422,12 @@ class NotificationService {
     const validated = validateServerEvent(fullNotification);
     if (!validated) {
       console.warn(`[ws] Broadcast validation failed for type="${notification.type}", sending anyway for backward compatibility`);
+    }
+
+    // Mirror to Socket.io: tenant:<id> broadcast (or skip if no tenant — we
+    // don't fan out cross-tenant on Socket.io, that would be a leak).
+    if (tenantId) {
+      socketIoBridge.emitToTenant(tenantId, notification.type, fullNotification);
     }
 
     const message = JSON.stringify(fullNotification);
@@ -444,6 +483,27 @@ class NotificationService {
     }
   }
 
+  // Build the canonical Go-style order payload reused across the
+  // `order:*`, `job_*`, `team:order_updated` etc. events. Mobile clients
+  // can render an order card directly from this payload without a refetch.
+  private buildGoOrderPayload(order: WorkOrderWithDetails, extra: Record<string, unknown> = {}) {
+    return {
+      orderId: order.id,
+      tenantId: order.tenantId,
+      resourceId: order.resourceId ?? null,
+      teamId: order.teamId ?? null,
+      title: order.title,
+      status: order.orderStatus ?? null,
+      priority: order.priority ?? null,
+      scheduledDate: order.scheduledDate ?? null,
+      scheduledStartTime: order.scheduledStartTime ?? null,
+      objectName: order.objectName ?? null,
+      objectAddress: order.objectAddress ?? null,
+      timestamp: new Date().toISOString(),
+      ...extra,
+    };
+  }
+
   notifyJobAssigned(order: WorkOrderWithDetails, resourceId: string) {
     this.sendToResource(resourceId, {
       type: "job_assigned",
@@ -458,7 +518,18 @@ class NotificationService {
         priority: order.priority
       }
     });
-    
+    // Go-style alias: emit `order:assigned` (and `job_assigned` for
+    // compatibility) to the resource room, tenant room and any team room.
+    const payload = this.buildGoOrderPayload(order, { event: "order:assigned" });
+    socketIoBridge.emitToResource(resourceId, "order:assigned", payload);
+    socketIoBridge.emitToResource(resourceId, "job_assigned", payload);
+    if (order.tenantId) {
+      socketIoBridge.emitToTenant(order.tenantId, "order:assigned", payload);
+      socketIoBridge.emitToTenant(order.tenantId, "job_assigned", payload);
+    }
+    if (order.teamId) {
+      socketIoBridge.emitToTeam(order.teamId, "team:order_updated", payload);
+    }
   }
 
   notifyJobUpdated(order: WorkOrderWithDetails, resourceId: string, changeDescription: string) {
@@ -473,6 +544,17 @@ class NotificationService {
         status: order.orderStatus
       }
     });
+    // `order:updated` is auto-aliased to `order:status_changed` in the bridge.
+    const payload = this.buildGoOrderPayload(order, { event: "order:updated", changeDescription });
+    socketIoBridge.emitToResource(resourceId, "order:updated", payload);
+    socketIoBridge.emitToResource(resourceId, "job_updated", payload);
+    if (order.tenantId) {
+      socketIoBridge.emitToTenant(order.tenantId, "order:updated", payload);
+      socketIoBridge.emitToTenant(order.tenantId, "job_updated", payload);
+    }
+    if (order.teamId) {
+      socketIoBridge.emitToTeam(order.teamId, "team:order_updated", payload);
+    }
   }
 
   notifyScheduleChanged(order: WorkOrderWithDetails, resourceId: string, oldDate?: string, newDate?: string) {
@@ -487,7 +569,18 @@ class NotificationService {
         scheduledStartTime: order.scheduledStartTime
       }
     });
-    
+    const payload = this.buildGoOrderPayload(order, {
+      event: "schedule_changed",
+      oldDate: oldDate ?? null,
+      newDate: newDate ?? null,
+    });
+    socketIoBridge.emitToResource(resourceId, "schedule_changed", payload);
+    if (order.tenantId) {
+      socketIoBridge.emitToTenant(order.tenantId, "schedule_changed", payload);
+    }
+    if (order.teamId) {
+      socketIoBridge.emitToTeam(order.teamId, "team:order_updated", payload);
+    }
   }
 
   notifyJobCancelled(order: WorkOrderWithDetails, resourceId: string) {
@@ -497,6 +590,16 @@ class NotificationService {
       message: `${order.title} har avbokats`,
       orderId: order.id
     });
+    const payload = this.buildGoOrderPayload(order, { event: "job_cancelled" });
+    socketIoBridge.emitToResource(resourceId, "order:updated", payload);
+    socketIoBridge.emitToResource(resourceId, "job_cancelled", payload);
+    if (order.tenantId) {
+      socketIoBridge.emitToTenant(order.tenantId, "order:updated", payload);
+      socketIoBridge.emitToTenant(order.tenantId, "job_cancelled", payload);
+    }
+    if (order.teamId) {
+      socketIoBridge.emitToTeam(order.teamId, "team:order_updated", payload);
+    }
   }
 
   notifyPriorityChanged(order: WorkOrderWithDetails, resourceId: string, oldPriority: string) {
@@ -517,6 +620,52 @@ class NotificationService {
         newPriority: order.priority
       }
     });
+    const payload = this.buildGoOrderPayload(order, {
+      event: "priority_changed",
+      oldPriority,
+      newPriority: order.priority,
+    });
+    socketIoBridge.emitToResource(resourceId, "priority_changed", payload);
+    if (order.tenantId) {
+      socketIoBridge.emitToTenant(order.tenantId, "priority_changed", payload);
+    }
+    if (order.teamId) {
+      socketIoBridge.emitToTeam(order.teamId, "team:order_updated", payload);
+    }
+  }
+
+  // ---- Team-room helpers (Go events `team:*`). Called from team routes
+  // when material is logged, members leave/join, or invites are issued.
+  notifyTeamOrderUpdated(teamId: string, orderId: string) {
+    socketIoBridge.emitToTeam(teamId, "team:order_updated", { orderId });
+  }
+
+  notifyTeamMaterialLogged(teamId: string, orderId: string) {
+    socketIoBridge.emitToTeam(teamId, "team:material_logged", { orderId });
+  }
+
+  notifyTeamMemberLeft(teamId: string, memberId: string) {
+    // Tell remaining members first so they see the departure live, then
+    // evict the leaver from the team room so they stop receiving its events
+    // immediately (without waiting for a Socket.io reconnect).
+    socketIoBridge.emitToTeam(teamId, "team:member_left", { teamId, memberId, timestamp: new Date().toISOString() });
+    socketIoBridge.evictResourceFromTeam(memberId, teamId);
+  }
+
+  notifyTeamInvite(teamId: string, invitedResourceId?: string) {
+    // Emit to the team room (existing members) and to the invited resource's
+    // personal room so they get a heads-up before they refresh teams.
+    socketIoBridge.emitToTeam(teamId, "team:invite", { teamId, invitedResourceId, timestamp: new Date().toISOString() });
+    if (invitedResourceId) {
+      socketIoBridge.emitToResource(invitedResourceId, "team:invite", { teamId, invitedResourceId, timestamp: new Date().toISOString() });
+    }
+  }
+
+  // Called on accept-invite / add-member so an open Socket.io session
+  // for the new member starts receiving team events without reconnecting.
+  notifyTeamMemberJoined(teamId: string, memberId: string) {
+    socketIoBridge.joinResourceToTeam(memberId, teamId);
+    socketIoBridge.emitToTeam(teamId, "team:order_updated", { teamId, memberJoined: memberId, timestamp: new Date().toISOString() });
   }
 
   getConnectedResources(): string[] {
@@ -626,6 +775,10 @@ class NotificationService {
       return;
     }
 
+    // Mirror to Socket.io: emit `position_update` to tenant:<id> so dashboards
+    // and Go-style clients receive it in the same payload shape.
+    socketIoBridge.emitToTenant(senderTenantId, "position_update", payload);
+
     // Skicka bara till klienter inom samma tenant (utom till själva sändaren).
     this.clients.forEach((clients, resourceId) => {
       if (resourceId === position.resourceId) return;
@@ -664,6 +817,11 @@ class NotificationService {
     const validated = validateServerEvent(fullNotification);
     if (!validated) {
       console.warn(`[ws] System alert validation failed for type="${notification.type}", sending anyway for backward compatibility`);
+    }
+
+    // Mirror to Socket.io tenant room (skip cross-tenant fan-out for safety).
+    if (tenantId) {
+      socketIoBridge.emitToTenant(tenantId, notification.type, fullNotification);
     }
 
     const message = JSON.stringify(fullNotification);

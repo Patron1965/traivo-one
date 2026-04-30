@@ -6,6 +6,7 @@ import {
   asyncHandler,
   NotFoundError, ValidationError, ForbiddenError,
   resources, teams, teamMembers, resourceProfileAssignments,
+  notificationService,
 } from "./shared";
 
 const myProfilesHandler = asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
@@ -92,6 +93,8 @@ const inviteHandler = asyncHandler(async (req: MobileAuthenticatedRequest, res: 
     resourceId: parsed.data.resourceId,
     role: "medlem",
   });
+  notificationService.notifyTeamInvite(teamId, parsed.data.resourceId);
+  notificationService.notifyTeamMemberJoined(teamId, parsed.data.resourceId);
   res.json({ success: true });
 });
 
@@ -101,6 +104,7 @@ const acceptHandler = asyncHandler(async (req: MobileAuthenticatedRequest, res: 
   const existing = await db.select().from(teamMembers)
     .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.resourceId, resourceId)));
   if (existing.length === 0) throw new NotFoundError("Ingen inbjudan hittad");
+  notificationService.notifyTeamMemberJoined(teamId, resourceId);
   res.json({ success: true });
 });
 
@@ -109,6 +113,7 @@ const leaveHandler = asyncHandler(async (req: MobileAuthenticatedRequest, res: R
   const teamId = req.params.id;
   await db.delete(teamMembers)
     .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.resourceId, resourceId)));
+  notificationService.notifyTeamMemberLeft(teamId, resourceId);
   res.json({ success: true });
 });
 

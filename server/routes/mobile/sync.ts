@@ -194,6 +194,11 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
                 loggedAt: new Date().toISOString(),
               }],
             } as Partial<WorkOrder>);
+            // Notify the team room (if any) that material was logged on a
+            // shared order — drives the `team:material_logged` Go event.
+            if (order.teamId) {
+              notificationService.notifyTeamMaterialLogged(order.teamId, orderId);
+            }
             await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
             results.push({ clientId, status: "completed" });
             break;

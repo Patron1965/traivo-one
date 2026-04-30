@@ -5,6 +5,7 @@ import type { Express } from "express";
     mobileTokens, generateMobileToken, validateMobileToken, isMobileAuthenticated,
     getTenantIdWithFallback, asyncHandler,
     NotFoundError, ValidationError,
+    notificationService,
   } from "./shared";
   import type { Resource } from "./shared";
   import type { Response } from "express";
@@ -141,6 +142,24 @@ app.get("/api/mobile/me", isMobileAuthenticated, asyncHandler(async (req: Mobile
       ...resource,
       startLatitude: resource.homeLatitude || null,
       startLongitude: resource.homeLongitude || null,
+    });
+}));
+
+// Issue a short-lived WebSocket / Socket.io auth token bound to the
+// authenticated mobile resource. Mobile clients (Traivo Go) use this token
+// in the `auth.token` field when calling `io(API_URL, { auth: { token } })`
+// or as `?token=...` on the legacy raw-WS endpoint `/ws/notifications`.
+app.post("/api/mobile/notifications/token", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) {
+      throw new NotFoundError("Resurs hittades inte");
+    }
+    const token = notificationService.generateAuthToken(resourceId, resource.tenantId);
+    res.json({
+      token,
+      expiresIn: 300,
+      resourceId,
     });
 }));
 
