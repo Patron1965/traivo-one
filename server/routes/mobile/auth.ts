@@ -8,6 +8,14 @@ import type { Express } from "express";
   } from "./shared";
   import type { Resource } from "./shared";
   import type { Response } from "express";
+  import { USER_ROLES, type UserRole } from "@shared/schema";
+
+  const VALID_RBAC_ROLES = new Set<string>(USER_ROLES);
+  function normalizeRbacRole(value: unknown): UserRole | null {
+    if (typeof value !== "string") return null;
+    const normalized = value.trim().toLowerCase();
+    return VALID_RBAC_ROLES.has(normalized) ? (normalized as UserRole) : null;
+  }
   
   export function registerAuthRoutes(app: Express) {
   const loginAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -74,14 +82,26 @@ app.post("/api/mobile/login", asyncHandler(async (req, res) => {
     mobileTokens.set(token, { resourceId: resource.id, tenantId: resource.tenantId, expiresAt });
     
     console.log(`[mobile] Login successful for resource ${resource.name} (${resource.id})`);
-    
+
+    // Map RBAC role from linked users-row when available; fall back to "technician"
+    // for resources without a user (typical field workers logged in via PIN).
+    let rbacRole: UserRole = "technician";
+    if (resource.userId) {
+      const linkedUser = await storage.getUser(resource.userId).catch(() => undefined);
+      const candidate = normalizeRbacRole(linkedUser?.role);
+      if (candidate) rbacRole = candidate;
+    }
+
     res.json({
       token,
       user: {
         id: resource.id,
         name: resource.name,
-        role: resource.resourceType || "driver",
+        role: rbacRole,
+        resourceType: resource.resourceType || "driver",
         resourceId: resource.id,
+        tenantId: resource.tenantId,
+        userId: resource.userId,
         vehicleRegNo: "",
         executionCodes: resource.executionCodes || [],
       },
@@ -106,7 +126,7 @@ app.post("/api/mobile/login", asyncHandler(async (req, res) => {
 
 // Mobile logout
 app.post("/api/mobile/logout", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
-    const authHeader = req.headers.authorization;
+    const authHeader = req.headers.authorization || "";
     const token = authHeader.substring(7);
     mobileTokens.delete(token);
     res.json({ success: true });

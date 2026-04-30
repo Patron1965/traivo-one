@@ -5,7 +5,7 @@ import type { Express } from "express";
     formatZodError, isMobileAuthenticated,
     getTenantIdWithFallback, asyncHandler,
     NotFoundError, ValidationError, ForbiddenError,
-    routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotificationsTable,
+    routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotificationsTable, visitConfirmationsTable,
     mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES,
     notificationService, triggerETANotification,
     OpenAI,
@@ -50,15 +50,25 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
       return a.scheduledStartTime.localeCompare(b.scheduledStartTime);
     });
     
-    // Batcha objects + customers i två frågor istället för 2*N (N+1 → 2).
+    // Batcha objects + customers + eta-notifs i tre frågor istället för 3*N (N+1 → 3).
     const objectIds = Array.from(new Set(orders.map(o => o.objectId).filter((v): v is string => !!v)));
     const customerIds = Array.from(new Set(orders.map(o => o.customerId).filter((v): v is string => !!v)));
-    const [objectList, customerList] = await Promise.all([
+    const orderIdsWithEta = orders.filter(o => !!o.onWayAt).map(o => o.id);
+    const [objectList, customerList, etaRows] = await Promise.all([
       objectIds.length > 0 ? storage.getObjectsByIds(tenantId, objectIds) : Promise.resolve([]),
       customerIds.length > 0 ? storage.getCustomersByIds(tenantId, customerIds) : Promise.resolve([]),
+      orderIdsWithEta.length > 0
+        ? db.select({ workOrderId: etaNotificationsTable.workOrderId })
+            .from(etaNotificationsTable)
+            .where(and(
+              inArray(etaNotificationsTable.workOrderId, orderIdsWithEta),
+              eq(etaNotificationsTable.status, "sent"),
+            ))
+        : Promise.resolve([] as Array<{ workOrderId: string }>),
     ]);
     const objectsById = new Map(objectList.map(o => [o.id, o]));
     const customersById = new Map(customerList.map(c => [c.id, c]));
+    const notifiedOrderIds = new Set(etaRows.map(r => r.workOrderId));
 
     const enrichedOrders = orders.map((order) => {
       const object = order.objectId ? objectsById.get(order.objectId) ?? null : null;
@@ -69,6 +79,13 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
         ? [{ id: order.executionCode, code: (order.executionCode as string).toUpperCase().substring(0, 4), name: order.executionCode }]
         : [];
 
+      const scheduledStartIso =
+        order.plannedWindowStart instanceof Date ? order.plannedWindowStart.toISOString() :
+        (order.plannedWindowStart as string | null) || (order.scheduledStartTime as string | null) || null;
+      const scheduledEndIso =
+        order.plannedWindowEnd instanceof Date ? order.plannedWindowEnd.toISOString() :
+        (order.plannedWindowEnd as string | null) || null;
+
       return {
         ...order,
         objectName: object?.name,
@@ -76,7 +93,7 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
         customerName: customer?.name,
         customerPhone: customer?.phone,
         enRouteAt: order.onWayAt instanceof Date ? order.onWayAt.toISOString() : (order.onWayAt as string | null) || null,
-        customerNotified: false,
+        customerNotified: notifiedOrderIds.has(order.id),
         isTeamOrder: !!order.teamId,
         actualStartTime: order.onSiteAt instanceof Date ? order.onSiteAt.toISOString() : (order.onSiteAt as string | null) || null,
         objectAccessCode: object?.accessCode || null,
@@ -90,6 +107,8 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
         postalCode: object?.postalCode || "",
         plannedNotes: order.plannedNotes || null,
         executionStatus: order.executionStatus || "not_started",
+        scheduledStart: scheduledStartIso,
+        scheduledEnd: scheduledEndIso,
         subSteps: [],
         dependencies: [],
         inspections: metadata.inspections || [],
@@ -136,12 +155,23 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
     const object = order.objectId ? await storage.getObject(order.objectId) : null;
     const customer = order.customerId ? await storage.getCustomer(order.customerId) : null;
 
-    const etaCheck = order.onWayAt ? await db.select().from(etaNotificationsTable)
-      .where(and(
-        eq(etaNotificationsTable.workOrderId, orderId),
-        eq(etaNotificationsTable.status, "sent"),
-      ))
-      .limit(1) : [];
+    const [etaCheck, visitRows] = await Promise.all([
+      order.onWayAt
+        ? db.select().from(etaNotificationsTable)
+            .where(and(
+              eq(etaNotificationsTable.workOrderId, orderId),
+              eq(etaNotificationsTable.status, "sent"),
+            ))
+            .limit(1)
+        : Promise.resolve([] as unknown[]),
+      db.select({ signatureUrl: visitConfirmationsTable.signatureUrl })
+        .from(visitConfirmationsTable)
+        .where(eq(visitConfirmationsTable.workOrderId, orderId))
+        .orderBy(desc(visitConfirmationsTable.confirmedAt))
+        .limit(1)
+        .catch(() => [] as Array<{ signatureUrl: string | null }>),
+    ]);
+    const signatureUrl = visitRows[0]?.signatureUrl || null;
 
     const orderMetadata = (order.metadata as Record<string, unknown>) || {};
     const completedSubSteps: string[] = (orderMetadata.completedSubSteps as string[]) || [];
@@ -201,6 +231,13 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
       })
     );
 
+    const detailScheduledStart =
+      order.plannedWindowStart instanceof Date ? order.plannedWindowStart.toISOString() :
+      (order.plannedWindowStart as string | null) || (order.scheduledStartTime as string | null) || null;
+    const detailScheduledEnd =
+      order.plannedWindowEnd instanceof Date ? order.plannedWindowEnd.toISOString() :
+      (order.plannedWindowEnd as string | null) || null;
+
     res.json({
       ...order,
       objectName: object?.name,
@@ -226,6 +263,9 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
       actualStartTime: order.onSiteAt instanceof Date ? order.onSiteAt.toISOString() : (order.onSiteAt as string | null) || null,
       plannedNotes: order.plannedNotes || null,
       executionStatus: order.executionStatus || "not_started",
+      scheduledStart: detailScheduledStart,
+      scheduledEnd: detailScheduledEnd,
+      signatureUrl,
       subSteps,
       articles,
       dependencies: depDetails,
@@ -326,12 +366,29 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
     const object = updatedOrder.objectId ? await storage.getObject(updatedOrder.objectId) : null;
     const customer = updatedOrder.customerId ? await storage.getCustomer(updatedOrder.customerId) : null;
 
-    const etaCheck = updatedOrder.onWayAt ? await db.select().from(etaNotificationsTable)
-      .where(and(
-        eq(etaNotificationsTable.workOrderId, orderId),
-        eq(etaNotificationsTable.status, "sent"),
-      ))
-      .limit(1) : [];
+    const [etaCheck, statusVisitRows] = await Promise.all([
+      updatedOrder.onWayAt
+        ? db.select().from(etaNotificationsTable)
+            .where(and(
+              eq(etaNotificationsTable.workOrderId, orderId),
+              eq(etaNotificationsTable.status, "sent"),
+            ))
+            .limit(1)
+        : Promise.resolve([] as unknown[]),
+      db.select({ signatureUrl: visitConfirmationsTable.signatureUrl })
+        .from(visitConfirmationsTable)
+        .where(eq(visitConfirmationsTable.workOrderId, orderId))
+        .orderBy(desc(visitConfirmationsTable.confirmedAt))
+        .limit(1)
+        .catch(() => [] as Array<{ signatureUrl: string | null }>),
+    ]);
+
+    const statusScheduledStart =
+      updatedOrder.plannedWindowStart instanceof Date ? updatedOrder.plannedWindowStart.toISOString() :
+      (updatedOrder.plannedWindowStart as string | null) || (updatedOrder.scheduledStartTime as string | null) || null;
+    const statusScheduledEnd =
+      updatedOrder.plannedWindowEnd instanceof Date ? updatedOrder.plannedWindowEnd.toISOString() :
+      (updatedOrder.plannedWindowEnd as string | null) || null;
 
     const enriched = {
       ...updatedOrder,
@@ -343,6 +400,9 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
       objectAddress: object?.address || null,
       objectAccessCode: object?.accessCode || null,
       objectKeyNumber: object?.keyNumber || null,
+      scheduledStart: statusScheduledStart,
+      scheduledEnd: statusScheduledEnd,
+      signatureUrl: statusVisitRows[0]?.signatureUrl || null,
     };
 
     res.json(enriched);
@@ -672,6 +732,70 @@ app.post("/api/mobile/orders/:id/materials", isMobileAuthenticated, asyncHandler
 
     console.log(`[mobile] Material logged for order ${orderId}: ${articleName || articleNumber} x${quantity}`);
     res.json({ success: true, line });
+}));
+
+// List materials previously logged on an order. Combines the canonical
+// `work_order_lines` rows (written by the mobile POST /materials handler)
+// with any free-form `metadata.materialsUsed` entries (written by the
+// offline-sync "material" action). Output shape matches Traivo Go's
+// expectation: { articleId, articleNumber, articleName, quantity, comment, loggedBy, loggedAt }.
+app.get("/api/mobile/orders/:id/materials", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+    const orderId = req.params.id;
+    const resourceId = req.mobileResourceId;
+
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+
+    const lines = await storage.getWorkOrderLines(orderId).catch(() => []);
+    const articlesById = new Map<string, { articleNumber: string; name: string }>();
+    await Promise.all(
+      lines.map(async (line) => {
+        if (!line.articleId || articlesById.has(line.articleId)) return;
+        const article = await storage.getArticle(line.articleId).catch(() => null);
+        if (article) {
+          articlesById.set(line.articleId, {
+            articleNumber: article.articleNumber || "",
+            name: article.name || "",
+          });
+        }
+      })
+    );
+
+    const fromLines = lines.map((line) => {
+      const meta = articlesById.get(line.articleId as string);
+      const createdAt = (line as { createdAt?: Date | string | null }).createdAt;
+      return {
+        id: line.id,
+        articleId: line.articleId,
+        articleNumber: meta?.articleNumber || "",
+        articleName: meta?.name || "",
+        quantity: line.quantity ?? 1,
+        comment: "",
+        loggedBy: null as string | null,
+        loggedAt: createdAt instanceof Date ? createdAt.toISOString() : (createdAt as string | null) || null,
+        source: "work_order_line" as const,
+      };
+    });
+
+    const orderMeta = (order.metadata as Record<string, unknown>) || {};
+    const metaMaterials = Array.isArray((orderMeta as { materialsUsed?: unknown }).materialsUsed)
+      ? ((orderMeta as { materialsUsed: Array<Record<string, unknown>> }).materialsUsed)
+      : [];
+    const fromMetadata = metaMaterials.map((m, idx) => ({
+      id: `meta-${idx}`,
+      articleId: (m.articleId as string) || null,
+      articleNumber: (m.articleNumber as string) || "",
+      articleName: (m.articleName as string) || "",
+      quantity: (m.quantity as number) ?? 1,
+      comment: (m.comment as string) || "",
+      loggedBy: (m.loggedBy as string) || null,
+      loggedAt: (m.loggedAt as string) || null,
+      source: "metadata" as const,
+    }));
+
+    const items = [...fromLines, ...fromMetadata];
+    res.json({ items, total: items.length });
 }));
 
 app.get("/api/mobile/articles", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {

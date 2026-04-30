@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../../tenant-middleware";
 import { asyncHandler } from "../../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../../errors";
 import { isAuthenticated } from "../../replit_integrations/auth";
-import { type ServiceObject, type WorkOrder, type Resource, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotifications as etaNotificationsTable, pushTokens, resources, teams, teamMembers, resourceProfileAssignments, workEntries, workSessions } from "@shared/schema";
+import { type ServiceObject, type WorkOrder, type Resource, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotifications as etaNotificationsTable, pushTokens, resources, teams, teamMembers, resourceProfileAssignments, workEntries, workSessions, visitConfirmations as visitConfirmationsTable } from "@shared/schema";
 import { mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES } from "@shared/changeRequestCategories";
 import { notificationService } from "../../notifications";
 import { triggerETANotification } from "../../eta-notification-service";
@@ -119,8 +119,23 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
     ))
     .limit(1) : [];
 
+  const visitRows = await db.select({ signatureUrl: visitConfirmationsTable.signatureUrl })
+    .from(visitConfirmationsTable)
+    .where(eq(visitConfirmationsTable.workOrderId, order.id))
+    .orderBy(desc(visitConfirmationsTable.confirmedAt))
+    .limit(1)
+    .catch(() => [] as Array<{ signatureUrl: string | null }>);
+  const signatureUrl = visitRows[0]?.signatureUrl || null;
+
   const inspections = (metadata.inspections as unknown[]) || [];
   const plannedNotes = (metadata.plannedNotes as string) || null;
+
+  const scheduledStartIso =
+    order.plannedWindowStart instanceof Date ? order.plannedWindowStart.toISOString() :
+    (order.plannedWindowStart as string | null) || (order.scheduledStartTime as string | null) || null;
+  const scheduledEndIso =
+    order.plannedWindowEnd instanceof Date ? order.plannedWindowEnd.toISOString() :
+    (order.plannedWindowEnd as string | null) || null;
 
   return {
     id: order.id,
@@ -171,6 +186,9 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
     actualStartTime: order.onSiteAt instanceof Date ? order.onSiteAt.toISOString() : (order.onSiteAt as string | null) || null,
     objectAccessCode: object?.accessCode || null,
     objectKeyNumber: object?.keyNumber || null,
+    scheduledStart: scheduledStartIso,
+    scheduledEnd: scheduledEndIso,
+    signatureUrl,
   };
 }
 
@@ -266,7 +284,7 @@ export {
   getTenantIdWithFallback, asyncHandler,
   NotFoundError, ValidationError, ForbiddenError,
   isAuthenticated,
-  routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotificationsTable, pushTokens, resources, teams, teamMembers, resourceProfileAssignments, workEntries, workSessions,
+  routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotificationsTable, pushTokens, resources, teams, teamMembers, resourceProfileAssignments, workEntries, workSessions, visitConfirmationsTable,
   mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES,
   notificationService, triggerETANotification,
   OpenAI,

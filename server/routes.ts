@@ -30,7 +30,7 @@ import { registerConfigRoutes } from "./routes/configRoutes";
 import { registerClusterRoutes } from "./routes/clusterRoutes";
 import { registerAIRoutes } from "./routes/aiRoutes";
 import { registerOptimizationRoutes } from "./routes/optimizationRoutes";
-import { registerMobileRoutes } from "./routes/mobile";
+import { registerMobileRoutes, registerMobileAliasRoutes } from "./routes/mobile";
 import { registerPlannerRoutes } from "./routes/plannerRoutes";
 import { registerKPIRoutes } from "./routes/kpiRoutes";
 import { registerFortnoxRoutes } from "./routes/fortnoxRoutes";
@@ -580,6 +580,10 @@ export async function registerRoutes(
       res.status(500).json({ error: "Kunde inte hämta kapacitetsdata" });
     }
   });
+
+  // Register Go-compat path aliases first so they take precedence for
+  // Bearer-token requests over web/admin routes registered below.
+  registerMobileAliasRoutes(app);
 
   registerObjectRoutes(app);
   registerCustomerRoutes(app);

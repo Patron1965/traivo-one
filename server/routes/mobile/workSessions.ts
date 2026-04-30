@@ -10,7 +10,43 @@ import type { Express } from "express";
   } from "./shared";
   import type { Resource } from "./shared";
   import type { Request, Response } from "express";
-  
+
+  // Decorate a work-session payload with Traivo-Go-compatible aliases so the
+  // mobile client gets `startedAt`, `totalPausedSeconds` and `entries` in
+  // addition to the legacy `startTime`/`totalPauseMinutes` fields.
+  async function decorateSession(session: Record<string, unknown> | null, sessionId: string | null) {
+    if (!session) return session;
+    const startTime = (session as { startTime?: string | null }).startTime || null;
+    const totalPauseMinutes = (session as { totalPauseMinutes?: number }).totalPauseMinutes || 0;
+    const sid = sessionId || (session as { id?: string }).id || null;
+    let entries: Array<Record<string, unknown>> = [];
+    if (sid) {
+      const rows = await db.select().from(workEntries)
+        .where(eq(workEntries.workSessionId, sid))
+        .orderBy(desc(workEntries.startTime))
+        .catch(() => [] as Array<Record<string, unknown>>);
+      entries = rows.map((e) => ({
+        id: (e as { id?: string }).id,
+        type: (e as { entryType?: string }).entryType,
+        startTime: (e as { startTime?: Date | null }).startTime instanceof Date
+          ? ((e as { startTime: Date }).startTime).toISOString()
+          : ((e as { startTime?: string | null }).startTime || null),
+        endTime: (e as { endTime?: Date | null }).endTime instanceof Date
+          ? ((e as { endTime: Date }).endTime).toISOString()
+          : ((e as { endTime?: string | null }).endTime || null),
+        duration: (e as { durationMinutes?: number | null }).durationMinutes ?? null,
+        note: (e as { notes?: string | null }).notes ?? null,
+        workOrderId: (e as { workOrderId?: string | null }).workOrderId ?? null,
+      }));
+    }
+    return {
+      ...session,
+      startedAt: startTime,
+      totalPausedSeconds: totalPauseMinutes * 60,
+      entries,
+    };
+  }
+
   export function registerWorkSessionRoutes(app: Express) {
   // ============================================
 // POSITION TRACKING API ENDPOINTS
@@ -85,7 +121,7 @@ app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, asyncHandler(
     const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | undefined;
 
     if (activeSession && (activeSession as { status?: string }).status === 'active') {
-      return res.json(activeSession);
+      return res.json(await decorateSession(activeSession, (activeSession as { id?: string }).id || null));
     }
 
     const session = {
@@ -102,7 +138,7 @@ app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, asyncHandler(
     } as Partial<Resource>);
 
     console.log(`[mobile] Work session started for resource ${resourceId}`);
-    res.json(session);
+    res.json(await decorateSession(session, session.id));
 
     notificationService.broadcastToAll({
       type: "schedule_changed",
@@ -121,7 +157,7 @@ app.get("/api/mobile/work-sessions/active", isMobileAuthenticated, asyncHandler(
     const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | null;
 
     if (activeSession && (activeSession as { status?: string }).status !== 'completed') {
-      res.json(activeSession);
+      res.json(await decorateSession(activeSession, (activeSession as { id?: string }).id || null));
     } else {
       res.json(null);
     }
@@ -150,7 +186,7 @@ const workSessionStopHandler = asyncHandler(async (req: MobileAuthenticatedReque
     } as Partial<Resource>);
 
     console.log(`[mobile] Work session stopped for resource ${resourceId}`);
-    res.json(updatedSession);
+    res.json(await decorateSession(updatedSession, (updatedSession as { id?: string }).id || null));
 
     notificationService.broadcastToAll({
       type: "schedule_changed",
@@ -184,7 +220,7 @@ const workSessionPauseHandler = asyncHandler(async (req: MobileAuthenticatedRequ
       metadata: { ...existingMeta, activeWorkSession: updatedSession },
     } as Partial<Resource>);
 
-    res.json(updatedSession);
+    res.json(await decorateSession(updatedSession, (updatedSession as { id?: string }).id || null));
 });
 app.patch("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, workSessionPauseHandler);
 app.post("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, workSessionPauseHandler);
@@ -216,7 +252,7 @@ const workSessionResumeHandler = asyncHandler(async (req: MobileAuthenticatedReq
       metadata: { ...existingMeta, activeWorkSession: updatedSession },
     } as Partial<Resource>);
 
-    res.json(updatedSession);
+    res.json(await decorateSession(updatedSession, (updatedSession as { id?: string }).id || null));
 });
 app.patch("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, workSessionResumeHandler);
 app.post("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, workSessionResumeHandler);
