@@ -65,13 +65,13 @@ export function getGrunddataItems(t: (key: string, fallback: string) => string, 
   return [
     { title: "Kunder", url: "/customers", icon: Building, description: "Översikt av kunder, kluster och objekt" },
     { title: useI18n ? l("nav.objects") : t("object_plural", l("nav.objects")), url: "/objects", icon: Building2, description: l("nav.objects.desc") },
-    { title: useI18n ? l("nav.resources") : t("resource_plural", l("nav.resources")), url: "/resources", icon: Users, description: l("nav.resources.desc") },
-    { title: useI18n ? l("nav.vehicles") : t("vehicle_plural", l("nav.vehicles")), url: "/vehicles", icon: Truck, description: l("nav.vehicles.desc") },
     { title: useI18n ? l("nav.clusters") : t("cluster_plural", l("nav.clusters")), url: "/clusters", icon: Target, description: l("nav.clusters.desc") },
     { title: l("nav.auto-cluster"), url: "/auto-cluster", icon: Layers, description: l("nav.auto-cluster.desc") },
+    { title: useI18n ? l("nav.resources") : t("resource_plural", l("nav.resources")), url: "/resources", icon: Users, description: l("nav.resources.desc") },
+    { title: useI18n ? l("nav.vehicles") : t("vehicle_plural", l("nav.vehicles")), url: "/vehicles", icon: Truck, description: l("nav.vehicles.desc") },
+    { title: l("nav.fleet"), url: "/fleet", icon: Fuel, description: l("nav.fleet.desc") },
     { title: useI18n ? l("nav.articles") : t("article_plural", l("nav.articles")), url: "/articles", icon: Package, description: l("nav.articles.desc") },
     { title: l("nav.price-lists"), url: "/price-lists", icon: Receipt, description: l("nav.price-lists.desc") },
-    { title: l("nav.fleet"), url: "/fleet", icon: Fuel, description: l("nav.fleet.desc") },
   ];
 }
 
@@ -80,18 +80,18 @@ export function getOrdrarItems(t: (key: string, fallback: string) => string, tl?
   return [
     { title: l("nav.order-concepts"), url: "/order-concepts", icon: ListChecks, description: l("nav.order-concepts.desc") },
     { title: l("nav.subscriptions"), url: "/subscriptions", icon: RefreshCw, description: l("nav.subscriptions.desc") },
-    { title: l("nav.assignments"), url: "/assignments", icon: UserCheck, description: l("nav.assignments.desc") },
     { title: l("nav.order-stock"), url: "/order-stock", icon: ClipboardList, description: l("nav.order-stock.desc") },
+    { title: l("nav.assignments"), url: "/assignments", icon: UserCheck, description: l("nav.assignments.desc") },
   ];
 }
 
 export function getPlaneringItems(tl?: (key: string) => string): NavItem[] {
   const l = tl || svFallback;
   return [
+    { title: "Kontrollpanel", url: "/control-tower", icon: Gauge, description: "Heatmap med beläggning och SLA-risk" },
+    { title: l("nav.annual-planning"), url: "/annual-planning", icon: Target, description: l("nav.annual-planning.desc") },
     { title: l("nav.week-planner"), url: "/planner", icon: Calendar, description: l("nav.week-planner.desc") },
     { title: l("nav.route-planning"), url: "/routes", icon: Map, description: l("nav.route-planning.desc") },
-    { title: l("nav.annual-planning"), url: "/annual-planning", icon: Target, description: l("nav.annual-planning.desc") },
-    { title: "Kontrollpanel", url: "/control-tower", icon: Gauge, description: "Heatmap med beläggning och SLA-risk" },
   ];
 }
 
@@ -112,9 +112,9 @@ export function getFaltItems(t: (key: string, fallback: string) => string, tl?: 
     { title: useI18n ? l("nav.inspections") : t("inspection_singular", l("nav.inspections")), url: "/inspections", icon: ClipboardCheck, description: l("nav.inspections.desc") },
     { title: l("nav.checklist-templates"), url: "/checklist-templates", icon: ClipboardCheck, description: l("nav.checklist-templates.desc") },
     { title: l("nav.customer-portal"), url: "/customer-portal", icon: Building, description: l("nav.customer-portal.desc") },
-    { title: l("nav.customer-reports"), url: "/customer-reports", icon: Camera, description: l("nav.customer-reports.desc") },
     { title: l("nav.booking-slots"), url: "/booking-slots", icon: CalendarDays, description: l("nav.booking-slots.desc") },
     { title: l("nav.portal-messages"), url: "/portal-messages", icon: MessageCircle, description: l("nav.portal-messages.desc") },
+    { title: l("nav.customer-reports"), url: "/customer-reports", icon: Camera, description: l("nav.customer-reports.desc") },
     { title: l("nav.telephony"), url: "/telephony", icon: Phone, description: l("nav.telephony.desc") },
   ];
 }
@@ -122,11 +122,11 @@ export function getFaltItems(t: (key: string, fallback: string) => string, tl?: 
 export function getEkonomiItems(tl?: (key: string) => string): NavItem[] {
   const l = tl || svFallback;
   return [
-    { title: l("nav.reporting"), url: "/reporting", icon: BarChart3, description: l("nav.reporting.desc") },
-    { title: l("nav.economics"), url: "/economics", icon: DollarSign, description: l("nav.economics.desc") },
     { title: l("nav.invoicing"), url: "/invoicing", icon: Receipt, description: l("nav.invoicing.desc") },
-    { title: l("nav.proactive-sales"), url: "/proactive-sales", icon: TrendingUp, description: l("nav.proactive-sales.desc") },
+    { title: l("nav.economics"), url: "/economics", icon: DollarSign, description: l("nav.economics.desc") },
+    { title: l("nav.reporting"), url: "/reporting", icon: BarChart3, description: l("nav.reporting.desc") },
     { title: l("nav.roi-report"), url: "/roi-report", icon: TrendingUp, description: l("nav.roi-report.desc") },
+    { title: l("nav.proactive-sales"), url: "/proactive-sales", icon: TrendingUp, description: l("nav.proactive-sales.desc") },
   ];
 }
 
@@ -142,18 +142,18 @@ export function getAIItems(tl?: (key: string) => string): NavItem[] {
 export function getAdminItems(tl?: (key: string) => string): NavItem[] {
   const l = tl || svFallback;
   return [
-    { title: l("nav.production-control"), url: "/planning-parameters", icon: Settings2, description: l("nav.production-control.desc") },
-    { title: l("nav.user-management"), url: "/user-management", icon: Users, description: l("nav.user-management.desc") },
-    { title: l("nav.company-settings"), url: "/tenant-config", icon: Settings2, description: l("nav.company-settings.desc") },
     { title: l("nav.new-customer"), url: "/onboarding", icon: Building2, description: l("nav.new-customer.desc") },
-    { title: l("nav.sms-settings"), url: "/sms-settings", icon: MessageSquare, description: l("nav.sms-settings.desc") },
-    { title: l("nav.fortnox"), url: "/fortnox", icon: Receipt, description: l("nav.fortnox.desc") },
-    { title: l("nav.import"), url: "/import", icon: Upload, description: l("nav.import.desc") },
+    { title: l("nav.company-settings"), url: "/tenant-config", icon: Settings2, description: l("nav.company-settings.desc") },
+    { title: l("nav.production-control"), url: "/planning-parameters", icon: Settings2, description: l("nav.production-control.desc") },
     { title: l("nav.metadata-settings"), url: "/metadata-settings", icon: Database, description: l("nav.metadata-settings.desc") },
+    { title: l("nav.user-management"), url: "/user-management", icon: Users, description: l("nav.user-management.desc") },
+    { title: l("nav.settings"), url: "/settings", icon: Settings, description: l("nav.settings.desc") },
+    { title: l("nav.fortnox"), url: "/fortnox", icon: Receipt, description: l("nav.fortnox.desc") },
+    { title: l("nav.sms-settings"), url: "/sms-settings", icon: MessageSquare, description: l("nav.sms-settings.desc") },
+    { title: l("nav.import"), url: "/import", icon: Upload, description: l("nav.import.desc") },
     { title: "Objekt utan koordinater", url: "/objects/missing-coordinates", icon: Building2, description: "Lista över objekt som saknar lat/lng och kan geokodas på nytt" },
     { title: l("nav.api-costs"), url: "/api-costs", icon: Activity, description: l("nav.api-costs.desc") },
     { title: l("nav.system-overview"), url: "/system-overview", icon: FileText, description: l("nav.system-overview.desc") },
-    { title: l("nav.settings"), url: "/settings", icon: Settings, description: l("nav.settings.desc") },
     { title: "Kundportal extern", url: "/portal", icon: Globe, description: "Öppna den externa kundportalen i ny flik", external: true },
   ];
 }
