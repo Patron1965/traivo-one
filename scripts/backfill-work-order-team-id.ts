@@ -15,7 +15,7 @@
 
 import { db } from "../server/db";
 import { teams, teamMembers, workOrders } from "../shared/schema";
-import { and, asc, eq, gt, isNull, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, isNotNull, sql } from "drizzle-orm";
 
 type Args = { tenantId?: string; dryRun: boolean };
 
@@ -145,7 +145,7 @@ async function backfillTenant(tenantId: string, dryRun: boolean): Promise<{ upda
             .set({ teamId })
             .where(
               and(
-                sql`${workOrders.id} = ANY(${chunk})`,
+                inArray(workOrders.id, chunk),
                 isNull(workOrders.teamId),
               ),
             )
