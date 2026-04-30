@@ -3,6 +3,9 @@
 ## Overview
 Traivo is an AI-driven platform optimizing field service operations for Nordic waste management companies. It transforms manual processes into AI-driven solutions for route planning, resource allocation, economic control, productivity, and predictive analytics. The platform aims to be the leading commercial SaaS platform in Nordic field service with comprehensive multi-tenant capabilities, offering AI-driven optimization and real-time decision support.
 
+## Stående bevakning: Traivo Go-integration
+**Vid ALLA framtida ändringar som berör Traivo Go-integrationen ska Traivo One-agenten proaktivt föreslå åtgärd och flagga konsekvenser.** Berörningspunkter inkluderar: ändringar i `server/routes/mobile/*.ts`, `server/notifications.ts`, `shared/schema.ts` (särskilt `workOrders`, `resources`, `teams`, `workSessions`, `etaNotifications`, `customerChangeRequests`, `visitConfirmations`, `mobileUserPreferences`, `pushTokens`), auth-flöden (`isMobileAuthenticated`, mobile-token), WebSocket/realtid, ETA-notiser, sync-protokollet, eller tillägg/borttag av endpoints under `/api/mobile/*`. Kontrakt mot Go finns i `docs/api/TRAIVO_GO_INTEGRATION_REPORT_FROM_GO.md` (Go-teamets spec) och `docs/api/TRAIVO_GO_GAP_ANALYSIS_2026-04-30.md` (täckningsmatris). Kvarvarande arbete spåras i tasks #341 (kontraktsfixar), #342 (Socket.io-realtid), #343 (städa död kod).
+
 ## User Preferences
 - **Language:** Swedish (sv) for UI
 - **Design:** Clean, professional Nordic aesthetic — Traivo Color Palette: Deep Ocean Blue (#1B4B6B), Arctic Ice (#E8F4F8), Mountain Gray (#6B7C8C), Northern Teal (#4A9B9B), Midnight Navy (#2C3E50), Aurora Green (#7DBFB0)
