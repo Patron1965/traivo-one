@@ -58,7 +58,7 @@ async function ensureDefaultTenant() {
   const any = await db.select().from(tenants).limit(1);
   if (any.length > 0) return undefined;
   return storage.ensureTenant(DEFAULT_TENANT_ID, {
-    name: "Plannix",
+    name: "Traivo",
     orgNumber: "556789-1234",
     contactEmail: "info@traivo.se",
     contactPhone: "+46701234567",

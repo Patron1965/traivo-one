@@ -136,7 +136,7 @@ export default function HistoricalMapPage() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    document.title = "Plannix - Historisk Kartvy";
+    document.title = "Traivo - Historisk Kartvy";
   }, []);
 
   const { data: resources } = useQuery<Resource[]>({

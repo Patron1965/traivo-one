@@ -137,7 +137,7 @@ function buildEmailHtml(params: {
       : `Antalet objekt utan koordinater har ökat från <strong>${previousMissing}</strong> till <strong>${currentMissing}</strong> (+${delta}).`;
   const linkBlock = link
     ? `<p><a href="${link}" style="display:inline-block;background:#0d6efd;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;">Visa objekt utan koordinater</a></p>`
-    : `<p>Öppna sidan <code>/objects/missing-coordinates</code> i Plannix för att åtgärda dem.</p>`;
+    : `<p>Öppna sidan <code>/objects/missing-coordinates</code> i Traivo för att åtgärda dem.</p>`;
   return `
     <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f8f9fa;">
       <div style="background:#fff;border-radius:8px;padding:24px;box-shadow:0 2px 4px rgba(0,0,0,0.08);">
@@ -361,10 +361,10 @@ export async function evaluateAndNotifyMissingCoordinates(
   }
   const subject =
     previousMissing == null
-      ? `Plannix: ${currentMissing} objekt saknar koordinater`
-      : `Plannix: +${delta} nya objekt saknar koordinater (totalt ${currentMissing})`;
+      ? `Traivo: ${currentMissing} objekt saknar koordinater`
+      : `Traivo: +${delta} nya objekt saknar koordinater (totalt ${currentMissing})`;
   const html = buildEmailHtml({
-    companyName: tenant.name || "Plannix",
+    companyName: tenant.name || "Traivo",
     currentMissing,
     previousMissing,
     delta,

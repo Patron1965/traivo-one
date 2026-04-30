@@ -122,7 +122,7 @@ app.post("/api/portal/auth/request-link", asyncHandler(async (req, res) => {
     }
 
     const tenant = await storage.getTenant(tenantId);
-    const companyName = tenant?.name || "Plannix";
+    const companyName = tenant?.name || "Traivo";
     
     const baseUrl = process.env.REPLIT_DEV_DOMAIN 
       ? `https://${process.env.REPLIT_DEV_DOMAIN}`

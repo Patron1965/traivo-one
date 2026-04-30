@@ -62,7 +62,7 @@ async function nominatimFallback(address: string): Promise<GeocodingResult | nul
     });
 
     const res = await fetch(`${NOMINATIM_BASE_URL}?${params.toString()}`, {
-      headers: { "User-Agent": "Plannix-FieldService/1.0" },
+      headers: { "User-Agent": "Traivo-FieldService/1.0" },
     });
 
     if (!res.ok) return null;
@@ -274,7 +274,7 @@ export async function autocompleteAddress(
         limit: String(Math.min(limit, 10)),
       });
       const res = await fetch(`${NOMINATIM_BASE_URL}?${params.toString()}`, {
-        headers: { "User-Agent": "Plannix-FieldService/1.0" },
+        headers: { "User-Agent": "Traivo-FieldService/1.0" },
       });
       if (!res.ok) return [];
       const data = (await res.json()) as Array<Record<string, any>>;
@@ -446,7 +446,7 @@ export async function reverseGeocode(
       addressdetails: "1",
     });
     const res = await fetch(`${NOMINATIM_REVERSE_URL}?${params.toString()}`, {
-      headers: { "User-Agent": "Plannix-FieldService/1.0" },
+      headers: { "User-Agent": "Traivo-FieldService/1.0" },
     });
     if (!res.ok) return null;
     const data = await res.json();

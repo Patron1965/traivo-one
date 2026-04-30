@@ -846,7 +846,7 @@ export default function MissingCoordinatesPage() {
                         Skicka notiser
                       </Label>
                       <p className="text-sm text-muted-foreground">
-                        Stäng av om du inte vill att Plannix skickar e-post om koordinatkvalitet för denna tenant.
+                        Stäng av om du inte vill att Traivo skickar e-post om koordinatkvalitet för denna tenant.
                       </p>
                     </div>
                     <Switch

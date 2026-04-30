@@ -1790,7 +1790,7 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                 {modusPreview.unmatchedCustomers.length > 0 && (
                   <div className="pt-2 space-y-2">
                     <div className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">
-                      {modusPreview.unmatchedCustomers.length} kund(er) saknas i Plannix:
+                      {modusPreview.unmatchedCustomers.length} kund(er) saknas i Traivo:
                     </div>
                     <div className="text-xs max-h-24 overflow-auto">
                       {modusPreview.unmatchedCustomers.slice(0, 20).map(n => (

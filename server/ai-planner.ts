@@ -3075,7 +3075,7 @@ ${clusters.slice(0, 10).map(c => `- ${c.name}`).join("\n")}
 ${clusters.length > 10 ? `...och ${clusters.length - 10} fler` : ""}
 `;
 
-  const systemPrompt = `Du är en AI-planeringsassistent för Plannix fältserviceplattform. Du hjälper planerare att hantera arbetsordrar och resurser genom naturligt språk.
+  const systemPrompt = `Du är en AI-planeringsassistent för Traivo fältserviceplattform. Du hjälper planerare att hantera arbetsordrar och resurser genom naturligt språk.
 
 ${contextSummary}
 

@@ -54,7 +54,7 @@ export async function mirrorExternalLogo(sourceUrl: string, owner?: string): Pro
     const response = await fetch(sourceUrl, {
       signal: controller.signal,
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; PlannixBrandBot/1.0)",
+        "User-Agent": "Mozilla/5.0 (compatible; TraivoBrandBot/1.0)",
         Accept: "image/*",
       },
     });

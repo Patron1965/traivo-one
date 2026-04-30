@@ -3,11 +3,11 @@ import type { TourDefinition } from "@/hooks/use-tour";
 export const platformTour: TourDefinition = {
   id: "platform-overview",
   name: "Plattformsguide",
-  description: "Lär dig grunderna i Plannix-plattformen",
+  description: "Lär dig grunderna i Traivo-plattformen",
   steps: [
     {
       target: '[data-testid="img-tenant-logo"], [data-testid="img-tenant-logo-fallback"]',
-      title: "Välkommen till Plannix",
+      title: "Välkommen till Traivo",
       description: "Det här är din organisation. Klicka på loggan för att alltid komma tillbaka till startsidan.",
       placement: "bottom",
     },
@@ -224,19 +224,19 @@ export const teamManagementTour: TourDefinition = {
     {
       target: '[data-testid="tab-users"], [data-testid="text-page-title"]',
       title: "Användare",
-      description: "Under fliken Användare ser du alla konton med roll, kopplad resurs och status. Skapa nya användare med lösenord för Plannix Go.",
+      description: "Under fliken Användare ser du alla konton med roll, kopplad resurs och status. Skapa nya användare med lösenord för Traivo Go.",
       placement: "bottom",
     },
     {
       target: '[data-testid="tab-teams"], [data-testid="text-page-title"]',
       title: "Team",
-      description: "Team grupperar resurser i arbetsgrupper (vanligtvis 2 personer). Tilldela ordrar till ett team så ser alla medlemmar jobben i Plannix Go.",
+      description: "Team grupperar resurser i arbetsgrupper (vanligtvis 2 personer). Tilldela ordrar till ett team så ser alla medlemmar jobben i Traivo Go.",
       placement: "bottom",
     },
     {
       target: '[data-testid="button-create-user"], [data-testid="text-page-title"]',
       title: "Skapa användare",
-      description: "Klicka Ny användare för att skapa ett konto. Ange namn, e-post, lösenord och roll. Koppla till en resurs för att aktivera Plannix Go.",
+      description: "Klicka Ny användare för att skapa ett konto. Ange namn, e-post, lösenord och roll. Koppla till en resurs för att aktivera Traivo Go.",
       placement: "bottom",
     },
     {
@@ -294,7 +294,7 @@ export const customerPortalTour: TourDefinition = {
     {
       target: '[data-testid="nav-dropdown-grunddata"]',
       title: "Kundportal",
-      description: "Plannix har en kundportal där era kunder kan logga in, se besök, boka extra tjänster och chatta — utan att ringa er.",
+      description: "Traivo har en kundportal där era kunder kan logga in, se besök, boka extra tjänster och chatta — utan att ringa er.",
       placement: "bottom",
     },
     {
@@ -326,13 +326,13 @@ export const customerPortalTour: TourDefinition = {
 
 export const fieldAppTour: TourDefinition = {
   id: "field-app-guide",
-  name: "Plannix Go",
+  name: "Traivo Go",
   description: "Översikt av mobilappen för fältarbetare",
   steps: [
     {
       target: '[data-testid="nav-dropdown-planering"]',
-      title: "Plannix Go",
-      description: "Fältarbetare använder Plannix Go för att se sina jobb, rapportera och kommunicera. Allt som planeras här syns direkt i appen.",
+      title: "Traivo Go",
+      description: "Fältarbetare använder Traivo Go för att se sina jobb, rapportera och kommunicera. Allt som planeras här syns direkt i appen.",
       placement: "bottom",
     },
     {

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Plannix is a multi-tenant field-service SaaS platform for planning, dispatch, customer portal access, mobile field work, reporting, and AI-assisted operations. The production stack is a React/TypeScript/Vite frontend backed by an Express/TypeScript API with PostgreSQL/Drizzle, Replit Auth web sessions, custom portal and mobile authentication flows, Replit Object Storage for uploaded media, and third-party integrations including OpenAI, Twilio, Resend, Fortnox, Geoapify, OSRM, and an optimization service.
+Traivo is a multi-tenant field-service SaaS platform for planning, dispatch, customer portal access, mobile field work, reporting, and AI-assisted operations. The production stack is a React/TypeScript/Vite frontend backed by an Express/TypeScript API with PostgreSQL/Drizzle, Replit Auth web sessions, custom portal and mobile authentication flows, Replit Object Storage for uploaded media, and third-party integrations including OpenAI, Twilio, Resend, Fortnox, Geoapify, OSRM, and an optimization service.
 
 Production security analysis should assume `NODE_ENV=production`, platform-managed TLS, and that mockup/dev sandbox surfaces are not deployed unless a path is proven production-reachable. For this deployment model, requests arrive through Replit-managed proxying on configured domains; arbitrary client-supplied `Host` header spoofing should not be treated as production-reachable unless a custom reverse-proxy path is introduced.
 
@@ -38,7 +38,7 @@ Production security analysis should assume `NODE_ENV=production`, platform-manag
 
 ### Spoofing
 
-Plannix uses several authentication models: Replit OIDC sessions for the main web app, custom portal sessions, and custom mobile bearer tokens. Every protected route must validate the correct identity type, and session or bearer tokens must be unpredictable, expire appropriately, and bind the caller to the intended tenant and role. Public-facing auth bootstrap endpoints such as portal login links and mobile login must fail closed in production rather than accept fallback tenant context or weak credentials.
+Traivo uses several authentication models: Replit OIDC sessions for the main web app, custom portal sessions, and custom mobile bearer tokens. Every protected route must validate the correct identity type, and session or bearer tokens must be unpredictable, expire appropriately, and bind the caller to the intended tenant and role. Public-facing auth bootstrap endpoints such as portal login links and mobile login must fail closed in production rather than accept fallback tenant context or weak credentials.
 
 ### Tampering
 
@@ -50,7 +50,7 @@ The application stores customer, scheduling, and field-service data plus uploade
 
 ### Denial of Service
 
-Plannix includes shared caches, schedulers, AI integrations, external API calls, and upload/storage flows that can amplify cost or disrupt service. Public or low-privilege endpoints must not be able to trigger expensive cache flushes, repeated external calls, or unbounded upload/storage consumption. Authentication and token-issuance endpoints should be rate-limited enough to prevent brute force and resource exhaustion.
+Traivo includes shared caches, schedulers, AI integrations, external API calls, and upload/storage flows that can amplify cost or disrupt service. Public or low-privilege endpoints must not be able to trigger expensive cache flushes, repeated external calls, or unbounded upload/storage consumption. Authentication and token-issuance endpoints should be rate-limited enough to prevent brute force and resource exhaustion.
 
 ### Elevation of Privilege
 

@@ -1537,7 +1537,7 @@ app.post("/api/work-orders/:workOrderId/auto-eta-sms", asyncHandler(async (req, 
     }
 
     const resource = workOrder.resourceId ? await storage.getResource(workOrder.resourceId) : null;
-    const companyName = tenant?.smsFromName || tenant?.name || "Plannix";
+    const companyName = tenant?.smsFromName || tenant?.name || "Traivo";
     const resourceName = resource?.name || "Vår tekniker";
 
     let sentCount = 0;

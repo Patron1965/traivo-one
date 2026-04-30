@@ -1,5 +1,5 @@
 """
-Plannix OR-Tools Optimization Service
+Traivo OR-Tools Optimization Service
 Fristående Python FastAPI-mikrotjänst som löser CVRPTW
 (Capacitated Vehicle Routing Problem with Time Windows) med Google OR-Tools.
 
@@ -14,7 +14,7 @@ from typing import Optional
 import math
 import time
 
-app = FastAPI(title="Plannix Optimization Service", version="1.0.0")
+app = FastAPI(title="Traivo Optimization Service", version="1.0.0")
 
 try:
     from ortools.constraint_solver import routing_enums_pb2, pywrapcp

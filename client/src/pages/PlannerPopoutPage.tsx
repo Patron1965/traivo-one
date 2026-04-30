@@ -26,7 +26,7 @@ export default function PlannerPopoutPage() {
   }, [showAIPanel]);
 
   useEffect(() => {
-    document.title = "Plannix — Planering (Pop-out)";
+    document.title = "Traivo — Planering (Pop-out)";
   }, []);
 
   const weekDates = useMemo(() => {
@@ -41,7 +41,7 @@ export default function PlannerPopoutPage() {
     <div className="flex flex-col h-screen bg-background text-foreground" data-testid="planner-popout-page">
       <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/30 shrink-0">
         <div className="flex items-center gap-2">
-          <img src={travoLogo} alt="Plannix" className="h-6" />
+          <img src={travoLogo} alt="Traivo" className="h-6" />
           <span className="text-sm font-semibold text-muted-foreground">Planering</span>
           <Badge variant="outline" className="text-[10px] px-1.5 py-0">Pop-out</Badge>
         </div>

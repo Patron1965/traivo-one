@@ -88,7 +88,7 @@ export async function maybeSendExtraJobSms(params: {
     }
 
     const tenant = await storage.getTenant(workOrder.tenantId);
-    const companyName = tenant?.name || "Plannix";
+    const companyName = tenant?.name || "Traivo";
 
     let objectName: string | null | undefined = workOrder.objectName ?? null;
     let objectAddress: string | null | undefined = workOrder.objectAddress ?? null;
@@ -190,7 +190,7 @@ export async function maybeSendCancellationSms(params: {
     }
 
     const tenant = await storage.getTenant(workOrder.tenantId);
-    const companyName = tenant?.name || "Plannix";
+    const companyName = tenant?.name || "Traivo";
 
     const scheduledDateStr = workOrder.scheduledDate
       ? (typeof workOrder.scheduledDate === "string"

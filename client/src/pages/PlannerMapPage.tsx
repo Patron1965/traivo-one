@@ -6,7 +6,7 @@ export default function PlannerMapPage() {
   const [urgentDialogOpen, setUrgentDialogOpen] = useState(false);
 
   useEffect(() => {
-    document.title = "Plannix - Planerarvy Karta";
+    document.title = "Traivo - Planerarvy Karta";
   }, []);
 
   const openPopout = () => {

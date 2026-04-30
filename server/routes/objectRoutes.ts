@@ -1028,7 +1028,7 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
         name: row.name,
         action: "skip",
         reason: row.customerName
-          ? `Kund "${row.customerName}" finns inte i Plannix`
+          ? `Kund "${row.customerName}" finns inte i Traivo`
           : "Ingen kund angiven",
         parentModusId: row.parentModusId ?? null,
       });

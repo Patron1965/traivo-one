@@ -111,13 +111,13 @@ const systemFeatures: FeatureSection[] = [
     icon: BarChart3,
     features: [
       { name: "Dashboard", description: "KPI:er och analys från verklig ställtidsdata" },
-      { name: "Ställtidsloggning", description: "Automatisk loggning från Plannix Go" },
+      { name: "Ställtidsloggning", description: "Automatisk loggning från Traivo Go" },
       { name: "Objektstatistik", description: "Historik och trender per objekt" },
       { name: "Effektivitetsanalys", description: "Identifiera förbättringsområden" },
     ]
   },
   {
-    title: "Plannix Go",
+    title: "Traivo Go",
     icon: Smartphone,
     features: [
       { name: "Dagens jobb", description: "Översikt över planerade uppdrag" },
@@ -263,7 +263,7 @@ export default function SystemOverviewPage() {
 
       doc.setFontSize(24);
       doc.setFont("helvetica", "bold");
-      doc.text("Plannix", pageWidth / 2, yPos, { align: "center" });
+      doc.text("Traivo", pageWidth / 2, yPos, { align: "center" });
       yPos += 10;
       
       doc.setFontSize(14);
@@ -273,7 +273,7 @@ export default function SystemOverviewPage() {
       
       doc.setFontSize(10);
       doc.setTextColor(100);
-      doc.text(`Systemöversikt för Plannix - ${new Date().toLocaleDateString("sv-SE")}`, pageWidth / 2, yPos, { align: "center" });
+      doc.text(`Systemöversikt för Traivo - ${new Date().toLocaleDateString("sv-SE")}`, pageWidth / 2, yPos, { align: "center" });
       doc.setTextColor(0);
       yPos += 15;
 
@@ -285,7 +285,7 @@ export default function SystemOverviewPage() {
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
       const summary = [
-        "Plannix är en AI-driven planeringsplattform som utvecklas i samarbete",
+        "Traivo är en AI-driven planeringsplattform som utvecklas i samarbete",
         "med branschledande aktörer. Målet är att skapa ett unikt system som optimerar hela fält-",
         "serviceverksamheten - och som sedan kan erbjudas till alla företag inom",
         "serviceverksamhet i Norden.",
@@ -383,9 +383,9 @@ export default function SystemOverviewPage() {
       doc.setFontSize(8);
       doc.setTextColor(100);
       doc.text(`Genererad: ${new Date().toLocaleString("sv-SE")}`, 14, yPos);
-      doc.text("Plannix - AI-driven fältserviceplattform", pageWidth - 14, yPos, { align: "right" });
+      doc.text("Traivo - AI-driven fältserviceplattform", pageWidth - 14, yPos, { align: "right" });
 
-      doc.save("Plannix_Systemoversikt.pdf");
+      doc.save("Traivo_Systemoversikt.pdf");
     } finally {
       setGenerating(false);
     }
@@ -396,7 +396,7 @@ export default function SystemOverviewPage() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Systemöversikt</h1>
-          <p className="text-muted-foreground">Komplett funktionslista för Plannix</p>
+          <p className="text-muted-foreground">Komplett funktionslista för Traivo</p>
           <div className="flex items-center gap-2 mt-2">
             <Badge variant="outline" className="text-xs">
               Uppdaterad: {format(new Date(), "d MMM yyyy", { locale: sv })}
@@ -420,18 +420,18 @@ export default function SystemOverviewPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Plannix - AI-driven fältserviceplanering
+            Traivo - AI-driven fältserviceplanering
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-muted-foreground">
-            Plannix är en AI-driven planeringsplattform som utvecklas i samarbete med branschledande aktörer. 
+            Traivo är en AI-driven planeringsplattform som utvecklas i samarbete med branschledande aktörer. 
             Målet är att skapa ett unikt system som optimerar hela fältserviceverksamheten - och som 
             sedan kan erbjudas till alla företag inom serviceverksamhet i Norden.
           </p>
           <p className="text-muted-foreground">
             Genom att först bevisa värde med designpartners bygger vi grunden för en 
-            kommersiell flerföretagsstöd SaaS-plattform. Plannix har flerföretagsstöd — varje kund får sin egen separata miljö med egna data, inställningar och utseende, men alla kör på samma plattform.
+            kommersiell flerföretagsstöd SaaS-plattform. Traivo har flerföretagsstöd — varje kund får sin egen separata miljö med egna data, inställningar och utseende, men alla kör på samma plattform.
           </p>
           <div className="space-y-2">
             <p className="text-sm font-medium">AI-driven optimering omfattar:</p>
@@ -499,7 +499,7 @@ export default function SystemOverviewPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
-            Plannix-specifika anpassningar
+            Traivo-specifika anpassningar
           </CardTitle>
         </CardHeader>
         <CardContent>

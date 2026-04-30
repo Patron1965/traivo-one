@@ -550,7 +550,7 @@ export default function FortnoxSettingsPage() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>
-              Fortnox-integrationen synkroniserar kunder, artiklar och fakturor mellan Plannix och Fortnox.
+              Fortnox-integrationen synkroniserar kunder, artiklar och fakturor mellan Traivo och Fortnox.
             </p>
             <div className="space-y-2">
               <h4 className="font-medium text-foreground">Mappningar:</h4>
@@ -615,7 +615,7 @@ export default function FortnoxSettingsPage() {
                 </div>
               </div>
               <CardDescription>
-                Koppla Plannix-entiteter till motsvarande Fortnox-ID:n
+                Koppla Traivo-entiteter till motsvarande Fortnox-ID:n
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -824,7 +824,7 @@ export default function FortnoxSettingsPage() {
                 <div>
                   <CardTitle className="text-lg">Importera från Fortnox</CardTitle>
                   <CardDescription>
-                    Hämta data från Fortnox, granska och välj vad som ska importeras till Plannix
+                    Hämta data från Fortnox, granska och välj vad som ska importeras till Traivo
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1183,7 +1183,7 @@ export default function FortnoxSettingsPage() {
           <DialogHeader>
             <DialogTitle>Lägg till koppling</DialogTitle>
             <DialogDescription>
-              Koppla en Plannix-entitet till ett Fortnox-ID
+              Koppla en Traivo-entitet till ett Fortnox-ID
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -1206,7 +1206,7 @@ export default function FortnoxSettingsPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Plannix-entitet</Label>
+              <Label>Traivo-entitet</Label>
               <Select value={selectedEntityId} onValueChange={setSelectedEntityId}>
                 <SelectTrigger data-testid="dialog-select-entity">
                   <SelectValue placeholder="Välj entitet" />

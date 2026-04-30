@@ -392,7 +392,7 @@ export async function sendScheduleToResource(
 
   try {
     const tenant = await storage.getTenant(tenantId);
-    const companyName = tenant?.name || "Plannix";
+    const companyName = tenant?.name || "Traivo";
     
     const jobsByDate: Record<string, ScheduleJob[]> = {};
     for (const job of jobs) {

@@ -1,6 +1,6 @@
-# Kinab — Aktuell personal i Plannix
+# Kinab — Aktuell personal i Traivo
 
-Denna lista speglar tenanten `kinab` i Plannix och uppdateras manuellt när nya
+Denna lista speglar tenanten `kinab` i Traivo och uppdateras manuellt när nya
 medlemmar bjuds in. Inbjudningar skickas av Anna (owner) från
 **Inställningar → Användarhantering → Inbjudningar**.
 

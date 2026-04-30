@@ -172,7 +172,7 @@ export function BrandingTab() {
         accentColor: "#4A9B9B",
         tagline: "",
       });
-      toast({ title: "Återställt", description: "Varumärkesprofilen har återställts till Plannix-standard." });
+      toast({ title: "Återställt", description: "Varumärkesprofilen har återställts till Traivo-standard." });
     },
     onError: (error: Error) => {
       toast({ title: "Kunde inte återställa varumärkesprofil", description: error.message, variant: "destructive" });
@@ -369,7 +369,7 @@ export function BrandingTab() {
                     <AlertTriangle className="h-4 w-4" />
                     <AlertTitle>Logon är hostad externt</AlertTitle>
                     <AlertDescription>
-                      Den nuvarande logotypen ligger på en extern webbadress och kan sluta fungera om källan ändras eller tas bort. Spara om varumärkesprofilen eller välj en ny logotyp för att flytta in den i Plannix.
+                      Den nuvarande logotypen ligger på en extern webbadress och kan sluta fungera om källan ändras eller tas bort. Spara om varumärkesprofilen eller välj en ny logotyp för att flytta in den i Traivo.
                     </AlertDescription>
                   </Alert>
                 )}
@@ -590,7 +590,7 @@ export function BrandingTab() {
                   disabled={resetMutation.isPending}
                 >
                   {resetMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  Återställ till Plannix
+                  Återställ till Traivo
                 </Button>
               )}
             </div>
@@ -646,7 +646,7 @@ export function BrandingTab() {
                   )}
                   <div className="text-center text-white">
                     <h2 className="text-xl font-bold drop-shadow-md">
-                      Välkommen till {form.companyName || "Plannix"}!
+                      Välkommen till {form.companyName || "Traivo"}!
                     </h2>
                     {form.tagline && (
                       <p className="text-sm opacity-80 mt-1">{form.tagline}</p>
@@ -671,7 +671,7 @@ export function BrandingTab() {
                     {(form.companyName || "T")[0]}
                   </div>
                 )}
-                <span className="font-semibold">{form.companyName || "Plannix"}</span>
+                <span className="font-semibold">{form.companyName || "Traivo"}</span>
               </div>
             </div>
 
