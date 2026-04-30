@@ -78,10 +78,10 @@ export function getGrunddataItems(t: (key: string, fallback: string) => string, 
 export function getOrdrarItems(t: (key: string, fallback: string) => string, tl?: (key: string) => string): NavItem[] {
   const l = tl || svFallback;
   return [
-    { title: l("nav.order-stock"), url: "/order-stock", icon: ClipboardList, description: l("nav.order-stock.desc") },
-    { title: l("nav.assignments"), url: "/assignments", icon: UserCheck, description: l("nav.assignments.desc") },
-    { title: l("nav.subscriptions"), url: "/subscriptions", icon: RefreshCw, description: l("nav.subscriptions.desc") },
     { title: l("nav.order-concepts"), url: "/order-concepts", icon: ListChecks, description: l("nav.order-concepts.desc") },
+    { title: l("nav.subscriptions"), url: "/subscriptions", icon: RefreshCw, description: l("nav.subscriptions.desc") },
+    { title: l("nav.assignments"), url: "/assignments", icon: UserCheck, description: l("nav.assignments.desc") },
+    { title: l("nav.order-stock"), url: "/order-stock", icon: ClipboardList, description: l("nav.order-stock.desc") },
   ];
 }
 
