@@ -46,6 +46,20 @@ The Traivo Go mobile app integrates with Traivo One via 94 `/api/mobile/*` endpo
 ### System Design Choices
 An AI-first approach guides all functionalities. Route optimization is offloaded to a separate Plannix optimization service, and external DataClean service handles data validation and geocoding. A complete REST API supports the Driver Core mobile field app. The system includes configurable status message templates, a resource availability service, portal chat auto-responses, and mobile API endpoints for team functions and statistics. A server-driven mobile app configuration and version check system are in place, alongside an AI Sales Intelligence Report.
 
+## Framtida funktioner
+
+### Klassisk CRM — medvetet utelämnat
+Dagens kundregister (sidan "Kunder" på `/customers` med drill-down `/customers/:id`, samt API:et `/api/customers/*`) är **operativt orienterat**: det visar kund → objektshierarki → ordrar → karta → stats per kund och stödjer full CRUD. Det är optimerat för fältservice-arbete, inte för försäljning.
+
+Klassiska CRM-funktioner är **medvetet utelämnade** från nuvarande scope och byggs först om kunden uttryckligen efterfrågar det:
+- **Säljpipeline** (kvalificering, faser, win/loss-rate)
+- **Leads och prospekt** (separat från befintliga kunder)
+- **Aktivitetslogg per kund** (samtalsanteckningar, möten, e-post med tidsstämpel och ansvarig)
+- **Offerter** (offert-mall, versionshantering, godkännande-flöde)
+- **Deals/affärer** (värde, sannolikhet, prognoser)
+
+Beslutet ligger fast tills kund efterfrågar utbyggnad — gör inte ad-hoc-tillägg av CRM-fält i kund- eller objektsmodellen utan att stämma av med användaren först.
+
 ## External Dependencies
 - **PostgreSQL:** Primary database.
 - **Drizzle ORM:** Database interactions.
