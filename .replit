@@ -43,7 +43,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm run dev"
+args = "ENABLE_REALTIME_TEST_ROUTES=true npm run dev"
 waitForPort = 5000
 
 [agent]

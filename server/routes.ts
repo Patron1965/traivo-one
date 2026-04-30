@@ -47,6 +47,7 @@ import { registerETANotificationRoutes } from "./routes/etaNotificationRoutes";
 import { registerFeatureRoutes } from "./routes/featureRoutes";
 import { registerUrgentJobRoutes } from "./routes/urgentJobRoutes";
 import { registerCapacityForecastRoutes, capacityForecastScheduler } from "./routes/capacityForecastRoutes";
+import { registerRealtimeTestRoutes } from "./routes/realtime-test";
 
 async function ensureDefaultTenant() {
   // Only auto-create the legacy demo tenant if the database has no tenants at all.
@@ -595,6 +596,7 @@ export async function registerRoutes(
   registerAIRoutes(app);
   registerOptimizationRoutes(app);
   registerMobileRoutes(app);
+  registerRealtimeTestRoutes(app);
   registerPlannerRoutes(app);
   registerKPIRoutes(app);
   await registerFortnoxRoutes(app);

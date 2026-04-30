@@ -735,6 +735,17 @@ class NotificationService {
     this.lastPositionBroadcast.set(position.resourceId, { timestamp: now, pending: null });
   }
 
+  // Test-only helper: clear the 30s position-broadcast throttle for a given
+  // resource so e2e tests can deterministically trigger a fresh broadcast on
+  // every run without sleeping. Safe in production but only ever called from
+  // the gated test endpoint.
+  resetPositionThrottleForResource(resourceId: string) {
+    const timer = this.positionBroadcastTimers.get(resourceId);
+    if (timer) clearTimeout(timer);
+    this.positionBroadcastTimers.delete(resourceId);
+    this.lastPositionBroadcast.delete(resourceId);
+  }
+
   private async doBroadcastPosition(position: PositionUpdate) {
     const payload = {
       type: "position_update" as const,
