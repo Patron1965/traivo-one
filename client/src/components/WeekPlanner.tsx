@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { DndContext, DragOverlay } from "@dnd-kit/core";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DndContext, DragOverlay, type DragEndEvent } from "@dnd-kit/core";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -26,8 +26,40 @@ import { usePlannerData } from "./weekplanner/usePlannerData";
 import { usePlannerDnd } from "./weekplanner/usePlannerDnd";
 import { UrgentJobDialog } from "./UrgentJobDialog";
 import { WhatIfPreview } from "./weekplanner/WhatIfPreview";
-import { usePlannerSync, openPlannerPopout, type AssignSlot, type PopoutView, type SyncedState } from "./weekplanner/usePlannerSync";
+import { usePlannerSync, openPlannerPopout, type AssignSlot, type PopoutView, type SyncedState, type RemoteDragInfo } from "./weekplanner/usePlannerSync";
 import type { WorkOrderWithObject } from "@shared/schema";
+
+function findDropIdAtClientPoint(clientX: number, clientY: number): string | null {
+  if (typeof document === "undefined") return null;
+  const el = document.elementFromPoint(clientX, clientY);
+  if (!el) return null;
+  let cur: Element | null = el;
+  while (cur) {
+    const tid = cur.getAttribute?.("data-testid");
+    if (tid && tid.startsWith("droppable-cell-")) {
+      return tid.slice("droppable-cell-".length);
+    }
+    cur = cur.parentElement;
+  }
+  return null;
+}
+
+function parseDropIdToTarget(dropId: string): { kind: "team"; teamId: string; dateStr: string } | { kind: "resource"; resourceId: string; dateStr: string; hour?: number } | null {
+  if (dropId.startsWith("team:")) {
+    const rest = dropId.slice(5);
+    const [teamId, dateStr] = rest.split("|");
+    if (!teamId || !dateStr) return null;
+    return { kind: "team", teamId, dateStr };
+  }
+  const parts = dropId.split("|");
+  if (parts.length < 2) return null;
+  return {
+    kind: "resource",
+    resourceId: parts[0],
+    dateStr: parts[1],
+    hour: parts[2] ? parseInt(parts[2], 10) : undefined,
+  };
+}
 
 export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, showAIPanel, onToggleAIPanel, displayMode = "full", popoutRole = "main" }: WeekPlannerProps) {
   const d = usePlannerData();
@@ -39,6 +71,26 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
   const [poppedOutViews, setPoppedOutViews] = useState<Set<PopoutView>>(new Set());
   const [crossWindowSlot, setCrossWindowSlot] = useState<AssignSlot | null>(null);
   const [remoteSelectedSlot, setRemoteSelectedSlot] = useState<AssignSlot | null>(null);
+  // Remote drag state — set when ANOTHER window is currently dragging
+  const [remoteDrag, setRemoteDrag] = useState<RemoteDragInfo>({ jobId: null, senderRole: null });
+  // Which dropId in OUR window the remote pointer is currently hovering over
+  const [remoteHoveredDropId, setRemoteHoveredDropId] = useState<string | null>(null);
+  // Refs used by drag handlers (avoid stale closures)
+  const remoteDragRef = useRef<RemoteDragInfo>({ jobId: null, senderRole: null });
+  remoteDragRef.current = remoteDrag;
+  const remoteHoveredDropIdRef = useRef<string | null>(null);
+  remoteHoveredDropIdRef.current = remoteHoveredDropId;
+  // When WE are the drag source, the dropId broadcast back from the receiving window.
+  // Includes the receiver's senderId and a freshness timestamp so we can ignore stale data
+  // if the receiver popout closes mid-drag or stops broadcasting.
+  const localDragRemoteHoverRef = useRef<{ senderId: string; dropId: string; lastSeen: number } | null>(null);
+  // How fresh a remote hover must be (ms) to be trusted as the auto-assign target on drop
+  const REMOTE_HOVER_FRESH_MS = 1500;
+  // Tracks whether THIS window currently has a local drag in progress, so cross-window
+  // hover broadcasts from other windows are only consumed when we're actually the drag source.
+  // (Prevents stale hover capture in multi-window setups, e.g. main + 2 popouts.)
+  const localActiveDragJobRef = useRef<string | null>(null);
+  localActiveDragJobRef.current = d.activeDragJob?.id ?? null;
 
   const syncedState = useMemo<SyncedState>(() => ({
     weekStart: format(d.currentWeekStart, "yyyy-MM-dd"),
@@ -76,14 +128,90 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     }
   }, [d]);
 
-  usePlannerSync({
+  const handleRemoteDragChange = useCallback((info: RemoteDragInfo) => {
+    setRemoteDrag(info);
+    if (!info.jobId) {
+      setRemoteHoveredDropId(null);
+    }
+  }, []);
+
+  // Ref to sync API — populated after usePlannerSync runs; used to break a circular dep
+  const syncApiRef = useRef<{ broadcastDragPointer: (x: number, y: number) => void; broadcastDragHover: (id: string | null) => void } | null>(null);
+
+  const handleRemoteDragPointer = useCallback((screenX: number, screenY: number) => {
+    // Convert source-screen coords to OUR client coords; approximate browser chrome offset
+    const chromeY = Math.max(0, window.outerHeight - window.innerHeight);
+    const chromeX = Math.max(0, (window.outerWidth - window.innerWidth) / 2);
+    const clientX = screenX - window.screenX - chromeX;
+    const clientY = screenY - window.screenY - chromeY;
+    if (clientX < 0 || clientY < 0 || clientX > window.innerWidth || clientY > window.innerHeight) {
+      if (remoteHoveredDropIdRef.current !== null) {
+        setRemoteHoveredDropId(null);
+        syncApiRef.current?.broadcastDragHover(null);
+      }
+      return;
+    }
+    const dropId = findDropIdAtClientPoint(clientX, clientY);
+    if (dropId !== remoteHoveredDropIdRef.current) {
+      setRemoteHoveredDropId(dropId);
+      syncApiRef.current?.broadcastDragHover(dropId);
+    }
+  }, []);
+
+  const handleRemoteDragHover = useCallback((dropId: string | null, _senderRole: unknown, senderId: string) => {
+    // Only the active drag source consumes hover broadcasts. If we're not currently
+    // dragging locally, ignore — otherwise hover from someone else's drag could be
+    // captured and consumed on a later, unrelated drop in this window.
+    if (!localActiveDragJobRef.current) return;
+    if (dropId === null) {
+      // Receiver explicitly told us its pointer left all droppable cells — clear any stale target
+      const cur = localDragRemoteHoverRef.current;
+      if (cur && cur.senderId === senderId) {
+        localDragRemoteHoverRef.current = null;
+      }
+      return;
+    }
+    localDragRemoteHoverRef.current = { senderId, dropId, lastSeen: Date.now() };
+  }, []);
+
+  // If the receiver popout closes mid-drag (graceful close OR detected via heartbeat),
+  // drop any stale hover ref pointing at it so we never auto-assign to a vanished window.
+  const handleRemoteSenderClosed = useCallback((senderId: string) => {
+    const cur = localDragRemoteHoverRef.current;
+    if (cur && cur.senderId === senderId) {
+      localDragRemoteHoverRef.current = null;
+    }
+  }, []);
+
+  const sync = usePlannerSync({
     role: popoutRole,
     state: syncedState,
     applyRemoteState,
     onPopoutsChange: setPoppedOutViews,
     selectedSlot: crossWindowSlot,
     onRemoteSlotChange: setRemoteSelectedSlot,
+    localDragJobId: d.activeDragJob?.id ?? null,
+    onRemoteDragChange: handleRemoteDragChange,
+    onRemoteDragPointer: handleRemoteDragPointer,
+    onRemoteDragHover: handleRemoteDragHover,
+    onRemoteSenderClosed: handleRemoteSenderClosed,
   });
+  syncApiRef.current = sync;
+
+  // While we are dragging locally, broadcast pointer screen coords (throttled inside hook)
+  useEffect(() => {
+    if (!d.activeDragJob) {
+      localDragRemoteHoverRef.current = null;
+      return;
+    }
+    const onMove = (e: PointerEvent) => {
+      syncApiRef.current?.broadcastDragPointer(e.screenX, e.screenY);
+    };
+    window.addEventListener("pointermove", onMove);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+    };
+  }, [d.activeDragJob]);
 
   const handleOpenPopout = useCallback((view: PopoutView) => {
     if (poppedOutViews.has(view)) return;
@@ -172,6 +300,56 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     fetchWhatIf: d.fetchWhatIf,
   });
 
+  // Wrap dnd.handleDragEnd to auto-assign on cross-window drop:
+  // If our local drag ended without a local "over" target but a remote window broadcasted
+  // a hover dropId, perform the assignment as if the user dropped on that remote slot.
+  // Guards: hover must originate from a still-active sender (not closed) AND be recent
+  // (REMOTE_HOVER_FRESH_MS) — otherwise we fall back to normal drag-end handling and avoid
+  // any state corruption if the receiving window closed mid-drag.
+  const handleDragEndWithRemote = useCallback((event: DragEndEvent) => {
+    const cur = localDragRemoteHoverRef.current;
+    const isFresh = !!cur && (Date.now() - cur.lastSeen) < REMOTE_HOVER_FRESH_MS;
+    if (event.active && !event.over && cur && isFresh) {
+      const target = parseDropIdToTarget(cur.dropId);
+      const jobId = String(event.active.id);
+      const job = d.workOrders.find(j => String(j.id) === jobId);
+      if (target && job) {
+        if (target.kind === "team" && d.executeTeamSchedule) {
+          d.executeTeamSchedule(job.id, target.teamId, target.dateStr);
+        } else if (target.kind === "resource") {
+          // Mirror usePlannerDnd.computeStartTime: use the cell hour when present;
+          // otherwise (week-mode whole-day drop) compute the next free slot for that resource/day.
+          let startTime: string | undefined = target.hour !== undefined
+            ? `${String(target.hour).padStart(2, "0")}:00`
+            : undefined;
+          if (!startTime) {
+            const existing = (d.resourceDayJobMap?.jobs?.[target.resourceId]?.[target.dateStr] || [])
+              .filter((j: WorkOrderWithObject) => j.scheduledStartTime)
+              .sort((a: WorkOrderWithObject, b: WorkOrderWithObject) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
+            let nextSlot = 7 * 60;
+            for (const e of existing) {
+              const [eH, eM] = (e.scheduledStartTime || "07:00").split(":").map(Number);
+              const end = eH * 60 + eM + (e.estimatedDuration || 60);
+              if (end > nextSlot) nextSlot = end;
+            }
+            const h = Math.floor(nextSlot / 60);
+            startTime = h < 17 ? `${String(h).padStart(2, "0")}:${String(nextSlot % 60).padStart(2, "0")}` : "07:00";
+          }
+          d.executeSchedule(job.id, target.resourceId, target.dateStr, startTime);
+        }
+        d.toast({ title: "Schemalagt över fönster", description: `${job.title} tilldelad via popout-fönster` });
+        d.setActiveDragJob(null);
+        localDragRemoteHoverRef.current = null;
+        return;
+      }
+    }
+    if (cur && !isFresh) {
+      console.info("[planner-sync] ignoring stale remote hover on drag-end", { ageMs: Date.now() - cur.lastSeen });
+    }
+    localDragRemoteHoverRef.current = null;
+    dnd.handleDragEnd(event);
+  }, [dnd, d]);
+
   const handleJobClickWithCallback = useCallback((jobId: string) => {
     d.handleJobClick(jobId);
     onSelectJob?.(jobId);
@@ -236,7 +414,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
   const showPersistentPopoutStrip = popoutRole === "main" && effectiveDisplayMode !== "full";
 
   return (
-    <DndContext sensors={dnd.sensors} collisionDetection={dnd.collisionDetection} onDragStart={dnd.handleDragStart} onDragOver={dnd.handleDragOver} onDragEnd={dnd.handleDragEnd}>
+    <DndContext sensors={dnd.sensors} collisionDetection={dnd.collisionDetection} onDragStart={dnd.handleDragStart} onDragOver={dnd.handleDragOver} onDragEnd={handleDragEndWithRemote}>
       <div className="flex flex-col h-full">
         {showPersistentPopoutStrip && (
           <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-1.5 text-xs" data-testid="strip-popout-controls">
@@ -407,6 +585,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
               clusterMatchedResourceIds={d.clusterMatchedResourceIds}
               showConstraintLayer={d.showConstraintLayer}
               constraintMap={d.constraintMap}
+              remoteDragActive={!!remoteDrag.jobId}
+              remoteHoveredDropId={remoteHoveredDropId}
             />
           )}
           {d.viewMode === "week" && (
@@ -424,6 +604,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
               clusterMatchedResourceIds={d.clusterMatchedResourceIds}
               showConstraintLayer={d.showConstraintLayer}
               constraintMap={d.constraintMap}
+              remoteDragActive={!!remoteDrag.jobId}
+              remoteHoveredDropId={remoteHoveredDropId}
               currentPeriod={d.currentPeriodRange}
               rowMode={d.weekRowMode}
               teamRows={d.teamRows}

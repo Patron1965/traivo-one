@@ -28,13 +28,22 @@ export interface SyncedState {
   filters: SyncedFilters;
 }
 
+export interface RemoteDragInfo {
+  jobId: string | null;
+  senderRole: SyncRole | null;
+}
+
 type SyncMessage =
   | { type: "state"; senderId: string; senderRole: SyncRole; state: SyncedState; timestamp: number }
   | { type: "popout-mounted"; senderId: string; view: PopoutView; timestamp: number }
   | { type: "popout-closed"; senderId: string; view: PopoutView; timestamp: number }
   | { type: "popout-heartbeat"; senderId: string; view: PopoutView; timestamp: number }
   | { type: "request-state"; senderId: string; timestamp: number }
-  | { type: "slot-changed"; senderId: string; senderRole: SyncRole; slot: AssignSlot | null; timestamp: number };
+  | { type: "slot-changed"; senderId: string; senderRole: SyncRole; slot: AssignSlot | null; timestamp: number }
+  | { type: "drag-start"; senderId: string; senderRole: SyncRole; jobId: string; timestamp: number }
+  | { type: "drag-end"; senderId: string; senderRole: SyncRole; timestamp: number }
+  | { type: "drag-pointer"; senderId: string; senderRole: SyncRole; screenX: number; screenY: number; timestamp: number }
+  | { type: "drag-hover"; senderId: string; senderRole: SyncRole; dropId: string | null; timestamp: number };
 
 interface UsePlannerSyncOpts {
   role: SyncRole;
@@ -44,24 +53,45 @@ interface UsePlannerSyncOpts {
   selectedSlot: AssignSlot | null;
   onRemoteSlotChange?: (slot: AssignSlot | null) => void;
   disabled?: boolean;
+  // Local active drag job id — auto-broadcasts drag-start/drag-end on change
+  localDragJobId?: string | null;
+  // Called when another window broadcasts drag-start (jobId) or drag-end (jobId=null)
+  onRemoteDragChange?: (info: RemoteDragInfo) => void;
+  // Called when receiving pointer position from another window's active drag
+  onRemoteDragPointer?: (screenX: number, screenY: number, senderRole: SyncRole) => void;
+  // Called when receiving a hover dropId broadcast from another window (when we're the drag source)
+  onRemoteDragHover?: (dropId: string | null, senderRole: SyncRole, senderId: string) => void;
+  // Called when ANY remote window broadcasts that it's closing (so we can drop stale references to it)
+  onRemoteSenderClosed?: (senderId: string) => void;
 }
 
 const CHANNEL_NAME = "traivo-planner";
 const STORAGE_KEY = "traivo-planner-msg";
 const HEARTBEAT_MS = 500;
 const HEARTBEAT_TIMEOUT = 1500;
+const DRAG_STALE_TIMEOUT = 2000;
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function usePlannerSync(opts: UsePlannerSyncOpts) {
+export interface PlannerSyncApi {
+  broadcastDragPointer: (screenX: number, screenY: number) => void;
+  broadcastDragHover: (dropId: string | null) => void;
+}
+
+export function usePlannerSync(opts: UsePlannerSyncOpts): PlannerSyncApi {
   const senderIdRef = useRef<string>(makeId());
   const channelRef = useRef<BroadcastChannel | null>(null);
   const ignoreUntilRef = useRef<number>(0);
   const lastSentStateKeyRef = useRef<string>("");
   const lastSentSlotKeyRef = useRef<string>("");
+  const lastSentDragJobIdRef = useRef<string | null>(null);
+  const lastSentHoverRef = useRef<string | null>(null);
+  const lastDragPointerSentRef = useRef<number>(0);
   const popoutLastSeenRef = useRef<Map<PopoutView, number>>(new Map());
+  const remoteDragSenderRef = useRef<{ senderId: string; senderRole: SyncRole } | null>(null);
+  const remoteDragLastSeenRef = useRef<number>(0);
 
   const stateRef = useRef(opts.state);
   stateRef.current = opts.state;
@@ -71,6 +101,14 @@ export function usePlannerSync(opts: UsePlannerSyncOpts) {
   onPopoutsChangeRef.current = opts.onPopoutsChange;
   const onRemoteSlotChangeRef = useRef(opts.onRemoteSlotChange);
   onRemoteSlotChangeRef.current = opts.onRemoteSlotChange;
+  const onRemoteDragChangeRef = useRef(opts.onRemoteDragChange);
+  onRemoteDragChangeRef.current = opts.onRemoteDragChange;
+  const onRemoteDragPointerRef = useRef(opts.onRemoteDragPointer);
+  onRemoteDragPointerRef.current = opts.onRemoteDragPointer;
+  const onRemoteDragHoverRef = useRef(opts.onRemoteDragHover);
+  onRemoteDragHoverRef.current = opts.onRemoteDragHover;
+  const onRemoteSenderClosedRef = useRef(opts.onRemoteSenderClosed);
+  onRemoteSenderClosedRef.current = opts.onRemoteSenderClosed;
   const roleRef = useRef(opts.role);
   roleRef.current = opts.role;
 
@@ -97,6 +135,13 @@ export function usePlannerSync(opts: UsePlannerSyncOpts) {
         channelRef.current = ch;
       }
     } catch {}
+
+    const clearRemoteDragIfFromSender = (senderId: string) => {
+      if (remoteDragSenderRef.current && remoteDragSenderRef.current.senderId === senderId) {
+        remoteDragSenderRef.current = null;
+        onRemoteDragChangeRef.current?.({ jobId: null, senderRole: null });
+      }
+    };
 
     const handleMessage = (msg: SyncMessage) => {
       if (!msg || typeof msg !== "object" || !("type" in msg)) return;
@@ -130,11 +175,14 @@ export function usePlannerSync(opts: UsePlannerSyncOpts) {
           break;
         }
         case "popout-closed": {
-          if (roleRef.current !== "main") return;
-          if (popoutLastSeenRef.current.has(msg.view)) {
+          if (roleRef.current === "main" && popoutLastSeenRef.current.has(msg.view)) {
             popoutLastSeenRef.current.delete(msg.view);
             onPopoutsChangeRef.current?.(new Set(popoutLastSeenRef.current.keys()));
           }
+          // If the closing popout was actively dragging, clear remote drag state
+          clearRemoteDragIfFromSender(senderId!);
+          // Notify source side too — it may have stale hover refs pointing at this sender
+          if (senderId) onRemoteSenderClosedRef.current?.(senderId);
           break;
         }
         case "request-state": {
@@ -153,6 +201,29 @@ export function usePlannerSync(opts: UsePlannerSyncOpts) {
           onRemoteSlotChangeRef.current?.(msg.slot);
           break;
         }
+        case "drag-start": {
+          remoteDragSenderRef.current = { senderId: msg.senderId, senderRole: msg.senderRole };
+          remoteDragLastSeenRef.current = Date.now();
+          onRemoteDragChangeRef.current?.({ jobId: msg.jobId, senderRole: msg.senderRole });
+          break;
+        }
+        case "drag-end": {
+          if (remoteDragSenderRef.current && remoteDragSenderRef.current.senderId === msg.senderId) {
+            remoteDragSenderRef.current = null;
+            onRemoteDragChangeRef.current?.({ jobId: null, senderRole: null });
+          }
+          break;
+        }
+        case "drag-pointer": {
+          remoteDragLastSeenRef.current = Date.now();
+          onRemoteDragPointerRef.current?.(msg.screenX, msg.screenY, msg.senderRole);
+          break;
+        }
+        case "drag-hover": {
+          // Only the drag source consumes hover (it's the receiver-of-hover)
+          onRemoteDragHoverRef.current?.(msg.dropId, msg.senderRole, msg.senderId);
+          break;
+        }
       }
     };
 
@@ -169,6 +240,7 @@ export function usePlannerSync(opts: UsePlannerSyncOpts) {
 
     let heartbeatTimer: number | null = null;
     let expirationTimer: number | null = null;
+    let dragStaleTimer: number | null = null;
 
     if (roleRef.current !== "main") {
       const view: PopoutView = roleRef.current === "popout-calendar" ? "calendar" : "orderlager";
@@ -191,7 +263,27 @@ export function usePlannerSync(opts: UsePlannerSyncOpts) {
       }, HEARTBEAT_MS);
     }
 
+    // Watchdog: clear stale remote drag state if no drag-pointer/end received
+    dragStaleTimer = window.setInterval(() => {
+      if (!remoteDragSenderRef.current) return;
+      const now = Date.now();
+      if (now - remoteDragLastSeenRef.current >= DRAG_STALE_TIMEOUT) {
+        remoteDragSenderRef.current = null;
+        onRemoteDragChangeRef.current?.({ jobId: null, senderRole: null });
+      }
+    }, 750);
+
     const onUnload = () => {
+      // If we're actively dragging when window closes, broadcast drag-end
+      if (lastSentDragJobIdRef.current) {
+        post({
+          type: "drag-end",
+          senderId: senderIdRef.current,
+          senderRole: roleRef.current,
+          timestamp: Date.now(),
+        });
+        lastSentDragJobIdRef.current = null;
+      }
       if (roleRef.current !== "main") {
         const view: PopoutView = roleRef.current === "popout-calendar" ? "calendar" : "orderlager";
         post({ type: "popout-closed", senderId: senderIdRef.current, view, timestamp: Date.now() });
@@ -211,6 +303,7 @@ export function usePlannerSync(opts: UsePlannerSyncOpts) {
       window.removeEventListener("pagehide", onUnload);
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       if (expirationTimer) clearInterval(expirationTimer);
+      if (dragStaleTimer) clearInterval(dragStaleTimer);
     };
   }, [opts.disabled, post]);
 
@@ -246,6 +339,61 @@ export function usePlannerSync(opts: UsePlannerSyncOpts) {
       timestamp: Date.now(),
     });
   }, [slotKey, opts.disabled, opts.role, post, opts.selectedSlot]);
+
+  // Auto-broadcast local drag start/end based on localDragJobId changes
+  const localDragJobId = opts.localDragJobId ?? null;
+  useEffect(() => {
+    if (opts.disabled) return;
+    if (localDragJobId === lastSentDragJobIdRef.current) return;
+    if (localDragJobId) {
+      post({
+        type: "drag-start",
+        senderId: senderIdRef.current,
+        senderRole: opts.role,
+        jobId: localDragJobId,
+        timestamp: Date.now(),
+      });
+    } else {
+      post({
+        type: "drag-end",
+        senderId: senderIdRef.current,
+        senderRole: opts.role,
+        timestamp: Date.now(),
+      });
+    }
+    lastSentDragJobIdRef.current = localDragJobId;
+  }, [localDragJobId, opts.disabled, opts.role, post]);
+
+  const broadcastDragPointer = useCallback((screenX: number, screenY: number) => {
+    if (opts.disabled) return;
+    // Throttle to ~60fps
+    const now = Date.now();
+    if (now - lastDragPointerSentRef.current < 16) return;
+    lastDragPointerSentRef.current = now;
+    post({
+      type: "drag-pointer",
+      senderId: senderIdRef.current,
+      senderRole: roleRef.current,
+      screenX,
+      screenY,
+      timestamp: now,
+    });
+  }, [opts.disabled, post]);
+
+  const broadcastDragHover = useCallback((dropId: string | null) => {
+    if (opts.disabled) return;
+    if (dropId === lastSentHoverRef.current) return;
+    lastSentHoverRef.current = dropId;
+    post({
+      type: "drag-hover",
+      senderId: senderIdRef.current,
+      senderRole: roleRef.current,
+      dropId,
+      timestamp: Date.now(),
+    });
+  }, [opts.disabled, post]);
+
+  return { broadcastDragPointer, broadcastDragHover };
 }
 
 export function openPlannerPopout(view: PopoutView): Window | null {

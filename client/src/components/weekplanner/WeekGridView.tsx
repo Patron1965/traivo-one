@@ -44,6 +44,8 @@ interface WeekGridViewProps {
   clusterMatchedResourceIds?: Set<string>;
   showConstraintLayer?: boolean;
   constraintMap?: Map<string, ConstraintCell>;
+  remoteDragActive?: boolean;
+  remoteHoveredDropId?: string | null;
   currentPeriod?: { start: string; end: string };
   rowMode?: "team" | "resource";
   teamRows?: TeamRow[];
@@ -76,7 +78,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
     getCapacityPercentage, getCapacityColor, getCapacityBgColor, getDropFitClass,
     activeDragJob, restrictionsByObject, resourceWeekSummary, zoom, weatherByDate,
     onResourceClick, onSendSchedule, jobCardProps, dragOverConflicts, clusterMatchedResourceIds,
-    showConstraintLayer, constraintMap,
+    showConstraintLayer, constraintMap, remoteDragActive, remoteHoveredDropId,
     rowMode = "resource", teamRows = [], getJobsForTeamAndDay, getTeamDayHours, teamWeekSummary,
     hiddenUntiedTeamSummary, showingUntiedUnderFilter, onShowUntiedTeamRows, onHideUntiedTeamRows,
   } = props;
@@ -286,6 +288,8 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                       style={{ minHeight: `${zoom.weekH}px` }}
                       dragOverConflicts={dragOverConflicts?.[droppableId]}
                       dropFitInfo={teamDropFit}
+                      remoteDragActive={remoteDragActive}
+                      remoteHovered={remoteHoveredDropId === droppableId}
                     >
                       <div className="min-w-0 overflow-hidden" data-testid={isFallback ? `drop-zone-resource-fallback-${team.resourceId}-${dayStr}` : `drop-zone-team-${team.id}-${dayStr}`}>
                         <div className="flex items-center gap-1 mb-2">
@@ -365,6 +369,8 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                     dropFitInfo={cellDropFit}
                     style={{ minHeight: `${zoom.weekH}px` }}
                     dragOverConflicts={dragOverConflicts?.[droppableId]}
+                    remoteDragActive={remoteDragActive}
+                    remoteHovered={remoteHoveredDropId === droppableId}
                   >
                     <div className="min-w-0 overflow-hidden" data-testid={`drop-zone-${resource.id}-${dayStr}`}>
                       <div className="flex items-center gap-1 mb-2">

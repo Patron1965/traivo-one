@@ -26,6 +26,8 @@ interface DayTimelineViewProps {
   clusterMatchedResourceIds?: Set<string>;
   showConstraintLayer?: boolean;
   constraintMap?: Map<string, ConstraintCell>;
+  remoteDragActive?: boolean;
+  remoteHoveredDropId?: string | null;
 }
 
 export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineViewProps) {
@@ -34,7 +36,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
     getJobsForResourceAndDay, getResourceDayHours, getCapacityPercentage,
     getDropFitClass, activeDragJob, travelTimesForDay, zoom, jobCardProps,
     dragOverConflicts, clusterMatchedResourceIds,
-    showConstraintLayer, constraintMap,
+    showConstraintLayer, constraintMap, remoteDragActive, remoteHoveredDropId,
   } = props;
 
   const hours = Array.from({ length: DAY_END_HOUR - DAY_START_HOUR + 1 }, (_, i) => DAY_START_HOUR + i);
@@ -121,6 +123,8 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
                   dropFitInfo={dayCellDropFit}
                   style={{ minHeight: `${zoom.dayH}px` }}
                   dragOverConflicts={dragOverConflicts?.[droppableId]}
+                  remoteDragActive={remoteDragActive}
+                  remoteHovered={remoteHoveredDropId === droppableId}
                 >
                   <div className={zoomGapClass} data-testid={`drop-zone-${resource.id}-${hour}`}>
                     {showConstraintLayer && constraintMap && hour === DAY_START_HOUR && (() => {

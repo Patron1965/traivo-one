@@ -62,17 +62,25 @@ export function DraggableJobCard({ id, children, disabled = false }: { id: strin
   );
 }
 
-export function DroppableCell({ id, children, className = "", dropFitInfo, style, dragOverConflicts }: { id: string; children: JSX.Element; className?: string; dropFitInfo?: { bg: string; label: string; color: string } | null; style?: React.CSSProperties; dragOverConflicts?: string[] }) {
+export function DroppableCell({ id, children, className = "", dropFitInfo, style, dragOverConflicts, remoteDragActive, remoteHovered }: { id: string; children: JSX.Element; className?: string; dropFitInfo?: { bg: string; label: string; color: string } | null; style?: React.CSSProperties; dragOverConflicts?: string[]; remoteDragActive?: boolean; remoteHovered?: boolean }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const hasConflict = isOver && dragOverConflicts && dragOverConflicts.length > 0;
   const hasHardBlock = hasConflict && dragOverConflicts!.some(c => c.startsWith("[BLOCK]"));
   const isClusterOnly = hasConflict && !hasHardBlock && dragOverConflicts!.every(c => c.includes("Kluster"));
+  // Remote drag highlight tier (only when no local drag interaction is happening on this cell)
+  const remoteHighlight = !isOver && !hasConflict && remoteDragActive
+    ? remoteHovered
+      ? "ring-2 ring-blue-500 bg-blue-100/40 dark:bg-blue-950/30 animate-pulse"
+      : "ring-1 ring-dashed ring-blue-400/50 bg-blue-50/30 dark:bg-blue-950/15"
+    : "";
   return (
     <div
       ref={setNodeRef}
-      className={`${className} ${hasConflict ? (hasHardBlock ? "bg-red-100 dark:bg-red-950/50 ring-2 ring-red-600 cursor-not-allowed" : isClusterOnly ? "bg-amber-50 dark:bg-amber-950/30 ring-2 ring-amber-500" : "bg-red-50 dark:bg-red-950/30 ring-2 ring-red-500") : isOver ? dropFitInfo ? `${dropFitInfo.bg} ring-2 ${dropFitInfo.bg.includes("ring-") ? "" : "ring-primary"}` : "bg-primary/10 ring-2 ring-primary/30" : ""}`}
+      className={`${className} ${hasConflict ? (hasHardBlock ? "bg-red-100 dark:bg-red-950/50 ring-2 ring-red-600 cursor-not-allowed" : isClusterOnly ? "bg-amber-50 dark:bg-amber-950/30 ring-2 ring-amber-500" : "bg-red-50 dark:bg-red-950/30 ring-2 ring-red-500") : isOver ? dropFitInfo ? `${dropFitInfo.bg} ring-2 ${dropFitInfo.bg.includes("ring-") ? "" : "ring-primary"}` : "bg-primary/10 ring-2 ring-primary/30" : remoteHighlight}`}
       style={style}
       data-testid={`droppable-cell-${id}`}
+      data-remote-drag-active={remoteDragActive ? "true" : undefined}
+      data-remote-hovered={remoteHovered ? "true" : undefined}
     >
       {hasConflict && (
         <div className={`text-[10px] font-bold mb-1 flex items-center gap-1 ${hasHardBlock ? "text-red-700 dark:text-red-300" : isClusterOnly ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`} data-testid={`drag-conflict-${id}`}>
@@ -84,6 +92,12 @@ export function DroppableCell({ id, children, className = "", dropFitInfo, style
         <div className={`text-[10px] font-medium ${dropFitInfo.color} mb-1 flex items-center gap-1`}>
           <span className={`w-2 h-2 rounded-full ${dropFitInfo.bg.split(" ")[0]}`} />
           {dropFitInfo.label}
+        </div>
+      )}
+      {remoteHovered && (
+        <div className="text-[10px] font-medium text-blue-700 dark:text-blue-300 mb-1 flex items-center gap-1" data-testid={`remote-hover-${id}`}>
+          <span className="w-2 h-2 rounded-full bg-blue-500" />
+          Tilldelas här
         </div>
       )}
       {children}
