@@ -343,6 +343,8 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                       const hasRealCustomer = customer && /[\p{L}\p{N}]/u.test(customer.name);
                       const customerLabel = hasRealCustomer ? customer!.name : "Okänd kund";
                       const addressLabel = job.objectName || "Okänt objekt";
+                      const titleLabel = (job.title || "").trim();
+                      const showTitle = !!titleLabel && titleLabel !== customerLabel && titleLabel !== addressLabel;
                       return (
                         <DraggableJobCard key={job.id} id={job.id}>
                           <Card
@@ -360,6 +362,15 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                                   {customerLabel}
                                 </span>
                               </div>
+                              {showTitle && (
+                                <div
+                                  className="text-[10px] font-medium text-foreground/90 truncate"
+                                  title={titleLabel}
+                                  data-testid={`missing-date-job-title-${job.id}`}
+                                >
+                                  {titleLabel}
+                                </div>
+                              )}
                               <div className="text-[10px] text-muted-foreground truncate" title={addressLabel}>{addressLabel}</div>
                               <Button
                                 size="sm"
@@ -555,6 +566,8 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                 const hasRealCustomer = customer && /[\p{L}\p{N}]/u.test(customer.name);
                 const customerLabel = hasRealCustomer ? customer!.name : "Okänd kund";
                 const addressLabel = job.objectName || "Okänt objekt";
+                const titleLabel = (job.title || "").trim();
+                const showTitle = !!titleLabel && titleLabel !== customerLabel && titleLabel !== addressLabel;
                 return (
                   <DraggableJobCard key={job.id} id={job.id}>
                     <Card
@@ -576,6 +589,15 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
                           )}
                         </div>
+                        {showTitle && (
+                          <div
+                            className="text-xs font-medium text-foreground/90 truncate"
+                            title={titleLabel}
+                            data-testid={`unscheduled-job-title-${job.id}`}
+                          >
+                            {titleLabel}
+                          </div>
+                        )}
                         <div className="text-xs text-muted-foreground truncate" title={addressLabel} data-testid={`unscheduled-job-address-${job.id}`}>{addressLabel}</div>
                         {jobCluster && (
                           <div className="flex items-center gap-1 text-[10px] text-muted-foreground" data-testid={`unscheduled-job-cluster-${job.id}`}>
