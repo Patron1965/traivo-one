@@ -262,3 +262,86 @@ export function useUpdateJobLine(jobId: string) {
     },
   });
 }
+
+export interface CreateLineInput {
+  articleId: string;
+  articleName?: string | null;
+  articleNumber?: string | null;
+  quantity: number;
+}
+
+export function useCreateJobLine(jobId: string) {
+  const qc = useQueryClient();
+  return useMutation<void, Error, CreateLineInput, { previous?: JobExpandData; tempId: string }>({
+    mutationFn: async (input) => {
+      await apiRequest("POST", `/api/work-orders/${jobId}/lines`, {
+        articleId: input.articleId,
+        quantity: input.quantity,
+      });
+    },
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: expandKey(jobId) });
+      const previous = qc.getQueryData<JobExpandData>(expandKey(jobId));
+      const tempId = `tmp-${Date.now()}`;
+      if (previous) {
+        const optimisticLine: JobExpandMaterial = {
+          id: tempId,
+          articleId: input.articleId,
+          articleName: input.articleName ?? null,
+          articleNumber: input.articleNumber ?? null,
+          quantity: input.quantity,
+          resolvedPrice: null,
+          notes: null,
+          isOptional: false,
+        };
+        const nextMaterials = [...previous.materials, optimisticLine];
+        qc.setQueryData<JobExpandData>(expandKey(jobId), {
+          ...previous,
+          materials: nextMaterials,
+          counts: { ...previous.counts, materials: nextMaterials.length },
+        });
+      }
+      return { previous, tempId };
+    },
+    onError: (_err, _input, ctx) => {
+      if (ctx?.previous) qc.setQueryData(expandKey(jobId), ctx.previous);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: expandKey(jobId) });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    },
+  });
+}
+
+export interface DeleteLineInput {
+  lineId: string;
+}
+
+export function useDeleteJobLine(jobId: string) {
+  const qc = useQueryClient();
+  return useMutation<void, Error, DeleteLineInput, { previous?: JobExpandData }>({
+    mutationFn: async (input) => {
+      await apiRequest("DELETE", `/api/work-order-lines/${input.lineId}`);
+    },
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: expandKey(jobId) });
+      const previous = qc.getQueryData<JobExpandData>(expandKey(jobId));
+      if (previous) {
+        const nextMaterials = previous.materials.filter((m) => m.id !== input.lineId);
+        qc.setQueryData<JobExpandData>(expandKey(jobId), {
+          ...previous,
+          materials: nextMaterials,
+          counts: { ...previous.counts, materials: nextMaterials.length },
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _input, ctx) => {
+      if (ctx?.previous) qc.setQueryData(expandKey(jobId), ctx.previous);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: expandKey(jobId) });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    },
+  });
+}

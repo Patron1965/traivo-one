@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SyntheticEvent } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +6,26 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useQuery } from "@tanstack/react-query";
 import {
   CalendarRange,
   History,
@@ -23,6 +43,9 @@ import {
   X,
   Loader2,
   Check,
+  Trash2,
+  Plus,
+  ChevronsUpDown,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -31,6 +54,8 @@ import {
   useUpdateJobLine,
   useUpdateJobNotes,
   useUpdateJobPeriod,
+  useCreateJobLine,
+  useDeleteJobLine,
   type JobExpandData,
   type JobExpandPeriod,
   type JobExpandSyncEntry,
@@ -716,7 +741,10 @@ function MaterialRow({ jobId, line }: { jobId: string; line: JobExpandMaterial }
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [qty, setQty] = useState(String(line.quantity));
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const mutation = useUpdateJobLine(jobId);
+  const deleteMutation = useDeleteJobLine(jobId);
+  const isTemp = line.id.startsWith("tmp-");
 
   useEffect(() => {
     if (!editing) setQty(String(line.quantity));
@@ -774,6 +802,24 @@ function MaterialRow({ jobId, line }: { jobId: string; line: JobExpandMaterial }
   };
 
   const isOptional = line.isOptional ?? false;
+  const handleConfirmDelete = () => {
+    deleteMutation.mutate(
+      { lineId: line.id },
+      {
+        onSuccess: () => {
+          setConfirmDelete(false);
+          toast({ title: "Orderrad borttagen" });
+        },
+        onError: (err) => {
+          toast({
+            title: "Kunde inte ta bort",
+            description: err.message,
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  };
 
   return (
     <li
@@ -825,9 +871,10 @@ function MaterialRow({ jobId, line }: { jobId: string; line: JobExpandMaterial }
           <>
             <button
               type="button"
-              onClick={() => setEditing(true)}
-              className="text-right hover-elevate rounded px-1 py-0.5"
-              title="Ändra antal"
+              onClick={() => { if (!isTemp) setEditing(true); }}
+              disabled={isTemp}
+              className="text-right hover-elevate rounded px-1 py-0.5 disabled:opacity-60 disabled:cursor-not-allowed"
+              title={isTemp ? "Sparar…" : "Ändra antal"}
               data-testid={`button-edit-line-${line.id}`}
             >
               <span className={isOptional ? "line-through text-muted-foreground" : ""}>{line.quantity} st</span>
@@ -841,7 +888,7 @@ function MaterialRow({ jobId, line }: { jobId: string; line: JobExpandMaterial }
               variant={isOptional ? "default" : "ghost"}
               className="h-6 w-6 p-0"
               onClick={handleToggleOptional}
-              disabled={mutation.isPending}
+              disabled={mutation.isPending || isTemp}
               title={isOptional ? "Avmarkera som klar" : "Markera som klar/valfri"}
               data-testid={`button-toggle-line-done-${line.id}`}
             >
@@ -853,10 +900,246 @@ function MaterialRow({ jobId, line }: { jobId: string; line: JobExpandMaterial }
                 <Check className="h-3.5 w-3.5" />
               )}
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+              onClick={() => setConfirmDelete(true)}
+              disabled={deleteMutation.isPending || isTemp}
+              title="Ta bort orderrad"
+              data-testid={`button-delete-line-${line.id}`}
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+            </Button>
           </>
         )}
       </div>
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent data-testid={`dialog-confirm-delete-line-${line.id}`}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ta bort orderrad?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {line.articleName || "Orderraden"} tas bort permanent från arbetsordern.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid={`button-cancel-delete-line-${line.id}`}>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              data-testid={`button-confirm-delete-line-${line.id}`}
+            >
+              Ta bort
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </li>
+  );
+}
+
+interface ArticleOption {
+  id: string;
+  name: string;
+  articleNumber?: string | null;
+  description?: string | null;
+}
+
+function AddMaterialRow({ jobId }: { jobId: string }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<ArticleOption | null>(null);
+  const [qty, setQty] = useState("1");
+  const createMutation = useCreateJobLine(jobId);
+
+  const { data: articles = [], isLoading: articlesLoading } = useQuery<ArticleOption[]>({
+    queryKey: ["/api/articles"],
+    enabled: open,
+  });
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return articles.slice(0, 50);
+    const q = search.toLowerCase();
+    return articles
+      .filter(
+        (a) =>
+          a.name?.toLowerCase().includes(q) ||
+          a.articleNumber?.toLowerCase().includes(q) ||
+          a.description?.toLowerCase().includes(q),
+      )
+      .slice(0, 50);
+  }, [articles, search]);
+
+  const reset = () => {
+    setSelected(null);
+    setQty("1");
+    setSearch("");
+    setPickerOpen(false);
+  };
+
+  const handleCancel = () => {
+    reset();
+    setOpen(false);
+  };
+
+  const handleSave = () => {
+    if (!selected) {
+      toast({ title: "Välj en artikel", variant: "destructive" });
+      return;
+    }
+    const parsed = Number(qty);
+    if (!Number.isFinite(parsed) || parsed <= 0 || !Number.isInteger(parsed)) {
+      toast({
+        title: "Ogiltig kvantitet",
+        description: "Ange ett heltal större än 0.",
+        variant: "destructive",
+      });
+      return;
+    }
+    createMutation.mutate(
+      {
+        articleId: selected.id,
+        articleName: selected.name,
+        articleNumber: selected.articleNumber ?? null,
+        quantity: parsed,
+      },
+      {
+        onSuccess: () => {
+          toast({ title: "Orderrad tillagd" });
+          reset();
+          setOpen(false);
+        },
+        onError: (err) => {
+          toast({
+            title: "Kunde inte lägga till",
+            description: err.message,
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  };
+
+  if (!open) {
+    return (
+      <div className="pt-1">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-6 w-full justify-start text-[11px] gap-1"
+          onClick={() => setOpen(true)}
+          data-testid={`button-add-line-${jobId}`}
+        >
+          <Plus className="h-3 w-3" /> Lägg till orderrad
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pt-1 space-y-1.5 border-t border-dashed">
+      <div className="text-muted-foreground text-[10px] pt-1">Ny orderrad</div>
+      <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 w-full justify-between text-[11px] font-normal"
+            data-testid={`button-pick-article-${jobId}`}
+          >
+            <span className="truncate">
+              {selected
+                ? `${selected.name}${selected.articleNumber ? ` (${selected.articleNumber})` : ""}`
+                : "Välj artikel…"}
+            </span>
+            <ChevronsUpDown className="h-3 w-3 opacity-50 shrink-0 ml-1" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="p-0 w-[280px]" align="start">
+          <Command shouldFilter={false}>
+            <CommandInput
+              placeholder="Sök artikel…"
+              value={search}
+              onValueChange={setSearch}
+              data-testid={`input-article-search-${jobId}`}
+            />
+            <CommandList>
+              {articlesLoading ? (
+                <div className="p-2 text-[11px] text-muted-foreground">Laddar…</div>
+              ) : filtered.length === 0 ? (
+                <CommandEmpty>Inga artiklar.</CommandEmpty>
+              ) : (
+                <CommandGroup>
+                  {filtered.map((a) => (
+                    <CommandItem
+                      key={a.id}
+                      value={a.id}
+                      onSelect={() => {
+                        setSelected(a);
+                        setPickerOpen(false);
+                      }}
+                      className="text-[11px]"
+                      data-testid={`option-article-${a.id}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">{a.name}</div>
+                        {a.articleNumber && (
+                          <div className="text-muted-foreground text-[10px]">{a.articleNumber}</div>
+                        )}
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      <div className="flex items-center gap-1">
+        <Input
+          type="number"
+          min={1}
+          step={1}
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          className="h-7 w-16 text-[11px] px-1"
+          data-testid={`input-new-line-qty-${jobId}`}
+        />
+        <span className="text-[10px] text-muted-foreground">st</span>
+        <div className="flex-1" />
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2 text-[10px]"
+          onClick={handleCancel}
+          disabled={createMutation.isPending}
+          data-testid={`button-cancel-add-line-${jobId}`}
+        >
+          Avbryt
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="default"
+          className="h-7 px-2 text-[10px] gap-1"
+          onClick={handleSave}
+          disabled={createMutation.isPending || !selected}
+          data-testid={`button-save-add-line-${jobId}`}
+        >
+          {createMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+          Lägg till
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -873,6 +1156,7 @@ function MaterialsTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
           ))}
         </ul>
       )}
+      <AddMaterialRow jobId={jobId} />
     </div>
   );
 }
