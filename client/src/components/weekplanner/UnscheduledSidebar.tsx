@@ -177,7 +177,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
   const widthClass = expanded ? "w-full flex-1" : "w-[280px] border-r";
 
   return (
-    <Collapsible open={expanded ? true : showUnscheduled} onOpenChange={expanded ? () => {} : setShowUnscheduled} className="flex flex-1 min-w-0">
+    <Collapsible open={expanded ? true : showUnscheduled} onOpenChange={expanded ? () => {} : setShowUnscheduled} className={`flex min-w-0 ${expanded ? "flex-1" : ""}`}>
       <CollapsibleContent className={`${widthClass} bg-muted/20 flex flex-col min-w-0`}>
         <div className="p-3 border-b space-y-2">
           <div className="flex items-center justify-between">
