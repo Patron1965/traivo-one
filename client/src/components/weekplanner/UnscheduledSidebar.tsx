@@ -16,8 +16,33 @@ import { EXECUTION_CODE_LABELS, EXECUTION_CODE_ICONS } from "@shared/schema";
 import { priorityDotColors, priorityLabels } from "./types";
 import type { AssignSlot } from "./usePlannerSync";
 import { DraggableJobCard } from "./DndComponents";
+import { JobCardExpandPanel } from "./JobCardExpandPanel";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+const EXPANDED_STORAGE_KEY = "traivo:orderlager:expanded";
+
+function readExpandedSet(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(EXPANDED_STORAGE_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) return new Set(arr.filter((x): x is string => typeof x === "string"));
+  } catch {
+    // ignore parse errors
+  }
+  return new Set();
+}
+
+function writeExpandedSet(set: Set<string>) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(EXPANDED_STORAGE_KEY, JSON.stringify(Array.from(set)));
+  } catch {
+    // ignore quota errors
+  }
+}
 
 interface UnscheduledSidebarProps {
   showUnscheduled: boolean;
@@ -175,6 +200,16 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
     visibleResources?.some(r => r.serviceArea && r.serviceArea.length > 0));
 
   const widthClass = expanded ? "w-full flex-1" : "w-[280px] border-r";
+
+  const [expandedJobs, setExpandedJobs] = useState<Set<string>>(() => readExpandedSet());
+  const toggleJobExpanded = useCallback((jobId: string) => {
+    setExpandedJobs(prev => {
+      const next = new Set(prev);
+      if (next.has(jobId)) next.delete(jobId); else next.add(jobId);
+      writeExpandedSet(next);
+      return next;
+    });
+  }, []);
 
   return (
     <Collapsible open={expanded ? true : showUnscheduled} onOpenChange={expanded ? () => {} : setShowUnscheduled} className={`flex min-w-0 ${expanded ? "flex-1" : ""}`}>
@@ -717,6 +752,23 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             </TooltipTrigger>
                             <TooltipContent>Tilldela till vald slot från andra fönstret</TooltipContent>
                           </Tooltip>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); toggleJobExpanded(job.id); }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          className="mt-1 w-full flex items-center justify-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors py-0.5 rounded hover-elevate"
+                          data-testid={`button-expand-job-${job.id}`}
+                          aria-expanded={expandedJobs.has(job.id)}
+                          title={expandedJobs.has(job.id) ? "Dölj jobbinfo" : "Visa jobbinfo"}
+                        >
+                          {expandedJobs.has(job.id) ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                          <span>{expandedJobs.has(job.id) ? "Dölj" : "Mer info"}</span>
+                        </button>
+                        {expandedJobs.has(job.id) && (
+                          <JobCardExpandPanel jobId={job.id} enabled={true} />
                         )}
                       </div>
                     </Card>

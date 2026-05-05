@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { z } from "zod";
 import {
   formatZodError,
@@ -122,6 +122,118 @@ app.get("/api/work-orders/:id", asyncHandler(async (req, res) => {
     customerEmail: customer?.email,
     objectName: object?.name,
     objectAddress: object?.address,
+  });
+}));
+
+app.get("/api/work-orders/:id/expand", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const workOrder = await storage.getWorkOrder(req.params.id);
+  const verified = verifyTenantOwnership(workOrder, tenantId);
+  if (!verified) throw new NotFoundError("Arbetsorder");
+
+  const objectId = verified.objectId;
+  const tenantSafeObject = objectId ? await storage.getObject(objectId) : null;
+  const tenantSafeObjectId = tenantSafeObject && tenantSafeObject.tenantId === tenantId ? objectId : null;
+
+  const [lines, history, communications, images, protocolList] = await Promise.all([
+    storage.getWorkOrderLines(verified.id),
+    tenantSafeObjectId ? storage.getRecentWorkOrdersForObject(tenantId, tenantSafeObjectId, verified.id, 5) : Promise.resolve([]),
+    storage.getCustomerCommunicationsByWorkOrder(tenantId, verified.id, 20),
+    tenantSafeObjectId ? storage.getObjectImages(tenantSafeObjectId) : Promise.resolve([]),
+    storage.getProtocols(tenantId, { workOrderId: verified.id }),
+  ]);
+
+  let articleNameMap = new Map<string, { name: string; articleNumber: string }>();
+  const articleIds = Array.from(new Set(lines.map(l => l.articleId).filter(Boolean) as string[]));
+  if (articleIds.length > 0) {
+    const rows = await db.select({ id: articles.id, name: articles.name, articleNumber: articles.articleNumber })
+      .from(articles)
+      .where(and(eq(articles.tenantId, tenantId), inArray(articles.id, articleIds)));
+    for (const a of rows) articleNameMap.set(a.id, { name: a.name, articleNumber: a.articleNumber });
+  }
+
+  const period = {
+    desiredDeliveryStart: verified.desiredDeliveryStart,
+    desiredDeliveryEnd: verified.desiredDeliveryEnd,
+    plannedWindowStart: verified.plannedWindowStart,
+    plannedWindowEnd: verified.plannedWindowEnd,
+    scheduledDate: verified.scheduledDate,
+    scheduledStartTime: verified.scheduledStartTime,
+  };
+
+  const notes = {
+    notes: verified.notes ?? null,
+    plannedNotes: verified.plannedNotes ?? null,
+    description: verified.description ?? null,
+  };
+
+  const materials = lines.map(l => ({
+    id: l.id,
+    articleId: l.articleId,
+    articleName: l.articleId ? (articleNameMap.get(l.articleId)?.name ?? null) : null,
+    articleNumber: l.articleId ? (articleNameMap.get(l.articleId)?.articleNumber ?? null) : null,
+    quantity: l.quantity,
+    resolvedPrice: l.resolvedPrice,
+    notes: l.notes,
+  }));
+
+  const recentJobs = history.map(h => ({
+    id: h.id,
+    title: h.title,
+    scheduledDate: h.scheduledDate,
+    orderStatus: h.orderStatus,
+    executionStatus: h.executionStatus,
+    completedAt: h.completedAt,
+    createdAt: h.createdAt,
+  }));
+
+  const comms = communications.map(c => ({
+    id: c.id,
+    channel: c.channel,
+    notificationType: c.notificationType,
+    status: c.status,
+    subject: c.subject,
+    message: c.message,
+    sentAt: c.sentAt,
+    createdAt: c.createdAt,
+  }));
+
+  const objectImagesList = images.slice(0, 8).map(i => ({
+    id: i.id,
+    imageUrl: i.imageUrl,
+    description: i.description,
+    imageDate: i.imageDate,
+  }));
+
+  const protocolImages = protocolList.flatMap(p => {
+    const arr: Array<{ url: string; label: string; date: Date }> = [];
+    if (p.beforePhotoUrl) arr.push({ url: p.beforePhotoUrl, label: "Före", date: p.executedAt });
+    if (p.afterPhotoUrl) arr.push({ url: p.afterPhotoUrl, label: "Efter", date: p.executedAt });
+    if (Array.isArray(p.additionalPhotos)) {
+      for (const u of p.additionalPhotos) arr.push({ url: u, label: "Foto", date: p.executedAt });
+    }
+    return arr;
+  });
+
+  const protocolImagesShown = protocolImages.slice(0, 8);
+
+  const counts = {
+    period: (period.desiredDeliveryStart || period.desiredDeliveryEnd || period.plannedWindowStart || period.plannedWindowEnd || period.scheduledDate || period.scheduledStartTime) ? 1 : 0,
+    history: recentJobs.length,
+    communications: comms.length,
+    images: objectImagesList.length + protocolImagesShown.length,
+    notes: [notes.notes, notes.plannedNotes, notes.description].filter(Boolean).length,
+    materials: materials.length,
+  };
+
+  res.json({
+    period,
+    history: recentJobs,
+    communications: comms,
+    images: { object: objectImagesList, protocols: protocolImagesShown },
+    notes,
+    materials,
+    counts,
   });
 }));
 

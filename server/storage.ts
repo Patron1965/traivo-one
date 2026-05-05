@@ -126,7 +126,9 @@ import {
   visitConfirmations, technicianRatings, portalMessages, selfBookingSlots, selfBookings,
   tenantFeatures,
   planningDecisionLog,
-  invitations, recurringSlotPatterns
+  invitations, recurringSlotPatterns,
+  customerCommunications,
+  type CustomerCommunication,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray } from "drizzle-orm";
@@ -287,7 +289,9 @@ export interface IStorage {
   updateWorkOrder(id: string, workOrder: Partial<InsertWorkOrder>): Promise<WorkOrder | undefined>;
   deleteWorkOrder(id: string): Promise<void>;
   getWorkOrderByModusId(tenantId: string, modusId: string): Promise<WorkOrder | undefined>;
-  
+  getRecentWorkOrdersForObject(tenantId: string, objectId: string, excludeId: string, limit?: number): Promise<WorkOrder[]>;
+  getCustomerCommunicationsByWorkOrder(tenantId: string, workOrderId: string, limit?: number): Promise<CustomerCommunication[]>;
+
   createSetupTimeLog(log: InsertSetupTimeLog): Promise<SetupTimeLog>;
   getSetupTimeLogs(tenantId: string, objectId?: string): Promise<SetupTimeLog[]>;
   
@@ -2441,6 +2445,28 @@ export class DatabaseStorage implements IStorage {
         lte(workOrders.scheduledDate, endOfDay)
       )
     ).orderBy(workOrders.scheduledStartTime);
+  }
+
+  async getRecentWorkOrdersForObject(tenantId: string, objectId: string, excludeId: string, limit: number = 5): Promise<WorkOrder[]> {
+    return db.select().from(workOrders)
+      .where(and(
+        eq(workOrders.tenantId, tenantId),
+        eq(workOrders.objectId, objectId),
+        isNull(workOrders.deletedAt),
+        sql`${workOrders.id} <> ${excludeId}`,
+      ))
+      .orderBy(desc(sql`coalesce(${workOrders.scheduledDate}, ${workOrders.createdAt})`))
+      .limit(limit);
+  }
+
+  async getCustomerCommunicationsByWorkOrder(tenantId: string, workOrderId: string, limit: number = 20): Promise<CustomerCommunication[]> {
+    return db.select().from(customerCommunications)
+      .where(and(
+        eq(customerCommunications.tenantId, tenantId),
+        eq(customerCommunications.workOrderId, workOrderId),
+      ))
+      .orderBy(desc(customerCommunications.createdAt))
+      .limit(limit);
   }
 
   async getWorkOrderCounts(tenantId: string): Promise<{ overdue: number; todayPending: number; total: number }> {
