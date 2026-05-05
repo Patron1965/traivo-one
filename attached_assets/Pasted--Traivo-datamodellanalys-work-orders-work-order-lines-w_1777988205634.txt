@@ -1,0 +1,229 @@
+# Traivo datamodellanalys â€“ work_orders / work_order_lines / work_order_objects
+
+Repository: `/home/ubuntu/traivo-one`
+Analyserad fÃ¶r beslut kring #356 (nytt orderlager).
+
+## 1) Nuvarande schemastruktur
+
+KÃ¤lla: `shared/schema.ts`
+
+### `work_orders` (tabell: `work_orders`)
+Definierad runt `shared/schema.ts:246-340`.
+
+Viktiga fÃ¤lt:
+- Identitet/kopplingar:
+  - `id`
+  - `tenantId` (FK -> tenants)
+  - `customerId` (FK -> customers)
+  - `objectId` (FK -> objects) **NOT NULL**
+  - `clusterId` (FK -> clusters)
+  - `resourceId` (FK -> resources)
+  - `teamId` (FK -> teams)
+- AffÃ¤rsdata:
+  - `title`, `description`, `orderType`, `priority`
+  - `status` (legacy)
+  - `orderStatus` (Modus-flÃ¶de: skapad, planerad_pre, planerad_resurs, planerad_las, utford, fakturerad)
+- Tid/planering:
+  - `scheduledDate`, `scheduledStartTime`
+  - `desiredDeliveryStart`, `desiredDeliveryEnd`
+  - `plannedWindowStart`, `plannedWindowEnd`
+  - `estimatedDuration`, `actualDuration`
+  - `setupTime`, `setupReason`
+- Summerade line-vÃ¤rden:
+  - `cachedValue`, `cachedCost`, `cachedProductionMinutes`
+- UtfÃ¶rande/metadata:
+  - `executionStatus`, `creationMethod`, `structuralArticleId`
+  - `what3words`, `taskLatitude`, `taskLongitude`
+  - `executionCode` (text)
+  - `externalReference`, `plannedBy`, `plannedNotes`, `notes`, `metadata`
+  - `importBatchId`, `etaSmsSent`
+- Status-timestamps och Ã¶vrigt:
+  - `lockedAt`, `completedAt`, `invoicedAt`, `onWayAt`, `onSiteAt`, `inspectedAt`
+  - `isSimulated`, `simulationScenarioId`
+  - `impossibleReason`, `impossibleReasonText`, `impossibleAt`, `impossibleBy`, `impossiblePhotoUrl`
+  - `createdAt`, `deletedAt`
+
+Modellering av `objectId` och `executionCode`:
+- `objectId` ligger **direkt pÃ¥ work order** och Ã¤r obligatoriskt.
+- `executionCode` ligger ocksÃ¥ **direkt pÃ¥ work order** (inte pÃ¥ radnivÃ¥).
+
+### `work_order_lines` (tabell: `work_order_lines`)
+Definierad runt `shared/schema.ts:343-369`.
+
+Viktiga fÃ¤lt:
+- `id`
+- `tenantId` (FK)
+- `workOrderId` (FK -> work_orders) **NOT NULL**
+- `articleId` (FK -> articles) **NOT NULL**
+- `quantity` (integer, default 1, NOT NULL)
+- `resolvedPrice` (integer)
+- `resolvedCost` (integer)
+- `resolvedProductionMinutes` (integer)
+- `priceListIdUsed` (FK -> price_lists)
+- `priceSource`
+- `discountPercent`
+- `isOptional`
+- `notes`
+- `createdAt`
+
+Modellering av quantity/unit:
+- `quantity` finns pÃ¥ work_order_lines.
+- **Ingen `unit` pÃ¥ work_order_lines**.
+- `unit` ligger pÃ¥ artikelnivÃ¥ (`articles.unit`, default `"st"`, se `shared/schema.ts` runt artikeldefinitionen).
+
+### `work_order_objects` (tabell: `work_order_objects`)
+Definierad runt `shared/schema.ts:372-385`.
+
+Viktiga fÃ¤lt:
+- `id`
+- `tenantId` (FK)
+- `workOrderId` (FK -> work_orders) **NOT NULL**
+- `objectId` (FK -> objects) **NOT NULL**
+- `isPrimary` (bool)
+- `sortOrder`
+- `notes`
+- `createdAt`
+- Unik constraint: `(tenantId, workOrderId, objectId)`
+
+Relationer:
+- `workOrdersRelations` har `lines: many(workOrderLines)` och `objects: many(workOrderObjects)` (`shared/schema.ts:1019-1029`).
+
+---
+
+## 2) Nuvarande modelleringsmÃ¶nster i kodbasen (uppgifter/jobb)
+
+### Kort slutsats
+I nuvarande flÃ¶den Ã¤r mÃ¶nstret tydligt: **1 uppgift/jobb â‰ˆ 1 work_order**, och varje work order kan ha **N work_order_lines** (artiklar/rader).
+
+### Evidens i kod
+1. **Import av uppgifter (Modus)** skapar/uppdaterar en work order per `uppgiftsId`:
+   - `server/routes/importRoutes.ts:1922-1961`
+   - `server/routes/importRoutes.ts:2139-2177`
+   - `externalReference` sÃ¤tts till `uppgiftsId`.
+
+2. **Import av fakturarader** lÃ¤gger till rader pÃ¥ befintlig work order:
+   - `server/routes/importRoutes.ts:2520-2530` (+ motsvarande batchdel)
+   - hÃ¤r anvÃ¤nds `quantity`, `resolvedPrice`, `priceSource` pÃ¥ line-nivÃ¥.
+
+3. **Work order line-API** (skapa/uppdatera/ta bort rader) Ã¤r separerat frÃ¥n work order:
+   - `server/routes/workOrderRoutes.ts:584-657`
+   - prissÃ¤ttning hÃ¤mtas via `resolveArticlePrice/resolveArticlePriceFromList`.
+
+4. **Mobile (Go-app-kontrakt via API)** behandlar work order som huvuduppgift och lines som artiklar/substeps:
+   - `server/routes/mobile/shared.ts:43-79, 166-172`
+   - `server/routes/mobile/orders.ts:218-231`
+   - `server/routes/mobile/misc.ts:76-84`
+
+5. **Optimering/planering** behandlar varje work order som ett VRP-jobb/stopp:
+   - `server/routes/optimizationRoutes.ts:70-99`
+   - `server/optimization-job-runner.ts:165-199`
+   - `server/route-optimizer.ts:237-266`
+
+### Hur `work_order_objects` anvÃ¤nds idag
+- PrimÃ¤rt som **extra lÃ¤nk-tabell** fÃ¶r multipla objekt pÃ¥ en order.
+- CRUD finns i storage och API:
+  - `server/storage.ts:3081-3099`
+  - `server/routes/workOrderRoutes.ts:659-713`
+- Men kÃ¤rnflÃ¶den (mobile, optimering, import, fakturering) lÃ¤ser i praktiken `work_orders.objectId` direkt.
+- Det innebÃ¤r att `work_order_objects` idag ser ut som **kompletterande/manuell** funktion, inte primÃ¤r datamodell fÃ¶r orderns objekt.
+
+---
+
+## 3) Downstream-konsumenter som pÃ¥verkas av schemaÃ¤ndringar
+
+## A) Storage/prissÃ¤ttning/line-logik
+
+- `server/storage.ts`
+  - **Notering**: Funktionen `resolvePriceForCustomer` finns inte i denna kodbas.
+  - Motsvarande centrala funktioner:
+    - `resolveArticlePrice(...)` (`server/storage.ts:3285+`) â€“ prishierarki rabattbrev/kundunik/generell/listprice.
+    - `resolveArticlePriceFromList(...)` (`server/storage.ts:3385+`).
+  - Line-funktioner:
+    - `getWorkOrderLines`, `createWorkOrderLine`, `updateWorkOrderLine`, `deleteWorkOrderLine` (`server/storage.ts:3032-3078`)
+  - Totalsummering frÃ¥n lines -> work_orders cached-fÃ¤lt:
+    - `recalculateWorkOrderTotals` / `recalculateWorkOrderTotalsBulk` (`server/storage.ts` runt 3490+ och 3530+).
+
+## B) Go mobile-beroenden (`server/routes/mobile/*`)
+
+Direkt beroende av work order + lines + objectId + executionCode:
+- `server/routes/mobile/shared.ts`
+  - LÃ¤ser `getWorkOrderLines(order.id)`
+  - Exponerar `articles`/`subSteps`
+  - Exponerar `objectId`, `customerId`, `executionCodes` (frÃ¥n `order.executionCode`)
+- `server/routes/mobile/orders.ts`
+  - List/detail bygger payload med `objectId`, `executionCode`, `articles` frÃ¥n work order lines
+- `server/routes/mobile/misc.ts`
+  - Checklist-logik hÃ¤rleder artikeltyper frÃ¥n `workOrderLines`
+- `server/routes/mobile/sync.ts`
+  - Statusuppdateringar mot `work_orders` (orderStatus/executionStatus), indirekt beroende av ordermodellen
+
+## C) Optimering / AI planner
+
+Not: katalogen `server/optimization/*` finns inte i detta repo. Relevanta filer ligger pÃ¥ andra paths.
+
+- `server/routes/optimizationRoutes.ts`
+  - bygger stop-lista frÃ¥n `workOrders` + `objectId`/koordinater
+- `server/optimization-job-runner.ts`
+  - filtrerar/bygger jobb frÃ¥n `workOrders` (`objectId`, `estimatedDuration`, `priority`)
+- `server/route-optimizer.ts`
+  - route stops innehÃ¥ller `workOrderId`, `objectId`
+- `server/vrp-constraints.ts`
+  - skills kopplas via `work_orders.executionCode` mot `resources.executionCodes`
+- `server/planning/constraintEngine.ts`
+  - anvÃ¤nder `workOrderLines` fÃ¶r kompetenskontroll mellan orderns artiklar och resursartiklar
+- `server/routes/aiRoutes.ts`
+  - skickar `workOrderLines` till constraint engine i AI-planeringsflÃ¶den
+- `server/ai-planner.ts`
+  - KPI/analys anvÃ¤nder `workOrders` och `objectId` som grund
+
+## D) Import/export/fakturering och Ã¶vriga line-konsumenter
+
+- `server/routes/importRoutes.ts`
+  - import av uppgifter -> work_orders
+  - import av fakturarader -> work_order_lines
+- `server/routes/workOrderRoutes.ts`
+  - line CRUD + prisresolving endpoint
+- `server/fortnox-client.ts`
+  - fakturaexport lÃ¤ser `getWorkOrderLines(workOrderId)` och skickar `DeliveredQuantity`/`Price`
+- `server/services/capacity-forecast-service.ts`
+  - joins `workOrders` + `workOrderLines` + `articles` fÃ¶r historiska estimat
+- `server/routes/annualGoalRoutes.ts`
+  - flera joins via `workOrderLines`/`articleId` fÃ¶r mÃ¥luppfÃ¶ljning
+- `server/routes/feedbackLoopRoutes.ts`
+  - importerar lines/artiklar fÃ¶r uppfÃ¶ljnings-KPI
+
+---
+
+## 4) Noteringar om `executionCode`-anvÃ¤ndning idag
+
+`executionCode` pÃ¥ work order anvÃ¤nds frÃ¤mst fÃ¶r:
+1. **Skill-matching i optimering**
+   - `server/vrp-constraints.ts:338-398`
+   - mappar `order.executionCode` till `job.required_skills`, jÃ¤mfÃ¶r mot `resource.executionCodes`.
+
+2. **Mobile payload**
+   - `server/routes/mobile/shared.ts` och `server/routes/mobile/orders.ts`
+   - serialiseras som `executionCodes`-array i app-responsen (frÃ¥n ett enskilt `order.executionCode`).
+
+3. **Kopiering vid auto-/barnorder**
+   - i `server/routes/fortnoxRoutes.ts` kopieras executionCode frÃ¥n huvudorder till genererade relaterade ordrar.
+
+4. **Listning/DTO i storage**
+   - returneras i flera listqueries (`server/storage.ts`, flera select-block).
+
+Praktisk observation:
+- `executionCode` Ã¤r en **single-value text** pÃ¥ work order (inte array).
+- Resurser har dÃ¤remot `executionCodes` (array), vilket anvÃ¤nds i matchning.
+
+---
+
+## Sammanfattning fÃ¶r datamodellsbeslut (#356)
+
+- Nuvarande modell Ã¤r starkt centrerad kring `work_orders` som uppgifts-/jobbenhet.
+- `work_order_lines` bÃ¤r artikelrader, kvantitet och pris/kostnad/tid pÃ¥ radnivÃ¥.
+- `work_order_objects` finns men anvÃ¤nds i praktiken mycket mindre Ã¤n `work_orders.objectId` i kÃ¤rnflÃ¶den.
+- SchemaÃ¤ndringar som pÃ¥verkar `objectId`, line-struktur eller executionCode fÃ¥r direkt effekt pÃ¥:
+  - mobile API-kontrakt (Go)
+  - optimering/AI-planering
+  - prissÃ¤ttning och order-totals i storage
+  - import/faktura-export (Fortnox) och uppfÃ¶ljningsrapporter

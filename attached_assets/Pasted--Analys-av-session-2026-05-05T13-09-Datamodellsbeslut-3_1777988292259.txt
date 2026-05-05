@@ -1,0 +1,178 @@
+# Analys av session 2026-05-05T13:09 â€” Datamodellsbeslut #356 (Orderlager)
+
+> **KÃ¤lla:** `/home/ubuntu/Uploads/session_2026-05-05T13-09.json`
+> **Typ:** Transkriberad rÃ¶stinspelning (Mats fÃ¶rklarar datamodellen)
+> **Deltagare:** Mats + minst en lyssnare
+
+---
+
+## 1. Hur "HÃ¤stvÃ¤gen 26" med 13 uppgifter ska modelleras
+
+### Orderkoncept â†’ Uppgifter (1:N)
+Mats beskriver en tydlig hierarki:
+
+1. **Kund lÃ¤gger en order** (muntligt/skriftligt) till Kinab, t.ex.:
+   - "TvÃ¤tta alla matavfallskÃ¤rl"
+   - "Avisera fÃ¶re"
+   - "Kontrollera status pÃ¥ kÃ¤rlen"
+   - "Efteravisera + ring upp per adress"
+
+2. **Kinab skapar ett orderkoncept** (grundorder/specifikation) med olika **artiklar**:
+   - TjÃ¤nster (tvÃ¤tt, kontroll)
+   - Varor
+   - Kontrolluppgifter
+   - Aviseringar (fÃ¶re/efter)
+
+3. **Orderkonceptet pekas mot ett kluster av objekt** (t.ex. alla kÃ¤rl pÃ¥ HÃ¤stvÃ¤gen 26).
+
+4. **Systemet "multiplar" orderkonceptet** i en lÃ¥ng lista med individuella **uppgifter**, dÃ¤r varje uppgift kopplas till ett unikt objekt.
+
+### Viktig insikt: Orderkonceptet â‰  Ordern
+> "Vi sprÃ¤cker den normala orderlogiken som oftast bygger pÃ¥ att man skapar en order och gÃ¶r den. HÃ¤r har vi ett orderkoncept eller en grundorder som sen delas upp pÃ¥ en eller flera mÃ¥nga uppgifter."
+
+**Konsekvens fÃ¶r datamodell:** Det behÃ¶vs en mellanentitet ("orderkoncept" / "grundorder") som sedan genererar N uppgifter. Det Ã¤r **inte** en 1:1-relation orderâ†’uppgift.
+
+---
+
+## 2. Uppgiftstyp-koder och executionCode (utfÃ¶randetyp)
+
+### Artiklar har associationstyp
+Varje artikel i orderkonceptet Ã¤r kodad med en **associationstyp** som avgÃ¶r vilken typ av objekt den "hakar fast pÃ¥":
+- TvÃ¤tt av matavfallskÃ¤rl â†’ associerar till objekt av typ "matavfallskÃ¤rl"
+- Avisering fÃ¶r tvÃ¤tt av matavfallskÃ¤rl â†’ associerar **ocksÃ¥** till "matavfallskÃ¤rl" (men annan uppgiftstyp)
+
+### UtfÃ¶randetyp (executionCode) definierar teamkompetens
+Mats ger tre konkreta exempel:
+
+| UtfÃ¶randetyp | Beskrivning | KrÃ¤ver |
+|---|---|---|
+| **A** | TvÃ¤tt av matavfallskÃ¤rl (vanlig kÃ¤rltvÃ¤tt) | Team med tvÃ¤ttkapacitet |
+| **B** | TvÃ¤tt av upptillÃ¶psnÃ¤ra behÃ¥llare | Team med **kran** (lyftfÃ¶rmÃ¥ga) |
+| **C** | Svetsarbete | Team med **svets** |
+
+> "Varje tjÃ¤nst har en utfÃ¶randetyp. TvÃ¤tt av matavfallskÃ¤rl har utfÃ¶randetyp A, vilket betyder att den uppgiften kan utfÃ¶ras av ett team som har fÃ¶rmÃ¥gan att utfÃ¶ra tjÃ¤nster av typen A."
+
+**Konsekvens fÃ¶r datamodell:**
+- `executionCode` / utfÃ¶randetyp sitter pÃ¥ **tjÃ¤nsten/artikeln**, inte pÃ¥ uppgiften direkt
+- Team har en lista med utfÃ¶randefÃ¶rmÃ¥gor (capabilities) som matchas mot uppgifters utfÃ¶randetyp
+- En uppgift Ã¤rver sin utfÃ¶randetyp frÃ¥n sin artikel
+
+### Uppgiftstyper (implicit frÃ¥n transkriptet)
+FÃ¶ljande typer framgÃ¥r (ej explicit BÃ–K/RBK-koder, men funktionellt):
+- **TvÃ¤tt** (huvudtjÃ¤nst)
+- **Avisering fÃ¶re** (fÃ¶re-avisering till kund)
+- **Efteravisering** (efter utfÃ¶rt jobb)
+- **Uppringning** (ring kund efter jobb, per adress)
+- **Statuskontroll** (kontrollera skick pÃ¥ kÃ¤rl)
+- **Varor** (material som levereras)
+
+> âš ï¸ **OBS:** Transkriptet nÃ¤mner **inte** explicita koder som BÃ–K, RBK etc. Dessa koder finns sannolikt i det Excel-ark som refereras men som inte ingÃ¥r i denna session.
+
+---
+
+## 3. Restid-berÃ¤kningar
+
+Mats beskriver restid som en **systemberÃ¤knad estimation**:
+
+> "Systemet estimerar ungefÃ¤r restid. Ska man utfÃ¶ra de hÃ¤r grejerna i SÃ¶dertÃ¤lje sÃ¥ kanske den ser att det tar 20 minuter fÃ¶r att Ã¥ka mellan de olika adresserna."
+
+### Hur restid fungerar:
+1. Varje uppgift kopplas till ett objekt som har en **geografisk plats**
+2. Objekt kan Ã¤rva sin plats uppÃ¥t i objekthierarkin (t.ex. ett kÃ¤rl Ã¤rver adressen frÃ¥n sitt Ã¥tervinningsrum)
+3. Systemet berÃ¤knar restid **mellan adresser** i uppgiftslistan
+4. Restid presenteras **separat** frÃ¥n produktionstid
+
+### Systemets summering fÃ¶r planeraren:
+| MÃ¥tt | Beskrivning |
+|---|---|
+| **OrdervÃ¤rde** | Summerat ekonomiskt vÃ¤rde |
+| **Produktionstid** | Hur lÃ¥ng tid det tar att utfÃ¶ra arbetet |
+| **Restid** | Estimerad transporttid mellan adresser |
+
+**Konsekvens fÃ¶r datamodell:** Restid berÃ¤knas dynamiskt baserat pÃ¥ objektens geografi â€” det lagras sannolikt inte statiskt per uppgift utan berÃ¤knas vid planering.
+
+---
+
+## 4. Cross-window drag-funktionalitet
+
+> âš ï¸ **Inget nÃ¤mns explicit** om cross-window drag i denna session.
+
+Dock beskrivs planerarens arbetsflÃ¶de:
+1. Planeraren ser en **lÃ¥ng lista** med uppgifter
+2. Listan kan **sorteras** efter: utfÃ¶randetyp, utfÃ¶randetid, geografi/plats, kund, jobb
+3. Planeraren "greppar lÃ¤get" och **lÃ¤gger ut jobb pÃ¥ ett eller flera team**
+
+**Implikation:** Planeringsvyn behÃ¶ver stÃ¶dja att flytta/tilldela uppgifter till team, men den tekniska implementationen (drag & drop mellan fÃ¶nster) diskuteras inte hÃ¤r.
+
+---
+
+## 5. Ã–vrig affÃ¤rslogik relevant fÃ¶r Alt A/B/C-beslutet
+
+### 5.1 Objekthierarki och metadata-Ã¤rvning
+- Objekt organiseras i kluster (t.ex. alla kÃ¤rl i ett Ã¥tervinningsrum)
+- Metadata **sprids nedÃ¥t** i objekthierarkin:
+  - Adress/plats Ã¤rvs frÃ¥n fÃ¶rÃ¤lderobjekt
+  - Associationstyp definierar vad objektet "Ã¤r"
+  - MÃ¤ngd/antal/storlek hÃ¤mtas frÃ¥n objektet
+
+### 5.2 Leveranstid â€” TvÃ¥ modeller
+| Modell | Beskrivning |
+|---|---|
+| **Punktinsats** | Specifikt datum |
+| **Tidsperiod** | Visst antal veckor eller dagar |
+
+### 5.3 Periodicitet (Ã¥terkommande jobb)
+- Jobb kan ha en periodicitet (t.ex. varannan mÃ¥nad)
+- Uppgifter **Ã¥terskapas automatiskt** baserat pÃ¥ objektdata, metadata och antal
+- Orderkonceptet fungerar som mall/specifikation som genererar nya uppgifter vid varje period
+
+### 5.4 Kinab vet inte omfattningen initialt
+> "I det lÃ¤get vet ju inte Kinab omfattningen, utan Kinab konstaterar enbart vad det Ã¤r som ska gÃ¶ras och skapar orderkonceptet."
+
+Omfattningen bestÃ¤ms fÃ¶rst nÃ¤r systemet matchar orderkonceptet mot faktiska objekt i klustret.
+
+### 5.5 Beslut fattat i sessionen
+> **"Det som kommer att hÃ¤nda i databasen hÃ¤r nu, det Ã¤r att orderkonceptet kommer att dela upp sig i en lÃ¥ng lista med uppgifter."**
+
+---
+
+## 6. Sammanfattande implikationer fÃ¶r datamodellsbeslutet
+
+### Entiteter som framgÃ¥r ur sessionen:
+
+```
+Kund
+  â””â”€â”€ Order (orderkoncept / grundorder)
+        â”œâ”€â”€ Artikel[] (tjÃ¤nster, varor, kontroller, aviseringar)
+        â”‚     â”œâ”€â”€ associationstyp (vad den hakar pÃ¥)
+        â”‚     â””â”€â”€ utfÃ¶randetyp (A/B/C â€” vilken kompetens krÃ¤vs)
+        â”œâ”€â”€ Leveranstid (punkt eller period)
+        â””â”€â”€ Periodicitet (varannan mÃ¥nad etc.)
+              â”‚
+              â–¼ (systemet "multiplar")
+        Uppgift[] (en per objekt Ã— artikel)
+              â”œâ”€â”€ â†’ Objekt (unikt, med Ã¤rvd geografi)
+              â”œâ”€â”€ â†’ Artikel (med utfÃ¶randetyp)
+              â”œâ”€â”€ mÃ¤ngd/antal (frÃ¥n objektmetadata)
+              â””â”€â”€ geografisk plats (Ã¤rvd frÃ¥n objekthierarki)
+                    â”‚
+                    â–¼ (planeraren tilldelar)
+              Team (med utfÃ¶randefÃ¶rmÃ¥gor A/B/C)
+```
+
+### NyckelfrÃ¥gor som INTE besvaras i sessionen:
+1. **Exakta uppgiftstypkoder** (BÃ–K, RBK, etc.) â€” ej nÃ¤mnda
+2. **Cross-window drag** â€” ej diskuterat
+3. **Alt A vs B vs C specifikt** â€” ej explicit jÃ¤mfÃ¶rda
+4. **Databasschema** â€” diskuteras konceptuellt men utan tekniska detaljer (tabeller, FK, etc.)
+5. **Hur aviseringsuppgifter schemalÃ¤ggs** relativt huvuduppgiften
+
+### Starkaste signalen fÃ¶r datamodellsbeslutet:
+Sessionen pekar mot en modell dÃ¤r:
+- **Orderkonceptet** Ã¤r en **specifikation/mall** (inte en traditionell order)
+- **Uppgifter genereras** dynamiskt genom att matcha artiklar mot objekt
+- **UtfÃ¶randetyp** Ã¤r den primÃ¤ra grupperingsdimensionen fÃ¶r planering
+- **Restid berÃ¤knas dynamiskt** baserat pÃ¥ objektgeografi
+- **Periodicitet** krÃ¤ver att orderkonceptet lever kvar som mall fÃ¶r regenerering
+
+> Detta talar starkt fÃ¶r en modell med en separat `OrderConcept`-entitet som Ã¤ger `Article[]`, och en `Task`-entitet som genereras vid "expansion" mot objekt â€” snarare Ã¤n en platt orderâ†’task-struktur.

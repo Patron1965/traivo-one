@@ -1,0 +1,452 @@
+# Datamodellsbeslut #356 â€” Orderlager / Uppgiftshantering
+
+> **Datum:** 2026-05-05
+> **Status:** UTKAST â€” invÃ¤ntar beslut
+> **Underlag:** GitHub-analys (`traivo_datamodel_analysis.md`), JSON-session (`json_session_analysis.md`)
+> **BerÃ¶rd tenant:** Kinab (~3 750 befintliga work_orders)
+
+---
+
+## InnehÃ¥ll
+
+- [1. Uppdaterade kritiska frÃ¥gor](#1-uppdaterade-kritiska-frÃ¥gor)
+- [2. Alternativanalys (Alt A / B / C)](#2-alternativanalys)
+- [3. Rekommendation](#3-rekommendation)
+- [4. ROM-estimat](#4-rom-estimat)
+- [5. NÃ¤sta steg](#5-nÃ¤sta-steg)
+
+---
+
+## 1. Uppdaterade kritiska frÃ¥gor
+
+Nedan listas de ursprungliga frÃ¥gorna med svar/insikter baserat pÃ¥ GitHub-analys och JSON-sessionen.
+
+### 1.1 Hur ska "1 order â†’ N uppgifter" modelleras?
+
+| FrÃ¥ga | Svar / Insikt |
+|---|---|
+| Finns det stÃ¶d fÃ¶r 1:N idag? | **Nej.** Nuvarande mÃ¶nster Ã¤r strikt **1 work_order = 1 uppgift**. Import (Modus) skapar en work_order per `uppgiftsId`. Optimering behandlar varje work_order som ett enskilt VRP-stopp. |
+| Vad sÃ¤ger JSON-sessionen? | Mats beskriver en tydlig hierarki: **OrderConcept (mall/specifikation) â†’ N Tasks**. Orderkonceptet "multiplas" mot objekt i ett kluster. Konceptet lever kvar som mall fÃ¶r periodicitet/regenerering. |
+| Slutsats | En ny entitet (`order_concepts` eller utÃ¶kning av befintlig tabell) krÃ¤vs. `work_orders` fortsÃ¤tter representera den enskilda uppgiften/tasken. |
+
+### 1.2 Var ska `executionCode` sitta?
+
+| FrÃ¥ga | Svar / Insikt |
+|---|---|
+| Var sitter den idag? | **PÃ¥ `work_orders`** som single-value text. Resurser har `executionCodes` (array). Matchning sker i `vrp-constraints.ts`. |
+| Vad sÃ¤ger JSON-sessionen? | `executionCode` / utfÃ¶randetyp hÃ¶r hemma pÃ¥ **artikeln/tjÃ¤nsten**, inte pÃ¥ uppgiften. Uppgiften *Ã¤rver* sin utfÃ¶randetyp frÃ¥n artikeln. Tre konkreta typer: A (kÃ¤rltvÃ¤tt), B (krantvÃ¤tt), C (svets). |
+| Slutsats | Artikeltabellen (`articles`) behÃ¶ver ett explicit `executionCode`-fÃ¤lt. `work_orders.executionCode` behÃ¥lls som **derived/cached** vÃ¤rde (sÃ¤tts vid generering) fÃ¶r bakÃ¥tkompatibilitet med VRP och mobile. |
+
+### 1.3 BehÃ¶vs `unit` pÃ¥ `work_order_lines`?
+
+| FrÃ¥ga | Svar / Insikt |
+|---|---|
+| Finns `unit` idag? | **Nej**, inte pÃ¥ `work_order_lines`. Enheten (`unit`) ligger enbart pÃ¥ `articles` (default `"st"`). |
+| BehÃ¶vs det? | **Ja, troligen.** NÃ¤r quantity varierar per objekt (t.ex. antal liter, antal kÃ¤rl) behÃ¶ver raden veta vilken enhet som gÃ¤ller vid faktureringstillfÃ¤llet. Att fÃ¶rlita sig pÃ¥ join mot `articles` skapar fragilt beroende om artikelns unit Ã¤ndras efter order-skapande. |
+| Slutsats | LÃ¤gg till `unit` pÃ¥ `work_order_lines` som snapshot av `articles.unit` vid rad-skapande. LÃ¥g risk, hÃ¶g framtidssÃ¤kerhet. |
+
+### 1.4 Hur anvÃ¤nds `work_order_objects` egentligen?
+
+| FrÃ¥ga | Svar / Insikt |
+|---|---|
+| Vad visar koden? | Tabellen finns med CRUD i storage/API men **kÃ¤rnflÃ¶dena** (mobile, optimering, import, fakturering) lÃ¤ser `work_orders.objectId` direkt. `work_order_objects` anvÃ¤nds som kompletterande/manuell funktion. |
+| BehÃ¶vs den i nya modellen? | **Ja, men annorlunda.** I OrderConcept-modellen pekar konceptet mot ett *kluster* av objekt. Vid expansion skapas en uppgift per objekt. LÃ¤nken uppgiftâ†’objekt fÃ¶rblir `work_orders.objectId`. `work_order_objects` kan eventuellt representera konceptets objektlista, alternativt hanteras via kluster-kopplingen. |
+| Slutsats | BehÃ¥ll `work_order_objects` men utvÃ¤rdera om den bÃ¶r kopplas till orderkoncept istÃ¤llet fÃ¶r/utÃ¶ver work_order. |
+
+### 1.5 Hur hanteras restidsberÃ¤kning?
+
+| FrÃ¥ga | Svar / Insikt |
+|---|---|
+| Finns stÃ¶d idag? | Optimeringsmotorn (`route-optimizer.ts`) berÃ¤knar rutter mellan work_orders baserat pÃ¥ `taskLatitude`/`taskLongitude`. |
+| Vad sÃ¤ger JSON-sessionen? | Restid berÃ¤knas **dynamiskt** baserat pÃ¥ objektens geografi (Ã¤rvd uppÃ¥t i hierarkin). Presenteras separat frÃ¥n produktionstid. |
+| Slutsats | Befintlig infrastruktur fungerar. Objekt behÃ¶ver pÃ¥litlig geo-data (redan via `taskLatitude`/`taskLongitude` pÃ¥ work_order, Ã¤rvd frÃ¥n objekt). Ingen schemaÃ¤ndring krÃ¤vs fÃ¶r restid specifikt. |
+
+### 1.6 Hur hanteras periodicitet (Ã¥terkommande jobb)?
+
+| FrÃ¥ga | Svar / Insikt |
+|---|---|
+| Finns stÃ¶d idag? | Inget explicit periodicitets-stÃ¶d i nuvarande schema. |
+| Vad sÃ¤ger JSON-sessionen? | Orderkonceptet fungerar som **mall** som Ã¥terskapar uppgifter baserat pÃ¥ periodicitet (t.ex. varannan mÃ¥nad). Konceptet mÃ¥ste leva kvar permanent. |
+| Slutsats | `order_concepts` behÃ¶ver fÃ¤lt fÃ¶r periodicitet (`periodicity`, `periodUnit`, `nextGenerationDate`). En scheduler/cron genererar nya tasks vid varje period. |
+
+---
+
+## 2. Alternativanalys
+
+### Definitioner
+
+| Alternativ | Kort beskrivning |
+|---|---|
+| **Alt A** â€” UtÃ¶ka `work_orders` | LÃ¤gg till fÃ¤lt pÃ¥ befintlig tabell (t.ex. `parentOrderId`, `orderConceptData` JSON). Ingen ny tabell. |
+| **Alt B** â€” Ny `order_concepts`-tabell | Separat entitet fÃ¶r orderkoncept med FK frÃ¥n `work_orders`. Tydlig separation koncept/uppgift. |
+| **Alt C** â€” FullstÃ¤ndig omstrukturering | Ny `tasks`-tabell ersÃ¤tter `work_orders` fÃ¶r utfÃ¶rande. `work_orders` blir orderkoncept. Komplett refaktorering. |
+
+---
+
+### Alt A â€” UtÃ¶ka `work_orders`
+
+#### Schema-pÃ¥verkan
+
+```sql
+ALTER TABLE work_orders ADD COLUMN parent_order_id UUID REFERENCES work_orders(id);
+ALTER TABLE work_orders ADD COLUMN is_concept BOOLEAN DEFAULT FALSE;
+ALTER TABLE work_orders ADD COLUMN concept_data JSONB;  -- periodicitet, leveranstid, etc.
+ALTER TABLE work_orders ADD COLUMN source_concept_id UUID REFERENCES work_orders(id);
+-- articles-tabellen:
+ALTER TABLE articles ADD COLUMN execution_code TEXT;
+-- work_order_lines:
+ALTER TABLE work_order_lines ADD COLUMN unit TEXT DEFAULT 'st';
+```
+
+#### Downstream-pÃ¥verkan
+
+| System | PÃ¥verkan | Risk |
+|---|---|---|
+| **storage.ts** | Alla queries behÃ¶ver `WHERE is_concept = FALSE` fÃ¶r att exkludera koncept frÃ¥n uppgiftslistor. `recalculateWorkOrderTotals` ofÃ¶rÃ¤ndrad. | **Medel** â€” risken fÃ¶r missade filter Ã¤r hÃ¶g |
+| **mobile (Go)** | Mobile-API:n ska aldrig exponera koncept-rader. Filter krÃ¤vs i `orders.ts` och `shared.ts`. | **Medel** |
+| **AI-planner / VRP** | `optimization-job-runner.ts` och `route-optimizer.ts` filtrerar redan pÃ¥ `orderStatus`, men behÃ¶ver explicit `is_concept = FALSE`. `vrp-constraints.ts` ofÃ¶rÃ¤ndrad om `executionCode` bibehÃ¥lls cachat. | **LÃ¥gâ€“Medel** |
+| **Fortnox** | `fortnox-client.ts` lÃ¤ser lines per workOrderId â€” fungerar om fakturering sker mot tasks, inte koncept. | **LÃ¥g** |
+| **Import (Modus)** | Befintlig import skapar work_orders som tasks (is_concept=FALSE). OfÃ¶rÃ¤ndrad. | **LÃ¥g** |
+
+#### Migration (3 750+ orders)
+
+- Alla befintliga work_orders sÃ¤tts till `is_concept = FALSE`, `parent_order_id = NULL`.
+- **Noll destruktiv migration** â€” enbart nya kolumner med defaults.
+- Befintliga orders kan sedan lÃ¤nkas till koncept i efterhand vid behov.
+- Estimat: **~1 timme** (migration-skript + test).
+
+#### Maintainability
+
+| | BedÃ¶mning |
+|---|---|
+| âœ… FÃ¶rdelar | Minimal schemaÃ¤ndring, snabb leverans, full bakÃ¥tkompatibilitet |
+| âŒ Nackdelar | `work_orders` blir Ã¶verbelastad (dual purpose: koncept + uppgift). SvÃ¥rt att enforcea affÃ¤rsregler pÃ¥ DB-nivÃ¥. JSONB `concept_data` saknar typsÃ¤kerhet. Risk fÃ¶r "boolean blindness" (`is_concept`). Skalerar dÃ¥ligt om konceptet fÃ¥r fler egna fÃ¤lt. |
+| ðŸ“Š FramtidssÃ¤kerhet | **LÃ¥gâ€“Medel.** Riskerar tech debt som krÃ¤ver Alt B/C-migration senare Ã¤ndÃ¥. |
+
+---
+
+### Alt B â€” Ny `order_concepts`-tabell â­ (rekommenderad)
+
+#### Schema-pÃ¥verkan
+
+```sql
+-- Ny tabell
+CREATE TABLE order_concepts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id),
+  customer_id UUID NOT NULL REFERENCES customers(id),
+  cluster_id UUID REFERENCES clusters(id),
+  title TEXT NOT NULL,
+  description TEXT,
+  order_type TEXT,
+  priority INTEGER DEFAULT 0,
+  concept_status TEXT DEFAULT 'draft',  -- draft, active, paused, completed, archived
+  
+  -- Leveranstid
+  desired_delivery_start TIMESTAMP,
+  desired_delivery_end TIMESTAMP,
+  delivery_model TEXT DEFAULT 'period',  -- 'point' | 'period'
+  
+  -- Periodicitet
+  is_recurring BOOLEAN DEFAULT FALSE,
+  recurrence_interval INTEGER,          -- antal
+  recurrence_unit TEXT,                  -- 'days' | 'weeks' | 'months'
+  next_generation_date TIMESTAMP,
+  last_generated_at TIMESTAMP,
+  
+  -- Metadata
+  external_reference TEXT,
+  notes TEXT,
+  metadata JSONB,
+  created_by UUID REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  deleted_at TIMESTAMP
+);
+
+-- Konceptets artikelrader (mall-rader)
+CREATE TABLE order_concept_lines (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id),
+  order_concept_id UUID NOT NULL REFERENCES order_concepts(id),
+  article_id UUID NOT NULL REFERENCES articles(id),
+  default_quantity INTEGER DEFAULT 1,
+  unit TEXT DEFAULT 'st',
+  association_type TEXT,         -- vilken objekttyp artikeln kopplas till
+  execution_code TEXT,           -- Ã¤rvs frÃ¥n artikel, cachat fÃ¶r snabb Ã¥tkomst
+  is_optional BOOLEAN DEFAULT FALSE,
+  sort_order INTEGER DEFAULT 0,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- FK frÃ¥n work_orders till order_concepts
+ALTER TABLE work_orders ADD COLUMN order_concept_id UUID REFERENCES order_concepts(id);
+ALTER TABLE work_orders ADD COLUMN concept_line_id UUID REFERENCES order_concept_lines(id);
+
+-- executionCode pÃ¥ artikel (source of truth)
+ALTER TABLE articles ADD COLUMN execution_code TEXT;
+
+-- unit-snapshot pÃ¥ work_order_lines
+ALTER TABLE work_order_lines ADD COLUMN unit TEXT DEFAULT 'st';
+```
+
+#### Downstream-pÃ¥verkan
+
+| System | PÃ¥verkan | Risk |
+|---|---|---|
+| **storage.ts** | Nya CRUD-funktioner fÃ¶r `order_concepts` och `order_concept_lines`. Befintliga work_order-funktioner **ofÃ¶rÃ¤ndrade**. Ny funktion `expandConceptToTasks()` som genererar work_orders. | **LÃ¥g** â€” additiv, inget befintligt bryts |
+| **mobile (Go)** | **OfÃ¶rÃ¤ndrad.** Mobile ser bara work_orders (tasks). Koncept-data Ã¤r irrelevant fÃ¶r fÃ¤ltpersonal. | **Ingen** |
+| **AI-planner / VRP** | **OfÃ¶rÃ¤ndrad** i Fas 2. Work_orders fortsÃ¤tter vara VRP-stopp. `executionCode` finns kvar cachat pÃ¥ work_order. I framtida fas kan planner lÃ¤sa concept-nivÃ¥ fÃ¶r bÃ¤ttre gruppering. | **Ingen** (kortsikt) |
+| **Fortnox** | **OfÃ¶rÃ¤ndrad.** Fakturering sker mot work_orders + work_order_lines som idag. Eventuell framtida gruppering av fakturarader per koncept. | **Ingen** |
+| **Import (Modus)** | Befintlig import ofÃ¶rÃ¤ndrad. `order_concept_id` sÃ¤tts till NULL fÃ¶r importerade orders. Ny import-path kan skapas fÃ¶r koncept-baserat flÃ¶de. | **Ingen** |
+| **Planerings-UI** | **Ny vy** krÃ¤vs fÃ¶r att skapa/hantera orderkoncept och trigga expansion. Befintlig planeringvy fÃ¶r uppgifter ofÃ¶rÃ¤ndrad. | **Medel** â€” ny funktionalitet |
+
+#### Migration (3 750+ orders)
+
+- `order_concepts`-tabell skapas tom. Inga befintliga orders behÃ¶ver migreras.
+- `work_orders` fÃ¥r ny nullable kolumn `order_concept_id` (default NULL).
+- Befintliga orders saknar koncept-koppling â€” **helt korrekt** eftersom de skapades fÃ¶re konceptmodellen.
+- Valfritt i senare fas: retroaktivt gruppera gamla orders till koncept om affÃ¤rsnytta finns.
+- Estimat: **~30 minuter** (DDL + test).
+
+#### Maintainability
+
+| | BedÃ¶mning |
+|---|---|
+| âœ… FÃ¶rdelar | Ren separation mellan koncept (specifikation/mall) och uppgift (utfÃ¶rande). Fullt typsÃ¤ker (egna kolumner istÃ¤llet fÃ¶r JSONB). Befintlig kod orÃ¶rd. Konceptet kan vÃ¤xa oberoende av work_orders. StÃ¶der periodicitet naturligt. |
+| âŒ Nackdelar | Fler tabeller = mer kod att underhÃ¥lla. KrÃ¤ver ny UI fÃ¶r koncepthantering. |
+| ðŸ“Š FramtidssÃ¤kerhet | **HÃ¶g.** Skalerar naturligt med fler artikeltyper, periodicitet, aviseringsflÃ¶den. StÃ¶der framtida AI-planering pÃ¥ koncept-nivÃ¥. |
+
+---
+
+### Alt C â€” FullstÃ¤ndig omstrukturering
+
+#### Schema-pÃ¥verkan
+
+```sql
+-- work_orders omdefinieras till "order_concepts" (rename eller ny semantik)
+-- Ny tasks-tabell tar Ã¶ver utfÃ¶randerollen
+CREATE TABLE tasks (
+  id UUID PRIMARY KEY,
+  tenant_id UUID NOT NULL,
+  work_order_id UUID NOT NULL REFERENCES work_orders(id),  -- work_orders = koncept nu
+  object_id UUID NOT NULL REFERENCES objects(id),
+  resource_id UUID REFERENCES resources(id),
+  team_id UUID REFERENCES teams(id),
+  -- ... alla utfÃ¶randefÃ¤lt flyttas hit frÃ¥n work_orders ...
+  execution_code TEXT,
+  scheduled_date DATE,
+  estimated_duration INTEGER,
+  order_status TEXT,
+  -- etc.
+);
+-- work_order_lines kopplas om till tasks eller dubbelkopplas
+-- work_order_objects omdefinieras
+```
+
+#### Downstream-pÃ¥verkan
+
+| System | PÃ¥verkan | Risk |
+|---|---|---|
+| **storage.ts** | **Massiv refaktorering.** Alla queries mot `work_orders` mÃ¥ste omdirigeras till `tasks`. Dubbla modeller under Ã¶vergÃ¥ngsperiod. | **Kritisk** |
+| **mobile (Go)** | **Breaking change.** API-kontrakt Ã¤ndras. Go-appen behÃ¶ver ny release. | **Kritisk** |
+| **AI-planner / VRP** | Alla optimerings-filer refererar `workOrderId`, `objectId` frÃ¥n work_orders. KrÃ¤ver total omskrivning. | **Kritisk** |
+| **Fortnox** | Faktura-export refererar `workOrderId`. KrÃ¤ver migration av kopplingar. | **HÃ¶g** |
+| **Import (Modus)** | Import-flÃ¶det bryts helt. Ny mapping krÃ¤vs. | **HÃ¶g** |
+| **Rapporter / KPI** | `capacity-forecast-service`, `annualGoalRoutes`, `feedbackLoopRoutes` â€” alla krÃ¤ver omskrivning. | **HÃ¶g** |
+
+#### Migration (3 750+ orders)
+
+- Alla 3 750+ work_orders mÃ¥ste transformeras: utfÃ¶randefÃ¤lt â†’ `tasks`, konceptfÃ¤lt â†’ behÃ¥lls.
+- Work_order_lines mÃ¥ste omkopplas.
+- Alla FK-referenser frÃ¥n andra tabeller (route_stops, invoice_rows, etc.) mÃ¥ste uppdateras.
+- KrÃ¤ver **dual-write-period** eller **big bang** migration med downtime.
+- Estimat: **3â€“5 dagar** enbart fÃ¶r migration, exklusive kodÃ¤ndringar.
+
+#### Maintainability
+
+| | BedÃ¶mning |
+|---|---|
+| âœ… FÃ¶rdelar | "RÃ¤tt" modell lÃ¥ngsiktigt. Ren separation med korrekta namn. |
+| âŒ Nackdelar | Enormt scope. Bryter alla befintliga integrationer. MÃ¥nader av arbete. HÃ¶g bugg-risk. KrÃ¤ver koordinering med Go-team. Ã–verkomplext fÃ¶r nuvarande fas. |
+| ðŸ“Š FramtidssÃ¤kerhet | **HÃ¶g** men till oacceptabel kostnad. |
+
+---
+
+### JÃ¤mfÃ¶relsematris
+
+| Kriterium | Alt A | Alt B â­ | Alt C |
+|---|---|---|---|
+| Schema-invasivitet | ðŸŸ¢ LÃ¥g | ðŸŸ¢ LÃ¥g | ðŸ”´ Kritisk |
+| Downstream-pÃ¥verkan | ðŸŸ¡ Medel | ðŸŸ¢ Ingen/LÃ¥g | ðŸ”´ Kritisk |
+| Migration befintliga orders | ðŸŸ¢ Trivial | ðŸŸ¢ Trivial | ðŸ”´ Komplex |
+| StÃ¶d fÃ¶r OrderConceptâ†’Task | ðŸŸ¡ Implicit | ðŸŸ¢ Explicit | ðŸŸ¢ Explicit |
+| BakÃ¥tkompatibilitet | ðŸŸ¡ Medel (filter-risk) | ðŸŸ¢ Full | ðŸ”´ Bryter allt |
+| Periodicitet-stÃ¶d | ðŸŸ¡ Via JSONB | ðŸŸ¢ Typade kolumner | ðŸŸ¢ Typade kolumner |
+| Framtida skalbarhet | ðŸŸ¡ BegrÃ¤nsad | ðŸŸ¢ HÃ¶g | ðŸŸ¢ HÃ¶g |
+| Implementationstid | ðŸŸ¢ ~1 vecka | ðŸŸ¢ ~2 veckor | ðŸ”´ ~2â€“3 mÃ¥nader |
+| Risk fÃ¶r tech debt | ðŸ”´ HÃ¶g | ðŸŸ¢ LÃ¥g | ðŸŸ¢ LÃ¥g |
+
+---
+
+## 3. Rekommendation
+
+### **Alt B â€” Ny `order_concepts`-tabell**
+
+#### Motivering
+
+1. **Minst invasiv fÃ¶rÃ¤ndring med maximal framtidssÃ¤kerhet.** Alt B lÃ¤gger till nya tabeller utan att rÃ¶ra befintliga. Alla downstream-system (mobile, VRP, Fortnox, import) fortsÃ¤tter fungera ofÃ¶rÃ¤ndrade.
+
+2. **StÃ¶der OrderConceptâ†’Task-flÃ¶det naturligt.** JSON-sessionen visar tydligt att det behÃ¶vs en separat entitet som representerar "vad ska gÃ¶ras" (konceptet/mallen) skilt frÃ¥n "gÃ¶r detta nu" (uppgiften). Alt B modellerar exakt detta.
+
+3. **Full bakÃ¥tkompatibilitet.** 3 750+ befintliga work_orders behÃ¶ver ingen migration. De saknar `order_concept_id` â€” helt korrekt. Nya orders skapade via koncept-flÃ¶det fÃ¥r FK-koppling.
+
+4. **`executionCode`-hanteringen lÃ¶ses elegant.** Artikeln blir source-of-truth (`articles.execution_code`). Vid expansion till tasks kopieras executionCode till `work_orders.executionCode` (cached). VRP-constraints och mobile API behÃ¶ver ingen Ã¤ndring.
+
+5. **Periodicitet byggs in frÃ¥n start.** Orderkoncept med `is_recurring` + `recurrence_interval` + `recurrence_unit` ger naturligt stÃ¶d fÃ¶r Mats' krav pÃ¥ Ã¥terkommande jobb.
+
+6. **Alt A riskerar tech debt.** Dual-purpose `work_orders` med `is_concept`-flagga skapar filter-beroenden som Ã¤r svÃ¥ra att upprÃ¤tthÃ¥lla. Erfarenhet visar att booleska flaggor fÃ¶r att skilja entitetstyper leder till buggar.
+
+7. **Alt C Ã¤r orimligt nu.** Trots att det Ã¤r "renaste" modellen krÃ¤ver det mÃ¥nader av arbete, bryter alla integrationer och krÃ¤ver koordinering med Go-teamet. Det kan vara en framtida Fas 5+ om behovet uppstÃ¥r.
+
+#### Arkitekturskiss (Alt B)
+
+```
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚   order_concepts    â”‚  â† Specifikation / Mall
+â”‚  (ny tabell)        â”‚
+â”‚  - customer_id      â”‚
+â”‚  - cluster_id       â”‚
+â”‚  - periodicitet     â”‚
+â”‚  - leveranstid      â”‚
+â”‚  - concept_status   â”‚
+â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+â”‚ order_concept_lines â”‚  â† Mall-rader (artiklar)
+â”‚  - article_id       â”‚
+â”‚  - association_type  â”‚
+â”‚  - execution_code   â”‚
+â”‚  - default_quantity  â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+         â”‚ expandConceptToTasks()
+         â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚    work_orders      â”‚  â† Uppgift / Task (befintlig tabell)
+â”‚  + order_concept_id â”‚  â† NY FK (nullable)
+â”‚  + concept_line_id  â”‚  â† NY FK (nullable)
+â”‚  (alla befintliga   â”‚
+â”‚   fÃ¤lt ofÃ¶rÃ¤ndrade) â”‚
+â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+â”‚  work_order_lines   â”‚  â† Artikelrader (befintlig)
+â”‚  + unit             â”‚  â† NYTT fÃ¤lt (snapshot)
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+         â”‚ (ofÃ¶rÃ¤ndrade consumers)
+         â–¼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚  mobile  â”‚  VRP/AI  â”‚  Fortnox  â”‚  Import   â”‚
+â”‚  (Go)    â”‚ planner  â”‚  faktura  â”‚  (Modus)  â”‚
+â”‚  âœ… ORÃ–RD â”‚  âœ… ORÃ–RD â”‚  âœ… ORÃ–RD  â”‚  âœ… ORÃ–RD  â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+```
+
+---
+
+## 4. ROM-estimat
+
+Baserat pÃ¥ **Alt B**. Estimat i arbetsdagar (1 dag = ~8h). FÃ¶rutsÃ¤tter en senior fullstack-utvecklare med Traivo-kunskap.
+
+### Fas 2 â€” Datamodell & Backend (Schema + Storage + API)
+
+| Uppgift | Estimat | Beroenden |
+|---|---|---|
+| DDL: `order_concepts` + `order_concept_lines` tabeller | 0.5 dag | â€” |
+| DDL: `work_orders.order_concept_id` + `work_orders.concept_line_id` | 0.25 dag | â€” |
+| DDL: `articles.execution_code` + `work_order_lines.unit` | 0.25 dag | â€” |
+| Drizzle schema-definitioner i `shared/schema.ts` | 0.5 dag | DDL klar |
+| Storage-funktioner (CRUD order_concepts + lines) | 1.5 dag | Schema klar |
+| `expandConceptToTasks()` â€” expansionslogik | 2 dagar | Storage klar |
+| API-routes (REST endpoints fÃ¶r koncept) | 1 dag | Storage klar |
+| Enhetstester + integrationstester | 1.5 dagar | Allt ovan |
+| **Fas 2 totalt** | **~7.5 dagar** | |
+
+### Fas 3 â€” Planerings-UI (Koncept-hantering)
+
+| Uppgift | Estimat | Beroenden |
+|---|---|---|
+| UI: Skapa/redigera orderkoncept | 2 dagar | Fas 2 API |
+| UI: Artikelrad-hantering pÃ¥ koncept | 1.5 dag | Fas 2 API |
+| UI: Kluster-/objektval och preview av expansion | 1.5 dag | Fas 2 API |
+| UI: Trigga expansion + visa genererade uppgifter | 1 dag | `expandConceptToTasks()` |
+| UI: Periodicitet-konfiguration | 1 dag | Fas 2 schema |
+| Integration med befintlig planeringvy | 1.5 dag | â€” |
+| **Fas 3 totalt** | **~8.5 dagar** | |
+
+### Fas 4 â€” Avancerade flÃ¶den
+
+| Uppgift | Estimat | Beroenden |
+|---|---|---|
+| Periodicitet-scheduler (cron/worker) | 1.5 dag | Fas 2 + 3 |
+| ExecutionCode-matching (artikelâ†’taskâ†’VRP) validering | 1 dag | Fas 2 |
+| Koncept-baserad rapportering/KPI | 1.5 dag | Fas 2 |
+| Migreringsverktyg: retroaktiv koncept-gruppering (valfritt) | 1 dag | Fas 2 |
+| End-to-end-testning hela flÃ¶det | 2 dagar | Allt ovan |
+| **Fas 4 totalt** | **~7 dagar** | |
+
+### TotalÃ¶versikt
+
+| Fas | Dagar | Veckor (ungefÃ¤r) |
+|---|---|---|
+| Fas 2 â€” Backend | 7.5 | ~1.5 veckor |
+| Fas 3 â€” UI | 8.5 | ~2 veckor |
+| Fas 4 â€” Avancerat | 7 | ~1.5 veckor |
+| **TOTALT** | **~23 dagar** | **~5 veckor** |
+
+> âš ï¸ **ROM = Rough Order of Magnitude.** Inkluderar inte code review, deployment, staging-testning eller eventuell koordinering med Go-teamet. LÃ¤gg till ~20% buffert â†’ **~6 veckor** realistiskt.
+
+---
+
+## 5. NÃ¤sta steg
+
+### Omedelbart (denna vecka)
+
+1. **Beslut Alt B** â€” BekrÃ¤fta val med teknikteam och produktÃ¤gare.
+2. **Skapa `articles.execution_code`** â€” LÃ¥g risk, kan gÃ¶ras parallellt. Populera med befintliga vÃ¤rden om de finns i importdata eller manuell mapping.
+3. **Skapa `work_order_lines.unit`** â€” Trivial migration. Populera med `articles.unit` via join.
+
+### Fas 2 â€” Vecka 1â€“2
+
+4. **Branch: `feature/356-order-concepts`** â€” DDL + Drizzle-schema fÃ¶r `order_concepts` + `order_concept_lines`.
+5. **Implementera storage-funktioner** â€” CRUD + `expandConceptToTasks()`.
+6. **API-routes** â€” REST endpoints med OpenAPI-spec.
+7. **Testsvit** â€” Verifiera att befintliga work_order-flÃ¶den Ã¤r helt opÃ¥verkade.
+
+### Fas 3 â€” Vecka 2â€“4
+
+8. **UI-design** â€” Wireframes fÃ¶r orderkoncept-vy (skapa, artikelrader, klusterval, expansion-preview).
+9. **Frontend-implementation** â€” React-komponenter med befintligt designsystem.
+10. **Integration** â€” Koppla koncept-vy till befintlig planeringvy.
+
+### Fas 4 â€” Vecka 4â€“5
+
+11. **Periodicitet-worker** â€” Cron-jobb som genererar nya tasks frÃ¥n aktiva koncept.
+12. **ExecutionCode-validering** â€” End-to-end: artikel â†’ koncept â†’ task â†’ VRP-skill-matching.
+13. **Staging-test med Kinab-data** â€” Verifiera mot reella 3 750+ orders.
+
+### Framtida Ã¶vervÃ¤ganden (ej i scope)
+
+- **Koncept-baserad fakturering** â€” gruppera fakturarader per orderkoncept i Fortnox.
+- **AI-planering pÃ¥ koncept-nivÃ¥** â€” planner som optimerar expansion baserat pÃ¥ teamkapacitet.
+- **Cross-window drag** â€” planeringvy med drag-and-drop mellan team (krÃ¤ver separat UI-beslut).
+- **Alt C-migration** â€” om systemet vÃ¤xer signifikant (>10 tenants, >100k orders) kan en framtida omstrukturering motiveras.
+
+---
+
+## Appendix: Risker och mitigeringar
+
+| Risk | Sannolikhet | Konsekvens | Mitigering |
+|---|---|---|---|
+| `expandConceptToTasks()` genererar fel antal tasks | Medel | HÃ¶g | Expansion-preview i UI + enhetstester med Kinabs kluster-data |
+| ExecutionCode-mismatch artikelâ†”task | LÃ¥g | Medel | Validering vid konceptskapande + VRP-constraint-test |
+| Periodicitet-scheduler skapar dubbletter | Medel | HÃ¶g | Idempotency-check (`last_generated_at` + unik constraint concept+period) |
+| Befintliga orders tappar koppling vid framtida refactor | LÃ¥g | LÃ¥g | `order_concept_id = NULL` Ã¤r explicit och hanterat |
+| Go-team behÃ¶ver anpassning | LÃ¥g (Alt B) | â€” | Mobile API orÃ¶rd. Informera Go-team men ingen kodÃ¤ndring krÃ¤vs. |
