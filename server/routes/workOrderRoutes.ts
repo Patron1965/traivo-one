@@ -141,7 +141,13 @@ app.get("/api/work-orders/:id/expand", asyncHandler(async (req, res) => {
     storage.getCustomerCommunicationsByWorkOrder(tenantId, verified.id, 3),
     tenantSafeObjectId ? storage.getObjectImages(tenantSafeObjectId) : Promise.resolve([]),
     storage.getProtocols(tenantId, { workOrderId: verified.id }),
-    db.select({ deadlineAt: slaRiskSnapshots.deadlineAt, riskLevel: slaRiskSnapshots.riskLevel })
+    db.select({
+        deadlineAt: slaRiskSnapshots.deadlineAt,
+        riskLevel: slaRiskSnapshots.riskLevel,
+        daysToBreach: slaRiskSnapshots.daysToBreach,
+        predictedCompletionDate: slaRiskSnapshots.predictedCompletionDate,
+        reason: slaRiskSnapshots.reason,
+      })
       .from(slaRiskSnapshots)
       .where(and(eq(slaRiskSnapshots.tenantId, tenantId), eq(slaRiskSnapshots.workOrderId, verified.id)))
       .limit(1)
@@ -167,6 +173,9 @@ app.get("/api/work-orders/:id/expand", asyncHandler(async (req, res) => {
     scheduledStartTime: verified.scheduledStartTime,
     slaDeadlineAt: slaSnapshot?.deadlineAt ?? null,
     slaRiskLevel: slaSnapshot?.riskLevel ?? null,
+    slaDaysToBreach: slaSnapshot?.daysToBreach ?? null,
+    slaPredictedCompletionDate: slaSnapshot?.predictedCompletionDate ?? null,
+    slaReason: slaSnapshot?.reason ?? null,
     createdAt: verified.createdAt,
   };
 
@@ -258,8 +267,21 @@ app.get("/api/work-orders/:id/expand", asyncHandler(async (req, res) => {
     materials: { status: computeStatus(woAnchor, materials.length > 0), latestSyncAt: woAnchor },
   };
 
+  const hasPeriodData = !!(
+    period.desiredDeliveryStart ||
+    period.desiredDeliveryEnd ||
+    period.plannedWindowStart ||
+    period.plannedWindowEnd ||
+    period.scheduledDate ||
+    period.scheduledStartTime ||
+    period.slaDeadlineAt
+  );
+  let periodCount = hasPeriodData ? 1 : 0;
+  if (period.slaRiskLevel === "critical") periodCount += 2;
+  else if (period.slaRiskLevel === "warning") periodCount += 1;
+
   const counts = {
-    period: (period.desiredDeliveryStart || period.desiredDeliveryEnd || period.plannedWindowStart || period.plannedWindowEnd || period.scheduledDate || period.scheduledStartTime || period.slaDeadlineAt) ? 1 : 0,
+    period: periodCount,
     history: recentJobs.length,
     communications: comms.length,
     images: fieldImages.length,

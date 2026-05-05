@@ -32,6 +32,7 @@ import {
   useUpdateJobNotes,
   useUpdateJobPeriod,
   type JobExpandData,
+  type JobExpandPeriod,
   type JobExpandSyncEntry,
   type JobExpandMaterial,
   type SyncStatus,
@@ -116,6 +117,137 @@ function SyncMarker({ entry }: { entry: JobExpandSyncEntry }) {
   );
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function diffInDays(d: string | null | undefined): number | null {
+  if (!d) return null;
+  const date = new Date(d);
+  if (Number.isNaN(date.getTime())) return null;
+  return (date.getTime() - Date.now()) / DAY_MS;
+}
+
+function formatRelativeDays(d: string | null | undefined): string | null {
+  const days = diffInDays(d);
+  if (days === null) return null;
+  const rounded = Math.round(days);
+  if (rounded === 0) return "idag";
+  if (rounded === 1) return "imorgon";
+  if (rounded === -1) return "igår";
+  if (rounded > 0) return `om ${rounded} dagar`;
+  return `${Math.abs(rounded)} dagar försenad`;
+}
+
+function relativeColorClass(d: string | null | undefined, opts?: { criticalDays?: number; warningDays?: number }): string {
+  const days = diffInDays(d);
+  if (days === null) return "";
+  const criticalDays = opts?.criticalDays ?? 1;
+  const warningDays = opts?.warningDays ?? 3;
+  if (days < 0) return "text-red-600 dark:text-red-400";
+  if (days <= criticalDays) return "text-red-600 dark:text-red-400";
+  if (days <= warningDays) return "text-amber-600 dark:text-amber-400";
+  return "text-emerald-600 dark:text-emerald-400";
+}
+
+function ts(d: string | null | undefined): number | null {
+  if (!d) return null;
+  const t = new Date(d).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+function PeriodTimeline({ period }: { period: JobExpandPeriod }) {
+  const desiredStart = ts(period.desiredDeliveryStart);
+  const desiredEnd = ts(period.desiredDeliveryEnd);
+  const plannedStart = ts(period.plannedWindowStart);
+  const plannedEnd = ts(period.plannedWindowEnd);
+  const scheduledAt = ts(period.scheduledDate);
+  const deadlineAt = ts(period.slaDeadlineAt);
+  const createdAt = ts(period.createdAt);
+  const now = Date.now();
+
+  const all = [desiredStart, desiredEnd, plannedStart, plannedEnd, scheduledAt, deadlineAt, createdAt, now]
+    .filter((v): v is number => v !== null);
+  if (all.length < 2) return null;
+
+  let min = Math.min(...all);
+  let max = Math.max(...all);
+  if (max - min < DAY_MS) {
+    const mid = (min + max) / 2;
+    min = mid - DAY_MS / 2;
+    max = mid + DAY_MS / 2;
+  }
+  const span = max - min;
+  const pad = span * 0.04;
+  min -= pad;
+  max += pad;
+  const totalSpan = max - min;
+  const pos = (t: number) => ((t - min) / totalSpan) * 100;
+
+  const desiredRange = desiredStart !== null && desiredEnd !== null && desiredEnd > desiredStart
+    ? { left: pos(desiredStart), width: pos(desiredEnd) - pos(desiredStart) }
+    : null;
+  const plannedRange = plannedStart !== null && plannedEnd !== null && plannedEnd > plannedStart
+    ? { left: pos(plannedStart), width: pos(plannedEnd) - pos(plannedStart) }
+    : null;
+  const nowPos = pos(now);
+  const scheduledPos = scheduledAt !== null ? pos(scheduledAt) : null;
+  const deadlinePos = deadlineAt !== null ? pos(deadlineAt) : null;
+
+  return (
+    <div className="my-2" data-testid="period-timeline">
+      <div className="relative h-7">
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-border" />
+        {desiredRange && (
+          <div
+            className="absolute top-[calc(50%-7px)] h-1.5 rounded bg-blue-300/80 dark:bg-blue-700/80"
+            style={{ left: `${desiredRange.left}%`, width: `${desiredRange.width}%` }}
+            title="Önskad leveransperiod"
+            data-testid="timeline-desired"
+          />
+        )}
+        {plannedRange && (
+          <div
+            className="absolute top-[calc(50%+1px)] h-1.5 rounded bg-purple-300/80 dark:bg-purple-700/80"
+            style={{ left: `${plannedRange.left}%`, width: `${plannedRange.width}%` }}
+            title="Planerat fönster"
+            data-testid="timeline-planned"
+          />
+        )}
+        {scheduledPos !== null && (
+          <div
+            className="absolute top-[calc(50%-6px)] h-3 w-1 rounded-sm bg-foreground"
+            style={{ left: `calc(${scheduledPos}% - 2px)` }}
+            title="Schemalagd"
+            data-testid="timeline-scheduled"
+          />
+        )}
+        {deadlinePos !== null && (
+          <div
+            className="absolute top-[calc(50%-9px)] h-[18px] w-0.5 bg-red-500"
+            style={{ left: `calc(${deadlinePos}% - 1px)` }}
+            title="SLA-deadline"
+            data-testid="timeline-deadline"
+          />
+        )}
+        <div
+          className="absolute top-[calc(50%-7px)] h-3.5 w-px bg-amber-500"
+          style={{ left: `calc(${nowPos}% - 0.5px)` }}
+          title="Nu"
+          data-testid="timeline-now"
+        >
+          <div className="absolute -top-1 -left-[2px] h-1.5 w-1.5 rounded-full bg-amber-500" />
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] text-muted-foreground mt-1">
+        <span className="inline-flex items-center gap-1"><span className="h-1.5 w-2 rounded bg-blue-300/80 dark:bg-blue-700/80" />Önskad</span>
+        <span className="inline-flex items-center gap-1"><span className="h-1.5 w-2 rounded bg-purple-300/80 dark:bg-purple-700/80" />Planerad</span>
+        <span className="inline-flex items-center gap-1"><span className="h-2.5 w-1 rounded-sm bg-foreground" />Schemalagd</span>
+        <span className="inline-flex items-center gap-1"><span className="h-2.5 w-0.5 bg-red-500" />Deadline</span>
+        <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />Nu</span>
+      </div>
+    </div>
+  );
+}
+
 function PeriodTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
   const { period } = data;
   const { toast } = useToast();
@@ -170,12 +302,58 @@ function PeriodTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
     );
   };
 
+  const slaLevel = period.slaRiskLevel;
+  const slaCritical = slaLevel === "critical";
+  const slaWarning = slaLevel === "warning";
+  const slaOk = slaLevel === "ok";
+  const showSlaBanner = slaCritical || slaWarning;
+
+  const deadlineRelative = formatRelativeDays(period.slaDeadlineAt);
+  const desiredEndRelative = formatRelativeDays(period.desiredDeliveryEnd ?? period.desiredDeliveryStart);
+  const scheduledRelative = formatRelativeDays(period.scheduledDate);
+  const predictedRelative = formatRelativeDays(period.slaPredictedCompletionDate);
+
   return (
     <div data-testid="expand-tab-period-content">
       <SyncMarker entry={data.sync.period} />
+
+      {showSlaBanner && (
+        <div
+          className={`flex items-start gap-1.5 rounded p-1.5 mb-2 text-[11px] border ${
+            slaCritical
+              ? "bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300"
+              : "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-amber-700 dark:text-amber-300"
+          }`}
+          data-testid={`sla-risk-banner-${slaLevel}`}
+        >
+          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold uppercase text-[10px] tracking-wide">
+              SLA-risk: {slaCritical ? "kritisk" : "varning"}
+            </div>
+            {period.slaReason && <div className="text-[10px] opacity-90 truncate">{period.slaReason}</div>}
+            {predictedRelative && period.slaPredictedCompletionDate && (
+              <div className="text-[10px] opacity-90">
+                Prognostiserad klart: {formatDate(period.slaPredictedCompletionDate)} ({predictedRelative})
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {slaOk && period.slaDeadlineAt && (
+        <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 dark:text-emerald-400 mb-1.5" data-testid="sla-risk-banner-ok">
+          <CheckCircle2 className="h-3 w-3" />
+          <span>SLA inom marginal</span>
+        </div>
+      )}
+
       {!hasAny && !editing && (
         <p className="text-[11px] text-muted-foreground py-2">Ingen leveransperiod, deadline eller schemalagd tid satt.</p>
       )}
+
+      {hasAny && <PeriodTimeline period={period} />}
+
       <div className="space-y-1.5 text-[11px]">
         <div className="border border-dashed rounded p-1.5">
           <div className="flex items-center justify-between mb-1">
@@ -237,17 +415,45 @@ function PeriodTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
               />
             </div>
           ) : (
-            <div className="font-medium">
-              {formatDate(period.desiredDeliveryStart)} → {formatDate(period.desiredDeliveryEnd)}
+            <div className="flex items-baseline gap-1.5 flex-wrap">
+              <span className="font-medium">
+                {formatDate(period.desiredDeliveryStart)} → {formatDate(period.desiredDeliveryEnd)}
+              </span>
+              {desiredEndRelative && (
+                <span className={`text-[10px] ${relativeColorClass(period.desiredDeliveryEnd ?? period.desiredDeliveryStart)}`} data-testid="period-desired-relative">
+                  {desiredEndRelative}
+                </span>
+              )}
             </div>
           )}
         </div>
         {period.slaDeadlineAt && (
           <div>
             <div className="text-muted-foreground">SLA-deadline</div>
-            <div className={`font-medium ${period.slaRiskLevel === "high" || period.slaRiskLevel === "critical" ? "text-red-600 dark:text-red-400" : period.slaRiskLevel === "medium" ? "text-amber-600 dark:text-amber-400" : ""}`}>
-              {formatDate(period.slaDeadlineAt)}
-              {period.slaRiskLevel && <span className="ml-1 text-[10px] uppercase">({period.slaRiskLevel})</span>}
+            <div className="flex items-baseline gap-1.5 flex-wrap">
+              <span className={`font-medium ${slaCritical ? "text-red-600 dark:text-red-400" : slaWarning ? "text-amber-600 dark:text-amber-400" : ""}`}>
+                {formatDate(period.slaDeadlineAt)}
+              </span>
+              {deadlineRelative && (
+                <span className={`text-[10px] ${relativeColorClass(period.slaDeadlineAt)}`} data-testid="period-deadline-relative">
+                  {deadlineRelative}
+                </span>
+              )}
+              {slaLevel && (
+                <Badge
+                  variant="outline"
+                  className={`text-[9px] h-4 px-1 ${
+                    slaCritical
+                      ? "border-red-400 text-red-700 dark:border-red-700 dark:text-red-300"
+                      : slaWarning
+                      ? "border-amber-400 text-amber-700 dark:border-amber-700 dark:text-amber-300"
+                      : "border-emerald-400 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300"
+                  }`}
+                  data-testid={`sla-risk-badge-${slaLevel}`}
+                >
+                  {slaLevel}
+                </Badge>
+              )}
             </div>
           </div>
         )}
@@ -262,8 +468,15 @@ function PeriodTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
         {period.scheduledDate && (
           <div>
             <div className="text-muted-foreground">Schemalagd</div>
-            <div className="font-medium">
-              {formatDate(period.scheduledDate)}{period.scheduledStartTime ? ` kl ${period.scheduledStartTime}` : ""}
+            <div className="flex items-baseline gap-1.5 flex-wrap">
+              <span className="font-medium">
+                {formatDate(period.scheduledDate)}{period.scheduledStartTime ? ` kl ${period.scheduledStartTime}` : ""}
+              </span>
+              {scheduledRelative && (
+                <span className={`text-[10px] ${relativeColorClass(period.scheduledDate, { criticalDays: 0, warningDays: 2 })}`} data-testid="period-scheduled-relative">
+                  {scheduledRelative}
+                </span>
+              )}
             </div>
           </div>
         )}

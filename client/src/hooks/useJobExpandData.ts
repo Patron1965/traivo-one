@@ -12,6 +12,9 @@ export interface JobExpandPeriod {
   scheduledStartTime: string | null;
   slaDeadlineAt: string | null;
   slaRiskLevel: string | null;
+  slaDaysToBreach: number | null;
+  slaPredictedCompletionDate: string | null;
+  slaReason: string | null;
   createdAt: string | null;
 }
 
