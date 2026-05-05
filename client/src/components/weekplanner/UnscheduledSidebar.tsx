@@ -103,7 +103,7 @@ interface UnscheduledSidebarProps {
   selectedJobIds?: Set<string>;
 }
 
-function SuggestPlacementButton({ job, currentWeekStart, className }: { job: WorkOrderWithObject; currentWeekStart?: Date; className?: string }) {
+function SuggestPlacementButton({ job, currentWeekStart, className, compact }: { job: WorkOrderWithObject; currentWeekStart?: Date; className?: string; compact?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<Array<{ resourceId: string; resourceName: string; date: string; startTime: string; score: number; reasons: string[] }> | null>(null);
   const { toast } = useToast();
@@ -126,20 +126,42 @@ function SuggestPlacementButton({ job, currentWeekStart, className }: { job: Wor
     }
   }, [job.id, toast, currentWeekStart]);
 
+  const triggerButton = compact ? (
+    <Button
+      size="icon"
+      variant="outline"
+      className={className ?? "h-7 w-7 p-0 shrink-0"}
+      onClick={handleSuggest}
+      data-testid={`button-suggest-placement-${job.id}`}
+      aria-label="Föreslå optimal tid"
+    >
+      {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+    </Button>
+  ) : (
+    <Button
+      size="sm"
+      variant="outline"
+      className={className ?? "w-full mt-1"}
+      onClick={handleSuggest}
+      data-testid={`button-suggest-placement-${job.id}`}
+    >
+      {loading ? <Loader2 className="h-3.5 w-3.5 mr-1 shrink-0 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1 shrink-0" />}
+      <span className="truncate">Föreslå optimal tid</span>
+    </Button>
+  );
+
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          size="sm"
-          variant="outline"
-          className={className ?? "w-full mt-1"}
-          onClick={handleSuggest}
-          data-testid={`button-suggest-placement-${job.id}`}
-        >
-          {loading ? <Loader2 className="h-3.5 w-3.5 mr-1 shrink-0 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1 shrink-0" />}
-          <span className="truncate">Föreslå optimal tid</span>
-        </Button>
-      </PopoverTrigger>
+      {compact ? (
+        <Tooltip>
+          <PopoverTrigger asChild>
+            <TooltipTrigger asChild>{triggerButton}</TooltipTrigger>
+          </PopoverTrigger>
+          <TooltipContent>Föreslå optimal tid</TooltipContent>
+        </Tooltip>
+      ) : (
+        <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
+      )}
       <PopoverContent className="w-72 p-3" side="right" align="start">
         <div className="space-y-2">
           <p className="text-sm font-medium">AI-förslag för placering</p>
@@ -723,7 +745,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                           )}
                         </div>
                         <div className="flex items-stretch gap-1.5 mt-1.5 w-full min-w-0">
-                          <SuggestPlacementButton job={job} currentWeekStart={currentWeekStart} className="flex-1 min-w-0 h-7 text-xs px-2 overflow-hidden" />
+                          <SuggestPlacementButton job={job} currentWeekStart={currentWeekStart} compact />
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
