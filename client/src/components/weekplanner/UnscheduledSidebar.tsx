@@ -768,7 +768,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                           <span>{expandedJobs.has(job.id) ? "Dölj" : "Mer info"}</span>
                         </button>
                         {expandedJobs.has(job.id) && (
-                          <JobCardExpandPanel jobId={job.id} enabled={true} />
+                          <JobCardExpandPanel jobId={job.id} enabled={true} onHistoryClick={onJobClick} />
                         )}
                       </div>
                     </Card>

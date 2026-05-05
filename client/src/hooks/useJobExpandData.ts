@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
+export type SyncStatus = "fresh" | "stale" | "pending" | "empty";
+
 export interface JobExpandPeriod {
   desiredDeliveryStart: string | null;
   desiredDeliveryEnd: string | null;
@@ -7,6 +9,9 @@ export interface JobExpandPeriod {
   plannedWindowEnd: string | null;
   scheduledDate: string | null;
   scheduledStartTime: string | null;
+  slaDeadlineAt: string | null;
+  slaRiskLevel: string | null;
+  createdAt: string | null;
 }
 
 export interface JobExpandHistoryItem {
@@ -30,14 +35,8 @@ export interface JobExpandCommunication {
   createdAt: string;
 }
 
-export interface JobExpandObjectImage {
+export interface JobExpandImage {
   id: string;
-  imageUrl: string;
-  description: string | null;
-  imageDate: string;
-}
-
-export interface JobExpandProtocolImage {
   url: string;
   label: string;
   date: string;
@@ -68,14 +67,30 @@ export interface JobExpandCounts {
   materials: number;
 }
 
+export interface JobExpandSyncEntry {
+  status: SyncStatus;
+  latestSyncAt: string | null;
+}
+
+export interface JobExpandSync {
+  pendingFieldSync: boolean;
+  period: JobExpandSyncEntry;
+  history: JobExpandSyncEntry;
+  communications: JobExpandSyncEntry;
+  images: JobExpandSyncEntry;
+  notes: JobExpandSyncEntry;
+  materials: JobExpandSyncEntry;
+}
+
 export interface JobExpandData {
   period: JobExpandPeriod;
   history: JobExpandHistoryItem[];
   communications: JobExpandCommunication[];
-  images: { object: JobExpandObjectImage[]; protocols: JobExpandProtocolImage[] };
+  images: JobExpandImage[];
   notes: JobExpandNotes;
   materials: JobExpandMaterial[];
   counts: JobExpandCounts;
+  sync: JobExpandSync;
 }
 
 export function useJobExpandData(jobId: string | null, enabled: boolean) {

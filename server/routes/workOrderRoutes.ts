@@ -13,7 +13,7 @@ import {
   ensureResourceIdsInTenant,
 } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
-import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, type OrderConcept } from "@shared/schema";
+import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, slaRiskSnapshots, type OrderConcept } from "@shared/schema";
 import { handleWorkOrderStatusChange } from "../ai-communication";
 import { notificationService } from "../notifications";
 import { asyncHandler } from "../asyncHandler";
@@ -135,12 +135,18 @@ app.get("/api/work-orders/:id/expand", asyncHandler(async (req, res) => {
   const tenantSafeObject = objectId ? await storage.getObject(objectId) : null;
   const tenantSafeObjectId = tenantSafeObject && tenantSafeObject.tenantId === tenantId ? objectId : null;
 
-  const [lines, history, communications, images, protocolList] = await Promise.all([
+  const [lines, history, communications, images, protocolList, slaSnapshot] = await Promise.all([
     storage.getWorkOrderLines(verified.id),
     tenantSafeObjectId ? storage.getRecentWorkOrdersForObject(tenantId, tenantSafeObjectId, verified.id, 5) : Promise.resolve([]),
-    storage.getCustomerCommunicationsByWorkOrder(tenantId, verified.id, 20),
+    storage.getCustomerCommunicationsByWorkOrder(tenantId, verified.id, 3),
     tenantSafeObjectId ? storage.getObjectImages(tenantSafeObjectId) : Promise.resolve([]),
     storage.getProtocols(tenantId, { workOrderId: verified.id }),
+    db.select({ deadlineAt: slaRiskSnapshots.deadlineAt, riskLevel: slaRiskSnapshots.riskLevel })
+      .from(slaRiskSnapshots)
+      .where(and(eq(slaRiskSnapshots.tenantId, tenantId), eq(slaRiskSnapshots.workOrderId, verified.id)))
+      .limit(1)
+      .then(rows => rows[0] ?? null)
+      .catch(() => null),
   ]);
 
   let articleNameMap = new Map<string, { name: string; articleNumber: string }>();
@@ -159,6 +165,9 @@ app.get("/api/work-orders/:id/expand", asyncHandler(async (req, res) => {
     plannedWindowEnd: verified.plannedWindowEnd,
     scheduledDate: verified.scheduledDate,
     scheduledStartTime: verified.scheduledStartTime,
+    slaDeadlineAt: slaSnapshot?.deadlineAt ?? null,
+    slaRiskLevel: slaSnapshot?.riskLevel ?? null,
+    createdAt: verified.createdAt,
   };
 
   const notes = {
@@ -198,30 +207,61 @@ app.get("/api/work-orders/:id/expand", asyncHandler(async (req, res) => {
     createdAt: c.createdAt,
   }));
 
-  const objectImagesList = images.slice(0, 8).map(i => ({
-    id: i.id,
-    imageUrl: i.imageUrl,
-    description: i.description,
-    imageDate: i.imageDate,
+  type FieldImage = { id: string; url: string; label: string; date: string };
+  const objectImageItems: FieldImage[] = images.map(i => ({
+    id: `obj:${i.id}`,
+    url: i.imageUrl,
+    label: i.description ?? "Objektbild",
+    date: (i.imageDate instanceof Date ? i.imageDate : new Date(i.imageDate)).toISOString(),
   }));
-
-  const protocolImages = protocolList.flatMap(p => {
-    const arr: Array<{ url: string; label: string; date: Date }> = [];
-    if (p.beforePhotoUrl) arr.push({ url: p.beforePhotoUrl, label: "Före", date: p.executedAt });
-    if (p.afterPhotoUrl) arr.push({ url: p.afterPhotoUrl, label: "Efter", date: p.executedAt });
+  const protocolImageItems: FieldImage[] = protocolList.flatMap(p => {
+    const arr: FieldImage[] = [];
+    const dateIso = (p.executedAt instanceof Date ? p.executedAt : new Date(p.executedAt)).toISOString();
+    if (p.beforePhotoUrl) arr.push({ id: `p:${p.id}:before`, url: p.beforePhotoUrl, label: "Före", date: dateIso });
+    if (p.afterPhotoUrl) arr.push({ id: `p:${p.id}:after`, url: p.afterPhotoUrl, label: "Efter", date: dateIso });
     if (Array.isArray(p.additionalPhotos)) {
-      for (const u of p.additionalPhotos) arr.push({ url: u, label: "Foto", date: p.executedAt });
+      p.additionalPhotos.forEach((u, idx) => arr.push({ id: `p:${p.id}:${idx}`, url: u, label: "Fältfoto", date: dateIso }));
     }
     return arr;
   });
+  const fieldImages = [...objectImageItems, ...protocolImageItems]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 4);
 
-  const protocolImagesShown = protocolImages.slice(0, 8);
+  // --- Sync-status per sektion ---
+  // pendingFieldSync är ett framtidssäkert fält; alltid false tills offline-kömodellen finns.
+  const pendingFieldSync = false;
+  const FRESH_WINDOW_MS = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+
+  const computeStatus = (latest: Date | string | null | undefined, hasData: boolean): "fresh" | "stale" | "pending" | "empty" => {
+    if (pendingFieldSync) return "pending";
+    if (!hasData) return "empty";
+    if (!latest) return "stale";
+    const t = (latest instanceof Date ? latest : new Date(latest)).getTime();
+    return Number.isFinite(t) && now - t <= FRESH_WINDOW_MS ? "fresh" : "stale";
+  };
+
+  const latestHistory = recentJobs[0]?.completedAt ?? recentJobs[0]?.scheduledDate ?? recentJobs[0]?.createdAt ?? null;
+  const latestComm = comms[0]?.sentAt ?? comms[0]?.createdAt ?? null;
+  const latestImage = fieldImages[0]?.date ?? null;
+  const woAnchor = verified.createdAt ?? null;
+
+  const sync = {
+    pendingFieldSync,
+    period: { status: computeStatus(woAnchor, true), latestSyncAt: woAnchor },
+    history: { status: computeStatus(latestHistory, recentJobs.length > 0), latestSyncAt: latestHistory },
+    communications: { status: computeStatus(latestComm, comms.length > 0), latestSyncAt: latestComm },
+    images: { status: computeStatus(latestImage, fieldImages.length > 0), latestSyncAt: latestImage },
+    notes: { status: computeStatus(woAnchor, !!(notes.notes || notes.plannedNotes || notes.description)), latestSyncAt: woAnchor },
+    materials: { status: computeStatus(woAnchor, materials.length > 0), latestSyncAt: woAnchor },
+  };
 
   const counts = {
-    period: (period.desiredDeliveryStart || period.desiredDeliveryEnd || period.plannedWindowStart || period.plannedWindowEnd || period.scheduledDate || period.scheduledStartTime) ? 1 : 0,
+    period: (period.desiredDeliveryStart || period.desiredDeliveryEnd || period.plannedWindowStart || period.plannedWindowEnd || period.scheduledDate || period.scheduledStartTime || period.slaDeadlineAt) ? 1 : 0,
     history: recentJobs.length,
     communications: comms.length,
-    images: objectImagesList.length + protocolImagesShown.length,
+    images: fieldImages.length,
     notes: [notes.notes, notes.plannedNotes, notes.description].filter(Boolean).length,
     materials: materials.length,
   };
@@ -230,10 +270,11 @@ app.get("/api/work-orders/:id/expand", asyncHandler(async (req, res) => {
     period,
     history: recentJobs,
     communications: comms,
-    images: { object: objectImagesList, protocols: protocolImagesShown },
+    images: fieldImages,
     notes,
     materials,
     counts,
+    sync,
   });
 }));
 
