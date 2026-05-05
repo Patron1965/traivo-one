@@ -162,6 +162,67 @@ describe("Socket.io reconnect after disconnect (mobile cellular flap)", () => {
     sock2.disconnect();
   });
 
+  it("delivers client-emitted position_update to other tenant clients after reconnect", async () => {
+    // Observer (Anna) stays connected throughout in the same tenant room.
+    const annaToken = await mintSocketToken(annaMobile);
+    const { socket: annaSock, rooms: annaRooms } = await connectSocket(annaToken);
+    expect(annaRooms).toContain(`tenant:${TENANT_ID}`);
+    const annaEvents = captureSocket(annaSock, ALL_NAMED_EVENTS);
+
+    // Tomas connects, then disconnects (simulating cellular flap).
+    const tomasToken1 = await mintSocketToken(tomasMobile);
+    const { socket: tomasSock1 } = await connectSocket(tomasToken1);
+    tomasSock1.disconnect();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(tomasSock1.connected).toBe(false);
+
+    // Tomas reconnects with a fresh token.
+    const tomasToken2 = await mintSocketToken(tomasMobile);
+    const { socket: tomasSock2, rooms: tomasRooms2 } = await connectSocket(tomasToken2);
+    expect(tomasRooms2).toContain(`resource:${TOMAS_ID}`);
+    expect(tomasRooms2).toContain(`tenant:${TENANT_ID}`);
+
+    // Reset the per-resource 30s position-broadcast throttle so the fan-out is
+    // deterministic across repeated runs against the same dev process.
+    await emitTest(tomasMobile, "reset_position_throttle", {
+      resourceId: TOMAS_ID,
+    });
+
+    // Emit position_update from the *reconnected* socket. The bridge handler
+    // must still be wired and fan out to tenant:<id>.
+    tomasSock2.emit("position_update", {
+      latitude: 59.3293,
+      longitude: 18.0686,
+      speed: 25,
+      heading: 180,
+      accuracy: 4,
+      status: "traveling",
+    });
+
+    // Anna (other client in the same tenant) receives the broadcast.
+    const annaPos = await waitFor(() =>
+      annaEvents.find(
+        (e) =>
+          e.event === "position_update" &&
+          e.payload?.resourceId === TOMAS_ID,
+      ),
+    );
+    expect(annaPos.payload?.latitude).toBeCloseTo(59.3293, 3);
+    expect(annaPos.payload?.longitude).toBeCloseTo(18.0686, 3);
+
+    // Alias position:updated is emitted in the same fan-out.
+    await waitFor(() =>
+      annaEvents.some(
+        (e) =>
+          e.event === "position:updated" &&
+          e.payload?.resourceId === TOMAS_ID,
+      ),
+    );
+
+    tomasSock2.disconnect();
+    annaSock.disconnect();
+  });
+
   it("handles multiple rapid disconnect-reconnect cycles", async () => {
     for (let cycle = 0; cycle < 3; cycle++) {
       const token = await mintSocketToken(tomasMobile);
