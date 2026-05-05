@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertTriangle, Loader2, ShieldAlert, User } from "lucide-react";
+import { AlertTriangle, Calendar as CalendarIcon, Inbox, Loader2, ShieldAlert, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SlaRiskJobsList, SlaRiskSummaryBadge } from "@/components/SlaRiskPanel";
 import { format, isSameDay } from "date-fns";
@@ -233,9 +233,49 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
   const isLoading = d.resourcesLoading || d.workOrdersLoading;
   if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
 
+  const showPersistentPopoutStrip = popoutRole === "main" && effectiveDisplayMode !== "full";
+
   return (
     <DndContext sensors={dnd.sensors} collisionDetection={dnd.collisionDetection} onDragStart={dnd.handleDragStart} onDragOver={dnd.handleDragOver} onDragEnd={dnd.handleDragEnd}>
-      <div className="flex h-full">
+      <div className="flex flex-col h-full">
+        {showPersistentPopoutStrip && (
+          <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-1.5 text-xs" data-testid="strip-popout-controls">
+            <span className="text-muted-foreground truncate">
+              {effectiveDisplayMode === "neither"
+                ? "Båda vyer i pop-out"
+                : effectiveDisplayMode === "calendar-only"
+                  ? "Orderlager i pop-out"
+                  : "Kalender i pop-out"}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant={poppedOutViews.has("calendar") ? "secondary" : "outline"}
+                size="sm"
+                className="h-7 px-2"
+                onClick={() => handleOpenPopout("calendar")}
+                disabled={poppedOutViews.has("calendar")}
+                data-testid="strip-button-popout-calendar"
+                title={poppedOutViews.has("calendar") ? "Kalender redan i pop-out" : "Öppna kalender i pop-out"}
+              >
+                <CalendarIcon className="h-3.5 w-3.5 mr-1" />
+                Kalender
+              </Button>
+              <Button
+                variant={poppedOutViews.has("orderlager") ? "secondary" : "outline"}
+                size="sm"
+                className="h-7 px-2"
+                onClick={() => handleOpenPopout("orderlager")}
+                disabled={poppedOutViews.has("orderlager")}
+                data-testid="strip-button-popout-orderlager"
+                title={poppedOutViews.has("orderlager") ? "Orderlager redan i pop-out" : "Öppna orderlager i pop-out"}
+              >
+                <Inbox className="h-3.5 w-3.5 mr-1" />
+                Orderlager
+              </Button>
+            </div>
+          </div>
+        )}
+      <div className="flex flex-1 min-h-0">
         {showSidebar && (
           <UnscheduledSidebar
             showUnscheduled={d.showUnscheduled} setShowUnscheduled={d.setShowUnscheduled}
@@ -430,6 +470,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             <p className="text-xs">Stäng ett pop-out-fönster för att visa innehållet här igen.</p>
           </div>
         )}
+      </div>
 
         <Sheet open={!!d.activeResourceId} onOpenChange={(open) => !open && d.setActiveResourceId(null)}>
           <SheetContent className="w-[400px] sm:w-[450px] p-0 flex flex-col">

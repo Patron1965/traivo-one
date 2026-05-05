@@ -46,10 +46,10 @@ interface UsePlannerSyncOpts {
   disabled?: boolean;
 }
 
-const CHANNEL_NAME = "traivo-planner-sync";
-const STORAGE_KEY = "traivo-planner-sync-msg";
-const HEARTBEAT_MS = 1500;
-const HEARTBEAT_TIMEOUT = 4500;
+const CHANNEL_NAME = "traivo-planner";
+const STORAGE_KEY = "traivo-planner-msg";
+const HEARTBEAT_MS = 500;
+const HEARTBEAT_TIMEOUT = 1500;
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -182,7 +182,7 @@ export function usePlannerSync(opts: UsePlannerSyncOpts) {
         const now = Date.now();
         let changed = false;
         for (const [view, ts] of Array.from(popoutLastSeenRef.current.entries())) {
-          if (now - ts > HEARTBEAT_TIMEOUT) {
+          if (now - ts >= HEARTBEAT_TIMEOUT) {
             popoutLastSeenRef.current.delete(view);
             changed = true;
           }
