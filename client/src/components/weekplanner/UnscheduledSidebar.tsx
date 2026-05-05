@@ -7,13 +7,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Inbox, AlertTriangle, Clock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, X, UserPlus, Key, DoorOpen, Filter, XCircle, Loader2, Sparkles, CheckCircle2, CalendarRange, Info, Calendar as CalendarIcon } from "lucide-react";
+import { Inbox, AlertTriangle, Clock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, X, UserPlus, Key, DoorOpen, Filter, XCircle, Loader2, Sparkles, CheckCircle2, CalendarRange, Info, Calendar as CalendarIcon, Target } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { format, addDays, startOfWeek, getISOWeek } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { WorkOrderWithObject, Customer, Cluster } from "@shared/schema";
 import { EXECUTION_CODE_LABELS, EXECUTION_CODE_ICONS } from "@shared/schema";
 import { priorityDotColors, priorityLabels } from "./types";
+import type { AssignSlot } from "./usePlannerSync";
 import { DraggableJobCard } from "./DndComponents";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -71,6 +72,9 @@ interface UnscheduledSidebarProps {
   activeDragJob?: WorkOrderWithObject | null;
   clusterMatchedResourceIds?: Set<string>;
   visibleResources?: Array<{ serviceArea?: string[] | null }>;
+  expanded?: boolean;
+  remoteSlot?: AssignSlot | null;
+  onCrossWindowAssign?: (job: WorkOrderWithObject) => void;
 }
 
 function SuggestPlacementButton({ job, currentWeekStart, className }: { job: WorkOrderWithObject; currentWeekStart?: Date; className?: string }) {
@@ -163,15 +167,18 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
     customers, clusters, teamsData, customerMap, clusterMap,
     selectedJob, onJobClick, onOpenAssignDialog, timewindowMap, currentWeekStart,
     activeDragJob, clusterMatchedResourceIds, visibleResources,
+    expanded = false, remoteSlot = null, onCrossWindowAssign,
   } = props;
 
   const showDragNoMatch = !!(activeDragJob && activeDragJob.clusterId &&
     clusterMatchedResourceIds && clusterMatchedResourceIds.size === 0 &&
     visibleResources?.some(r => r.serviceArea && r.serviceArea.length > 0));
 
+  const widthClass = expanded ? "w-full flex-1" : "w-[280px] border-r";
+
   return (
-    <Collapsible open={showUnscheduled} onOpenChange={setShowUnscheduled} className="flex">
-      <CollapsibleContent className="w-[280px] border-r bg-muted/20 flex flex-col">
+    <Collapsible open={expanded ? true : showUnscheduled} onOpenChange={expanded ? () => {} : setShowUnscheduled} className="flex flex-1 min-w-0">
+      <CollapsibleContent className={`${widthClass} bg-muted/20 flex flex-col min-w-0`}>
         <div className="p-3 border-b space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -694,6 +701,23 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             <TooltipContent>Tilldela resurs och datum</TooltipContent>
                           </Tooltip>
                         </div>
+                        {remoteSlot && onCrossWindowAssign && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-full mt-1 h-7 text-xs px-2 gap-1 border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-200 dark:hover:bg-blue-900/40"
+                                onClick={(e) => { e.stopPropagation(); onCrossWindowAssign(job); }}
+                                data-testid={`button-cross-window-assign-${job.id}`}
+                              >
+                                <Target className="h-3 w-3 shrink-0" />
+                                <span className="truncate">Tilldela {remoteSlot.resourceName} · {format(new Date(remoteSlot.date + "T12:00:00"), "d MMM", { locale: sv })}{remoteSlot.startTime ? ` ${remoteSlot.startTime}` : ""}</span>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Tilldela till vald slot från andra fönstret</TooltipContent>
+                          </Tooltip>
+                        )}
                       </div>
                     </Card>
                   </DraggableJobCard>
@@ -723,18 +747,20 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
           </div>
         </div>
       </CollapsibleContent>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-full rounded-none border-r w-6" data-testid="button-toggle-unscheduled">
-              {showUnscheduled ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            </Button>
-          </CollapsibleTrigger>
-        </TooltipTrigger>
-        <TooltipContent side="right">
-          <p>{showUnscheduled ? "Dölj oplanerade" : "Visa oplanerade"}</p>
-        </TooltipContent>
-      </Tooltip>
+      {!expanded && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-full rounded-none border-r w-6" data-testid="button-toggle-unscheduled">
+                {showUnscheduled ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </Button>
+            </CollapsibleTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            <p>{showUnscheduled ? "Dölj oplanerade" : "Visa oplanerade"}</p>
+          </TooltipContent>
+        </Tooltip>
+      )}
     </Collapsible>
   );
 });

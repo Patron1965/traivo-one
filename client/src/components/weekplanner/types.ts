@@ -27,12 +27,17 @@ export interface PlannerAction {
   newState: PlannerActionState;
 }
 
+export type PlannerDisplayMode = "full" | "calendar-only" | "orderlager-only";
+export type PlannerEffectiveDisplayMode = PlannerDisplayMode | "neither";
+
 export interface WeekPlannerProps {
   onAddJob?: () => void;
   onSelectJob?: (jobId: string) => void;
   onSelectedJobIdsChange?: (ids: Set<string>) => void;
   showAIPanel?: boolean;
   onToggleAIPanel?: () => void;
+  displayMode?: PlannerDisplayMode;
+  popoutRole?: "main" | "popout-calendar" | "popout-orderlager";
 }
 
 export type ViewMode = "day" | "week" | "month" | "route";

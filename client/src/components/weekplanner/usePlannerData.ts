@@ -1147,7 +1147,8 @@ export function usePlannerData() {
   }, [constraintData]);
 
   return {
-    viewMode, currentDate, currentWeekStart, selectedJob, showUnscheduled, setShowUnscheduled,
+    viewMode, setViewMode, currentDate, setCurrentDate, currentWeekStart, setCurrentWeekStart,
+    selectedJob, setSelectedJob, showUnscheduled, setShowUnscheduled,
     filterCustomer, setFilterCustomer, filterPriority, setFilterPriority,
     filterCluster, setFilterCluster, filterTeam, setFilterTeam,
     filterExecutionCode, setFilterExecutionCode,

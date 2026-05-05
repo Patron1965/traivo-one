@@ -9,10 +9,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight, ChevronDown, ChevronUp, Crosshair, ExternalLink, ShieldCheck, Send } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight, ChevronDown, ChevronUp, Crosshair, ExternalLink, ShieldCheck, Send, Inbox, Target, X } from "lucide-react";
 import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
-import type { ViewMode } from "./types";
+import type { ViewMode, PlannerDisplayMode } from "./types";
+import type { PopoutView, SyncRole, AssignSlot } from "./usePlannerSync";
 import { zoomLevels } from "./types";
+import { format, addDays } from "date-fns";
+import { sv } from "date-fns/locale";
 
 interface PlannerToolbarProps {
   viewMode: ViewMode;
@@ -56,6 +59,12 @@ interface PlannerToolbarProps {
   showConstraintLayer?: boolean;
   onToggleConstraintLayer?: () => void;
   onPublishWeek?: () => void;
+  popoutRole?: SyncRole;
+  displayMode?: PlannerDisplayMode;
+  poppedOutViews?: Set<PopoutView>;
+  onOpenPopout?: (view: PopoutView) => void;
+  crossWindowSlot?: AssignSlot | null;
+  setCrossWindowSlot?: (slot: AssignSlot | null) => void;
 }
 
 const getGoalColor = (pct: number) => {
@@ -69,6 +78,118 @@ const getGoalTextColor = (pct: number) => {
   if (pct >= 50) return "text-yellow-600 dark:text-yellow-400";
   return "text-red-600 dark:text-red-400";
 };
+
+function CrossWindowSlotPicker({ resources, slot, onChange }: { resources: Resource[]; slot: AssignSlot | null; onChange?: (slot: AssignSlot | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const [resourceId, setResourceId] = useState<string>(slot?.resourceId ?? "");
+  const [date, setDate] = useState<string>(slot?.date ?? format(new Date(), "yyyy-MM-dd"));
+  const [time, setTime] = useState<string>(slot?.startTime ?? "");
+
+  if (!onChange) return null;
+
+  const slotLabel = slot
+    ? `${slot.resourceName} · ${format(new Date(slot.date + "T12:00:00"), "d MMM", { locale: sv })}${slot.startTime ? ` ${slot.startTime}` : ""}`
+    : null;
+
+  const handleApply = () => {
+    if (!resourceId || !date) return;
+    const r = resources.find(x => x.id === resourceId);
+    onChange({
+      resourceId,
+      resourceName: r?.name || "Resurs",
+      date,
+      startTime: time || null,
+    });
+    setOpen(false);
+  };
+
+  const handleClear = () => {
+    onChange(null);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button
+              variant={slot ? "default" : "ghost"}
+              size="sm"
+              className="h-8 gap-1.5 px-2"
+              data-testid="button-cross-window-slot-picker"
+            >
+              <Target className="h-3.5 w-3.5" />
+              {slotLabel ? (
+                <span className="text-xs max-w-[180px] truncate">{slotLabel}</span>
+              ) : (
+                <span className="text-xs hidden xl:inline">Markera slot</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="top">Markera mål-slot för uppdrag i andra fönstret</TooltipContent>
+      </Tooltip>
+      <PopoverContent className="w-72 p-3 space-y-2" align="end">
+        <div className="space-y-1">
+          <p className="text-xs font-medium">Mottagar-slot</p>
+          <p className="text-[10px] text-muted-foreground">Uppgifter i orderlagret kan tilldelas direkt hit utan att ha kalendern öppen.</p>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground" htmlFor="slot-resource">Resurs</label>
+          <select
+            id="slot-resource"
+            className="w-full h-8 text-xs border border-input bg-background rounded-md px-2"
+            value={resourceId}
+            onChange={(e) => setResourceId(e.target.value)}
+            data-testid="select-cross-window-resource"
+          >
+            <option value="">Välj resurs…</option>
+            {resources.map(r => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground" htmlFor="slot-date">Datum</label>
+            <input
+              id="slot-date"
+              type="date"
+              className="w-full h-8 text-xs border border-input bg-background rounded-md px-2"
+              value={date}
+              min={format(addDays(new Date(), -7), "yyyy-MM-dd")}
+              onChange={(e) => setDate(e.target.value)}
+              data-testid="input-cross-window-date"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground" htmlFor="slot-time">Tid (valfri)</label>
+            <input
+              id="slot-time"
+              type="time"
+              className="w-full h-8 text-xs border border-input bg-background rounded-md px-2"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              data-testid="input-cross-window-time"
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-2 pt-1">
+          {slot ? (
+            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={handleClear} data-testid="button-cross-window-clear">
+              <X className="h-3 w-3" />
+              Avmarkera
+            </Button>
+          ) : <span />}
+          <Button size="sm" className="h-7 text-xs ml-auto" onClick={handleApply} disabled={!resourceId || !date} data-testid="button-cross-window-apply">
+            Spara slot
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbarProps) {
   const {
@@ -432,14 +553,50 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
             </Tooltip>
           )}
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.open("/planering/popout", "traivo-planner", "width=1400,height=900,menubar=no,toolbar=no,location=no,status=no")} data-testid="button-popout-planner">
-                <ExternalLink className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Öppna i eget fönster</TooltipContent>
-          </Tooltip>
+          {(props.popoutRole ?? "main") === "main" && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={props.poppedOutViews?.has("calendar") ? "default" : "ghost"}
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => props.onOpenPopout?.("calendar")}
+                    disabled={props.poppedOutViews?.has("calendar")}
+                    data-testid="button-popout-calendar"
+                  >
+                    <Calendar className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {props.poppedOutViews?.has("calendar") ? "Kalender är redan poppad ut" : "Pop ut kalender"}
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={props.poppedOutViews?.has("orderlager") ? "default" : "ghost"}
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => props.onOpenPopout?.("orderlager")}
+                    disabled={props.poppedOutViews?.has("orderlager")}
+                    data-testid="button-popout-orderlager"
+                  >
+                    <Inbox className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {props.poppedOutViews?.has("orderlager") ? "Orderlager är redan poppad ut" : "Pop ut orderlager"}
+                </TooltipContent>
+              </Tooltip>
+            </>
+          )}
+
+          <CrossWindowSlotPicker
+            resources={visibleResources}
+            slot={props.crossWindowSlot ?? null}
+            onChange={props.setCrossWindowSlot}
+          />
 
           {onToggleAIPanel && (
             <Tooltip>

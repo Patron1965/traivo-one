@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useLocation } from "wouter";
 import { WeekPlanner } from "@/components/WeekPlanner";
 import { JobModal } from "@/components/JobModal";
 import { JobDetailModal } from "@/components/JobDetailModal";
@@ -6,12 +7,22 @@ import { AISuggestionsPanel } from "@/components/AISuggestionsPanel";
 import { RouteOptimizationPanel } from "@/components/RouteOptimizationPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, X, Route, ExternalLink } from "lucide-react";
+import { Sparkles, X, Route, ExternalLink, Calendar, Inbox } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
-import { useTheme } from "@/hooks/use-theme";
 import travoLogo from "@assets/traivo_logo_transparent.png";
+import type { PlannerDisplayMode } from "@/components/weekplanner/types";
+import type { SyncRole } from "@/components/weekplanner/usePlannerSync";
+
+function readPopoutView(): "calendar" | "orderlager" | "full" {
+  if (typeof window === "undefined") return "full";
+  const params = new URLSearchParams(window.location.search);
+  const v = params.get("view");
+  if (v === "calendar" || v === "orderlager") return v;
+  return "full";
+}
 
 export default function PlannerPopoutPage() {
+  const [location] = useLocation();
   const [showJobModal, setShowJobModal] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [showAIPanel, setShowAIPanel] = useState(() => {
@@ -19,15 +30,32 @@ export default function PlannerPopoutPage() {
     return saved === 'true';
   });
   const [aiPanelTab, setAiPanelTab] = useState<"ai" | "vrp">("ai");
-  const { theme } = useTheme();
+
+  const popoutView = useMemo(() => readPopoutView(), [location]);
+  const displayMode: PlannerDisplayMode = popoutView === "calendar"
+    ? "calendar-only"
+    : popoutView === "orderlager"
+      ? "orderlager-only"
+      : "full";
+  const popoutRole: SyncRole = popoutView === "calendar"
+    ? "popout-calendar"
+    : popoutView === "orderlager"
+      ? "popout-orderlager"
+      : "main";
+
+  const headerLabel = popoutView === "calendar"
+    ? "Kalender"
+    : popoutView === "orderlager"
+      ? "Orderlager"
+      : "Planering";
 
   useEffect(() => {
     localStorage.setItem('weekplanner-ai-panel-open', String(showAIPanel));
   }, [showAIPanel]);
 
   useEffect(() => {
-    document.title = "Traivo — Planering (Pop-out)";
-  }, []);
+    document.title = `Traivo — ${headerLabel} (Pop-out)`;
+  }, [headerLabel]);
 
   const weekDates = useMemo(() => {
     const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
@@ -37,13 +65,19 @@ export default function PlannerPopoutPage() {
     };
   }, []);
 
+  const showAIPanelInPopout = displayMode === "calendar-only" || displayMode === "full";
+
   return (
     <div className="flex flex-col h-screen bg-background text-foreground" data-testid="planner-popout-page">
       <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/30 shrink-0">
         <div className="flex items-center gap-2">
           <img src={travoLogo} alt="Traivo" className="h-6" />
-          <span className="text-sm font-semibold text-muted-foreground">Planering</span>
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0">Pop-out</Badge>
+          <span className="text-sm font-semibold text-muted-foreground">{headerLabel}</span>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1" data-testid="badge-popout-view">
+            {popoutView === "calendar" && <Calendar className="h-2.5 w-2.5" />}
+            {popoutView === "orderlager" && <Inbox className="h-2.5 w-2.5" />}
+            Pop-out
+          </Badge>
         </div>
         <div className="flex items-center gap-1">
           <Button
@@ -64,12 +98,14 @@ export default function PlannerPopoutPage() {
           <WeekPlanner
             onAddJob={() => setShowJobModal(true)}
             onSelectJob={(id) => setSelectedJobId(id)}
-            showAIPanel={showAIPanel}
-            onToggleAIPanel={() => setShowAIPanel(!showAIPanel)}
+            showAIPanel={showAIPanelInPopout && showAIPanel}
+            onToggleAIPanel={showAIPanelInPopout ? () => setShowAIPanel(!showAIPanel) : undefined}
+            displayMode={displayMode}
+            popoutRole={popoutRole}
           />
         </div>
 
-        {showAIPanel && (
+        {showAIPanelInPopout && showAIPanel && (
           <div className="w-80 max-w-[320px] border-l bg-background flex flex-col shrink-0 overflow-hidden">
             <div className="flex items-center justify-between p-3 border-b shrink-0">
               <div className="flex items-center gap-1">

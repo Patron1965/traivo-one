@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { SlaRiskJobsList, SlaRiskSummaryBadge } from "@/components/SlaRiskPanel";
 import { format, isSameDay } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { WeekPlannerProps } from "./weekplanner/types";
+import type { WeekPlannerProps, PlannerDisplayMode } from "./weekplanner/types";
 import { zoomLevels } from "./weekplanner/types";
 import { DroppableCell, DraggableJobCard } from "./weekplanner/DndComponents";
 import { JobCard, DragOverlayContent } from "./weekplanner/JobCard";
@@ -26,15 +26,113 @@ import { usePlannerData } from "./weekplanner/usePlannerData";
 import { usePlannerDnd } from "./weekplanner/usePlannerDnd";
 import { UrgentJobDialog } from "./UrgentJobDialog";
 import { WhatIfPreview } from "./weekplanner/WhatIfPreview";
+import { usePlannerSync, openPlannerPopout, type AssignSlot, type PopoutView, type SyncedState } from "./weekplanner/usePlannerSync";
 import type { WorkOrderWithObject } from "@shared/schema";
 
-export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, showAIPanel, onToggleAIPanel }: WeekPlannerProps) {
+export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, showAIPanel, onToggleAIPanel, displayMode = "full", popoutRole = "main" }: WeekPlannerProps) {
   const d = usePlannerData();
   const zoom = zoomLevels[d.zoomLevel];
   const [urgentDialogOpen, setUrgentDialogOpen] = useState(false);
   const [conflictListOpen, setConflictListOpen] = useState(false);
   const [slaRiskOpen, setSlaRiskOpen] = useState(false);
   const [urgentPreselectedOrder, setUrgentPreselectedOrder] = useState<WorkOrderWithObject | null>(null);
+  const [poppedOutViews, setPoppedOutViews] = useState<Set<PopoutView>>(new Set());
+  const [crossWindowSlot, setCrossWindowSlot] = useState<AssignSlot | null>(null);
+  const [remoteSelectedSlot, setRemoteSelectedSlot] = useState<AssignSlot | null>(null);
+
+  const syncedState = useMemo<SyncedState>(() => ({
+    weekStart: format(d.currentWeekStart, "yyyy-MM-dd"),
+    currentDate: format(d.currentDate, "yyyy-MM-dd"),
+    viewMode: d.viewMode,
+    selectedJob: d.selectedJob,
+    filters: {
+      customer: d.filterCustomer,
+      priority: d.filterPriority,
+      cluster: d.filterCluster,
+      team: d.filterTeam,
+      executionCode: d.filterExecutionCode,
+      search: d.orderstockSearch,
+    },
+  }), [d.currentWeekStart, d.currentDate, d.viewMode, d.selectedJob, d.filterCustomer, d.filterPriority, d.filterCluster, d.filterTeam, d.filterExecutionCode, d.orderstockSearch]);
+
+  const applyRemoteState = useCallback((s: SyncedState) => {
+    if (s.weekStart) {
+      const ws = new Date(s.weekStart + "T00:00:00");
+      if (!isNaN(ws.getTime())) d.setCurrentWeekStart(ws);
+    }
+    if (s.currentDate) {
+      const cd = new Date(s.currentDate + "T00:00:00");
+      if (!isNaN(cd.getTime())) d.setCurrentDate(cd);
+    }
+    if (s.viewMode && s.viewMode !== d.viewMode) d.setViewMode(s.viewMode);
+    if (s.selectedJob !== d.selectedJob) d.setSelectedJob(s.selectedJob ?? null);
+    if (s.filters) {
+      if (s.filters.customer !== d.filterCustomer) d.setFilterCustomer(s.filters.customer);
+      if (s.filters.priority !== d.filterPriority) d.setFilterPriority(s.filters.priority);
+      if (s.filters.cluster !== d.filterCluster) d.setFilterCluster(s.filters.cluster);
+      if (s.filters.team !== d.filterTeam) d.setFilterTeam(s.filters.team);
+      if (s.filters.executionCode !== d.filterExecutionCode) d.setFilterExecutionCode(s.filters.executionCode);
+      if (s.filters.search !== d.orderstockSearch) d.setOrderstockSearch(s.filters.search);
+    }
+  }, [d]);
+
+  usePlannerSync({
+    role: popoutRole,
+    state: syncedState,
+    applyRemoteState,
+    onPopoutsChange: setPoppedOutViews,
+    selectedSlot: crossWindowSlot,
+    onRemoteSlotChange: setRemoteSelectedSlot,
+  });
+
+  const handleOpenPopout = useCallback((view: PopoutView) => {
+    if (poppedOutViews.has(view)) return;
+    openPlannerPopout(view);
+  }, [poppedOutViews]);
+
+  const handleCrossWindowAssign = useCallback((job: WorkOrderWithObject) => {
+    if (!remoteSelectedSlot) return;
+    const slotLabel = `${remoteSelectedSlot.resourceName} · ${remoteSelectedSlot.date}${remoteSelectedSlot.startTime ? ` ${remoteSelectedSlot.startTime}` : ""}`;
+    d.updateWorkOrderMutation.mutate(
+      {
+        id: job.id,
+        resourceId: remoteSelectedSlot.resourceId,
+        scheduledDate: remoteSelectedSlot.date,
+        ...(remoteSelectedSlot.startTime ? { scheduledStartTime: remoteSelectedSlot.startTime } : {}),
+      },
+      {
+        onSuccess: () => {
+          d.toast({
+            title: "Uppgift tilldelad",
+            description: `${(job.title || "Uppgift").slice(0, 60)} → ${slotLabel}`,
+          });
+        },
+        onError: (err: unknown) => {
+          d.toast({
+            title: "Tilldelning misslyckades",
+            description: err instanceof Error ? err.message : "Kunde inte tilldela uppgiften till vald slot.",
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  }, [remoteSelectedSlot, d]);
+
+  type EffectiveDisplayMode = "full" | "calendar-only" | "orderlager-only" | "neither";
+  const effectiveDisplayMode = useMemo<EffectiveDisplayMode>(() => {
+    if (displayMode !== "full") return displayMode;
+    if (popoutRole !== "main") return displayMode;
+    const calOut = poppedOutViews.has("calendar");
+    const ordOut = poppedOutViews.has("orderlager");
+    if (calOut && ordOut) return "neither";
+    if (ordOut) return "calendar-only";
+    if (calOut) return "orderlager-only";
+    return "full";
+  }, [displayMode, popoutRole, poppedOutViews]);
+
+  const showSidebar = effectiveDisplayMode === "full" || effectiveDisplayMode === "orderlager-only";
+  const showCalendar = effectiveDisplayMode === "full" || effectiveDisplayMode === "calendar-only";
+  const sidebarDisplayMode: PlannerDisplayMode = effectiveDisplayMode === "neither" ? "full" : effectiveDisplayMode;
 
   useEffect(() => {
     onSelectedJobIdsChange?.(d.selectedJobIds);
@@ -138,37 +236,43 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
   return (
     <DndContext sensors={dnd.sensors} collisionDetection={dnd.collisionDetection} onDragStart={dnd.handleDragStart} onDragOver={dnd.handleDragOver} onDragEnd={dnd.handleDragEnd}>
       <div className="flex h-full">
-        <UnscheduledSidebar
-          showUnscheduled={d.showUnscheduled} setShowUnscheduled={d.setShowUnscheduled}
-          unscheduledJobs={d.unscheduledJobs} unscheduledTotal={d.unscheduledTotal} accumulatedCount={d.accumulatedUnscheduled.length}
-          hasMoreUnscheduled={d.hasMoreUnscheduled} loadMoreLoading={d.loadMoreLoading} loadMoreUnscheduled={d.loadMoreUnscheduled}
-          orderstockSearch={d.orderstockSearch} setOrderstockSearch={d.setOrderstockSearch}
-          sidebarFiltersOpen={d.sidebarFiltersOpen} setSidebarFiltersOpen={d.setSidebarFiltersOpen}
-          sidebarActiveFilterCount={d.sidebarActiveFilterCount} clearAllSidebarFilters={d.clearAllSidebarFilters}
-          sidebarQuickStats={d.sidebarQuickStats}
-          filterCustomer={d.filterCustomer} setFilterCustomer={d.setFilterCustomer}
-          filterPriority={d.filterPriority} setFilterPriority={d.setFilterPriority}
-          filterCluster={d.filterCluster} setFilterCluster={d.setFilterCluster}
-          filterTeam={d.filterTeam} setFilterTeam={d.setFilterTeam}
-          filterExecutionCode={d.filterExecutionCode} setFilterExecutionCode={d.setFilterExecutionCode}
-          filterDateField={d.filterDateField} setFilterDateField={d.setFilterDateField}
-          filterDatePeriod={d.filterDatePeriod} setFilterDatePeriod={d.setFilterDatePeriod}
-          filterDateCustomFrom={d.filterDateCustomFrom} setFilterDateCustomFrom={d.setFilterDateCustomFrom}
-          filterDateCustomTo={d.filterDateCustomTo} setFilterDateCustomTo={d.setFilterDateCustomTo}
-          dateFilterActive={d.dateFilterActive}
-          unscheduledMissingDateCount={d.unscheduledMissingDateCount}
-          missingDateExpanded={d.missingDateExpanded} setMissingDateExpanded={d.setMissingDateExpanded}
-          missingDateJobs={d.missingDateJobs} missingDateLoading={d.missingDateLoading}
-          customers={d.customers} clusters={d.clusters} teamsData={d.teamsData}
-          customerMap={d.customerMap} clusterMap={d.clusterMap}
-          selectedJob={d.selectedJob} onJobClick={handleJobClickWithCallback} onOpenAssignDialog={d.handleOpenAssignDialog}
-          timewindowMap={d.timewindowMap}
-          currentWeekStart={d.currentWeekStart}
-          activeDragJob={d.activeDragJob}
-          clusterMatchedResourceIds={d.clusterMatchedResourceIds}
-          visibleResources={d.visibleResources}
-        />
+        {showSidebar && (
+          <UnscheduledSidebar
+            showUnscheduled={d.showUnscheduled} setShowUnscheduled={d.setShowUnscheduled}
+            unscheduledJobs={d.unscheduledJobs} unscheduledTotal={d.unscheduledTotal} accumulatedCount={d.accumulatedUnscheduled.length}
+            hasMoreUnscheduled={d.hasMoreUnscheduled} loadMoreLoading={d.loadMoreLoading} loadMoreUnscheduled={d.loadMoreUnscheduled}
+            orderstockSearch={d.orderstockSearch} setOrderstockSearch={d.setOrderstockSearch}
+            sidebarFiltersOpen={d.sidebarFiltersOpen} setSidebarFiltersOpen={d.setSidebarFiltersOpen}
+            sidebarActiveFilterCount={d.sidebarActiveFilterCount} clearAllSidebarFilters={d.clearAllSidebarFilters}
+            sidebarQuickStats={d.sidebarQuickStats}
+            filterCustomer={d.filterCustomer} setFilterCustomer={d.setFilterCustomer}
+            filterPriority={d.filterPriority} setFilterPriority={d.setFilterPriority}
+            filterCluster={d.filterCluster} setFilterCluster={d.setFilterCluster}
+            filterTeam={d.filterTeam} setFilterTeam={d.setFilterTeam}
+            filterExecutionCode={d.filterExecutionCode} setFilterExecutionCode={d.setFilterExecutionCode}
+            filterDateField={d.filterDateField} setFilterDateField={d.setFilterDateField}
+            filterDatePeriod={d.filterDatePeriod} setFilterDatePeriod={d.setFilterDatePeriod}
+            filterDateCustomFrom={d.filterDateCustomFrom} setFilterDateCustomFrom={d.setFilterDateCustomFrom}
+            filterDateCustomTo={d.filterDateCustomTo} setFilterDateCustomTo={d.setFilterDateCustomTo}
+            dateFilterActive={d.dateFilterActive}
+            unscheduledMissingDateCount={d.unscheduledMissingDateCount}
+            missingDateExpanded={d.missingDateExpanded} setMissingDateExpanded={d.setMissingDateExpanded}
+            missingDateJobs={d.missingDateJobs} missingDateLoading={d.missingDateLoading}
+            customers={d.customers} clusters={d.clusters} teamsData={d.teamsData}
+            customerMap={d.customerMap} clusterMap={d.clusterMap}
+            selectedJob={d.selectedJob} onJobClick={handleJobClickWithCallback} onOpenAssignDialog={d.handleOpenAssignDialog}
+            timewindowMap={d.timewindowMap}
+            currentWeekStart={d.currentWeekStart}
+            activeDragJob={d.activeDragJob}
+            clusterMatchedResourceIds={d.clusterMatchedResourceIds}
+            visibleResources={d.visibleResources}
+            expanded={effectiveDisplayMode === "orderlager-only"}
+            remoteSlot={remoteSelectedSlot}
+            onCrossWindowAssign={handleCrossWindowAssign}
+          />
+        )}
 
+        {showCalendar && (
         <div className="flex-1 flex flex-col overflow-hidden">
           <PlannerToolbar
             viewMode={d.viewMode} headerLabel={d.getHeaderLabel()}
@@ -192,6 +296,12 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             showConstraintLayer={d.showConstraintLayer}
             onToggleConstraintLayer={() => d.setShowConstraintLayer(!d.showConstraintLayer)}
             onPublishWeek={d.openBulkSendDialog}
+            popoutRole={popoutRole}
+            displayMode={effectiveDisplayMode}
+            poppedOutViews={poppedOutViews}
+            onOpenPopout={handleOpenPopout}
+            crossWindowSlot={crossWindowSlot}
+            setCrossWindowSlot={setCrossWindowSlot}
           />
 
           <DisruptionPanel />
@@ -312,6 +422,14 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             onConflictClick={() => setConflictListOpen(true)}
           />
         </div>
+        )}
+
+        {effectiveDisplayMode === "neither" && (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground p-6 text-center">
+            <p>Båda vyer är öppna i andra fönster.</p>
+            <p className="text-xs">Stäng ett pop-out-fönster för att visa innehållet här igen.</p>
+          </div>
+        )}
 
         <Sheet open={!!d.activeResourceId} onOpenChange={(open) => !open && d.setActiveResourceId(null)}>
           <SheetContent className="w-[400px] sm:w-[450px] p-0 flex flex-col">
