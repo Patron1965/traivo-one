@@ -72,12 +72,19 @@ class NotificationService {
   private positionBroadcastTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private positionBroadcastIntervalMs = 30_000;
 
-  generateAuthToken(resourceId: string, tenantId?: string | null): string {
+  generateAuthToken(
+    resourceId: string,
+    tenantId?: string | null,
+    ttlMsOverride?: number,
+  ): string {
     const token = crypto.randomBytes(32).toString("hex");
+    const ttl = typeof ttlMsOverride === "number" && ttlMsOverride > 0
+      ? ttlMsOverride
+      : this.tokenExpiryMs;
     this.authTokens.set(token, {
       resourceId,
       tenantId: tenantId ?? null,
-      expiresAt: Date.now() + this.tokenExpiryMs,
+      expiresAt: Date.now() + ttl,
     });
 
     // Clean up expired tokens periodically

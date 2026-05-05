@@ -159,6 +159,23 @@ export function registerRealtimeTestRoutes(app: Express) {
           notificationService.resetPositionThrottleForResource(targetResourceId);
           break;
         }
+        case "mint_socket_token": {
+          // Mint a Socket.io auth token bound to the calling resource with a
+          // caller-supplied TTL. Used by the token-expiry test so we can
+          // mint a token that expires in a few hundred milliseconds without
+          // having to wait the full 5-minute production TTL.
+          const ttlMs =
+            typeof params.ttlMs === "number" && params.ttlMs > 0
+              ? Math.min(params.ttlMs, 5 * 60 * 1000)
+              : 250;
+          const token = notificationService.generateAuthToken(
+            req.mobileResourceId,
+            tenantId,
+            ttlMs,
+          );
+          res.json({ success: true, event, token, ttlMs });
+          return;
+        }
         case "resource_notification": {
           // Push a generic "notification" event into a resource room so a
           // connected mobile client (bound by resourceId, not userId) actually

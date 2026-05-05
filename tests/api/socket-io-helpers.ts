@@ -59,6 +59,32 @@ export async function mintSocketToken(mobileToken: string): Promise<string> {
   return data.token as string;
 }
 
+// Mint a Socket.io auth token with a caller-controlled TTL via the test-only
+// `mint_socket_token` event. Used by the token-expiry test so we can wait a
+// few hundred milliseconds for expiry instead of 5 minutes.
+export async function mintShortLivedSocketToken(
+  mobileToken: string,
+  ttlMs: number,
+): Promise<string> {
+  const res = await fetch(`${BASE}/api/mobile/__test/realtime/emit`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${mobileToken}`,
+    },
+    body: JSON.stringify({ event: "mint_socket_token", params: { ttlMs } }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`mintShortLivedSocketToken failed: ${res.status} ${text}`);
+  }
+  const data = await res.json();
+  if (!data?.token) {
+    throw new Error(`mintShortLivedSocketToken: no token in response`);
+  }
+  return data.token as string;
+}
+
 export async function emitTest(
   mobileToken: string,
   event: string,
