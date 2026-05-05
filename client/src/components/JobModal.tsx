@@ -124,10 +124,11 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       if (!res.ok) throw new Error("Failed to fetch objects");
       return res.json();
     },
-    enabled: objectSearch.length >= 2,
+    enabled: objectSearch.length >= 2 || !!formData.customerId,
   });
 
   const objects = objectsResponse?.objects || [];
+  const objectsTotal = objectsResponse?.total ?? objects.length;
 
   const { data: resources = [] } = useQuery<Resource[]>({
     queryKey: ["/api/resources"],
@@ -493,15 +494,27 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                         </div>
                       )}
                       {!objectsLoading && objects.length === 0 && objectSearch.length >= 2 && (
-                        <div className="py-4 text-center text-sm text-muted-foreground">Inga objekt hittades</div>
+                        <div className="py-4 text-center text-sm text-muted-foreground" data-testid="text-objects-no-match">
+                          Inga objekt hittades
+                        </div>
                       )}
-                      {!objectsLoading && objects.length === 0 && objectSearch.length < 2 && (
+                      {!objectsLoading && objects.length === 0 && objectSearch.length < 2 && !formData.customerId && (
                         <div className="py-4 text-center text-sm text-muted-foreground">
-                          Skriv minst 2 tecken för att söka
+                          Välj en kund eller skriv minst 2 tecken för att söka
+                        </div>
+                      )}
+                      {!objectsLoading && objects.length === 0 && objectSearch.length < 2 && formData.customerId && (
+                        <div className="py-4 text-center text-sm text-muted-foreground" data-testid="text-objects-empty-customer">
+                          Den här kunden har inga objekt knutna till sig
                         </div>
                       )}
                       {objects.length > 0 && (
                         <div className="p-1">
+                          {!objectSearch && formData.customerId && (
+                            <div className="px-2 py-1.5 text-xs text-muted-foreground border-b mb-1" data-testid="text-objects-customer-count">
+                              {objectsTotal} objekt för kunden{objectsTotal > objects.length ? ` — visar ${objects.length}, skriv för att söka` : ""}
+                            </div>
+                          )}
                           {objects.map((obj) => (
                             <button
                               key={obj.id}
