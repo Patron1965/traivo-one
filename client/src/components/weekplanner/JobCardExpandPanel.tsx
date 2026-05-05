@@ -743,6 +743,8 @@ function MaterialRow({ jobId, line, bulkJobIds = [] }: { jobId: string; line: Jo
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [qty, setQty] = useState(String(line.quantity));
+  const [price, setPrice] = useState(line.resolvedPrice != null ? String(line.resolvedPrice) : "");
+  const [noteText, setNoteText] = useState(line.notes ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const mutation = useUpdateJobLine(jobId);
@@ -752,12 +754,16 @@ function MaterialRow({ jobId, line, bulkJobIds = [] }: { jobId: string; line: Jo
   const hasBulkTargets = otherBulkIds.length > 0;
 
   useEffect(() => {
-    if (!editing) setQty(String(line.quantity));
-  }, [editing, line.quantity]);
+    if (!editing) {
+      setQty(String(line.quantity));
+      setPrice(line.resolvedPrice != null ? String(line.resolvedPrice) : "");
+      setNoteText(line.notes ?? "");
+    }
+  }, [editing, line.quantity, line.resolvedPrice, line.notes]);
 
-  const handleSaveQty = () => {
-    const parsed = Number(qty);
-    if (!Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
+  const handleSaveAll = () => {
+    const parsedQty = Number(qty);
+    if (!Number.isFinite(parsedQty) || parsedQty < 0 || !Number.isInteger(parsedQty)) {
       toast({
         title: "Ogiltig kvantitet",
         description: "Ange ett heltal ≥ 0.",
@@ -765,26 +771,56 @@ function MaterialRow({ jobId, line, bulkJobIds = [] }: { jobId: string; line: Jo
       });
       return;
     }
-    if (parsed === line.quantity) {
+
+    const trimmedPrice = price.trim();
+    let parsedPrice: number | null = null;
+    if (trimmedPrice !== "") {
+      const num = Number(trimmedPrice);
+      if (!Number.isFinite(num) || num < 0 || !Number.isInteger(num)) {
+        toast({
+          title: "Ogiltigt pris",
+          description: "Ange ett heltal ≥ 0 (kr) eller lämna tomt.",
+          variant: "destructive",
+        });
+        return;
+      }
+      parsedPrice = num;
+    }
+
+    const trimmedNote = noteText.trim();
+    const nextNote: string | null = trimmedNote === "" ? null : trimmedNote;
+
+    const payload: { lineId: string; quantity?: number; resolvedPrice?: number | null; notes?: string | null } = {
+      lineId: line.id,
+    };
+    if (parsedQty !== line.quantity) payload.quantity = parsedQty;
+    const currentPrice = line.resolvedPrice ?? null;
+    if (parsedPrice !== currentPrice) payload.resolvedPrice = parsedPrice;
+    const currentNote = line.notes ?? null;
+    if (nextNote !== currentNote) payload.notes = nextNote;
+
+    if (
+      payload.quantity === undefined &&
+      payload.resolvedPrice === undefined &&
+      payload.notes === undefined
+    ) {
       setEditing(false);
       return;
     }
-    mutation.mutate(
-      { lineId: line.id, quantity: parsed },
-      {
-        onSuccess: () => {
-          setEditing(false);
-          toast({ title: "Kvantitet uppdaterad" });
-        },
-        onError: (err) => {
-          toast({
-            title: "Kunde inte uppdatera",
-            description: err.message,
-            variant: "destructive",
-          });
-        },
+
+    mutation.mutate(payload, {
+      onSuccess: () => {
+        setEditing(false);
+        toast({ title: "Orderrad uppdaterad" });
       },
-    );
+      onError: (err) => {
+        toast({
+          title: "Kunde inte uppdatera",
+          description: err.message,
+          variant: "destructive",
+        });
+      },
+    });
   };
 
   const handleToggleCompleted = () => {
@@ -900,102 +936,147 @@ function MaterialRow({ jobId, line, bulkJobIds = [] }: { jobId: string; line: Jo
 
   return (
     <li
-      className="flex items-center justify-between gap-2 text-[11px] border-b border-muted pb-1"
+      className="text-[11px] border-b border-muted pb-1"
       data-testid={`expand-material-item-${line.id}`}
     >
-      <div className="min-w-0 flex-1">
-        <div className={`font-medium truncate ${isCompleted ? "line-through text-muted-foreground" : ""}`}>
-          {line.articleName || "—"}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className={`font-medium truncate ${isCompleted ? "line-through text-muted-foreground" : ""}`}>
+            {line.articleName || "—"}
+          </div>
+          {line.articleNumber && <div className="text-muted-foreground text-[10px]">{line.articleNumber}</div>}
+          {!editing && line.notes && (
+            <div
+              className="text-muted-foreground text-[10px] whitespace-pre-wrap mt-0.5"
+              data-testid={`text-line-notes-${line.id}`}
+            >
+              {line.notes}
+            </div>
+          )}
         </div>
-        {line.articleNumber && <div className="text-muted-foreground text-[10px]">{line.articleNumber}</div>}
+        <div className="shrink-0 flex items-center gap-1">
+          {editing ? (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0"
+                onClick={() => setEditing(false)}
+                disabled={mutation.isPending}
+                data-testid={`button-cancel-line-${line.id}`}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="default"
+                className="h-6 px-1.5 text-[10px] gap-0.5"
+                onClick={handleSaveAll}
+                disabled={mutation.isPending}
+                data-testid={`button-save-line-${line.id}`}
+              >
+                {mutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+              </Button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => { if (!isTemp) setEditing(true); }}
+                disabled={isTemp}
+                className="text-right hover-elevate rounded px-1 py-0.5 disabled:opacity-60 disabled:cursor-not-allowed"
+                title={isTemp ? "Sparar…" : "Ändra antal, pris och anteckning"}
+                data-testid={`button-edit-line-${line.id}`}
+              >
+                <span className={isCompleted ? "line-through text-muted-foreground" : ""}>{line.quantity} st</span>
+                {line.resolvedPrice !== null && line.resolvedPrice !== undefined && (
+                  <div className="text-muted-foreground text-[10px]" data-testid={`text-line-price-${line.id}`}>
+                    {line.resolvedPrice} kr
+                  </div>
+                )}
+              </button>
+              <Button
+                type="button"
+                size="sm"
+                variant={isCompleted ? "default" : "ghost"}
+                className="h-6 w-6 p-0"
+                onClick={handleToggleCompleted}
+                disabled={mutation.isPending || isTemp}
+                title={isCompleted ? "Avmarkera som klar" : "Markera som klar"}
+                data-testid={`button-toggle-line-done-${line.id}`}
+              >
+                {mutation.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : isCompleted ? (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                ) : (
+                  <Check className="h-3.5 w-3.5" />
+                )}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                onClick={() => setConfirmDelete(true)}
+                disabled={deleteMutation.isPending || isTemp}
+                title="Ta bort orderrad"
+                data-testid={`button-delete-line-${line.id}`}
+              >
+                {deleteMutation.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            </>
+          )}
+        </div>
       </div>
-      <div className="shrink-0 flex items-center gap-1">
-        {editing ? (
-          <>
+      {editing && (
+        <div className="mt-1 grid gap-1">
+          <div className="flex items-center gap-1">
+            <label className="text-muted-foreground text-[10px] w-12 shrink-0">Antal</label>
             <Input
               type="number"
               min={0}
               step={1}
               value={qty}
               onChange={(e) => setQty(e.target.value)}
-              className="h-6 w-14 text-[11px] px-1"
+              className="h-6 flex-1 text-[11px] px-1"
               data-testid={`input-line-qty-${line.id}`}
             />
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-6 w-6 p-0"
-              onClick={() => setEditing(false)}
-              disabled={mutation.isPending}
-              data-testid={`button-cancel-line-${line.id}`}
-            >
-              <X className="h-3 w-3" />
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="default"
-              className="h-6 px-1.5 text-[10px] gap-0.5"
-              onClick={handleSaveQty}
-              disabled={mutation.isPending}
-              data-testid={`button-save-line-${line.id}`}
-            >
-              {mutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-            </Button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={() => { if (!isTemp) setEditing(true); }}
-              disabled={isTemp}
-              className="text-right hover-elevate rounded px-1 py-0.5 disabled:opacity-60 disabled:cursor-not-allowed"
-              title={isTemp ? "Sparar…" : "Ändra antal"}
-              data-testid={`button-edit-line-${line.id}`}
-            >
-              <span className={isCompleted ? "line-through text-muted-foreground" : ""}>{line.quantity} st</span>
-              {line.resolvedPrice !== null && line.resolvedPrice !== undefined && (
-                <div className="text-muted-foreground text-[10px]">{line.resolvedPrice} kr</div>
-              )}
-            </button>
-            <Button
-              type="button"
-              size="sm"
-              variant={isCompleted ? "default" : "ghost"}
-              className="h-6 w-6 p-0"
-              onClick={handleToggleCompleted}
-              disabled={mutation.isPending || isTemp}
-              title={isCompleted ? "Avmarkera som klar" : "Markera som klar"}
-              data-testid={`button-toggle-line-done-${line.id}`}
-            >
-              {mutation.isPending ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : isCompleted ? (
-                <CheckCircle2 className="h-3.5 w-3.5" />
-              ) : (
-                <Check className="h-3.5 w-3.5" />
-              )}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-              onClick={() => setConfirmDelete(true)}
-              disabled={deleteMutation.isPending || isTemp}
-              title="Ta bort orderrad"
-              data-testid={`button-delete-line-${line.id}`}
-            >
-              {deleteMutation.isPending ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Trash2 className="h-3.5 w-3.5" />
-              )}
-            </Button>
-          </>
-        )}
-      </div>
+            <span className="text-muted-foreground text-[10px]">st</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <label className="text-muted-foreground text-[10px] w-12 shrink-0">Pris</label>
+            <Input
+              type="number"
+              min={0}
+              step={1}
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              placeholder="Tomt"
+              className="h-6 flex-1 text-[11px] px-1"
+              data-testid={`input-line-price-${line.id}`}
+            />
+            <span className="text-muted-foreground text-[10px]">kr</span>
+          </div>
+          <div className="flex items-start gap-1">
+            <label className="text-muted-foreground text-[10px] w-12 shrink-0 mt-1">Notering</label>
+            <Textarea
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder="Kort radkommentar"
+              rows={2}
+              className="text-[11px] px-1 py-1 min-h-[40px]"
+              data-testid={`input-line-notes-${line.id}`}
+            />
+          </div>
+        </div>
+      )}
       <AlertDialog open={confirmDelete} onOpenChange={(o) => { if (!bulkDeleting) setConfirmDelete(o); }}>
         <AlertDialogContent data-testid={`dialog-confirm-delete-line-${line.id}`}>
           <AlertDialogHeader>

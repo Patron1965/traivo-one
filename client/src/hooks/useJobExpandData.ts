@@ -225,6 +225,8 @@ export interface UpdateLineInput {
   quantity?: number;
   isOptional?: boolean;
   isCompleted?: boolean;
+  resolvedPrice?: number | null;
+  notes?: string | null;
 }
 
 export function useUpdateJobLine(jobId: string) {
@@ -235,6 +237,8 @@ export function useUpdateJobLine(jobId: string) {
       if (input.quantity !== undefined) payload.quantity = input.quantity;
       if (input.isOptional !== undefined) payload.isOptional = input.isOptional;
       if (input.isCompleted !== undefined) payload.isCompleted = input.isCompleted;
+      if (input.resolvedPrice !== undefined) payload.resolvedPrice = input.resolvedPrice;
+      if (input.notes !== undefined) payload.notes = input.notes;
       await apiRequest("PATCH", `/api/work-order-lines/${input.lineId}`, payload);
     },
     onMutate: async (input) => {
@@ -253,6 +257,8 @@ export function useUpdateJobLine(jobId: string) {
                       completedAt: input.isCompleted ? (m.completedAt ?? new Date().toISOString()) : null,
                     }
                   : {}),
+                ...(input.resolvedPrice !== undefined ? { resolvedPrice: input.resolvedPrice } : {}),
+                ...(input.notes !== undefined ? { notes: input.notes } : {}),
               }
             : m,
         );
