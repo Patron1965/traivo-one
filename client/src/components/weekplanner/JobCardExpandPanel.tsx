@@ -26,6 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useQuery } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   CalendarRange,
   History,
@@ -68,6 +69,7 @@ interface JobCardExpandPanelProps {
   jobId: string;
   enabled: boolean;
   onHistoryClick?: (jobId: string) => void;
+  bulkJobIds?: string[];
 }
 
 const TAB_KEY_PREFIX = "traivo:orderlager:expanded-tab:";
@@ -737,14 +739,17 @@ function NotesTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
   );
 }
 
-function MaterialRow({ jobId, line }: { jobId: string; line: JobExpandMaterial }) {
+function MaterialRow({ jobId, line, bulkJobIds = [] }: { jobId: string; line: JobExpandMaterial; bulkJobIds?: string[] }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [qty, setQty] = useState(String(line.quantity));
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const mutation = useUpdateJobLine(jobId);
   const deleteMutation = useDeleteJobLine(jobId);
   const isTemp = line.id.startsWith("tmp-");
+  const otherBulkIds = bulkJobIds.filter((id) => id !== jobId);
+  const hasBulkTargets = otherBulkIds.length > 0;
 
   useEffect(() => {
     if (!editing) setQty(String(line.quantity));
@@ -820,6 +825,77 @@ function MaterialRow({ jobId, line }: { jobId: string; line: JobExpandMaterial }
         },
       },
     );
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    setBulkDeleting(true);
+    try {
+      // Delete from current job first
+      await apiRequest("DELETE", `/api/work-order-lines/${line.id}`);
+
+      // Look up matching lines on other selected jobs and delete them
+      const results = await Promise.all(
+        otherBulkIds.map(async (targetId) => {
+          try {
+            const res = await fetch(`/api/work-orders/${targetId}/lines`);
+            if (!res.ok) return { targetId, deleted: 0, error: true };
+            const lines = (await res.json()) as Array<{
+              id: string;
+              articleId?: string | null;
+              articleNumber?: string | null;
+              articleName?: string | null;
+            }>;
+            const matches = lines.filter((l) => {
+              if (line.articleId && l.articleId) return l.articleId === line.articleId;
+              if (line.articleNumber && l.articleNumber)
+                return l.articleNumber === line.articleNumber;
+              if (line.articleName && l.articleName) return l.articleName === line.articleName;
+              return false;
+            });
+            await Promise.all(
+              matches.map((m) => apiRequest("DELETE", `/api/work-order-lines/${m.id}`)),
+            );
+            return { targetId, deleted: matches.length, error: false };
+          } catch {
+            return { targetId, deleted: 0, error: true };
+          }
+        }),
+      );
+
+      const totalOtherDeleted = results.reduce((sum, r) => sum + r.deleted, 0);
+      const errorCount = results.filter((r) => r.error).length;
+      const ordersAffected = results.filter((r) => r.deleted > 0).length + 1;
+
+      // Invalidate caches for all affected jobs
+      queryClient.invalidateQueries({ queryKey: ["job-expand-data", jobId] });
+      for (const targetId of otherBulkIds) {
+        queryClient.invalidateQueries({ queryKey: ["job-expand-data", targetId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/work-orders", targetId, "lines"] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+
+      setConfirmDelete(false);
+      if (errorCount > 0) {
+        toast({
+          title: "Borttaget delvis",
+          description: `Tog bort ${1 + totalOtherDeleted} rader på ${ordersAffected} jobb. ${errorCount} jobb kunde inte uppdateras.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Orderrader borttagna",
+          description: `${1 + totalOtherDeleted} rader borttagna på ${ordersAffected} jobb.`,
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Kunde inte ta bort",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setBulkDeleting(false);
+    }
   };
 
   return (
@@ -920,22 +996,49 @@ function MaterialRow({ jobId, line }: { jobId: string; line: JobExpandMaterial }
           </>
         )}
       </div>
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+      <AlertDialog open={confirmDelete} onOpenChange={(o) => { if (!bulkDeleting) setConfirmDelete(o); }}>
         <AlertDialogContent data-testid={`dialog-confirm-delete-line-${line.id}`}>
           <AlertDialogHeader>
             <AlertDialogTitle>Ta bort orderrad?</AlertDialogTitle>
             <AlertDialogDescription>
-              {line.articleName || "Orderraden"} tas bort permanent från arbetsordern.
+              {hasBulkTargets ? (
+                <>
+                  {line.articleName || "Orderraden"} tas bort permanent från detta jobb.
+                  <br />
+                  Du har <span className="font-medium">{otherBulkIds.length + 1}</span> jobb markerade — välj nedan om raden även ska tas bort från övriga markerade jobb (matchas på artikel).
+                </>
+              ) : (
+                <>{line.articleName || "Orderraden"} tas bort permanent från arbetsordern.</>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid={`button-cancel-delete-line-${line.id}`}>Avbryt</AlertDialogCancel>
+            <AlertDialogCancel
+              disabled={bulkDeleting || deleteMutation.isPending}
+              data-testid={`button-cancel-delete-line-${line.id}`}
+            >
+              Avbryt
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDelete}
+              disabled={bulkDeleting || deleteMutation.isPending}
               data-testid={`button-confirm-delete-line-${line.id}`}
             >
-              Ta bort
+              {hasBulkTargets ? "Ta bort endast här" : "Ta bort"}
             </AlertDialogAction>
+            {hasBulkTargets && (
+              <AlertDialogAction
+                onClick={(e) => { e.preventDefault(); handleConfirmBulkDelete(); }}
+                disabled={bulkDeleting || deleteMutation.isPending}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                data-testid={`button-confirm-bulk-delete-line-${line.id}`}
+              >
+                {bulkDeleting ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                ) : null}
+                Ta bort på alla {otherBulkIds.length + 1} markerade
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1144,7 +1247,7 @@ function AddMaterialRow({ jobId }: { jobId: string }) {
   );
 }
 
-function MaterialsTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
+function MaterialsTab({ jobId, data, bulkJobIds }: { jobId: string; data: JobExpandData; bulkJobIds?: string[] }) {
   return (
     <div data-testid="expand-tab-materials-content">
       <SyncMarker entry={data.sync.materials} />
@@ -1153,7 +1256,7 @@ function MaterialsTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
       ) : (
         <ul className="space-y-1">
           {data.materials.map((m) => (
-            <MaterialRow key={m.id} jobId={jobId} line={m} />
+            <MaterialRow key={m.id} jobId={jobId} line={m} bulkJobIds={bulkJobIds} />
           ))}
         </ul>
       )}
@@ -1162,7 +1265,7 @@ function MaterialsTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
   );
 }
 
-export function JobCardExpandPanel({ jobId, enabled, onHistoryClick }: JobCardExpandPanelProps) {
+export function JobCardExpandPanel({ jobId, enabled, onHistoryClick, bulkJobIds }: JobCardExpandPanelProps) {
   const tabKey = `${TAB_KEY_PREFIX}${jobId}`;
   const [activeTab, setActiveTab] = useState<string>(() => {
     if (typeof window === "undefined") return "period";
@@ -1232,7 +1335,7 @@ export function JobCardExpandPanel({ jobId, enabled, onHistoryClick }: JobCardEx
           <TabsContent value="communications" className="mt-0"><CommunicationsTab data={data} /></TabsContent>
           <TabsContent value="images" className="mt-0"><ImagesTab data={data} /></TabsContent>
           <TabsContent value="notes" className="mt-0"><NotesTab jobId={jobId} data={data} /></TabsContent>
-          <TabsContent value="materials" className="mt-0"><MaterialsTab jobId={jobId} data={data} /></TabsContent>
+          <TabsContent value="materials" className="mt-0"><MaterialsTab jobId={jobId} data={data} bulkJobIds={bulkJobIds} /></TabsContent>
         </div>
       </Tabs>
     </div>

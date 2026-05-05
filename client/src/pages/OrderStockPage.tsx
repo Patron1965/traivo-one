@@ -16,6 +16,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Form,
   FormControl,
   FormField,
@@ -191,6 +201,8 @@ export default function OrderStockPage() {
   const [selectedOrderForLines, setSelectedOrderForLines] = useState<WorkOrder | null>(null);
   const [selectedArticleId, setSelectedArticleId] = useState<string>("");
   const [lineQuantity, setLineQuantity] = useState(1);
+  const [lineToDelete, setLineToDelete] = useState<WorkOrderLine | null>(null);
+  const [bulkDeletingLine, setBulkDeletingLine] = useState(false);
 
   const metadataFilterString = useMemo(() => {
     if (metadataFilters.length === 0) return "";
@@ -1580,8 +1592,8 @@ export default function OrderStockPage() {
                             <Button
                               size="icon"
                               variant="ghost"
-                              onClick={() => deleteLineMutation.mutate({ lineId: line.id, workOrderId: selectedOrderForLines!.id })}
-                              disabled={deleteLineMutation.isPending}
+                              onClick={() => setLineToDelete(line)}
+                              disabled={deleteLineMutation.isPending || bulkDeletingLine}
                               data-testid={`button-delete-line-${line.id}`}
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
@@ -1723,6 +1735,153 @@ export default function OrderStockPage() {
         open={!!chainTraceWorkOrderId}
         onClose={() => setChainTraceWorkOrderId(null)}
       />
+
+      <AlertDialog
+        open={!!lineToDelete}
+        onOpenChange={(o) => { if (!o && !bulkDeletingLine) setLineToDelete(null); }}
+      >
+        {lineToDelete && (() => {
+          const article = articleMap.get(lineToDelete.articleId);
+          const otherSelected = Array.from(selectedIds).filter(
+            (id) => id !== selectedOrderForLines?.id,
+          );
+          const showBulk =
+            !!selectedOrderForLines &&
+            selectedIds.has(selectedOrderForLines.id) &&
+            otherSelected.length > 0;
+          return (
+            <AlertDialogContent data-testid={`dialog-confirm-delete-line-${lineToDelete.id}`}>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Ta bort orderrad?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {showBulk ? (
+                    <>
+                      {article?.name || "Orderraden"} tas bort permanent från denna order.
+                      <br />
+                      Du har <span className="font-medium">{otherSelected.length + 1}</span> ordrar markerade — välj nedan om raden även ska tas bort från övriga markerade ordrar (matchas på artikel).
+                    </>
+                  ) : (
+                    <>{article?.name || "Orderraden"} tas bort permanent från arbetsordern.</>
+                  )}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel
+                  disabled={bulkDeletingLine || deleteLineMutation.isPending}
+                  data-testid={`button-cancel-delete-line-${lineToDelete.id}`}
+                >
+                  Avbryt
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (!selectedOrderForLines) return;
+                    deleteLineMutation.mutate(
+                      { lineId: lineToDelete.id, workOrderId: selectedOrderForLines.id },
+                      { onSuccess: () => setLineToDelete(null) },
+                    );
+                  }}
+                  disabled={bulkDeletingLine || deleteLineMutation.isPending}
+                  data-testid={`button-confirm-delete-line-${lineToDelete.id}`}
+                >
+                  {showBulk ? "Ta bort endast här" : "Ta bort"}
+                </AlertDialogAction>
+                {showBulk && (
+                  <AlertDialogAction
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      if (!selectedOrderForLines || !lineToDelete) return;
+                      setBulkDeletingLine(true);
+                      try {
+                        await apiRequest(
+                          "DELETE",
+                          `/api/work-order-lines/${lineToDelete.id}`,
+                        );
+                        const results = await Promise.all(
+                          otherSelected.map(async (targetId) => {
+                            try {
+                              const res = await fetch(
+                                `/api/work-orders/${targetId}/lines`,
+                              );
+                              if (!res.ok) return { targetId, deleted: 0, error: true };
+                              const lines = (await res.json()) as WorkOrderLine[];
+                              const matches = lines.filter(
+                                (l) => l.articleId === lineToDelete.articleId,
+                              );
+                              await Promise.all(
+                                matches.map((m) =>
+                                  apiRequest("DELETE", `/api/work-order-lines/${m.id}`),
+                                ),
+                              );
+                              return {
+                                targetId,
+                                deleted: matches.length,
+                                error: false,
+                              };
+                            } catch {
+                              return { targetId, deleted: 0, error: true };
+                            }
+                          }),
+                        );
+                        const totalOther = results.reduce(
+                          (sum, r) => sum + r.deleted,
+                          0,
+                        );
+                        const errorCount = results.filter((r) => r.error).length;
+                        const ordersAffected =
+                          results.filter((r) => r.deleted > 0).length + 1;
+                        await queryClient.refetchQueries({
+                          queryKey: [
+                            "/api/work-orders",
+                            selectedOrderForLines.id,
+                            "lines",
+                          ],
+                        });
+                        for (const targetId of otherSelected) {
+                          queryClient.invalidateQueries({
+                            queryKey: ["/api/work-orders", targetId, "lines"],
+                          });
+                        }
+                        queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
+                        queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+                        if (errorCount > 0) {
+                          toast({
+                            title: "Borttaget delvis",
+                            description: `Tog bort ${1 + totalOther} rader på ${ordersAffected} ordrar. ${errorCount} ordrar kunde inte uppdateras.`,
+                            variant: "destructive",
+                          });
+                        } else {
+                          toast({
+                            title: "Orderrader borttagna",
+                            description: `${1 + totalOther} rader borttagna på ${ordersAffected} ordrar.`,
+                          });
+                        }
+                        setLineToDelete(null);
+                      } catch (err) {
+                        toast({
+                          title: "Kunde inte ta bort",
+                          description: err instanceof Error ? err.message : String(err),
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setBulkDeletingLine(false);
+                      }
+                    }}
+                    disabled={bulkDeletingLine || deleteLineMutation.isPending}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    data-testid={`button-confirm-bulk-delete-line-${lineToDelete.id}`}
+                  >
+                    {bulkDeletingLine ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    ) : null}
+                    Ta bort på alla {otherSelected.length + 1} markerade
+                  </AlertDialogAction>
+                )}
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          );
+        })()}
+      </AlertDialog>
     </div>
   );
 }

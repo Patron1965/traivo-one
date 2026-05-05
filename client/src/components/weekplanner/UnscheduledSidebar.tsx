@@ -100,6 +100,7 @@ interface UnscheduledSidebarProps {
   expanded?: boolean;
   remoteSlot?: AssignSlot | null;
   onCrossWindowAssign?: (job: WorkOrderWithObject) => void;
+  selectedJobIds?: Set<string>;
 }
 
 function SuggestPlacementButton({ job, currentWeekStart, className }: { job: WorkOrderWithObject; currentWeekStart?: Date; className?: string }) {
@@ -193,7 +194,9 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
     selectedJob, onJobClick, onOpenAssignDialog, timewindowMap, currentWeekStart,
     activeDragJob, clusterMatchedResourceIds, visibleResources,
     expanded = false, remoteSlot = null, onCrossWindowAssign,
+    selectedJobIds,
   } = props;
+  const bulkJobIds = selectedJobIds && selectedJobIds.size > 1 ? Array.from(selectedJobIds) : undefined;
 
   const showDragNoMatch = !!(activeDragJob && activeDragJob.clusterId &&
     clusterMatchedResourceIds && clusterMatchedResourceIds.size === 0 &&
@@ -768,7 +771,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                           <span>{expandedJobs.has(job.id) ? "Dölj" : "Mer info"}</span>
                         </button>
                         {expandedJobs.has(job.id) && (
-                          <JobCardExpandPanel jobId={job.id} enabled={true} onHistoryClick={onJobClick} />
+                          <JobCardExpandPanel jobId={job.id} enabled={true} onHistoryClick={onJobClick} bulkJobIds={bulkJobIds} />
                         )}
                       </div>
                     </Card>

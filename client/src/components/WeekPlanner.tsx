@@ -487,6 +487,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             expanded={effectiveDisplayMode === "orderlager-only"}
             remoteSlot={remoteSelectedSlot}
             onCrossWindowAssign={handleCrossWindowAssign}
+            selectedJobIds={d.selectedJobIds}
           />
         )}
 
