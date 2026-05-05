@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +75,25 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
   const [teamPopoverOpen, setTeamPopoverOpen] = useState(false);
   const [teamSearchQuery, setTeamSearchQuery] = useState("");
+  const teamPopoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!teamPopoverOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (teamPopoverRef.current && !teamPopoverRef.current.contains(e.target as Node)) {
+        setTeamPopoverOpen(false);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setTeamPopoverOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [teamPopoverOpen]);
   const [competencyWarning, setCompetencyWarning] = useState<{ hasWarning: boolean; message?: string; missingArticles?: Array<{ id: string; name: string }> } | null>(null);
   const [checkingCompetency, setCheckingCompetency] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<Array<{ resourceId: string; resourceName: string; date: string; startTime: string; score: number; reasons: string[] }>>([]);
@@ -662,7 +681,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                 <Users className="h-3.5 w-3.5" />
                 Tekniker {formData.teamResourceIds.length > 1 && <Badge variant="secondary" className="text-xs px-1.5 py-0">{formData.teamResourceIds.length} st</Badge>}
               </Label>
-              <div className="relative">
+              <div className="relative" ref={teamPopoverRef}>
                 <button
                   type="button"
                   className="flex w-full items-center justify-between rounded-md border bg-background px-3 h-auto min-h-[36px] text-sm"
@@ -710,6 +729,14 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                           setTeamSearchQuery(q);
                         }}
                       />
+                      <button
+                        type="button"
+                        className="ml-2 text-xs text-primary hover:underline shrink-0"
+                        onClick={() => setTeamPopoverOpen(false)}
+                        data-testid="button-close-resource-popover"
+                      >
+                        Klar
+                      </button>
                     </div>
                     <div className="max-h-[200px] overflow-y-auto p-1">
                       {resources.filter(r => !teamSearchQuery || r.name.toLowerCase().includes(teamSearchQuery)).map(r => (
