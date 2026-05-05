@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Link } from "wouter";
 import type { Customer, ServiceObject, Resource, Article, Team, TeamMember, PriceList, ObjectPayer } from "@shared/schema";
 import { ARTICLE_HOOK_LEVEL_LABELS } from "@shared/schema";
 import { BillingCustomerDialog } from "@/components/BillingCustomerDialog";
@@ -132,12 +133,18 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     queryKey: ["/api/resources"],
   });
 
-  const { data: teams = [] } = useQuery<Team[]>({
+  const { data: teams = [], isLoading: teamsLoading } = useQuery<Team[]>({
     queryKey: ["/api/teams"],
+    enabled: open,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: allTeamMembers = [] } = useQuery<TeamMember[]>({
     queryKey: ["/api/team-members"],
+    enabled: open,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: priceLists = [] } = useQuery<PriceList[]>({
@@ -590,33 +597,52 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
               />
             </div>
 
-            {teams.length > 0 && (
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1.5">
-                  <Users className="h-3.5 w-3.5" />
-                  Välj team
-                </Label>
-                <Select value={selectedTeamId || "none"} onValueChange={(v) => selectTeam(v === "none" ? "" : v)}>
-                  <SelectTrigger data-testid="select-team">
-                    <SelectValue placeholder="Inget team" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Inget team (välj manuellt)</SelectItem>
-                    {teams.filter(t => t.status === "active").map(t => {
-                      const memberCount = allTeamMembers.filter(m => m.teamId === t.id).length;
-                      return (
-                        <SelectItem key={t.id} value={t.id}>
-                          <span className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.color || "#3B82F6" }} />
-                            {t.name} ({memberCount} pers)
-                          </span>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5" />
+                Välj team
+              </Label>
+              {(() => {
+                const visibleTeams = teams.filter(t => t.status !== "inactive" && t.status !== "archived");
+                return (
+                  <>
+                    <Select value={selectedTeamId || "none"} onValueChange={(v) => selectTeam(v === "none" ? "" : v)}>
+                      <SelectTrigger data-testid="select-team">
+                        <SelectValue placeholder={teamsLoading ? "Laddar team…" : "Inget team"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Inget team (välj manuellt)</SelectItem>
+                        {visibleTeams.map(t => {
+                          const memberCount = allTeamMembers.filter(m => m.teamId === t.id).length;
+                          return (
+                            <SelectItem key={t.id} value={t.id} data-testid={`option-team-${t.id}`}>
+                              <span className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.color || "#3B82F6" }} />
+                                {t.name} ({memberCount} pers)
+                              </span>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    {!teamsLoading && visibleTeams.length === 0 && (
+                      <p className="text-xs text-muted-foreground" data-testid="text-teams-empty">
+                        {teams.length === 0 ? "Inga team finns ännu. " : "Inga aktiva team. "}
+                        <Link href="/teams" className="underline text-primary">
+                          {teams.length === 0 ? "Skapa ett team" : "Hantera team"}
+                        </Link>{" "}
+                        för att kunna tilldela jobb till en grupp.
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
+              {selectedTeamId && formData.teamResourceIds.length === 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400" data-testid="text-team-empty-warning">
+                  Det valda teamet har inga medlemmar. Välj tekniker manuellt nedan — teamet sparas på ordern ändå.
+                </p>
+              )}
+            </div>
 
             <div className="space-y-2 relative">
               <Label className="flex items-center gap-1.5">
