@@ -184,6 +184,7 @@ app.get("/api/work-orders/:id/expand", asyncHandler(async (req, res) => {
     quantity: l.quantity,
     resolvedPrice: l.resolvedPrice,
     notes: l.notes,
+    isOptional: l.isOptional ?? false,
   }));
 
   const recentJobs = history.map(h => ({

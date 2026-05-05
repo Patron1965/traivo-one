@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export type SyncStatus = "fresh" | "stale" | "pending" | "empty";
 
@@ -56,6 +57,7 @@ export interface JobExpandMaterial {
   quantity: number;
   resolvedPrice: number | null;
   notes: string | null;
+  isOptional?: boolean;
 }
 
 export interface JobExpandCounts {
@@ -98,5 +100,162 @@ export function useJobExpandData(jobId: string | null, enabled: boolean) {
     queryKey: ["/api/work-orders", jobId, "expand"],
     enabled: enabled && !!jobId,
     staleTime: 60_000,
+  });
+}
+
+function expandKey(jobId: string) {
+  return ["/api/work-orders", jobId, "expand"] as const;
+}
+
+function recomputeNotesCount(notes: JobExpandNotes): number {
+  return [notes.notes, notes.plannedNotes, notes.description].filter(Boolean).length;
+}
+
+function recomputePeriodCount(period: JobExpandPeriod): number {
+  return (
+    period.desiredDeliveryStart ||
+    period.desiredDeliveryEnd ||
+    period.plannedWindowStart ||
+    period.plannedWindowEnd ||
+    period.scheduledDate ||
+    period.scheduledStartTime ||
+    period.slaDeadlineAt
+  )
+    ? 1
+    : 0;
+}
+
+export interface UpdateNotesInput {
+  notes?: string | null;
+  plannedNotes?: string | null;
+}
+
+export function useUpdateJobNotes(jobId: string) {
+  const qc = useQueryClient();
+  return useMutation<void, Error, UpdateNotesInput, { previous?: JobExpandData }>({
+    mutationFn: async (input) => {
+      const payload: Record<string, unknown> = {};
+      if (input.notes !== undefined) payload.notes = input.notes ?? null;
+      if (input.plannedNotes !== undefined) payload.plannedNotes = input.plannedNotes ?? null;
+      await apiRequest("PATCH", `/api/work-orders/${jobId}`, payload);
+    },
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: expandKey(jobId) });
+      const previous = qc.getQueryData<JobExpandData>(expandKey(jobId));
+      if (previous) {
+        const nextNotes: JobExpandNotes = {
+          ...previous.notes,
+          ...(input.notes !== undefined ? { notes: input.notes ?? null } : {}),
+          ...(input.plannedNotes !== undefined ? { plannedNotes: input.plannedNotes ?? null } : {}),
+        };
+        qc.setQueryData<JobExpandData>(expandKey(jobId), {
+          ...previous,
+          notes: nextNotes,
+          counts: { ...previous.counts, notes: recomputeNotesCount(nextNotes) },
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _input, ctx) => {
+      if (ctx?.previous) qc.setQueryData(expandKey(jobId), ctx.previous);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: expandKey(jobId) });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    },
+  });
+}
+
+export interface UpdatePeriodInput {
+  desiredDeliveryStart?: string | null;
+  desiredDeliveryEnd?: string | null;
+}
+
+export function useUpdateJobPeriod(jobId: string) {
+  const qc = useQueryClient();
+  return useMutation<void, Error, UpdatePeriodInput, { previous?: JobExpandData }>({
+    mutationFn: async (input) => {
+      const payload: Record<string, unknown> = {};
+      if (input.desiredDeliveryStart !== undefined) {
+        payload.desiredDeliveryStart = input.desiredDeliveryStart ?? null;
+      }
+      if (input.desiredDeliveryEnd !== undefined) {
+        payload.desiredDeliveryEnd = input.desiredDeliveryEnd ?? null;
+      }
+      await apiRequest("PATCH", `/api/work-orders/${jobId}`, payload);
+    },
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: expandKey(jobId) });
+      const previous = qc.getQueryData<JobExpandData>(expandKey(jobId));
+      if (previous) {
+        const nextPeriod: JobExpandPeriod = {
+          ...previous.period,
+          ...(input.desiredDeliveryStart !== undefined
+            ? { desiredDeliveryStart: input.desiredDeliveryStart ?? null }
+            : {}),
+          ...(input.desiredDeliveryEnd !== undefined
+            ? { desiredDeliveryEnd: input.desiredDeliveryEnd ?? null }
+            : {}),
+        };
+        qc.setQueryData<JobExpandData>(expandKey(jobId), {
+          ...previous,
+          period: nextPeriod,
+          counts: { ...previous.counts, period: recomputePeriodCount(nextPeriod) },
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _input, ctx) => {
+      if (ctx?.previous) qc.setQueryData(expandKey(jobId), ctx.previous);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: expandKey(jobId) });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    },
+  });
+}
+
+export interface UpdateLineInput {
+  lineId: string;
+  quantity?: number;
+  isOptional?: boolean;
+}
+
+export function useUpdateJobLine(jobId: string) {
+  const qc = useQueryClient();
+  return useMutation<void, Error, UpdateLineInput, { previous?: JobExpandData }>({
+    mutationFn: async (input) => {
+      const payload: Record<string, unknown> = {};
+      if (input.quantity !== undefined) payload.quantity = input.quantity;
+      if (input.isOptional !== undefined) payload.isOptional = input.isOptional;
+      await apiRequest("PATCH", `/api/work-order-lines/${input.lineId}`, payload);
+    },
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: expandKey(jobId) });
+      const previous = qc.getQueryData<JobExpandData>(expandKey(jobId));
+      if (previous) {
+        const nextMaterials = previous.materials.map((m) =>
+          m.id === input.lineId
+            ? {
+                ...m,
+                ...(input.quantity !== undefined ? { quantity: input.quantity } : {}),
+                ...(input.isOptional !== undefined ? { isOptional: input.isOptional } : {}),
+              }
+            : m,
+        );
+        qc.setQueryData<JobExpandData>(expandKey(jobId), {
+          ...previous,
+          materials: nextMaterials,
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _input, ctx) => {
+      if (ctx?.previous) qc.setQueryData(expandKey(jobId), ctx.previous);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: expandKey(jobId) });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    },
   });
 }

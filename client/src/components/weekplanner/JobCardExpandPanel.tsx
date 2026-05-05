@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { SyntheticEvent } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   CalendarRange,
   History,
@@ -15,10 +18,25 @@ import {
   CheckCircle2,
   Circle,
   Clock,
+  Pencil,
+  Save,
+  X,
+  Loader2,
+  Check,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { sv } from "date-fns/locale";
-import { useJobExpandData, type JobExpandData, type JobExpandSyncEntry, type SyncStatus } from "@/hooks/useJobExpandData";
+import {
+  useJobExpandData,
+  useUpdateJobLine,
+  useUpdateJobNotes,
+  useUpdateJobPeriod,
+  type JobExpandData,
+  type JobExpandSyncEntry,
+  type JobExpandMaterial,
+  type SyncStatus,
+} from "@/hooks/useJobExpandData";
+import { useToast } from "@/hooks/use-toast";
 
 interface JobCardExpandPanelProps {
   jobId: string;
@@ -62,6 +80,17 @@ function formatRelative(d: string | null | undefined): string {
   }
 }
 
+function toDateInputValue(d: string | null | undefined): string {
+  if (!d) return "";
+  try {
+    const date = new Date(d);
+    if (Number.isNaN(date.getTime())) return "";
+    return format(date, "yyyy-MM-dd");
+  } catch {
+    return "";
+  }
+}
+
 function CountBadge({ value }: { value: number }) {
   if (!value) return null;
   return (
@@ -87,8 +116,21 @@ function SyncMarker({ entry }: { entry: JobExpandSyncEntry }) {
   );
 }
 
-function PeriodTab({ data }: { data: JobExpandData }) {
+function PeriodTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
   const { period } = data;
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [start, setStart] = useState(toDateInputValue(period.desiredDeliveryStart));
+  const [end, setEnd] = useState(toDateInputValue(period.desiredDeliveryEnd));
+  const mutation = useUpdateJobPeriod(jobId);
+
+  useEffect(() => {
+    if (!editing) {
+      setStart(toDateInputValue(period.desiredDeliveryStart));
+      setEnd(toDateInputValue(period.desiredDeliveryEnd));
+    }
+  }, [editing, period.desiredDeliveryStart, period.desiredDeliveryEnd]);
+
   const hasAny =
     period.desiredDeliveryStart ||
     period.desiredDeliveryEnd ||
@@ -97,19 +139,109 @@ function PeriodTab({ data }: { data: JobExpandData }) {
     period.scheduledDate ||
     period.slaDeadlineAt ||
     period.createdAt;
+
+  const handleSave = () => {
+    if (start && end && start > end) {
+      toast({
+        title: "Ogiltigt intervall",
+        description: "Startdatumet måste vara före slutdatumet.",
+        variant: "destructive",
+      });
+      return;
+    }
+    mutation.mutate(
+      {
+        desiredDeliveryStart: start ? start : null,
+        desiredDeliveryEnd: end ? end : null,
+      },
+      {
+        onSuccess: () => {
+          setEditing(false);
+          toast({ title: "Önskad leveransperiod uppdaterad" });
+        },
+        onError: (err) => {
+          toast({
+            title: "Kunde inte spara perioden",
+            description: err.message,
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  };
+
   return (
     <div data-testid="expand-tab-period-content">
       <SyncMarker entry={data.sync.period} />
-      {!hasAny && <p className="text-[11px] text-muted-foreground py-2">Ingen leveransperiod, deadline eller schemalagd tid satt.</p>}
+      {!hasAny && !editing && (
+        <p className="text-[11px] text-muted-foreground py-2">Ingen leveransperiod, deadline eller schemalagd tid satt.</p>
+      )}
       <div className="space-y-1.5 text-[11px]">
-        {(period.desiredDeliveryStart || period.desiredDeliveryEnd) && (
-          <div>
+        <div className="border border-dashed rounded p-1.5">
+          <div className="flex items-center justify-between mb-1">
             <div className="text-muted-foreground">Önskad leveransperiod</div>
+            {!editing ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-5 px-1 text-[10px] gap-1"
+                onClick={() => setEditing(true)}
+                data-testid={`button-edit-period-${jobId}`}
+              >
+                <Pencil className="h-3 w-3" /> Ändra
+              </Button>
+            ) : (
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-5 px-1 text-[10px]"
+                  onClick={() => setEditing(false)}
+                  disabled={mutation.isPending}
+                  data-testid={`button-cancel-period-${jobId}`}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  className="h-5 px-1.5 text-[10px] gap-1"
+                  onClick={handleSave}
+                  disabled={mutation.isPending}
+                  data-testid={`button-save-period-${jobId}`}
+                >
+                  {mutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                  Spara
+                </Button>
+              </div>
+            )}
+          </div>
+          {editing ? (
+            <div className="grid grid-cols-2 gap-1">
+              <Input
+                type="date"
+                value={start}
+                onChange={(e) => setStart(e.target.value)}
+                className="h-7 text-[11px]"
+                data-testid={`input-period-start-${jobId}`}
+              />
+              <Input
+                type="date"
+                value={end}
+                onChange={(e) => setEnd(e.target.value)}
+                className="h-7 text-[11px]"
+                data-testid={`input-period-end-${jobId}`}
+              />
+            </div>
+          ) : (
             <div className="font-medium">
               {formatDate(period.desiredDeliveryStart)} → {formatDate(period.desiredDeliveryEnd)}
             </div>
-          </div>
-        )}
+          )}
+        </div>
         {period.slaDeadlineAt && (
           <div>
             <div className="text-muted-foreground">SLA-deadline</div>
@@ -233,13 +365,113 @@ function ImagesTab({ data }: { data: JobExpandData }) {
   );
 }
 
-function NotesTab({ data }: { data: JobExpandData }) {
+function NotesTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
   const { notes } = data;
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [notesValue, setNotesValue] = useState(notes.notes ?? "");
+  const [plannedValue, setPlannedValue] = useState(notes.plannedNotes ?? "");
+  const mutation = useUpdateJobNotes(jobId);
+
+  useEffect(() => {
+    if (!editing) {
+      setNotesValue(notes.notes ?? "");
+      setPlannedValue(notes.plannedNotes ?? "");
+    }
+  }, [editing, notes.notes, notes.plannedNotes]);
+
+  const handleSave = () => {
+    mutation.mutate(
+      {
+        notes: notesValue.trim() ? notesValue : null,
+        plannedNotes: plannedValue.trim() ? plannedValue : null,
+      },
+      {
+        onSuccess: () => {
+          setEditing(false);
+          toast({ title: "Anteckningar sparade" });
+        },
+        onError: (err) => {
+          toast({
+            title: "Kunde inte spara anteckningar",
+            description: err.message,
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  };
+
   const hasAny = notes.notes || notes.plannedNotes || notes.description;
   return (
     <div data-testid="expand-tab-notes-content">
       <SyncMarker entry={data.sync.notes} />
-      {!hasAny ? (
+      <div className="flex items-center justify-end mb-1.5">
+        {!editing ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-5 px-1 text-[10px] gap-1"
+            onClick={() => setEditing(true)}
+            data-testid={`button-edit-notes-${jobId}`}
+          >
+            <Pencil className="h-3 w-3" /> Redigera
+          </Button>
+        ) : (
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-5 px-1 text-[10px]"
+              onClick={() => setEditing(false)}
+              disabled={mutation.isPending}
+              data-testid={`button-cancel-notes-${jobId}`}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="default"
+              className="h-5 px-1.5 text-[10px] gap-1"
+              onClick={handleSave}
+              disabled={mutation.isPending}
+              data-testid={`button-save-notes-${jobId}`}
+            >
+              {mutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+              Spara
+            </Button>
+          </div>
+        )}
+      </div>
+      {editing ? (
+        <div className="space-y-1.5 text-[11px]">
+          <div>
+            <div className="text-muted-foreground mb-0.5">Anteckningar</div>
+            <Textarea
+              value={notesValue}
+              onChange={(e) => setNotesValue(e.target.value)}
+              rows={3}
+              className="text-[11px] min-h-[60px] py-1.5"
+              placeholder="Anteckningar för fältarbetet…"
+              data-testid={`textarea-notes-${jobId}`}
+            />
+          </div>
+          <div>
+            <div className="text-muted-foreground mb-0.5">Planeringsanteckning</div>
+            <Textarea
+              value={plannedValue}
+              onChange={(e) => setPlannedValue(e.target.value)}
+              rows={2}
+              className="text-[11px] min-h-[44px] py-1.5"
+              placeholder="Internt för planeraren…"
+              data-testid={`textarea-planned-notes-${jobId}`}
+            />
+          </div>
+        </div>
+      ) : !hasAny ? (
         <p className="text-[11px] text-muted-foreground py-2">Inga anteckningar.</p>
       ) : (
         <div className="space-y-1.5 text-[11px]">
@@ -267,7 +499,155 @@ function NotesTab({ data }: { data: JobExpandData }) {
   );
 }
 
-function MaterialsTab({ data }: { data: JobExpandData }) {
+function MaterialRow({ jobId, line }: { jobId: string; line: JobExpandMaterial }) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [qty, setQty] = useState(String(line.quantity));
+  const mutation = useUpdateJobLine(jobId);
+
+  useEffect(() => {
+    if (!editing) setQty(String(line.quantity));
+  }, [editing, line.quantity]);
+
+  const handleSaveQty = () => {
+    const parsed = Number(qty);
+    if (!Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
+      toast({
+        title: "Ogiltig kvantitet",
+        description: "Ange ett heltal ≥ 0.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (parsed === line.quantity) {
+      setEditing(false);
+      return;
+    }
+    mutation.mutate(
+      { lineId: line.id, quantity: parsed },
+      {
+        onSuccess: () => {
+          setEditing(false);
+          toast({ title: "Kvantitet uppdaterad" });
+        },
+        onError: (err) => {
+          toast({
+            title: "Kunde inte uppdatera",
+            description: err.message,
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  };
+
+  const handleToggleOptional = () => {
+    const next = !(line.isOptional ?? false);
+    mutation.mutate(
+      { lineId: line.id, isOptional: next },
+      {
+        onSuccess: () => {
+          toast({ title: next ? "Markerad som klar/valfri" : "Markerad som krävs igen" });
+        },
+        onError: (err) => {
+          toast({
+            title: "Kunde inte uppdatera",
+            description: err.message,
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  };
+
+  const isOptional = line.isOptional ?? false;
+
+  return (
+    <li
+      className="flex items-center justify-between gap-2 text-[11px] border-b border-muted pb-1"
+      data-testid={`expand-material-item-${line.id}`}
+    >
+      <div className="min-w-0 flex-1">
+        <div className={`font-medium truncate ${isOptional ? "line-through text-muted-foreground" : ""}`}>
+          {line.articleName || "—"}
+        </div>
+        {line.articleNumber && <div className="text-muted-foreground text-[10px]">{line.articleNumber}</div>}
+      </div>
+      <div className="shrink-0 flex items-center gap-1">
+        {editing ? (
+          <>
+            <Input
+              type="number"
+              min={0}
+              step={1}
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+              className="h-6 w-14 text-[11px] px-1"
+              data-testid={`input-line-qty-${line.id}`}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-6 w-6 p-0"
+              onClick={() => setEditing(false)}
+              disabled={mutation.isPending}
+              data-testid={`button-cancel-line-${line.id}`}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="default"
+              className="h-6 px-1.5 text-[10px] gap-0.5"
+              onClick={handleSaveQty}
+              disabled={mutation.isPending}
+              data-testid={`button-save-line-${line.id}`}
+            >
+              {mutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+            </Button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="text-right hover-elevate rounded px-1 py-0.5"
+              title="Ändra antal"
+              data-testid={`button-edit-line-${line.id}`}
+            >
+              <span className={isOptional ? "line-through text-muted-foreground" : ""}>{line.quantity} st</span>
+              {line.resolvedPrice !== null && line.resolvedPrice !== undefined && (
+                <div className="text-muted-foreground text-[10px]">{line.resolvedPrice} kr</div>
+              )}
+            </button>
+            <Button
+              type="button"
+              size="sm"
+              variant={isOptional ? "default" : "ghost"}
+              className="h-6 w-6 p-0"
+              onClick={handleToggleOptional}
+              disabled={mutation.isPending}
+              title={isOptional ? "Avmarkera som klar" : "Markera som klar/valfri"}
+              data-testid={`button-toggle-line-done-${line.id}`}
+            >
+              {mutation.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : isOptional ? (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              ) : (
+                <Check className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function MaterialsTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
   return (
     <div data-testid="expand-tab-materials-content">
       <SyncMarker entry={data.sync.materials} />
@@ -276,18 +656,7 @@ function MaterialsTab({ data }: { data: JobExpandData }) {
       ) : (
         <ul className="space-y-1">
           {data.materials.map((m) => (
-            <li key={m.id} className="flex items-center justify-between gap-2 text-[11px] border-b border-muted pb-1" data-testid={`expand-material-item-${m.id}`}>
-              <div className="min-w-0 flex-1">
-                <div className="font-medium truncate">{m.articleName || "—"}</div>
-                {m.articleNumber && <div className="text-muted-foreground text-[10px]">{m.articleNumber}</div>}
-              </div>
-              <div className="shrink-0 text-right">
-                <div>{m.quantity} st</div>
-                {m.resolvedPrice !== null && m.resolvedPrice !== undefined && (
-                  <div className="text-muted-foreground text-[10px]">{m.resolvedPrice} kr</div>
-                )}
-              </div>
-            </li>
+            <MaterialRow key={m.id} jobId={jobId} line={m} />
           ))}
         </ul>
       )}
@@ -360,12 +729,12 @@ export function JobCardExpandPanel({ jobId, enabled, onHistoryClick }: JobCardEx
           </TabsTrigger>
         </TabsList>
         <div className="mt-2 max-h-56 overflow-y-auto pr-1">
-          <TabsContent value="period" className="mt-0"><PeriodTab data={data} /></TabsContent>
+          <TabsContent value="period" className="mt-0"><PeriodTab jobId={jobId} data={data} /></TabsContent>
           <TabsContent value="history" className="mt-0"><HistoryTab data={data} onHistoryClick={onHistoryClick} /></TabsContent>
           <TabsContent value="communications" className="mt-0"><CommunicationsTab data={data} /></TabsContent>
           <TabsContent value="images" className="mt-0"><ImagesTab data={data} /></TabsContent>
-          <TabsContent value="notes" className="mt-0"><NotesTab data={data} /></TabsContent>
-          <TabsContent value="materials" className="mt-0"><MaterialsTab data={data} /></TabsContent>
+          <TabsContent value="notes" className="mt-0"><NotesTab jobId={jobId} data={data} /></TabsContent>
+          <TabsContent value="materials" className="mt-0"><MaterialsTab jobId={jobId} data={data} /></TabsContent>
         </div>
       </Tabs>
     </div>
