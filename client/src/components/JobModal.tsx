@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,11 +6,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CalendarIcon, Loader2, ChevronsUpDown, Check, Package, Anchor, Users, X, MessageSquare, Receipt, Sparkles, AlertTriangle, Search } from "lucide-react";
+import { CalendarIcon, Loader2, Check, Package, Anchor, X, MessageSquare, Receipt, AlertTriangle, Search, Sun, Sunset } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -19,8 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Link } from "wouter";
-import type { Customer, ServiceObject, Resource, Article, Team, TeamMember, PriceList, ObjectPayer } from "@shared/schema";
+import type { Customer, ServiceObject, Article, PriceList } from "@shared/schema";
 import { ARTICLE_HOOK_LEVEL_LABELS } from "@shared/schema";
 import { BillingCustomerDialog } from "@/components/BillingCustomerDialog";
 
@@ -30,41 +38,37 @@ interface JobModalProps {
   onSubmit?: (data: JobFormData) => void;
 }
 
+type TimeOfDayPreference = "any" | "morning" | "afternoon";
+
 interface JobFormData {
   title: string;
   description: string;
   plannedNotes: string;
   customerId: string;
   objectId: string;
-  orderType: string;
   priority: string;
-  estimatedDuration: string;
-  resourceId: string;
-  scheduledDate: Date | undefined;
   desiredDeliveryStart: Date | undefined;
   desiredDeliveryEnd: Date | undefined;
-  teamResourceIds: string[];
+  timeOfDayPreference: TimeOfDayPreference;
   priceListId: string;
 }
 
+const EMPTY_FORM: JobFormData = {
+  title: "",
+  description: "",
+  plannedNotes: "",
+  customerId: "",
+  objectId: "",
+  priority: "normal",
+  desiredDeliveryStart: undefined,
+  desiredDeliveryEnd: undefined,
+  timeOfDayPreference: "any",
+  priceListId: "",
+};
+
 export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
   const { toast } = useToast();
-  const [formData, setFormData] = useState<JobFormData>({
-    title: "",
-    description: "",
-    plannedNotes: "",
-    customerId: "",
-    objectId: "",
-    orderType: "service",
-    priority: "normal",
-    estimatedDuration: "60",
-    resourceId: "",
-    scheduledDate: undefined,
-    desiredDeliveryStart: undefined,
-    desiredDeliveryEnd: undefined,
-    teamResourceIds: [],
-    priceListId: "",
-  });
+  const [formData, setFormData] = useState<JobFormData>(EMPTY_FORM);
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerPopoverOpen, setCustomerPopoverOpen] = useState(false);
   const [objectSearch, setObjectSearch] = useState("");
@@ -73,31 +77,12 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
   const [showBillingDialog, setShowBillingDialog] = useState(false);
   const [pendingObjectId, setPendingObjectId] = useState("");
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
-  const [teamPopoverOpen, setTeamPopoverOpen] = useState(false);
-  const [teamSearchQuery, setTeamSearchQuery] = useState("");
-  const teamPopoverRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!teamPopoverOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (teamPopoverRef.current && !teamPopoverRef.current.contains(e.target as Node)) {
-        setTeamPopoverOpen(false);
-      }
-    };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setTeamPopoverOpen(false);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [teamPopoverOpen]);
-  const [competencyWarning, setCompetencyWarning] = useState<{ hasWarning: boolean; message?: string; missingArticles?: Array<{ id: string; name: string }> } | null>(null);
-  const [checkingCompetency, setCheckingCompetency] = useState(false);
-  const [aiSuggestions, setAiSuggestions] = useState<Array<{ resourceId: string; resourceName: string; date: string; startTime: string; score: number; reasons: string[] }>>([]);
-  const [loadingAiSuggestions, setLoadingAiSuggestions] = useState(false);
+  const [fromPopoverOpen, setFromPopoverOpen] = useState(false);
+  const [toPopoverOpen, setToPopoverOpen] = useState(false);
+
+  const [autoSelectedPriceListId, setAutoSelectedPriceListId] = useState<string>("");
+  const [pendingPriceListId, setPendingPriceListId] = useState<string | null>(null);
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
@@ -113,16 +98,6 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     if (!formData.customerId) return "";
     return customers.find(c => c.id === formData.customerId)?.name || "";
   }, [customers, formData.customerId]);
-
-  const debouncedSearch = useMemo(() => {
-    let timeoutId: NodeJS.Timeout;
-    return (value: string) => {
-      clearTimeout(timeoutId);
-      return new Promise<string>((resolve) => {
-        timeoutId = setTimeout(() => resolve(value), 300);
-      });
-    };
-  }, []);
 
   const objectSearchParams = useMemo(() => {
     const params = new URLSearchParams();
@@ -149,41 +124,85 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
   const objects = objectsResponse?.objects || [];
   const objectsTotal = objectsResponse?.total ?? objects.length;
 
-  const { data: resources = [] } = useQuery<Resource[]>({
-    queryKey: ["/api/resources"],
-  });
-
-  const { data: teams = [], isLoading: teamsLoading } = useQuery<Team[]>({
-    queryKey: ["/api/teams"],
-    enabled: open,
-    staleTime: 0,
-    refetchOnMount: "always",
-  });
-
-  const { data: allTeamMembers = [] } = useQuery<TeamMember[]>({
-    queryKey: ["/api/team-members"],
-    enabled: open,
-    staleTime: 0,
-    refetchOnMount: "always",
-  });
-
   const { data: priceLists = [] } = useQuery<PriceList[]>({
     queryKey: ["/api/price-lists"],
   });
 
-  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+  const activePriceLists = useMemo(
+    () => priceLists.filter(pl => pl.status === "active" && !pl.deletedAt),
+    [priceLists],
+  );
 
-  const selectTeam = (teamId: string) => {
-    if (!teamId || teamId === "none") {
-      setSelectedTeamId("");
-      setFormData(prev => ({ ...prev, teamResourceIds: [], resourceId: "" }));
+  // Auto-välj prislista när kund ändras: rabattbrev > kundunik (sorterat efter prioritet desc).
+  // Om ingen kundkopplad prislista finns — eller om den auto-valda försvinner — återställs
+  // formData.priceListId till "" så att backend faller tillbaka på generell/listpris.
+  useEffect(() => {
+    if (!formData.customerId) {
+      setAutoSelectedPriceListId("");
+      setFormData(prev => (prev.priceListId ? { ...prev, priceListId: "" } : prev));
       return;
     }
-    setSelectedTeamId(teamId);
-    const members = allTeamMembers.filter(m => m.teamId === teamId);
-    const resourceIds = members.map(m => m.resourceId);
-    const primaryId = resourceIds.length > 0 ? resourceIds[0] : "";
-    setFormData(prev => ({ ...prev, teamResourceIds: resourceIds, resourceId: primaryId }));
+    const customerLists = activePriceLists.filter(pl => pl.customerId === formData.customerId);
+    if (customerLists.length === 0) {
+      setAutoSelectedPriceListId("");
+      setFormData(prev => (prev.priceListId ? { ...prev, priceListId: "" } : prev));
+      return;
+    }
+    const sorted = [...customerLists].sort((a, b) => {
+      const typeRank = (t: string) => (t === "rabattbrev" ? 2 : t === "kundunik" ? 1 : 0);
+      const ta = typeRank(a.priceListType);
+      const tb = typeRank(b.priceListType);
+      if (ta !== tb) return tb - ta;
+      return (b.priority ?? 0) - (a.priority ?? 0);
+    });
+    const auto = sorted[0];
+    setAutoSelectedPriceListId(auto.id);
+    setFormData(prev => ({ ...prev, priceListId: auto.id }));
+  }, [formData.customerId, activePriceLists]);
+
+  // Skydd mot stale priceListId om den valda prislistan försvinner (inaktiveras/raderas).
+  // Hela kontrollen ligger inuti den funktionella setFormData så vi alltid läser den
+  // senaste queue-uppdaterade `prev` — inte en stale closure-värde. Det undviker race
+  // med auto-effekten ovan när både `customerId` och `activePriceLists` ändras i samma
+  // commit (annars kunde detta effect rensa det auto-värde som auto-effekten precis satt).
+  useEffect(() => {
+    setFormData(prev => {
+      if (!prev.priceListId) return prev;
+      if (!activePriceLists.some(pl => pl.id === prev.priceListId)) {
+        return { ...prev, priceListId: "" };
+      }
+      return prev;
+    });
+  }, [activePriceLists]);
+
+  const autoSelectedPriceList = useMemo(
+    () => activePriceLists.find(pl => pl.id === autoSelectedPriceListId) || null,
+    [activePriceLists, autoSelectedPriceListId],
+  );
+
+  const pendingPriceList = useMemo(
+    () => (pendingPriceListId ? activePriceLists.find(pl => pl.id === pendingPriceListId) || null : null),
+    [activePriceLists, pendingPriceListId],
+  );
+
+  const handlePriceListChange = (newValue: string) => {
+    const newId = newValue === "auto" ? "" : newValue;
+    if (autoSelectedPriceListId && newId !== autoSelectedPriceListId) {
+      setPendingPriceListId(newId || "__auto__");
+      return;
+    }
+    setFormData(prev => ({ ...prev, priceListId: newId }));
+  };
+
+  const confirmPriceListChange = () => {
+    if (pendingPriceListId === null) return;
+    const newId = pendingPriceListId === "__auto__" ? "" : pendingPriceListId;
+    setFormData(prev => ({ ...prev, priceListId: newId }));
+    setPendingPriceListId(null);
+  };
+
+  const cancelPriceListChange = () => {
+    setPendingPriceListId(null);
   };
 
   const { data: applicableArticles = [], isLoading: articlesLoading } = useQuery<Article[]>({
@@ -215,25 +234,24 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       plannedNotes: string;
       customerId: string;
       objectId: string;
-      orderType: string;
       priority: string;
-      estimatedDuration: number;
-      resourceId: string | null;
-      scheduledDate: Date | null;
       desiredDeliveryStart: Date | null;
       desiredDeliveryEnd: Date | null;
-      status: string;
       articlesToAdd: Array<{ id: string; name: string; price: number | null }>;
       priceListId: string;
-      metadata?: Record<string, any>;
+      metadata?: Record<string, unknown>;
     }) => {
-      const { articlesToAdd, priceListId, ...orderData } = data;
-      const response = await apiRequest("POST", "/api/work-orders", {
+      const { articlesToAdd, priceListId, metadata, ...orderData } = data;
+      const payload: Record<string, unknown> = {
         ...orderData,
         plannedNotes: orderData.plannedNotes || null,
-      });
+      };
+      if (metadata && Object.keys(metadata).length > 0) {
+        payload.metadata = metadata;
+      }
+      const response = await apiRequest("POST", "/api/work-orders", payload);
       const workOrder = response as unknown as { id: string };
-      
+
       if (articlesToAdd.length > 0 && workOrder.id) {
         for (const article of articlesToAdd) {
           const linePayload: Record<string, unknown> = {
@@ -246,15 +264,15 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
           await apiRequest("POST", `/api/work-orders/${workOrder.id}/lines`, linePayload);
         }
       }
-      
+
       return { workOrder, articleCount: articlesToAdd.length };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/work-order-lines"] });
-      const message = result.articleCount > 0 
-        ? `Arbetsordern har skapats med ${result.articleCount} fasthakade artiklar.`
-        : "Arbetsordern har skapats.";
+      const message = result.articleCount > 0
+        ? `Jobbet har skapats med ${result.articleCount} fasthakade artiklar. Tilldela team och tider i planeringen.`
+        : "Jobbet har skapats. Tilldela team och tider i planeringen.";
       toast({ title: "Jobb skapat", description: message });
       handleClose();
     },
@@ -263,82 +281,33 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     },
   });
 
-  const toggleTeamMember = (resourceId: string) => {
-    setFormData(prev => {
-      const ids = prev.teamResourceIds.includes(resourceId)
-        ? prev.teamResourceIds.filter(id => id !== resourceId)
-        : [...prev.teamResourceIds, resourceId];
-      const primaryId = ids.length > 0 ? ids[0] : "";
-      return { ...prev, teamResourceIds: ids, resourceId: primaryId };
-    });
-  };
-
-  const removeTeamMember = (resourceId: string) => {
-    setFormData(prev => {
-      const ids = prev.teamResourceIds.filter(id => id !== resourceId);
-      const primaryId = ids.length > 0 ? ids[0] : "";
-      return { ...prev, teamResourceIds: ids, resourceId: primaryId };
-    });
-  };
-
-  const checkCompetency = async (resourceId: string, articleIds: string[]) => {
-    if (!resourceId || articleIds.length === 0) {
-      setCompetencyWarning(null);
-      return;
-    }
-    setCheckingCompetency(true);
-    try {
-      const res = await apiRequest("POST", "/api/ai/resource-competency-check", { resourceId, articleIds });
-      const data = res as unknown as { hasWarning: boolean; message?: string; missingArticles?: Array<{ id: string; name: string }> };
-      setCompetencyWarning(data);
-    } catch {
-      setCompetencyWarning(null);
-    } finally {
-      setCheckingCompetency(false);
-    }
-  };
-
-  const primaryResourceId = formData.teamResourceIds[0] || formData.resourceId;
-  const selectedArticleArray = Array.from(selectedArticleIds);
-
-  useEffect(() => {
-    if (primaryResourceId && selectedArticleArray.length > 0) {
-      checkCompetency(primaryResourceId, selectedArticleArray);
-    } else {
-      setCompetencyWarning(null);
-    }
-  }, [primaryResourceId, selectedArticleArray.join(",")]);
-
   const handleClose = () => {
-    setFormData({
-      title: "",
-      description: "",
-      plannedNotes: "",
-      customerId: "",
-      objectId: "",
-      orderType: "service",
-      priority: "normal",
-      estimatedDuration: "60",
-      resourceId: "",
-      scheduledDate: undefined,
-      desiredDeliveryStart: undefined,
-      desiredDeliveryEnd: undefined,
-      teamResourceIds: [],
-      priceListId: "",
-    });
+    setFormData(EMPTY_FORM);
     setObjectSearch("");
     setSelectedObjectName("");
     setSelectedArticleIds(new Set());
-    setTeamPopoverOpen(false);
-    setSelectedTeamId("");
-    setCompetencyWarning(null);
-    setAiSuggestions([]);
+    setAutoSelectedPriceListId("");
+    setPendingPriceListId(null);
+    setFromPopoverOpen(false);
+    setToPopoverOpen(false);
     onClose();
   };
+
+  const dateRangeError = useMemo(() => {
+    if (!formData.desiredDeliveryStart || !formData.desiredDeliveryEnd) return null;
+    if (formData.desiredDeliveryEnd < formData.desiredDeliveryStart) {
+      return "Senaste datum ligger före tidigaste — kontrollera ordningen.";
+    }
+    return null;
+  }, [formData.desiredDeliveryStart, formData.desiredDeliveryEnd]);
 
   const handleSubmit = () => {
     if (!formData.title || !formData.customerId || !formData.objectId) {
       toast({ title: "Saknade uppgifter", description: "Fyll i titel, kund och objekt.", variant: "destructive" });
+      return;
+    }
+    if (dateRangeError) {
+      toast({ title: "Kontrollera datum", description: dateRangeError, variant: "destructive" });
       return;
     }
 
@@ -346,8 +315,17 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       .filter(a => selectedArticleIds.has(a.id))
       .map(a => ({ id: a.id, name: a.name, price: a.listPrice }));
 
-    const teamResourceNames = formData.teamResourceIds
-      .map(id => resources.find(r => r.id === id)?.name || id);
+    // Auto-fyll så att Från och Till alltid är symmetriska:
+    // - Bara Från → Till = Från (samma dag)
+    // - Bara Till → Från = Till (samma dag, så vi inte sparar ofullständig period)
+    // - Båda satta → använd som de är
+    const start = formData.desiredDeliveryStart ?? formData.desiredDeliveryEnd ?? null;
+    const end = formData.desiredDeliveryEnd ?? formData.desiredDeliveryStart ?? null;
+
+    const metadata: Record<string, unknown> = {};
+    if (formData.timeOfDayPreference !== "any") {
+      metadata.timeOfDayPreference = formData.timeOfDayPreference;
+    }
 
     createWorkOrderMutation.mutate({
       title: formData.title,
@@ -355,25 +333,12 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       plannedNotes: formData.plannedNotes,
       customerId: formData.customerId,
       objectId: formData.objectId,
-      orderType: formData.orderType,
       priority: formData.priority,
-      estimatedDuration: parseInt(formData.estimatedDuration) || 60,
-      resourceId: formData.resourceId || null,
-      scheduledDate: formData.scheduledDate || null,
-      desiredDeliveryStart: formData.desiredDeliveryStart || null,
-      desiredDeliveryEnd: formData.desiredDeliveryEnd || null,
-      orderStatus: formData.resourceId && formData.scheduledDate ? "planerad_resurs" : "skapad",
+      desiredDeliveryStart: start,
+      desiredDeliveryEnd: end,
       articlesToAdd,
       priceListId: formData.priceListId,
-      metadata: (selectedTeamId || formData.teamResourceIds.length > 1) ? {
-        teamId: selectedTeamId || undefined,
-        teamName: selectedTeamId ? teams.find(t => t.id === selectedTeamId)?.name : undefined,
-        teamMembers: formData.teamResourceIds.map((id, i) => ({
-          resourceId: id,
-          name: teamResourceNames[i],
-          role: i === 0 ? "ansvarig" : "medlem",
-        })),
-      } : undefined,
+      metadata,
     });
 
     onSubmit?.(formData);
@@ -385,17 +350,19 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nytt jobb</DialogTitle>
-          <DialogDescription>Fyll i jobbdetaljer för att skapa ett nytt arbetsorder.</DialogDescription>
+          <DialogDescription>
+            Fyll i det som är känt nu. Team, tider och uppgifter läggs till i planeringen.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="title">Titel</Label>
+            <Label htmlFor="title">Jobbnamn</Label>
             <Input
               id="title"
               placeholder="T.ex. Årlig service"
               value={formData.title}
-              onChange={(e) => setFormData({...formData, title: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               data-testid="input-job-title"
             />
           </div>
@@ -423,7 +390,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                       type="button"
                       className="mr-2 opacity-50 hover:opacity-100"
                       onClick={() => {
-                        setFormData({...formData, customerId: "", objectId: ""});
+                        setFormData({ ...formData, customerId: "", objectId: "" });
                         setSelectedObjectName("");
                         setCustomerSearch("");
                       }}
@@ -445,16 +412,17 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                               type="button"
                               className={cn(
                                 "relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
-                                formData.customerId === c.id && "bg-accent"
+                                formData.customerId === c.id && "bg-accent",
                               )}
                               onMouseDown={(e) => e.preventDefault()}
                               onClick={() => {
-                                setFormData({...formData, customerId: c.id, objectId: ""});
+                                setFormData({ ...formData, customerId: c.id, objectId: "" });
                                 setSelectedObjectName("");
                                 setObjectSearch("");
                                 setCustomerPopoverOpen(false);
                                 setCustomerSearch("");
                               }}
+                              data-testid={`option-customer-${c.id}`}
                             >
                               <Check className={cn("mr-2 h-4 w-4 shrink-0", formData.customerId === c.id ? "opacity-100" : "opacity-0")} />
                               {c.name}
@@ -495,7 +463,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                       type="button"
                       className="mr-2 opacity-50 hover:opacity-100"
                       onClick={() => {
-                        setFormData({...formData, objectId: ""});
+                        setFormData({ ...formData, objectId: "" });
                         setSelectedObjectName("");
                         setObjectSearch("");
                       }}
@@ -506,41 +474,26 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                 </div>
                 {objectPopoverOpen && (
                   <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
-                    <div className="max-h-[200px] overflow-y-auto">
-                      {objectsLoading && (
-                        <div className="flex items-center justify-center py-6">
+                    <div className="max-h-[220px] overflow-y-auto">
+                      {!formData.customerId && objectSearch.length < 2 ? (
+                        <div className="py-4 text-center text-sm text-muted-foreground">
+                          Välj kund eller skriv minst 2 tecken
+                        </div>
+                      ) : objectsLoading ? (
+                        <div className="flex items-center justify-center py-4">
                           <Loader2 className="h-4 w-4 animate-spin" />
                         </div>
-                      )}
-                      {!objectsLoading && objects.length === 0 && objectSearch.length >= 2 && (
-                        <div className="py-4 text-center text-sm text-muted-foreground" data-testid="text-objects-no-match">
-                          Inga objekt hittades
-                        </div>
-                      )}
-                      {!objectsLoading && objects.length === 0 && objectSearch.length < 2 && !formData.customerId && (
-                        <div className="py-4 text-center text-sm text-muted-foreground">
-                          Välj en kund eller skriv minst 2 tecken för att söka
-                        </div>
-                      )}
-                      {!objectsLoading && objects.length === 0 && objectSearch.length < 2 && formData.customerId && (
-                        <div className="py-4 text-center text-sm text-muted-foreground" data-testid="text-objects-empty-customer">
-                          Den här kunden har inga objekt knutna till sig
-                        </div>
-                      )}
-                      {objects.length > 0 && (
+                      ) : objects.length === 0 ? (
+                        <div className="py-4 text-center text-sm text-muted-foreground">Inget objekt hittat</div>
+                      ) : (
                         <div className="p-1">
-                          {!objectSearch && formData.customerId && (
-                            <div className="px-2 py-1.5 text-xs text-muted-foreground border-b mb-1" data-testid="text-objects-customer-count">
-                              {objectsTotal} objekt för kunden{objectsTotal > objects.length ? ` — visar ${objects.length}, skriv för att söka` : ""}
-                            </div>
-                          )}
-                          {objects.map((obj) => (
+                          {objects.map(obj => (
                             <button
                               key={obj.id}
                               type="button"
                               className={cn(
-                                "relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
-                                formData.objectId === obj.id && "bg-accent"
+                                "relative flex w-full cursor-pointer select-none items-start rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
+                                formData.objectId === obj.id && "bg-accent",
                               )}
                               onMouseDown={(e) => e.preventDefault()}
                               onClick={async () => {
@@ -549,20 +502,29 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                                 setObjectSearch("");
                                 try {
                                   const res = await fetch(`/api/objects/${obj.id}/billing-customers`);
-                                  const data = await res.json();
-                                  if (data.multiPayer) {
-                                    setPendingObjectId(obj.id);
-                                    setFormData(prev => ({...prev, objectId: obj.id}));
-                                    setShowBillingDialog(true);
-                                  } else {
-                                    setFormData(prev => ({...prev, objectId: obj.id}));
+                                  if (res.ok) {
+                                    const billing = await res.json() as { multiPayer?: boolean; defaultCustomerId?: string | null };
+                                    if (billing?.multiPayer) {
+                                      // Sätt objectId direkt så den persisteras även om dialogen avbryts;
+                                      // BillingCustomerDialog uppdaterar bara customerId vid bekräftelse.
+                                      setFormData(prev => ({ ...prev, objectId: obj.id }));
+                                      setPendingObjectId(obj.id);
+                                      setShowBillingDialog(true);
+                                      return;
+                                    }
+                                    if (billing?.defaultCustomerId) {
+                                      setFormData(prev => ({ ...prev, objectId: obj.id, customerId: billing.defaultCustomerId as string }));
+                                      return;
+                                    }
                                   }
+                                  setFormData(prev => ({ ...prev, objectId: obj.id }));
                                 } catch {
-                                  setFormData(prev => ({...prev, objectId: obj.id}));
+                                  setFormData(prev => ({ ...prev, objectId: obj.id }));
                                 }
                               }}
+                              data-testid={`option-object-${obj.id}`}
                             >
-                              <Check className={cn("mr-2 h-4 w-4 shrink-0", formData.objectId === obj.id ? "opacity-100" : "opacity-0")} />
+                              <Check className={cn("mr-2 h-4 w-4 shrink-0 mt-0.5", formData.objectId === obj.id ? "opacity-100" : "opacity-0")} />
                               <div className="flex flex-col items-start">
                                 <span>{obj.name}</span>
                                 {obj.address && (
@@ -573,321 +535,54 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                           ))}
                         </div>
                       )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Jobbtyp</Label>
-              <Select 
-                value={formData.orderType} 
-                onValueChange={(v) => setFormData({...formData, orderType: v})}
-              >
-                <SelectTrigger data-testid="select-order-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="service">Service</SelectItem>
-                  <SelectItem value="repair">Reparation</SelectItem>
-                  <SelectItem value="installation">Installation</SelectItem>
-                  <SelectItem value="emergency">Akut</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Prioritet</Label>
-              <Select 
-                value={formData.priority} 
-                onValueChange={(v) => setFormData({...formData, priority: v})}
-              >
-                <SelectTrigger data-testid="select-priority">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">Låg</SelectItem>
-                  <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="high">Hög</SelectItem>
-                  <SelectItem value="urgent">Akut</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Beräknad tid (min)</Label>
-              <Input
-                type="number"
-                value={formData.estimatedDuration}
-                onChange={(e) => setFormData({...formData, estimatedDuration: e.target.value})}
-                data-testid="input-duration"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1.5">
-                <Users className="h-3.5 w-3.5" />
-                Välj team
-              </Label>
-              {(() => {
-                const visibleTeams = teams.filter(t => t.status !== "inactive" && t.status !== "archived");
-                return (
-                  <>
-                    <Select value={selectedTeamId || "none"} onValueChange={(v) => selectTeam(v === "none" ? "" : v)}>
-                      <SelectTrigger data-testid="select-team">
-                        <SelectValue placeholder={teamsLoading ? "Laddar team…" : "Inget team"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Inget team (välj manuellt)</SelectItem>
-                        {visibleTeams.map(t => {
-                          const memberCount = allTeamMembers.filter(m => m.teamId === t.id).length;
-                          return (
-                            <SelectItem key={t.id} value={t.id} data-testid={`option-team-${t.id}`}>
-                              <span className="flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.color || "#3B82F6" }} />
-                                {t.name} ({memberCount} pers)
-                              </span>
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                    {!teamsLoading && visibleTeams.length === 0 && (
-                      <p className="text-xs text-muted-foreground" data-testid="text-teams-empty">
-                        {teams.length === 0 ? "Inga team finns ännu. " : "Inga aktiva team. "}
-                        <Link href="/teams" className="underline text-primary">
-                          {teams.length === 0 ? "Skapa ett team" : "Hantera team"}
-                        </Link>{" "}
-                        för att kunna tilldela jobb till en grupp.
-                      </p>
-                    )}
-                  </>
-                );
-              })()}
-              {selectedTeamId && formData.teamResourceIds.length === 0 && (
-                <p className="text-xs text-amber-600 dark:text-amber-400" data-testid="text-team-empty-warning">
-                  Det valda teamet har inga medlemmar. Välj tekniker manuellt nedan — teamet sparas på ordern ändå.
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2 relative">
-              <Label className="flex items-center gap-1.5">
-                <Users className="h-3.5 w-3.5" />
-                Tekniker {formData.teamResourceIds.length > 1 && <Badge variant="secondary" className="text-xs px-1.5 py-0">{formData.teamResourceIds.length} st</Badge>}
-              </Label>
-              <div className="relative" ref={teamPopoverRef}>
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-between rounded-md border bg-background px-3 h-auto min-h-[36px] text-sm"
-                  onClick={() => setTeamPopoverOpen(!teamPopoverOpen)}
-                  data-testid="select-resource"
-                >
-                  {formData.teamResourceIds.length === 0 ? (
-                    <span className="text-muted-foreground py-1.5">Välj tekniker...</span>
-                  ) : (
-                    <div className="flex flex-wrap gap-1 py-1">
-                      {formData.teamResourceIds.map((id, i) => {
-                        const r = resources.find(res => res.id === id);
-                        return (
-                          <Badge
-                            key={id}
-                            variant={i === 0 ? "default" : "secondary"}
-                            className="text-xs gap-1 pr-1"
-                          >
-                            {r?.name || id}
-                            <span
-                              role="button"
-                              className="hover:bg-background/20 rounded-full p-0.5 cursor-pointer"
-                              onClick={(e) => { e.stopPropagation(); removeTeamMember(id); }}
-                              data-testid={`button-remove-resource-${id}`}
-                            >
-                              <X className="h-3 w-3" />
-                            </span>
-                          </Badge>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </button>
-                {teamPopoverOpen && (
-                  <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
-                    <div className="flex items-center border-b px-3">
-                      <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                      <input
-                        className="flex h-9 w-full bg-transparent py-1 text-sm outline-none placeholder:text-muted-foreground"
-                        placeholder="Sök tekniker..."
-                        autoFocus
-                        onChange={(e) => {
-                          const q = e.target.value.toLowerCase();
-                          setTeamSearchQuery(q);
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="ml-2 text-xs text-primary hover:underline shrink-0"
-                        onClick={() => setTeamPopoverOpen(false)}
-                        data-testid="button-close-resource-popover"
-                      >
-                        Klar
-                      </button>
-                    </div>
-                    <div className="max-h-[200px] overflow-y-auto p-1">
-                      {resources.filter(r => !teamSearchQuery || r.name.toLowerCase().includes(teamSearchQuery)).map(r => (
-                        <button
-                          key={r.id}
-                          type="button"
-                          className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => toggleTeamMember(r.id)}
-                          data-testid={`option-resource-${r.id}`}
-                        >
-                          <Check className={cn("mr-2 h-4 w-4 shrink-0", formData.teamResourceIds.includes(r.id) ? "opacity-100" : "opacity-0")} />
-                          <span>{r.name}</span>
-                          {formData.teamResourceIds[0] === r.id && (
-                            <Badge variant="outline" className="ml-auto text-xs">Ansvarig</Badge>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {resources.length > 0 && formData.objectId && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    setLoadingAiSuggestions(true);
-                    setAiSuggestions([]);
-                    try {
-                      const today = new Date();
-                      const dayOfWeek = today.getDay();
-                      const monday = new Date(today);
-                      monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-                      const weekStart = monday.toISOString().split("T")[0];
-
-                      const res = await apiRequest("POST", "/api/ai/suggest-resource-for-new-order", {
-                        objectId: formData.objectId,
-                        articleIds: selectedArticleArray,
-                        estimatedDuration: parseInt(formData.estimatedDuration) || 60,
-                        priority: formData.priority,
-                        weekStart,
-                      });
-                      const data = res as unknown as { suggestions: Array<{ resourceId: string; resourceName: string; date: string; startTime: string; score: number; reasons: string[] }> };
-                      setAiSuggestions(data.suggestions || []);
-                      if (!data.suggestions || data.suggestions.length === 0) {
-                        toast({ title: "AI-förslag", description: "Inga lämpliga resurser hittades.", variant: "destructive" });
-                      }
-                    } catch {
-                      toast({ title: "Kunde inte hämta AI-förslag", description: error instanceof Error ? error.message : "Försök igen senare.", variant: "destructive" });
-                    } finally {
-                      setLoadingAiSuggestions(false);
-                    }
-                  }}
-                  disabled={loadingAiSuggestions}
-                  data-testid="button-ai-suggest"
-                >
-                  {loadingAiSuggestions ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-                  AI-förslag
-                </Button>
-                {aiSuggestions.length > 0 && (
-                  <span className="text-xs text-muted-foreground">Top {aiSuggestions.length} förslag</span>
-                )}
-              </div>
-              {aiSuggestions.length > 0 && (
-                <div className="space-y-1.5">
-                  {aiSuggestions.map((s, i) => (
-                    <div
-                      key={s.resourceId + s.date}
-                      className={cn(
-                        "flex items-center justify-between p-2 rounded-md border text-sm cursor-pointer transition-colors",
-                        formData.teamResourceIds.includes(s.resourceId) ? "border-primary bg-primary/5" : "hover:bg-muted/50"
+                      {!objectsLoading && objects.length > 0 && objectsTotal > objects.length && (
+                        <div className="px-3 py-2 text-xs text-muted-foreground text-center border-t">
+                          Visar {objects.length} av {objectsTotal} — förfina sökningen
+                        </div>
                       )}
-                      onClick={() => {
-                        setFormData(prev => ({
-                          ...prev,
-                          resourceId: s.resourceId,
-                          teamResourceIds: [s.resourceId],
-                          scheduledDate: new Date(s.date),
-                        }));
-                        setAiSuggestions([]);
-                        toast({ title: "Resurs vald", description: `${s.resourceName} tilldelad via AI-förslag.` });
-                      }}
-                      data-testid={`ai-suggestion-${i}`}
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <Badge variant={i === 0 ? "default" : "secondary"} className="text-xs">
-                            #{i + 1}
-                          </Badge>
-                          <span className="font-medium">{s.resourceName}</span>
-                          <span className="text-muted-foreground text-xs">Poäng: {s.score}</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {s.reasons.join(" · ")}
-                        </div>
-                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-
-          {competencyWarning?.hasWarning && (
-            <Alert variant="destructive" data-testid="alert-competency-warning">
-              <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
-              <AlertDescription className="text-sm">
-                {competencyWarning.message}
-              </AlertDescription>
-            </Alert>
-          )}
+          </div>
 
           <div className="space-y-2">
-            <Label>Planerat datum</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full justify-start" data-testid="button-select-date">
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {formData.scheduledDate ? format(formData.scheduledDate, "PPP", { locale: sv }) : "Välj datum"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={formData.scheduledDate}
-                  onSelect={(d) => setFormData({...formData, scheduledDate: d})}
-                  locale={sv}
-                />
-              </PopoverContent>
-            </Popover>
+            <Label>Prioritet</Label>
+            <Select
+              value={formData.priority}
+              onValueChange={(v) => setFormData({ ...formData, priority: v })}
+            >
+              <SelectTrigger data-testid="select-priority">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">Låg</SelectItem>
+                <SelectItem value="normal">Normal</SelectItem>
+                <SelectItem value="high">Hög</SelectItem>
+                <SelectItem value="urgent">Akut</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
             <Label className="flex items-center gap-1.5">
               <CalendarIcon className="h-3.5 w-3.5" />
-              Önskad leveransperiod (valfritt)
+              Önskad leveranstid
             </Label>
             <div className="grid grid-cols-2 gap-2">
-              <Popover>
+              <Popover open={fromPopoverOpen} onOpenChange={setFromPopoverOpen}>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full justify-start text-left font-normal" data-testid="button-select-desired-start">
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                    data-testid="button-select-desired-start"
+                  >
                     <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
                     <span className="truncate">
-                      {formData.desiredDeliveryStart ? format(formData.desiredDeliveryStart, "PPP", { locale: sv }) : "Tidigast"}
+                      {formData.desiredDeliveryStart
+                        ? format(formData.desiredDeliveryStart, "PPP", { locale: sv })
+                        : "Från"}
                     </span>
                   </Button>
                 </PopoverTrigger>
@@ -895,7 +590,10 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                   <Calendar
                     mode="single"
                     selected={formData.desiredDeliveryStart}
-                    onSelect={(d) => setFormData({...formData, desiredDeliveryStart: d})}
+                    onSelect={(d) => {
+                      setFormData(prev => ({ ...prev, desiredDeliveryStart: d }));
+                      setFromPopoverOpen(false);
+                    }}
                     locale={sv}
                   />
                   {formData.desiredDeliveryStart && (
@@ -904,7 +602,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                         variant="ghost"
                         size="sm"
                         className="w-full"
-                        onClick={() => setFormData({...formData, desiredDeliveryStart: undefined})}
+                        onClick={() => setFormData(prev => ({ ...prev, desiredDeliveryStart: undefined }))}
                         data-testid="button-clear-desired-start"
                       >
                         Rensa
@@ -913,12 +611,20 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                   )}
                 </PopoverContent>
               </Popover>
-              <Popover>
+              <Popover open={toPopoverOpen} onOpenChange={setToPopoverOpen}>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full justify-start text-left font-normal" data-testid="button-select-desired-end">
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                    data-testid="button-select-desired-end"
+                  >
                     <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
                     <span className="truncate">
-                      {formData.desiredDeliveryEnd ? format(formData.desiredDeliveryEnd, "PPP", { locale: sv }) : "Senast"}
+                      {formData.desiredDeliveryEnd
+                        ? format(formData.desiredDeliveryEnd, "PPP", { locale: sv })
+                        : formData.desiredDeliveryStart
+                          ? "Samma dag"
+                          : "Till"}
                     </span>
                   </Button>
                 </PopoverTrigger>
@@ -926,7 +632,10 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                   <Calendar
                     mode="single"
                     selected={formData.desiredDeliveryEnd}
-                    onSelect={(d) => setFormData({...formData, desiredDeliveryEnd: d})}
+                    onSelect={(d) => {
+                      setFormData(prev => ({ ...prev, desiredDeliveryEnd: d }));
+                      setToPopoverOpen(false);
+                    }}
                     locale={sv}
                   />
                   {formData.desiredDeliveryEnd && (
@@ -935,7 +644,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                         variant="ghost"
                         size="sm"
                         className="w-full"
-                        onClick={() => setFormData({...formData, desiredDeliveryEnd: undefined})}
+                        onClick={() => setFormData(prev => ({ ...prev, desiredDeliveryEnd: undefined }))}
                         data-testid="button-clear-desired-end"
                       >
                         Rensa
@@ -945,16 +654,74 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                 </PopoverContent>
               </Popover>
             </div>
-            {formData.desiredDeliveryStart && formData.desiredDeliveryEnd && formData.desiredDeliveryEnd < formData.desiredDeliveryStart && (
-              <p className="text-xs text-orange-600 dark:text-orange-400 flex items-center gap-1">
+            <Select
+              value={formData.timeOfDayPreference}
+              onValueChange={(v) => setFormData({ ...formData, timeOfDayPreference: v as TimeOfDayPreference })}
+            >
+              <SelectTrigger data-testid="select-time-of-day" className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Hela dagen</SelectItem>
+                <SelectItem value="morning">
+                  <span className="flex items-center gap-2">
+                    <Sun className="h-3.5 w-3.5" /> Förmiddag
+                  </span>
+                </SelectItem>
+                <SelectItem value="afternoon">
+                  <span className="flex items-center gap-2">
+                    <Sunset className="h-3.5 w-3.5" /> Eftermiddag
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            {dateRangeError && (
+              <p className="text-xs text-orange-600 dark:text-orange-400 flex items-center gap-1" data-testid="text-date-range-error">
                 <AlertTriangle className="h-3 w-3" />
-                Senaste datum ligger före tidigaste — kontrollera ordningen.
+                {dateRangeError}
               </p>
             )}
             <p className="text-xs text-muted-foreground">
-              Mjuk preferens som visas för planeraren — blockerar inte planering.
-              Önskade veckodagar och tider lägger du till i orderns detaljvy efter att ordern sparats.
+              Mjuk preferens. Lämnar du bara Från eller bara Till tom används samma dag — perioden sparas alltid med både start och slut.
             </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1.5">
+              <Receipt className="h-3.5 w-3.5" />
+              Prislista
+            </Label>
+            <Select
+              value={formData.priceListId || "auto"}
+              onValueChange={handlePriceListChange}
+            >
+              <SelectTrigger data-testid="select-price-list">
+                <SelectValue placeholder="Automatisk (standard)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Automatisk (standard)</SelectItem>
+                {activePriceLists.map(pl => (
+                  <SelectItem key={pl.id} value={pl.id} data-testid={`option-price-list-${pl.id}`}>
+                    <span className="flex items-center gap-2">
+                      {pl.name}
+                      <Badge variant="outline" className="text-[10px] ml-1">
+                        {pl.priceListType === "generell" ? "Generell" : pl.priceListType === "kundunik" ? "Kundunik" : "Rabattbrev"}
+                      </Badge>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {autoSelectedPriceList && formData.priceListId === autoSelectedPriceListId && (
+              <p className="text-xs text-muted-foreground" data-testid="text-pricelist-auto">
+                Vald automatiskt från kunden: <span className="font-medium">{autoSelectedPriceList.name}</span>
+              </p>
+            )}
+            {!formData.priceListId && (
+              <p className="text-xs text-muted-foreground">
+                Pris löses automatiskt via prislisthierarkin (rabattbrev → kundunik → generell → listpris)
+              </p>
+            )}
           </div>
 
           {formData.objectId && (
@@ -975,7 +742,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                 <ScrollArea className="h-[120px] border rounded-md p-2">
                   <div className="space-y-2">
                     {applicableArticles.map((article) => (
-                      <div 
+                      <div
                         key={article.id}
                         className="flex items-center gap-2 p-2 rounded-md hover-elevate"
                       >
@@ -985,7 +752,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                           onCheckedChange={() => toggleArticle(article.id)}
                           data-testid={`checkbox-article-${article.id}`}
                         />
-                        <label 
+                        <label
                           htmlFor={`article-${article.id}`}
                           className="flex-1 flex items-center gap-2 cursor-pointer"
                         >
@@ -1007,44 +774,11 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
               )}
               {selectedArticleIds.size > 0 && (
                 <div className="text-xs text-muted-foreground">
-                  {selectedArticleIds.size} artikel(ar) valda - läggs till vid skapande
+                  {selectedArticleIds.size} artikel(ar) valda — läggs till vid skapande
                 </div>
               )}
             </div>
           )}
-
-          <div className="space-y-2">
-            <Label className="flex items-center gap-1.5">
-              <Receipt className="h-3.5 w-3.5" />
-              Prislista
-            </Label>
-            <Select
-              value={formData.priceListId || "auto"}
-              onValueChange={(v) => setFormData({...formData, priceListId: v === "auto" ? "" : v})}
-            >
-              <SelectTrigger data-testid="select-price-list">
-                <SelectValue placeholder="Automatisk (standard)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">Automatisk (standard)</SelectItem>
-                {priceLists
-                  .filter(pl => pl.status === "active" && !pl.deletedAt)
-                  .map(pl => (
-                    <SelectItem key={pl.id} value={pl.id}>
-                      <span className="flex items-center gap-2">
-                        {pl.name}
-                        <Badge variant="outline" className="text-[10px] ml-1">
-                          {pl.priceListType === "generell" ? "Generell" : pl.priceListType === "kundunik" ? "Kundunik" : "Rabattbrev"}
-                        </Badge>
-                      </span>
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-            {!formData.priceListId && (
-              <p className="text-xs text-muted-foreground">Pris löses automatiskt via prislisthierarkin (rabattbrev → kundunik → generell → listpris)</p>
-            )}
-          </div>
 
           <div className="space-y-2">
             <Label htmlFor="planned-notes" className="flex items-center gap-1.5">
@@ -1055,7 +789,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
               id="planned-notes"
               placeholder="Info som visas för chauffören i Traivo Go..."
               value={formData.plannedNotes}
-              onChange={(e) => setFormData({...formData, plannedNotes: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, plannedNotes: e.target.value })}
               rows={2}
               data-testid="input-planned-notes"
             />
@@ -1067,18 +801,25 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
               id="description"
               placeholder="Beskrivning av jobbet..."
               value={formData.description}
-              onChange={(e) => setFormData({...formData, description: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               data-testid="input-description"
+              rows={2}
             />
           </div>
+
+          <Alert>
+            <AlertDescription className="text-xs">
+              Team, tekniker, beräknad tid och planerat datum sätts senare i planeringen utifrån de uppgifter och artiklar jobbet får.
+            </AlertDescription>
+          </Alert>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose} data-testid="button-cancel">
             Avbryt
           </Button>
-          <Button 
-            onClick={handleSubmit} 
+          <Button
+            onClick={handleSubmit}
             disabled={createWorkOrderMutation.isPending}
             data-testid="button-save-job"
           >
@@ -1088,6 +829,30 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={pendingPriceListId !== null} onOpenChange={(open) => { if (!open) cancelPriceListChange(); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Byt prislista?</AlertDialogTitle>
+          <AlertDialogDescription data-testid="text-pricelist-confirm">
+            Vill du använda{" "}
+            <span className="font-medium">
+              {pendingPriceListId === "__auto__" ? "Automatisk (standard)" : pendingPriceList?.name || "den valda prislistan"}
+            </span>{" "}
+            istället för kundens prislista{" "}
+            <span className="font-medium">{autoSelectedPriceList?.name || "(okänd)"}</span> för det här jobbet?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={cancelPriceListChange} data-testid="button-pricelist-cancel">
+            Avbryt
+          </AlertDialogCancel>
+          <AlertDialogAction onClick={confirmPriceListChange} data-testid="button-pricelist-confirm">
+            Bekräfta byte
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     <BillingCustomerDialog
       open={showBillingDialog}
