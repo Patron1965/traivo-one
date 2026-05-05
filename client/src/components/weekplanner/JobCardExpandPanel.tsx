@@ -782,13 +782,13 @@ function MaterialRow({ jobId, line }: { jobId: string; line: JobExpandMaterial }
     );
   };
 
-  const handleToggleOptional = () => {
-    const next = !(line.isOptional ?? false);
+  const handleToggleCompleted = () => {
+    const next = !(line.isCompleted ?? false);
     mutation.mutate(
-      { lineId: line.id, isOptional: next },
+      { lineId: line.id, isCompleted: next },
       {
         onSuccess: () => {
-          toast({ title: next ? "Markerad som klar/valfri" : "Markerad som krävs igen" });
+          toast({ title: next ? "Markerad som klar" : "Markerad som ej klar" });
         },
         onError: (err) => {
           toast({
@@ -801,7 +801,8 @@ function MaterialRow({ jobId, line }: { jobId: string; line: JobExpandMaterial }
     );
   };
 
-  const isOptional = line.isOptional ?? false;
+  const isCompleted = line.isCompleted ?? false;
+
   const handleConfirmDelete = () => {
     deleteMutation.mutate(
       { lineId: line.id },
@@ -827,7 +828,7 @@ function MaterialRow({ jobId, line }: { jobId: string; line: JobExpandMaterial }
       data-testid={`expand-material-item-${line.id}`}
     >
       <div className="min-w-0 flex-1">
-        <div className={`font-medium truncate ${isOptional ? "line-through text-muted-foreground" : ""}`}>
+        <div className={`font-medium truncate ${isCompleted ? "line-through text-muted-foreground" : ""}`}>
           {line.articleName || "—"}
         </div>
         {line.articleNumber && <div className="text-muted-foreground text-[10px]">{line.articleNumber}</div>}
@@ -877,7 +878,7 @@ function MaterialRow({ jobId, line }: { jobId: string; line: JobExpandMaterial }
               title={isTemp ? "Sparar…" : "Ändra antal"}
               data-testid={`button-edit-line-${line.id}`}
             >
-              <span className={isOptional ? "line-through text-muted-foreground" : ""}>{line.quantity} st</span>
+              <span className={isCompleted ? "line-through text-muted-foreground" : ""}>{line.quantity} st</span>
               {line.resolvedPrice !== null && line.resolvedPrice !== undefined && (
                 <div className="text-muted-foreground text-[10px]">{line.resolvedPrice} kr</div>
               )}
@@ -885,16 +886,16 @@ function MaterialRow({ jobId, line }: { jobId: string; line: JobExpandMaterial }
             <Button
               type="button"
               size="sm"
-              variant={isOptional ? "default" : "ghost"}
+              variant={isCompleted ? "default" : "ghost"}
               className="h-6 w-6 p-0"
-              onClick={handleToggleOptional}
+              onClick={handleToggleCompleted}
               disabled={mutation.isPending || isTemp}
-              title={isOptional ? "Avmarkera som klar" : "Markera som klar/valfri"}
+              title={isCompleted ? "Avmarkera som klar" : "Markera som klar"}
               data-testid={`button-toggle-line-done-${line.id}`}
             >
               {mutation.isPending ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
-              ) : isOptional ? (
+              ) : isCompleted ? (
                 <CheckCircle2 className="h-3.5 w-3.5" />
               ) : (
                 <Check className="h-3.5 w-3.5" />

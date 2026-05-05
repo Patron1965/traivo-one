@@ -61,6 +61,8 @@ export interface JobExpandMaterial {
   resolvedPrice: number | null;
   notes: string | null;
   isOptional?: boolean;
+  isCompleted?: boolean;
+  completedAt?: string | null;
 }
 
 export interface JobExpandCounts {
@@ -222,6 +224,7 @@ export interface UpdateLineInput {
   lineId: string;
   quantity?: number;
   isOptional?: boolean;
+  isCompleted?: boolean;
 }
 
 export function useUpdateJobLine(jobId: string) {
@@ -231,6 +234,7 @@ export function useUpdateJobLine(jobId: string) {
       const payload: Record<string, unknown> = {};
       if (input.quantity !== undefined) payload.quantity = input.quantity;
       if (input.isOptional !== undefined) payload.isOptional = input.isOptional;
+      if (input.isCompleted !== undefined) payload.isCompleted = input.isCompleted;
       await apiRequest("PATCH", `/api/work-order-lines/${input.lineId}`, payload);
     },
     onMutate: async (input) => {
@@ -243,6 +247,12 @@ export function useUpdateJobLine(jobId: string) {
                 ...m,
                 ...(input.quantity !== undefined ? { quantity: input.quantity } : {}),
                 ...(input.isOptional !== undefined ? { isOptional: input.isOptional } : {}),
+                ...(input.isCompleted !== undefined
+                  ? {
+                      isCompleted: input.isCompleted,
+                      completedAt: input.isCompleted ? (m.completedAt ?? new Date().toISOString()) : null,
+                    }
+                  : {}),
               }
             : m,
         );

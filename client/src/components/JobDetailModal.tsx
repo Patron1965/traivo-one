@@ -709,9 +709,14 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                           )}
                         </div>
                       </div>
-                      {line.isOptional && (
-                        <Badge variant="outline" className="text-xs" data-testid={`badge-optional-${line.id}`}>Valfri</Badge>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {line.isCompleted && (
+                          <Badge variant="default" className="text-xs" data-testid={`badge-completed-${line.id}`}>Klar</Badge>
+                        )}
+                        {line.isOptional && (
+                          <Badge variant="outline" className="text-xs" data-testid={`badge-optional-${line.id}`}>Valfri</Badge>
+                        )}
+                      </div>
                     </div>
                   ))}
                   

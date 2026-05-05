@@ -360,6 +360,9 @@ export const workOrderLines = pgTable("work_order_lines", {
   discountPercent: integer("discount_percent").default(0),
   // Valfri rad (kan tas bort utan att påverka ordern)
   isOptional: boolean("is_optional").default(false),
+  // Markerad som utförd/klar i fält eller i planeringsvyn
+  isCompleted: boolean("is_completed").default(false).notNull(),
+  completedAt: timestamp("completed_at"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
@@ -1047,7 +1050,7 @@ export const insertCustomerSchema = createInsertSchema(customers).omit({ id: tru
 export const insertObjectSchema = createInsertSchema(objects).omit({ id: true, createdAt: true });
 export const insertResourceSchema = createInsertSchema(resources).omit({ id: true, createdAt: true });
 export const insertWorkOrderSchema = createInsertSchema(workOrders).omit({ id: true, createdAt: true });
-export const insertWorkOrderLineSchema = createInsertSchema(workOrderLines).omit({ id: true, createdAt: true });
+export const insertWorkOrderLineSchema = createInsertSchema(workOrderLines).omit({ id: true, createdAt: true, completedAt: true });
 export const insertWorkOrderObjectSchema = createInsertSchema(workOrderObjects).omit({ id: true, createdAt: true });
 export const insertSimulationScenarioSchema = createInsertSchema(simulationScenarios).omit({ id: true, createdAt: true });
 export const insertSetupTimeLogSchema = createInsertSchema(setupTimeLogs).omit({ id: true, createdAt: true });

@@ -194,6 +194,8 @@ app.get("/api/work-orders/:id/expand", asyncHandler(async (req, res) => {
     resolvedPrice: l.resolvedPrice,
     notes: l.notes,
     isOptional: l.isOptional ?? false,
+    isCompleted: l.isCompleted ?? false,
+    completedAt: l.completedAt instanceof Date ? l.completedAt.toISOString() : (l.completedAt ?? null),
   }));
 
   const recentJobs = history.map(h => ({
@@ -811,6 +813,13 @@ app.patch("/api/work-order-lines/:id", asyncHandler(async (req, res) => {
     return res.status(400).json(formatZodError(parseResult.error));
   }
   const { id: _id, tenantId: _t, workOrderId: _w, createdAt: _c, ...updateData } = parseResult.data as Record<string, unknown>;
+  if (Object.prototype.hasOwnProperty.call(updateData, "isCompleted")) {
+    const next = updateData.isCompleted === true;
+    (updateData as Record<string, unknown>).isCompleted = next;
+    (updateData as Record<string, unknown>).completedAt = next
+      ? (existingLine.completedAt ?? new Date())
+      : null;
+  }
   const line = await storage.updateWorkOrderLine(req.params.id, updateData);
   if (!line) throw new NotFoundError("Orderrad");
 
