@@ -559,7 +559,7 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                 )}
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <Popover>
+                <Popover modal>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="w-full justify-start text-left font-normal" data-testid="button-detail-desired-start">
                       <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
@@ -590,7 +590,7 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                     )}
                   </PopoverContent>
                 </Popover>
-                <Popover>
+                <Popover modal>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="w-full justify-start text-left font-normal" data-testid="button-detail-desired-end">
                       <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
