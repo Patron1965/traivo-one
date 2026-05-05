@@ -559,68 +559,74 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                 )}
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <Popover modal>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start text-left font-normal" data-testid="button-detail-desired-start">
-                      <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                      <span className="truncate">
-                        {desiredStart ? format(desiredStart, "PPP", { locale: sv }) : "Tidigast"}
-                      </span>
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={desiredStart}
-                      onSelect={(d) => { setDesiredStart(d); setDesiredDirty(true); }}
-                      locale={sv}
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Tidigast</label>
+                  <div className="flex gap-1">
+                    <Input
+                      type="date"
+                      value={desiredStart ? format(desiredStart, "yyyy-MM-dd") : ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (!v) {
+                          setDesiredStart(undefined);
+                        } else {
+                          const [y, m, d] = v.split("-").map(Number);
+                          setDesiredStart(new Date(y, m - 1, d, 12, 0, 0, 0));
+                        }
+                        setDesiredDirty(true);
+                      }}
+                      className="h-9"
+                      data-testid="input-detail-desired-start"
                     />
                     {desiredStart && (
-                      <div className="p-2 border-t">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="w-full"
-                          onClick={() => { setDesiredStart(undefined); setDesiredDirty(true); }}
-                          data-testid="button-clear-detail-desired-start"
-                        >
-                          Rensa
-                        </Button>
-                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 shrink-0"
+                        onClick={() => { setDesiredStart(undefined); setDesiredDirty(true); }}
+                        data-testid="button-clear-detail-desired-start"
+                        title="Rensa tidigaste datum"
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </Button>
                     )}
-                  </PopoverContent>
-                </Popover>
-                <Popover modal>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start text-left font-normal" data-testid="button-detail-desired-end">
-                      <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                      <span className="truncate">
-                        {desiredEnd ? format(desiredEnd, "PPP", { locale: sv }) : "Senast"}
-                      </span>
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={desiredEnd}
-                      onSelect={(d) => { setDesiredEnd(d); setDesiredDirty(true); }}
-                      locale={sv}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Senast</label>
+                  <div className="flex gap-1">
+                    <Input
+                      type="date"
+                      value={desiredEnd ? format(desiredEnd, "yyyy-MM-dd") : ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (!v) {
+                          setDesiredEnd(undefined);
+                        } else {
+                          const [y, m, d] = v.split("-").map(Number);
+                          setDesiredEnd(new Date(y, m - 1, d, 12, 0, 0, 0));
+                        }
+                        setDesiredDirty(true);
+                      }}
+                      className="h-9"
+                      data-testid="input-detail-desired-end"
                     />
                     {desiredEnd && (
-                      <div className="p-2 border-t">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="w-full"
-                          onClick={() => { setDesiredEnd(undefined); setDesiredDirty(true); }}
-                          data-testid="button-clear-detail-desired-end"
-                        >
-                          Rensa
-                        </Button>
-                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 shrink-0"
+                        onClick={() => { setDesiredEnd(undefined); setDesiredDirty(true); }}
+                        data-testid="button-clear-detail-desired-end"
+                        title="Rensa senaste datum"
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </Button>
                     )}
-                  </PopoverContent>
-                </Popover>
+                  </div>
+                </div>
               </div>
               {desiredStart && desiredEnd && desiredEnd < desiredStart && (
                 <Alert variant="default" className="border-orange-300 dark:border-orange-700" data-testid="alert-desired-range-invalid">
