@@ -5431,3 +5431,65 @@ export const insertInvoiceRecalculationLogSchema = createInsertSchema(invoiceRec
 });
 export type InsertInvoiceRecalculationLog = z.infer<typeof insertInvoiceRecalculationLogSchema>;
 export type InvoiceRecalculationLog = typeof invoiceRecalculationLog.$inferSelect;
+
+// ============================================
+// Task #421: ML duration-prediktion (Fas 0 + Fas 1)
+// ============================================
+export const mlFeatureSnapshots = pgTable("ml_feature_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id, { onDelete: "cascade" }).notNull(),
+  resourceId: varchar("resource_id").references(() => resources.id, { onDelete: "set null" }),
+  objectId: varchar("object_id").references(() => objects.id, { onDelete: "set null" }),
+  // 'pre_optimization' | 'post_completion'
+  snapshotKind: text("snapshot_kind").notNull(),
+  snapshotAt: timestamp("snapshot_at").defaultNow().notNull(),
+  estimatedDurationMin: integer("estimated_duration_min"),
+  actualDurationMin: integer("actual_duration_min"),
+  setupMinutes: integer("setup_minutes"),
+  executionCode: text("execution_code"),
+  taskCategory: text("task_category"),
+  weekday: integer("weekday"),
+  hourOfDay: integer("hour_of_day"),
+  month: integer("month"),
+  isWeekend: boolean("is_weekend"),
+  objectPostalCode: text("object_postal_code"),
+  objectLat: real("object_lat"),
+  objectLng: real("object_lng"),
+  resourceExperienceDays: integer("resource_experience_days"),
+  rawFeatures: jsonb("raw_features").default({}).notNull(),
+  qualityScore: real("quality_score"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ml_snapshots_tenant").on(table.tenantId),
+  index("idx_ml_snapshots_kind_created").on(table.snapshotKind, table.createdAt),
+  index("idx_ml_snapshots_wo").on(table.workOrderId),
+  index("idx_ml_snapshots_tenant_kind_created").on(table.tenantId, table.snapshotKind, table.createdAt),
+]);
+
+export type MlFeatureSnapshot = typeof mlFeatureSnapshots.$inferSelect;
+export const insertMlFeatureSnapshotSchema = createInsertSchema(mlFeatureSnapshots).omit({ id: true, createdAt: true, snapshotAt: true });
+export type InsertMlFeatureSnapshot = z.infer<typeof insertMlFeatureSnapshotSchema>;
+
+export const mlModels = pgTable("ml_models", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // 'duration_p50' | framtida varianter
+  modelType: text("model_type").notNull(),
+  version: text("version").notNull(),
+  // 'training' | 'shadow' | 'assist' | 'retired'
+  status: text("status").default("training").notNull(),
+  artifactPath: text("artifact_path"),
+  trainedAt: timestamp("trained_at"),
+  trainingRows: integer("training_rows"),
+  trainingTenants: text("training_tenants").array(),
+  metrics: jsonb("metrics").default({}).notNull(),
+  featureNames: text("feature_names").array(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  unique("uq_ml_models_type_version").on(table.modelType, table.version),
+  index("idx_ml_models_type_status").on(table.modelType, table.status),
+]);
+
+export type MlModel = typeof mlModels.$inferSelect;
+export const insertMlModelSchema = createInsertSchema(mlModels).omit({ id: true, createdAt: true });
+export type InsertMlModel = z.infer<typeof insertMlModelSchema>;

@@ -368,6 +368,26 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
     vrpResult.constraintsApplied.push(`${constraintResult.dependencySequences.length} beroenden`);
   }
 
+  // Task #421 Fas 0: skriv pre_optimization-snapshots (fail-safe, non-blocking).
+  // Bryter ALDRIG planeringen om ML-tabellen saknas eller skrivning misslyckas.
+  try {
+    const { writeBatchSnapshots } = await import("./services/mlFeatureSnapshot");
+    const objectMap2 = new Map(objects.map(o => [o.id, o]));
+    const snapshotInputs = validOrders
+      .filter(wo => stopMap.has(wo.id))
+      .map(wo => ({
+        tenantId,
+        workOrder: wo,
+        object: wo.objectId ? objectMap2.get(wo.objectId) ?? null : null,
+        snapshotKind: "pre_optimization" as const,
+      }));
+    if (snapshotInputs.length > 0) {
+      writeBatchSnapshots(snapshotInputs).catch(() => { /* non-blocking */ });
+    }
+  } catch {
+    // ignorera — observability får aldrig stoppa planering
+  }
+
   return vrpResult;
 }
 

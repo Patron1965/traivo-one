@@ -77,6 +77,7 @@ const WorkflowGuidePage = lazy(() => import("@/pages/WorkflowGuidePage"));
 const DataRequirementsPage = lazy(() => import("@/pages/DataRequirementsPage"));
 const InvestorPitchPage = lazy(() => import("@/pages/InvestorPitchPage"));
 const ApiCostsDashboardPage = lazy(() => import("@/pages/ApiCostsDashboardPage"));
+const MLDataQualityPage = lazy(() => import("@/pages/MLDataQualityPage"));
 const PortalLoginPage = lazy(() => import("@/pages/portal/PortalLoginPage"));
 const PortalVerifyPage = lazy(() => import("@/pages/portal/PortalVerifyPage"));
 const PortalDashboardPage = lazy(() => import("@/pages/portal/PortalDashboardPage"));
@@ -238,6 +239,7 @@ function PortalRouter() {
         <Route path="/portal/field" component={PortalFieldPage} />
         <Route path="/portal/map" component={PortalMapPage} />
         <Route path="/portal/completed-jobs" component={PortalCompletedJobsPage} />
+        <Route path="/ml-data-quality">{() => <ProtectedRoute component={MLDataQualityPage} path="/ml-data-quality" />}</Route>
         <Route component={NotFound} />
       </Switch>
     </Suspense>

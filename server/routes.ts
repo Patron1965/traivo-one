@@ -597,6 +597,8 @@ export async function registerRoutes(
   registerClusterRoutes(app);
   registerAIRoutes(app);
   registerOptimizationRoutes(app);
+  const { registerMlRoutes } = await import("./routes/mlRoutes");
+  registerMlRoutes(app);
   registerMobileRoutes(app);
   registerRealtimeTestRoutes(app);
   registerPlannerRoutes(app);

@@ -53,6 +53,7 @@ _Populate as you build_
 - **Development:** Alla nya funktioner ska alltid läggas till i frontend med navigeringslänkar - användaren vill se helheten och vad som byggs under skalet
 
 ## Gotchas
+- **ML Duration-Prediktion (Task #421, Fas 0 aktiv, Fas 1 scaffolding):** `ml_feature_snapshots` skrivs vid VRP-jobb (fail-safe, non-blocking). `mlPredictionClient.predictDurations()` returnerar alltid `null` tills `ML_PREDICTION_ENABLED=true` + tränad modell finns. Audit via `Admin → ML datakvalitet` eller `npx tsx scripts/ml-data-quality-audit.ts`. Se `docs/ml-fas0-fas1-handover.md`.
 - **Frozen WO Snapshot Idempotency:** `POST /api/work-orders/:id/freeze` is idempotent; refuses refreezing unless `?force=true` is used.
 - **Price List Index Adjustment Idempotency:** `POST /api/price-lists/:id/apply-index-adjustment` is idempotent at the field level; multiple runs will overwrite `indexDate/indexPercentage` with the latest.
 - **BOM Self-Referencing:** Article components (`article_components`) prevent a child article from being its own parent (`childId ≠ parentId`).

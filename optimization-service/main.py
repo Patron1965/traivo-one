@@ -645,6 +645,68 @@ def optimize(req: OptimizeRequest):
     return solve_nearest_neighbor(req.stops, req.vehicles)
 
 
+# ============================================
+# Task #421: ML duration-prediktion (Fas 1 — scaffolding)
+# ============================================
+class PredictionRequestRow(BaseModel):
+    workOrderId: str
+    estimatedDurationMin: int
+    executionCode: Optional[str] = None
+    taskCategory: Optional[str] = None
+    weekday: Optional[int] = None
+    hourOfDay: Optional[int] = None
+    isWeekend: Optional[bool] = None
+    objectLat: Optional[float] = None
+    objectLng: Optional[float] = None
+
+
+class PredictionBatchRequest(BaseModel):
+    tenantId: str
+    rows: list[PredictionRequestRow]
+
+
+class PredictionResultRow(BaseModel):
+    workOrderId: str
+    predictedDurationMin: int
+    p50: int
+    modelVersion: str
+    fallbackUsed: bool
+
+
+class PredictionBatchResponse(BaseModel):
+    predictions: list[PredictionResultRow]
+    modelLoaded: bool
+
+
+# Scaffolding: ingen modell laddas förrän Fas 0-audit returnerar GO.
+# Vid GO-beslut: ladda .lgb från Object Storage här och cacha i minnet.
+_loaded_model = None
+_loaded_model_version = "none"
+
+
+@app.post("/predict/durations", response_model=PredictionBatchResponse)
+def predict_durations(req: PredictionBatchRequest):
+    """Returnerar fallback (= estimatedDurationMin) tills modell laddats.
+    Caller (mlPredictionClient.ts) faller då tillbaka på heuristisk skattning."""
+    if _loaded_model is None:
+        return PredictionBatchResponse(
+            predictions=[
+                PredictionResultRow(
+                    workOrderId=r.workOrderId,
+                    predictedDurationMin=r.estimatedDurationMin,
+                    p50=r.estimatedDurationMin,
+                    modelVersion=_loaded_model_version,
+                    fallbackUsed=True,
+                )
+                for r in req.rows
+            ],
+            modelLoaded=False,
+        )
+
+    # När modellen finns: bygg feature-matris och kör _loaded_model.predict(...)
+    raise HTTPException(status_code=501, detail="Model loaded but inference not yet implemented")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8090)

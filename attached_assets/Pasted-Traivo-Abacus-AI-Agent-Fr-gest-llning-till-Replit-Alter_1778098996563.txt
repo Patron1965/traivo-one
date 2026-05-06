@@ -1,0 +1,80 @@
+Traivo
+Abacus AI Agent
+Frågeställning till Replit - Alternativa förslag på AI/ML-implementation
+Tack för den grundliga granskningen - den är spot on. Jag håller med om huvudpunkterna (stryk Fas 4, data-audit först, global modell). Här är några alternativa tekniska lösningar jag vill höra er syn på:
+
+1. Duration-prediktion: Distribution vs Percentiler
+Ert förslag: P50 som default, P90 för SLA-kritiska order
+Mitt alternativ: Använd Quantile Regression (LightGBM stödjer det native) → predicera hela distributionen (P10, P50, P75, P90) i en körning. Låt OR-Tools själv välja risk-nivå baserat på constraints istället för hårdkodad P50/P90-switch.
+
+Fördel: Flexibilitet utan if/else-logik. Solver får mer information.
+Nackdel: Något mer komplex modellträning.
+
+Håller ni med, eller ser ni problem med detta?
+
+2. Per-tenant strategi: Hierarchical model vs Global+feature
+Ert förslag: Global modell + tenant_id som feature, finetune vid >5000 jobb
+Mitt alternativ: Hierarchical Bayesian Model (PyMC3/Stan) där nya tenants får priors från liknande tenants (geografiskt område, bransch, storlek).
+
+Fördel: Intelligent warm-start, inga skräpmodeller för små tenants
+Nackdel: Mer komplex implementation, högre initial overhead
+
+Är detta overkill, eller värt att utvärdera i Fas 1?
+
+3. Replanning (Fas 3): Hybrid från dag 1
+Ert förslag: Regelbaserad policy först, ML senare
+Mitt alternativ: Bygg regelbaserad MEN med counterfactual logging från start:
+
+typescript
+Copy
+replanning_decisions {
+  rule_based_action,      // Vad reglerna valde
+  ml_counterfactual_score // Vad ML SKULLE valt (shadow)
+}
+Fördel: När regelbaserad når tak har vi perfekt träningsdata för bandit
+Nackdel: Måste bygga ML-inferens även i shadow-mode
+
+Är detta värt extra arbetet, eller optimering i onödan?
+
+4. Data Quality: Dashboard vs Tröskel
+Ert förslag: Data-audit före Fas 1
+Mitt tillägg: Bygg Data Quality Score per tenant (% valid actualDuration, outlier-rate) med auto-flagging:
+
+<70% = "Not ready for ML" → fallback till statisk duration
+70-85% = "Shadow mode only"
+85% = "Production eligible"
+
+Dashboard i admin-panel så planerare ser varför deras tenant inte får ML än.
+
+Värt att bygga, eller feature creep?
+
+5. GDPR: Partition-strategi
+Ert förslag: Tenant_id kolumn i ml_feature_snapshots
+Mitt tillägg: Postgres PARTITION BY LIST (tenant_id) från dag 1:
+
+Fysisk data-isolering (inte bara logisk WHERE-clause)
+Tenant deletion = DROP PARTITION (instant, garanterad cascade)
+Performance-boost på tenant-specifika queries
+Är detta overkill för er dataskala, eller best practice?
+
+6. Versionshantering: Blue-Green deployment
+Saknas i båda förslagen:
+Hur ska ni hantera modellbyten i produktion? Förslag:
+
+sql
+Copy
+ml_models {
+  version,
+  status: 'shadow' | 'canary_10%' | 'active' | 'deprecated'
+}
+Gradvis utrullning med automatisk rollback vid quality-regression?
+
+Sammanfattning - vad tycker ni?
+Område	Min rekommendation
+Duration	Quantile Regression (hela distributionen)
+Per-tenant	Utvärdera Hierarchical Bayesian för Fas 2
+Replanning	Hybrid med counterfactual från dag 1
+Data Quality	Auto-flagging + dashboard
+GDPR	Postgres PARTITION
+Versionshantering	Blue-green deployment-strategi
+Vilka av dessa ser ni värde i, och vilka är unnecessary complexity?
