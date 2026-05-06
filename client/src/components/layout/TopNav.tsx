@@ -552,7 +552,7 @@ function NotificationsBell() {
                     data-testid={`notification-item-${n.id}`}
                   >
                     {!n.isRead && (
-                      <span className="mt-1.5 h-2 w-2 rounded-full bg-red-500 flex-shrink-0" />
+                      <span className="mt-1.5 h-2 w-2 rounded-full bg-destructive flex-shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate" data-testid={`text-notification-title-${n.id}`}>
