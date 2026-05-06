@@ -346,6 +346,17 @@ export const workOrders = pgTable("work_orders", {
   // (skapad från artikel med offset_minutes != 0). Sätts vid expand av orderkoncept.
   // Mjuk länk: om huvudjobbet raderas blir parent null (set null), inte cascade.
   parentWorkOrderId: varchar("parent_work_order_id").references((): any => workOrders.id, { onDelete: "set null" }),
+  // === ADR v3 (F5): Frozen snapshot vid expansion (immutabelt efter sättning) ===
+  // Används för per-task-fakturering och retroaktiv omräkning vid metadata-ändring.
+  // Befintliga 3 750 WO behåller NULL — fakturas via cachedValue/work_order_lines som idag.
+  // Nya WO via expand sätter dessa från artikel + objektmetadata snapshot.
+  frozenUnit: text("frozen_unit"),
+  frozenQuantity: real("frozen_quantity"),
+  frozenUnitPrice: real("frozen_unit_price"),
+  frozenUnitCost: real("frozen_unit_cost"),
+  frozenUnitTime: real("frozen_unit_time"),
+  // Snapshot av relevanta metadata-värden vid expansion (för audit/omräkning).
+  metadataSnapshot: jsonb("metadata_snapshot"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
@@ -486,6 +497,12 @@ export const articles = pgTable("articles", {
   // som denna ersätter (t.ex. ny version av en tjänst). Befintliga work_orders och linjer
   // behåller pekare till original-artikeln; nya WO via expand kan välja ersättaren.
   replacesArticleId: varchar("replaces_article_id").references((): any => articles.id, { onDelete: "set null" }),
+  // === ADR v3 (F4): BOM-cachade flaggor ===
+  // Sätts av storage när article_components skapas/tas bort.
+  // Strukturartikel = parent i BOM (TILG100 → TILG201+TILG202).
+  // Komponentartikel = child i BOM.
+  isStructure: boolean("is_structure").default(false),
+  isComponent: boolean("is_component").default(false),
   // Utförandekod som krävs (t.ex. "kranbil", "tvatt", "sug")
   executionCode: text("execution_code"),
   // Metadata-koppling (per Mats spec Funktion 3 & 7)
@@ -852,6 +869,21 @@ export const teams = pgTable("teams", {
   color: text("color").default("#3B82F6"),
   status: text("status").default("active").notNull(),
   profileIds: text("profile_ids").array().default([]),
+  // === ADR v3 (F2): Kapacitetsmål per vecka (Kinab default 28h prod / 12h resa) ===
+  // Används av kapacitetsförnsel och planerar-UI för att visa team-belastning.
+  // Defaults bevarar nuvarande beteende — ingen befintlig kod ändras automatiskt.
+  productionHoursTarget: real("production_hours_target").default(28.0),
+  travelHoursTarget: real("travel_hours_target").default(12.0),
+  totalHoursWeek: real("total_hours_week").default(40.0),
+  // === ADR v3 (F2): Senaste position (uppdateras av Mobile vid completion) ===
+  lastPositionLat: real("last_position_lat"),
+  lastPositionLng: real("last_position_lng"),
+  lastPositionAt: timestamp("last_position_at"),
+  // === ADR v3 (F2): Vilohantering ===
+  // rest_type: 'none' | 'daily' | 'weekly' — styr om team är tillgängligt
+  restType: text("rest_type").default("none"),
+  restLocation: text("rest_location"),
+  restUntil: timestamp("rest_until"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 });
@@ -5273,3 +5305,127 @@ export type MissingCoordinatesNotificationConfig = z.infer<
   typeof missingCoordinatesNotificationConfigSchema
 >;
 
+
+// ============================================
+// ADR v3 (F3): Sparade sökmönster för planeraren
+// ============================================
+export const plannerSearchFilters = pgTable("planner_search_filters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  // Filterkriterier (JSONB för flexibilitet):
+  // { executionTypes?: string[], postalCodes?: string[], geographicArea?: {lat,lng,radiusKm},
+  //   articleAssociations?: string[], status?: string[], dateRange?: {from,to} }
+  filterCriteria: jsonb("filter_criteria").default({}).notNull(),
+  // Frivilligt kopplad till team (delade filter inom team)
+  teamId: varchar("team_id").references(() => teams.id, { onDelete: "set null" }),
+  // 'personal' | 'shared' (synligt för hela tenanten)
+  scope: text("scope").default("personal").notNull(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_planner_search_filters_tenant").on(table.tenantId),
+  index("idx_planner_search_filters_team").on(table.teamId),
+  index("idx_planner_search_filters_creator").on(table.createdBy),
+]);
+
+export const insertPlannerSearchFilterSchema = createInsertSchema(plannerSearchFilters).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type InsertPlannerSearchFilter = z.infer<typeof insertPlannerSearchFilterSchema>;
+export type PlannerSearchFilter = typeof plannerSearchFilters.$inferSelect;
+
+// ============================================
+// ADR v3 (F4): BOM-komponenter (article_components)
+// Strukturartikel TILG100 → komponentrader (TILG201, TILG202)
+// ============================================
+export const articleComponents = pgTable("article_components", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  parentArticleId: varchar("parent_article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  childArticleId: varchar("child_article_id").references(() => articles.id, { onDelete: "restrict" }).notNull(),
+  sortOrder: integer("sort_order").default(0),
+  // Antal av komponenten per parent (default 1)
+  quantity: real("quantity").default(1.0).notNull(),
+  // Obligatorisk komponent (false = valfri sub-task)
+  isMandatory: boolean("is_mandatory").default(true),
+  // Anteckning för utförare
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_article_components_parent").on(table.parentArticleId),
+  index("idx_article_components_child").on(table.childArticleId),
+  unique("unq_article_components_parent_child").on(table.parentArticleId, table.childArticleId),
+]);
+
+export const insertArticleComponentSchema = createInsertSchema(articleComponents).omit({
+  id: true, createdAt: true,
+});
+export type InsertArticleComponent = z.infer<typeof insertArticleComponentSchema>;
+export type ArticleComponent = typeof articleComponents.$inferSelect;
+
+// ============================================
+// ADR v3 (F4): Beroende-graf mellan work_orders (instans-nivå)
+// task_dependency_templates används för mall, denna för instans.
+// ============================================
+export const workOrderDependencies = pgTable("work_order_dependencies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id, { onDelete: "cascade" }).notNull(),
+  dependsOnWorkOrderId: varchar("depends_on_work_order_id").references(() => workOrders.id, { onDelete: "cascade" }).notNull(),
+  // 'must_complete_first' (default) | 'must_start_first' | 'soft_preference'
+  dependencyType: text("dependency_type").default("must_complete_first").notNull(),
+  // Cachad — sätts till true när dependsOn-WO når completed
+  isSatisfied: boolean("is_satisfied").default(false).notNull(),
+  satisfiedAt: timestamp("satisfied_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_wod_work_order").on(table.workOrderId),
+  index("idx_wod_depends_on").on(table.dependsOnWorkOrderId),
+  index("idx_wod_tenant_satisfied").on(table.tenantId, table.isSatisfied),
+  unique("unq_wod_pair").on(table.workOrderId, table.dependsOnWorkOrderId),
+]);
+
+export const insertWorkOrderDependencySchema = createInsertSchema(workOrderDependencies).omit({
+  id: true, createdAt: true, satisfiedAt: true,
+});
+export type InsertWorkOrderDependency = z.infer<typeof insertWorkOrderDependencySchema>;
+export type WorkOrderDependency = typeof workOrderDependencies.$inferSelect;
+
+// ============================================
+// ADR v3 (F5/F6): Logg över omräknade fakturor (bokföringslagen)
+// ============================================
+export const invoiceRecalculationLog = pgTable("invoice_recalculation_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Vilken WO eller koncept omräkningen gäller
+  workOrderId: varchar("work_order_id").references(() => workOrders.id, { onDelete: "set null" }),
+  orderConceptId: varchar("order_concept_id").references(() => orderConcepts.id, { onDelete: "set null" }),
+  // 'metadata_change' | 'index_adjustment' | 'price_change' | 'manual'
+  recalculationReason: text("recalculation_reason").notNull(),
+  // Beskrivning av ändringen
+  description: text("description"),
+  // Tidigare och nya värden för audit
+  previousValue: real("previous_value"),
+  newValue: real("new_value"),
+  delta: real("delta"),
+  // Vilka månader/perioder som påverkades (JSONB array av YYYY-MM)
+  affectedPeriods: jsonb("affected_periods").default([]),
+  // Trigger
+  triggeredBy: varchar("triggered_by").references(() => users.id, { onDelete: "set null" }),
+  triggeredAt: timestamp("triggered_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_irl_tenant").on(table.tenantId),
+  index("idx_irl_work_order").on(table.workOrderId),
+  index("idx_irl_concept").on(table.orderConceptId),
+  index("idx_irl_triggered_at").on(table.triggeredAt),
+]);
+
+export const insertInvoiceRecalculationLogSchema = createInsertSchema(invoiceRecalculationLog).omit({
+  id: true, createdAt: true, triggeredAt: true,
+});
+export type InsertInvoiceRecalculationLog = z.infer<typeof insertInvoiceRecalculationLogSchema>;
+export type InvoiceRecalculationLog = typeof invoiceRecalculationLog.$inferSelect;
