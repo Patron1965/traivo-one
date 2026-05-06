@@ -778,18 +778,18 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             <TooltipContent>Tilldela till vald slot från andra fönstret</TooltipContent>
                           </Tooltip>
                         )}
-                        <div className="flex items-stretch gap-1.5 mt-2 w-full min-w-0">
+                        <div className="flex items-center justify-between gap-1.5 mt-2 w-full min-w-0">
                           <SuggestPlacementButton job={job} currentWeekStart={currentWeekStart} compact />
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
                                 size="sm"
-                                className="flex-1 min-w-0 h-7 text-xs px-2 overflow-hidden bg-chart-2 hover:bg-chart-2 text-white border border-chart-2/70 dark:bg-chart-2 dark:hover:bg-chart-2 dark:text-white dark:border-chart-2/50"
+                                className="h-7 text-xs px-3 bg-chart-2 hover:bg-chart-2/90 text-white border border-chart-2/70 dark:bg-chart-2 dark:hover:bg-chart-2/90 dark:text-white dark:border-chart-2/50"
                                 onClick={(e) => onOpenAssignDialog(job, e)}
                                 data-testid={`button-assign-job-${job.id}`}
                               >
                                 <UserPlus className="h-3.5 w-3.5 mr-1 shrink-0" />
-                                <span className="truncate">Tilldela</span>
+                                Tilldela
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>Tilldela resurs och datum</TooltipContent>
