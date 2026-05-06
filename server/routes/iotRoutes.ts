@@ -195,7 +195,7 @@ app.delete("/api/iot/devices/:id", requireAdmin, asyncHandler(async (req, res) =
     res.status(204).send();
 }));
 
-app.get("/api/iot/api-keys", asyncHandler(async (req, res) => {
+app.get("/api/iot/api-keys", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const keys = await storage.getIotApiKeys(tenantId);
     const masked = keys.map(k => ({ ...k, apiKey: k.apiKey.slice(0, 8) + "..." }));
