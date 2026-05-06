@@ -604,7 +604,7 @@ app.post("/api/quick-action", isAuthenticated, asyncHandler(async (req: Request,
     res.json(result);
 }));
 
-app.post("/api/mobile/travel-times", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
+app.post("/api/mobile/travel-times", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const { latitude, longitude, destinations } = req.body;
 
     if (latitude == null || longitude == null || !Array.isArray(destinations) || destinations.length === 0) {

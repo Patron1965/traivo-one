@@ -1783,6 +1783,7 @@ app.post("/api/field/mobile-token", asyncHandler(async (req: any, res) => {
     const token = generateMobileToken();
     mobileTokens.set(token, {
       resourceId: userResourceId,
+      tenantId: resource.tenantId,
       expiresAt: Date.now() + 24 * 60 * 60 * 1000,
     });
 

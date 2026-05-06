@@ -156,9 +156,8 @@ export function notifyImportProgress(jobId: string) {
 export const mobileTokens = new Map<string, { resourceId: string; tenantId?: string; expiresAt: number }>();
 
 export function generateMobileToken(): string {
-  return Array.from({ length: 64 }, () => 
-    Math.random().toString(36).charAt(2)
-  ).join('');
+  const { randomBytes } = require("crypto");
+  return randomBytes(48).toString("hex");
 }
 
 export function validateMobileToken(token: string): { resourceId: string; tenantId?: string } | null {

@@ -80,7 +80,10 @@ app.post("/api/mobile/ai/chat", isMobileAuthenticated, asyncHandler(async (req: 
     const { message, context } = req.body;
     if (!message) throw new ValidationError("Meddelande krävs");
 
-    const tenantId = req.tenantId || "kinab";
+    const tenantId = req.mobileTenantId;
+    if (!tenantId) {
+      return res.status(403).json({ error: "Tenant-kontext saknas för AI-anrop" });
+    }
     const { enforceBudgetAndRateLimit, withRetry } = await import("../../ai-budget-service");
     const enforcement = await enforceBudgetAndRateLimit(tenantId, "chat");
     if (!enforcement.allowed) {
@@ -113,7 +116,10 @@ app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, asyncHandler(async 
     const { audio } = req.body;
     if (!audio) throw new ValidationError("Ljuddata krävs");
 
-    const transcribeTenantId = req.tenantId || "kinab";
+    const transcribeTenantId = req.mobileTenantId;
+    if (!transcribeTenantId) {
+      return res.status(403).json({ error: "Tenant-kontext saknas för AI-anrop" });
+    }
     const { enforceBudgetAndRateLimit: transcribeEnforce, withRetry: transcribeRetry } = await import("../../ai-budget-service");
     const transcribeCheck = await transcribeEnforce(transcribeTenantId, "chat");
     if (!transcribeCheck.allowed) {
@@ -143,7 +149,10 @@ app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, asyncHandler(asy
     const { image, context } = req.body;
     if (!image) throw new ValidationError("Image data required");
 
-    const imgTenantId = req.tenantId || "kinab";
+    const imgTenantId = req.mobileTenantId;
+    if (!imgTenantId) {
+      return res.status(403).json({ error: "Tenant-kontext saknas för AI-anrop" });
+    }
     const { enforceBudgetAndRateLimit: imgEnforce, withRetry: imgRetry } = await import("../../ai-budget-service");
     const imgCheck = await imgEnforce(imgTenantId, "analysis");
     if (!imgCheck.allowed) {
