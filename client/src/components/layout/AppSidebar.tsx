@@ -77,7 +77,7 @@ function Badge({ count }: { count: number }) {
   if (count === 0) return null;
   return (
     <span
-      className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none"
+      className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold leading-none"
       data-testid="badge-count"
     >
       {count > 99 ? "99+" : count}
@@ -168,7 +168,7 @@ function NavItemRow({
             e.stopPropagation();
             onToggleFavorite(item.url);
           }}
-          className={`p-1 rounded-sm transition-opacity ${
+          className={`p-1 rounded-sm transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100 ${
             isFav
               ? "opacity-100 text-yellow-500"
               : "opacity-0 group-hover/fav:opacity-60 text-muted-foreground hover:text-yellow-500"

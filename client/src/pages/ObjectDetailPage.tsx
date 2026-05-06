@@ -30,6 +30,7 @@ import "leaflet/dist/leaflet.css";
 import { useMapConfig } from "@/hooks/use-map-config";
 import type { ServiceObject, WorkOrder, DeliveryPreferences } from "@shared/schema";
 import { PolylineEditor } from "@/components/PolylineEditor";
+import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors } from "@/lib/status-colors";
 
 const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
   koncern: { label: "Koncern", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
@@ -59,20 +60,6 @@ const accessTypeLabels: Record<string, { label: string; icon: typeof Key }> = {
   code: { label: "Kod", icon: Keyboard },
   key: { label: "Nyckel/bricka", icon: Key },
   meeting: { label: "Personligt möte", icon: Users },
-};
-
-const statusColors: Record<string, string> = {
-  active: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  inactive: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
-  pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-};
-
-const workOrderStatusColors: Record<string, string> = {
-  unassigned: "bg-gray-100 text-gray-800",
-  scheduled: "bg-blue-100 text-blue-800",
-  in_progress: "bg-yellow-100 text-yellow-800",
-  completed: "bg-green-100 text-green-800",
-  cancelled: "bg-red-100 text-red-800",
 };
 
 const CONTACT_TYPES = [

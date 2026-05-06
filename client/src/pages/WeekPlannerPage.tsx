@@ -42,12 +42,12 @@ export default function WeekPlannerPage() {
         <PageHeader icon={Calendar} title="Veckoplanerare" testId="text-page-title" />
       </div>
       {filterParam === "unassigned" && (
-        <div className="flex items-center gap-3 px-4 py-2 bg-amber-50 border-b border-amber-200 dark:bg-amber-950/20 dark:border-amber-800" data-testid="banner-unassigned-filter">
-          <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0" />
-          <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+        <div className="flex items-center gap-3 px-4 py-2 bg-destructive/10 border-b border-destructive/30" data-testid="banner-unassigned-filter">
+          <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+          <span className="text-sm font-medium text-destructive">
             Uppgifter utan resurstilldelning — tilldela resurser via veckoplaneraren nedan
           </span>
-          <Badge variant="outline" className="text-xs border-amber-300 text-amber-600">Från import</Badge>
+          <Badge variant="outline" className="text-xs border-destructive/40 text-destructive">Från import</Badge>
         </div>
       )}
       <div className="flex flex-1 min-h-0 mx-3 mb-3 border border-border rounded-lg shadow-sm bg-background overflow-hidden">

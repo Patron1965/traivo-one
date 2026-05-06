@@ -54,6 +54,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { QueryState } from "@/components/QueryState";
 import type { PriceList, Customer } from "@shared/schema";
 
 const priceListTypeOptions = [
@@ -127,7 +128,7 @@ export default function PriceListsPage() {
   const [formData, setFormData] = useState<PriceListFormData>(emptyFormData);
   const [showFilters, setShowFilters] = useState(false);
 
-  const { data: priceLists = [], isLoading } = useQuery<PriceList[]>({
+  const { data: priceLists = [], isLoading, isError, error, refetch } = useQuery<PriceList[]>({
     queryKey: ["/api/price-lists"],
   });
 
@@ -238,14 +239,6 @@ export default function PriceListsPage() {
     });
   }, [priceLists, searchQuery, typeFilter]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
   return (
     <div className="h-full flex flex-col p-6">
       <div className="flex flex-col gap-4 mb-6">
@@ -312,7 +305,18 @@ export default function PriceListsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 overflow-auto p-0">
-          <Table>
+          <QueryState
+            isLoading={isLoading}
+            isError={isError}
+            isEmpty={filteredPriceLists.length === 0}
+            error={error as { message?: string } | null}
+            onRetry={() => refetch()}
+            emptyTitle="Inga prislistor hittades"
+            emptyDescription={searchQuery ? "Prova att ändra sökningen." : "Skapa din första prislista för att komma igång."}
+            loadingVariant="skeleton-rows"
+            skeletonRows={6}
+          >
+          <Table density="compact">
             <TableHeader>
               <TableRow>
                 <TableHead>Namn</TableHead>
@@ -324,16 +328,7 @@ export default function PriceListsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredPriceLists.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    <ListTree className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>Inga prislistor hittades</p>
-                    {searchQuery && <p className="text-sm">Prova att ändra sökningen</p>}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredPriceLists.map((priceList) => (
+              {filteredPriceLists.map((priceList) => (
                   <TableRow key={priceList.id} data-testid={`row-price-list-${priceList.id}`}>
                     <TableCell>
                       <div className="font-medium">{priceList.name}</div>
@@ -375,6 +370,7 @@ export default function PriceListsPage() {
                           size="icon"
                           onClick={() => openIndexDialog(priceList)}
                           title="Indexjustering"
+                          aria-label={`Indexjustera ${priceList.name}`}
                           data-testid={`button-index-price-list-${priceList.id}`}
                         >
                           <TrendingUp className="h-4 w-4" />
@@ -383,6 +379,8 @@ export default function PriceListsPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => openEditDialog(priceList)}
+                          title="Redigera"
+                          aria-label={`Redigera ${priceList.name}`}
                           data-testid={`button-edit-price-list-${priceList.id}`}
                         >
                           <Pencil className="h-4 w-4" />
@@ -394,6 +392,8 @@ export default function PriceListsPage() {
                             setPriceListToDelete(priceList);
                             setDeleteDialogOpen(true);
                           }}
+                          title="Ta bort"
+                          aria-label={`Ta bort ${priceList.name}`}
                           data-testid={`button-delete-price-list-${priceList.id}`}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -401,10 +401,10 @@ export default function PriceListsPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
+                ))}
             </TableBody>
           </Table>
+          </QueryState>
         </CardContent>
       </Card>
 

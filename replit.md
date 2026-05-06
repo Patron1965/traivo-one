@@ -21,7 +21,9 @@ _Populate as you build_
   - Price List Adjustments: `server/routes/priceListRoutes.ts` (example)
   - Mobile Endpoints: `server/routes/mobile/*` (v1 oförändrad; v2: `GET /api/mobile/v2/orders/:id` exponerar frozen-snapshot, BOM-checklista, beroende-status — se `docs/traivo-go-v2-handover.md`)
 - **UI Components:** `src/components/ui/` (shadcn/ui), `src/components/` for custom components
-- **Theme/Styling:** Refer to Traivo Color Palette and Inter font usage for Nordic aesthetic.
+- **Shared list-state wrapper:** `client/src/components/QueryState.tsx` (Skeleton/Empty/Error)
+- **Status badge tokens:** `client/src/lib/status-colors.ts` (objektstatus + work-order-status mappade till tema-tokens)
+- **Theme/Styling:** Refer to Traivo Color Palette and Inter font usage for Nordic aesthetic. Använd alltid tema-tokens (`bg-destructive`, `chart-*`, `muted` osv) i nya vyer — inga `bg-red-500`/`bg-amber-*`/`text-orange-*`. Tabellen stöder `density="compact"` för datatäta listor.
 - **Fortnox Integration:** `server/fortnox-client.ts`
 - **Delivery Preferences Logic:** `storage.resolveDeliveryPreferences(objectId)`
 

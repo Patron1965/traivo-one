@@ -99,7 +99,7 @@ function NavBadge({ count }: { count: number }) {
   if (count === 0) return null;
   return (
     <span
-      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none flex-shrink-0"
+      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold leading-none flex-shrink-0"
       data-testid="badge-count"
     >
       {count > 99 ? "99+" : count}
@@ -111,7 +111,7 @@ function DropdownBadge({ count }: { count: number }) {
   if (count === 0) return null;
   return (
     <span
-      className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none"
+      className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold leading-none"
       data-testid="badge-count"
     >
       {count > 99 ? "99+" : count}
@@ -186,7 +186,7 @@ function NavDropdown({ label, items, icon: Icon, colorClass, badges, isFavorite,
                       e.stopPropagation();
                       onToggleFavorite(item.url);
                     }}
-                    className={`p-0.5 rounded transition-opacity ${
+                    className={`p-0.5 rounded transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100 ${
                       fav
                         ? "opacity-100 text-yellow-500"
                         : "opacity-0 group-hover/fav:opacity-60 text-muted-foreground hover:text-yellow-500"
@@ -512,7 +512,7 @@ function NotificationsBell() {
           <Bell className="h-4 w-4" />
           {unread > 0 && (
             <span
-              className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none"
+              className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold leading-none"
               data-testid="badge-notifications-unread"
             >
               {unread > 99 ? "99+" : unread}
