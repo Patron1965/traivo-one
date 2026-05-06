@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
+import { PortalUsersTab } from "@/components/customer/PortalUsersTab";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1212,11 +1213,22 @@ export default function CustomerDetailPage() {
                 Leveranspreferenser
               </TabsTrigger>
               {isAdmin && (
+                <TabsTrigger value="portal-users" data-testid="tab-portal-users">
+                  <Users className="h-4 w-4 mr-2" /> Portal-användare
+                </TabsTrigger>
+              )}
+              {isAdmin && (
                 <TabsTrigger value="profitability" data-testid="tab-profitability">
                   <TrendingUp className="h-4 w-4 mr-2" /> Lönsamhet
                 </TabsTrigger>
               )}
             </TabsList>
+
+            {isAdmin && customerId && (
+              <TabsContent value="portal-users">
+                <PortalUsersTab customerId={customerId} />
+              </TabsContent>
+            )}
 
             <TabsContent value="tree">
               <Card>

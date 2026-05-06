@@ -71,9 +71,25 @@ export async function verifyMagicLink(
   const sessionToken = generateSessionToken();
   const expiresAt = new Date(Date.now() + SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
 
+  // Säkerställ att en portal_user-rad finns för denna (kund, e-post)
+  // — krävs för per-objekt-scope. Om e-post saknas (orimligt här eftersom
+  // token alltid skickas till en e-post) faller vi tillbaka till null.
+  let portalUserId: string | null = null;
+  if (portalToken.email) {
+    const customerForName = await storage.getCustomer(portalToken.customerId);
+    const portalUser = await storage.upsertPortalUser({
+      tenantId: portalToken.tenantId,
+      customerId: portalToken.customerId,
+      email: portalToken.email,
+      name: customerForName?.name || null,
+    });
+    portalUserId = portalUser.id;
+  }
+
   await storage.createPortalSession({
     tenantId: portalToken.tenantId,
     customerId: portalToken.customerId,
+    portalUserId,
     sessionToken,
     expiresAt,
     ipAddress: ipAddress || null,
@@ -97,6 +113,7 @@ export async function validateSession(sessionToken: string): Promise<{
   valid: boolean;
   customerId?: string;
   tenantId?: string;
+  portalUserId?: string | null;
   customer?: any;
 }> {
   const session = await storage.getPortalSessionByToken(sessionToken);
@@ -117,6 +134,7 @@ export async function validateSession(sessionToken: string): Promise<{
     valid: true,
     customerId: session.customerId,
     tenantId: session.tenantId,
+    portalUserId: session.portalUserId ?? null,
     customer,
   };
 }

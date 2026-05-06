@@ -48,6 +48,10 @@ interface PortalSession {
   tenantId?: string;
   tenantName?: string;
   sessionId?: string;
+  portalUserId?: string | null;
+  // null = full access (alla objekt under kunden). Set = endast dessa objektsId
+  // (inkl. descendants) är synliga för portalanvändaren.
+  scopedObjectIds?: Set<string> | null;
 }
 
 async function requirePortalAuth(req: ExpressRequest, res: ExpressResponse): Promise<PortalSession | null> {
@@ -77,7 +81,35 @@ async function requirePortalAuth(req: ExpressRequest, res: ExpressResponse): Pro
     return null;
   }
 
-  return session as PortalSession;
+  // Resolve per-objekt-scope. Bakåtkompat: portalUserId saknas eller scope tomt = full access.
+  let scopedObjectIds: Set<string> | null = null;
+  if (session.portalUserId) {
+    try {
+      scopedObjectIds = await storage.resolvePortalUserScopeObjectIds(session.portalUserId, session.tenantId);
+    } catch (err) {
+      console.error("[portal] Failed to resolve scope:", err);
+      res.status(500).json({ error: "Kunde inte verifiera objektsbehörighet" });
+      return null;
+    }
+  }
+
+  return {
+    valid: true,
+    customerId: session.customerId,
+    customerName: session.customer?.name,
+    email: session.customer?.email,
+    tenantId: session.tenantId,
+    portalUserId: session.portalUserId ?? null,
+    scopedObjectIds,
+  };
+}
+
+// Returnera true om objektet är synligt för portalsessionen.
+// scopedObjectIds === null betyder full access (bakåtkompat / ingen scope satt).
+function isObjectInScope(session: PortalSession, objectId: string | null | undefined): boolean {
+  if (!session.scopedObjectIds) return true;
+  if (!objectId) return false;
+  return session.scopedObjectIds.has(objectId);
 }
 
 app.get("/api/portal/tenants", asyncHandler(async (req, res) => {
@@ -193,6 +225,26 @@ app.get("/api/portal/me", asyncHandler(async (req, res) => {
 
     const tenant = await storage.getTenant(session.tenantId!);
 
+    // Lös upp objekt-scope för portal-användaren (om någon).
+    let scope: { isFullAccess: boolean; objectCount: number; rootObjectIds: string[] } = {
+      isFullAccess: true,
+      objectCount: 0,
+      rootObjectIds: [],
+    };
+    if (session.portalUserId) {
+      const rootIds = await storage.getPortalUserScopeRaw(session.portalUserId);
+      if (rootIds.length === 0) {
+        scope = { isFullAccess: true, objectCount: 0, rootObjectIds: [] };
+      } else {
+        const resolved = await storage.resolvePortalUserScopeObjectIds(session.portalUserId, session.tenantId!);
+        scope = {
+          isFullAccess: false,
+          objectCount: resolved ? resolved.size : rootIds.length,
+          rootObjectIds: rootIds,
+        };
+      }
+    }
+
     res.json({
       customer: {
         id: session.customer?.id,
@@ -204,6 +256,8 @@ app.get("/api/portal/me", asyncHandler(async (req, res) => {
         id: tenant?.id,
         name: tenant?.name,
       },
+      portalUserId: session.portalUserId ?? null,
+      scope,
     });
 }));
 
@@ -211,7 +265,10 @@ app.get("/api/portal/orders", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
-    const workOrders = await storage.getWorkOrdersByCustomer(session.customerId!, session.tenantId!);
+    const allWorkOrders = await storage.getWorkOrdersByCustomer(session.customerId!, session.tenantId!);
+    const workOrders = session.scopedObjectIds
+      ? allWorkOrders.filter(o => o.objectId && session.scopedObjectIds!.has(o.objectId))
+      : allWorkOrders;
     const objects = await storage.getObjects(session.tenantId!);
     const objectMap = new Map(objects.map(o => [o.id, o]));
     const resources = await storage.getResources(session.tenantId!);
@@ -259,7 +316,10 @@ app.get("/api/portal/objects", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
-    const objects = await storage.getObjectsByCustomer(session.customerId!);
+    const allObjects = await storage.getObjectsByCustomer(session.customerId!);
+    const objects = session.scopedObjectIds
+      ? allObjects.filter(o => session.scopedObjectIds!.has(o.id))
+      : allObjects;
     
     res.json(objects.map(o => ({
       id: o.id,
@@ -279,7 +339,10 @@ app.get("/api/portal/clusters", asyncHandler(async (req, res) => {
     if (!session) return;
 
     // Get all objects for this customer with hierarchy info
-    const customerObjects = await storage.getObjectsByCustomer(session.customerId!);
+    const allCustomerObjects = await storage.getObjectsByCustomer(session.customerId!);
+    const customerObjects = session.scopedObjectIds
+      ? allCustomerObjects.filter(o => session.scopedObjectIds!.has(o.id))
+      : allCustomerObjects;
     
     // Create a set of customer's object IDs for filtering
     const customerObjectIds = new Set(customerObjects.map(obj => obj.id));
@@ -509,6 +572,19 @@ app.post("/api/portal/booking-requests", asyncHandler(async (req, res) => {
 
     const { objectId, workOrderId, requestType, preferredDate1, preferredDate2, preferredTimeSlot, customerNotes } = parseResult.data;
 
+    if (objectId) {
+      const obj = await storage.getObject(objectId);
+      if (!obj || obj.customerId !== session.customerId || !isObjectInScope(session, obj.id)) {
+        throw new NotFoundError("Objekt hittades inte");
+      }
+    }
+    if (workOrderId) {
+      const wo = await storage.getWorkOrder(workOrderId);
+      if (!wo || wo.customerId !== session.customerId || !isObjectInScope(session, wo.objectId)) {
+        throw new NotFoundError("Order hittades inte");
+      }
+    }
+
     const bookingRequest = await storage.createBookingRequest({
       tenantId: session.tenantId!,
       customerId: session.customerId!,
@@ -532,7 +608,10 @@ app.get("/api/portal/booking-requests", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
-    const requests = await storage.getBookingRequests(session.tenantId!, session.customerId!);
+    const allRequests = await storage.getBookingRequests(session.tenantId!, session.customerId!);
+    const requests = session.scopedObjectIds
+      ? allRequests.filter(r => !r.objectId || session.scopedObjectIds!.has(r.objectId))
+      : allRequests;
     res.json(requests);
 }));
 
@@ -620,7 +699,10 @@ app.get("/api/portal/issue-reports", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
-    const reports = await storage.getCustomerIssueReports(session.tenantId!, session.customerId!);
+    const allReports = await storage.getCustomerIssueReports(session.tenantId!, session.customerId!);
+    const reports = session.scopedObjectIds
+      ? allReports.filter((r: any) => !r.objectId || session.scopedObjectIds!.has(r.objectId))
+      : allReports;
     res.json(reports);
 }));
 
@@ -632,6 +714,13 @@ app.post("/api/portal/issue-reports", asyncHandler(async (req, res) => {
     
     if (!issueType || !title) {
       throw new ValidationError("Typ och rubrik krävs");
+    }
+
+    if (objectId) {
+      const obj = await storage.getObject(objectId);
+      if (!obj || obj.customerId !== session.customerId || !isObjectInScope(session, obj.id)) {
+        throw new NotFoundError("Objekt hittades inte");
+      }
     }
 
     const report = await storage.createCustomerIssueReport({
@@ -703,7 +792,7 @@ app.get("/api/portal/objects/:objectId/delivery-preferences", asyncHandler(async
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     const obj = await storage.getObject(req.params.objectId);
-    if (!obj || !verifyTenantOwnership(obj, session.tenantId!) || obj.customerId !== session.customerId) {
+    if (!obj || !verifyTenantOwnership(obj, session.tenantId!) || obj.customerId !== session.customerId || !isObjectInScope(session, obj.id)) {
       throw new NotFoundError("Objekt");
     }
     res.json({ deliveryPreferences: obj.deliveryPreferences ?? null });
@@ -713,7 +802,7 @@ const updatePortalObjectDeliveryPrefsHandler = asyncHandler(async (req: ExpressR
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     const obj = await storage.getObject(req.params.objectId);
-    if (!obj || !verifyTenantOwnership(obj, session.tenantId!) || obj.customerId !== session.customerId) {
+    if (!obj || !verifyTenantOwnership(obj, session.tenantId!) || obj.customerId !== session.customerId || !isObjectInScope(session, obj.id)) {
       throw new NotFoundError("Objekt");
     }
     const { deliveryPreferencesSchema } = await import("@shared/schema");
@@ -782,7 +871,8 @@ app.get("/api/portal/visit-protocols", asyncHandler(async (req, res) => {
     const workOrders = await storage.getWorkOrders(session.tenantId!);
     const customerOrders = workOrders.filter(
       o => o.customerId === session.customerId && 
-      ["utford", "fakturerad"].includes(o.orderStatus || "")
+      ["utford", "fakturerad"].includes(o.orderStatus || "") &&
+      (!session.scopedObjectIds || (o.objectId && session.scopedObjectIds.has(o.objectId)))
     );
 
     const protocols = customerOrders
@@ -815,7 +905,8 @@ app.get("/api/portal/completed-jobs", asyncHandler(async (req, res) => {
       .filter(o =>
         o.customerId === session.customerId &&
         ["utford", "fakturerad"].includes(o.orderStatus || "") &&
-        o.completedAt
+        o.completedAt &&
+        (!session.scopedObjectIds || (o.objectId && session.scopedObjectIds.has(o.objectId)))
       )
       .sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime())
       .slice(0, 100);
@@ -1073,9 +1164,16 @@ app.get("/api/portal/visit-confirmations", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     
-    const confirmations = await storage.getVisitConfirmations(session.tenantId!, { 
+    const allConfirmations = await storage.getVisitConfirmations(session.tenantId!, { 
       customerId: session.customerId 
     });
+    let confirmations = allConfirmations;
+    if (session.scopedObjectIds) {
+      const woIds = Array.from(new Set(allConfirmations.map((c: any) => c.workOrderId).filter(Boolean)));
+      const wos = await Promise.all(woIds.map(id => storage.getWorkOrder(id)));
+      const allowedWoIds = new Set(wos.filter(w => w && w.objectId && session.scopedObjectIds!.has(w.objectId)).map(w => w!.id));
+      confirmations = allConfirmations.filter((c: any) => allowedWoIds.has(c.workOrderId));
+    }
     res.json(confirmations);
 }));
 
@@ -1104,7 +1202,7 @@ app.post("/api/portal/visit-confirmations", asyncHandler(async (req, res) => {
     
     // Get work order to validate ownership
     const workOrder = await storage.getWorkOrder(workOrderId);
-    if (!workOrder || workOrder.customerId !== session.customerId) {
+    if (!workOrder || workOrder.customerId !== session.customerId || !isObjectInScope(session, workOrder.objectId)) {
       throw new NotFoundError("Order hittades inte");
     }
     
@@ -1127,9 +1225,16 @@ app.get("/api/portal/technician-ratings", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     
-    const ratings = await storage.getTechnicianRatings(session.tenantId!, { 
+    const allRatings = await storage.getTechnicianRatings(session.tenantId!, { 
       customerId: session.customerId 
     });
+    let ratings = allRatings;
+    if (session.scopedObjectIds) {
+      const woIds = Array.from(new Set(allRatings.map((r: any) => r.workOrderId).filter(Boolean)));
+      const wos = await Promise.all(woIds.map(id => storage.getWorkOrder(id)));
+      const allowedWoIds = new Set(wos.filter(w => w && w.objectId && session.scopedObjectIds!.has(w.objectId)).map(w => w!.id));
+      ratings = allRatings.filter((r: any) => allowedWoIds.has(r.workOrderId));
+    }
     res.json(ratings);
 }));
 
@@ -1165,7 +1270,7 @@ app.post("/api/portal/technician-ratings", asyncHandler(async (req, res) => {
     
     // Get work order to get resource and validate
     const workOrder = await storage.getWorkOrder(workOrderId);
-    if (!workOrder || workOrder.customerId !== session.customerId) {
+    if (!workOrder || workOrder.customerId !== session.customerId || !isObjectInScope(session, workOrder.objectId)) {
       throw new NotFoundError("Order hittades inte");
     }
     
@@ -1192,7 +1297,7 @@ app.get("/api/portal/work-order-chat/:workOrderId", asyncHandler(async (req, res
     
     // Verify work order ownership
     const workOrder = await storage.getWorkOrder(workOrderId);
-    if (!workOrder || workOrder.customerId !== session.customerId) {
+    if (!workOrder || workOrder.customerId !== session.customerId || !isObjectInScope(session, workOrder.objectId)) {
       throw new NotFoundError("Order hittades inte");
     }
     
@@ -1243,7 +1348,7 @@ app.post("/api/portal/work-order-chat/:workOrderId", asyncHandler(async (req, re
     
     // Verify work order ownership
     const workOrder = await storage.getWorkOrder(workOrderId);
-    if (!workOrder || workOrder.customerId !== session.customerId) {
+    if (!workOrder || workOrder.customerId !== session.customerId || !isObjectInScope(session, workOrder.objectId)) {
       throw new NotFoundError("Order hittades inte");
     }
     
@@ -1290,9 +1395,12 @@ app.get("/api/portal/self-bookings", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     
-    const bookings = await storage.getSelfBookings(session.tenantId!, { 
+    const allBookings = await storage.getSelfBookings(session.tenantId!, { 
       customerId: session.customerId 
     });
+    const bookings = session.scopedObjectIds
+      ? allBookings.filter((b: any) => !b.objectId || session.scopedObjectIds!.has(b.objectId))
+      : allBookings;
     
     // Enrich with slot info
     const enrichedBookings = await Promise.all(bookings.map(async (booking) => {
@@ -1353,7 +1461,7 @@ app.post("/api/portal/self-bookings", asyncHandler(async (req, res) => {
     // Verify object belongs to customer if provided
     if (objectId) {
       const object = await storage.getObject(objectId);
-      if (!object || object.customerId !== session.customerId) {
+      if (!object || object.customerId !== session.customerId || !isObjectInScope(session, object.id)) {
         throw new NotFoundError("Objekt hittades inte");
       }
     }
@@ -1792,8 +1900,14 @@ app.get("/api/portal/field/objects", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
-    const customerObjects = await storage.getObjectsByCustomer(session.customerId!);
-    const { items: changeRequests } = await storage.getCustomerChangeRequests({ tenantId: session.tenantId!, customerId: session.customerId! });
+    const allCustomerObjects = await storage.getObjectsByCustomer(session.customerId!);
+    const customerObjects = session.scopedObjectIds
+      ? allCustomerObjects.filter(o => session.scopedObjectIds!.has(o.id))
+      : allCustomerObjects;
+    const { items: allChangeRequests } = await storage.getCustomerChangeRequests({ tenantId: session.tenantId!, customerId: session.customerId! });
+    const changeRequests = session.scopedObjectIds
+      ? allChangeRequests.filter(cr => session.scopedObjectIds!.has(cr.objectId))
+      : allChangeRequests;
 
     const reportCountByObject: Record<string, number> = {};
     for (const cr of changeRequests) {
@@ -1818,7 +1932,7 @@ app.get("/api/portal/field/object/:id", asyncHandler(async (req, res) => {
     if (!session) return;
 
     const obj = await storage.getObject(req.params.id);
-    if (!obj || obj.customerId !== session.customerId) {
+    if (!obj || obj.customerId !== session.customerId || !isObjectInScope(session, obj.id)) {
       throw new NotFoundError("Objekt hittades inte");
     }
 
@@ -1875,10 +1989,13 @@ app.get("/api/portal/field/reports", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
-    const { items: reports } = await storage.getCustomerChangeRequests({
+    const { items: allReports } = await storage.getCustomerChangeRequests({
       tenantId: session.tenantId!,
       customerId: session.customerId!,
     });
+    const reports = session.scopedObjectIds
+      ? allReports.filter(cr => session.scopedObjectIds!.has(cr.objectId))
+      : allReports;
 
     res.json(reports.map(cr => ({
       id: cr.id,
@@ -1913,7 +2030,7 @@ app.post("/api/portal/field/report", asyncHandler(async (req, res) => {
     const { objectId, category, description, photos, latitude, longitude } = parsed.data;
 
     const obj = await storage.getObject(objectId);
-    if (!obj || obj.customerId !== session.customerId) {
+    if (!obj || obj.customerId !== session.customerId || !isObjectInScope(session, obj.id)) {
       throw new NotFoundError("Objekt hittades inte eller tillhör inte din kund");
     }
 
@@ -2037,7 +2154,7 @@ app.get("/api/portal/field/qr-lookup/:code", asyncHandler(async (req, res) => {
       throw new NotFoundError("Objektet kopplat till QR-koden hittades inte");
     }
 
-    if (obj.customerId !== session.customerId) {
+    if (obj.customerId !== session.customerId || !isObjectInScope(session, obj.id)) {
       throw new ForbiddenError("Detta objekt tillhör inte din organisation");
     }
 
@@ -2432,6 +2549,96 @@ app.post("/api/staff/portal-messages/:customerId", asyncHandler(async (req, res)
     }).returning();
     
     res.json(newMsg);
+}));
+
+// ============================================
+// ADMIN: Portal-användare med per-objekt-scope
+// ============================================
+
+app.get("/api/customers/:customerId/portal-users", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const customer = await storage.getCustomer(req.params.customerId);
+    if (!verifyTenantOwnership(customer, tenantId)) {
+      throw new NotFoundError("Kund");
+    }
+    const users = await storage.getPortalUsersByCustomer(tenantId, req.params.customerId);
+    res.json(users);
+}));
+
+const createPortalUserSchema = z.object({
+  email: z.string().email("Ogiltig e-postadress"),
+  name: z.string().trim().min(1).max(200).optional().nullable(),
+  scopeObjectIds: z.array(z.string().uuid()).optional().default([]),
+});
+
+app.post("/api/customers/:customerId/portal-users", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const customer = await storage.getCustomer(req.params.customerId);
+    if (!verifyTenantOwnership(customer, tenantId)) {
+      throw new NotFoundError("Kund");
+    }
+    const parsed = createPortalUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json(formatZodError(parsed.error));
+    }
+    const { email, name, scopeObjectIds } = parsed.data;
+
+    if (scopeObjectIds.length > 0) {
+      const objs = await Promise.all(scopeObjectIds.map(id => storage.getObject(id)));
+      for (let i = 0; i < objs.length; i++) {
+        const o = objs[i];
+        if (!o || o.tenantId !== tenantId || o.customerId !== req.params.customerId) {
+          throw new ValidationError(`Ogiltigt objekt-id: ${scopeObjectIds[i]}`);
+        }
+      }
+    }
+
+    const user = await storage.upsertPortalUser({
+      tenantId,
+      customerId: req.params.customerId,
+      email,
+      name: name ?? null,
+    });
+    await storage.setPortalUserScope(user.id, scopeObjectIds);
+    res.json({ ...user, scopeObjectIds });
+}));
+
+const updateScopeSchema = z.object({
+  scopeObjectIds: z.array(z.string().uuid()),
+});
+
+app.put("/api/portal-users/:id/scope", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const user = await storage.getPortalUser(req.params.id);
+    if (!user || user.tenantId !== tenantId) {
+      throw new NotFoundError("Portal-användare");
+    }
+    const parsed = updateScopeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json(formatZodError(parsed.error));
+    }
+    const { scopeObjectIds } = parsed.data;
+    if (scopeObjectIds.length > 0) {
+      const objs = await Promise.all(scopeObjectIds.map(id => storage.getObject(id)));
+      for (let i = 0; i < objs.length; i++) {
+        const o = objs[i];
+        if (!o || o.tenantId !== tenantId || o.customerId !== user.customerId) {
+          throw new ValidationError(`Ogiltigt objekt-id: ${scopeObjectIds[i]}`);
+        }
+      }
+    }
+    await storage.setPortalUserScope(user.id, scopeObjectIds);
+    res.json({ success: true, scopeObjectIds });
+}));
+
+app.delete("/api/portal-users/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const user = await storage.getPortalUser(req.params.id);
+    if (!user || user.tenantId !== tenantId) {
+      throw new NotFoundError("Portal-användare");
+    }
+    await storage.deletePortalUser(user.id);
+    res.json({ success: true });
 }));
 
 }

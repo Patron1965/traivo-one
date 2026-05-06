@@ -65,6 +65,8 @@ import {
   type DeliverySchedule, type InsertDeliverySchedule,
   type CustomerPortalToken, type InsertCustomerPortalToken,
   type CustomerPortalSession, type InsertCustomerPortalSession,
+  type PortalUser, type InsertPortalUser,
+  type PortalUserObjectScope,
   type CustomerBookingRequest, type InsertCustomerBookingRequest,
   type CustomerPortalMessage, type InsertCustomerPortalMessage,
   type CustomerInvoice, type InsertCustomerInvoice,
@@ -121,6 +123,7 @@ import {
   orderConceptObjects, orderConceptArticles, articleObjectMappings,
   invoiceConfigurations, documentConfigurations, deliverySchedules,
   customerPortalTokens, customerPortalSessions, customerBookingRequests, customerPortalMessages,
+  portalUsers, portalUserObjectScopes,
   customerInvoices, customerIssueReports, customerServiceContracts, fortnoxContractSuggestions, customerNotificationSettings,
   protocols, deviationReports, qrCodeLinks, publicIssueReports, customerChangeRequests, environmentalData,
   visitConfirmations, technicianRatings, portalMessages, selfBookingSlots, selfBookings,
@@ -661,6 +664,16 @@ export interface IStorage {
   getPortalSessionByToken(sessionToken: string): Promise<CustomerPortalSession | undefined>;
   updatePortalSessionAccess(id: string): Promise<void>;
   deletePortalSession(id: string): Promise<void>;
+
+  // Customer Portal - Portal Users (per-objekt-scope)
+  upsertPortalUser(data: InsertPortalUser): Promise<PortalUser>;
+  getPortalUser(id: string): Promise<PortalUser | undefined>;
+  getPortalUserByEmail(tenantId: string, customerId: string, email: string): Promise<PortalUser | undefined>;
+  getPortalUsersByCustomer(tenantId: string, customerId: string): Promise<Array<PortalUser & { scopeObjectIds: string[] }>>;
+  deletePortalUser(id: string): Promise<void>;
+  setPortalUserScope(portalUserId: string, objectIds: string[]): Promise<void>;
+  getPortalUserScopeRaw(portalUserId: string): Promise<string[]>;
+  resolvePortalUserScopeObjectIds(portalUserId: string, tenantId: string): Promise<Set<string> | null>;
   
   // Customer Portal - Booking Requests
   getBookingRequests(tenantId: string, customerId?: string): Promise<CustomerBookingRequest[]>;
@@ -5669,6 +5682,107 @@ export class DatabaseStorage implements IStorage {
   async deletePortalSession(id: string): Promise<void> {
     await db.delete(customerPortalSessions)
       .where(eq(customerPortalSessions.id, id));
+  }
+
+  // ============================================
+  // Portal Users (per-objekt-scope)
+  // ============================================
+  async upsertPortalUser(data: InsertPortalUser): Promise<PortalUser> {
+    const normalizedEmail = data.email.trim().toLowerCase();
+    const existing = await this.getPortalUserByEmail(data.tenantId, data.customerId, normalizedEmail);
+    if (existing) {
+      if (data.name && data.name !== existing.name) {
+        const [updated] = await db.update(portalUsers)
+          .set({ name: data.name })
+          .where(eq(portalUsers.id, existing.id))
+          .returning();
+        return updated;
+      }
+      return existing;
+    }
+    const [created] = await db.insert(portalUsers).values({
+      ...data,
+      email: normalizedEmail,
+    }).returning();
+    return created;
+  }
+
+  async getPortalUser(id: string): Promise<PortalUser | undefined> {
+    const [u] = await db.select().from(portalUsers).where(eq(portalUsers.id, id));
+    return u || undefined;
+  }
+
+  async getPortalUserByEmail(tenantId: string, customerId: string, email: string): Promise<PortalUser | undefined> {
+    const [u] = await db.select().from(portalUsers).where(and(
+      eq(portalUsers.tenantId, tenantId),
+      eq(portalUsers.customerId, customerId),
+      eq(portalUsers.email, email.trim().toLowerCase()),
+    ));
+    return u || undefined;
+  }
+
+  async getPortalUsersByCustomer(tenantId: string, customerId: string): Promise<Array<PortalUser & { scopeObjectIds: string[] }>> {
+    const users = await db.select().from(portalUsers).where(and(
+      eq(portalUsers.tenantId, tenantId),
+      eq(portalUsers.customerId, customerId),
+    ));
+    if (users.length === 0) return [];
+    const userIds = users.map(u => u.id);
+    const scopes = await db.select().from(portalUserObjectScopes)
+      .where(inArray(portalUserObjectScopes.portalUserId, userIds));
+    const byUser = new Map<string, string[]>();
+    for (const s of scopes) {
+      const arr = byUser.get(s.portalUserId) || [];
+      arr.push(s.objectId);
+      byUser.set(s.portalUserId, arr);
+    }
+    return users.map(u => ({ ...u, scopeObjectIds: byUser.get(u.id) || [] }));
+  }
+
+  async deletePortalUser(id: string): Promise<void> {
+    await db.delete(portalUsers).where(eq(portalUsers.id, id));
+  }
+
+  async setPortalUserScope(portalUserId: string, objectIds: string[]): Promise<void> {
+    const unique = Array.from(new Set(objectIds.filter(Boolean)));
+    await db.transaction(async (tx) => {
+      await tx.delete(portalUserObjectScopes).where(eq(portalUserObjectScopes.portalUserId, portalUserId));
+      if (unique.length > 0) {
+        await tx.insert(portalUserObjectScopes).values(unique.map(objectId => ({
+          portalUserId,
+          objectId,
+        })));
+      }
+    });
+  }
+
+  async getPortalUserScopeRaw(portalUserId: string): Promise<string[]> {
+    const rows = await db.select({ objectId: portalUserObjectScopes.objectId })
+      .from(portalUserObjectScopes)
+      .where(eq(portalUserObjectScopes.portalUserId, portalUserId));
+    return rows.map(r => r.objectId);
+  }
+
+  async resolvePortalUserScopeObjectIds(portalUserId: string, tenantId: string): Promise<Set<string> | null> {
+    const rootIds = await this.getPortalUserScopeRaw(portalUserId);
+    if (rootIds.length === 0) return null; // null = full access (bakåtkompat)
+    const rootList = sql.join(rootIds.map(id => sql`${id}`), sql`, `);
+    const rows = await db.execute(sql`
+      WITH RECURSIVE scope_tree AS (
+        SELECT id FROM objects
+        WHERE id IN (${rootList}) AND tenant_id = ${tenantId} AND deleted_at IS NULL
+        UNION ALL
+        SELECT o.id FROM objects o
+        JOIN scope_tree st ON o.parent_id = st.id
+        WHERE o.tenant_id = ${tenantId} AND o.deleted_at IS NULL
+      )
+      SELECT DISTINCT id FROM scope_tree
+    `);
+    const set = new Set<string>();
+    for (const r of (rows as any).rows ?? rows as any) {
+      set.add((r as any).id);
+    }
+    return set;
   }
 
   // ============================================

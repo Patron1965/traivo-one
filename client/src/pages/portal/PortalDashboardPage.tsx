@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight, Sparkles, Package, Phone, Trash2, Recycle, TreeDeciduous, Star, Camera, Menu, X, Home, Settings, Bell, ChevronRight, Map as MapIcon, Image as ImageIcon } from "lucide-react";
+import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight, Sparkles, Package, Phone, Trash2, Recycle, TreeDeciduous, Star, Camera, Menu, X, Home, Settings, Bell, ChevronRight, Map as MapIcon, Image as ImageIcon, Shield } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -27,6 +27,25 @@ function getGreeting() {
   if (hour < 10) return "God morgon";
   if (hour < 18) return "Hej";
   return "God kväll";
+}
+
+function PortalScopeBadge() {
+  const meQuery = useQuery<{ scope?: { isFullAccess: boolean; objectCount: number } }>({
+    queryKey: ["/api/portal/me"],
+    queryFn: () => portalFetch("/api/portal/me"),
+    staleTime: 60_000,
+  });
+  const scope = meQuery.data?.scope;
+  if (!scope || scope.isFullAccess) return null;
+  return (
+    <div
+      className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 mb-2"
+      data-testid="badge-portal-scope"
+    >
+      <Shield className="h-3 w-3" />
+      Du har åtkomst till {scope.objectCount} av kundens objekt
+    </div>
+  );
 }
 
 const bookingSchema = z.object({
@@ -369,6 +388,7 @@ export default function PortalDashboardPage() {
               <span className="text-sm font-medium text-primary">{companyName} Kundportal</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold mb-2">{getGreeting()}, {customer?.name?.split(" ")[0]}!</h2>
+            <PortalScopeBadge />
             <p className="text-muted-foreground max-w-xl">
               Välkommen till {companyName}. Här kan du enkelt hantera dina tjänster, 
               boka extra tömningar och kontakta oss.

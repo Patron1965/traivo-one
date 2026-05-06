@@ -18,6 +18,7 @@ Production security analysis should assume `NODE_ENV=production`, platform-manag
 
 - **Browser/mobile/portal client to Express API** — all request parameters, headers, cookies, and bearer tokens are untrusted until validated server-side.
 - **Authenticated user to tenant-scoped data** — web users must be constrained to their assigned tenant and role on every API route.
+- **Portal user to object-scoped data** — portal sessions may be scoped to a subset of a customer's objects via `portal_users` + `portal_user_object_scopes`. Every `/api/portal/*` route that returns or mutates object-bound resources (work orders, visit confirmations, ratings, chat, bookings, issue reports, field reports, delivery preferences, QR lookups) must enforce `isObjectInScope` against the resolved descendant set. Empty scope = full access (back-compat); a non-empty scope is a hard ceiling and must never be widened by client-supplied IDs.
 - **Authenticated user to admin functions** — admin/owner capabilities are higher trust than normal tenant membership and must be enforced server-side on every privileged endpoint.
 - **Portal/mobile/public routes to core application state** — `/api/portal/*`, `/api/mobile/*`, `/api/admin/*`, `/api/auth/*`, and storage/object-serving routes bypass the normal `/api` tenant middleware path and therefore require dedicated review.
 - **API to PostgreSQL** — the server has broad data access; injection or missing tenant predicates can expose or corrupt all tenant data.

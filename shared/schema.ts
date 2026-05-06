@@ -3045,10 +3045,35 @@ export const customerPortalTokens = pgTable("customer_portal_tokens", {
   userAgent: text("user_agent"),
 });
 
+export const portalUsers = pgTable("portal_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  email: text("email").notNull(),
+  name: text("name"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  uniqEmail: uniqueIndex("portal_users_tenant_customer_email_unique").on(t.tenantId, t.customerId, t.email),
+  byCustomer: index("portal_users_customer_idx").on(t.tenantId, t.customerId),
+}));
+
+// Tomt scope (inga rader) = portal-användaren ser allt under sin kund (bakåtkompat).
+// Annars: scope = listan av root-objekt (descendants ingår automatiskt vid resolve).
+export const portalUserObjectScopes = pgTable("portal_user_object_scopes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  portalUserId: varchar("portal_user_id").references(() => portalUsers.id, { onDelete: 'cascade' }).notNull(),
+  objectId: varchar("object_id").references(() => objects.id, { onDelete: 'cascade' }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  uniq: uniqueIndex("portal_user_scope_unique").on(t.portalUserId, t.objectId),
+  byUser: index("portal_user_scope_user_idx").on(t.portalUserId),
+}));
+
 export const customerPortalSessions = pgTable("customer_portal_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  portalUserId: varchar("portal_user_id").references(() => portalUsers.id, { onDelete: 'set null' }),
   sessionToken: text("session_token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -3105,6 +3130,12 @@ export const customerPortalMessages = pgTable("customer_portal_messages", {
 
 export const insertCustomerPortalTokenSchema = createInsertSchema(customerPortalTokens).omit({ id: true, requestedAt: true });
 export const insertCustomerPortalSessionSchema = createInsertSchema(customerPortalSessions).omit({ id: true, createdAt: true, lastAccessedAt: true });
+export const insertPortalUserSchema = createInsertSchema(portalUsers).omit({ id: true, createdAt: true });
+export const insertPortalUserObjectScopeSchema = createInsertSchema(portalUserObjectScopes).omit({ id: true, createdAt: true });
+export type PortalUser = typeof portalUsers.$inferSelect;
+export type InsertPortalUser = z.infer<typeof insertPortalUserSchema>;
+export type PortalUserObjectScope = typeof portalUserObjectScopes.$inferSelect;
+export type InsertPortalUserObjectScope = z.infer<typeof insertPortalUserObjectScopeSchema>;
 export const insertCustomerBookingRequestSchema = createInsertSchema(customerBookingRequests).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertCustomerPortalMessageSchema = createInsertSchema(customerPortalMessages).omit({ id: true, createdAt: true });
 
