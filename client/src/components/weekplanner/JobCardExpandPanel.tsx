@@ -1390,24 +1390,24 @@ export function JobCardExpandPanel({ jobId, enabled, onHistoryClick, bulkJobIds 
   return (
     <div className="mt-2 pt-2 border-t border-dashed" {...stopAll} data-testid={`expand-panel-${jobId}`}>
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList className="grid grid-cols-6 h-7 p-0.5 gap-0.5">
-          <TabsTrigger value="period" className="h-6 px-1 text-[10px] gap-0.5" data-testid={`tab-job-period-${jobId}`} title="Period">
-            <CalendarRange className="h-3 w-3" /><CountBadge value={data.counts.period} />
+        <TabsList className="grid grid-cols-6 h-9 p-1 gap-1 bg-muted/70 border border-border rounded-md">
+          <TabsTrigger value="period" className="h-7 px-1 text-[10px] gap-1 font-semibold text-foreground/70 rounded-sm border border-transparent data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:shadow-sm" data-testid={`tab-job-period-${jobId}`} title="Period">
+            <CalendarRange className="h-4 w-4 stroke-[2.25]" /><CountBadge value={data.counts.period} />
           </TabsTrigger>
-          <TabsTrigger value="history" className="h-6 px-1 text-[10px] gap-0.5" data-testid={`tab-job-history-${jobId}`} title="Historik">
-            <History className="h-3 w-3" /><CountBadge value={data.counts.history} />
+          <TabsTrigger value="history" className="h-7 px-1 text-[10px] gap-1 font-semibold text-foreground/70 rounded-sm border border-transparent data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:shadow-sm" data-testid={`tab-job-history-${jobId}`} title="Historik">
+            <History className="h-4 w-4 stroke-[2.25]" /><CountBadge value={data.counts.history} />
           </TabsTrigger>
-          <TabsTrigger value="communications" className="h-6 px-1 text-[10px] gap-0.5" data-testid={`tab-job-communications-${jobId}`} title="Kommunikation">
-            <MessageSquare className="h-3 w-3" /><CountBadge value={data.counts.communications} />
+          <TabsTrigger value="communications" className="h-7 px-1 text-[10px] gap-1 font-semibold text-foreground/70 rounded-sm border border-transparent data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:shadow-sm" data-testid={`tab-job-communications-${jobId}`} title="Kommunikation">
+            <MessageSquare className="h-4 w-4 stroke-[2.25]" /><CountBadge value={data.counts.communications} />
           </TabsTrigger>
-          <TabsTrigger value="images" className="h-6 px-1 text-[10px] gap-0.5" data-testid={`tab-job-images-${jobId}`} title="Bilder">
-            <ImageIcon className="h-3 w-3" /><CountBadge value={data.counts.images} />
+          <TabsTrigger value="images" className="h-7 px-1 text-[10px] gap-1 font-semibold text-foreground/70 rounded-sm border border-transparent data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:shadow-sm" data-testid={`tab-job-images-${jobId}`} title="Bilder">
+            <ImageIcon className="h-4 w-4 stroke-[2.25]" /><CountBadge value={data.counts.images} />
           </TabsTrigger>
-          <TabsTrigger value="notes" className="h-6 px-1 text-[10px] gap-0.5" data-testid={`tab-job-notes-${jobId}`} title="Anteckningar">
-            <StickyNote className="h-3 w-3" /><CountBadge value={data.counts.notes} />
+          <TabsTrigger value="notes" className="h-7 px-1 text-[10px] gap-1 font-semibold text-foreground/70 rounded-sm border border-transparent data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:shadow-sm" data-testid={`tab-job-notes-${jobId}`} title="Anteckningar">
+            <StickyNote className="h-4 w-4 stroke-[2.25]" /><CountBadge value={data.counts.notes} />
           </TabsTrigger>
-          <TabsTrigger value="materials" className="h-6 px-1 text-[10px] gap-0.5" data-testid={`tab-job-materials-${jobId}`} title="Material">
-            <Package className="h-3 w-3" /><CountBadge value={data.counts.materials} />
+          <TabsTrigger value="materials" className="h-7 px-1 text-[10px] gap-1 font-semibold text-foreground/70 rounded-sm border border-transparent data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:shadow-sm" data-testid={`tab-job-materials-${jobId}`} title="Material">
+            <Package className="h-4 w-4 stroke-[2.25]" /><CountBadge value={data.counts.materials} />
           </TabsTrigger>
         </TabsList>
         <div className="mt-2 max-h-56 overflow-y-auto pr-1">
