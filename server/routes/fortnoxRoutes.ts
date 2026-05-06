@@ -1698,10 +1698,29 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
     const createdAssignments = [];
     const scheduledDate = req.body.scheduledDate ? new Date(req.body.scheduledDate) : undefined;
     
-    // Fetch article once before loop if concept has articleId
+    // Fetch article + resolve customer-specific price once before the loop.
+    // Task #391: Använd resolveArticlePrice så kundunik/rabattbrev slår igenom
+    // (tidigare användes article.listPrice direkt → kund-priser ignorerades).
     let linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> | undefined = undefined;
+    let linkedPrice = { price: 0, cost: 0, productionMinutes: 0, priceListId: null as string | null };
     if (concept.articleId) {
       linkedArticle = await storage.getArticle(concept.articleId);
+      if (linkedArticle && concept.customerId) {
+        const info = await storage.resolveArticlePrice(tenantId, concept.articleId, concept.customerId);
+        linkedPrice = {
+          price: info.price,
+          cost: info.cost,
+          productionMinutes: info.productionMinutes,
+          priceListId: info.priceListId,
+        };
+      } else if (linkedArticle) {
+        linkedPrice = {
+          price: linkedArticle.listPrice || 0,
+          cost: linkedArticle.cost || 0,
+          productionMinutes: linkedArticle.productionTime || 0,
+          priceListId: null,
+        };
+      }
     }
 
     for (const obj of matchingObjects) {
@@ -1716,11 +1735,11 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
       let estimatedDuration = 60; // default 60 minutes
       let totalValue = 0;
       let totalCost = 0;
-      
+
       if (linkedArticle) {
-        estimatedDuration = (linkedArticle.productionTime || 0) * quantity;
-        totalValue = (linkedArticle.listPrice || 0) * quantity;
-        totalCost = (linkedArticle.cost || 0) * quantity;
+        estimatedDuration = linkedPrice.productionMinutes * quantity;
+        totalValue = linkedPrice.price * quantity;
+        totalCost = linkedPrice.cost * quantity;
       }
 
       const assignment = await storage.createAssignment({
@@ -1744,18 +1763,18 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         cachedCost: totalCost
       });
 
-      // If an article is linked, create assignment article
+      // If an article is linked, create assignment article (kund-pris via resolveArticlePrice)
       if (linkedArticle && concept.articleId) {
         await storage.createAssignmentArticle({
           assignmentId: assignment.id,
           articleId: concept.articleId,
           quantity,
-          unitPrice: linkedArticle.listPrice || 0,
-          totalPrice: (linkedArticle.listPrice || 0) * quantity,
-          unitCost: linkedArticle.cost || 0,
-          totalCost: (linkedArticle.cost || 0) * quantity,
-          unitTime: linkedArticle.productionTime || 0,
-          totalTime: (linkedArticle.productionTime || 0) * quantity,
+          unitPrice: linkedPrice.price,
+          totalPrice: linkedPrice.price * quantity,
+          unitCost: linkedPrice.cost,
+          totalCost: linkedPrice.cost * quantity,
+          unitTime: linkedPrice.productionMinutes,
+          totalTime: linkedPrice.productionMinutes * quantity,
           sequenceOrder: 1,
           status: "pending"
         });
@@ -1776,6 +1795,9 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         const article = await storage.getArticle(ca.articleId);
         if (!article) continue;
         const qty = ca.quantity ?? 1;
+        // Task #391: kund-pris via resolveArticlePrice även för admin/logistik
+        const priceInfo = await storage.resolveArticlePrice(tenantId, ca.articleId, concept.customerId);
+        const minutes = priceInfo.productionMinutes || 30;
         const wo = await storage.createWorkOrder({
           tenantId,
           customerId: concept.customerId,
@@ -1787,7 +1809,7 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
           orderStatus: "ej_planerad",
           priority: concept.priority || "normal",
           scheduledDate,
-          estimatedDuration: (article.productionTime || 30) * qty,
+          estimatedDuration: minutes * qty,
           creationMethod: "concept_execute",
           createdBy: userId ?? null,
         } as InsertWorkOrder);
@@ -1849,8 +1871,19 @@ app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
     });
 
     let linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> | undefined = undefined;
+    let linkedPrice = { price: 0, cost: 0, productionMinutes: 0 };
     if (concept.articleId) {
       linkedArticle = await storage.getArticle(concept.articleId);
+      if (linkedArticle && concept.customerId) {
+        const info = await storage.resolveArticlePrice(tenantId, concept.articleId, concept.customerId);
+        linkedPrice = { price: info.price, cost: info.cost, productionMinutes: info.productionMinutes };
+      } else if (linkedArticle) {
+        linkedPrice = {
+          price: linkedArticle.listPrice || 0,
+          cost: linkedArticle.cost || 0,
+          productionMinutes: linkedArticle.productionTime || 0,
+        };
+      }
     }
 
     const previewItems = matchingObjects.map(obj => {
@@ -1859,15 +1892,14 @@ app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
       if (concept.crossPollinationField && objWithMeta.metadata?.[concept.crossPollinationField]) {
         quantity = Number(objWithMeta.metadata[concept.crossPollinationField]) || 1;
       }
-      const unitPrice = linkedArticle?.listPrice || 0;
       return {
         objectId: obj.id,
         objectName: obj.name,
         address: obj.address,
         quantity,
         articleName: linkedArticle?.name || "-",
-        estimatedDuration: (linkedArticle?.productionTime || 0) * quantity,
-        estimatedValue: unitPrice * quantity,
+        estimatedDuration: linkedPrice.productionMinutes * quantity,
+        estimatedValue: linkedPrice.price * quantity,
       };
     });
 
@@ -1962,8 +1994,19 @@ app.post("/api/order-concepts/:id/run-rolling", asyncHandler(async (req, res) =>
     });
 
     let linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> | undefined = undefined;
+    let linkedPrice = { price: 0, cost: 0, productionMinutes: 0 };
     if (concept.articleId) {
       linkedArticle = await storage.getArticle(concept.articleId);
+      if (linkedArticle && concept.customerId) {
+        const info = await storage.resolveArticlePrice(tenantId, concept.articleId, concept.customerId);
+        linkedPrice = { price: info.price, cost: info.cost, productionMinutes: info.productionMinutes };
+      } else if (linkedArticle) {
+        linkedPrice = {
+          price: linkedArticle.listPrice || 0,
+          cost: linkedArticle.cost || 0,
+          productionMinutes: linkedArticle.productionTime || 0,
+        };
+      }
     }
 
     const schedule = concept.deliverySchedule as Array<{ month: number; weekNumber: number; weekday: number; timeWindowStart?: string; timeWindowEnd?: string }>;
@@ -1985,9 +2028,9 @@ app.post("/api/order-concepts/:id/run-rolling", asyncHandler(async (req, res) =>
             quantity = Number(objWithMeta.metadata[concept.crossPollinationField]) || 1;
           }
 
-          const estimatedDuration = (linkedArticle?.productionTime || 0) * quantity || 60;
-          const totalValue = (linkedArticle?.listPrice || 0) * quantity;
-          const totalCost = (linkedArticle?.cost || 0) * quantity;
+          const estimatedDuration = linkedPrice.productionMinutes * quantity || 60;
+          const totalValue = linkedPrice.price * quantity;
+          const totalCost = linkedPrice.cost * quantity;
 
           const assignment = await storage.createAssignment({
             tenantId,
@@ -2017,11 +2060,11 @@ app.post("/api/order-concepts/:id/run-rolling", asyncHandler(async (req, res) =>
               assignmentId: assignment.id,
               articleId: concept.articleId,
               quantity,
-              unitPrice: linkedArticle.listPrice || 0,
+              unitPrice: linkedPrice.price,
               totalPrice: totalValue,
-              unitCost: linkedArticle.cost || 0,
+              unitCost: linkedPrice.cost,
               totalCost,
-              unitTime: linkedArticle.productionTime || 0,
+              unitTime: linkedPrice.productionMinutes,
               totalTime: estimatedDuration,
               sequenceOrder: 1,
               status: "pending"
