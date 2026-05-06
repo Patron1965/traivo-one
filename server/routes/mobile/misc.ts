@@ -1025,7 +1025,8 @@ app.post("/api/mobile/notifications/read-all", isMobileAuthenticated, asyncHandl
 }));
 
 app.get("/api/resource_profile_assignments", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
-    const resourceId = req.query.resourceId as string || req.mobileResourceId;
+    // Always scope to the authenticated caller — never allow a client-supplied resourceId.
+    const resourceId = req.mobileResourceId;
     if (!resourceId) return res.json([]);
 
     try {
@@ -1039,7 +1040,8 @@ app.get("/api/resource_profile_assignments", isMobileAuthenticated, asyncHandler
 }));
 
 app.get("/resource_profile_assignments", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
-    const resourceId = req.query.resourceId as string || req.mobileResourceId;
+    // Always scope to the authenticated caller — never allow a client-supplied resourceId.
+    const resourceId = req.mobileResourceId;
     if (!resourceId) return res.json([]);
 
     try {

@@ -28,8 +28,9 @@ const myTeamHandler = asyncHandler(async (req: MobileAuthenticatedRequest, res: 
   if (teamIds.length === 0) return res.json([]);
 
   const statusFilter = (req.query.status as string | undefined) || "active";
+  // Only return teams that belong to the authenticated resource's own tenant.
   const activeTeams = await db.select().from(teams)
-    .where(and(inArray(teams.id, teamIds), eq(teams.status, statusFilter)));
+    .where(and(inArray(teams.id, teamIds), eq(teams.status, statusFilter), eq(teams.tenantId, resource.tenantId)));
 
   const result = [];
   for (const team of activeTeams) {
@@ -82,6 +83,11 @@ const inviteHandler = asyncHandler(async (req: MobileAuthenticatedRequest, res: 
   const team = await db.select().from(teams).where(eq(teams.id, teamId));
   if (!team.length) throw new NotFoundError("Team hittades inte");
   if (team[0].leaderId !== resourceId) throw new ForbiddenError("Bara teamledare kan bjuda in");
+
+  // Verify the invited resource exists and belongs to the same tenant as the team.
+  const invitedResource = await storage.getResource(parsed.data.resourceId);
+  if (!invitedResource) throw new NotFoundError("Inbjuden resurs hittades inte");
+  if (invitedResource.tenantId !== team[0].tenantId) throw new ForbiddenError("Inbjuden resurs tillhör en annan organisation");
 
   const existing = await db.select().from(teamMembers)
     .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.resourceId, parsed.data.resourceId)));
