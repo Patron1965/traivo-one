@@ -11,8 +11,24 @@ import { requireTenantWithFallback, requireAdmin, getTenantIdWithFallback } from
 import { db } from "../db";
 import { mlFeatureSnapshots, mlModels } from "@shared/schema";
 import { sql, eq, desc } from "drizzle-orm";
+import { z } from "zod";
 import { runDataQualityAudit, writeBaselineReport } from "../../scripts/ml-data-quality-audit";
-import { predictDurations } from "../services/mlPredictionClient";
+import { predictDurations, type PredictionRequestRow } from "../services/mlPredictionClient";
+
+const predictJobSchema = z.object({
+  workOrderId: z.string().min(1),
+  estimatedDurationMin: z.number().nonnegative(),
+  executionCode: z.string().nullish(),
+  taskCategory: z.string().nullish(),
+  weekday: z.number().int().min(0).max(6).nullish(),
+  hourOfDay: z.number().int().min(0).max(23).nullish(),
+  isWeekend: z.boolean().nullish(),
+  objectLat: z.number().nullish(),
+  objectLng: z.number().nullish(),
+});
+const predictBodySchema = z.object({
+  jobs: z.array(predictJobSchema).min(1).max(500),
+});
 
 const PLATFORM_OWNER_TENANT = "kinab";
 
@@ -62,13 +78,14 @@ export function registerMlRoutes(app: Express): void {
     requireAdmin,
     asyncHandler(async (req, res) => {
       const tenantId = getTenantIdWithFallback(req);
-      const jobs = Array.isArray(req.body?.jobs) ? req.body.jobs : [];
-      if (jobs.length === 0) {
-        return res.status(400).json({ error: "jobs[] krävs" });
+      const parsed = predictBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "ogiltig payload", issues: parsed.error.issues });
       }
+      const jobs: PredictionRequestRow[] = parsed.data.jobs;
       const result = await predictDurations({ tenantId, jobs });
-      const predictions = jobs.map((j: any, i: number) => {
-        const fallbackSec = Math.round((Number(j.estimatedDurationMin) || 30) * 60);
+      const predictions = jobs.map((j, i) => {
+        const fallbackSec = Math.round((j.estimatedDurationMin || 30) * 60);
         const pred = result?.[i];
         if (!pred) {
           return {
