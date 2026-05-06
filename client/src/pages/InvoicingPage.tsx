@@ -193,11 +193,11 @@ export default function InvoicingPage() {
     return params.toString();
   }, [selectedCustomer, fromDate, toDate]);
 
-  const { data: invoicePreviews = [], isLoading: isLoadingPreviews, refetch: refetchPreviews } = useQuery<InvoicePreview[]>({
+  const { data: invoicePreviews = [], isLoading: isLoadingPreviews, isError: isErrorPreviews, error: errorPreviews, refetch: refetchPreviews } = useQuery<InvoicePreview[]>({
     queryKey: [`/api/invoice-preview?${queryParams}`],
   });
 
-  const { data: fortnoxExports = [], isLoading: isLoadingExports, refetch: refetchExports } = useQuery<FortnoxExport[]>({
+  const { data: fortnoxExports = [], isLoading: isLoadingExports, isError: isErrorExports, error: errorExports, refetch: refetchExports } = useQuery<FortnoxExport[]>({
     queryKey: ["/api/fortnox/exports"],
   });
 
@@ -532,11 +532,13 @@ export default function InvoicingPage() {
               </div>
             </div>
 
-            {isLoadingPreviews ? (
+            {isLoadingPreviews || isErrorPreviews ? (
               <QueryState
-                isLoading={true}
-                isError={false}
+                isLoading={isLoadingPreviews}
+                isError={isErrorPreviews}
                 isEmpty={false}
+                error={errorPreviews instanceof Error ? errorPreviews : null}
+                onRetry={() => refetchPreviews()}
                 loadingVariant="skeleton-rows"
                 skeletonRows={6}
               >
@@ -873,10 +875,18 @@ export default function InvoicingPage() {
               </Card>
             </div>
 
-            {isLoadingExports ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
+            {isLoadingExports || isErrorExports ? (
+              <QueryState
+                isLoading={isLoadingExports}
+                isError={isErrorExports}
+                isEmpty={false}
+                error={errorExports instanceof Error ? errorExports : null}
+                onRetry={() => refetchExports()}
+                loadingVariant="skeleton-rows"
+                skeletonRows={6}
+              >
+                <></>
+              </QueryState>
             ) : filteredExports.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center">
