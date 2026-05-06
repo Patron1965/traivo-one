@@ -85,6 +85,34 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+// Fields whose values must never appear in logs because they are reusable bearer
+// credentials. Add any future token/secret fields here.
+const SENSITIVE_FIELDS = new Set([
+  "token",
+  "sessionToken",
+  "shareToken",
+  "shareUrl",
+  "accessToken",
+  "refreshToken",
+  "secret",
+  "password",
+]);
+
+function redactSensitiveFields(value: any, depth = 0): any {
+  if (depth > 10) return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSensitiveFields(item, depth + 1));
+  }
+  if (value !== null && typeof value === "object") {
+    const redacted: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value)) {
+      redacted[k] = SENSITIVE_FIELDS.has(k) ? "[REDACTED]" : redactSensitiveFields(v, depth + 1);
+    }
+    return redacted;
+  }
+  return value;
+}
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -104,7 +132,8 @@ app.use((req, res, next) => {
         if (Array.isArray(capturedJsonResponse)) {
           logLine += ` :: [Array(${capturedJsonResponse.length} items)]`;
         } else {
-          const jsonStr = JSON.stringify(capturedJsonResponse);
+          const safe = redactSensitiveFields(capturedJsonResponse);
+          const jsonStr = JSON.stringify(safe);
           logLine += ` :: ${jsonStr.length > 200 ? jsonStr.slice(0, 200) + "..." : jsonStr}`;
         }
       }
