@@ -5416,15 +5416,17 @@ export class DatabaseStorage implements IStorage {
       const obj = await this.getObject(wo.objectId);
       metadataSnapshot = (obj as any)?.metadata ?? {};
     }
+    const frozenAt = new Date();
     await db.update(workOrders).set({
       frozenUnit,
       frozenQuantity,
       frozenUnitPrice,
       frozenUnitCost,
       frozenUnitTime,
+      frozenAt,
       metadataSnapshot,
     }).where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
-    return { workOrderId, frozenUnit, frozenQuantity, frozenUnitPrice, frozenUnitCost, frozenUnitTime, alreadyFrozen };
+    return { workOrderId, frozenUnit, frozenQuantity, frozenUnitPrice, frozenUnitCost, frozenUnitTime, frozenAt, alreadyFrozen };
   }
 
   async recalculateWorkOrder(

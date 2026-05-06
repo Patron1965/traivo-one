@@ -931,10 +931,10 @@ app.get("/api/mobile/v2/orders/:id", isMobileAuthenticated, asyncHandler(async (
       const components = await storage.getArticleComponents(line.articleId as string, tenantId).catch(() => []);
       if (!components.length) continue;
       const items = await Promise.all(components.map(async (c: Record<string, unknown>) => {
-        const child = await storage.getArticle(c.childId as string).catch(() => null);
+        const child = await storage.getArticle(c.childArticleId as string).catch(() => null);
         return {
           componentId: c.id,
-          articleId: c.childId,
+          articleId: c.childArticleId,
           articleNumber: (child as Record<string, unknown>)?.articleNumber || "",
           articleName: (child as Record<string, unknown>)?.name || "",
           quantityPerParent: Number(c.quantity ?? 1),
@@ -960,10 +960,10 @@ app.get("/api/mobile/v2/orders/:id", isMobileAuthenticated, asyncHandler(async (
         if (components.length) {
           const parent = await storage.getArticle(sid).catch(() => null);
           const items = await Promise.all(components.map(async (c: Record<string, unknown>) => {
-            const child = await storage.getArticle(c.childId as string).catch(() => null);
+            const child = await storage.getArticle(c.childArticleId as string).catch(() => null);
             return {
               componentId: c.id,
-              articleId: c.childId,
+              articleId: c.childArticleId,
               articleNumber: (child as Record<string, unknown>)?.articleNumber || "",
               articleName: (child as Record<string, unknown>)?.name || "",
               quantityPerParent: Number(c.quantity ?? 1),

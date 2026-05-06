@@ -355,6 +355,8 @@ export const workOrders = pgTable("work_orders", {
   frozenUnitPrice: real("frozen_unit_price"),
   frozenUnitCost: real("frozen_unit_cost"),
   frozenUnitTime: real("frozen_unit_time"),
+  // Tidpunkt da snapshot las (audit + Traivo Go v2-kontrakt).
+  frozenAt: timestamp("frozen_at"),
   // Snapshot av relevanta metadata-värden vid expansion (för audit/omräkning).
   metadataSnapshot: jsonb("metadata_snapshot"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
