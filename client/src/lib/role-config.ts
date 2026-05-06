@@ -45,6 +45,7 @@ const PLANNER_ROUTES = new Set([
   "/subscriptions",
   "/planning-parameters",
   "/planner-search-filters",
+  "/article-components",
   "/dashboard",
   "/economics",
   "/setup-analysis",

@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
-import { insertArticleSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema, insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema, insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema, insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertResourceProfileSchema, insertResourceProfileAssignmentSchema, insertWorkSessionSchema, insertWorkEntrySchema, insertFuelLogSchema, insertMaintenanceLogSchema, workSessions, workEntries, timeLogs, equipmentBookings } from "@shared/schema";
+import { insertArticleSchema, insertArticleComponentSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema, insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema, insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema, insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertResourceProfileSchema, insertResourceProfileAssignmentSchema, insertWorkSessionSchema, insertWorkEntrySchema, insertFuelLogSchema, insertMaintenanceLogSchema, workSessions, workEntries, timeLogs, equipmentBookings } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { notificationService } from "../notifications";
 
@@ -70,6 +70,73 @@ app.delete("/api/articles/:id", asyncHandler(async (req, res) => {
     }
     await storage.deleteArticle(req.params.id);
     res.status(204).send();
+}));
+
+// ============== ADR v3 (F4): ARTICLE COMPONENTS (BOM) ==============
+app.get("/api/articles/:parentId/components", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const parent = await storage.getArticle(req.params.parentId);
+  if (!verifyTenantOwnership(parent, tenantId)) throw new NotFoundError("Strukturartikel hittades inte");
+  const rows = await storage.getArticleComponents(req.params.parentId, tenantId);
+  res.json(rows);
+}));
+
+app.post("/api/articles/:parentId/components", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const parent = await storage.getArticle(req.params.parentId);
+  if (!verifyTenantOwnership(parent, tenantId)) throw new NotFoundError("Strukturartikel hittades inte");
+  const parsed = insertArticleComponentSchema.safeParse({
+    ...req.body,
+    tenantId,
+    parentArticleId: req.params.parentId,
+  });
+  if (!parsed.success) {
+    return res.status(400).json(formatZodError(parsed.error));
+  }
+  if (parsed.data.childArticleId === req.params.parentId) {
+    throw new ValidationError("En artikel kan inte vara komponent av sig själv");
+  }
+  const child = await storage.getArticle(parsed.data.childArticleId);
+  if (!verifyTenantOwnership(child, tenantId)) throw new ValidationError("Komponent-artikel hittades inte i tenant");
+  // Server-side nesting-skydd: strukturartiklar far inte vara komponenter (forhindrar cykler)
+  if ((child as any).isStructure) {
+    throw new ValidationError("Strukturartiklar kan inte anvandas som komponenter (forhindrar nesting/cykler)");
+  }
+  try {
+    const row = await storage.createArticleComponent(parsed.data);
+    res.status(201).json(row);
+  } catch (err: any) {
+    if (err?.code === "23505") throw new ConflictError("Komponenten finns redan i strukturen");
+    throw err;
+  }
+}));
+
+app.patch("/api/articles/:parentId/components/:id", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const parent = await storage.getArticle(req.params.parentId);
+  if (!verifyTenantOwnership(parent, tenantId)) throw new NotFoundError("Strukturartikel hittades inte");
+  const existing = await storage.getArticleComponent(req.params.id, tenantId);
+  if (!existing || existing.parentArticleId !== req.params.parentId) throw new NotFoundError("Komponent hittades inte");
+  const partial = insertArticleComponentSchema.partial().safeParse(req.body);
+  if (!partial.success) return res.status(400).json(formatZodError(partial.error));
+  const { tenantId: _t, parentArticleId: _p, childArticleId: _c, ...patch } = partial.data;
+  try {
+    const row = await storage.updateArticleComponent(req.params.id, tenantId, patch);
+    res.json(row);
+  } catch (err: any) {
+    if (err?.code === "23505") throw new ConflictError("Komponenten finns redan i strukturen");
+    throw err;
+  }
+}));
+
+app.delete("/api/articles/:parentId/components/:id", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const parent = await storage.getArticle(req.params.parentId);
+  if (!verifyTenantOwnership(parent, tenantId)) throw new NotFoundError("Strukturartikel hittades inte");
+  const existing = await storage.getArticleComponent(req.params.id, tenantId);
+  if (!existing || existing.parentArticleId !== req.params.parentId) throw new NotFoundError("Komponent hittades inte");
+  await storage.deleteArticleComponent(req.params.id, tenantId);
+  res.status(204).send();
 }));
 
 // Fasthakning: Hämta applicerbara artiklar för ett objekt baserat på hookLevel

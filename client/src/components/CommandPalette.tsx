@@ -84,6 +84,7 @@ const allNavItems: NavItemConfig[] = [
   { title: "Fortnox", url: "/fortnox", icon: Receipt, category: "System", keywords: ["faktura", "bokföring", "export"] },
   { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2, category: "System", keywords: ["sla", "tid", "parameter"] },
   { title: "Sparade sökmönster", url: "/planner-search-filters", icon: Sliders, category: "Planering", keywords: ["filter", "sök", "planerare", "sparat"] },
+  { title: "Artikelkomponenter (BOM)", url: "/article-components", icon: Package, category: "System", keywords: ["bom", "struktur", "komponent", "tilg"] },
   { title: "Importera data", url: "/import", icon: Upload, category: "System", keywords: ["csv", "fil", "ladda upp"] },
   { title: "Arkitektur", url: "/architecture", icon: Network, category: "System", keywords: ["system", "teknisk", "dokumentation"] },
   { title: "Inställningar", url: "/settings", icon: Settings, category: "System", keywords: ["konfiguration", "preferens"] },

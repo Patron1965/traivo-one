@@ -51,6 +51,7 @@ import {
   type OrderConcept, type InsertOrderConcept,
   type ConceptFilter, type InsertConceptFilter,
   type PlannerSearchFilter, type InsertPlannerSearchFilter,
+  type ArticleComponent, type InsertArticleComponent,
   type Assignment, type InsertAssignment,
   type AssignmentArticle, type InsertAssignmentArticle,
   type SubscriptionChange, type InsertSubscriptionChange,
@@ -119,7 +120,7 @@ import {
   industryPackages, industryPackageData, tenantPackageInstallations,
   metadataDefinitions, objectMetadata, objectPayers,
   objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, objectTimeRestrictions, structuralArticles,
-  orderConcepts, conceptFilters, plannerSearchFilters, assignments, assignmentArticles, subscriptionChanges,
+  orderConcepts, conceptFilters, plannerSearchFilters, articleComponents, assignments, assignmentArticles, subscriptionChanges,
   taskDependencyTemplates, taskDependencyInstances, invoiceRules, orderConceptRunLogs,
   orderConceptObjects, orderConceptArticles, articleObjectMappings,
   invoiceConfigurations, documentConfigurations, deliverySchedules,
@@ -594,6 +595,13 @@ export interface IStorage {
   createPlannerSearchFilter(filter: InsertPlannerSearchFilter): Promise<PlannerSearchFilter>;
   updatePlannerSearchFilter(id: string, tenantId: string, data: Partial<InsertPlannerSearchFilter>): Promise<PlannerSearchFilter | undefined>;
   deletePlannerSearchFilter(id: string, tenantId: string): Promise<void>;
+
+  // ADR v3 (F4): Article Components (BOM)
+  getArticleComponents(parentArticleId: string, tenantId: string): Promise<ArticleComponent[]>;
+  getArticleComponent(id: string, tenantId: string): Promise<ArticleComponent | undefined>;
+  createArticleComponent(component: InsertArticleComponent): Promise<ArticleComponent>;
+  updateArticleComponent(id: string, tenantId: string, data: Partial<InsertArticleComponent>): Promise<ArticleComponent | undefined>;
+  deleteArticleComponent(id: string, tenantId: string): Promise<void>;
   
   // Assignments
   getAssignments(tenantId: string, options?: { status?: string; resourceId?: string; clusterId?: string; startDate?: Date; endDate?: Date }): Promise<Assignment[]>;
@@ -5281,6 +5289,42 @@ export class DatabaseStorage implements IStorage {
   async deletePlannerSearchFilter(id: string, tenantId: string): Promise<void> {
     await db.delete(plannerSearchFilters)
       .where(and(eq(plannerSearchFilters.id, id), eq(plannerSearchFilters.tenantId, tenantId)));
+  }
+
+  // ============================================
+  // ADR v3 (F4): Article Components (BOM)
+  // ============================================
+  async getArticleComponents(parentArticleId: string, tenantId: string): Promise<ArticleComponent[]> {
+    return db.select().from(articleComponents)
+      .where(and(
+        eq(articleComponents.parentArticleId, parentArticleId),
+        eq(articleComponents.tenantId, tenantId)
+      ))
+      .orderBy(articleComponents.sortOrder, articleComponents.createdAt);
+  }
+
+  async getArticleComponent(id: string, tenantId: string): Promise<ArticleComponent | undefined> {
+    const [row] = await db.select().from(articleComponents)
+      .where(and(eq(articleComponents.id, id), eq(articleComponents.tenantId, tenantId)));
+    return row || undefined;
+  }
+
+  async createArticleComponent(component: InsertArticleComponent): Promise<ArticleComponent> {
+    const [row] = await db.insert(articleComponents).values(component).returning();
+    return row;
+  }
+
+  async updateArticleComponent(id: string, tenantId: string, data: Partial<InsertArticleComponent>): Promise<ArticleComponent | undefined> {
+    const [row] = await db.update(articleComponents)
+      .set(data)
+      .where(and(eq(articleComponents.id, id), eq(articleComponents.tenantId, tenantId)))
+      .returning();
+    return row || undefined;
+  }
+
+  async deleteArticleComponent(id: string, tenantId: string): Promise<void> {
+    await db.delete(articleComponents)
+      .where(and(eq(articleComponents.id, id), eq(articleComponents.tenantId, tenantId)));
   }
 
   // ============================================

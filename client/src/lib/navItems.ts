@@ -147,6 +147,7 @@ export function getAdminItems(tl?: (key: string) => string): NavItem[] {
     { title: l("nav.company-settings"), url: "/tenant-config", icon: Settings2, description: l("nav.company-settings.desc") },
     { title: l("nav.production-control"), url: "/planning-parameters", icon: Settings2, description: l("nav.production-control.desc") },
     { title: l("nav.planner-search-filters"), url: "/planner-search-filters", icon: Sliders, description: l("nav.planner-search-filters.desc") },
+    { title: l("nav.article-components"), url: "/article-components", icon: Package, description: l("nav.article-components.desc") },
     { title: l("nav.metadata-settings"), url: "/metadata-settings", icon: Database, description: l("nav.metadata-settings.desc") },
     { title: l("nav.user-management"), url: "/user-management", icon: Users, description: l("nav.user-management.desc") },
     { title: l("nav.settings"), url: "/settings", icon: Settings, description: l("nav.settings.desc") },
