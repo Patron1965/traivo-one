@@ -44,6 +44,7 @@ const SubscriptionsPage = lazy(() => import("@/pages/SubscriptionsPage"));
 const PlanningParametersPage = lazy(() => import("@/pages/PlanningParametersPage"));
 const PlannerSearchFiltersPage = lazy(() => import("@/pages/PlannerSearchFiltersPage"));
 const ArticleComponentsPage = lazy(() => import("@/pages/ArticleComponentsPage"));
+const InvoiceRecalculationLogPage = lazy(() => import("@/pages/InvoiceRecalculationLogPage"));
 const OnboardingWizardPage = lazy(() => import("@/pages/OnboardingWizardPage"));
 const SystemOverviewPage = lazy(() => import("@/pages/SystemOverviewPage"));
 const ClustersPage = lazy(() => import("@/pages/ClustersPage"));
@@ -155,6 +156,7 @@ function Router() {
         <Route path="/planning-parameters">{() => <ProtectedRoute component={PlanningParametersPage} path="/planning-parameters" />}</Route>
         <Route path="/planner-search-filters">{() => <ProtectedRoute component={PlannerSearchFiltersPage} path="/planner-search-filters" />}</Route>
         <Route path="/article-components">{() => <ProtectedRoute component={ArticleComponentsPage} path="/article-components" />}</Route>
+        <Route path="/invoice-recalculation-log">{() => <ProtectedRoute component={InvoiceRecalculationLogPage} path="/invoice-recalculation-log" />}</Route>
         <Route path="/dashboard">{() => <ProtectedRoute component={DashboardPage} path="/dashboard" />}</Route>
         <Route path="/economics">{() => <ProtectedRoute component={EconomicsDashboardPage} path="/economics" />}</Route>
         <Route path="/setup-analysis">{() => <ProtectedRoute component={SetupTimeAnalysisPage} path="/setup-analysis" />}</Route>

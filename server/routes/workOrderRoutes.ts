@@ -12,7 +12,7 @@ import {
   ensureObjectInTenant,
   ensureResourceIdsInTenant,
 } from "./helpers";
-import { getTenantIdWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, slaRiskSnapshots, type OrderConcept, isOutsidePreferredWindow } from "@shared/schema";
 import { handleWorkOrderStatusChange } from "../ai-communication";
 import { notificationService } from "../notifications";
@@ -1404,6 +1404,39 @@ app.get("/api/chain-trace/:workOrderId", asyncHandler(async (req, res) => {
   };
 
   res.json(trace);
+}));
+
+// ============== ADR v3 (F5): Frozen Snapshot + Invoice Recalculation ==============
+app.post("/api/work-orders/:id/freeze", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const force = req.query.force === "true" || req.body?.force === true;
+  try {
+    const result = await storage.freezeWorkOrder(req.params.id, tenantId, { force });
+    res.json(result);
+  } catch (err: any) {
+    res.status(404).json({ error: err.message || "Kunde inte frysa arbetsordern" });
+  }
+}));
+
+app.post("/api/work-orders/:id/recalculate", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const userId = (req as any).user?.claims?.sub ?? (req as any).user?.id ?? null;
+  const reason = typeof req.body?.reason === "string" ? req.body.reason : "manual";
+  try {
+    const result = await storage.recalculateWorkOrder(req.params.id, tenantId, userId, reason);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "Kunde inte rakna om" });
+  }
+}));
+
+app.get("/api/invoice-recalculation-log", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const workOrderId = typeof req.query.workOrderId === "string" ? req.query.workOrderId : undefined;
+  const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+  const offset = parseInt(req.query.offset as string) || 0;
+  const rows = await storage.getInvoiceRecalculationLogs(tenantId, { workOrderId, limit, offset });
+  res.json(rows);
 }));
 
 }

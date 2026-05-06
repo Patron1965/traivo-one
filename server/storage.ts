@@ -52,6 +52,7 @@ import {
   type ConceptFilter, type InsertConceptFilter,
   type PlannerSearchFilter, type InsertPlannerSearchFilter,
   type ArticleComponent, type InsertArticleComponent,
+  type InvoiceRecalculationLog, type InsertInvoiceRecalculationLog,
   type Assignment, type InsertAssignment,
   type AssignmentArticle, type InsertAssignmentArticle,
   type SubscriptionChange, type InsertSubscriptionChange,
@@ -120,7 +121,7 @@ import {
   industryPackages, industryPackageData, tenantPackageInstallations,
   metadataDefinitions, objectMetadata, objectPayers,
   objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, objectTimeRestrictions, structuralArticles,
-  orderConcepts, conceptFilters, plannerSearchFilters, articleComponents, assignments, assignmentArticles, subscriptionChanges,
+  orderConcepts, conceptFilters, plannerSearchFilters, articleComponents, invoiceRecalculationLog, assignments, assignmentArticles, subscriptionChanges,
   taskDependencyTemplates, taskDependencyInstances, invoiceRules, orderConceptRunLogs,
   orderConceptObjects, orderConceptArticles, articleObjectMappings,
   invoiceConfigurations, documentConfigurations, deliverySchedules,
@@ -602,6 +603,12 @@ export interface IStorage {
   createArticleComponent(component: InsertArticleComponent): Promise<ArticleComponent>;
   updateArticleComponent(id: string, tenantId: string, data: Partial<InsertArticleComponent>): Promise<ArticleComponent | undefined>;
   deleteArticleComponent(id: string, tenantId: string): Promise<void>;
+
+  // ADR v3 (F5): Frozen WO snapshot + Invoice Recalculation Log
+  freezeWorkOrder(workOrderId: string, tenantId: string, opts?: { force?: boolean }): Promise<{ workOrderId: string; frozenUnit: string; frozenQuantity: number; frozenUnitPrice: number; frozenUnitCost: number; frozenUnitTime: number; alreadyFrozen: boolean }>;
+  recalculateWorkOrder(workOrderId: string, tenantId: string, triggeredBy: string | null, reason?: string): Promise<{ previousValue: number; newValue: number; delta: number; logId: string | null }>;
+  getInvoiceRecalculationLogs(tenantId: string, opts?: { workOrderId?: string; limit?: number; offset?: number }): Promise<InvoiceRecalculationLog[]>;
+  createInvoiceRecalculationLog(entry: InsertInvoiceRecalculationLog): Promise<InvoiceRecalculationLog>;
   
   // Assignments
   getAssignments(tenantId: string, options?: { status?: string; resourceId?: string; clusterId?: string; startDate?: Date; endDate?: Date }): Promise<Assignment[]>;
@@ -5325,6 +5332,118 @@ export class DatabaseStorage implements IStorage {
   async deleteArticleComponent(id: string, tenantId: string): Promise<void> {
     await db.delete(articleComponents)
       .where(and(eq(articleComponents.id, id), eq(articleComponents.tenantId, tenantId)));
+  }
+
+  // ============================================
+  // ADR v3 (F5): Frozen WO snapshot + Recalculation Log
+  // ============================================
+  async freezeWorkOrder(
+    workOrderId: string,
+    tenantId: string,
+    opts: { force?: boolean } = {}
+  ) {
+    const wo = await this.getWorkOrder(workOrderId);
+    if (!wo || wo.tenantId !== tenantId) throw new Error("Arbetsorder hittades inte");
+    // Komplett frozen-state kraver alla 5 falten satta (skydd mot partial legacy state)
+    const alreadyFrozen =
+      wo.frozenUnitPrice != null &&
+      wo.frozenQuantity != null &&
+      wo.frozenUnitCost != null &&
+      wo.frozenUnitTime != null &&
+      wo.frozenUnit != null;
+    if (alreadyFrozen && !opts.force) {
+      return {
+        workOrderId,
+        frozenUnit: wo.frozenUnit ?? "st",
+        frozenQuantity: Number(wo.frozenQuantity ?? 0),
+        frozenUnitPrice: Number(wo.frozenUnitPrice ?? 0),
+        frozenUnitCost: Number(wo.frozenUnitCost ?? 0),
+        frozenUnitTime: Number(wo.frozenUnitTime ?? 0),
+        alreadyFrozen: true,
+      };
+    }
+    const lines = await this.getWorkOrderLines(workOrderId);
+    const totalQty = lines.reduce((s, l) => s + Number(l.quantity ?? 0), 0);
+    const totalPrice = lines.reduce((s, l) => s + Number(l.resolvedPrice ?? 0) * Number(l.quantity ?? 1), 0);
+    const totalCost = lines.reduce((s, l) => s + Number(l.resolvedCost ?? 0) * Number(l.quantity ?? 1), 0);
+    const totalMin = lines.reduce((s, l) => s + Number(l.resolvedProductionMinutes ?? 0) * Number(l.quantity ?? 1), 0);
+    const safeQty = totalQty > 0 ? totalQty : 1;
+    const frozenUnit = "st";
+    const frozenQuantity = totalQty;
+    const frozenUnitPrice = totalPrice / safeQty;
+    const frozenUnitCost = totalCost / safeQty;
+    const frozenUnitTime = totalMin / safeQty;
+    let metadataSnapshot: any = {};
+    if (wo.objectId) {
+      const obj = await this.getObject(wo.objectId);
+      metadataSnapshot = (obj as any)?.metadata ?? {};
+    }
+    await db.update(workOrders).set({
+      frozenUnit,
+      frozenQuantity,
+      frozenUnitPrice,
+      frozenUnitCost,
+      frozenUnitTime,
+      metadataSnapshot,
+    }).where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
+    return { workOrderId, frozenUnit, frozenQuantity, frozenUnitPrice, frozenUnitCost, frozenUnitTime, alreadyFrozen };
+  }
+
+  async recalculateWorkOrder(
+    workOrderId: string,
+    tenantId: string,
+    triggeredBy: string | null,
+    reason: string = "manual"
+  ) {
+    const wo = await this.getWorkOrder(workOrderId);
+    if (!wo || wo.tenantId !== tenantId) throw new Error("Arbetsorder hittades inte");
+    if (wo.frozenUnitPrice == null) {
+      throw new Error("Arbetsordern har ingen frozen-snapshot. Frys den forst.");
+    }
+    const lines = await this.getWorkOrderLines(workOrderId);
+    const currentValue = lines.reduce((s, l) => s + Number(l.resolvedPrice ?? 0) * Number(l.quantity ?? 1), 0);
+    const previousValue = Number(wo.frozenUnitPrice ?? 0) * Number(wo.frozenQuantity ?? 0);
+    const delta = currentValue - previousValue;
+    let logId: string | null = null;
+    if (Math.abs(delta) > 0.001) {
+      const period = wo.completedAt
+        ? new Date(wo.completedAt).toISOString().slice(0, 7)
+        : new Date().toISOString().slice(0, 7);
+      // Inkludera fryst snapshot i description for fullstandig audit-trail
+      const frozenContext = `frozen=${Number(wo.frozenQuantity ?? 0)}${wo.frozenUnit ?? "st"} @ ${Number(wo.frozenUnitPrice ?? 0).toFixed(2)} (cost ${Number(wo.frozenUnitCost ?? 0).toFixed(2)}, time ${Number(wo.frozenUnitTime ?? 0).toFixed(1)}m)`;
+      const [logRow] = await db.insert(invoiceRecalculationLog).values({
+        tenantId,
+        workOrderId,
+        recalculationReason: reason,
+        description: `Omberakning: ${previousValue.toFixed(2)} -> ${currentValue.toFixed(2)} (delta ${delta.toFixed(2)}) | ${frozenContext}`,
+        previousValue,
+        newValue: currentValue,
+        delta,
+        affectedPeriods: [period],
+        triggeredBy,
+      }).returning();
+      logId = logRow.id;
+    }
+    return { previousValue, newValue: currentValue, delta, logId };
+  }
+
+  async getInvoiceRecalculationLogs(
+    tenantId: string,
+    opts: { workOrderId?: string; limit?: number; offset?: number } = {}
+  ): Promise<InvoiceRecalculationLog[]> {
+    const conditions = [eq(invoiceRecalculationLog.tenantId, tenantId)];
+    if (opts.workOrderId) conditions.push(eq(invoiceRecalculationLog.workOrderId, opts.workOrderId));
+    let q = db.select().from(invoiceRecalculationLog)
+      .where(and(...conditions))
+      .orderBy(desc(invoiceRecalculationLog.triggeredAt));
+    const limit = Math.min(opts.limit ?? 100, 500);
+    const offset = opts.offset ?? 0;
+    return (q as any).limit(limit).offset(offset);
+  }
+
+  async createInvoiceRecalculationLog(entry: InsertInvoiceRecalculationLog): Promise<InvoiceRecalculationLog> {
+    const [row] = await db.insert(invoiceRecalculationLog).values(entry).returning();
+    return row;
   }
 
   // ============================================
