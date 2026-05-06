@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertTriangle, Clock, X, Link2, ArrowRight, Key, DoorOpen, UsersRound, MoreVertical, Zap, Info } from "lucide-react";
+import { AlertTriangle, Clock, X, Link2, ArrowRight, Key, DoorOpen, UsersRound, MoreVertical, Zap, Info, CalendarClock } from "lucide-react";
 import type { WorkOrderWithObject } from "@shared/schema";
 import { EXECUTION_CODE_LABELS, EXECUTION_CODE_ICONS } from "@shared/schema";
 import {
@@ -171,6 +171,31 @@ export const JobCard = memo(function JobCard({
                   </Tooltip>
                 )}
               </div>
+            )}
+            {(job as { outsidePreferredWindow?: boolean }).outsidePreferredWindow && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="outline"
+                    className={
+                      (job as { deliveryPreferencePriority?: string }).deliveryPreferencePriority === "strict"
+                        ? "text-[9px] h-4 gap-0.5 mt-0.5 bg-red-50 text-red-800 border-red-300 dark:bg-red-950/40 dark:text-red-200 dark:border-red-700"
+                        : "text-[9px] h-4 gap-0.5 mt-0.5 bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-700"
+                    }
+                    data-testid={`badge-outside-preferred-${job.id}`}
+                  >
+                    <CalendarClock className="h-2.5 w-2.5" />
+                    {(job as { deliveryPreferencePriority?: string }).deliveryPreferencePriority === "strict"
+                      ? "Bryter slottid"
+                      : "Utanför slottid"}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs text-xs">
+                  {(job as { deliveryPreferencePriority?: string }).deliveryPreferencePriority === "strict"
+                    ? "Planerad tid bryter mot kundens strikta leveransfönster."
+                    : "Planerad tid ligger utanför kundens/objektets önskade leveransfönster."}
+                </TooltipContent>
+              </Tooltip>
             )}
             {hasConflict && (
               <Tooltip>

@@ -2934,6 +2934,14 @@ app.post("/api/ai/suggest-placement", isAuthenticated, asyncHandler(async (req: 
     if (!workOrder) throw new NotFoundError("Arbetsorder hittades inte");
     await verifyTenantOwnership(workOrder.tenantId, tenantId, "work_order");
 
+    // Ladda effektiva leveranspreferenser så placering kan respektera slottider.
+    const { EMPTY_DELIVERY_PREFERENCES } = await import("@shared/schema");
+    type DeliveryPrefs = import("@shared/schema").DeliveryPreferences;
+    type ResolvedPrefs = { effective: DeliveryPrefs; source: "object" | "customer" | "none" };
+    const deliveryPrefs: ResolvedPrefs = workOrder.objectId
+      ? await storage.resolveDeliveryPreferences(workOrder.objectId)
+      : { effective: EMPTY_DELIVERY_PREFERENCES, source: "none" };
+
     const allResources = await storage.getResources(tenantId);
     const activeResources = allResources.filter(r => r.status === "active" && r.resourceType === "person");
 
@@ -3029,6 +3037,27 @@ app.post("/api/ai/suggest-placement", isAuthenticated, asyncHandler(async (req: 
           }
         }
 
+        // Justera score utifrån kundens/objektets leveranspreferenser.
+        const dayDate = new Date(day + "T00:00:00Z");
+        const weekday = dayDate.getUTCDay();
+        const dayWindows = (deliveryPrefs.effective.weeklyWindows || []).filter(w => w.weekday === weekday);
+        const isStrict = deliveryPrefs.effective.priority === "strict";
+        if (deliveryPrefs.source !== "none") {
+          const blockedDay = (deliveryPrefs.effective.blockedDates || []).includes(day);
+          if (blockedDay) {
+            if (isStrict) continue; // hoppa helt — får inte planeras denna dag
+            score -= 30;
+            reasons.push("Kunden har markerat dagen som blockerad");
+          } else if (dayWindows.length > 0) {
+            score += isStrict ? 25 : 12;
+            reasons.push(
+              isStrict
+                ? `Inom kundens strikta slottid (${dayWindows.map(w => `${w.start}-${w.end}`).join(", ")})`
+                : `Inom kundens önskade slottid (${dayWindows.map(w => `${w.start}-${w.end}`).join(", ")})`,
+            );
+          }
+        }
+
         let startTime = "07:00";
         const sortedExisting = dayOrders
           .filter(o => o.scheduledStartTime)
@@ -3039,6 +3068,49 @@ app.post("/api/ai/suggest-placement", isAuthenticated, asyncHandler(async (req: 
           const endMin = h * 60 + m + (last.estimatedDuration || 60);
           if (endMin >= 17 * 60) continue;
           startTime = `${Math.floor(endMin / 60).toString().padStart(2, "0")}:${(endMin % 60).toString().padStart(2, "0")}`;
+        }
+
+        // Om kunden har slottider, försök placera startTime inom ett av fönstren.
+        // Strict => hård regel (skip om ingen passar); preferred => mjuk (justera + behåll).
+        if (dayWindows.length > 0) {
+          const toMin = (s: string) => {
+            const [h, m] = s.split(":").map(Number);
+            return h * 60 + m;
+          };
+          const toHHMM = (mins: number) =>
+            `${Math.floor(mins / 60).toString().padStart(2, "0")}:${(mins % 60).toString().padStart(2, "0")}`;
+          const startMin = toMin(startTime);
+          const finishMin = startMin + (jobDuration * 60);
+          const fits = dayWindows.find(w => startMin >= toMin(w.start) && finishMin <= toMin(w.end));
+          if (!fits) {
+            // Hitta första fönster där hela jobbet ryms efter startMin
+            const candidate = dayWindows
+              .map(w => ({ start: toMin(w.start), end: toMin(w.end) }))
+              .filter(w => w.end - w.start >= jobDuration * 60)
+              .sort((a, b) => a.start - b.start)
+              .find(w => w.start >= startMin || w.end >= finishMin);
+            if (candidate) {
+              const newStart = Math.max(candidate.start, startMin);
+              if (newStart + jobDuration * 60 <= candidate.end) {
+                startTime = toHHMM(newStart);
+                reasons.push(
+                  isStrict
+                    ? `Justerad starttid ${startTime} för att rymmas i strikt slottid`
+                    : `Justerad starttid ${startTime} för att möta önskad slottid`,
+                );
+              } else if (isStrict) {
+                continue;
+              } else {
+                score -= 15;
+                reasons.push("Kan ej placeras inom önskad slottid");
+              }
+            } else if (isStrict) {
+              continue;
+            } else {
+              score -= 15;
+              reasons.push("Kan ej placeras inom önskad slottid");
+            }
+          }
         }
 
         suggestions.push({

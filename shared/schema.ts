@@ -63,6 +63,10 @@ export const customers = pgTable("customers", {
   invoicePostalCode: text("invoice_postal_code"),
   invoiceCity: text("invoice_city"),
   notes: text("notes"),
+  // Stående leveranspreferenser (slottider, blockerade tider, anteckningar) - används som
+  // fallback när objekt saknar egen `deliveryPreferences`. Struktur valideras av
+  // deliveryPreferencesSchema.
+  deliveryPreferences: jsonb("delivery_preferences"),
   importBatchId: text("import_batch_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
@@ -160,6 +164,10 @@ export const objects = pgTable("objects", {
   
   status: text("status").default("active").notNull(),
   notes: text("notes"),
+  // Stående leveranspreferenser (slottider, blockerade tider, anteckningar) -
+  // primär källa per objekt; faller tillbaka till kundens preferens om null.
+  // Struktur valideras av deliveryPreferencesSchema.
+  deliveryPreferences: jsonb("delivery_preferences"),
   lastServiceDate: timestamp("last_service_date"),
   importBatchId: text("import_batch_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -317,6 +325,14 @@ export const workOrders = pgTable("work_orders", {
   plannedNotes: text("planned_notes"),
   notes: text("notes"),
   metadata: jsonb("metadata").default({}),
+  // Cachat resultat av jämförelsen mellan plannedWindowStart/End och kundens/objektets
+  // effektiva leveranspreferens. true = ordern ligger utanför önskat fönster.
+  // Beräknas i POST/PATCH /api/work-orders.
+  outsidePreferredWindow: boolean("outside_preferred_window").default(false),
+  // Cachad priority från effektiv leveranspreferens ("strict" | "preferred").
+  // Används av planner-UI för att färgkoda outsidePreferredWindow-badgen
+  // (röd för strict, gul för preferred). Skrivs av POST/PATCH /api/work-orders.
+  deliveryPreferencePriority: text("delivery_preference_priority"),
   importBatchId: text("import_batch_id"),
   etaSmsSent: boolean("eta_sms_sent").default(false),
   // Mjuk länk till huvudjobbet om denna order är en förberedande/följande offset-uppgift
@@ -1056,10 +1072,97 @@ export const workOrderObjectsRelations = relations(workOrderObjects, ({ one }) =
   object: one(objects, { fields: [workOrderObjects.objectId], references: [objects.id] }),
 }));
 
+// ============================================
+// Delivery Preferences (slottider per kund/objekt)
+// ============================================
+// Stående preferenser per veckodag, blockerade tider/datum, anteckningar.
+// Lagras som JSONB på objects.deliveryPreferences (primär) och
+// customers.deliveryPreferences (fallback). Effektiv preferens beräknas
+// runtime av storage.resolveDeliveryPreferences(objectId).
+const TIME_HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export const weeklyWindowSchema = z.object({
+  weekday: z.number().int().min(0).max(6),
+  start: z.string().regex(TIME_HHMM_RE, "Tid måste vara HH:MM"),
+  end: z.string().regex(TIME_HHMM_RE, "Tid måste vara HH:MM"),
+});
+
+export const blockedHourSchema = z.object({
+  start: z.string().regex(TIME_HHMM_RE, "Tid måste vara HH:MM"),
+  end: z.string().regex(TIME_HHMM_RE, "Tid måste vara HH:MM"),
+  weekdays: z.array(z.number().int().min(0).max(6)).optional(),
+});
+
+export const deliveryPreferencesSchema = z.object({
+  weeklyWindows: z.array(weeklyWindowSchema).default([]),
+  blockedHours: z.array(blockedHourSchema).default([]),
+  blockedDates: z.array(z.string().regex(ISO_DATE_RE, "Datum måste vara YYYY-MM-DD")).default([]),
+  notes: z.string().max(500, "Anteckning får vara max 500 tecken").default(""),
+  priority: z.enum(["preferred", "strict"]).default("preferred"),
+});
+
+export type WeeklyWindow = z.infer<typeof weeklyWindowSchema>;
+export type BlockedHour = z.infer<typeof blockedHourSchema>;
+export type DeliveryPreferences = z.infer<typeof deliveryPreferencesSchema>;
+
+export const EMPTY_DELIVERY_PREFERENCES: DeliveryPreferences = {
+  weeklyWindows: [],
+  blockedHours: [],
+  blockedDates: [],
+  notes: "",
+  priority: "preferred",
+};
+
+/**
+ * Returnerar true om det givna tidsintervallet (start..end, lokal tid) bryter
+ * mot leveranspreferensen. Används av backend (sätter outsidePreferredWindow)
+ * och UI för förhandsgranskning.
+ */
+export function isOutsidePreferredWindow(
+  prefs: DeliveryPreferences | null | undefined,
+  windowStart: Date | string | null | undefined,
+  windowEnd: Date | string | null | undefined,
+): boolean {
+  if (!prefs || !windowStart) return false;
+  const start = windowStart instanceof Date ? windowStart : new Date(windowStart);
+  const end = windowEnd ? (windowEnd instanceof Date ? windowEnd : new Date(windowEnd)) : start;
+  if (Number.isNaN(start.getTime())) return false;
+
+  const isoDate = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+  if ((prefs.blockedDates || []).includes(isoDate)) return true;
+
+  const weekday = start.getDay();
+  const startMin = start.getHours() * 60 + start.getMinutes();
+  const endMin = end.getHours() * 60 + end.getMinutes();
+
+  const toMin = (s: string) => {
+    const [h, m] = s.split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  const dayWindows = (prefs.weeklyWindows || []).filter((w) => w.weekday === weekday);
+  if (dayWindows.length > 0) {
+    const fits = dayWindows.some((w) => startMin >= toMin(w.start) && endMin <= toMin(w.end));
+    if (!fits) return true;
+  }
+
+  for (const bh of prefs.blockedHours || []) {
+    if (bh.weekdays && bh.weekdays.length > 0 && !bh.weekdays.includes(weekday)) continue;
+    const bStart = toMin(bh.start);
+    const bEnd = toMin(bh.end);
+    if (startMin < bEnd && endMin > bStart) return true;
+  }
+
+  return false;
+}
+
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
-export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, createdAt: true });
-export const insertObjectSchema = createInsertSchema(objects).omit({ id: true, createdAt: true });
+export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, createdAt: true })
+  .extend({ deliveryPreferences: deliveryPreferencesSchema.nullish() });
+export const insertObjectSchema = createInsertSchema(objects).omit({ id: true, createdAt: true })
+  .extend({ deliveryPreferences: deliveryPreferencesSchema.nullish() });
 export const insertResourceSchema = createInsertSchema(resources).omit({ id: true, createdAt: true });
 export const insertWorkOrderSchema = createInsertSchema(workOrders).omit({ id: true, createdAt: true });
 export const insertWorkOrderLineSchema = createInsertSchema(workOrderLines).omit({ id: true, createdAt: true, completedAt: true });

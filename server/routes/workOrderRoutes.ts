@@ -13,11 +13,27 @@ import {
   ensureResourceIdsInTenant,
 } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
-import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, slaRiskSnapshots, type OrderConcept } from "@shared/schema";
+import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, slaRiskSnapshots, type OrderConcept, isOutsidePreferredWindow } from "@shared/schema";
 import { handleWorkOrderStatusChange } from "../ai-communication";
 import { notificationService } from "../notifications";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ConflictError, ForbiddenError } from "../errors";
+
+/** Räknar ut outsidePreferredWindow-flaggan + priority utifrån objektets/kundens
+ * effektiva leveranspreferens och plannedWindowStart/End. */
+async function computeOutsidePreferredWindow(
+  objectId: string | null | undefined,
+  plannedStart: Date | string | null | undefined,
+  plannedEnd: Date | string | null | undefined,
+): Promise<{ outsidePreferredWindow: boolean; deliveryPreferencePriority: string | null }> {
+  if (!objectId || !plannedStart) return { outsidePreferredWindow: false, deliveryPreferencePriority: null };
+  const { effective, source } = await storage.resolveDeliveryPreferences(objectId);
+  if (source === "none") return { outsidePreferredWindow: false, deliveryPreferencePriority: null };
+  return {
+    outsidePreferredWindow: isOutsidePreferredWindow(effective, plannedStart, plannedEnd),
+    deliveryPreferencePriority: effective.priority ?? "preferred",
+  };
+}
 import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "../metadata-queries";
 
 export async function registerWorkOrderRoutes(app: Express) {
@@ -430,7 +446,17 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
     }
   }
 
-  const workOrder = await storage.createWorkOrder(data);
+  const prefFlags = await computeOutsidePreferredWindow(
+    data.objectId,
+    data.plannedWindowStart,
+    data.plannedWindowEnd,
+  );
+  const dataWithFlag = {
+    ...data,
+    outsidePreferredWindow: prefFlags.outsidePreferredWindow,
+    deliveryPreferencePriority: prefFlags.deliveryPreferencePriority,
+  };
+  const workOrder = await storage.createWorkOrder(dataWithFlag);
 
   if (workOrder.resourceId) {
     notificationService.notifyJobAssigned(workOrder, workOrder.resourceId);
@@ -510,6 +536,28 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
 
   if (updateData.lockedAt && typeof updateData.lockedAt === 'string') {
     updateData.lockedAt = new Date(updateData.lockedAt);
+  }
+
+  for (const field of ['plannedWindowStart', 'plannedWindowEnd'] as const) {
+    if (updateData[field] && typeof updateData[field] === 'string') {
+      updateData[field] = new Date(updateData[field] as string);
+    } else if (updateData[field] === '' || updateData[field] === null) {
+      updateData[field] = null;
+    }
+  }
+
+  const willChangeWindow = 'plannedWindowStart' in updateData || 'plannedWindowEnd' in updateData || 'objectId' in updateData;
+  if (willChangeWindow) {
+    const effectiveObjectId = updateData.objectId ?? existingOrder.objectId;
+    const effectiveStart = 'plannedWindowStart' in updateData ? updateData.plannedWindowStart : existingOrder.plannedWindowStart;
+    const effectiveEnd = 'plannedWindowEnd' in updateData ? updateData.plannedWindowEnd : existingOrder.plannedWindowEnd;
+    const prefFlags = await computeOutsidePreferredWindow(
+      effectiveObjectId,
+      effectiveStart,
+      effectiveEnd,
+    );
+    updateData.outsidePreferredWindow = prefFlags.outsidePreferredWindow;
+    updateData.deliveryPreferencePriority = prefFlags.deliveryPreferencePriority;
   }
 
   const workOrder = await storage.updateWorkOrder(req.params.id, updateData);

@@ -32,6 +32,9 @@ Route optimization treats each team as a single vehicle. Synthetic resource reco
 ### Auto-Inferens av teamId från resourceId
 `workOrders.teamId` is automatically inferred based on a resource's team membership when `resourceId` is provided without `teamId`. This inference uses a per-tenant cache and follows cluster priority.
 
+### Delivery Preferences (slottider per kund/objekt)
+Stående leveranspreferenser lagras som JSONB på `objects.delivery_preferences` (primär) och `customers.delivery_preferences` (fallback). Schema: `weeklyWindows`, `blockedHours`, `blockedDates`, `notes`, `priority` (`preferred|strict`). `storage.resolveDeliveryPreferences(objectId)` returnerar effektiv preferens. Backend (POST/PATCH `/api/work-orders`) jämför `plannedWindowStart/End` mot effektiv preferens och cachar `outsidePreferredWindow`-flaggan på work_orders. VRP/optimering: `strict` => snäva `time_windows` + +20 priority bonus, `preferred` => +10 prioritet (mjuk). UI: editor på objekt-/kund-detaljsidor (tab "Leveranspreferenser"), gul badge "Utanför slottid" på `JobCard`. Mobile (Traivo Go) får `deliveryPreferenceNotes` och `outsidePreferredWindow` per order. Kundportal har `GET/PUT /api/portal/delivery-preferences`.
+
 ### Auto-Cluster System
 Clusters are automatically generated based on customer ownership during object creation or import. Cluster names default to customer names, and geo-center coordinates and object counts are updated post-import. Clusters are visualized in the UI with dedicated filters and detail pages.
 

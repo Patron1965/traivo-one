@@ -218,6 +218,20 @@
       "when": 1776863424908,
       "tag": "0030_conscious_marvel_zombies",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1778057956577,
+      "tag": "0031_tired_wildside",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1778058613651,
+      "tag": "0032_powerful_stardust",
+      "breakpoints": true
     }
   ]
 }

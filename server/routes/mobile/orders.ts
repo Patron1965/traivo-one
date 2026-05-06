@@ -254,6 +254,8 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
       objectAccessCode: object?.accessCode || null,
       objectKeyNumber: object?.keyNumber || null,
       objectNotes: object?.notes,
+      deliveryPreferenceNotes: order.objectId ? (await storage.resolveDeliveryPreferences(order.objectId)).effective.notes || null : null,
+      outsidePreferredWindow: order.outsidePreferredWindow ?? false,
       customerName: customer?.name,
       customerPhone: customer?.phone,
       customerEmail: customer?.email,

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -24,7 +25,7 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import "leaflet.markercluster";
 import { useMapConfig } from "@/hooks/use-map-config";
-import type { Customer } from "@shared/schema";
+import type { Customer, DeliveryPreferences } from "@shared/schema";
 
 interface CustomerStatsCluster {
   id: string;
@@ -1079,6 +1080,9 @@ export default function CustomerDetailPage() {
               <TabsTrigger value="map" data-testid="tab-map">
                 <MapIcon className="h-4 w-4 mr-2" /> Karta
               </TabsTrigger>
+              <TabsTrigger value="delivery-preferences" data-testid="tab-delivery-preferences">
+                Leveranspreferenser
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="tree">
@@ -1328,6 +1332,18 @@ export default function CustomerDetailPage() {
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="delivery-preferences">
+              <DeliveryPreferencesEditor
+                entityKind="customer"
+                entityId={customer.id}
+                initial={(customer as { deliveryPreferences?: DeliveryPreferences | null }).deliveryPreferences}
+                invalidateKeys={[["/api/customers", customer.id], ["/api/customers"]]}
+              />
+              <p className="text-xs text-muted-foreground mt-3">
+                Dessa preferenser används som fallback för objekt som saknar egna preferenser.
+              </p>
             </TabsContent>
           </Tabs>
         </>

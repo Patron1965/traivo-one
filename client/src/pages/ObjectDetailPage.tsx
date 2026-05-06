@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
@@ -27,7 +28,7 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useMapConfig } from "@/hooks/use-map-config";
-import type { ServiceObject, WorkOrder } from "@shared/schema";
+import type { ServiceObject, WorkOrder, DeliveryPreferences } from "@shared/schema";
 import { PolylineEditor } from "@/components/PolylineEditor";
 
 const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
@@ -735,6 +736,9 @@ export default function ObjectDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="restrictions" data-testid="tab-restrictions">
             SlotPreference {timeRestrictions.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{timeRestrictions.length}</Badge>}
+          </TabsTrigger>
+          <TabsTrigger value="delivery-preferences" data-testid="tab-delivery-preferences">
+            Leveranspreferenser
           </TabsTrigger>
           <TabsTrigger value="matching-articles" data-testid="tab-matching-articles">
             <LinkIcon className="h-3.5 w-3.5 mr-1" />
@@ -1453,6 +1457,21 @@ export default function ObjectDetailPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ==================== LEVERANSPREFERENSER ==================== */}
+        <TabsContent value="delivery-preferences">
+          <DeliveryPreferencesEditor
+            entityKind="object"
+            entityId={obj.id}
+            initial={(obj as { deliveryPreferences?: DeliveryPreferences | null }).deliveryPreferences}
+            invalidateKeys={[["/api/objects", obj.id], ["/api/objects"]]}
+          />
+          {!((obj as { deliveryPreferences?: DeliveryPreferences | null }).deliveryPreferences) && customer && (
+            <p className="text-xs text-muted-foreground mt-3">
+              Inga preferenser för objektet — kundens preferenser används som fallback.
+            </p>
+          )}
         </TabsContent>
 
         {/* ==================== MATCHANDE ARTIKLAR ==================== */}

@@ -659,6 +659,76 @@ app.get("/api/portal/service-contracts", asyncHandler(async (req, res) => {
 }));
 
 // ============================================
+// PORTAL - DELIVERY PREFERENCES (Slottider/önskemål)
+// Kunder kan se och uppdatera sina egna leveranspreferenser via portalen.
+// ============================================
+app.get("/api/portal/delivery-preferences", asyncHandler(async (req, res) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+    const customer = await storage.getCustomer(session.customerId!);
+    if (!customer || !verifyTenantOwnership(customer, session.tenantId!)) {
+      throw new NotFoundError("Kund");
+    }
+    res.json({
+      deliveryPreferences: customer.deliveryPreferences ?? null,
+    });
+}));
+
+const updatePortalDeliveryPrefsHandler = asyncHandler(async (req: ExpressRequest, res: ExpressResponse) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+    // Skrivrätt: kräver att portal-modulen är aktiv (kontrolleras i requirePortalAuth)
+    // OCH att sessionen tillhör samma kund som ska uppdateras. Portal har idag
+    // ingen separat read-only roll — alla autentiserade portalsessioner för
+    // kunden får uppdatera sina egna preferenser.
+    const customer = await storage.getCustomer(session.customerId!);
+    if (!customer || !verifyTenantOwnership(customer, session.tenantId!)) {
+      throw new NotFoundError("Kund");
+    }
+    const { deliveryPreferencesSchema } = await import("@shared/schema");
+    const parsed = deliveryPreferencesSchema.nullish().safeParse(req.body?.deliveryPreferences);
+    if (!parsed.success) {
+      return res.status(400).json(formatZodError(parsed.error));
+    }
+    await storage.updateCustomer(customer.id, { deliveryPreferences: parsed.data ?? null });
+    console.log(`[portal] Customer ${customer.id} (${session.email}) updated delivery preferences`);
+    res.json({ deliveryPreferences: parsed.data ?? null });
+});
+// Stöd både PUT (REST-konvention) och PATCH (matchar object/customer-mönstret).
+app.put("/api/portal/delivery-preferences", updatePortalDeliveryPrefsHandler);
+app.patch("/api/portal/delivery-preferences", updatePortalDeliveryPrefsHandler);
+
+// Objekt-nivå preferenser via portal — kunden kan se/sätta per objekt.
+app.get("/api/portal/objects/:objectId/delivery-preferences", asyncHandler(async (req, res) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+    const obj = await storage.getObject(req.params.objectId);
+    if (!obj || !verifyTenantOwnership(obj, session.tenantId!) || obj.customerId !== session.customerId) {
+      throw new NotFoundError("Objekt");
+    }
+    res.json({ deliveryPreferences: obj.deliveryPreferences ?? null });
+}));
+
+const updatePortalObjectDeliveryPrefsHandler = asyncHandler(async (req: ExpressRequest, res: ExpressResponse) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+    const obj = await storage.getObject(req.params.objectId);
+    if (!obj || !verifyTenantOwnership(obj, session.tenantId!) || obj.customerId !== session.customerId) {
+      throw new NotFoundError("Objekt");
+    }
+    const { deliveryPreferencesSchema } = await import("@shared/schema");
+    const parsed = deliveryPreferencesSchema.nullish().safeParse(req.body?.deliveryPreferences);
+    if (!parsed.success) {
+      return res.status(400).json(formatZodError(parsed.error));
+    }
+    await storage.updateObject(obj.id, { deliveryPreferences: parsed.data ?? null });
+    console.log(`[portal] Customer ${session.customerId} updated delivery preferences for object ${obj.id}`);
+    res.json({ deliveryPreferences: parsed.data ?? null });
+});
+app.put("/api/portal/objects/:objectId/delivery-preferences", updatePortalObjectDeliveryPrefsHandler);
+app.patch("/api/portal/objects/:objectId/delivery-preferences", updatePortalObjectDeliveryPrefsHandler);
+
+// ============================================
 // PORTAL - NOTIFICATION SETTINGS (Profil)
 // ============================================
 app.get("/api/portal/notification-settings", asyncHandler(async (req, res) => {

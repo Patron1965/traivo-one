@@ -185,15 +185,83 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
 
   await updateProgress(jobId, 30);
 
+  // Lös effektiva leveranspreferenser (objekt eller kund) per order så att VRP
+  // kan respektera slottider. strict => hård tidsfönster + bonus-prioritet,
+  // preferred => behåller standard-fönster men flaggas via prioritetsökning.
+  const { storage: _storage } = await import("./storage");
+  type ResolvedPref = { effective: import("@shared/schema").DeliveryPreferences; source: "object" | "customer" | "none" };
+  const prefsByOrder = new Map<string, ResolvedPref>();
+  for (const o of validOrders) {
+    if (o.objectId) {
+      const resolved = await _storage.resolveDeliveryPreferences(o.objectId);
+      prefsByOrder.set(o.id, resolved as ResolvedPref);
+    }
+  }
+
+  const toSec = (s: string) => {
+    const [h, m] = s.split(":").map(Number);
+    return h * 3600 + m * 60;
+  };
+  // Subtraherar blockerade timmar från ett fönster och returnerar kvarvarande
+  // intervall (sekunder från midnatt). Hanterar strict-läge med blockedHours.
+  const subtractBlocks = (
+    win: [number, number],
+    blocks: { start: string; end: string }[],
+  ): [number, number][] => {
+    let segments: [number, number][] = [win];
+    for (const b of blocks) {
+      const bs = toSec(b.start);
+      const be = toSec(b.end);
+      const next: [number, number][] = [];
+      for (const [s, e] of segments) {
+        if (be <= s || bs >= e) { next.push([s, e]); continue; }
+        if (bs > s) next.push([s, Math.min(bs, e)]);
+        if (be < e) next.push([Math.max(be, s), e]);
+      }
+      segments = next.filter(([s, e]) => e - s >= 600); // släng <10 min-fragment
+    }
+    return segments;
+  };
+
   const baseJobs = validOrders.map(o => {
     const obj = objectMap.get(o.objectId)!;
     const durationSec = (o.estimatedDuration || 30) * 60;
+    let priority = o.priority === "hög" ? 80 : o.priority === "medel" ? 50 : 30;
+    let timeWindows: [number, number][] | undefined;
+
+    const pref = prefsByOrder.get(o.id);
+    if (pref && pref.source !== "none" && o.scheduledDate) {
+      const dateObj = o.scheduledDate instanceof Date ? o.scheduledDate : new Date(o.scheduledDate);
+      const weekday = dateObj.getDay();
+      const isoDate = dateObj.toISOString().slice(0, 10);
+      const blockedToday = (pref.effective.blockedDates || []).includes(isoDate);
+      const dayWindows = (pref.effective.weeklyWindows || []).filter(w => w.weekday === weekday);
+      const blockedHours = pref.effective.blockedHours || [];
+      if (pref.effective.priority === "strict") {
+        if (blockedToday) {
+          // Helt blockerad dag — sätt omöjligt fönster så VRP utesluter ordern.
+          timeWindows = [[0, 0]];
+          priority = Math.min(100, priority + 20);
+        } else if (dayWindows.length > 0) {
+          // Hård bindning: snäva tidsfönstren minus eventuella blockedHours.
+          const raw = dayWindows.map(w => [toSec(w.start), toSec(w.end)] as [number, number]);
+          timeWindows = raw.flatMap(w => subtractBlocks(w, blockedHours));
+          if (timeWindows.length === 0) timeWindows = [[0, 0]];
+          priority = Math.min(100, priority + 20);
+        }
+      } else if (dayWindows.length > 0 && !blockedToday) {
+        // Mjuk bindning: höj bara prioritet så VRP försöker passa in.
+        priority = Math.min(100, priority + 10);
+      }
+    }
+
     return {
       location: [obj.longitude!, obj.latitude!] as [number, number],
       duration: durationSec,
-      priority: o.priority === "hög" ? 80 : o.priority === "medel" ? 50 : 30,
+      priority,
       id: o.id,
       description: o.orderTitle || o.id,
+      ...(timeWindows ? { time_windows: timeWindows } : {}),
     };
   });
 
@@ -346,6 +414,30 @@ async function executeVRPJob(jobId: string, input: VRPJobInput): Promise<VRPOpti
   filteredOrders = filteredOrders.filter(o =>
     o.orderStatus !== "utford" && o.orderStatus !== "fakturerad"
   );
+
+  // Respektera leveranspreferenser även i fallback-VRP-vägen: ordrar med
+  // strict priority som faller på blockerade datum exkluderas helt så de
+  // inte kan placeras orealistiskt. (preferred-pri hanteras via OR-tools).
+  const filteredWithPrefs: typeof filteredOrders = [];
+  for (const o of filteredOrders) {
+    if (!o.objectId || !o.scheduledDate) {
+      filteredWithPrefs.push(o);
+      continue;
+    }
+    const { effective, source } = await storage.resolveDeliveryPreferences(o.objectId);
+    if (source === "none" || effective.priority !== "strict") {
+      filteredWithPrefs.push(o);
+      continue;
+    }
+    const dateObj = o.scheduledDate instanceof Date ? o.scheduledDate : new Date(o.scheduledDate);
+    const isoDate = dateObj.toISOString().slice(0, 10);
+    if ((effective.blockedDates || []).includes(isoDate)) {
+      console.log(`[vrp-fallback] Exkluderar order ${o.id} pga strict blockedDate ${isoDate}`);
+      continue;
+    }
+    filteredWithPrefs.push(o);
+  }
+  filteredOrders = filteredWithPrefs;
 
   await updateProgress(jobId, 40);
 

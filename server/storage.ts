@@ -129,6 +129,9 @@ import {
   invitations, recurringSlotPatterns,
   customerCommunications,
   type CustomerCommunication,
+  type DeliveryPreferences,
+  EMPTY_DELIVERY_PREFERENCES,
+  deliveryPreferencesSchema,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray } from "drizzle-orm";
@@ -265,6 +268,10 @@ export interface IStorage {
   createObject(object: InsertObject): Promise<ServiceObject>;
   updateObject(id: string, object: Partial<InsertObject>): Promise<ServiceObject | undefined>;
   deleteObject(id: string): Promise<void>;
+  resolveDeliveryPreferences(objectId: string): Promise<{
+    effective: DeliveryPreferences;
+    source: "object" | "customer" | "none";
+  }>;
   
   getResources(tenantId: string): Promise<Resource[]>;
   getResourcesPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ resources: Resource[]; total: number }>;
@@ -1825,6 +1832,31 @@ export class DatabaseStorage implements IStorage {
     await db.update(objects).set({ deletedAt: new Date() }).where(eq(objects.id, id));
   }
 
+  async resolveDeliveryPreferences(objectId: string): Promise<{
+    effective: DeliveryPreferences;
+    source: "object" | "customer" | "none";
+  }> {
+    const obj = await this.getObject(objectId);
+    if (!obj) return { effective: EMPTY_DELIVERY_PREFERENCES, source: "none" };
+
+    const parseSafe = (raw: unknown): DeliveryPreferences | null => {
+      if (!raw || typeof raw !== "object") return null;
+      const parsed = deliveryPreferencesSchema.safeParse(raw);
+      return parsed.success ? parsed.data : null;
+    };
+
+    const objPrefs = parseSafe(obj.deliveryPreferences);
+    if (objPrefs) return { effective: objPrefs, source: "object" };
+
+    if (obj.customerId) {
+      const customer = await this.getCustomer(obj.customerId);
+      const custPrefs = customer ? parseSafe(customer.deliveryPreferences) : null;
+      if (custPrefs) return { effective: custPrefs, source: "customer" };
+    }
+
+    return { effective: EMPTY_DELIVERY_PREFERENCES, source: "none" };
+  }
+
   async getResources(tenantId: string): Promise<Resource[]> {
     return db.select().from(resources).where(and(eq(resources.tenantId, tenantId), isNull(resources.deletedAt)));
   }
@@ -1940,6 +1972,8 @@ export class DatabaseStorage implements IStorage {
       inspectedAt: workOrders.inspectedAt,
       executionCode: workOrders.executionCode,
       importBatchId: workOrders.importBatchId,
+      outsidePreferredWindow: workOrders.outsidePreferredWindow,
+      deliveryPreferencePriority: workOrders.deliveryPreferencePriority,
       objectName: objects.name,
       objectAddress: objects.address,
       objectAccessCode: objects.resolvedAccessCode,
@@ -2014,6 +2048,8 @@ export class DatabaseStorage implements IStorage {
       inspectedAt: workOrders.inspectedAt,
       executionCode: workOrders.executionCode,
       importBatchId: workOrders.importBatchId,
+      outsidePreferredWindow: workOrders.outsidePreferredWindow,
+      deliveryPreferencePriority: workOrders.deliveryPreferencePriority,
       objectName: objects.name,
       objectAddress: objects.address,
       objectAccessCode: objects.resolvedAccessCode,
@@ -2150,6 +2186,8 @@ export class DatabaseStorage implements IStorage {
       inspectedAt: workOrders.inspectedAt,
       executionCode: workOrders.executionCode,
       importBatchId: workOrders.importBatchId,
+      outsidePreferredWindow: workOrders.outsidePreferredWindow,
+      deliveryPreferencePriority: workOrders.deliveryPreferencePriority,
       objectName: objects.name,
       objectAddress: objects.address,
       objectAccessCode: objects.resolvedAccessCode,
@@ -2241,6 +2279,8 @@ export class DatabaseStorage implements IStorage {
       inspectedAt: workOrders.inspectedAt,
       executionCode: workOrders.executionCode,
       importBatchId: workOrders.importBatchId,
+      outsidePreferredWindow: workOrders.outsidePreferredWindow,
+      deliveryPreferencePriority: workOrders.deliveryPreferencePriority,
       objectName: objects.name,
       objectAddress: objects.address,
       objectAccessCode: objects.resolvedAccessCode,
@@ -2367,6 +2407,8 @@ export class DatabaseStorage implements IStorage {
       inspectedAt: workOrders.inspectedAt,
       executionCode: workOrders.executionCode,
       importBatchId: workOrders.importBatchId,
+      outsidePreferredWindow: workOrders.outsidePreferredWindow,
+      deliveryPreferencePriority: workOrders.deliveryPreferencePriority,
       objectName: objects.name,
       objectAddress: objects.address,
       objectAccessCode: objects.resolvedAccessCode,

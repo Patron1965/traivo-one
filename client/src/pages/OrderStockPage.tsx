@@ -1112,6 +1112,26 @@ export default function OrderStockPage() {
                       <StatusIcon className="h-3 w-3" />
                       {STATUS_LABELS[status] || status}
                     </Badge>
+                    {(order as { outsidePreferredWindow?: boolean }).outsidePreferredWindow && (
+                      <Badge
+                        variant="outline"
+                        className={
+                          (order as { deliveryPreferencePriority?: string }).deliveryPreferencePriority === "strict"
+                            ? "gap-1 shrink-0 bg-red-50 text-red-800 border-red-300 dark:bg-red-950/40 dark:text-red-200 dark:border-red-700"
+                            : "gap-1 shrink-0 bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-700"
+                        }
+                        data-testid={`badge-outside-preferred-${order.id}`}
+                        title={
+                          (order as { deliveryPreferencePriority?: string }).deliveryPreferencePriority === "strict"
+                            ? "Planerad tid bryter mot kundens strikta leveransfönster"
+                            : "Planerad tid ligger utanför kundens önskade leveransfönster"
+                        }
+                      >
+                        {(order as { deliveryPreferencePriority?: string }).deliveryPreferencePriority === "strict"
+                          ? "Bryter slottid"
+                          : "Utanför slottid"}
+                      </Badge>
+                    )}
 
                     <div className="flex items-center gap-2">
                       <Button
