@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import compression from "compression";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -9,6 +10,21 @@ import { AppError } from "./errors";
 
 const app = express();
 const httpServer = createServer(app);
+
+app.use(
+  compression({
+    threshold: 1024,
+    filter: (req, res) => {
+      if (req.headers["x-no-compression"]) return false;
+      const accept = String(req.headers["accept"] || "");
+      const ctype = String(res.getHeader("Content-Type") || "");
+      if (accept.includes("text/event-stream") || ctype.includes("text/event-stream")) {
+        return false;
+      }
+      return compression.filter(req, res);
+    },
+  }),
+);
 
 declare module "http" {
   interface IncomingMessage {

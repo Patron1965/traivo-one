@@ -152,13 +152,32 @@ export default function AssignmentsPage() {
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       apiRequest("PATCH", `/api/assignments/${id}`, { status }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/assignments"] });
+    onMutate: async ({ id, status }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/assignments"] });
+      const snapshots = queryClient
+        .getQueriesData<Assignment[]>({ queryKey: ["/api/assignments"] })
+        .filter(([key, data]) => key.length <= 2 && Array.isArray(data));
+      snapshots.forEach(([key, data]) => {
+        if (!data) return;
+        queryClient.setQueryData<Assignment[]>(
+          key,
+          data.map((a) => (a.id === id ? { ...a, status } : a)),
+        );
+      });
       setStatusUpdateOpen(false);
+      return { snapshots };
+    },
+    onError: (_err, _vars, context) => {
+      context?.snapshots.forEach(([key, data]) => {
+        if (data) queryClient.setQueryData(key, data);
+      });
+      toast({ title: "Kunde inte uppdatera status", variant: "destructive" });
+    },
+    onSuccess: () => {
       toast({ title: "Status uppdaterad" });
     },
-    onError: () => {
-      toast({ title: "Kunde inte uppdatera status", variant: "destructive" });
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/assignments"] });
     },
   });
 
@@ -177,14 +196,42 @@ export default function AssignmentsPage() {
   const assignResourceMutation = useMutation({
     mutationFn: ({ assignmentId, resourceId, scheduledDate }: { assignmentId: string; resourceId: string; scheduledDate?: string }) =>
       apiRequest("POST", `/api/assignments/${assignmentId}/assign`, { resourceId, scheduledDate }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/assignments"] });
+    onMutate: async ({ assignmentId, resourceId, scheduledDate }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/assignments"] });
+      const snapshots = queryClient
+        .getQueriesData<Assignment[]>({ queryKey: ["/api/assignments"] })
+        .filter(([key, data]) => key.length <= 2 && Array.isArray(data));
+      snapshots.forEach(([key, data]) => {
+        if (!data) return;
+        queryClient.setQueryData<Assignment[]>(
+          key,
+          data.map((a) =>
+            a.id === assignmentId
+              ? {
+                  ...a,
+                  resourceId,
+                  scheduledDate: scheduledDate ? new Date(scheduledDate) : a.scheduledDate,
+                  status: a.status === "not_planned" ? "planned_fine" : a.status,
+                }
+              : a,
+          ),
+        );
+      });
       setAssignDialogOpen(false);
       setAssignmentToAssign(null);
+      return { snapshots };
+    },
+    onError: (_err, _vars, context) => {
+      context?.snapshots.forEach(([key, data]) => {
+        if (data) queryClient.setQueryData(key, data);
+      });
+      toast({ title: "Kunde inte tilldela resurs", variant: "destructive" });
+    },
+    onSuccess: () => {
       toast({ title: "Resurs tilldelad" });
     },
-    onError: () => {
-      toast({ title: "Kunde inte tilldela resurs", variant: "destructive" });
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/assignments"] });
     },
   });
 
