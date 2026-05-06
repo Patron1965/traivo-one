@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Building2, Search, Layers, Package, ClipboardList, ArrowRight, Users, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle } from "lucide-react";
+import { Building2, Search, Layers, Package, ClipboardList, ArrowRight, Users, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { versionedUrl } from "@/lib/queryClient";
+import { QueryState } from "@/components/QueryState";
 import type { Customer } from "@shared/schema";
 
 interface CustomerAggregate {
@@ -210,36 +211,20 @@ export default function CustomersPage() {
             )}
           </div>
 
-          {isLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : customersIsError ? (
-            <div className="flex flex-col items-center justify-center py-12 px-4 text-center" data-testid="text-customers-error">
-              <AlertCircle className="h-8 w-8 text-destructive mb-3" />
-              <p className="text-sm font-medium">Kunde inte hämta kunder</p>
-              {customersError instanceof Error && (
-                <p className="text-xs text-muted-foreground mt-1 max-w-md break-words">{customersError.message}</p>
-              )}
-              <Button variant="outline" size="sm" className="mt-4" onClick={() => customersRefetch()} data-testid="button-customers-retry">
-                Försök igen
-              </Button>
-            </div>
-          ) : tenantHasNoCustomers ? (
-            <div className="py-12 text-center text-muted-foreground space-y-2" data-testid="text-empty-customers">
-              <Building2 className="h-12 w-12 mx-auto text-muted-foreground/40" />
-              <p>Inga kunder ännu.</p>
-              <p className="text-sm">
-                Gå till <Link href="/import" className="text-primary underline">Import</Link> för att importera kunder från Fortnox eller fil.
-              </p>
-            </div>
-          ) : visibleCustomers.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground" data-testid="text-no-search-results">
-              Inga kunder matchar "{debouncedSearch}".
-            </div>
-          ) : (
+          <QueryState
+            isLoading={isLoading}
+            isError={customersIsError}
+            isEmpty={tenantHasNoCustomers || (visibleCustomers.length === 0)}
+            error={customersError instanceof Error ? customersError : null}
+            onRetry={() => customersRefetch()}
+            loadingVariant="skeleton-rows"
+            skeletonRows={6}
+            emptyTitle={tenantHasNoCustomers ? "Inga kunder ännu" : `Inga kunder matchar "${debouncedSearch}"`}
+            emptyDescription={tenantHasNoCustomers ? "Gå till Import för att importera kunder från Fortnox eller fil." : undefined}
+            emptyAction={tenantHasNoCustomers ? (
+              <Link href="/import" className="text-primary underline text-sm" data-testid="link-import-customers">Öppna Import</Link>
+            ) : undefined}
+          >
             <>
               <div className="rounded-md border overflow-x-auto">
                 <Table density="compact">
@@ -372,7 +357,7 @@ export default function CustomersPage() {
                 </div>
               </div>
             </>
-          )}
+          </QueryState>
         </CardContent>
       </Card>
     </div>

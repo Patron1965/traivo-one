@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { QueryState } from "@/components/QueryState";
 import { AICard } from "@/components/AICard";
 import { ObjectMetadataPanel } from "@/components/ObjectMetadataPanel";
 import { ObjectPayersPanel } from "@/components/ObjectPayersPanel";
@@ -936,25 +937,20 @@ export default function ObjectsPage() {
   };
 
 
-  if (isLoading) {
+  if (isLoading || objectsIsError) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (objectsIsError) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full p-6 text-center" data-testid="text-objects-error">
-        <AlertCircle className="h-8 w-8 text-destructive mb-3" />
-        <p className="text-sm font-medium">Kunde inte hämta objekt</p>
-        {objectsError instanceof Error && (
-          <p className="text-xs text-muted-foreground mt-1 max-w-md break-words">{objectsError.message}</p>
-        )}
-        <Button variant="outline" size="sm" className="mt-4" onClick={() => objectsRefetch()} data-testid="button-objects-retry">
-          Försök igen
-        </Button>
+      <div className="p-6">
+        <QueryState
+          isLoading={isLoading}
+          isError={objectsIsError}
+          isEmpty={false}
+          error={objectsError instanceof Error ? objectsError : null}
+          onRetry={() => objectsRefetch()}
+          loadingVariant="skeleton-rows"
+          skeletonRows={8}
+        >
+          <></>
+        </QueryState>
       </div>
     );
   }

@@ -36,6 +36,8 @@ import {
   RefreshCw, BarChart3, Plus, Trash2, CreditCard, Undo2, Link2
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { QueryState } from "@/components/QueryState";
+import { invoiceStatusBadge } from "@/lib/status-colors";
 import { format, subDays, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Customer, Article } from "@shared/schema";
@@ -138,16 +140,8 @@ function formatCurrency(amount: number): string {
 }
 
 function ExportStatusBadge({ status }: { status: string }) {
-  const variants: Record<string, string> = {
-    pending: "bg-chart-3/15 text-chart-3 border border-chart-3/30",
-    processing: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
-    exported: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
-    failed: "bg-destructive/15 text-destructive border border-destructive/30",
-    cancelled: "bg-muted text-muted-foreground border border-border",
-    credited: "bg-chart-5/15 text-chart-5 border border-chart-5/30",
-  };
   return (
-    <Badge data-testid={`badge-export-status-${status}`} className={variants[status] || variants.pending}>
+    <Badge data-testid={`badge-export-status-${status}`} className={invoiceStatusBadge[status] || invoiceStatusBadge.pending}>
       {EXPORT_STATUS_LABELS[status] || status}
     </Badge>
   );
@@ -539,9 +533,15 @@ export default function InvoicingPage() {
             </div>
 
             {isLoadingPreviews ? (
-              <div className="flex items-center justify-center py-20">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
+              <QueryState
+                isLoading={true}
+                isError={false}
+                isEmpty={false}
+                loadingVariant="skeleton-rows"
+                skeletonRows={6}
+              >
+                <></>
+              </QueryState>
             ) : filteredPreviews.length === 0 ? (
               <Card>
                 <CardContent className="p-0">
@@ -621,7 +621,7 @@ export default function InvoicingPage() {
                           <>
                             <Separator />
                             <div className="p-4 bg-muted/30">
-                              <Table>
+                              <Table density="compact">
                                 <TableHeader>
                                   <TableRow>
                                     <TableHead>Beskrivning</TableHead>
@@ -751,7 +751,7 @@ export default function InvoicingPage() {
             ) : (
               <Card>
                 <div className="max-h-[600px] overflow-y-auto">
-                  <Table>
+                  <Table density="compact">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Kund</TableHead>
@@ -888,7 +888,7 @@ export default function InvoicingPage() {
             ) : (
               <Card>
                 <div className="max-h-[600px] overflow-y-auto">
-                  <Table>
+                  <Table density="compact">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Order-ID</TableHead>
