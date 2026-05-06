@@ -482,6 +482,10 @@ export const articles = pgTable("articles", {
   stockLongitude: real("stock_longitude"),
   // För beroende: antal minuter före huvuduppgift
   dependencyMinutesBefore: integer("dependency_minutes_before"),
+  // ADR v3 (F1): Artikelersättning utan att bryta historik. Self-FK till föregående artikel
+  // som denna ersätter (t.ex. ny version av en tjänst). Befintliga work_orders och linjer
+  // behåller pekare till original-artikeln; nya WO via expand kan välja ersättaren.
+  replacesArticleId: varchar("replaces_article_id").references((): any => articles.id, { onDelete: "set null" }),
   // Utförandekod som krävs (t.ex. "kranbil", "tvatt", "sug")
   executionCode: text("execution_code"),
   // Metadata-koppling (per Mats spec Funktion 3 & 7)
@@ -542,6 +546,11 @@ export const priceLists = pgTable("price_lists", {
   priority: integer("priority").default(1),
   validFrom: timestamp("valid_from"),
   validTo: timestamp("valid_to"),
+  // ADR v3 (F1): Indexjustering. Triggas av POST /api/v1/invoicing/index-adjustment
+  // (Sprint F6). Sätts vid applicering — påverkar omräkning av framtida fakturor.
+  indexAdjusted: boolean("index_adjusted").default(false),
+  indexDate: timestamp("index_date"),
+  indexPercentage: real("index_percentage"),
   status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
@@ -2161,6 +2170,21 @@ export const orderConcepts = pgTable("order_concepts", {
   totalValue: real("total_value").default(0),
   estimatedHours: real("estimated_hours").default(0),
   orderMetadata: jsonb("order_metadata"),
+
+  // === ADR v3 (F1): Periodicitet, fakturering, säsong ===
+  // Periodicitetstolerans i dagar — periodicitetsdaemonen accepterar
+  // ±tolerans från nextRunDate (Sprint F5). 0 = exakt datum.
+  toleranceDays: integer("tolerance_days").default(0),
+  // Faktureringsmodell: 'per_task' (default — fakturera vid utförd WO),
+  // 'monthly' (annual_planned_value/12 per månad), 'quarterly' (/4).
+  // Befintliga koncept = 'per_task' (oförändrat beteende).
+  billingMode: text("billing_mode").default("per_task"),
+  // Årligt planerat fakturavärde — bas för månads-/kvartalsfakturering
+  // när billing_mode != 'per_task'. Sätts manuellt eller via aggregering.
+  annualPlannedValue: real("annual_planned_value"),
+  // Mänskbar säsongsetikett (t.ex. "Vårtvätt 2026", "Hösttvätt 2026").
+  // Inget enum — tenanten väljer terminologi.
+  seasonName: text("season_name"),
 
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
