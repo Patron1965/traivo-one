@@ -160,7 +160,8 @@ app.get("/api/kpis/weekly", asyncHandler(async (req, res) => {
 }));
 
 // Marginal per artikel: aggregerar work_order_lines × articles
-app.get("/api/kpis/article-margins", asyncHandler(async (req, res) => {
+// Endast admin/owner — innehåller intern kostnadsdata
+app.get("/api/kpis/article-margins", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawLimit = parseInt(String(req.query.limit || "50"), 10) || 50;
     const limit = Math.min(Math.max(1, rawLimit), 200);

@@ -25,6 +25,7 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import "leaflet.markercluster";
 import { useMapConfig } from "@/hooks/use-map-config";
+import { useAuth } from "@/hooks/use-auth";
 import type { Customer, DeliveryPreferences } from "@shared/schema";
 
 interface CustomerStatsCluster {
@@ -720,6 +721,8 @@ export default function CustomerDetailPage() {
   const [, params] = useRoute("/customers/:id");
   const customerId = params?.id;
   const mapConfig = useMapConfig();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "owner";
   const [sync, setSync] = useState<SyncState>({
     selectedObjectId: null,
     selectedClusterId: null,
@@ -1208,9 +1211,11 @@ export default function CustomerDetailPage() {
               <TabsTrigger value="delivery-preferences" data-testid="tab-delivery-preferences">
                 Leveranspreferenser
               </TabsTrigger>
-              <TabsTrigger value="profitability" data-testid="tab-profitability">
-                <TrendingUp className="h-4 w-4 mr-2" /> Lönsamhet
-              </TabsTrigger>
+              {isAdmin && (
+                <TabsTrigger value="profitability" data-testid="tab-profitability">
+                  <TrendingUp className="h-4 w-4 mr-2" /> Lönsamhet
+                </TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="tree">
@@ -1462,9 +1467,11 @@ export default function CustomerDetailPage() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="profitability">
-              <CustomerProfitabilityTab customerId={customer.id} />
-            </TabsContent>
+            {isAdmin && (
+              <TabsContent value="profitability">
+                <CustomerProfitabilityTab customerId={customer.id} />
+              </TabsContent>
+            )}
 
             <TabsContent value="delivery-preferences">
               <DeliveryPreferencesEditor

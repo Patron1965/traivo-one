@@ -32,6 +32,9 @@ export default function EconomicsDashboardPage() {
     queryKey: ["/api/clusters"],
   });
 
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "owner";
+
   const { data: articleMargins = [] } = useQuery<Array<{
     articleId: string;
     articleNumber: string | null;
@@ -46,6 +49,7 @@ export default function EconomicsDashboardPage() {
     lineCount: number;
   }>>({
     queryKey: ["/api/kpis/article-margins"],
+    enabled: isAdmin,
   });
 
   const clusterMap = useMemo(() => new Map(clusters.map(c => [c.id, c])), [clusters]);
@@ -422,6 +426,7 @@ export default function EconomicsDashboardPage() {
         </Card>
       </div>
 
+      {isAdmin && (
       <Card data-testid="card-article-margins">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -468,6 +473,7 @@ export default function EconomicsDashboardPage() {
           )}
         </CardContent>
       </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card data-testid="card-top-customers">

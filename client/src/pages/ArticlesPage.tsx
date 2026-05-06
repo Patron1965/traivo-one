@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useTerminology } from "@/hooks/use-terminology";
+import { useAuth } from "@/hooks/use-auth";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -209,6 +210,8 @@ const emptyFormData: ArticleFormData = {
 export default function ArticlesPage() {
   const { toast } = useToast();
   const { t } = useTerminology();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "owner";
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [objectTypeFilter, setObjectTypeFilter] = useState<string>("all");
@@ -1151,7 +1154,7 @@ export default function ArticlesPage() {
                   />
                 </div>
               </div>
-              {(() => {
+              {isAdmin && (() => {
                 const marginOre = (formData.listPrice || 0) - (formData.cost || 0);
                 const marginKr = (marginOre / 100).toFixed(2);
                 const marginPct = formData.listPrice > 0
@@ -1179,7 +1182,7 @@ export default function ArticlesPage() {
               })()}
 
               <div className="space-y-2">
-                <Label htmlFor="quantityMode">Kvantitetsläge</Label>
+                <Label htmlFor="quantityMode">Kvantitetsläge</Label>{/* */}
                 <Select
                   value={formData.quantityMode}
                   onValueChange={(value) => setFormData({ ...formData, quantityMode: value })}

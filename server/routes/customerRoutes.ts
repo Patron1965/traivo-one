@@ -3,7 +3,7 @@ import { storage } from "../storage";
 import { z } from "zod";
 import { insertCustomerSchema, insertObjectSchema, objects, customers, workOrders } from "@shared/schema";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
-import { getTenantIdWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { db } from "../db";
@@ -183,14 +183,11 @@ app.get("/api/customers/:id/stats", asyncHandler(async (req, res) => {
 }));
 
 // Lönsamhet per kund: aggregerar work_orders.cachedValue/cachedCost + månadstrend
-app.get("/api/customers/:id/profitability", asyncHandler(async (req, res) => {
+// Endast admin/owner — innehåller intern kostnadsdata
+app.get("/api/customers/:id/profitability", requireAdmin, asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const customer = await storage.getCustomer(req.params.id);
   if (!verifyTenantOwnership(customer, tenantId)) throw new NotFoundError("Kund");
-
-  const { db } = await import("../db");
-  const { workOrders } = await import("@shared/schema");
-  const { and, eq, sql } = await import("drizzle-orm");
 
   const totalsRow = await db
     .select({
