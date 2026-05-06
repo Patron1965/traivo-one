@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sparkles, X, Route, ExternalLink, Calendar, Inbox } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
-import travoLogo from "@assets/traivo_logo_transparent.png";
 import type { PlannerDisplayMode } from "@/components/weekplanner/types";
 import type { SyncRole } from "@/components/weekplanner/usePlannerSync";
 
@@ -69,25 +68,27 @@ export default function PlannerPopoutPage() {
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground" data-testid="planner-popout-page">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/30 shrink-0">
-        <div className="flex items-center gap-2">
-          <img src={travoLogo} alt="Traivo" className="h-6" />
-          <span className="text-sm font-semibold text-muted-foreground">{headerLabel}</span>
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1" data-testid="badge-popout-view">
-            {popoutView === "calendar" && <Calendar className="h-2.5 w-2.5" />}
-            {popoutView === "orderlager" && <Inbox className="h-2.5 w-2.5" />}
-            Pop-out
-          </Badge>
+      <div className="flex items-center justify-between px-5 py-3 border-b bg-gradient-to-r from-chart-2/10 via-background to-background shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-chart-2/15 text-chart-2">
+            {popoutView === "calendar" ? <Calendar className="h-5 w-5" /> : <Inbox className="h-5 w-5" />}
+          </div>
+          <div className="flex flex-col leading-tight">
+            <h1 className="text-lg font-semibold text-foreground tracking-tight" data-testid="text-popout-heading">
+              {headerLabel}
+            </h1>
+            <span className="text-xs text-muted-foreground">Pop-out · synkad med huvudfönstret</span>
+          </div>
         </div>
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 text-xs gap-1"
+            className="h-8 text-xs gap-1.5"
             onClick={() => window.opener?.focus()}
             data-testid="button-back-to-main"
           >
-            <ExternalLink className="h-3 w-3" />
+            <ExternalLink className="h-3.5 w-3.5" />
             Huvudfönstret
           </Button>
         </div>
