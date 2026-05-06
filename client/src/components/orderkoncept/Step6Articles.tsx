@@ -4,8 +4,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, Plus, Trash2, Package } from "lucide-react";
+import { Search, Plus, Trash2, Package, Info } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Article } from "@shared/schema";
+
+type QuantityMode = "use_object_quantity" | "single_per_task";
 
 interface ConceptArticle {
   id: string;
@@ -13,6 +17,7 @@ interface ConceptArticle {
   quantity: number;
   unitPrice: number | null;
   priceOverride: boolean;
+  quantityModeOverride?: string | null;
   article?: Article;
 }
 
@@ -21,6 +26,7 @@ interface Step6Props {
   onAddArticle: (articleId: string, quantity: number, unitPrice: number | null) => void;
   onRemoveArticle: (id: string) => void;
   onUpdateQuantity: (id: string, quantity: number) => void;
+  onUpdateQuantityMode?: (id: string, mode: QuantityMode | null) => void;
 }
 
 export default function Step6Articles({
@@ -28,6 +34,7 @@ export default function Step6Articles({
   onAddArticle,
   onRemoveArticle,
   onUpdateQuantity,
+  onUpdateQuantityMode,
 }: Step6Props) {
   const [search, setSearch] = useState("");
 
@@ -128,39 +135,82 @@ export default function Step6Articles({
               {enrichedArticles.map(ca => {
                 const price = ca.unitPrice ?? ca.article?.listPrice ?? 0;
                 const lineTotal = price * (ca.quantity || 1);
+                const articleMode = (ca.article?.quantityMode as QuantityMode | null | undefined) || "use_object_quantity";
+                const effectiveMode: QuantityMode = (ca.quantityModeOverride as QuantityMode | null) || articleMode;
+                const selectValue = ca.quantityModeOverride ? `override:${ca.quantityModeOverride}` : "default";
                 return (
-                  <div key={ca.id} className="flex items-center gap-3 p-3" data-testid={`article-row-${ca.id}`}>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">
-                        {ca.article?.name || "Okänd artikel"}
+                  <div key={ca.id} className="p-3 space-y-2" data-testid={`article-row-${ca.id}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">
+                          {ca.article?.name || "Okänd artikel"}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {ca.article?.articleNumber && <span>{ca.article.articleNumber}</span>}
+                          <span>{price} kr/st</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        {ca.article?.articleNumber && <span>{ca.article.articleNumber}</span>}
-                        <span>{price} kr/st</span>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          value={ca.quantity}
+                          onChange={(e) => onUpdateQuantity(ca.id, parseInt(e.target.value) || 1)}
+                          className="w-20 h-8 text-sm"
+                          data-testid={`input-quantity-${ca.id}`}
+                        />
+                        <Badge variant="secondary" className="whitespace-nowrap">
+                          {lineTotal.toLocaleString("sv-SE")} kr
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onRemoveArticle(ca.id)}
+                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                          data-testid={`button-remove-article-${ca.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        min={1}
-                        value={ca.quantity}
-                        onChange={(e) => onUpdateQuantity(ca.id, parseInt(e.target.value) || 1)}
-                        className="w-20 h-8 text-sm"
-                        data-testid={`input-quantity-${ca.id}`}
-                      />
-                      <Badge variant="secondary" className="whitespace-nowrap">
-                        {lineTotal.toLocaleString("sv-SE")} kr
-                      </Badge>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onRemoveArticle(ca.id)}
-                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                        data-testid={`button-remove-article-${ca.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    {onUpdateQuantityMode && (
+                      <div className="flex items-center gap-2 pl-1 text-xs">
+                        <span className="text-muted-foreground whitespace-nowrap">Kvantitetsläge:</span>
+                        <Select
+                          value={selectValue}
+                          onValueChange={(v) => {
+                            if (v === "default") onUpdateQuantityMode(ca.id, null);
+                            else if (v === "override:single_per_task") onUpdateQuantityMode(ca.id, "single_per_task");
+                            else if (v === "override:use_object_quantity") onUpdateQuantityMode(ca.id, "use_object_quantity");
+                          }}
+                        >
+                          <SelectTrigger className="h-7 w-[260px] text-xs" data-testid={`select-quantity-mode-${ca.id}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="default">
+                              Använd artikelns standard ({articleMode === "single_per_task" ? "En per uppdrag" : "Multiplicera med objektets antal"})
+                            </SelectItem>
+                            <SelectItem value="override:use_object_quantity">Tvinga: Multiplicera med objektets antal</SelectItem>
+                            <SelectItem value="override:single_per_task">Tvinga: En per uppdrag</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs text-xs">
+                              <p><strong>Multiplicera med objektets antal:</strong> kvantiteten hämtas från objektets metadata (t.ex. antal kärl eller m²). Pris och tid skalar därefter.</p>
+                              <p className="mt-1"><strong>En per uppdrag:</strong> sätter alltid 1 oavsett objektets antal — passar fotodokumentation, telefonavisering, nyckelhämtning och liknande.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        {effectiveMode === "single_per_task" && (
+                          <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-5">1 per uppdrag</Badge>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}

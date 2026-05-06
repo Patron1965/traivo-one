@@ -612,7 +612,20 @@ export default function OrderConceptWizardPage() {
 
   const handleUpdateQuantity = useCallback((id: string, quantity: number) => {
     setConceptArticles(prev => prev.map(a => a.id === id ? { ...a, quantity } : a));
-  }, []);
+    if (conceptId) {
+      apiRequest("PATCH", `/api/order-concepts/${conceptId}/articles/${id}`, { quantity }).catch(() => {});
+    }
+  }, [conceptId]);
+
+  const handleUpdateQuantityMode = useCallback(async (id: string, mode: "use_object_quantity" | "single_per_task" | null) => {
+    setConceptArticles(prev => prev.map(a => a.id === id ? { ...a, quantityModeOverride: mode } : a));
+    if (!conceptId) return;
+    try {
+      await apiRequest("PATCH", `/api/order-concepts/${conceptId}/articles/${id}`, { quantityModeOverride: mode });
+    } catch {
+      toast({ title: "Kunde inte uppdatera kvantitetsläge", variant: "destructive" });
+    }
+  }, [conceptId]);
 
   const isSaving = createConceptMutation.isPending || saveStepMutation.isPending;
 
@@ -849,6 +862,7 @@ export default function OrderConceptWizardPage() {
                 onAddArticle={handleAddArticle}
                 onRemoveArticle={handleRemoveArticle}
                 onUpdateQuantity={handleUpdateQuantity}
+                onUpdateQuantityMode={handleUpdateQuantityMode}
               />
             )}
 

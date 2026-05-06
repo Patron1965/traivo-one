@@ -627,6 +627,7 @@ export interface IStorage {
   getOrderConceptArticles(orderConceptId: string): Promise<OrderConceptArticle[]>;
   addOrderConceptArticle(article: InsertOrderConceptArticle): Promise<OrderConceptArticle>;
   removeOrderConceptArticle(id: string, orderConceptId: string): Promise<void>;
+  updateOrderConceptArticle(id: string, orderConceptId: string, updates: Partial<InsertOrderConceptArticle>): Promise<OrderConceptArticle | undefined>;
 
   // Order Concept Wizard - Article-Object Mappings
   getArticleObjectMappings(orderConceptId: string): Promise<ArticleObjectMapping[]>;
@@ -5441,6 +5442,18 @@ export class DatabaseStorage implements IStorage {
       eq(orderConceptArticles.id, id),
       eq(orderConceptArticles.orderConceptId, orderConceptId)
     ));
+  }
+
+  async updateOrderConceptArticle(id: string, orderConceptId: string, updates: Partial<InsertOrderConceptArticle>): Promise<OrderConceptArticle | undefined> {
+    const { id: _i, orderConceptId: _o, createdAt: _c, ...patch } = updates as any;
+    const [result] = await db.update(orderConceptArticles)
+      .set(patch)
+      .where(and(
+        eq(orderConceptArticles.id, id),
+        eq(orderConceptArticles.orderConceptId, orderConceptId)
+      ))
+      .returning();
+    return result;
   }
 
   // ============================================

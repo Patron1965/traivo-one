@@ -170,6 +170,7 @@ interface ArticleFormData {
   showPreviousValue: boolean;
   isInfoCarrier: boolean;
   limitationType: string;
+  quantityMode: string;
 }
 
 const emptyFormData: ArticleFormData = {
@@ -200,6 +201,7 @@ const emptyFormData: ArticleFormData = {
   showPreviousValue: false,
   isInfoCarrier: false,
   limitationType: "unlimited",
+  quantityMode: "use_object_quantity",
 };
 
 export default function ArticlesPage() {
@@ -358,6 +360,7 @@ export default function ArticlesPage() {
       showPreviousValue: article.showPreviousValue || false,
       isInfoCarrier: article.isInfoCarrier || false,
       limitationType: article.limitationType || "unlimited",
+      quantityMode: (article as any).quantityMode || "use_object_quantity",
     });
     setDialogOpen(true);
   };
@@ -1141,6 +1144,26 @@ export default function ArticlesPage() {
                     data-testid="input-list-price"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="quantityMode">Kvantitetsläge</Label>
+                <Select
+                  value={formData.quantityMode}
+                  onValueChange={(value) => setFormData({ ...formData, quantityMode: value })}
+                >
+                  <SelectTrigger id="quantityMode" data-testid="select-quantity-mode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="use_object_quantity">Multiplicera med objektets antal (standard)</SelectItem>
+                    <SelectItem value="single_per_task">En per uppdrag (alltid 1)</SelectItem>
+                    <SelectItem value="configurable">Konfigurerbar per orderkoncept</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Avgör om artikelns pris/tid multipliceras med objektets antal (t.ex. 45 kärl × 150 kr) eller alltid räknas som 1 per uppdrag (t.ex. fotodokumentation, telefonavisering, nyckelhämtning).
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

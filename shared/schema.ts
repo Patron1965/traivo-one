@@ -477,6 +477,9 @@ export const articles = pgTable("articles", {
   associationValue: text("association_value"),
   associationOperator: text("association_operator").default("equals"),
   maxPerAddress: integer("max_per_address"),
+  // Kvantitetsläge: 'use_object_quantity' (default — multiplicera med objektets antal),
+  // 'single_per_task' (alltid 1, t.ex. fotodokumentation), 'configurable' (sätts per orderkoncept-rad)
+  quantityMode: text("quantity_mode").default("use_object_quantity"),
   // Intern beskrivning för utförare
   internalDescription: text("internal_description"),
   // Länk till arbetsbeskrivning
@@ -2653,6 +2656,9 @@ export const orderConceptArticles = pgTable("order_concept_articles", {
   priceOverride: boolean("price_override").default(false),
   metadataRules: jsonb("metadata_rules"),
   sortOrder: integer("sort_order").default(0),
+  // Override för artikelns quantityMode på just denna orderkoncept-rad.
+  // null = använd artikelns inställning. Värden: 'use_object_quantity' | 'single_per_task'
+  quantityModeOverride: text("quantity_mode_override"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_oca_order_concept").on(table.orderConceptId),
