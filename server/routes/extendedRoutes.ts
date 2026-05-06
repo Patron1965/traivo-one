@@ -11,7 +11,7 @@ import { objects, workOrders, articles , insertDeviationReportSchema, insertProt
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
-import { requireAdmin } from "../tenant-middleware";
+import { requireAdmin, requirePlanner } from "../tenant-middleware";
 import { hashPassword } from "../password";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject, createMetadata, getAllMetadataTypes } from "../metadata-queries";
 
@@ -287,7 +287,7 @@ app.post("/api/protocols/:id/generate-pdf", asyncHandler(async (req, res) => {
 }));
 
 // Send protocol to customer via email
-app.post("/api/protocols/:id/send-to-customer", asyncHandler(async (req, res) => {
+app.post("/api/protocols/:id/send-to-customer", requirePlanner, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const protocol = await storage.getProtocol(req.params.id);
@@ -1495,7 +1495,7 @@ app.get("/api/ai/communications/settings", asyncHandler(async (req, res) => {
     res.json(settings);
 }));
 
-app.post("/api/ai/communications/eta-update", asyncHandler(async (req, res) => {
+app.post("/api/ai/communications/eta-update", requirePlanner, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId, estimatedMinutes } = req.body;
     if (!workOrderId || estimatedMinutes === undefined) {
@@ -1505,7 +1505,7 @@ app.post("/api/ai/communications/eta-update", asyncHandler(async (req, res) => {
     res.json(result);
 }));
 
-app.post("/api/ai/communications/send-manual", asyncHandler(async (req, res) => {
+app.post("/api/ai/communications/send-manual", requirePlanner, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId, notificationType, channel, customMessage } = req.body;
     if (!workOrderId) {

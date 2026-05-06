@@ -126,7 +126,7 @@ app.post("/api/iot/signals", asyncHandler(async (req, res) => {
     });
 }));
 
-app.get("/api/iot/rules", asyncHandler(async (req, res) => {
+app.get("/api/iot/rules", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const tenant = await storage.getTenant(tenantId);
     const settings = (tenant?.settings || {}) as Record<string, unknown>;
@@ -155,7 +155,7 @@ app.put("/api/iot/rules", requireAdmin, asyncHandler(async (req, res) => {
     res.json(parsed.data);
 }));
 
-app.get("/api/iot/devices", asyncHandler(async (req, res) => {
+app.get("/api/iot/devices", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const devices = await storage.getIotDevices(tenantId);
     res.json(devices);
@@ -221,7 +221,7 @@ app.delete("/api/iot/api-keys/:id", requireAdmin, asyncHandler(async (req, res) 
     res.status(204).send();
 }));
 
-app.get("/api/iot/signals", asyncHandler(async (req, res) => {
+app.get("/api/iot/signals", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const deviceId = req.query.deviceId as string | undefined;
     const limit = parseInt(req.query.limit as string) || 50;

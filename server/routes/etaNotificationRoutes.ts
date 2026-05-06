@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import { getTenantIdWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, requireAdmin, requirePlanner } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { storage } from "../storage";
@@ -26,7 +26,7 @@ export async function registerETANotificationRoutes(app: Express) {
     res.json(config);
   }));
 
-  app.patch("/api/eta-notification/config", isAuthenticated, asyncHandler(async (req, res) => {
+  app.patch("/api/eta-notification/config", isAuthenticated, requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { enabled, marginMinutes, channel, triggerOnEnRoute } = req.body;
 
@@ -70,7 +70,7 @@ export async function registerETANotificationRoutes(app: Express) {
     res.json(notifications);
   }));
 
-  app.post("/api/work-orders/:id/auto-eta-sms", isAuthenticated, asyncHandler(async (req, res) => {
+  app.post("/api/work-orders/:id/auto-eta-sms", isAuthenticated, requirePlanner, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrderId = req.params.id;
 

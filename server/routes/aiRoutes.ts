@@ -5,7 +5,7 @@ import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
-import { getTenantIdWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, requirePlanner } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
@@ -1004,7 +1004,7 @@ app.post("/api/ai/explain-anomaly", asyncHandler(async (req, res) => {
 }));
 
 // AI Auto-Schedule - automatisk schemaläggning av oschemalagda ordrar
-app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
+app.post("/api/ai/auto-schedule", requirePlanner, asyncHandler(async (req, res) => {
     const { aiEnhancedSchedule } = await import("../ai-planner");
     const { weekStart, weekEnd } = req.body;
     
@@ -1136,7 +1136,7 @@ app.post("/api/ai/optimize-routes", asyncHandler(async (req, res) => {
 }));
 
 // VRP-based route optimization using Geoapify Route Planner
-app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
+app.post("/api/ai/optimize-vrp", requirePlanner, asyncHandler(async (req, res) => {
     const { optimizeRoutesVRP, DEFAULT_BREAK_CONFIG } = await import("../route-optimizer");
     const { createOptimizationJob, ASYNC_THRESHOLD } = await import("../optimization-job-runner");
     const { buildTeamVehicles, buildTeamMemberMap } = await import("../team-vehicles");
@@ -1476,7 +1476,7 @@ app.get("/api/ai/route-recommendations", asyncHandler(async (req, res) => {
 }));
 
 // Apply VRP optimization - update order sequence
-app.post("/api/ai/optimize-vrp/apply", asyncHandler(async (req, res) => {
+app.post("/api/ai/optimize-vrp/apply", requirePlanner, asyncHandler(async (req, res) => {
     const { routes } = req.body as { 
       routes: Array<{
         resourceId: string;
@@ -1560,7 +1560,7 @@ app.post("/api/admin/distance-cache/cleanup", isAuthenticated, requireSystemAdmi
 }));
 
 // Apply auto-schedule assignments
-app.post("/api/ai/auto-schedule/apply", asyncHandler(async (req, res) => {
+app.post("/api/ai/auto-schedule/apply", requirePlanner, asyncHandler(async (req, res) => {
     const { assignments } = req.body as { assignments: Array<{
       workOrderId: string;
       resourceId: string;
@@ -1616,7 +1616,7 @@ app.post("/api/ai/workload-analysis", asyncHandler(async (req, res) => {
     res.json(analysis);
 }));
 
-app.post("/api/ai/planner-chat", asyncHandler(async (req, res) => {
+app.post("/api/ai/planner-chat", requirePlanner, asyncHandler(async (req, res) => {
     const { processConversationalPlannerQueryV2 } = await import("../ai-planner");
     const { query, weekStart, weekEnd, conversationHistory } = req.body;
     
@@ -1651,7 +1651,7 @@ app.post("/api/ai/planner-chat", asyncHandler(async (req, res) => {
 }));
 
 // Execute conversational planner action (reschedule, etc.)
-app.post("/api/ai/planner-chat/execute", asyncHandler(async (req, res) => {
+app.post("/api/ai/planner-chat/execute", requirePlanner, asyncHandler(async (req, res) => {
     const { action, params, workOrderIds, toResourceId, toDate } = req.body;
     
     if (!action || typeof action !== "string") {
@@ -3712,7 +3712,7 @@ app.post("/api/ai/auto-distribute-today", isAuthenticated, asyncHandler(async (r
     });
 }));
 
-app.post("/api/ai/auto-distribute-today/apply", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
+app.post("/api/ai/auto-distribute-today/apply", requirePlanner, asyncHandler(async (req: Request, res: Response) => {
     const schema = z.object({
       assignments: z.array(z.object({
         workOrderId: z.string(),

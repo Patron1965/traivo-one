@@ -115,6 +115,7 @@ export const requireRole = (...allowedRoles: UserRole[]): RequestHandler => {
 };
 
 export const requireAdmin: RequestHandler = requireRole("owner", "admin");
+export const requirePlanner: RequestHandler = requireRole("owner", "admin", "planner");
 export const requireOwner: RequestHandler = requireRole("owner");
 
 export function getTenantId(req: Request): string {
