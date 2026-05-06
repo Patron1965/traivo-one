@@ -744,40 +744,6 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             </Badge>
                           )}
                         </div>
-                        <div className="flex items-stretch gap-1.5 mt-1.5 w-full min-w-0">
-                          <SuggestPlacementButton job={job} currentWeekStart={currentWeekStart} compact />
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                size="sm"
-                                className="flex-1 min-w-0 h-7 text-xs px-2 overflow-hidden bg-green-600 hover:bg-green-700 text-white border border-green-700/40 dark:bg-green-600 dark:hover:bg-green-500 dark:text-white dark:border-green-500/40"
-                                onClick={(e) => onOpenAssignDialog(job, e)}
-                                data-testid={`button-assign-job-${job.id}`}
-                              >
-                                <UserPlus className="h-3.5 w-3.5 mr-1 shrink-0" />
-                                <span className="truncate">Tilldela</span>
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Tilldela resurs och datum</TooltipContent>
-                          </Tooltip>
-                        </div>
-                        {remoteSlot && onCrossWindowAssign && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="w-full mt-1 h-7 text-xs px-2 gap-1 border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-200 dark:hover:bg-blue-900/40"
-                                onClick={(e) => { e.stopPropagation(); onCrossWindowAssign(job); }}
-                                data-testid={`button-cross-window-assign-${job.id}`}
-                              >
-                                <Target className="h-3 w-3 shrink-0" />
-                                <span className="truncate">Tilldela {remoteSlot.resourceName} · {format(new Date(remoteSlot.date + "T12:00:00"), "d MMM", { locale: sv })}{remoteSlot.startTime ? ` ${remoteSlot.startTime}` : ""}</span>
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Tilldela till vald slot från andra fönstret</TooltipContent>
-                          </Tooltip>
-                        )}
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); toggleJobExpanded(job.id); }}
@@ -795,6 +761,40 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                         {expandedJobs.has(job.id) && (
                           <JobCardExpandPanel jobId={job.id} enabled={true} onHistoryClick={onJobClick} bulkJobIds={bulkJobIds} />
                         )}
+                        {remoteSlot && onCrossWindowAssign && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-full mt-2 h-7 text-xs px-2 gap-1 border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-200 dark:hover:bg-blue-900/40"
+                                onClick={(e) => { e.stopPropagation(); onCrossWindowAssign(job); }}
+                                data-testid={`button-cross-window-assign-${job.id}`}
+                              >
+                                <Target className="h-3 w-3 shrink-0" />
+                                <span className="truncate">Tilldela {remoteSlot.resourceName} · {format(new Date(remoteSlot.date + "T12:00:00"), "d MMM", { locale: sv })}{remoteSlot.startTime ? ` ${remoteSlot.startTime}` : ""}</span>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Tilldela till vald slot från andra fönstret</TooltipContent>
+                          </Tooltip>
+                        )}
+                        <div className="flex items-stretch gap-1.5 mt-2 w-full min-w-0">
+                          <SuggestPlacementButton job={job} currentWeekStart={currentWeekStart} compact />
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                className="flex-1 min-w-0 h-7 text-xs px-2 overflow-hidden bg-green-600 hover:bg-green-700 text-white border border-green-700/40 dark:bg-green-600 dark:hover:bg-green-500 dark:text-white dark:border-green-500/40"
+                                onClick={(e) => onOpenAssignDialog(job, e)}
+                                data-testid={`button-assign-job-${job.id}`}
+                              >
+                                <UserPlus className="h-3.5 w-3.5 mr-1 shrink-0" />
+                                <span className="truncate">Tilldela</span>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Tilldela resurs och datum</TooltipContent>
+                          </Tooltip>
+                        </div>
                       </div>
                     </Card>
                   </DraggableJobCard>
