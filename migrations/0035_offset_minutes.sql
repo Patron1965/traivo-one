@@ -14,3 +14,17 @@ UPDATE "articles"
   WHERE "offset_minutes" IS NULL;
 
 CREATE INDEX IF NOT EXISTS "idx_work_orders_parent" ON "work_orders" ("parent_work_order_id");
+
+-- Mjuk självreferens: om huvudjobbet raderas blir kopplade offset-jobb's parent null
+-- (inte cascade — offset-jobbet kan stå kvar som löst minne). Idempotent: lägg bara
+-- till constraintet om det inte redan finns.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'work_orders_parent_work_order_id_fkey'
+  ) THEN
+    ALTER TABLE "work_orders"
+      ADD CONSTRAINT "work_orders_parent_work_order_id_fkey"
+      FOREIGN KEY ("parent_work_order_id") REFERENCES "work_orders"("id") ON DELETE SET NULL;
+  END IF;
+END $$;

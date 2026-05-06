@@ -322,7 +322,7 @@ export const workOrders = pgTable("work_orders", {
   // Mjuk länk till huvudjobbet om denna order är en förberedande/följande offset-uppgift
   // (skapad från artikel med offset_minutes != 0). Sätts vid expand av orderkoncept.
   // Mjuk länk: om huvudjobbet raderas blir parent null (set null), inte cascade.
-  parentWorkOrderId: varchar("parent_work_order_id"),
+  parentWorkOrderId: varchar("parent_work_order_id").references((): any => workOrders.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
