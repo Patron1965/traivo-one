@@ -620,7 +620,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
           )}
         </div>
         <div className="flex-1 overflow-y-auto p-2">
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {unscheduledJobs.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground text-sm">
                 Inga oschemalagda jobb
@@ -638,15 +638,15 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                 return (
                   <DraggableJobCard key={job.id} id={job.id}>
                     <Card
-                      className={`p-3 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 touch-none ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${job.priority === "urgent" ? "bg-destructive/10 dark:bg-destructive/15" : ""}`}
+                      className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 touch-none ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${job.priority === "urgent" ? "bg-destructive/10 dark:bg-destructive/15" : ""}`}
                       onClick={() => onJobClick(job.id)}
                       data-testid={`unscheduled-job-${job.id}`}
                     >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1.5">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
                           <span className={`w-2 h-2 rounded-full shrink-0 ${priorityDotColors[job.priority]}`} />
                           <span
-                            className={`text-sm font-medium truncate ${hasRealCustomer ? "" : "italic text-muted-foreground"}`}
+                            className={`text-[13px] font-semibold truncate ${hasRealCustomer ? "" : "italic text-muted-foreground"}`}
                             title={customerLabel}
                             data-testid={`unscheduled-job-customer-${job.id}`}
                           >
@@ -655,17 +655,25 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                           {job.priority === "urgent" && (
                             <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />
                           )}
+                          <span className="ml-auto flex items-center gap-1 shrink-0">
+                            <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                              {priorityLabels[job.priority] || job.priority}
+                            </Badge>
+                            <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+                              {((job.estimatedDuration || 0) / 60).toFixed(1).replace(".", ",")} h
+                            </Badge>
+                          </span>
                         </div>
                         {showTitle && (
                           <div
-                            className="text-xs font-medium text-foreground/90 truncate"
+                            className="text-xs text-foreground/90 truncate pl-3.5"
                             title={titleLabel}
                             data-testid={`unscheduled-job-title-${job.id}`}
                           >
                             {titleLabel}
                           </div>
                         )}
-                        <div className="text-xs text-muted-foreground truncate" title={addressLabel} data-testid={`unscheduled-job-address-${job.id}`}>{addressLabel}</div>
+                        <div className="text-[11px] text-muted-foreground truncate pl-3.5" title={addressLabel} data-testid={`unscheduled-job-address-${job.id}`}>{addressLabel}</div>
                         {jobCluster && (
                           <div className="flex items-center gap-1 text-[10px] text-muted-foreground" data-testid={`unscheduled-job-cluster-${job.id}`}>
                             <MapPin className="h-2.5 w-2.5" />
@@ -731,33 +739,13 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             )}
                           </div>
                         )}
-                        <div className="flex items-center gap-2 pt-1 flex-wrap">
-                          <Badge variant="outline" className="text-[10px]">
-                            {priorityLabels[job.priority] || job.priority}
-                          </Badge>
-                          <Badge variant="secondary" className="text-[10px]">
-                            {((job.estimatedDuration || 0) / 60).toFixed(1).replace(".", ",")} h
-                          </Badge>
-                          {job.executionCode && (
-                            <Badge variant="outline" className="text-[10px]" data-testid={`unscheduled-exec-code-${job.id}`}>
+                        {job.executionCode && (
+                          <div className="pl-3.5">
+                            <Badge variant="outline" className="text-[10px] h-4 px-1.5" data-testid={`unscheduled-exec-code-${job.id}`}>
                               {EXECUTION_CODE_ICONS[job.executionCode] || "KOD"} {EXECUTION_CODE_LABELS[job.executionCode] || job.executionCode}
                             </Badge>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); toggleJobExpanded(job.id); }}
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          className="mt-1 w-full flex items-center justify-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors py-0.5 rounded hover-elevate"
-                          data-testid={`button-expand-job-${job.id}`}
-                          aria-expanded={expandedJobs.has(job.id)}
-                          title={expandedJobs.has(job.id) ? "Dölj jobbinfo" : "Visa jobbinfo"}
-                        >
-                          {expandedJobs.has(job.id) ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                          <span>{expandedJobs.has(job.id) ? "Dölj" : "Mer info"}</span>
-                        </button>
+                          </div>
+                        )}
                         {expandedJobs.has(job.id) && (
                           <JobCardExpandPanel jobId={job.id} enabled={true} onHistoryClick={onJobClick} bulkJobIds={bulkJobIds} />
                         )}
@@ -767,7 +755,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="w-full mt-2 h-7 text-xs px-2 gap-1 border-chart-1/30 bg-chart-1/10 hover:bg-chart-1/15 text-chart-1 dark:bg-chart-1/15 dark:border-chart-1/80 dark:hover:bg-chart-1/15"
+                                className="w-full mt-1.5 h-6 text-[11px] px-2 gap-1 border-chart-1/30 bg-chart-1/10 hover:bg-chart-1/15 text-chart-1 dark:bg-chart-1/15 dark:border-chart-1/80 dark:hover:bg-chart-1/15"
                                 onClick={(e) => { e.stopPropagation(); onCrossWindowAssign(job); }}
                                 data-testid={`button-cross-window-assign-${job.id}`}
                               >
@@ -778,22 +766,38 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             <TooltipContent>Tilldela till vald slot från andra fönstret</TooltipContent>
                           </Tooltip>
                         )}
-                        <div className="flex items-center justify-between gap-1.5 mt-2 w-full min-w-0">
-                          <SuggestPlacementButton job={job} currentWeekStart={currentWeekStart} compact />
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                size="sm"
-                                className="h-7 text-xs px-3 bg-chart-2 hover:bg-chart-2/90 text-white border border-chart-2/70 dark:bg-chart-2 dark:hover:bg-chart-2/90 dark:text-white dark:border-chart-2/50"
-                                onClick={(e) => onOpenAssignDialog(job, e)}
-                                data-testid={`button-assign-job-${job.id}`}
-                              >
-                                <UserPlus className="h-3.5 w-3.5 mr-1 shrink-0" />
-                                Tilldela
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Tilldela resurs och datum</TooltipContent>
-                          </Tooltip>
+                        <div className="flex items-center gap-1.5 mt-1.5 w-full min-w-0">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); toggleJobExpanded(job.id); }}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onTouchStart={(e) => e.stopPropagation()}
+                            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-1 rounded hover-elevate shrink-0"
+                            data-testid={`button-expand-job-${job.id}`}
+                            aria-expanded={expandedJobs.has(job.id)}
+                            title={expandedJobs.has(job.id) ? "Dölj jobbinfo" : "Visa jobbinfo"}
+                          >
+                            {expandedJobs.has(job.id) ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            <span>{expandedJobs.has(job.id) ? "Dölj" : "Mer info"}</span>
+                          </button>
+                          <div className="ml-auto flex items-center gap-1.5">
+                            <SuggestPlacementButton job={job} currentWeekStart={currentWeekStart} compact />
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs px-3 bg-chart-2 hover:bg-chart-2/90 text-white border border-chart-2/70 dark:bg-chart-2 dark:hover:bg-chart-2/90 dark:text-white dark:border-chart-2/50"
+                                  onClick={(e) => onOpenAssignDialog(job, e)}
+                                  data-testid={`button-assign-job-${job.id}`}
+                                >
+                                  <UserPlus className="h-3.5 w-3.5 mr-1 shrink-0" />
+                                  Tilldela
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Tilldela resurs och datum</TooltipContent>
+                            </Tooltip>
+                          </div>
                         </div>
                       </div>
                     </Card>
