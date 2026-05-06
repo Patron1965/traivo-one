@@ -68,10 +68,9 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AICard } from "@/components/AICard";
-import { EmptyState } from "@/components/EmptyState";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { QueryErrorState } from "@/components/ErrorBoundary";
+import { QueryState } from "@/components/QueryState";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, startOfWeek, endOfWeek, addDays, isWithinInterval, parseISO } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -273,7 +272,7 @@ export default function ResourcesPage() {
   const weekStart = startOfWeek(today, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
 
-  const { data: resources = [], isLoading, isError, refetch } = useQuery<Resource[]>({
+  const { data: resources = [], isLoading, isError, error, refetch } = useQuery<Resource[]>({
     queryKey: ["/api/resources"],
   });
 
@@ -577,17 +576,7 @@ export default function ResourcesPage() {
     return { activeResources: activeResources.length, availableToday, totalWeeklyHours, totalWorkloadHours, teamUtilization };
   }, [resources, resourceWorkloads]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (isError) {
-    return <QueryErrorState message="Kunde inte hämta resurser" onRetry={() => refetch()} />;
-  }
+  const hasActiveResourceFilter = !!searchQuery || competencyFilter !== "all" || availabilityFilter !== "all";
 
   return (
     <div className="space-y-6 p-6">
@@ -679,6 +668,25 @@ export default function ResourcesPage() {
         )}
       </div>
 
+      <QueryState
+        isLoading={isLoading}
+        isError={isError}
+        isEmpty={filteredResources.length === 0}
+        error={error as { message?: string } | null}
+        onRetry={() => refetch()}
+        loadingVariant="skeleton-rows"
+        skeletonRows={6}
+        emptyTitle={hasActiveResourceFilter ? "Inga resurser matchade filtren" : "Inga resurser ännu"}
+        emptyDescription={hasActiveResourceFilter
+          ? "Försök med andra sökord eller rensa filtren"
+          : "Lägg till tekniker och resurser som ska schemaläggas för fältarbete"}
+        emptyAction={!hasActiveResourceFilter ? (
+          <Button onClick={() => setDialogOpen(true)} data-testid="button-empty-add-resource">
+            <UserPlus className="h-4 w-4 mr-2" />
+            Lägg till resurs
+          </Button>
+        ) : undefined}
+      >
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {paginatedResources.map((resource) => {
           const workloadMinutes = resourceWorkloads.get(resource.id) || 0;
@@ -833,27 +841,7 @@ export default function ResourcesPage() {
           );
         })}
       </div>
-
-      {filteredResources.length === 0 && !isLoading && (() => {
-        const hasActiveFilter = !!searchQuery || competencyFilter !== "all" || availabilityFilter !== "all";
-        return (
-          <Card>
-            <CardContent className="p-0">
-              <EmptyState
-                icon={Users}
-                title={hasActiveFilter ? "Inga resurser matchade filtren" : "Inga resurser ännu"}
-                description={hasActiveFilter
-                  ? "Försök med andra sökord eller rensa filtren"
-                  : "Lägg till tekniker och resurser som ska schemaläggas för fältarbete"
-                }
-                actionLabel={hasActiveFilter ? undefined : "Lägg till resurs"}
-                onAction={hasActiveFilter ? undefined : () => setDialogOpen(true)}
-                actionIcon={UserPlus}
-              />
-            </CardContent>
-          </Card>
-        );
-      })()}
+      </QueryState>
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between border-t pt-4" data-testid="pagination-resources">

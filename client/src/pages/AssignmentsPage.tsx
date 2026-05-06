@@ -63,6 +63,7 @@ import { ASSIGNMENT_STATUS_LABELS, type AssignmentStatus } from "@shared/schema"
 import { PageHelp } from "@/components/ui/help-tooltip";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ClipboardList } from "lucide-react";
+import { QueryState } from "@/components/QueryState";
 
 function formatCurrency(value: number | null | undefined): string {
   if (!value) return "0 kr";
@@ -132,7 +133,7 @@ export default function AssignmentsPage() {
 
   const { toast } = useToast();
 
-  const { data: assignments = [], isLoading } = useQuery<Assignment[]>({
+  const { data: assignments = [], isLoading, isError, error, refetch } = useQuery<Assignment[]>({
     queryKey: ["/api/assignments", statusFilter !== "all" ? statusFilter : undefined],
   });
 
@@ -239,13 +240,7 @@ export default function AssignmentsPage() {
     setSearchTerm("");
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64" data-testid="loading-assignments">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
+  const hasActiveAssignmentFilter = !!searchTerm || statusFilter !== "all" || resourceFilter !== "all";
 
   return (
     <div className="p-6 space-y-6">
@@ -418,6 +413,32 @@ export default function AssignmentsPage() {
       {/* Assignments Table */}
       <Card>
         <CardContent className="p-0">
+          <QueryState
+            isLoading={isLoading}
+            isError={isError}
+            isEmpty={filteredAssignments.length === 0}
+            error={error as { message?: string } | null}
+            onRetry={() => refetch()}
+            loadingVariant="skeleton-rows"
+            skeletonRows={6}
+            emptyTitle={hasActiveAssignmentFilter ? "Inga uppgifter matchade filtren" : "Inga uppgifter skapade än"}
+            emptyDescription={hasActiveAssignmentFilter
+              ? "Försök med andra sökord eller rensa filtren."
+              : "Kör ett orderkoncept för att automatiskt generera uppgifter."}
+            emptyAction={hasActiveAssignmentFilter ? (
+              <Button variant="outline" size="sm" onClick={clearAllFilters} className="gap-1" data-testid="button-clear-filters-empty">
+                <XCircle className="h-4 w-4" />
+                Rensa filter
+              </Button>
+            ) : (
+              <Link href="/order-concepts">
+                <Button variant="outline" size="sm" className="gap-2" data-testid="button-goto-concepts">
+                  Gå till Orderkoncept
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            )}
+          >
           <Table density="compact">
             <TableHeader>
               <TableRow>
@@ -534,35 +555,9 @@ export default function AssignmentsPage() {
                   </TableRow>
                 );
               })}
-              {filteredAssignments.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-12">
-                    {searchTerm || statusFilter !== "all" || resourceFilter !== "all" ? (
-                      <div className="space-y-2">
-                        <p className="text-muted-foreground">Inga uppgifter matchade filtren</p>
-                        <Button variant="ghost" size="sm" onClick={clearAllFilters} className="gap-1" data-testid="button-clear-filters-empty">
-                          <XCircle className="h-4 w-4" />
-                          Rensa filter
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <Package className="h-10 w-10 mx-auto text-muted-foreground/50" />
-                        <p className="text-muted-foreground">Inga uppgifter skapade än</p>
-                        <p className="text-sm text-muted-foreground/70">Kör ett orderkoncept för att automatiskt generera uppgifter</p>
-                        <Link href="/order-concepts">
-                          <Button variant="outline" size="sm" className="gap-2 mt-1" data-testid="button-goto-concepts">
-                            Gå till Orderkoncept
-                            <ArrowRight className="h-4 w-4" />
-                          </Button>
-                        </Link>
-                      </div>
-                    )}
-                  </TableCell>
-                </TableRow>
-              )}
             </TableBody>
           </Table>
+          </QueryState>
         </CardContent>
       </Card>
 
