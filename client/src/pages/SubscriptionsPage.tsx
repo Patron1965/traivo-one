@@ -128,7 +128,7 @@ export default function SubscriptionsPage() {
   const [editing, setEditing] = useState<Subscription | null>(null);
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string } | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
-  const [selectedObject, setSelectedObject] = useState<ServiceObject | null>(null);
+  const [viewObjectId, setViewObjectId] = useState<string | null>(null);
   const [objectDialogOpen, setObjectDialogOpen] = useState(false);
 
   const form = useForm<SubscriptionFormValues>({
@@ -159,12 +159,13 @@ export default function SubscriptionsPage() {
   });
 
   const { data: objects = [] } = useQuery<ObjectOption[]>({
-    queryKey: ["/api/objects"],
+    queryKey: ["/api/objects", "lookup"],
     select: (data: any[]) => data.map((o) => ({ id: o.id, name: o.name, objectNumber: o.objectNumber })),
   });
 
-  const { data: fullObjects = [] } = useQuery<ServiceObject[]>({
-    queryKey: ["/api/objects"],
+  const { data: selectedObject = null, isLoading: selectedObjectLoading } = useQuery<ServiceObject | null>({
+    queryKey: ["/api/objects", viewObjectId, "resolved"],
+    enabled: !!viewObjectId && objectDialogOpen,
   });
 
   const { data: articles = [] } = useQuery<Article[]>({
@@ -291,11 +292,8 @@ export default function SubscriptionsPage() {
   };
 
   const handleViewObject = (objectId: string) => {
-    const obj = fullObjects.find((o) => o.id === objectId);
-    if (obj) {
-      setSelectedObject(obj);
-      setObjectDialogOpen(true);
-    }
+    setViewObjectId(objectId);
+    setObjectDialogOpen(true);
   };
 
   const getPeriodicityLabel = (value: string) => {
@@ -813,6 +811,13 @@ export default function SubscriptionsPage() {
               </DialogDescription>
             )}
           </DialogHeader>
+
+          {selectedObjectLoading && !selectedObject && (
+            <div className="flex items-center justify-center py-12 text-muted-foreground" data-testid="text-object-loading">
+              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              Laddar objektdetaljer...
+            </div>
+          )}
 
           {selectedObject && (
             <Tabs defaultValue="info" className="flex-1 overflow-hidden flex flex-col">
