@@ -679,25 +679,62 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       });
 
       if (job) {
-        const customer = customerMap.get(job.customerId);
-        const pdfBlob = await generateJobProtocol({
-          workOrderId: job.id,
-          title: job.title,
-          objectName: job.objectName || undefined,
-          objectAddress: job.objectAddress || undefined,
-          customerName: customer?.name || undefined,
-          scheduledDate: job.scheduledDate ? String(job.scheduledDate) : undefined,
-          actualDuration: elapsed,
-          photos,
-          signaturePath: finalSignature,
-          materials: materials.length > 0 ? materials : (existingMetadata.materials as MaterialItem[]) || [],
-          orderStatus: "utford",
-        });
-        downloadBlob(pdfBlob, `protokoll-${job.id.slice(0, 8)}.pdf`);
+        try {
+          const customer = customerMap.get(job.customerId);
+          const pdfBlob = await generateJobProtocol({
+            workOrderId: job.id,
+            title: job.title,
+            objectName: job.objectName || undefined,
+            objectAddress: job.objectAddress || undefined,
+            customerName: customer?.name || undefined,
+            scheduledDate: job.scheduledDate ? String(job.scheduledDate) : undefined,
+            actualDuration: elapsed,
+            photos,
+            signaturePath: finalSignature,
+            materials: materials.length > 0 ? materials : (existingMetadata.materials as MaterialItem[]) || [],
+            orderStatus: "utford",
+          });
+          downloadBlob(pdfBlob, `protokoll-${job.id.slice(0, 8)}.pdf`);
+        } catch (pdfErr) {
+          console.error("PDF-generering misslyckades", pdfErr);
+          toast({
+            title: "Jobbet är klart",
+            description: "Men protokollet kunde inte genereras automatiskt. Du kan ladda ner det senare.",
+            variant: "destructive",
+          });
+        }
       }
     },
+    onMutate: async ({ id }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/work-orders"] });
+      const previous = queryClient.getQueryData<WorkOrderWithObject[]>(["/api/work-orders"]);
+      const elapsed = Math.ceil(elapsedSeconds / 60);
+      queryClient.setQueryData<WorkOrderWithObject[]>(["/api/work-orders"], (old) => {
+        if (!old) return old;
+        return old.map((wo) =>
+          wo.id === id
+            ? {
+                ...wo,
+                orderStatus: "utford" as typeof wo.orderStatus,
+                completedAt: new Date(),
+                actualDuration: elapsed,
+              }
+            : wo,
+        );
+      });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["/api/work-orders"], context.previous);
+      }
+      toast({
+        title: "Kunde inte slutföra jobbet",
+        description: "Försök igen om en stund.",
+        variant: "destructive",
+      });
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       toast({ title: "Klart!", description: "Jobbet slutfört och protokoll genererat." });
       setJobStarted(false);
       setStartTime(null);
@@ -709,6 +746,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       setMaterials([]);
       setJobNote("");
       setShowCompletedDialog(true);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
     },
   });
 
