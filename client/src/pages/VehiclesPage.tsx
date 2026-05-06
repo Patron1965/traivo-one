@@ -42,6 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { QueryState } from "@/components/QueryState";
 import {
   Plus,
   Search,
@@ -172,11 +173,11 @@ export default function VehiclesPage() {
     },
   });
 
-  const { data: vehicles = [], isLoading: loadingVehicles } = useQuery<Vehicle[]>({
+  const { data: vehicles = [], isLoading: loadingVehicles, isError: vehiclesIsError, error: vehiclesError, refetch: refetchVehicles } = useQuery<Vehicle[]>({
     queryKey: ["/api/vehicles"],
   });
 
-  const { data: equipment = [], isLoading: loadingEquipment } = useQuery<Equipment[]>({
+  const { data: equipment = [], isLoading: loadingEquipment, isError: equipmentIsError, error: equipmentError, refetch: refetchEquipment } = useQuery<Equipment[]>({
     queryKey: ["/api/equipment"],
   });
 
@@ -468,18 +469,30 @@ export default function VehiclesPage() {
               Lägg till fordon
             </Button>
           </div>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : filteredVehicles.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                <Truck className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Inga fordon registrerade</p>
-              </CardContent>
-            </Card>
-          ) : (
+          <QueryState
+            isLoading={loadingVehicles}
+            isError={vehiclesIsError}
+            isEmpty={!loadingVehicles && !vehiclesIsError && filteredVehicles.length === 0}
+            error={vehiclesError instanceof Error ? vehiclesError : null}
+            onRetry={() => refetchVehicles()}
+            loadingVariant="skeleton-rows"
+            skeletonRows={4}
+            emptyTitle="Inga fordon registrerade"
+            emptyDescription="Lägg till fordon för att hålla koll på fordonsparken, service och besiktning."
+            emptyAction={
+              <Button
+                onClick={() => {
+                  setEditingVehicle(null);
+                  vehicleForm.reset();
+                  setVehicleDialogOpen(true);
+                }}
+                data-testid="button-add-vehicle-empty"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Lägg till fordon
+              </Button>
+            }
+          >
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredVehicles.map((vehicle) => {
                 const TypeIcon = vehicleTypeOptions.find((t) => t.value === vehicle.vehicleType)?.icon || Truck;
@@ -601,7 +614,7 @@ export default function VehiclesPage() {
                 );
               })}
             </div>
-          )}
+          </QueryState>
         </TabsContent>
 
         <TabsContent value="equipment" className="mt-4">
@@ -619,18 +632,30 @@ export default function VehiclesPage() {
             </Button>
           </div>
 
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : filteredEquipment.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                <Wrench className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Ingen utrustning registrerad</p>
-              </CardContent>
-            </Card>
-          ) : (
+          <QueryState
+            isLoading={loadingEquipment}
+            isError={equipmentIsError}
+            isEmpty={!loadingEquipment && !equipmentIsError && filteredEquipment.length === 0}
+            error={equipmentError instanceof Error ? equipmentError : null}
+            onRetry={() => refetchEquipment()}
+            loadingVariant="skeleton-rows"
+            skeletonRows={4}
+            emptyTitle="Ingen utrustning registrerad"
+            emptyDescription="Lägg till verktyg och utrustning för att hantera bokningar och inventarier."
+            emptyAction={
+              <Button
+                onClick={() => {
+                  setEditingEquipment(null);
+                  equipmentForm.reset();
+                  setEquipmentDialogOpen(true);
+                }}
+                data-testid="button-add-equipment-empty"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Lägg till utrustning
+              </Button>
+            }
+          >
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredEquipment.map((eq) => (
                 <Card key={eq.id} className="overflow-visible" data-testid={`card-equipment-${eq.id}`}>
@@ -693,7 +718,7 @@ export default function VehiclesPage() {
                 </Card>
               ))}
             </div>
-          )}
+          </QueryState>
         </TabsContent>
 
         <TabsContent value="availability" className="mt-4">

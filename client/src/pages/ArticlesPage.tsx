@@ -85,6 +85,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Article, ServiceObject } from "@shared/schema";
+import { QueryState } from "@/components/QueryState";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
 import { HelpTooltip, PageHelp } from "@/components/ui/help-tooltip";
@@ -231,7 +232,7 @@ export default function ArticlesPage() {
   const [assocTestLoading, setAssocTestLoading] = useState(false);
   const ITEMS_PER_PAGE = 25;
 
-  const { data: articles = [], isLoading } = useQuery<Article[]>({
+  const { data: articles = [], isLoading, isError, error: articlesError, refetch: refetchArticles } = useQuery<Article[]>({
     queryKey: ["/api/articles"],
   });
 
@@ -458,14 +459,6 @@ export default function ArticlesPage() {
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
   return (
     <div className="h-full flex flex-col p-6">
       <div className="flex flex-col gap-4 mb-6">
@@ -665,6 +658,23 @@ export default function ArticlesPage() {
         )}
       </div>
 
+      <QueryState
+        isLoading={isLoading}
+        isError={isError}
+        isEmpty={!isLoading && !isError && articles.length === 0}
+        error={articlesError instanceof Error ? articlesError : null}
+        onRetry={() => refetchArticles()}
+        loadingVariant="skeleton-rows"
+        skeletonRows={6}
+        emptyTitle="Inga artiklar ännu"
+        emptyDescription="Skapa en ny artikel eller importera artiklar från Fortnox för att komma igång."
+        emptyAction={
+          <Button onClick={openCreateDialog} data-testid="button-create-article-empty">
+            <Plus className="h-4 w-4 mr-2" />
+            Ny artikel
+          </Button>
+        }
+      >
       {viewMode === "hooks" ? (
         <div className="flex-1 overflow-auto">
           <div className="grid gap-4">
@@ -926,6 +936,7 @@ export default function ArticlesPage() {
           )}
         </Card>
       )}
+      </QueryState>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) resetForm(); setDialogOpen(open); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

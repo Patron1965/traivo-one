@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { QueryState } from "@/components/QueryState";
 import {
   Plus,
   Search,
@@ -73,7 +74,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { QueryErrorState } from "@/components/ErrorBoundary";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { AddressSearch } from "@/components/AddressSearch";
@@ -213,7 +213,7 @@ export default function ClustersPage() {
     },
   });
 
-  const { data: clusters = [], isLoading, error } = useQuery<Cluster[]>({
+  const { data: clusters = [], isLoading, error, isError, refetch: refetchClusters } = useQuery<Cluster[]>({
     queryKey: ["/api/clusters"],
   });
 
@@ -387,14 +387,6 @@ export default function ClustersPage() {
     return { total, totalObjects, totalOrders, slaCounts, withCoords };
   }, [clusters]);
 
-  if (error) {
-    return (
-      <div className="p-6">
-        <QueryErrorState message="Kunde inte ladda kluster" />
-      </div>
-    );
-  }
-
   return (
     <div className="p-6 space-y-6">
       <PageHeader icon={Target} title={t("cluster_plural")} description="Arbetsområden — skapas automatiskt per kund">
@@ -462,32 +454,30 @@ export default function ClustersPage() {
         </Tabs>
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      ) : filteredClusters.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Target className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">Inga kluster ännu</h3>
-            <p className="text-muted-foreground mb-4">
-              Kluster skapas automatiskt när objekt importeras eller läggs till med en kund.
-              Du kan även skapa kluster manuellt eller använda auto-klustring.
-            </p>
-            <div className="flex items-center justify-center gap-3">
-              <Button variant="outline" onClick={() => navigate("/auto-cluster")} data-testid="button-auto-cluster-empty">
-                <Sparkles className="mr-2 h-4 w-4" />
-                Auto-klustring
-              </Button>
-              <Button variant="outline" onClick={handleOpenCreate} data-testid="button-create-cluster-empty">
-                <Plus className="mr-2 h-4 w-4" />
-                Manuellt kluster
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : viewMode === "map" ? (
+      <QueryState
+        isLoading={isLoading}
+        isError={isError}
+        isEmpty={!isLoading && !isError && filteredClusters.length === 0}
+        error={(error as Error | null) ?? null}
+        onRetry={() => refetchClusters()}
+        loadingVariant="skeleton-rows"
+        skeletonRows={6}
+        emptyTitle="Inga kluster ännu"
+        emptyDescription="Kluster skapas automatiskt när objekt importeras eller läggs till med en kund. Du kan även skapa kluster manuellt eller använda auto-klustring."
+        emptyAction={
+          <div className="flex items-center justify-center gap-3">
+            <Button variant="outline" onClick={() => navigate("/auto-cluster")} data-testid="button-auto-cluster-empty">
+              <Sparkles className="mr-2 h-4 w-4" />
+              Auto-klustring
+            </Button>
+            <Button variant="outline" onClick={handleOpenCreate} data-testid="button-create-cluster-empty">
+              <Plus className="mr-2 h-4 w-4" />
+              Manuellt kluster
+            </Button>
+          </div>
+        }
+      >
+      {viewMode === "map" ? (
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <Card className="overflow-hidden">
@@ -771,6 +761,7 @@ export default function ClustersPage() {
           })}
         </div>
       )}
+      </QueryState>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">

@@ -22,6 +22,7 @@ import type { Procurement, Customer, ServiceObject } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { QueryState } from "@/components/QueryState";
 
 const statusLabels: Record<string, string> = {
   draft: "Utkast",
@@ -70,7 +71,7 @@ export default function ProcurementsPage() {
   });
   const { toast } = useToast();
 
-  const { data: procurements = [], isLoading } = useQuery<Procurement[]>({
+  const { data: procurements = [], isLoading, isError, error: procurementsError, refetch: refetchProcurements } = useQuery<Procurement[]>({
     queryKey: ["/api/procurements"],
   });
 
@@ -271,14 +272,6 @@ export default function ProcurementsPage() {
     return map;
   }, [selectedObjects, objectSearchResults]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 p-6">
       <PageHeader
@@ -429,6 +422,23 @@ export default function ProcurementsPage() {
         )}
       </div>
 
+      <QueryState
+        isLoading={isLoading}
+        isError={isError}
+        isEmpty={!isLoading && !isError && filteredProcurements.length === 0}
+        error={procurementsError instanceof Error ? procurementsError : null}
+        onRetry={() => refetchProcurements()}
+        loadingVariant="skeleton-rows"
+        skeletonRows={6}
+        emptyTitle="Inga upphandlingar hittades"
+        emptyDescription="Skapa en ny upphandling för att börja följa anbud, deadlines och resultat."
+        emptyAction={
+          <Button onClick={() => setShowCreateDialog(true)} data-testid="button-add-procurement-empty">
+            <Plus className="h-4 w-4 mr-2" />
+            Ny upphandling
+          </Button>
+        }
+      >
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredProcurements.map((procurement) => {
           const customer = customers.find(c => c.id === procurement.customerId);
@@ -551,13 +561,7 @@ export default function ProcurementsPage() {
         })}
       </div>
 
-      {filteredProcurements.length === 0 && !isLoading && (
-        <div className="text-center py-12 text-muted-foreground">
-          <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p>Inga upphandlingar hittades</p>
-          <p className="text-sm mt-1">Klicka på &quot;Ny upphandling&quot; för att skapa en</p>
-        </div>
-      )}
+      </QueryState>
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent>
