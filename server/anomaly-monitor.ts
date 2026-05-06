@@ -71,11 +71,12 @@ class AnomalyMonitor {
     }
   }
 
-  private async checkStalePositions(): Promise<AnomalyAlert[]> {
+  private async checkStalePositions(tenantId?: string): Promise<AnomalyAlert[]> {
     const alerts: AnomalyAlert[] = [];
     
     try {
-      const resources = await storage.getAllActiveResourcePositions();
+      const allResources = await storage.getAllActiveResourcePositions();
+      const resources = tenantId ? allResources.filter(r => r.tenantId === tenantId) : allResources;
       const now = Date.now();
       const staleThresholdMs = 30 * 60 * 1000; // 30 minutes
 
@@ -106,11 +107,11 @@ class AnomalyMonitor {
     return alerts;
   }
 
-  private async checkDelayedOrders(): Promise<AnomalyAlert[]> {
+  private async checkDelayedOrders(tenantId: string = DEFAULT_TENANT_ID): Promise<AnomalyAlert[]> {
     const alerts: AnomalyAlert[] = [];
     
     try {
-      const orders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
+      const orders = await storage.getWorkOrders(tenantId);
       const now = new Date();
       const todayStart = new Date(now);
       todayStart.setHours(0, 0, 0, 0);
@@ -171,12 +172,12 @@ class AnomalyMonitor {
     return alerts;
   }
 
-  private async checkSetupTimeAnomalies(): Promise<AnomalyAlert[]> {
+  private async checkSetupTimeAnomalies(tenantId: string = DEFAULT_TENANT_ID): Promise<AnomalyAlert[]> {
     const alerts: AnomalyAlert[] = [];
     
     try {
       // Single fetch for all logs - calculate averages and check recent ones in one pass
-      const allLogs = await storage.getSetupTimeLogs(DEFAULT_TENANT_ID);
+      const allLogs = await storage.getSetupTimeLogs(tenantId);
       const hourAgo = Date.now() - 60 * 60 * 1000;
       
       // Calculate per-object averages using all logs
@@ -260,19 +261,19 @@ class AnomalyMonitor {
     return true;
   }
 
-  // Manual trigger for testing
-  async runManualCheck(): Promise<AnomalyAlert[]> {
-    console.log("[anomaly-monitor] Running manual check...");
+  // Manual trigger — scoped to the caller's tenant so cross-tenant data is never returned
+  async runManualCheck(tenantId: string): Promise<AnomalyAlert[]> {
+    console.log(`[anomaly-monitor] Running manual check for tenant ${tenantId}...`);
     
     const alerts: AnomalyAlert[] = [];
 
-    const stalePositionAlerts = await this.checkStalePositions();
+    const stalePositionAlerts = await this.checkStalePositions(tenantId);
     alerts.push(...stalePositionAlerts);
 
-    const delayAlerts = await this.checkDelayedOrders();
+    const delayAlerts = await this.checkDelayedOrders(tenantId);
     alerts.push(...delayAlerts);
 
-    const setupTimeAlerts = await this.checkSetupTimeAnomalies();
+    const setupTimeAlerts = await this.checkSetupTimeAnomalies(tenantId);
     alerts.push(...setupTimeAlerts);
 
     return alerts;

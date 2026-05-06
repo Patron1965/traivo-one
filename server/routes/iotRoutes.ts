@@ -4,7 +4,7 @@ import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
-import { getTenantIdWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import crypto from "crypto";
@@ -138,7 +138,7 @@ app.get("/api/iot/rules", asyncHandler(async (req, res) => {
     res.json(iotRules);
 }));
 
-app.put("/api/iot/rules", asyncHandler(async (req, res) => {
+app.put("/api/iot/rules", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rulesSchema = z.object({
       enabled: z.boolean().optional(),
@@ -161,7 +161,7 @@ app.get("/api/iot/devices", asyncHandler(async (req, res) => {
     res.json(devices);
 }));
 
-app.post("/api/iot/devices", asyncHandler(async (req, res) => {
+app.post("/api/iot/devices", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertIotDeviceSchema.parse({ ...req.body, tenantId });
     const obj = await storage.getObject(data.objectId);
@@ -172,7 +172,7 @@ app.post("/api/iot/devices", asyncHandler(async (req, res) => {
     res.status(201).json(device);
 }));
 
-app.patch("/api/iot/devices/:id", asyncHandler(async (req, res) => {
+app.patch("/api/iot/devices/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getIotDevice(req.params.id);
     if (!existing || existing.tenantId !== tenantId) throw new NotFoundError("Enhet hittades inte.");
@@ -187,7 +187,7 @@ app.patch("/api/iot/devices/:id", asyncHandler(async (req, res) => {
     res.json(device);
 }));
 
-app.delete("/api/iot/devices/:id", asyncHandler(async (req, res) => {
+app.delete("/api/iot/devices/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getIotDevice(req.params.id);
     if (!existing || existing.tenantId !== tenantId) throw new NotFoundError("Enhet hittades inte.");
@@ -202,7 +202,7 @@ app.get("/api/iot/api-keys", asyncHandler(async (req, res) => {
     res.json(masked);
 }));
 
-app.post("/api/iot/api-keys", asyncHandler(async (req, res) => {
+app.post("/api/iot/api-keys", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const nameSchema = z.object({ name: z.string().min(1) });
     const parsed = nameSchema.safeParse(req.body);
@@ -212,7 +212,7 @@ app.post("/api/iot/api-keys", asyncHandler(async (req, res) => {
     res.status(201).json(key);
 }));
 
-app.delete("/api/iot/api-keys/:id", asyncHandler(async (req, res) => {
+app.delete("/api/iot/api-keys/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const keys = await storage.getIotApiKeys(tenantId);
     const key = keys.find(k => k.id === req.params.id);

@@ -221,9 +221,10 @@ app.post("/api/system/weekly-report/trigger", requireAdmin, asyncHandler(async (
 // ANOMALY MONITORING API ENDPOINTS
 // ============================================
 
-// Manually trigger anomaly check and get results
-app.get("/api/system/anomalies/check", asyncHandler(async (req, res) => {
-    const alerts = await anomalyMonitor.runManualCheck();
+// Manually trigger anomaly check and get results (admin/owner only — tenant-scoped)
+app.get("/api/system/anomalies/check", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const alerts = await anomalyMonitor.runManualCheck(tenantId);
     res.json({
       timestamp: new Date().toISOString(),
       alertCount: alerts.length,
@@ -1329,8 +1330,8 @@ app.post("/api/system/industry-packages/seed", requireAdmin, asyncHandler(async 
     res.json({ success: true, results });
 }));
 
-// Audit Logs - Get logs for current tenant
-app.get("/api/system/audit-logs", asyncHandler(async (req, res) => {
+// Audit Logs - Get logs for current tenant (admin/owner only — sensitive operational history)
+app.get("/api/system/audit-logs", requireAdmin, asyncHandler(async (req, res) => {
     const limit = parseInt(req.query.limit as string) || 100;
     const offset = parseInt(req.query.offset as string) || 0;
     const action = req.query.action as string;
