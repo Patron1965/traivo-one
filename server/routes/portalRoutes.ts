@@ -1488,7 +1488,7 @@ app.delete("/api/portal/self-bookings/:id", asyncHandler(async (req, res) => {
     if (!session) return;
     
     const booking = await storage.getSelfBooking(req.params.id);
-    if (!booking || booking.customerId !== session.customerId) {
+    if (!booking || booking.customerId !== session.customerId || !isObjectInScope(session, booking.objectId)) {
       throw new NotFoundError("Bokning hittades inte");
     }
     
@@ -2447,7 +2447,7 @@ app.patch("/api/portal/self-bookings/:id/cancel", asyncHandler(async (req, res) 
     
     const [booking] = await db.select().from(selfBookings)
       .where(and(eq(selfBookings.id, req.params.id), eq(selfBookings.customerId, session.customerId!)));
-    if (!booking) throw new NotFoundError("Bokning hittades inte");
+    if (!booking || !isObjectInScope(session, booking.objectId)) throw new NotFoundError("Bokning hittades inte");
     if (booking.status === "cancelled") throw new ValidationError("Bokningen är redan avbokad");
     
     const [updated] = await db.update(selfBookings)
@@ -2467,18 +2467,49 @@ app.get("/api/portal/notifications/summary", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     
-    const { portalMessages } = await import("@shared/schema");
-    const unreadMessages = await db.select({ count: sql<number>`count(*)` })
-      .from(portalMessages)
-      .where(and(
-        eq(portalMessages.tenantId, session.tenantId!),
-        eq(portalMessages.customerId, session.customerId!),
-        eq(portalMessages.sender, "staff"),
-        isNull(portalMessages.readAt)
-      ));
+    const { portalMessages, workOrders: woTbl } = await import("@shared/schema");
+    let unreadCount = 0;
+    if (session.scopedObjectIds) {
+      // Begränsad scope: räkna bara olästa meddelanden vars work_order tillhör scope
+      // (eller meddelanden utan work_order — generella kund-meddelanden förblir synliga).
+      const rows = await db.select({
+        id: portalMessages.id,
+        workOrderId: portalMessages.workOrderId,
+      })
+        .from(portalMessages)
+        .where(and(
+          eq(portalMessages.tenantId, session.tenantId!),
+          eq(portalMessages.customerId, session.customerId!),
+          eq(portalMessages.sender, "staff"),
+          isNull(portalMessages.readAt)
+        ));
+      const woIds = Array.from(new Set(rows.map(r => r.workOrderId).filter((x): x is string => !!x)));
+      const woMap = new Map<string, string | null>();
+      if (woIds.length > 0) {
+        const wos = await db.select({ id: woTbl.id, objectId: woTbl.objectId })
+          .from(woTbl)
+          .where(inArray(woTbl.id, woIds));
+        for (const w of wos) woMap.set(w.id, w.objectId);
+      }
+      unreadCount = rows.filter(r => {
+        if (!r.workOrderId) return true; // generellt kund-meddelande
+        const objId = woMap.get(r.workOrderId);
+        return objId ? session.scopedObjectIds!.has(objId) : false;
+      }).length;
+    } else {
+      const unreadMessages = await db.select({ count: sql<number>`count(*)` })
+        .from(portalMessages)
+        .where(and(
+          eq(portalMessages.tenantId, session.tenantId!),
+          eq(portalMessages.customerId, session.customerId!),
+          eq(portalMessages.sender, "staff"),
+          isNull(portalMessages.readAt)
+        ));
+      unreadCount = Number(unreadMessages[0]?.count || 0);
+    }
     
     res.json({
-      unreadMessages: Number(unreadMessages[0]?.count || 0),
+      unreadMessages: unreadCount,
     });
 }));
 
