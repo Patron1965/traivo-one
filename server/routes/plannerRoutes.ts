@@ -1850,8 +1850,14 @@ app.post("/api/planner-search-filters", isAuthenticated, requireTenantWithFallba
 
 app.patch("/api/planner-search-filters/:id", isAuthenticated, requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req: any, res) => {
   const tenantId = getTenantIdWithFallback(req);
+  const userId = req.user?.claims?.sub;
   const existing = await storage.getPlannerSearchFilter(req.params.id, tenantId);
   if (!existing) throw new NotFoundError("Sökmönster hittades inte");
+  // Agarskapskontroll: personliga filter far bara redigeras av skaparen.
+  // Delade filter (scope='shared') kan redigeras av vilken planner som helst i tenanten.
+  if (existing.scope === "personal" && existing.createdBy && existing.createdBy !== userId) {
+    throw new ForbiddenError("Du kan bara redigera dina egna personliga sökmönster");
+  }
   const partial = insertPlannerSearchFilterSchema.partial().safeParse(req.body);
   if (!partial.success) throw new ValidationError(formatZodError(partial.error));
   const { tenantId: _ignoreTenant, createdBy: _ignoreCreator, ...patch } = partial.data;
@@ -1862,8 +1868,12 @@ app.patch("/api/planner-search-filters/:id", isAuthenticated, requireTenantWithF
 
 app.delete("/api/planner-search-filters/:id", isAuthenticated, requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req: any, res) => {
   const tenantId = getTenantIdWithFallback(req);
+  const userId = req.user?.claims?.sub;
   const existing = await storage.getPlannerSearchFilter(req.params.id, tenantId);
   if (!existing) throw new NotFoundError("Sökmönster hittades inte");
+  if (existing.scope === "personal" && existing.createdBy && existing.createdBy !== userId) {
+    throw new ForbiddenError("Du kan bara ta bort dina egna personliga sökmönster");
+  }
   await storage.deletePlannerSearchFilter(req.params.id, tenantId);
   res.status(204).send();
 }));
