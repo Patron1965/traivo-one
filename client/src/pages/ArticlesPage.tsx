@@ -1151,6 +1151,32 @@ export default function ArticlesPage() {
                   />
                 </div>
               </div>
+              {(() => {
+                const marginOre = (formData.listPrice || 0) - (formData.cost || 0);
+                const marginKr = (marginOre / 100).toFixed(2);
+                const marginPct = formData.listPrice > 0
+                  ? Math.round((marginOre / formData.listPrice) * 1000) / 10
+                  : null;
+                const positive = marginOre >= 0;
+                return (
+                  <div
+                    className={`rounded-md border px-3 py-2 text-sm flex items-center justify-between ${
+                      positive
+                        ? "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-900 text-green-800 dark:text-green-300"
+                        : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900 text-red-800 dark:text-red-300"
+                    }`}
+                    data-testid="text-article-margin"
+                  >
+                    <span className="font-medium">Marginal per enhet</span>
+                    <span className="font-mono">
+                      {positive ? "+" : ""}{marginKr} kr
+                      {marginPct !== null && (
+                        <span className="ml-2 opacity-80">({marginPct}%)</span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })()}
 
               <div className="space-y-2">
                 <Label htmlFor="quantityMode">Kvantitetsläge</Label>

@@ -182,6 +182,73 @@ app.get("/api/customers/:id/stats", asyncHandler(async (req, res) => {
   res.json(stats);
 }));
 
+// Lönsamhet per kund: aggregerar work_orders.cachedValue/cachedCost + månadstrend
+app.get("/api/customers/:id/profitability", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customer = await storage.getCustomer(req.params.id);
+  if (!verifyTenantOwnership(customer, tenantId)) throw new NotFoundError("Kund");
+
+  const { db } = await import("../db");
+  const { workOrders } = await import("@shared/schema");
+  const { and, eq, sql } = await import("drizzle-orm");
+
+  const totalsRow = await db
+    .select({
+      orderCount: sql<number>`COUNT(*)::int`,
+      totalRevenue: sql<string>`COALESCE(SUM(${workOrders.cachedValue}), 0)::bigint`,
+      totalCost: sql<string>`COALESCE(SUM(${workOrders.cachedCost}), 0)::bigint`,
+    })
+    .from(workOrders)
+    .where(and(
+      eq(workOrders.tenantId, tenantId),
+      eq(workOrders.customerId, req.params.id),
+      sql`${workOrders.deletedAt} IS NULL`,
+    ));
+
+  const t = totalsRow[0] || { orderCount: 0, totalRevenue: 0, totalCost: 0 };
+  const totalRevenue = Number(t.totalRevenue) || 0;
+  const totalCost = Number(t.totalCost) || 0;
+  const totalMargin = totalRevenue - totalCost;
+
+  const monthlyRows = await db
+    .select({
+      month: sql<string>`to_char(date_trunc('month', COALESCE(${workOrders.scheduledDate}, ${workOrders.createdAt})), 'YYYY-MM')`,
+      revenue: sql<string>`COALESCE(SUM(${workOrders.cachedValue}), 0)::bigint`,
+      cost: sql<string>`COALESCE(SUM(${workOrders.cachedCost}), 0)::bigint`,
+      orders: sql<number>`COUNT(*)::int`,
+    })
+    .from(workOrders)
+    .where(and(
+      eq(workOrders.tenantId, tenantId),
+      eq(workOrders.customerId, req.params.id),
+      sql`${workOrders.deletedAt} IS NULL`,
+      sql`COALESCE(${workOrders.scheduledDate}, ${workOrders.createdAt}) >= NOW() - INTERVAL '12 months'`,
+    ))
+    .groupBy(sql`date_trunc('month', COALESCE(${workOrders.scheduledDate}, ${workOrders.createdAt}))`)
+    .orderBy(sql`date_trunc('month', COALESCE(${workOrders.scheduledDate}, ${workOrders.createdAt}))`);
+
+  res.json({
+    customerId: req.params.id,
+    orderCount: t.orderCount,
+    totalRevenue,
+    totalCost,
+    totalMargin,
+    marginPercent: totalRevenue > 0 ? Math.round((totalMargin / totalRevenue) * 100) : 0,
+    monthly: monthlyRows.map(m => {
+      const rev = Number(m.revenue) || 0;
+      const c = Number(m.cost) || 0;
+      return {
+        month: m.month,
+        revenue: rev,
+        cost: c,
+        margin: rev - c,
+        marginPercent: rev > 0 ? Math.round(((rev - c) / rev) * 100) : 0,
+        orders: m.orders,
+      };
+    }),
+  });
+}));
+
 app.get("/api/customers/:id", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const customer = await storage.getCustomer(req.params.id);

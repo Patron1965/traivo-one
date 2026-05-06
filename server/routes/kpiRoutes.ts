@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
 import { requireAdmin } from "../tenant-middleware";
-import { objects, workOrders, objectMetadata, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema } from "@shared/schema";
+import { objects, workOrders, objectMetadata, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { sendEmail } from "../replit_integrations/resend";
 import { dashboardCache, DASHBOARD_CACHE_TTL } from "../services/dashboardCache";
@@ -157,6 +157,57 @@ app.get("/api/kpis/weekly", asyncHandler(async (req, res) => {
       },
     );
     res.json(payload);
+}));
+
+// Marginal per artikel: aggregerar work_order_lines × articles
+app.get("/api/kpis/article-margins", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const rawLimit = parseInt(String(req.query.limit || "50"), 10) || 50;
+    const limit = Math.min(Math.max(1, rawLimit), 200);
+
+    const rows = await db
+      .select({
+        articleId: workOrderLines.articleId,
+        articleNumber: articles.articleNumber,
+        name: articles.name,
+        unitCost: articles.cost,
+        listPrice: articles.listPrice,
+        totalRevenue: sql<string>`COALESCE(SUM(${workOrderLines.quantity} * COALESCE(${workOrderLines.resolvedPrice}, 0)), 0)::bigint`,
+        totalCost: sql<string>`COALESCE(SUM(${workOrderLines.quantity} * COALESCE(${workOrderLines.resolvedCost}, 0)), 0)::bigint`,
+        totalQuantity: sql<number>`COALESCE(SUM(${workOrderLines.quantity}), 0)::numeric`,
+        lineCount: sql<number>`COUNT(*)::int`,
+      })
+      .from(workOrderLines)
+      .innerJoin(workOrders, eq(workOrderLines.workOrderId, workOrders.id))
+      .leftJoin(articles, eq(workOrderLines.articleId, articles.id))
+      .where(and(
+        eq(workOrderLines.tenantId, tenantId),
+        sql`${workOrders.deletedAt} IS NULL`,
+      ))
+      .groupBy(workOrderLines.articleId, articles.articleNumber, articles.name, articles.cost, articles.listPrice)
+      .orderBy(desc(sql`SUM(${workOrderLines.quantity} * COALESCE(${workOrderLines.resolvedPrice}, 0))`))
+      .limit(limit);
+
+    const result = rows.map(r => {
+      const revenue = Number(r.totalRevenue) || 0;
+      const cost = Number(r.totalCost) || 0;
+      const margin = revenue - cost;
+      return {
+        articleId: r.articleId,
+        articleNumber: r.articleNumber,
+        name: r.name,
+        unitCost: r.unitCost,
+        listPrice: r.listPrice,
+        totalRevenue: revenue,
+        totalCost: cost,
+        totalMargin: margin,
+        marginPercent: revenue > 0 ? Math.round((margin / revenue) * 100) : 0,
+        totalQuantity: Number(r.totalQuantity) || 0,
+        lineCount: r.lineCount,
+      };
+    });
+
+    res.json(result);
 }));
 
 app.post("/api/system/weekly-report/trigger", requireAdmin, asyncHandler(async (req, res) => {

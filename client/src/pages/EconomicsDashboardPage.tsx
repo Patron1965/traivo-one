@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, TrendingUp, TrendingDown, DollarSign, Users, MapPin, BarChart3, PieChart as PieChartIcon, AlertTriangle } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, DollarSign, Users, MapPin, BarChart3, PieChart as PieChartIcon, AlertTriangle, Package } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
@@ -30,6 +30,22 @@ export default function EconomicsDashboardPage() {
 
   const { data: clusters = [] } = useQuery<Cluster[]>({
     queryKey: ["/api/clusters"],
+  });
+
+  const { data: articleMargins = [] } = useQuery<Array<{
+    articleId: string;
+    articleNumber: string | null;
+    name: string | null;
+    unitCost: number | null;
+    listPrice: number | null;
+    totalRevenue: number;
+    totalCost: number;
+    totalMargin: number;
+    marginPercent: number;
+    totalQuantity: number;
+    lineCount: number;
+  }>>({
+    queryKey: ["/api/kpis/article-margins"],
   });
 
   const clusterMap = useMemo(() => new Map(clusters.map(c => [c.id, c])), [clusters]);
@@ -405,6 +421,53 @@ export default function EconomicsDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card data-testid="card-article-margins">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Package className="h-5 w-5" />
+            Marginal per artikel
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {articleMargins.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">Inga artikelrader att analysera ännu.</p>
+          ) : (
+            <ScrollArea className="h-80">
+              <div className="space-y-2">
+                {articleMargins.slice(0, 20).map((a) => (
+                  <div
+                    key={a.articleId}
+                    className="flex items-center justify-between gap-3 p-2 rounded bg-muted/30"
+                    data-testid={`article-margin-row-${a.articleId}`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        {a.articleNumber && (
+                          <Badge variant="outline" className="text-[10px] font-mono">{a.articleNumber}</Badge>
+                        )}
+                        <span className="font-medium text-sm truncate">{a.name || "Okänd artikel"}</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {a.lineCount} rader · {Math.round(a.totalQuantity).toLocaleString()} enheter
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-xs text-muted-foreground">
+                        {(a.totalRevenue / 100).toLocaleString()} kr intäkt
+                      </div>
+                      <div className={`text-sm font-medium ${a.totalMargin >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        {a.totalMargin >= 0 ? "+" : ""}{(a.totalMargin / 100).toLocaleString()} kr
+                        <span className="ml-1 text-xs opacity-75">({a.marginPercent}%)</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card data-testid="card-top-customers">

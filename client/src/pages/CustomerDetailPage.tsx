@@ -15,7 +15,7 @@ import {
   ArrowLeft, Building2, Layers, Package, ClipboardList, Phone, Mail, MapPin,
   ChevronDown, ChevronRight, Users, Home, Container, Trash2, TreePine, Map as MapIcon,
   Repeat, Receipt, GitBranch, Hash, FileText, AlertTriangle, Loader2, Search, X,
-  Pyramid, DoorClosed, ArrowUp, ArrowDown, ArrowUpDown,
+  Pyramid, DoorClosed, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, TrendingDown,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { MapContainer, TileLayer, Circle, Popup, useMap, useMapEvents } from "react-leaflet";
@@ -478,6 +478,131 @@ interface MarkerClusterLayerProps {
   sync: SyncState;
   onSelectObject: (id: string | null) => void;
   onHoverObject: (id: string | null) => void;
+}
+
+interface ProfitabilityResponse {
+  customerId: string;
+  orderCount: number;
+  totalRevenue: number;
+  totalCost: number;
+  totalMargin: number;
+  marginPercent: number;
+  monthly: Array<{
+    month: string;
+    revenue: number;
+    cost: number;
+    margin: number;
+    marginPercent: number;
+    orders: number;
+  }>;
+}
+
+function CustomerProfitabilityTab({ customerId }: { customerId: string }) {
+  const { data, isLoading, isError, refetch } = useQuery<ProfitabilityResponse>({
+    queryKey: ["/api/customers", customerId, "profitability"],
+    queryFn: async () => {
+      const r = await fetch(`/api/customers/${encodeURIComponent(customerId)}/profitability`, { credentials: "include" });
+      if (!r.ok) throw new Error("Kunde inte hämta lönsamhet");
+      return r.json();
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-6 flex items-center justify-center text-muted-foreground gap-2">
+          <Loader2 className="h-4 w-4 animate-spin" /> Laddar lönsamhet...
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <Card>
+        <CardContent className="p-6 flex items-center gap-2 text-sm text-destructive">
+          <AlertTriangle className="h-4 w-4" /> Kunde inte hämta lönsamhet.
+          <Button variant="ghost" size="sm" onClick={() => refetch()}>Försök igen</Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const positive = data.totalMargin >= 0;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <Card data-testid="card-customer-revenue">
+          <CardContent className="p-4">
+            <div className="text-xs text-muted-foreground">Intäkt</div>
+            <div className="text-xl font-bold">{(data.totalRevenue / 100).toLocaleString()} kr</div>
+          </CardContent>
+        </Card>
+        <Card data-testid="card-customer-cost">
+          <CardContent className="p-4">
+            <div className="text-xs text-muted-foreground">Kostnad</div>
+            <div className="text-xl font-bold">{(data.totalCost / 100).toLocaleString()} kr</div>
+          </CardContent>
+        </Card>
+        <Card data-testid="card-customer-margin">
+          <CardContent className="p-4">
+            <div className="text-xs text-muted-foreground">Marginal</div>
+            <div className={`text-xl font-bold flex items-center gap-1 ${positive ? "text-green-600" : "text-red-600"}`}>
+              {positive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+              {positive ? "+" : ""}{(data.totalMargin / 100).toLocaleString()} kr
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">{data.marginPercent}% marginal</div>
+          </CardContent>
+        </Card>
+        <Card data-testid="card-customer-orders">
+          <CardContent className="p-4">
+            <div className="text-xs text-muted-foreground">Ordrar</div>
+            <div className="text-xl font-bold">{data.orderCount.toLocaleString()}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Månadstrend (senaste 12 månaderna)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {data.monthly.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">Inga ordrar med ekonomisk data senaste året.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="table-customer-profitability-monthly">
+                <thead>
+                  <tr className="text-left text-xs text-muted-foreground border-b">
+                    <th className="py-2 pr-3">Månad</th>
+                    <th className="py-2 pr-3 text-right">Ordrar</th>
+                    <th className="py-2 pr-3 text-right">Intäkt</th>
+                    <th className="py-2 pr-3 text-right">Kostnad</th>
+                    <th className="py-2 pr-3 text-right">Marginal</th>
+                    <th className="py-2 text-right">%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.monthly.map((m) => (
+                    <tr key={m.month} className="border-b last:border-0" data-testid={`row-monthly-${m.month}`}>
+                      <td className="py-1.5 pr-3 font-mono text-xs">{m.month}</td>
+                      <td className="py-1.5 pr-3 text-right">{m.orders}</td>
+                      <td className="py-1.5 pr-3 text-right">{(m.revenue / 100).toLocaleString()} kr</td>
+                      <td className="py-1.5 pr-3 text-right">{(m.cost / 100).toLocaleString()} kr</td>
+                      <td className={`py-1.5 pr-3 text-right font-medium ${m.margin >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        {m.margin >= 0 ? "+" : ""}{(m.margin / 100).toLocaleString()} kr
+                      </td>
+                      <td className="py-1.5 text-right text-xs text-muted-foreground">{m.marginPercent}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 function MarkerClusterLayer({ points, sync, onSelectObject, onHoverObject }: MarkerClusterLayerProps) {
@@ -1083,6 +1208,9 @@ export default function CustomerDetailPage() {
               <TabsTrigger value="delivery-preferences" data-testid="tab-delivery-preferences">
                 Leveranspreferenser
               </TabsTrigger>
+              <TabsTrigger value="profitability" data-testid="tab-profitability">
+                <TrendingUp className="h-4 w-4 mr-2" /> Lönsamhet
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="tree">
@@ -1332,6 +1460,10 @@ export default function CustomerDetailPage() {
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="profitability">
+              <CustomerProfitabilityTab customerId={customer.id} />
             </TabsContent>
 
             <TabsContent value="delivery-preferences">
