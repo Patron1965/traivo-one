@@ -360,7 +360,7 @@ export default function ArticlesPage() {
       showPreviousValue: article.showPreviousValue || false,
       isInfoCarrier: article.isInfoCarrier || false,
       limitationType: article.limitationType || "unlimited",
-      quantityMode: (article as any).quantityMode || "use_object_quantity",
+      quantityMode: article.quantityMode || "use_object_quantity",
     });
     setDialogOpen(true);
   };

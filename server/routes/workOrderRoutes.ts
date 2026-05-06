@@ -779,11 +779,16 @@ app.post("/api/work-orders/:workOrderId/lines", asyncHandler(async (req, res) =>
     priceInfo = await storage.resolveArticlePrice(tenantId, articleId, workOrder.customerId);
   }
 
+  const [articleRow] = await db.select({ quantityMode: articles.quantityMode })
+    .from(articles)
+    .where(and(eq(articles.id, articleId), eq(articles.tenantId, tenantId)));
+  const effectiveQuantity = articleRow?.quantityMode === 'single_per_task' ? 1 : quantity;
+
   const lineData = insertWorkOrderLineSchema.parse({
     tenantId,
     workOrderId: req.params.workOrderId,
     articleId,
-    quantity,
+    quantity: effectiveQuantity,
     resolvedPrice: priceInfo.price,
     resolvedCost: priceInfo.cost,
     resolvedProductionMinutes: priceInfo.productionMinutes,
@@ -1137,11 +1142,16 @@ app.post("/api/work-orders/bulk-apply-lines", asyncHandler(async (req, res) => {
         priceInfo = await storage.resolveArticlePrice(tenantId, line.articleId!, targetOrder!.customerId);
       }
 
+      const [articleRow] = await db.select({ quantityMode: articles.quantityMode })
+        .from(articles)
+        .where(and(eq(articles.id, line.articleId!), eq(articles.tenantId, tenantId)));
+      const effectiveQuantity = articleRow?.quantityMode === 'single_per_task' ? 1 : line.quantity;
+
       const lineData = insertWorkOrderLineSchema.parse({
         tenantId,
         workOrderId: targetId,
         articleId: line.articleId,
-        quantity: line.quantity,
+        quantity: effectiveQuantity,
         resolvedPrice: priceInfo.price,
         resolvedCost: priceInfo.cost,
         resolvedProductionMinutes: priceInfo.productionMinutes,
