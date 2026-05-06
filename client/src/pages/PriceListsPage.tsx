@@ -49,6 +49,7 @@ import {
   ChevronDown,
   ChevronUp,
   ListTree,
+  TrendingUp,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -95,6 +96,34 @@ export default function PriceListsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingPriceList, setEditingPriceList] = useState<PriceList | null>(null);
   const [priceListToDelete, setPriceListToDelete] = useState<PriceList | null>(null);
+  const [indexDialogOpen, setIndexDialogOpen] = useState(false);
+  const [priceListForIndex, setPriceListForIndex] = useState<PriceList | null>(null);
+  const [indexPercentage, setIndexPercentage] = useState("");
+
+  const openIndexDialog = (pl: PriceList) => {
+    setPriceListForIndex(pl);
+    setIndexPercentage("");
+    setIndexDialogOpen(true);
+  };
+
+  const indexMutation = useMutation({
+    mutationFn: async ({ id, percentage }: { id: string; percentage: number }) => {
+      return apiRequest("POST", `/api/price-lists/${id}/apply-index-adjustment`, { percentage });
+    },
+    onSuccess: async (res: any) => {
+      const data = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/price-lists"] });
+      toast({
+        title: "Indexjustering applicerad",
+        description: `${data.updatedArticles} artiklar uppdaterade med ${data.percentage}%.`,
+      });
+      setIndexDialogOpen(false);
+      setPriceListForIndex(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Kunde inte indexjustera", description: error.message, variant: "destructive" });
+    },
+  });
   const [formData, setFormData] = useState<PriceListFormData>(emptyFormData);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -331,6 +360,25 @@ export default function PriceListsPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {priceList.indexAdjusted && (
+                          <Badge
+                            variant="outline"
+                            className="mr-1 text-xs"
+                            data-testid={`badge-indexed-${priceList.id}`}
+                            title={`Indexjusterad ${priceList.indexPercentage ?? ""}% ${priceList.indexDate ? new Date(priceList.indexDate).toLocaleDateString("sv-SE") : ""}`}
+                          >
+                            Index {priceList.indexPercentage ?? ""}%
+                          </Badge>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openIndexDialog(priceList)}
+                          title="Indexjustering"
+                          data-testid={`button-index-price-list-${priceList.id}`}
+                        >
+                          <TrendingUp className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -524,6 +572,60 @@ export default function PriceListsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={indexDialogOpen} onOpenChange={setIndexDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Indexjustering</DialogTitle>
+            <DialogDescription>
+              Justera alla priser i prislistan "{priceListForIndex?.name}" med en procentsats.
+              Operationen är permanent — befintliga arbetsorder med fryst snapshot påverkas inte.
+              {priceListForIndex?.indexAdjusted && (
+                <span className="block mt-2 text-amber-600 dark:text-amber-400">
+                  Tidigare justering: {priceListForIndex.indexPercentage}% den{" "}
+                  {priceListForIndex.indexDate
+                    ? new Date(priceListForIndex.indexDate).toLocaleDateString("sv-SE")
+                    : "—"}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label htmlFor="index-pct">Procentsats (t.ex. 3.5 för +3.5%)</Label>
+            <Input
+              id="index-pct"
+              type="number"
+              step="0.1"
+              value={indexPercentage}
+              onChange={(e) => setIndexPercentage(e.target.value)}
+              placeholder="3.5"
+              data-testid="input-index-percentage"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIndexDialogOpen(false)}>
+              Avbryt
+            </Button>
+            <Button
+              onClick={() => {
+                const pct = parseFloat(indexPercentage);
+                if (!isFinite(pct) || pct <= -100) {
+                  toast({ title: "Ogiltig procentsats", variant: "destructive" });
+                  return;
+                }
+                if (priceListForIndex) {
+                  indexMutation.mutate({ id: priceListForIndex.id, percentage: pct });
+                }
+              }}
+              disabled={indexMutation.isPending}
+              data-testid="button-confirm-index"
+            >
+              {indexMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Applicera indexjustering
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

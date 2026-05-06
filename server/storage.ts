@@ -604,6 +604,9 @@ export interface IStorage {
   updateArticleComponent(id: string, tenantId: string, data: Partial<InsertArticleComponent>): Promise<ArticleComponent | undefined>;
   deleteArticleComponent(id: string, tenantId: string): Promise<void>;
 
+  // ADR v3 (F6): Index-justering pa prislista
+  applyIndexAdjustmentToPriceList(priceListId: string, tenantId: string, percentage: number): Promise<{ priceListId: string; percentage: number; updatedArticles: number; indexDate: Date }>;
+
   // ADR v3 (F5): Frozen WO snapshot + Invoice Recalculation Log
   freezeWorkOrder(workOrderId: string, tenantId: string, opts?: { force?: boolean }): Promise<{ workOrderId: string; frozenUnit: string; frozenQuantity: number; frozenUnitPrice: number; frozenUnitCost: number; frozenUnitTime: number; alreadyFrozen: boolean }>;
   recalculateWorkOrder(workOrderId: string, tenantId: string, triggeredBy: string | null, reason?: string): Promise<{ previousValue: number; newValue: number; delta: number; logId: string | null }>;
@@ -5332,6 +5335,41 @@ export class DatabaseStorage implements IStorage {
   async deleteArticleComponent(id: string, tenantId: string): Promise<void> {
     await db.delete(articleComponents)
       .where(and(eq(articleComponents.id, id), eq(articleComponents.tenantId, tenantId)));
+  }
+
+  // ============================================
+  // ADR v3 (F6): Index-justering pa prislista
+  // ============================================
+  async applyIndexAdjustmentToPriceList(
+    priceListId: string,
+    tenantId: string,
+    percentage: number
+  ): Promise<{ priceListId: string; percentage: number; updatedArticles: number; indexDate: Date }> {
+    if (!isFinite(percentage) || percentage <= -100) {
+      throw new Error("Ogiltig procentsats");
+    }
+    const list = await this.getPriceList(priceListId);
+    if (!list || list.tenantId !== tenantId) throw new Error("Prislista hittades inte");
+    const factor = 1 + percentage / 100;
+    const indexDate = new Date();
+    // Atomisk transaktion — alla rader och prislista uppdateras eller ingen.
+    // Tenant-skydd: priceListId-WHERE i UPDATE forhindrar cross-tenant-skrivning
+    // aven om en rad mot formodan har inkonsistent priceListId-koppling.
+    let updated = 0;
+    await db.transaction(async (tx) => {
+      const result = await tx.execute(sql`
+        UPDATE price_list_articles
+        SET price = ROUND(price * ${factor})
+        WHERE price_list_id = ${priceListId}
+      `);
+      updated = (result as any).rowCount ?? 0;
+      await tx.update(priceLists).set({
+        indexAdjusted: true,
+        indexDate,
+        indexPercentage: percentage,
+      }).where(and(eq(priceLists.id, priceListId), eq(priceLists.tenantId, tenantId)));
+    });
+    return { priceListId, percentage, updatedArticles: updated, indexDate };
   }
 
   // ============================================

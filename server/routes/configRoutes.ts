@@ -269,6 +269,20 @@ app.patch("/api/price-lists/:id", asyncHandler(async (req, res) => {
     res.json(priceList);
 }));
 
+// ADR v3 (F6): Index-justering — applicerar % uppdatering pa alla rader i en prislista
+app.post("/api/price-lists/:id/apply-index-adjustment", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const schema = z.object({ percentage: z.number().gt(-100).lt(1000) });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
+    try {
+      const result = await storage.applyIndexAdjustmentToPriceList(req.params.id, tenantId, parsed.data.percentage);
+      res.json(result);
+    } catch (err: any) {
+      res.status(404).json({ error: err.message || "Kunde inte indexjustera" });
+    }
+}));
+
 app.delete("/api/price-lists/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getPriceList(req.params.id);

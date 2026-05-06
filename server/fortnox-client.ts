@@ -478,6 +478,27 @@ export async function exportWorkOrderToFortnox(
       }
 
       const invoiceRows = [];
+      // ADR v3 (F6): Anvand frozen-snapshot om WO ar fryst.
+      // frozenUnitPrice ar ett WO-niva-genomsnitt (totalPrice / totalQty),
+      // sa att applicera det per rad ger fel summa. Lasningen: skala varje
+      // rads pris proportionellt sa att fakturasumman exakt matchar
+      // frozenUnitPrice * frozenQuantity (audit-snapshotet) men artikel-
+      // granulariteten bevaras.
+      const useFrozen =
+        (workOrder as any).frozenUnitPrice != null &&
+        (workOrder as any).frozenQuantity != null &&
+        Number((workOrder as any).frozenQuantity) > 0;
+      let scale = 1;
+      if (useFrozen) {
+        const currentTotal = workOrderLines.reduce(
+          (s, l) => s + Number(l.resolvedPrice ?? 0) * Number(l.quantity ?? 1),
+          0
+        );
+        const frozenTotal =
+          Number((workOrder as any).frozenUnitPrice) *
+          Number((workOrder as any).frozenQuantity);
+        scale = currentTotal > 0 ? frozenTotal / currentTotal : 1;
+      }
       for (const line of workOrderLines) {
         if (payer?.articleTypes?.length && !payer.articleTypes.includes(line.articleId)) {
           continue;
@@ -490,11 +511,15 @@ export async function exportWorkOrderToFortnox(
         }
 
         const quantity = line.quantity * (payerPercentage / 100);
+        const basePrice = Number(line.resolvedPrice ?? 0);
+        const price = useFrozen
+          ? Math.round(basePrice * scale * 100) / 100
+          : (line.resolvedPrice || undefined);
         invoiceRows.push({
           ArticleNumber: articleMapping.fortnoxId,
           DeliveredQuantity: quantity,
-          Description: line.notes || undefined,
-          Price: line.resolvedPrice || undefined,
+          Description: line.notes || (useFrozen ? "Fryst pris (audit-snapshot)" : undefined),
+          Price: price,
           CostCenter: invoiceExport.costCenter || undefined,
           Project: invoiceExport.project || undefined,
         });
