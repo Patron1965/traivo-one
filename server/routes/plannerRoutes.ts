@@ -8,7 +8,7 @@ import { getTenantIdWithFallback, requireTenantWithFallback, requireRole } from 
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
-import { workSessions, workEntries, equipmentBookings, deviationReports, teamMembers } from "@shared/schema";
+import { workSessions, workEntries, equipmentBookings, deviationReports, teamMembers, insertPlannerSearchFilterSchema } from "@shared/schema";
 
 import { notificationService } from "../notifications";
 import { validateSchedule, type ConstraintContext, type ScheduleMove } from "../planning/constraintEngine";
@@ -1814,6 +1814,58 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
     }
 
     res.json({ dates, rows: heatmapRows, summary, weeks, teamOptions, unassignedSlaByDate });
+}));
+
+// ============================================
+// ADR v3 (F3): Planner Search Filters CRUD
+// ============================================
+async function assertTeamInTenant(teamId: string | null | undefined, tenantId: string) {
+  if (!teamId) return;
+  const team = await storage.getTeam(teamId);
+  if (!team || team.tenantId !== tenantId) {
+    throw new ValidationError("Ogiltigt team för denna tenant");
+  }
+}
+
+app.get("/api/planner-search-filters", isAuthenticated, requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req: any, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const userId = req.user?.claims?.sub;
+  const rows = await storage.getPlannerSearchFilters(tenantId, userId);
+  res.json(rows);
+}));
+
+app.post("/api/planner-search-filters", isAuthenticated, requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req: any, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const userId = req.user?.claims?.sub;
+  const parsed = insertPlannerSearchFilterSchema.safeParse({
+    ...req.body,
+    tenantId,
+    createdBy: userId ?? null,
+  });
+  if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+  await assertTeamInTenant(parsed.data.teamId, tenantId);
+  const row = await storage.createPlannerSearchFilter(parsed.data);
+  res.status(201).json(row);
+}));
+
+app.patch("/api/planner-search-filters/:id", isAuthenticated, requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req: any, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getPlannerSearchFilter(req.params.id, tenantId);
+  if (!existing) throw new NotFoundError("Sökmönster hittades inte");
+  const partial = insertPlannerSearchFilterSchema.partial().safeParse(req.body);
+  if (!partial.success) throw new ValidationError(formatZodError(partial.error));
+  const { tenantId: _ignoreTenant, createdBy: _ignoreCreator, ...patch } = partial.data;
+  if ("teamId" in patch) await assertTeamInTenant(patch.teamId, tenantId);
+  const row = await storage.updatePlannerSearchFilter(req.params.id, tenantId, patch);
+  res.json(row);
+}));
+
+app.delete("/api/planner-search-filters/:id", isAuthenticated, requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req: any, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getPlannerSearchFilter(req.params.id, tenantId);
+  if (!existing) throw new NotFoundError("Sökmönster hittades inte");
+  await storage.deletePlannerSearchFilter(req.params.id, tenantId);
+  res.status(204).send();
 }));
 
 

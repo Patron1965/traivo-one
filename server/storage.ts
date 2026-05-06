@@ -50,6 +50,7 @@ import {
   type StructuralArticle, type InsertStructuralArticle,
   type OrderConcept, type InsertOrderConcept,
   type ConceptFilter, type InsertConceptFilter,
+  type PlannerSearchFilter, type InsertPlannerSearchFilter,
   type Assignment, type InsertAssignment,
   type AssignmentArticle, type InsertAssignmentArticle,
   type SubscriptionChange, type InsertSubscriptionChange,
@@ -118,7 +119,7 @@ import {
   industryPackages, industryPackageData, tenantPackageInstallations,
   metadataDefinitions, objectMetadata, objectPayers,
   objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, objectTimeRestrictions, structuralArticles,
-  orderConcepts, conceptFilters, assignments, assignmentArticles, subscriptionChanges,
+  orderConcepts, conceptFilters, plannerSearchFilters, assignments, assignmentArticles, subscriptionChanges,
   taskDependencyTemplates, taskDependencyInstances, invoiceRules, orderConceptRunLogs,
   orderConceptObjects, orderConceptArticles, articleObjectMappings,
   invoiceConfigurations, documentConfigurations, deliverySchedules,
@@ -586,6 +587,13 @@ export interface IStorage {
   createConceptFilter(filter: InsertConceptFilter): Promise<ConceptFilter>;
   updateConceptFilter(id: string, orderConceptId: string, data: Partial<InsertConceptFilter>): Promise<ConceptFilter | undefined>;
   deleteConceptFilter(id: string, orderConceptId: string): Promise<void>;
+
+  // ADR v3 (F3): Planner Search Filters
+  getPlannerSearchFilters(tenantId: string, userId?: string): Promise<PlannerSearchFilter[]>;
+  getPlannerSearchFilter(id: string, tenantId: string): Promise<PlannerSearchFilter | undefined>;
+  createPlannerSearchFilter(filter: InsertPlannerSearchFilter): Promise<PlannerSearchFilter>;
+  updatePlannerSearchFilter(id: string, tenantId: string, data: Partial<InsertPlannerSearchFilter>): Promise<PlannerSearchFilter | undefined>;
+  deletePlannerSearchFilter(id: string, tenantId: string): Promise<void>;
   
   // Assignments
   getAssignments(tenantId: string, options?: { status?: string; resourceId?: string; clusterId?: string; startDate?: Date; endDate?: Date }): Promise<Assignment[]>;
@@ -5234,6 +5242,45 @@ export class DatabaseStorage implements IStorage {
       eq(conceptFilters.id, id),
       eq(conceptFilters.orderConceptId, orderConceptId)
     ));
+  }
+
+  // ============================================
+  // ADR v3 (F3): Planner Search Filters
+  // ============================================
+  async getPlannerSearchFilters(tenantId: string, userId?: string): Promise<PlannerSearchFilter[]> {
+    const visibility = userId
+      ? or(
+          eq(plannerSearchFilters.scope, "shared"),
+          and(eq(plannerSearchFilters.scope, "personal"), eq(plannerSearchFilters.createdBy, userId))
+        )
+      : eq(plannerSearchFilters.scope, "shared");
+    return db.select().from(plannerSearchFilters)
+      .where(and(eq(plannerSearchFilters.tenantId, tenantId), visibility))
+      .orderBy(desc(plannerSearchFilters.updatedAt));
+  }
+
+  async getPlannerSearchFilter(id: string, tenantId: string): Promise<PlannerSearchFilter | undefined> {
+    const [row] = await db.select().from(plannerSearchFilters)
+      .where(and(eq(plannerSearchFilters.id, id), eq(plannerSearchFilters.tenantId, tenantId)));
+    return row || undefined;
+  }
+
+  async createPlannerSearchFilter(filter: InsertPlannerSearchFilter): Promise<PlannerSearchFilter> {
+    const [row] = await db.insert(plannerSearchFilters).values(filter).returning();
+    return row;
+  }
+
+  async updatePlannerSearchFilter(id: string, tenantId: string, data: Partial<InsertPlannerSearchFilter>): Promise<PlannerSearchFilter | undefined> {
+    const [row] = await db.update(plannerSearchFilters)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(plannerSearchFilters.id, id), eq(plannerSearchFilters.tenantId, tenantId)))
+      .returning();
+    return row || undefined;
+  }
+
+  async deletePlannerSearchFilter(id: string, tenantId: string): Promise<void> {
+    await db.delete(plannerSearchFilters)
+      .where(and(eq(plannerSearchFilters.id, id), eq(plannerSearchFilters.tenantId, tenantId)));
   }
 
   // ============================================

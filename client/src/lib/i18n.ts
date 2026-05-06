@@ -105,6 +105,8 @@ const translations: Record<string, Record<Language, string>> = {
 
   "nav.production-control": { sv: "Produktionsstyrning", en: "Production Control" },
   "nav.production-control.desc": { sv: "SLA och tider", en: "SLA and schedules" },
+  "nav.planner-search-filters": { sv: "Sparade sökmönster", en: "Saved Search Filters" },
+  "nav.planner-search-filters.desc": { sv: "Återanvändbara filter för planeraren", en: "Reusable planner filters" },
   "nav.user-management": { sv: "Användarhantering", en: "User Management" },
   "nav.user-management.desc": { sv: "Hantera användare och roller", en: "Manage users and roles" },
   "nav.company-settings": { sv: "Företagsinställningar", en: "Company Settings" },
