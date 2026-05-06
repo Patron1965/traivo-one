@@ -19,7 +19,7 @@ _Populate as you build_
   - Article Components (BOM): `server/routes/configRoutes.ts`
   - Work Order Operations: `server/routes/workOrderRoutes.ts` (example)
   - Price List Adjustments: `server/routes/priceListRoutes.ts` (example)
-  - Mobile Endpoints: `server/routes/mobile/*`
+  - Mobile Endpoints: `server/routes/mobile/*` (v1 oförändrad; v2: `GET /api/mobile/v2/orders/:id` exponerar frozen-snapshot, BOM-checklista, beroende-status — se `docs/traivo-go-v2-handover.md`)
 - **UI Components:** `src/components/ui/` (shadcn/ui), `src/components/` for custom components
 - **Theme/Styling:** Refer to Traivo Color Palette and Inter font usage for Nordic aesthetic.
 - **Fortnox Integration:** `server/fortnox-client.ts`

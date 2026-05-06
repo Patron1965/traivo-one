@@ -886,5 +886,142 @@ app.post("/api/mobile/orders/:id/inspections", isMobileAuthenticated, asyncHandl
     res.json({ success: true, inspections: results });
 }));
 
+// ============================================================
+// ADR v3 (F7): Mobile v2 endpoint
+// Exponerar frozen-snapshot, BOM-checklista, beroende-status.
+// v1 (/api/mobile/orders/:id) ar oforandrad — Go-appen kan
+// adoptera v2 nar den ar redo utan baklangeskompatibilitetsbrott.
+// ============================================================
+app.get("/api/mobile/v2/orders/:id", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+    const orderId = req.params.id;
+    const resourceId = req.mobileResourceId;
+    const tenantId = getTenantIdWithFallback(req);
+
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behorig");
+
+    const [object, customer, dependencies, orderLines] = await Promise.all([
+      order.objectId ? storage.getObject(order.objectId) : Promise.resolve(null),
+      order.customerId ? storage.getCustomer(order.customerId) : Promise.resolve(null),
+      storage.getTaskDependencies(orderId).catch(() => []),
+      storage.getWorkOrderLines(orderId).catch(() => []),
+    ]);
+
+    // F5 — frozen-snapshot (audit-immutabelt prislas).
+    const wo = order as Record<string, unknown>;
+    const frozen = (wo.frozenUnitPrice != null && wo.frozenQuantity != null && Number(wo.frozenQuantity) > 0)
+      ? {
+          isFrozen: true,
+          quantity: Number(wo.frozenQuantity),
+          unitPrice: Number(wo.frozenUnitPrice),
+          unitCost: wo.frozenUnitCost != null ? Number(wo.frozenUnitCost) : null,
+          unitTime: wo.frozenUnitTime != null ? Number(wo.frozenUnitTime) : null,
+          frozenAt: wo.frozenAt || null,
+          totalPrice: Number(wo.frozenUnitPrice) * Number(wo.frozenQuantity),
+        }
+      : { isFrozen: false };
+
+    // F4 — BOM-checklista. For varje WO-rad med strukturartikel, hamta
+    // komponentrader sa fältarbetaren kan bocka av varje del.
+    const bomChecklist: Array<Record<string, unknown>> = [];
+    for (const line of orderLines as Array<Record<string, unknown>>) {
+      const article = await storage.getArticle(line.articleId as string).catch(() => null);
+      if (!article || !(article as Record<string, unknown>).isStructure) continue;
+      const components = await storage.getArticleComponents(line.articleId as string, tenantId).catch(() => []);
+      if (!components.length) continue;
+      const items = await Promise.all(components.map(async (c: Record<string, unknown>) => {
+        const child = await storage.getArticle(c.childId as string).catch(() => null);
+        return {
+          componentId: c.id,
+          articleId: c.childId,
+          articleNumber: (child as Record<string, unknown>)?.articleNumber || "",
+          articleName: (child as Record<string, unknown>)?.name || "",
+          quantityPerParent: Number(c.quantity ?? 1),
+          totalRequired: Number(c.quantity ?? 1) * Number(line.quantity ?? 1),
+          unit: c.unit || (child as Record<string, unknown>)?.unit || null,
+          notes: c.notes || null,
+        };
+      }));
+      bomChecklist.push({
+        parentLineId: line.id,
+        parentArticleId: line.articleId,
+        parentArticleName: (article as Record<string, unknown>).name,
+        parentQuantity: Number(line.quantity ?? 1),
+        items,
+      });
+    }
+
+    // F4 (utokat) — om WO har structuralArticleId pa toppnivan, exponera den ocksa.
+    if ((order as Record<string, unknown>).structuralArticleId) {
+      const sid = (order as Record<string, unknown>).structuralArticleId as string;
+      if (!bomChecklist.find(b => b.parentArticleId === sid)) {
+        const components = await storage.getArticleComponents(sid, tenantId).catch(() => []);
+        if (components.length) {
+          const parent = await storage.getArticle(sid).catch(() => null);
+          const items = await Promise.all(components.map(async (c: Record<string, unknown>) => {
+            const child = await storage.getArticle(c.childId as string).catch(() => null);
+            return {
+              componentId: c.id,
+              articleId: c.childId,
+              articleNumber: (child as Record<string, unknown>)?.articleNumber || "",
+              articleName: (child as Record<string, unknown>)?.name || "",
+              quantityPerParent: Number(c.quantity ?? 1),
+              totalRequired: Number(c.quantity ?? 1),
+              unit: c.unit || (child as Record<string, unknown>)?.unit || null,
+              notes: c.notes || null,
+            };
+          }));
+          bomChecklist.push({
+            parentLineId: null,
+            parentArticleId: sid,
+            parentArticleName: (parent as Record<string, unknown>)?.name || "Strukturartikel",
+            parentQuantity: 1,
+            items,
+          });
+        }
+      }
+    }
+
+    // Beroende-status — varje dep med blockerande/icke-blockerande flagga.
+    const dependencyStatus = await Promise.all(
+      (dependencies as Array<Record<string, unknown>>).map(async (dep) => {
+        const depOrderId = dep.dependsOnWorkOrderId as string;
+        const depOrder = await storage.getWorkOrder(depOrderId).catch(() => null);
+        const depStatus = (depOrder as Record<string, unknown>)?.orderStatus as string || "unknown";
+        const isCompleted = ["completed", "invoiced", "closed"].includes(depStatus);
+        const depType = dep.dependencyType === "sequential" ? "must_complete_first" : (dep.dependencyType as string);
+        const isBlocking = depType === "must_complete_first" && !isCompleted;
+        return {
+          orderId: depOrderId,
+          orderTitle: (depOrder as Record<string, unknown>)?.title || depOrderId,
+          status: depStatus,
+          type: depType,
+          isCompleted,
+          isBlocking,
+        };
+      })
+    );
+    const canStart = !dependencyStatus.some(d => d.isBlocking);
+
+    res.json({
+      apiVersion: "v2",
+      orderId: order.id,
+      title: order.title,
+      orderStatus: order.orderStatus,
+      executionStatus: order.executionStatus || "not_started",
+      scheduledStart: order.plannedWindowStart instanceof Date ? order.plannedWindowStart.toISOString() : (order.plannedWindowStart as string | null) || null,
+      scheduledEnd: order.plannedWindowEnd instanceof Date ? order.plannedWindowEnd.toISOString() : (order.plannedWindowEnd as string | null) || null,
+      object: object ? { id: object.id, name: object.name, address: object.address, latitude: object.latitude, longitude: object.longitude } : null,
+      customer: customer ? { id: customer.id, name: customer.name } : null,
+      // === ADR v3-fält ===
+      frozen,
+      bomChecklist,
+      dependencyStatus,
+      canStart,
+      blockedBy: dependencyStatus.filter(d => d.isBlocking).map(d => d.orderId),
+    });
+}));
+
   }
   
