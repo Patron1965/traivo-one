@@ -1324,6 +1324,7 @@ app.get("/api/chain-trace/:workOrderId", asyncHandler(async (req, res) => {
       objectId: wo.objectId,
       objectName: object?.name || null,
       objectAddress: object?.address || null,
+      parentWorkOrderId: wo.parentWorkOrderId ?? null,
     },
     resurs: resource ? {
       id: resource.id,

@@ -319,10 +319,15 @@ export const workOrders = pgTable("work_orders", {
   metadata: jsonb("metadata").default({}),
   importBatchId: text("import_batch_id"),
   etaSmsSent: boolean("eta_sms_sent").default(false),
+  // Mjuk länk till huvudjobbet om denna order är en förberedande/följande offset-uppgift
+  // (skapad från artikel med offset_minutes != 0). Sätts vid expand av orderkoncept.
+  // Mjuk länk: om huvudjobbet raderas blir parent null (set null), inte cascade.
+  parentWorkOrderId: varchar("parent_work_order_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
   index("idx_work_orders_tenant").on(table.tenantId),
+  index("idx_work_orders_parent").on(table.parentWorkOrderId),
   index("idx_work_orders_scheduled_date").on(table.scheduledDate),
   index("idx_work_orders_order_status").on(table.orderStatus),
   index("idx_work_orders_object").on(table.objectId),
@@ -480,6 +485,10 @@ export const articles = pgTable("articles", {
   // Kvantitetsläge: 'use_object_quantity' (default — multiplicera med objektets antal),
   // 'single_per_task' (alltid 1, t.ex. fotodokumentation), 'configurable' (sätts per orderkoncept-rad)
   quantityMode: text("quantity_mode").default("use_object_quantity"),
+  // Offsettid i minuter (Mats prislista: A100=120, N100=2400). Negativt = före huvudjobbet,
+  // 0 = samtidigt, positivt = efter. Används vid expand av orderkoncept för att skapa
+  // förberedande work_orders med tidsfönster relativt huvudjobbet (parent_work_order_id).
+  offsetMinutes: integer("offset_minutes").default(0).notNull(),
   // Intern beskrivning för utförare
   internalDescription: text("internal_description"),
   // Länk till arbetsbeskrivning

@@ -171,6 +171,7 @@ interface ArticleFormData {
   isInfoCarrier: boolean;
   limitationType: string;
   quantityMode: string;
+  offsetMinutes: number;
 }
 
 const emptyFormData: ArticleFormData = {
@@ -202,6 +203,7 @@ const emptyFormData: ArticleFormData = {
   isInfoCarrier: false,
   limitationType: "unlimited",
   quantityMode: "use_object_quantity",
+  offsetMinutes: 0,
 };
 
 export default function ArticlesPage() {
@@ -219,6 +221,7 @@ export default function ArticlesPage() {
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
   const [articleToDelete, setArticleToDelete] = useState<Article | null>(null);
   const [formData, setFormData] = useState<ArticleFormData>(emptyFormData);
+  const [offsetMinutesInput, setOffsetMinutesInput] = useState<string>("0");
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [assocTestResult, setAssocTestResult] = useState<{ matchCount: number; matches: Array<{ objectId: string; objectName: string; objectAddress: string; metadataValue: string | null }>; labelFound: boolean; labelName?: string } | null>(null);
@@ -322,6 +325,7 @@ export default function ArticlesPage() {
 
   const resetForm = () => {
     setFormData(emptyFormData);
+    setOffsetMinutesInput("0");
     setEditingArticle(null);
   };
 
@@ -361,7 +365,9 @@ export default function ArticlesPage() {
       isInfoCarrier: article.isInfoCarrier || false,
       limitationType: article.limitationType || "unlimited",
       quantityMode: article.quantityMode || "use_object_quantity",
+      offsetMinutes: article.offsetMinutes ?? 0,
     });
+    setOffsetMinutesInput(String(article.offsetMinutes ?? 0));
     setDialogOpen(true);
   };
 
@@ -1163,6 +1169,35 @@ export default function ArticlesPage() {
                 </Select>
                 <p className="text-xs text-muted-foreground">
                   Avgör om artikelns pris/tid multipliceras med objektets antal (t.ex. 45 kärl × 150 kr) eller alltid räknas som 1 per uppdrag (t.ex. fotodokumentation, telefonavisering, nyckelhämtning).
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="offsetMinutes">Offsettid (minuter relativt huvudjobb)</Label>
+                <Input
+                  id="offsetMinutes"
+                  type="number"
+                  step="1"
+                  value={offsetMinutesInput}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setOffsetMinutesInput(raw);
+                    if (raw === "" || raw === "-") return;
+                    const parsed = parseInt(raw, 10);
+                    if (!Number.isNaN(parsed)) {
+                      setFormData(prev => ({ ...prev, offsetMinutes: parsed }));
+                    }
+                  }}
+                  onBlur={() => {
+                    const parsed = parseInt(offsetMinutesInput, 10);
+                    const normalized = Number.isNaN(parsed) ? 0 : parsed;
+                    setFormData(prev => ({ ...prev, offsetMinutes: normalized }));
+                    setOffsetMinutesInput(String(normalized));
+                  }}
+                  data-testid="input-offset-minutes"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Negativt värde = utförs <strong>före</strong> huvudjobbet (t.ex. -120 = telefonavisering 2 timmar innan, -2400 = nyckelhämtning 40 timmar innan). 0 = samtidigt med huvudjobbet. Positivt = efter. När orderkonceptet expanderas skapas en separat förberedande uppgift kopplad till huvudjobbet.
                 </p>
               </div>
 
