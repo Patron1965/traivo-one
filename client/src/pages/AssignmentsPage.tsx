@@ -418,7 +418,7 @@ export default function AssignmentsPage() {
       {/* Assignments Table */}
       <Card>
         <CardContent className="p-0">
-          <Table>
+          <Table density="compact">
             <TableHeader>
               <TableRow>
                 <TableHead>Uppgift</TableHead>
