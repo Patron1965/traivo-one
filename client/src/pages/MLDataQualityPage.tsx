@@ -9,11 +9,20 @@ interface TenantQuality {
   tenantId: string;
   totalCompletedWO: number;
   withActualDuration: number;
+  withValidActualDuration: number;
   withScheduledDate: number;
   withExecutionCode: number;
   withCoordinates: number;
+  withSetupLogLink: number;
   qualityScore: number;
   passes70Gate: boolean;
+}
+
+interface ExecutionCodeStat {
+  executionCode: string;
+  sampleCount: number;
+  meanActualMin: number | null;
+  hasEnoughSamples: boolean;
 }
 
 interface QualityReport {
@@ -25,6 +34,7 @@ interface QualityReport {
   goNoGoRecommendation: "GO" | "NO_GO" | "WARN";
   reasoning: string[];
   tenants: TenantQuality[];
+  perExecutionCode: ExecutionCodeStat[];
   snapshotStats: {
     preOptimization: number;
     postCompletion: number;
@@ -157,10 +167,10 @@ export default function MLDataQualityPage() {
                 <tr className="text-left text-muted-foreground">
                   <th className="py-2 px-2">Tenant</th>
                   <th className="py-2 px-2 text-right">WO totalt</th>
-                  <th className="py-2 px-2 text-right">Med actual</th>
-                  <th className="py-2 px-2 text-right">Med datum</th>
+                  <th className="py-2 px-2 text-right">Valid actual (5min–12h)</th>
                   <th className="py-2 px-2 text-right">Med kod</th>
                   <th className="py-2 px-2 text-right">Med koord</th>
+                  <th className="py-2 px-2 text-right">Med setup-log</th>
                   <th className="py-2 px-2 text-right">Kvalitet</th>
                   <th className="py-2 px-2">Status</th>
                 </tr>
@@ -173,10 +183,10 @@ export default function MLDataQualityPage() {
                   <tr key={t.tenantId} className="border-b" data-testid={`row-tenant-${t.tenantId}`}>
                     <td className="py-2 px-2 font-mono text-xs">{t.tenantId}</td>
                     <td className="py-2 px-2 text-right">{t.totalCompletedWO}</td>
-                    <td className="py-2 px-2 text-right">{t.withActualDuration}</td>
-                    <td className="py-2 px-2 text-right">{t.withScheduledDate}</td>
+                    <td className="py-2 px-2 text-right">{t.withValidActualDuration}</td>
                     <td className="py-2 px-2 text-right">{t.withExecutionCode}</td>
                     <td className="py-2 px-2 text-right">{t.withCoordinates}</td>
+                    <td className="py-2 px-2 text-right">{t.withSetupLogLink}</td>
                     <td className="py-2 px-2 text-right">{(t.qualityScore * 100).toFixed(0)}%</td>
                     <td className="py-2 px-2">
                       <Badge variant={t.passes70Gate ? "default" : "destructive"} data-testid={`badge-status-${t.tenantId}`}>
@@ -190,6 +200,43 @@ export default function MLDataQualityPage() {
           </div>
         </CardContent>
       </Card>
+
+      {report.perExecutionCode.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Per execution code</CardTitle>
+            <CardDescription>Stratifieringsbas för LightGBM. Krav: ≥30 prov per kod.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b">
+                  <tr className="text-left text-muted-foreground">
+                    <th className="py-2 px-2">Kod</th>
+                    <th className="py-2 px-2 text-right">Prov</th>
+                    <th className="py-2 px-2 text-right">Snitt (min)</th>
+                    <th className="py-2 px-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.perExecutionCode.slice(0, 20).map(c => (
+                    <tr key={c.executionCode} className="border-b" data-testid={`row-code-${c.executionCode}`}>
+                      <td className="py-2 px-2 font-mono text-xs">{c.executionCode}</td>
+                      <td className="py-2 px-2 text-right">{c.sampleCount}</td>
+                      <td className="py-2 px-2 text-right">{c.meanActualMin ?? "—"}</td>
+                      <td className="py-2 px-2">
+                        <Badge variant={c.hasEnoughSamples ? "default" : "outline"}>
+                          {c.hasEnoughSamples ? "Stratifierbar" : "För få prov"}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {modelsData && (
         <Card>

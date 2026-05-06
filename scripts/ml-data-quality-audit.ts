@@ -6,26 +6,45 @@
  *   LightGBM-modell som ger MAE ≤ 15% mot heuristisk baseline?"
  *
  * Grindkriterier (från task #421):
- *   - ≥70% av utförda WO de senaste 12 veckorna har actualDuration
- *   - ≥70% av dessa har scheduledDate, executionCode, objektkoordinater
- *   - ≥500 utförda WO totalt över alla tenants (för global modell)
+ *   - Mätfönster: 12 månader (365 dagar) av utförda WO
+ *   - ≥70% har actualDuration inom rimligt intervall (5 min – 12 h)
+ *   - ≥70% har scheduledDate, executionCode, objektkoppling
+ *   - ≥500 utförda WO totalt (för global modell)
+ *   - Per-executionCode breakdown: minst 30 prov per kod för stratifiering
+ *   - Setup-log linkage: andel WO med matchande setup_time_logs
  *
- * Kör: npx tsx scripts/ml-data-quality-audit.ts
+ * Kör: npx tsx scripts/ml-data-quality-audit.ts [--tenant=<id>]
  * Output: stdout JSON + markdown-sammanfattning
  */
 import { db } from "../server/db";
-import { workOrders, objects, mlFeatureSnapshots } from "../shared/schema";
-import { sql, gte, eq, and, isNotNull, type SQL } from "drizzle-orm";
+import { workOrders, mlFeatureSnapshots, setupTimeLogs } from "../shared/schema";
+import { sql, gte, eq, and, type SQL } from "drizzle-orm";
+
+const VALID_DURATION_MIN = 5;
+const VALID_DURATION_MAX = 720; // 12h
+const WINDOW_DAYS = 365; // 12 månader
+const VOLUME_GATE = 500;
+const QUALITY_GATE = 0.70;
+const MIN_SAMPLES_PER_CODE = 30;
 
 interface TenantQualityReport {
   tenantId: string;
   totalCompletedWO: number;
   withActualDuration: number;
+  withValidActualDuration: number; // 5min – 12h
   withScheduledDate: number;
   withExecutionCode: number;
   withCoordinates: number;
+  withSetupLogLink: number;
   qualityScore: number;
   passes70Gate: boolean;
+}
+
+interface ExecutionCodeStats {
+  executionCode: string;
+  sampleCount: number;
+  meanActualMin: number | null;
+  hasEnoughSamples: boolean;
 }
 
 interface OverallReport {
@@ -37,16 +56,13 @@ interface OverallReport {
   goNoGoRecommendation: "GO" | "NO_GO" | "WARN";
   reasoning: string[];
   tenants: TenantQualityReport[];
+  perExecutionCode: ExecutionCodeStats[];
   snapshotStats: {
     preOptimization: number;
     postCompletion: number;
     last7Days: number;
   };
 }
-
-const WINDOW_DAYS = 84; // 12 veckor
-const VOLUME_GATE = 500;
-const QUALITY_GATE = 0.70;
 
 async function buildReport(opts: { tenantId?: string } = {}): Promise<OverallReport> {
   const cutoff = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
@@ -57,10 +73,13 @@ async function buildReport(opts: { tenantId?: string } = {}): Promise<OverallRep
   ];
   if (opts.tenantId) baseConds.push(eq(workOrders.tenantId, opts.tenantId));
 
+  // Per-tenant grundstats
+  const validRangeExpr = sql`${workOrders.actualDuration} IS NOT NULL AND ${workOrders.actualDuration} BETWEEN ${VALID_DURATION_MIN} AND ${VALID_DURATION_MAX}`;
   const tenantStats = await db.select({
     tenantId: workOrders.tenantId,
     totalCompletedWO: sql<number>`COUNT(*)::int`,
     withActualDuration: sql<number>`SUM(CASE WHEN ${workOrders.actualDuration} IS NOT NULL AND ${workOrders.actualDuration} > 0 THEN 1 ELSE 0 END)::int`,
+    withValidActualDuration: sql<number>`SUM(CASE WHEN ${validRangeExpr} THEN 1 ELSE 0 END)::int`,
     withScheduledDate: sql<number>`SUM(CASE WHEN ${workOrders.scheduledDate} IS NOT NULL THEN 1 ELSE 0 END)::int`,
     withExecutionCode: sql<number>`SUM(CASE WHEN ${workOrders.executionCode} IS NOT NULL AND ${workOrders.executionCode} != '' THEN 1 ELSE 0 END)::int`,
     withCoordinates: sql<number>`SUM(CASE WHEN ${workOrders.objectId} IS NOT NULL THEN 1 ELSE 0 END)::int`,
@@ -69,25 +88,70 @@ async function buildReport(opts: { tenantId?: string } = {}): Promise<OverallRep
     .where(and(...baseConds))
     .groupBy(workOrders.tenantId);
 
+  // Setup-log-linkage: räkna distinct WO som har minst en setup_time_logs-rad
+  const setupLinkRows = await db.execute(sql`
+    SELECT wo.tenant_id::text AS tenant_id, COUNT(DISTINCT wo.id)::int AS with_setup
+    FROM work_orders wo
+    INNER JOIN setup_time_logs stl ON stl.work_order_id = wo.id
+    WHERE wo.order_status = 'utford'
+      AND wo.completed_at >= ${cutoff}
+      ${opts.tenantId ? sql`AND wo.tenant_id = ${opts.tenantId}` : sql``}
+    GROUP BY wo.tenant_id
+  `);
+  const setupLinkMap = new Map<string, number>();
+  for (const row of setupLinkRows.rows as Array<{ tenant_id: string; with_setup: number }>) {
+    setupLinkMap.set(row.tenant_id, row.with_setup);
+  }
+
   const tenantReports: TenantQualityReport[] = tenantStats.map(t => {
     const total = Math.max(1, t.totalCompletedWO);
+    const withSetupLogLink = setupLinkMap.get(t.tenantId) ?? 0;
+    // Quality = vägd kompletthet med valid-range som dominant signal
     const completeness = (
-      (t.withActualDuration / total) * 0.4 +
-      (t.withScheduledDate / total) * 0.2 +
+      (t.withValidActualDuration / total) * 0.5 +
+      (t.withScheduledDate / total) * 0.15 +
       (t.withExecutionCode / total) * 0.2 +
-      (t.withCoordinates / total) * 0.2
+      (t.withCoordinates / total) * 0.15
     );
     return {
       tenantId: t.tenantId,
       totalCompletedWO: t.totalCompletedWO,
       withActualDuration: t.withActualDuration,
+      withValidActualDuration: t.withValidActualDuration,
       withScheduledDate: t.withScheduledDate,
       withExecutionCode: t.withExecutionCode,
       withCoordinates: t.withCoordinates,
+      withSetupLogLink,
       qualityScore: Math.round(completeness * 100) / 100,
       passes70Gate: completeness >= QUALITY_GATE,
     };
   });
+
+  // Per-executionCode breakdown
+  const codeConds: SQL[] = [
+    eq(workOrders.orderStatus, "utford"),
+    gte(workOrders.completedAt, cutoff),
+    sql`${workOrders.executionCode} IS NOT NULL AND ${workOrders.executionCode} != ''`,
+    sql`${workOrders.actualDuration} BETWEEN ${VALID_DURATION_MIN} AND ${VALID_DURATION_MAX}`,
+  ];
+  if (opts.tenantId) codeConds.push(eq(workOrders.tenantId, opts.tenantId));
+  const codeStats = await db.select({
+    executionCode: workOrders.executionCode,
+    sampleCount: sql<number>`COUNT(*)::int`,
+    meanActualMin: sql<number>`AVG(${workOrders.actualDuration})::float`,
+  })
+    .from(workOrders)
+    .where(and(...codeConds))
+    .groupBy(workOrders.executionCode)
+    .orderBy(sql`COUNT(*) DESC`)
+    .limit(50);
+
+  const perExecutionCode: ExecutionCodeStats[] = codeStats.map(c => ({
+    executionCode: c.executionCode ?? "(saknas)",
+    sampleCount: c.sampleCount,
+    meanActualMin: c.meanActualMin != null ? Math.round(c.meanActualMin * 10) / 10 : null,
+    hasEnoughSamples: c.sampleCount >= MIN_SAMPLES_PER_CODE,
+  }));
 
   const totalCompleted = tenantReports.reduce((s, t) => s + t.totalCompletedWO, 0);
   const passesVolume = totalCompleted >= VOLUME_GATE;
@@ -95,20 +159,23 @@ async function buildReport(opts: { tenantId?: string } = {}): Promise<OverallRep
     tenantReports.filter(t => t.passes70Gate).length / tenantReports.length >= 0.5;
 
   const reasoning: string[] = [];
-  reasoning.push(`Mätfönster: senaste ${WINDOW_DAYS} dagarna (12 veckor)`);
-  reasoning.push(`Total utförda WO över alla tenants: ${totalCompleted} (grind: ≥${VOLUME_GATE})`);
+  reasoning.push(`Mätfönster: senaste ${WINDOW_DAYS} dagarna (12 månader)`);
+  reasoning.push(`Total utförda WO i fönstret: ${totalCompleted} (grind: ≥${VOLUME_GATE})`);
+  reasoning.push(`actualDuration valideras till intervall ${VALID_DURATION_MIN}–${VALID_DURATION_MAX} min`);
   reasoning.push(`Tenants som passerar 70%-grinden: ${tenantReports.filter(t => t.passes70Gate).length}/${tenantReports.length}`);
+  const codesWithEnough = perExecutionCode.filter(c => c.hasEnoughSamples).length;
+  reasoning.push(`ExecutionCodes med ≥${MIN_SAMPLES_PER_CODE} prov (för stratifiering): ${codesWithEnough}/${perExecutionCode.length}`);
 
   let recommendation: OverallReport["goNoGoRecommendation"];
-  if (passesVolume && passesQuality) {
+  if (passesVolume && passesQuality && codesWithEnough >= 3) {
     recommendation = "GO";
     reasoning.push("Rekommendation: GO för Fas 1 (träning + shadow).");
   } else if (totalCompleted >= VOLUME_GATE * 0.5) {
     recommendation = "WARN";
-    reasoning.push("Rekommendation: VÄNTA 2-4 veckor och kör auditet igen — datavolym är låg men växande.");
+    reasoning.push("Rekommendation: VÄNTA. Datavolym växande men kvalitet/stratifiering otillräcklig. Verifiera att fältarbetare loggar actualDuration + executionCode.");
   } else {
     recommendation = "NO_GO";
-    reasoning.push("Rekommendation: NO_GO. För lite data för meningsfull träning. Verifiera att Fas 0 snapshot-skrivning är aktiv och att fältarbetare loggar actualDuration.");
+    reasoning.push("Rekommendation: NO_GO. För lite data för meningsfull träning.");
   }
 
   // Snapshot-statistik (visar att Fas 0-instrumenteringen fungerar)
@@ -131,6 +198,7 @@ async function buildReport(opts: { tenantId?: string } = {}): Promise<OverallRep
     goNoGoRecommendation: recommendation,
     reasoning,
     tenants: tenantReports,
+    perExecutionCode,
     snapshotStats: {
       preOptimization: snapshotStats?.preOptimization ?? 0,
       postCompletion: snapshotStats?.postCompletion ?? 0,
@@ -155,10 +223,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`\n## Resonemang`);
     report.reasoning.forEach(r => console.log(`- ${r}`));
     console.log(`\n## Per tenant`);
-    console.log(`| Tenant | WO totalt | Med actual | Kvalitet | Passerar |`);
-    console.log(`|---|---|---|---|---|`);
+    console.log(`| Tenant | WO | Med valid actual | Med setup-log | Kvalitet | Passerar |`);
+    console.log(`|---|---|---|---|---|---|`);
     report.tenants.forEach(t => {
-      console.log(`| ${t.tenantId} | ${t.totalCompletedWO} | ${t.withActualDuration} | ${(t.qualityScore * 100).toFixed(0)}% | ${t.passes70Gate ? "✓" : "✗"} |`);
+      console.log(`| ${t.tenantId} | ${t.totalCompletedWO} | ${t.withValidActualDuration} | ${t.withSetupLogLink} | ${(t.qualityScore * 100).toFixed(0)}% | ${t.passes70Gate ? "✓" : "✗"} |`);
+    });
+    console.log(`\n## Per execution code (top 50)`);
+    console.log(`| Kod | Prov | Snitt min | Stratifierbar |`);
+    console.log(`|---|---|---|---|`);
+    report.perExecutionCode.slice(0, 20).forEach(c => {
+      console.log(`| ${c.executionCode} | ${c.sampleCount} | ${c.meanActualMin ?? "—"} | ${c.hasEnoughSamples ? "✓" : "✗"} |`);
     });
     process.exit(0);
   }).catch(err => {

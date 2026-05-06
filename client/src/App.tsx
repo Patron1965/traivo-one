@@ -216,6 +216,7 @@ function Router() {
         <Route path="/notifications">{() => <ProtectedRoute component={NotificationsPage} path="/notifications" />}</Route>
         <Route path="/customers/:id">{() => <ProtectedRoute component={CustomerDetailPage} path="/customers" />}</Route>
         <Route path="/customers">{() => <ProtectedRoute component={CustomersPage} path="/customers" />}</Route>
+        <Route path="/ml-data-quality">{() => <ProtectedRoute component={MLDataQualityPage} path="/ml-data-quality" />}</Route>
         <Route component={NotFound} />
       </Switch>
     </Suspense>
@@ -239,7 +240,6 @@ function PortalRouter() {
         <Route path="/portal/field" component={PortalFieldPage} />
         <Route path="/portal/map" component={PortalMapPage} />
         <Route path="/portal/completed-jobs" component={PortalCompletedJobsPage} />
-        <Route path="/ml-data-quality">{() => <ProtectedRoute component={MLDataQualityPage} path="/ml-data-quality" />}</Route>
         <Route component={NotFound} />
       </Switch>
     </Suspense>

@@ -3610,6 +3610,26 @@ export class DatabaseStorage implements IStorage {
     
     const [wo] = await db.update(workOrders).set(updates).where(eq(workOrders.id, id)).returning();
     if (wo?.tenantId) invalidateWorkflowCaches(wo.tenantId);
+
+    // Task #421 Fas 0: skriv post_completion ML-snapshot vid utförd order.
+    // Fail-safe: bryter ALDRIG completion-flödet. Fire-and-forget.
+    if (wo && newStatus === 'utford' && wo.tenantId) {
+      try {
+        const [{ writeMlFeatureSnapshot }, objSrc] = await Promise.all([
+          import("./services/mlFeatureSnapshot"),
+          wo.objectId ? this.getObject(wo.objectId).catch(() => null) : Promise.resolve(null),
+        ]);
+        writeMlFeatureSnapshot({
+          tenantId: wo.tenantId,
+          workOrder: wo,
+          object: objSrc ?? null,
+          snapshotKind: "post_completion",
+        }).catch(() => { /* non-blocking */ });
+      } catch {
+        // observability får aldrig stoppa completion
+      }
+    }
+
     return wo || undefined;
   }
 
