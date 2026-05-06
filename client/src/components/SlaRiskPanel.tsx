@@ -38,7 +38,7 @@ type ClusterAgg = {
 
 const RISK_BADGE: Record<RiskLevel, { label: string; cls: string }> = {
   ok: { label: "OK", cls: "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15" },
-  warning: { label: "Varning", cls: "bg-chart-4/15 text-chart-4 dark:bg-chart-4/15" },
+  warning: { label: "Varning", cls: "bg-warning/15 text-warning dark:bg-warning/15" },
   critical: { label: "Kritisk", cls: "bg-destructive/15 text-destructive dark:bg-destructive/15" },
 };
 
@@ -76,11 +76,11 @@ export function SlaRiskClusterGrid({ days = 7 }: { days?: number }) {
       {clusters.map(c => {
         const borderClass =
           c.worst === "critical" ? "border-destructive/40 dark:border-destructive/70"
-          : c.worst === "warning" ? "border-chart-4/40 dark:border-chart-4/70"
+          : c.worst === "warning" ? "border-warning/40 dark:border-warning/70"
           : "border-chart-2/30 dark:border-chart-2/70";
         const bgClass =
           c.worst === "critical" ? "bg-destructive/10 dark:bg-destructive/15"
-          : c.worst === "warning" ? "bg-chart-4/10 dark:bg-chart-4/15"
+          : c.worst === "warning" ? "bg-warning/10 dark:bg-warning/15"
           : "bg-chart-2/10 dark:bg-chart-2/15";
         return (
           <div
@@ -106,7 +106,7 @@ export function SlaRiskClusterGrid({ days = 7 }: { days?: number }) {
                 <span className="text-muted-foreground">krit.</span>
               </div>
               <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-chart-4/15" />
+                <span className="w-2 h-2 rounded-full bg-warning/15" />
                 <span className="font-semibold">{c.warning}</span>
                 <span className="text-muted-foreground">varn.</span>
               </div>
@@ -173,8 +173,8 @@ export function SlaRiskJobsList({
           const Icon = job.riskLevel === "critical" ? ShieldAlert : AlertTriangle;
           const colorCls = job.riskLevel === "critical"
             ? "border-destructive/30 dark:border-destructive/70 bg-destructive/10 dark:bg-destructive/15"
-            : "border-chart-4/30 dark:border-chart-4/70 bg-chart-4/10 dark:bg-chart-4/15";
-          const iconCls = job.riskLevel === "critical" ? "text-destructive" : "text-chart-4";
+            : "border-warning/30 dark:border-warning/70 bg-warning/10 dark:bg-warning/15";
+          const iconCls = job.riskLevel === "critical" ? "text-destructive" : "text-warning";
           const days = job.daysToBreach;
           const daysLabel = days < 0
             ? `${Math.abs(days).toFixed(1)} dagar över`

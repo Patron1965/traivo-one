@@ -80,7 +80,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }>
   skapad: { bg: "bg-gray-100 dark:bg-gray-800", text: "text-gray-700 dark:text-gray-300", label: "Skapad" },
   scheduled: { bg: "bg-chart-1/15 dark:bg-chart-1/15", text: "text-chart-1", label: "Schemalagd" },
   tilldelad: { bg: "bg-chart-1/15 dark:bg-chart-1/15", text: "text-chart-1", label: "Tilldelad" },
-  paborjad: { bg: "bg-chart-4/15 dark:bg-chart-4/15", text: "text-chart-4", label: "Pågår" },
+  paborjad: { bg: "bg-warning/15 dark:bg-warning/15", text: "text-warning", label: "Pågår" },
   utford: { bg: "bg-chart-2/15 dark:bg-chart-2/15", text: "text-chart-2", label: "Utförd" },
   avbruten: { bg: "bg-destructive/15 dark:bg-destructive/15", text: "text-destructive", label: "Avbruten" },
   omojlig: { bg: "bg-destructive/15 dark:bg-destructive/15", text: "text-destructive", label: "Omöjlig" },
@@ -133,7 +133,7 @@ export function FocusCTA({ jobStarted, hasAddress, onStart, onNavigate, onReport
         onClick={onReport}
         data-testid="focus-button-report"
       >
-        <AlertTriangle className="h-6 w-6 text-chart-4" />
+        <AlertTriangle className="h-6 w-6 text-warning" />
         <span className="text-xs font-medium">Rapportera</span>
       </Button>
     </div>

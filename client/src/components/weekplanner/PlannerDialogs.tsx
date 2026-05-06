@@ -81,9 +81,9 @@ export const AssignDialog = memo(function AssignDialog(props: AssignDialogProps)
             <Input type="date" value={assignDate} onChange={(e) => setAssignDate(e.target.value)} data-testid="input-assign-date" />
           </div>
           {matchData?.noMatch && matchData?.clusterName && (
-            <div className="flex items-center gap-2 p-2.5 rounded-md bg-chart-4/10 dark:bg-chart-4/15 border border-chart-4/20 dark:border-chart-4/80" data-testid="no-cluster-match-warning">
-              <AlertTriangle className="h-4 w-4 text-chart-4 shrink-0" />
-              <span className="text-xs text-chart-4">Ingen resurs matchar klustret <strong>{matchData.clusterName}</strong>. Kontrollera resursernas serviceområden.</span>
+            <div className="flex items-center gap-2 p-2.5 rounded-md bg-warning/10 dark:bg-warning/15 border border-warning/20 dark:border-warning/80" data-testid="no-cluster-match-warning">
+              <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
+              <span className="text-xs text-warning">Ingen resurs matchar klustret <strong>{matchData.clusterName}</strong>. Kontrollera resursernas serviceområden.</span>
             </div>
           )}
           <div className="space-y-2">
@@ -435,7 +435,7 @@ export const ConflictDialog = memo(function ConflictDialog(props: ConflictDialog
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
-            <AlertTriangle className="h-5 w-5 text-chart-4" />
+            <AlertTriangle className="h-5 w-5 text-warning" />
             {hasHardBlock ? "Tilldelning blockerad" : "Konflikt upptäckt"}
           </DialogTitle>
           <DialogDescription>
@@ -459,8 +459,8 @@ export const ConflictDialog = memo(function ConflictDialog(props: ConflictDialog
                 const isClusterWarning = !isHardBlock && conflict.includes("Kluster");
                 const displayText = isHardBlock ? conflict.replace("[BLOCK] ", "") : conflict;
                 return (
-                <div key={i} className={`flex items-start gap-2 p-2 rounded border ${isHardBlock ? "bg-destructive/15 dark:bg-destructive/15 border-destructive/30 dark:border-destructive/70" : isClusterWarning ? "bg-chart-4/10 dark:bg-chart-4/15 border-chart-4/20 dark:border-chart-4/80" : "bg-destructive/10 dark:bg-destructive/15 border-destructive/20 dark:border-destructive/80"}`}>
-                  <AlertTriangle className={`h-4 w-4 shrink-0 mt-0.5 ${isHardBlock ? "text-destructive" : isClusterWarning ? "text-chart-4" : "text-destructive"}`} />
+                <div key={i} className={`flex items-start gap-2 p-2 rounded border ${isHardBlock ? "bg-destructive/15 dark:bg-destructive/15 border-destructive/30 dark:border-destructive/70" : isClusterWarning ? "bg-warning/10 dark:bg-warning/15 border-warning/20 dark:border-warning/80" : "bg-destructive/10 dark:bg-destructive/15 border-destructive/20 dark:border-destructive/80"}`}>
+                  <AlertTriangle className={`h-4 w-4 shrink-0 mt-0.5 ${isHardBlock ? "text-destructive" : isClusterWarning ? "text-warning" : "text-destructive"}`} />
                   <span className="text-sm">{displayText}</span>
                 </div>
                 );
@@ -474,7 +474,7 @@ export const ConflictDialog = memo(function ConflictDialog(props: ConflictDialog
           </Button>
           {!hasHardBlock && (
             <Button variant="destructive" onClick={onAccept} data-testid="button-accept-conflict">
-              <AlertTriangle className="h-4 w-4 mr-2 text-chart-4" />
+              <AlertTriangle className="h-4 w-4 mr-2 text-warning" />
               Schemalägg ändå
             </Button>
           )}
@@ -594,7 +594,7 @@ export const AutoFillDialog = memo(function AutoFillDialog(props: AutoFillDialog
                 <div className="text-xs text-muted-foreground space-y-0.5">
                   <p>{skipped} uppdrag ryms ej i schemat och förblir oplanerade i orderstocken.</p>
                   {diag && diag.clusterSkipped > 0 && (
-                    <p className="text-chart-4">{diag.clusterSkipped} av dessa saknar matchande resurs för sitt kluster.</p>
+                    <p className="text-warning">{diag.clusterSkipped} av dessa saknar matchande resurs för sitt kluster.</p>
                   )}
                 </div>
               )}
@@ -607,8 +607,8 @@ export const AutoFillDialog = memo(function AutoFillDialog(props: AutoFillDialog
                   <div className="grid grid-cols-5 gap-2">
                     {Object.entries(geoSpread).sort().map(([day, info]) => {
                       const focusPct = info.dominantZonePct;
-                      const quality = focusPct >= 80 ? "text-chart-2" : focusPct >= 60 ? "text-chart-4" : "text-destructive";
-                      const bgColor = focusPct >= 80 ? "bg-chart-2/15" : focusPct >= 60 ? "bg-chart-4/15" : "bg-destructive/15";
+                      const quality = focusPct >= 80 ? "text-chart-2" : focusPct >= 60 ? "text-warning" : "text-destructive";
+                      const bgColor = focusPct >= 80 ? "bg-chart-2/15" : focusPct >= 60 ? "bg-warning/15" : "bg-destructive/15";
                       return (
                         <div key={day} className="text-center text-xs" data-testid={`geo-spread-day-${day}`}>
                           <p className="font-medium">{format(new Date(day + "T12:00:00"), "EEE", { locale: sv })}</p>
@@ -667,7 +667,7 @@ export const AutoFillDialog = memo(function AutoFillDialog(props: AutoFillDialog
                                   <div key={day} className="text-center">
                                     <p className="font-medium">{day.slice(5)}</p>
                                     <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-0.5">
-                                      <div className={`h-full rounded-full ${fillPct >= 95 ? 'bg-destructive/15' : fillPct >= 70 ? 'bg-chart-4/15' : 'bg-chart-2/15'}`} style={{ width: `${fillPct}%` }} />
+                                      <div className={`h-full rounded-full ${fillPct >= 95 ? 'bg-destructive/15' : fillPct >= 70 ? 'bg-warning/15' : 'bg-chart-2/15'}`} style={{ width: `${fillPct}%` }} />
                                     </div>
                                     <p className="mt-0.5">{fillPct}%</p>
                                   </div>
@@ -676,7 +676,7 @@ export const AutoFillDialog = memo(function AutoFillDialog(props: AutoFillDialog
                             </div>
                           )}
                           {diag.clusterSkipped > 0 && (
-                            <p className="text-chart-4 mt-1">{diag.clusterSkipped} uppdrag saknar matchande resurs för sitt kluster (geografiskt område).</p>
+                            <p className="text-warning mt-1">{diag.clusterSkipped} uppdrag saknar matchande resurs för sitt kluster (geografiskt område).</p>
                           )}
                           <p className="mt-1">Prova att öka överbokningsprocenten eller byta till en annan vecka.</p>
                         </>
@@ -717,7 +717,7 @@ export const DepChainDialog = memo(function DepChainDialog(props: DepChainDialog
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Link2 className="h-5 w-5 text-chart-4" />
+            <Link2 className="h-5 w-5 text-warning" />
             Beroendekedja
           </DialogTitle>
           <DialogDescription>Visar alla uppgifter som är kopplade via beroenden.</DialogDescription>
@@ -732,9 +732,9 @@ export const DepChainDialog = memo(function DepChainDialog(props: DepChainDialog
           {depChainData?.chain && depChainData.chain.length > 0 ? (
             <div className="space-y-2">
               {depChainData.chain.map((item, i) => (
-                <div key={i} className={`p-3 border rounded-lg flex items-start gap-3 ${item.workOrder.creationMethod === "automatic" ? "border-chart-4/30 bg-chart-4/10 dark:border-chart-4/70 dark:bg-chart-4/15" : ""}`}>
+                <div key={i} className={`p-3 border rounded-lg flex items-start gap-3 ${item.workOrder.creationMethod === "automatic" ? "border-warning/30 bg-warning/10 dark:border-warning/70 dark:bg-warning/15" : ""}`}>
                   <div className="shrink-0 mt-0.5">
-                    {item.type === "depends_on" ? <Link2 className="h-4 w-4 text-chart-4" /> : <ArrowRight className="h-4 w-4 text-chart-1" />}
+                    {item.type === "depends_on" ? <Link2 className="h-4 w-4 text-warning" /> : <ArrowRight className="h-4 w-4 text-chart-1" />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium">{item.workOrder.title}</div>
@@ -752,7 +752,7 @@ export const DepChainDialog = memo(function DepChainDialog(props: DepChainDialog
                         </span>
                       )}
                       {item.workOrder.creationMethod === "automatic" && (
-                        <Badge className="text-[10px] bg-chart-4/15 text-chart-4 dark:bg-chart-4/15">Plockuppgift</Badge>
+                        <Badge className="text-[10px] bg-warning/15 text-warning dark:bg-warning/15">Plockuppgift</Badge>
                       )}
                     </div>
                   </div>
@@ -842,7 +842,7 @@ export const ConflictListDialog = memo(function ConflictListDialog({ open, onOpe
                     <div className="mt-1.5 space-y-0.5">
                       {reasons.map((reason, i) => (
                         <div key={i} className="flex items-start gap-1.5 text-xs text-destructive">
-                          <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5 text-chart-4" />
+                          <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5 text-warning" />
                           <span>{reason}</span>
                         </div>
                       ))}

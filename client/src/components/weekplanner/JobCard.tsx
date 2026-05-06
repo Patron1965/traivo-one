@@ -110,7 +110,7 @@ export const JobCard = memo(function JobCard({
                       }}
                       data-testid={`dep-chain-link-${job.id}`}
                     >
-                      {hasDependencies && <Link2 className="h-3 w-3 text-chart-4" />}
+                      {hasDependencies && <Link2 className="h-3 w-3 text-warning" />}
                       {hasDependents && <ArrowRight className="h-3 w-3 text-chart-1" />}
                     </span>
                   </TooltipTrigger>
@@ -118,7 +118,7 @@ export const JobCard = memo(function JobCard({
                     <div className="text-xs space-y-1">
                       {hasDependencies && (
                         <p className="flex items-center gap-1">
-                          <Link2 className="h-3 w-3 text-chart-4" />
+                          <Link2 className="h-3 w-3 text-warning" />
                           Beroende av {jobDependencies.length} uppgift{jobDependencies.length > 1 ? "er" : ""}
                         </p>
                       )}
@@ -142,7 +142,7 @@ export const JobCard = memo(function JobCard({
               </Badge>
             )}
             {job.creationMethod === "automatic" && (
-              <Badge className="text-[9px] h-4 bg-chart-4/15 text-chart-4 dark:bg-chart-4/15 border-chart-4/30" data-testid={`pickup-badge-${job.id}`}>
+              <Badge className="text-[9px] h-4 bg-warning/15 text-warning dark:bg-warning/15 border-warning/30" data-testid={`pickup-badge-${job.id}`}>
                 Plockuppgift
               </Badge>
             )}
@@ -151,7 +151,7 @@ export const JobCard = memo(function JobCard({
                 {job.objectAccessCode && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="flex items-center gap-0.5 text-[10px] text-chart-4">
+                      <span className="flex items-center gap-0.5 text-[10px] text-warning">
                         <DoorOpen className="h-2.5 w-2.5" />
                         {job.objectAccessCode}
                       </span>
@@ -180,7 +180,7 @@ export const JobCard = memo(function JobCard({
                     className={
                       (job as { deliveryPreferencePriority?: string }).deliveryPreferencePriority === "strict"
                         ? "text-[9px] h-4 gap-0.5 mt-0.5 bg-destructive/10 text-destructive border-destructive/30 dark:bg-destructive/15-foreground dark:border-destructive/70"
-                        : "text-[9px] h-4 gap-0.5 mt-0.5 bg-chart-4/10 text-chart-4 border-chart-4/30 dark:bg-chart-4/15 dark:border-chart-4/70"
+                        : "text-[9px] h-4 gap-0.5 mt-0.5 bg-warning/10 text-warning border-warning/30 dark:bg-warning/15 dark:border-warning/70"
                     }
                     data-testid={`badge-outside-preferred-${job.id}`}
                   >
@@ -201,7 +201,7 @@ export const JobCard = memo(function JobCard({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div className="flex items-center gap-1 text-[10px] text-destructive mt-0.5 cursor-help" data-testid={`conflict-warning-${job.id}`}>
-                    <AlertTriangle className="h-3 w-3 shrink-0 text-chart-4" />
+                    <AlertTriangle className="h-3 w-3 shrink-0 text-warning" />
                     <span className="truncate">{jobConflicts[job.id][0]}</span>
                   </div>
                 </TooltipTrigger>
@@ -355,7 +355,7 @@ export const DragOverlayContent = memo(function DragOverlayContent({
             </Badge>
           )}
           {hasDeadline && (
-            <Badge variant="outline" className="text-[10px] border-chart-4/30 text-chart-4">
+            <Badge variant="outline" className="text-[10px] border-warning/30 text-warning">
               DL: {(() => { const d = new Date(job.plannedWindowEnd!); return `${d.getDate()} ${d.toLocaleString("sv-SE", { month: "short" })}`; })()}
             </Badge>
           )}

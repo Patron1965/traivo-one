@@ -52,6 +52,8 @@
   --accent-foreground: 180 35% 25%;
   --destructive: 0 70% 35%;
   --destructive-foreground: 0 0% 98%;
+  --warning: 32 80% 44%;
+  --warning-foreground: 0 0% 100%;
   --input: 210 15% 72%;
   --ring: 204 60% 26%;
   --chart-1: 204 60% 26%;
@@ -136,6 +138,8 @@
   --accent-foreground: 180 35% 75%;
   --destructive: 0 70% 42%;
   --destructive-foreground: 0 0% 98%;
+  --warning: 36 85% 56%;
+  --warning-foreground: 210 30% 8%;
   --input: 210 22% 28%;
   --ring: 204 55% 40%;
   --chart-1: 204 55% 40%;

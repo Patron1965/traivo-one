@@ -73,7 +73,7 @@ export interface PendingSchedule {
 
 export const priorityDotColors: Record<string, string> = {
   urgent: "bg-destructive/15",
-  high: "bg-chart-4/15",
+  high: "bg-warning/15",
   normal: "bg-chart-1/15",
   low: "bg-gray-400",
 };

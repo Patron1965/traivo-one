@@ -71,7 +71,7 @@ export function TaskDependenciesView({ workOrderId, className }: TaskDependencie
         return <CheckCircle2 className="h-4 w-4 text-chart-2" />;
       case "on_way":
       case "on_site":
-        return <Clock className="h-4 w-4 text-chart-4 animate-pulse" />;
+        return <Clock className="h-4 w-4 text-warning animate-pulse" />;
       default:
         return <AlertCircle className="h-4 w-4 text-muted-foreground" />;
     }
@@ -207,7 +207,7 @@ export function TaskDependenciesView({ workOrderId, className }: TaskDependencie
                 </>
               ) : (
                 <>
-                  <AlertCircle className="h-4 w-4 text-chart-4" />
+                  <AlertCircle className="h-4 w-4 text-warning" />
                   <span className="text-muted-foreground">
                     {dependencies.filter(d => !isOrderComplete(d.dependsOnOrder)).length} beroenden kvar
                   </span>

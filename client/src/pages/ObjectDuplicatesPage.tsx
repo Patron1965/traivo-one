@@ -177,9 +177,9 @@ export default function ObjectDuplicatesPage() {
           <Card data-testid="card-duplicate-groups">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
-                <Copy className="h-5 w-5 text-chart-4" />
+                <Copy className="h-5 w-5 text-warning" />
                 <div>
-                  <p className="text-2xl font-bold text-chart-4">{summary.totalGroups.toLocaleString("sv-SE")}</p>
+                  <p className="text-2xl font-bold text-warning">{summary.totalGroups.toLocaleString("sv-SE")}</p>
                   <p className="text-xs text-muted-foreground">Dubblettgrupper</p>
                 </div>
               </div>
@@ -263,7 +263,7 @@ export default function ObjectDuplicatesPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-chart-4" />
+            <AlertTriangle className="h-5 w-5 text-warning" />
             Dubblettgrupper
           </CardTitle>
           <CardDescription>
@@ -432,7 +432,7 @@ export default function ObjectDuplicatesPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-chart-4" />
+              <AlertTriangle className="h-5 w-5 text-warning" />
               Bekräfta auto-sammanslagning
             </AlertDialogTitle>
             <AlertDialogDescription>

@@ -50,7 +50,7 @@ function HistoryRow({ item }: { item: DriverNotification }) {
       case "extra_job_sms":
         return { icon: <PlusCircle className="h-4 w-4 text-chart-1" />, label: "Extrajobb-SMS", success: !data.error };
       case "cancel_job_sms":
-        return { icon: <XCircle className="h-4 w-4 text-chart-4" />, label: "Borttaget jobb-SMS", success: !data.error };
+        return { icon: <XCircle className="h-4 w-4 text-warning" />, label: "Borttaget jobb-SMS", success: !data.error };
       default:
         return { icon: <MessageSquare className="h-4 w-4 text-muted-foreground" />, label: item.type, success: true };
     }
@@ -211,7 +211,7 @@ export const ResourceDetailSheet = memo(function ResourceDetailSheet(props: Reso
               <div className="flex items-center gap-2 text-sm" data-testid={`text-resource-last-published-${resource.id}`}>
                 {lastPublishedAt
                   ? <><CheckCircle2 className="h-4 w-4 text-chart-2" /><span>Senast publicerat {format(lastPublishedAt, "EEE d MMM HH:mm", { locale: sv })}</span></>
-                  : <><AlertCircle className="h-4 w-4 text-chart-4" /><span>Schemat har inte publicerats än</span></>}
+                  : <><AlertCircle className="h-4 w-4 text-warning" /><span>Schemat har inte publicerats än</span></>}
               </div>
               {resource.lastSchedulePeriodStart && resource.lastSchedulePeriodEnd && (
                 <div className="text-xs text-muted-foreground pl-6">

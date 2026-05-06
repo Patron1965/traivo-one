@@ -459,13 +459,13 @@ export function usePlannerData() {
   }, [resources, currentDate, getJobsForResourceAndDay]);
 
   const getCapacityPercentage = useCallback((h: number) => Math.min((h / HOURS_IN_DAY) * 100, 100), []);
-  const getCapacityColor = useCallback((p: number) => p >= 100 ? "bg-destructive/15" : p >= 85 ? "bg-chart-4/15" : p >= 65 ? "bg-chart-3/15" : "bg-chart-2/15", []);
-  const getCapacityBgColor = useCallback((p: number) => p >= 100 ? "bg-destructive/10 dark:bg-destructive/15" : p >= 85 ? "bg-chart-4/10 dark:bg-chart-4/15" : p >= 65 ? "bg-chart-3/10 dark:bg-chart-3/15" : "", []);
+  const getCapacityColor = useCallback((p: number) => p >= 100 ? "bg-destructive/15" : p >= 85 ? "bg-warning/15" : p >= 65 ? "bg-chart-3/15" : "bg-chart-2/15", []);
+  const getCapacityBgColor = useCallback((p: number) => p >= 100 ? "bg-destructive/10 dark:bg-destructive/15" : p >= 85 ? "bg-warning/10 dark:bg-warning/15" : p >= 65 ? "bg-chart-3/10 dark:bg-chart-3/15" : "", []);
   const getDropFitClass = useCallback((rid: string, dayStr: string, dur: number) => {
     const nh = (resourceDayJobMap.hours[rid]?.[dayStr] || 0) + dur / 60;
     const p = (nh / HOURS_IN_DAY) * 100;
     if (p > 110) return { bg: "bg-destructive/15 dark:bg-destructive/15 ring-destructive/40", label: "Överbokning", color: "text-destructive" };
-    if (p > 85) return { bg: "bg-chart-4/15 dark:bg-chart-4/15 ring-chart-4/40", label: "Tight", color: "text-chart-4" };
+    if (p > 85) return { bg: "bg-warning/15 dark:bg-warning/15 ring-warning/40", label: "Tight", color: "text-warning" };
     if (p > 65) return { bg: "bg-chart-3/15 dark:bg-chart-3/15 ring-chart-3/40", label: "Bra", color: "text-chart-3" };
     return { bg: "bg-chart-2/15 dark:bg-chart-2/15 ring-chart-2/40", label: "Gott om plats", color: "text-chart-2" };
   }, [resourceDayJobMap]);

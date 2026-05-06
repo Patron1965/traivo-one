@@ -311,7 +311,7 @@ function RouteFeedbackTab() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-chart-4" />
+                <AlertTriangle className="h-4 w-4 text-warning" />
                 Orsaker
               </CardTitle>
             </CardHeader>
@@ -977,7 +977,7 @@ export default function ReportingDashboardPage() {
           subtitle={`${deviationKpis.open} öppna`}
           change={deviationKpis.change}
           changeLabel="vs föreg."
-          icon={<AlertTriangle className="h-5 w-5 text-chart-4" />}
+          icon={<AlertTriangle className="h-5 w-5 text-warning" />}
           variant={deviationKpis.critical > 3 ? "danger" : deviationKpis.total > 0 ? "warning" : "default"}
         />
       </div>
@@ -1405,7 +1405,7 @@ export default function ReportingDashboardPage() {
               value={deviationKpis.total}
               change={deviationKpis.change}
               changeLabel="vs föreg."
-              icon={<AlertTriangle className="h-5 w-5 text-chart-4" />}
+              icon={<AlertTriangle className="h-5 w-5 text-warning" />}
               variant={deviationKpis.total > 10 ? "danger" : deviationKpis.total > 0 ? "warning" : "default"}
             />
             <KPICard
@@ -1573,7 +1573,7 @@ export default function ReportingDashboardPage() {
                       <div key={d.id} className="flex items-start gap-2 p-2 rounded-lg border text-sm">
                         <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
                           d.severityLevel === "critical" ? "bg-destructive/15" :
-                          d.severityLevel === "high" ? "bg-chart-4/15" :
+                          d.severityLevel === "high" ? "bg-warning/15" :
                           d.severityLevel === "medium" ? "bg-chart-3/15" : "bg-chart-1/15"
                         }`} />
                         <div className="flex-1 min-w-0">
@@ -1631,7 +1631,7 @@ export default function ReportingDashboardPage() {
                       </div>
                       <div>
                         <p className="text-muted-foreground text-xs">Effektivitet</p>
-                        <p className={`font-medium ${resource.efficiency > 120 ? "text-destructive" : resource.efficiency > 100 ? "text-chart-4" : "text-chart-2"}`}>
+                        <p className={`font-medium ${resource.efficiency > 120 ? "text-destructive" : resource.efficiency > 100 ? "text-warning" : "text-chart-2"}`}>
                           {resource.efficiency > 0 ? `${resource.efficiency}%` : "–"}
                         </p>
                       </div>

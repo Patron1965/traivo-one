@@ -499,13 +499,13 @@ export function Dashboard() {
 
   const insightColors = {
     suggestion: "bg-chart-1/10 dark:bg-chart-1/15",
-    warning: "bg-chart-4/10 dark:bg-chart-4/15",
+    warning: "bg-warning/10 dark:bg-warning/15",
     success: "bg-chart-2/10 dark:bg-chart-2/15",
   };
 
   const insightIconColors = {
     suggestion: "text-chart-1",
-    warning: "text-chart-4",
+    warning: "text-warning",
     success: "text-chart-2",
   };
 
@@ -1154,7 +1154,7 @@ export function Dashboard() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-chart-4" />
+                <AlertTriangle className="h-4 w-4 text-warning" />
                 Top 5 objekt med högst ställtid
               </CardTitle>
               <Link href="/objects">
@@ -1367,7 +1367,7 @@ export function Dashboard() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-base flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-chart-4" />
+                <AlertCircle className="h-4 w-4 text-warning" />
                 Risker och förseningar
               </CardTitle>
               <Link href="/">
@@ -1386,13 +1386,13 @@ export function Dashboard() {
                   className={`flex items-center gap-3 p-3 rounded-md ${
                     risk.type === "overdue" 
                       ? "bg-destructive/10 dark:bg-destructive/15" 
-                      : "bg-chart-4/10 dark:bg-chart-4/15"
+                      : "bg-warning/10 dark:bg-warning/15"
                   }`}
                 >
                   {risk.type === "overdue" ? (
                     <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
                   ) : (
-                    <Clock className="h-4 w-4 text-chart-4 shrink-0" />
+                    <Clock className="h-4 w-4 text-warning shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm">{risk.workOrder.title}</div>
@@ -1563,7 +1563,7 @@ function AICapabilityCard({ icon: Icon, title, description, impact, status }: AI
   const statusColors = {
     active: "bg-chart-2/15 text-chart-2 border-chart-2/50",
     planned: "bg-primary/15 text-primary border-primary/30",
-    coming: "bg-chart-4/15 text-chart-4 border-chart-4/50"
+    coming: "bg-warning/15 text-warning border-warning/50"
   };
 
   return (

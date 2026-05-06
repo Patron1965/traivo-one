@@ -266,7 +266,7 @@ export default function ApiCostsDashboardPage() {
       {budgetStatus && (
         <Card data-testid="card-budget-status" className={
           budgetStatus.status === "exceeded" ? "border-destructive/50 bg-destructive/10 dark:bg-destructive/15" :
-          budgetStatus.status === "critical" ? "border-chart-4/50 bg-chart-4/10 dark:bg-chart-4/15" :
+          budgetStatus.status === "critical" ? "border-warning/50 bg-warning/10 dark:bg-warning/15" :
           budgetStatus.status === "warning" ? "border-chart-3/50 bg-chart-3/10 dark:bg-chart-3/15" :
           "border-chart-2/50"
         }>
@@ -275,7 +275,7 @@ export default function ApiCostsDashboardPage() {
               <div className="flex items-center gap-2">
                 <Shield className={`h-5 w-5 ${
                   budgetStatus.status === "exceeded" ? "text-destructive" :
-                  budgetStatus.status === "critical" ? "text-chart-4" :
+                  budgetStatus.status === "critical" ? "text-warning" :
                   budgetStatus.status === "warning" ? "text-chart-3" :
                   "text-chart-2"
                 }`} />
@@ -319,7 +319,7 @@ export default function ApiCostsDashboardPage() {
                   <Gauge className="h-4 w-4 text-muted-foreground" />
                   <span className={`text-lg font-bold ${
                     budgetStatus.percentUsed >= 100 ? "text-destructive" :
-                    budgetStatus.percentUsed >= 80 ? "text-chart-4" :
+                    budgetStatus.percentUsed >= 80 ? "text-warning" :
                     ""
                   }`} data-testid="text-budget-percent">{budgetStatus.percentUsed}%</span>
                 </div>

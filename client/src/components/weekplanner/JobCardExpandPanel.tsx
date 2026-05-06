@@ -132,7 +132,7 @@ function SyncMarker({ entry }: { entry: JobExpandSyncEntry }) {
   const map: Record<SyncStatus, { color: string; icon: typeof CheckCircle2; label: string }> = {
     fresh: { color: "text-chart-2", icon: CheckCircle2, label: `Synkad ${formatRelative(entry.latestSyncAt)}` },
     stale: { color: "text-muted-foreground", icon: Clock, label: `Senast ${formatRelative(entry.latestSyncAt)}` },
-    pending: { color: "text-chart-4", icon: AlertTriangle, label: "Väntar på fältsync" },
+    pending: { color: "text-warning", icon: AlertTriangle, label: "Väntar på fältsync" },
     empty: { color: "text-muted-foreground/60", icon: Circle, label: "Ingen data" },
   };
   const { color, icon: Icon, label } = map[entry.status];
@@ -171,7 +171,7 @@ function relativeColorClass(d: string | null | undefined, opts?: { criticalDays?
   const warningDays = opts?.warningDays ?? 3;
   if (days < 0) return "text-destructive";
   if (days <= criticalDays) return "text-destructive";
-  if (days <= warningDays) return "text-chart-4";
+  if (days <= warningDays) return "text-warning";
   return "text-chart-2";
 }
 
@@ -256,12 +256,12 @@ function PeriodTimeline({ period }: { period: JobExpandPeriod }) {
           />
         )}
         <div
-          className="absolute top-[calc(50%-7px)] h-3.5 w-px bg-chart-4/15"
+          className="absolute top-[calc(50%-7px)] h-3.5 w-px bg-warning/15"
           style={{ left: `calc(${nowPos}% - 0.5px)` }}
           title="Nu"
           data-testid="timeline-now"
         >
-          <div className="absolute -top-1 -left-[2px] h-1.5 w-1.5 rounded-full bg-chart-4/15" />
+          <div className="absolute -top-1 -left-[2px] h-1.5 w-1.5 rounded-full bg-warning/15" />
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] text-muted-foreground mt-1">
@@ -269,7 +269,7 @@ function PeriodTimeline({ period }: { period: JobExpandPeriod }) {
         <span className="inline-flex items-center gap-1"><span className="h-1.5 w-2 rounded bg-chart-5/30 dark:bg-chart-5/15" />Planerad</span>
         <span className="inline-flex items-center gap-1"><span className="h-2.5 w-1 rounded-sm bg-foreground" />Schemalagd</span>
         <span className="inline-flex items-center gap-1"><span className="h-2.5 w-0.5 bg-destructive/15" />Deadline</span>
-        <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-chart-4/15" />Nu</span>
+        <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-warning/15" />Nu</span>
       </div>
     </div>
   );
@@ -349,7 +349,7 @@ function PeriodTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
           className={`flex items-start gap-1.5 rounded p-1.5 mb-2 text-[11px] border ${
             slaCritical
               ? "bg-destructive/10 dark:bg-destructive/15 border-destructive/20 dark:border-destructive/90 text-destructive"
-              : "bg-chart-4/10 dark:bg-chart-4/15 border-chart-4/20 dark:border-chart-4/90 text-chart-4"
+              : "bg-warning/10 dark:bg-warning/15 border-warning/20 dark:border-warning/90 text-warning"
           }`}
           data-testid={`sla-risk-banner-${slaLevel}`}
         >
@@ -458,7 +458,7 @@ function PeriodTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
           <div>
             <div className="text-muted-foreground">SLA-deadline</div>
             <div className="flex items-baseline gap-1.5 flex-wrap">
-              <span className={`font-medium ${slaCritical ? "text-destructive" : slaWarning ? "text-chart-4" : ""}`}>
+              <span className={`font-medium ${slaCritical ? "text-destructive" : slaWarning ? "text-warning" : ""}`}>
                 {formatDate(period.slaDeadlineAt)}
               </span>
               {deadlineRelative && (
@@ -473,7 +473,7 @@ function PeriodTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
                     slaCritical
                       ? "border-destructive/40 text-destructive dark:border-destructive/70"
                       : slaWarning
-                      ? "border-chart-4/40 text-chart-4 dark:border-chart-4/70"
+                      ? "border-warning/40 text-warning dark:border-warning/70"
                       : "border-chart-2/40 text-chart-2 dark:border-chart-2/70"
                   }`}
                   data-testid={`sla-risk-badge-${slaLevel}`}

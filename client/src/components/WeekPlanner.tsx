@@ -543,9 +543,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
           </div>
 
           {d.activeDragJob && d.activeDragJob.clusterId && d.clusterMatchedResourceIds.size === 0 && d.visibleResources.some(r => r.serviceArea && r.serviceArea.length > 0) && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-chart-4/10 dark:bg-chart-4/15 border-b border-chart-4/20 dark:border-chart-4/80 animate-in fade-in slide-in-from-top-1 duration-200" data-testid="drag-no-cluster-match-warning">
-              <AlertTriangle className="h-4 w-4 text-chart-4 shrink-0" />
-              <span className="text-xs text-chart-4">
+            <div className="flex items-center gap-2 px-3 py-2 bg-warning/10 dark:bg-warning/15 border-b border-warning/20 dark:border-warning/80 animate-in fade-in slide-in-from-top-1 duration-200" data-testid="drag-no-cluster-match-warning">
+              <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
+              <span className="text-xs text-warning">
                 Ingen synlig resurs matchar klustret för detta jobb. Kontrollera resursernas serviceområden.
               </span>
             </div>

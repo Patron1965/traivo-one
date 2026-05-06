@@ -23,7 +23,7 @@ _Populate as you build_
 - **UI Components:** `src/components/ui/` (shadcn/ui), `src/components/` for custom components
 - **Shared list-state wrapper:** `client/src/components/QueryState.tsx` (Skeleton/Empty/Error)
 - **Status badge tokens:** `client/src/lib/status-colors.ts` (objektstatus + work-order-status mappade till tema-tokens)
-- **Theme/Styling:** Refer to Traivo Color Palette and Inter font usage for Nordic aesthetic. Använd alltid tema-tokens (`bg-destructive`, `chart-*`, `muted` osv) i nya vyer — inga `bg-red-500`/`bg-amber-*`/`text-orange-*`. Tabellen stöder `density="compact"` för datatäta listor.
+- **Theme/Styling:** Refer to Traivo Color Palette and Inter font usage for Nordic aesthetic. Använd alltid tema-tokens (`bg-destructive`, `bg-warning`, `chart-*`, `muted` osv) i nya vyer — inga `bg-red-500`/`bg-amber-*`/`text-orange-*`. Använd `warning` för varningstillstånd (tight/snart/SLA-risk/fel-räknare), `destructive` för hård-blockerande/kritiskt, och `chart-4` enbart för kategoriska neutrala saker (kärl, rast, diagramserier, navigation). Se `docs/color-harmonization-review.md`. Tabellen stöder `density="compact"` för datatäta listor.
 - **Fortnox Integration:** `server/fortnox-client.ts`
 - **Delivery Preferences Logic:** `storage.resolveDeliveryPreferences(objectId)`
 

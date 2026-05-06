@@ -83,7 +83,7 @@ function CapacityBar({ label, current, max, isNew }: { label: string; current: n
       </div>
       <Progress
         value={Math.min(pct, 100)}
-        className={`h-2 ${overbooked ? "[&>div]:bg-destructive/15" : pct > 85 ? "[&>div]:bg-chart-4/15" : pct > 65 ? "[&>div]:bg-chart-3/15" : "[&>div]:bg-chart-2/15"}`}
+        className={`h-2 ${overbooked ? "[&>div]:bg-destructive/15" : pct > 85 ? "[&>div]:bg-warning/15" : pct > 65 ? "[&>div]:bg-chart-3/15" : "[&>div]:bg-chart-2/15"}`}
       />
     </div>
   );
@@ -144,14 +144,14 @@ export function WhatIfPreview({ open, onOpenChange, result, loading, jobTitle, o
             {softViolations.length > 0 && (
               <div className="space-y-2" data-testid="what-if-soft-violations">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-chart-4" />
-                  <span className="text-sm font-medium text-chart-4">Varningar ({softViolations.length})</span>
+                  <AlertTriangle className="h-4 w-4 text-warning" />
+                  <span className="text-sm font-medium text-warning">Varningar ({softViolations.length})</span>
                 </div>
                 <div className="space-y-1.5">
                   {softViolations.map((v, i) => (
-                    <div key={i} className="flex items-start gap-2 p-2 rounded bg-chart-4/10 dark:bg-chart-4/15 border border-chart-4/20 dark:border-chart-4/80" data-testid={`what-if-violation-soft-${i}`}>
-                      <AlertTriangle className="h-4 w-4 text-chart-4 shrink-0 mt-0.5" />
-                      <span className="text-xs text-chart-4">{v.description}</span>
+                    <div key={i} className="flex items-start gap-2 p-2 rounded bg-warning/10 dark:bg-warning/15 border border-warning/20 dark:border-warning/80" data-testid={`what-if-violation-soft-${i}`}>
+                      <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+                      <span className="text-xs text-warning">{v.description}</span>
                     </div>
                   ))}
                 </div>
@@ -215,7 +215,7 @@ export function WhatIfPreview({ open, onOpenChange, result, loading, jobTitle, o
                         {o.scheduledStartTime && <span className="text-muted-foreground">{o.scheduledStartTime}</span>}
                         <span className="text-muted-foreground">{(o.estimatedDuration / 60).toFixed(1)}h</span>
                         {o.etaDeltaMinutes !== null && o.etaDeltaMinutes > 0 && (
-                          <Badge variant="outline" className="text-[10px] px-1 py-0 bg-chart-4/10 dark:bg-chart-4/15 border-chart-4/30 dark:border-chart-4/70 text-chart-4" data-testid={`what-if-eta-delta-${o.id}`}>
+                          <Badge variant="outline" className="text-[10px] px-1 py-0 bg-warning/10 dark:bg-warning/15 border-warning/30 dark:border-warning/70 text-warning" data-testid={`what-if-eta-delta-${o.id}`}>
                             +{o.etaDeltaMinutes}min
                           </Badge>
                         )}
@@ -229,15 +229,15 @@ export function WhatIfPreview({ open, onOpenChange, result, loading, jobTitle, o
             {result.slaRisks && result.slaRisks.length > 0 && (
               <div className="space-y-2" data-testid="what-if-sla-risks">
                 <div className="flex items-center gap-2">
-                  <ShieldAlert className="h-4 w-4 text-chart-4" />
-                  <span className="text-sm font-medium text-chart-4">SLA-risker ({result.slaRisks.length})</span>
+                  <ShieldAlert className="h-4 w-4 text-warning" />
+                  <span className="text-sm font-medium text-warning">SLA-risker ({result.slaRisks.length})</span>
                 </div>
                 <div className="space-y-1.5">
                   {result.slaRisks.map((r) => (
                     <div key={r.workOrderId} className={`flex items-center justify-between text-xs p-2 rounded border ${
                       r.risk === "high"
                         ? "bg-destructive/10 dark:bg-destructive/15 border-destructive/20 dark:border-destructive/80"
-                        : "bg-chart-4/10 dark:bg-chart-4/15 border-chart-4/20 dark:border-chart-4/80"
+                        : "bg-warning/10 dark:bg-warning/15 border-warning/20 dark:border-warning/80"
                     }`} data-testid={`what-if-sla-risk-${r.workOrderId}`}>
                       <span className="truncate mr-2">{r.title}</span>
                       <div className="flex items-center gap-2 shrink-0">
@@ -245,7 +245,7 @@ export function WhatIfPreview({ open, onOpenChange, result, loading, jobTitle, o
                         <Badge variant="outline" className={`text-[10px] px-1 py-0 ${
                           r.risk === "high"
                             ? "bg-destructive/15 dark:bg-destructive/15 border-destructive/40 dark:border-destructive/60 text-destructive"
-                            : "bg-chart-4/15 dark:bg-chart-4/15 border-chart-4/40 dark:border-chart-4/60 text-chart-4"
+                            : "bg-warning/15 dark:bg-warning/15 border-warning/40 dark:border-warning/60 text-warning"
                         }`}>
                           {r.daysRemaining < 0 ? `${Math.abs(r.daysRemaining)}d försenad` : `${r.daysRemaining}d kvar`}
                         </Badge>

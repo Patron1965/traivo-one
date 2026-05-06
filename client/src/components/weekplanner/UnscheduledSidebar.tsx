@@ -248,20 +248,20 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
             </div>
           </div>
           {showDragNoMatch && (
-            <div className="flex items-center gap-1.5 p-2 rounded-md bg-chart-4/10 dark:bg-chart-4/15 border border-chart-4/20 dark:border-chart-4/80" data-testid="sidebar-no-cluster-match-warning">
-              <AlertTriangle className="h-3.5 w-3.5 text-chart-4 shrink-0" />
-              <span className="text-[10px] text-chart-4">Ingen resurs matchar klustret</span>
+            <div className="flex items-center gap-1.5 p-2 rounded-md bg-warning/10 dark:bg-warning/15 border border-warning/20 dark:border-warning/80" data-testid="sidebar-no-cluster-match-warning">
+              <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
+              <span className="text-[10px] text-warning">Ingen resurs matchar klustret</span>
             </div>
           )}
           <div className="flex items-center gap-1.5 flex-wrap" data-testid="sidebar-quick-stats">
             {sidebarQuickStats.urgentCount > 0 && (
               <Badge variant="destructive" className="text-[10px] h-5 gap-1">
-                <AlertTriangle className="h-2.5 w-2.5 text-chart-4" />
+                <AlertTriangle className="h-2.5 w-2.5 text-warning" />
                 {sidebarQuickStats.urgentCount} akut
               </Badge>
             )}
             {sidebarQuickStats.highCount > 0 && (
-              <Badge className="text-[10px] h-5 bg-chart-4/15 text-chart-4 dark:bg-chart-4/15 border-chart-4/30">
+              <Badge className="text-[10px] h-5 bg-warning/15 text-warning dark:bg-warning/15 border-warning/30">
                 {sidebarQuickStats.highCount} hög
               </Badge>
             )}
@@ -676,7 +676,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                         {(job.objectAccessCode || job.objectKeyNumber) && (
                           <div className="flex items-center gap-2 mt-1">
                             {job.objectAccessCode && (
-                              <span className="flex items-center gap-0.5 text-[10px] text-chart-4">
+                              <span className="flex items-center gap-0.5 text-[10px] text-warning">
                                 <DoorOpen className="h-2.5 w-2.5" />
                                 {job.objectAccessCode}
                               </span>
@@ -727,7 +727,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                               <Badge variant="destructive" className="text-[9px] h-4 ml-1">Försenad</Badge>
                             )}
                             {new Date(job.plannedWindowEnd) >= new Date() && new Date(job.plannedWindowEnd) < addDays(new Date(), 7) && (
-                              <Badge className="text-[9px] h-4 ml-1 bg-chart-4/15 text-chart-4 dark:bg-chart-4/15 border-chart-4/30">Snart</Badge>
+                              <Badge className="text-[9px] h-4 ml-1 bg-warning/15 text-warning dark:bg-warning/15 border-warning/30">Snart</Badge>
                             )}
                           </div>
                         )}

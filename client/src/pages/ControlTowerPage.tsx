@@ -62,16 +62,16 @@ type HeatmapData = {
 const LEVEL_COLORS: Record<HeatmapCell["level"], string> = {
   empty: "bg-gray-100 dark:bg-gray-800",
   low: "bg-chart-2/15 dark:bg-chart-2/15",
-  medium: "bg-chart-4/15 dark:bg-chart-4/15",
-  high: "bg-chart-4/20 dark:bg-chart-4/15",
+  medium: "bg-warning/15 dark:bg-warning/15",
+  high: "bg-warning/20 dark:bg-warning/15",
   overloaded: "bg-destructive/30 dark:bg-destructive/15",
 };
 
 const LEVEL_BORDERS: Record<HeatmapCell["level"], string> = {
   empty: "border-gray-200 dark:border-gray-700",
   low: "border-chart-2/30 dark:border-chart-2/70",
-  medium: "border-chart-4/30 dark:border-chart-4/70",
-  high: "border-chart-4/40 dark:border-chart-4/70",
+  medium: "border-warning/30 dark:border-warning/70",
+  high: "border-warning/40 dark:border-warning/70",
   overloaded: "border-destructive/50 dark:border-destructive/60",
 };
 
@@ -147,11 +147,11 @@ function CellDetailDialog({ cell, resourceName, open, onClose }: {
             </div>
           )}
           {cell.deviationCount > 0 && (
-            <div className="flex items-center gap-2 rounded-lg border border-chart-4/30 dark:border-chart-4/70 bg-chart-4/10 dark:bg-chart-4/15 p-3">
-              <AlertTriangle className="h-4 w-4 text-chart-4 flex-shrink-0" />
+            <div className="flex items-center gap-2 rounded-lg border border-warning/30 dark:border-warning/70 bg-warning/10 dark:bg-warning/15 p-3">
+              <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0" />
               <div>
-                <p className="text-sm font-medium text-chart-4">Avvikelser</p>
-                <p className="text-xs text-chart-4">{cell.deviationCount} rapporterade avvikelser</p>
+                <p className="text-sm font-medium text-warning">Avvikelser</p>
+                <p className="text-xs text-warning">{cell.deviationCount} rapporterade avvikelser</p>
               </div>
             </div>
           )}
@@ -207,7 +207,7 @@ function HeatmapCellComponent({ cell, onClick }: { cell: HeatmapCell; onClick: (
             </div>
           )}
           {cell.deviationCount > 0 && (
-            <div className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-chart-4/15 flex items-center justify-center">
+            <div className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-warning/15 flex items-center justify-center">
               <span className="text-[8px] text-white font-bold">{cell.deviationCount}</span>
             </div>
           )}
@@ -222,7 +222,7 @@ function HeatmapCellComponent({ cell, onClick }: { cell: HeatmapCell; onClick: (
             <p className="text-xs text-destructive">SLA-risk: {cell.slaAtRisk} ordrar</p>
           )}
           {cell.deviationCount > 0 && (
-            <p className="text-xs text-chart-4">Avvikelser: {cell.deviationCount}</p>
+            <p className="text-xs text-warning">Avvikelser: {cell.deviationCount}</p>
           )}
           <p className="text-[10px] text-muted-foreground italic">Klicka för detaljer</p>
         </div>
@@ -365,7 +365,7 @@ export default function ControlTowerPage() {
           <SummaryCard icon={Users} label="Resurser" value={data.summary.totalResources} color="bg-[#1B4B6B]" />
           <SummaryCard icon={ClipboardList} label="Ordrar" value={data.summary.totalOrders} color="bg-[#4A9B9B]" />
           <SummaryCard icon={TrendingUp} label="Snittbeläggning" value={`${data.summary.avgCapacity}%`} color="bg-[#7DBFB0]" />
-          <SummaryCard icon={AlertTriangle} label="Överbelastade" value={data.summary.overloadedCells} color="bg-chart-4/15" />
+          <SummaryCard icon={AlertTriangle} label="Överbelastade" value={data.summary.overloadedCells} color="bg-warning/15" />
           <SummaryCard icon={AlertTriangle} label="SLA-risk" value={data.summary.slaRiskTotal} color="bg-destructive/15" />
         </div>
       )}
@@ -502,7 +502,7 @@ export default function ControlTowerPage() {
           <span>SLA-risk</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-chart-4/15" />
+          <div className="w-3 h-3 rounded-full bg-warning/15" />
           <span>Avvikelser</span>
         </div>
       </div>

@@ -71,7 +71,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
                   <span className="text-xs font-medium truncate">{resource.name}</span>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className={`text-[10px] whitespace-nowrap cursor-help shrink-0 ${capacityPct >= 100 ? "text-destructive font-semibold" : capacityPct >= 85 ? "text-chart-4" : "text-muted-foreground"}`}>
+                      <span className={`text-[10px] whitespace-nowrap cursor-help shrink-0 ${capacityPct >= 100 ? "text-destructive font-semibold" : capacityPct >= 85 ? "text-warning" : "text-muted-foreground"}`}>
                         {dayHours.toFixed(1)}h
                       </span>
                     </TooltipTrigger>
@@ -110,7 +110,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
               const cellHasBreak = jobs.some(j => getJobCategory(j) === "break");
               const constraintCellKey = `${resource.id}|${dayStr}`;
               const slotConstraint = showConstraintLayer && constraintMap ? constraintMap.get(constraintCellKey) : undefined;
-              const constraintBg = slotConstraint?.status === "blocked" ? "bg-destructive/10 dark:bg-destructive/15" : slotConstraint?.status === "warning" ? "bg-chart-4/10 dark:bg-chart-4/15" : "";
+              const constraintBg = slotConstraint?.status === "blocked" ? "bg-destructive/10 dark:bg-destructive/15" : slotConstraint?.status === "warning" ? "bg-warning/10 dark:bg-warning/15" : "";
               const cellBg = constraintBg || (cellHasProduction ? "bg-chart-2/10 dark:bg-chart-2/15" : cellHasTravel ? "bg-chart-3/10 dark:bg-chart-3/15" : cellHasBreak ? "bg-chart-1/10 dark:bg-chart-1/15" : "bg-muted/20");
 
               const dayCellDropFit = activeDragJob ? getDropFitClass(resource.id, format(day, "yyyy-MM-dd"), activeDragJob.estimatedDuration || 60) : null;
@@ -142,7 +142,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
                       return (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <div className={`flex items-center gap-1 text-[9px] cursor-help px-1 py-0.5 rounded mb-1 ${isBlocked ? "text-destructive bg-destructive/10 dark:bg-destructive/15" : "text-chart-4 bg-chart-4/10 dark:bg-chart-4/15"}`} data-testid={`constraint-day-${resource.id}`}>
+                            <div className={`flex items-center gap-1 text-[9px] cursor-help px-1 py-0.5 rounded mb-1 ${isBlocked ? "text-destructive bg-destructive/10 dark:bg-destructive/15" : "text-warning bg-warning/10 dark:bg-warning/15"}`} data-testid={`constraint-day-${resource.id}`}>
                               <Icon className="h-2.5 w-2.5 shrink-0" />
                               <span>{isBlocked ? "Blockerad" : "Varning"} ({cellConstraint.constraints.length})</span>
                             </div>
@@ -151,7 +151,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
                             <div className="text-xs space-y-1">
                               {cellConstraint.constraints.map((c, i) => (
                                 <div key={i} className="flex items-start gap-1.5">
-                                  <span className={`mt-0.5 h-1.5 w-1.5 rounded-full shrink-0 ${c.severity === "critical" ? "bg-destructive/15" : "bg-chart-4/15"}`} />
+                                  <span className={`mt-0.5 h-1.5 w-1.5 rounded-full shrink-0 ${c.severity === "critical" ? "bg-destructive/15" : "bg-warning/15"}`} />
                                   <span><strong>{constraintCategoryLabels[c.category] || c.category}:</strong> {c.description}</span>
                                 </div>
                               ))}

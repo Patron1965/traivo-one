@@ -146,7 +146,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
   const statusColors: Record<string, string> = {
     idle: "bg-chart-2/15",
     on_job: "bg-chart-1/15",
-    traveling: "bg-chart-4/15",
+    traveling: "bg-warning/15",
     on_break: "bg-gray-400",
     offline: "bg-destructive/15",
   };
@@ -158,7 +158,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
       <div className="bg-background border rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-auto" data-testid="dialog-urgent-job">
         <div className="flex items-center gap-3 p-4 border-b bg-destructive/10 dark:bg-destructive/15">
           <div className="bg-destructive text-white p-2 rounded-full animate-pulse">
-            <AlertTriangle className="h-5 w-5 text-chart-4" />
+            <AlertTriangle className="h-5 w-5 text-warning" />
           </div>
           <div>
             <h2 className="font-semibold text-lg">Akut Jobbhantering</h2>
@@ -187,7 +187,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
                     <span>Koordinater: {latitude.toFixed(4)}, {longitude.toFixed(4)}</span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 text-sm text-chart-4">
+                  <div className="flex items-center gap-2 text-sm text-warning">
                     <MapPin className="h-4 w-4" />
                     <span>Inga koordinater — välj en order med position</span>
                   </div>
@@ -262,7 +262,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
               </button>
               <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
                 <h3 className="font-medium text-destructive flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-chart-4" />
+                  <AlertTriangle className="h-4 w-4 text-warning" />
                   Bekräfta akut tilldelning
                 </h3>
                 <div className="space-y-2 text-sm">
@@ -310,7 +310,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
                 {assignMutation.isPending ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Skickar...</>
                 ) : (
-                  <><AlertTriangle className="h-4 w-4 mr-2 text-chart-4" /> Skicka akut uppdrag nu</>
+                  <><AlertTriangle className="h-4 w-4 mr-2 text-warning" /> Skicka akut uppdrag nu</>
                 )}
               </Button>
             </>

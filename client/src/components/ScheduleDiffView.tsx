@@ -125,7 +125,7 @@ function KPIDiffTable({ trace }: { trace: DecisionTrace }) {
     },
     {
       label: "Övertid",
-      icon: <AlertTriangle className="h-3.5 w-3.5 text-chart-4" />,
+      icon: <AlertTriangle className="h-3.5 w-3.5 text-warning" />,
       before: `${s.baselineOvertimeMinutes} min`,
       after: `${s.proposedOvertimeMinutes} min`,
       delta: overtimeDelta,
@@ -164,7 +164,7 @@ function KPIDiffTable({ trace }: { trace: DecisionTrace }) {
         {rows.map((row) => {
           const deltaColor = row.good
             ? "text-chart-2"
-            : "text-chart-4";
+            : "text-warning";
 
           return (
             <div key={row.label} className="grid grid-cols-[1fr_55px_55px_40px] gap-1 items-center text-xs" data-testid={`kpi-row-${row.label}`}>
@@ -193,7 +193,7 @@ function RiskBadge({ score, factors }: { score: number; factors: string[] }) {
     color = "bg-destructive/15 text-destructive";
     label = "Hög risk";
   } else if (pct >= 25) {
-    color = "bg-chart-4/15 text-chart-4";
+    color = "bg-warning/15 text-warning";
     label = "Måttlig risk";
   }
 
@@ -213,13 +213,13 @@ function RiskBadge({ score, factors }: { score: number; factors: string[] }) {
           {factors.length > 0 ? factors.map((factor, i) => {
             const lf = factor.toLowerCase();
             let FactorIcon = Info;
-            let iconColor = "text-chart-4";
+            let iconColor = "text-warning";
             if (lf.includes("väder") || lf.includes("prognos")) {
               FactorIcon = CloudRain;
               iconColor = "text-chart-1";
             } else if (lf.includes("portkod") || lf.includes("åtkomst")) {
               FactorIcon = KeyRound;
-              iconColor = "text-chart-4";
+              iconColor = "text-warning";
             } else if (lf.includes("historik") || lf.includes("resurs")) {
               FactorIcon = UserX;
               iconColor = "text-chart-5";
@@ -250,17 +250,17 @@ function ConstraintViolationsAlert({ violations }: { violations: ConstraintViola
   const soft = violations.filter(v => v.type === "soft");
 
   return (
-    <Card className="p-3 border-chart-4/50 bg-chart-4/10 dark:bg-chart-4/15" data-testid="constraint-violations">
+    <Card className="p-3 border-warning/50 bg-warning/10 dark:bg-warning/15" data-testid="constraint-violations">
       <button
         className="flex items-center gap-2 w-full text-left"
         onClick={() => setExpanded(!expanded)}
         data-testid="button-toggle-violations"
       >
-        <AlertTriangle className="h-4 w-4 text-chart-4 shrink-0" />
+        <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
         <span className="text-xs font-medium flex-1">
           {violations.length} constraint-{violations.length === 1 ? "varning" : "varningar"}
           {hard.length > 0 && <span className="text-destructive ml-1">({hard.length} hårda)</span>}
-          {soft.length > 0 && <span className="text-chart-4 ml-1">({soft.length} mjuka)</span>}
+          {soft.length > 0 && <span className="text-warning ml-1">({soft.length} mjuka)</span>}
         </span>
         {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
       </button>
@@ -272,14 +272,14 @@ function ConstraintViolationsAlert({ violations }: { violations: ConstraintViola
               className={`flex items-start gap-1.5 text-xs rounded px-2 py-1 ${
                 v.type === "hard"
                   ? "bg-destructive/15 dark:bg-destructive/15 text-destructive"
-                  : "bg-chart-4/15 dark:bg-chart-4/15 text-chart-4"
+                  : "bg-warning/15 dark:bg-warning/15 text-warning"
               }`}
               data-testid={`violation-${i}`}
             >
               {v.type === "hard" ? (
                 <ShieldAlert className="h-3 w-3 mt-0.5 shrink-0" />
               ) : (
-                <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0 text-chart-4" />
+                <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0 text-warning" />
               )}
               <span>{v.description}</span>
             </div>
@@ -304,13 +304,13 @@ function MoveCard({
   const statusIcon = move.constraintStatus === "valid"
     ? <ShieldCheck className="h-3.5 w-3.5 text-chart-2" />
     : move.constraintStatus === "warning"
-    ? <AlertTriangle className="h-3.5 w-3.5 text-chart-4" />
+    ? <AlertTriangle className="h-3.5 w-3.5 text-warning" />
     : <ShieldAlert className="h-3.5 w-3.5 text-destructive" />;
 
   const confidenceColor = move.confidence >= 80
     ? "bg-chart-2/15 text-chart-2"
     : move.confidence >= 60
-    ? "bg-chart-4/15 text-chart-4"
+    ? "bg-warning/15 text-warning"
     : "bg-destructive/15 text-destructive";
 
   return (
@@ -441,7 +441,7 @@ export function ScheduleDiffView({
                     <p className="text-xs font-mono truncate">{a.workOrderId.slice(0, 8)}...</p>
                     <p className="text-xs text-muted-foreground truncate">{a.reason}</p>
                   </div>
-                  <Badge className={`text-[10px] px-1.5 shrink-0 ${a.confidence >= 80 ? "bg-chart-2/15 text-chart-2" : a.confidence >= 60 ? "bg-chart-4/15 text-chart-4" : "bg-destructive/15 text-destructive"}`}>
+                  <Badge className={`text-[10px] px-1.5 shrink-0 ${a.confidence >= 80 ? "bg-chart-2/15 text-chart-2" : a.confidence >= 60 ? "bg-warning/15 text-warning" : "bg-destructive/15 text-destructive"}`}>
                     {a.confidence}%
                   </Badge>
                 </div>

@@ -1462,7 +1462,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                                 </SelectItem>
                                 <SelectItem value="EJ_OK">
                                   <span className="flex items-center gap-2 text-destructive font-medium">
-                                    <AlertTriangle className="h-4 w-4 text-chart-4" /> EJ OK
+                                    <AlertTriangle className="h-4 w-4 text-warning" /> EJ OK
                                   </span>
                                 </SelectItem>
                               </SelectContent>
@@ -1751,7 +1751,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               }}
               data-testid="button-report-problem"
             >
-              <AlertTriangle className="h-5 w-5 text-chart-4" />
+              <AlertTriangle className="h-5 w-5 text-warning" />
               <span className="text-xs">Problem</span>
             </Button>
             {jobStarted && (
@@ -1880,10 +1880,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
 
 
           {showProblemPanel && (
-            <Card className="border-chart-4/20 dark:border-chart-4/80">
+            <Card className="border-warning/20 dark:border-warning/80">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-chart-4" />
+                  <AlertTriangle className="h-4 w-4 text-warning" />
                   Rapportera problem
                 </CardTitle>
               </CardHeader>
@@ -2175,7 +2175,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                   {markImpossibleMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin mr-1" />
                   ) : (
-                    <AlertTriangle className="h-4 w-4 mr-1 text-chart-4" />
+                    <AlertTriangle className="h-4 w-4 mr-1 text-warning" />
                   )}
                   Markera som omöjlig
                 </Button>
@@ -2275,7 +2275,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                             className={`h-7 px-2 text-xs ${
                               inspectionItems[type]?.status === status
                                 ? status === 'ok' ? 'bg-chart-2/15 hover:bg-chart-2/15' 
-                                  : status === 'warning' ? 'bg-chart-4/15 hover:bg-chart-4/15'
+                                  : status === 'warning' ? 'bg-warning/15 hover:bg-warning/15'
                                   : 'bg-destructive/15 hover:bg-destructive/15'
                                 : ''
                             }`}

@@ -62,14 +62,14 @@ interface CommunicationEntry {
 function InsightCardComponent({ card }: { card: InsightCard }) {
   const severityStyles: Record<string, string> = {
     info: "border-l-chart-1 bg-chart-1/10 dark:bg-chart-1/15",
-    warning: "border-l-chart-4 bg-chart-4/10 dark:bg-chart-4/15",
+    warning: "border-l-warning bg-warning/10 dark:bg-warning/15",
     critical: "border-l-destructive bg-destructive/10 dark:bg-destructive/15",
     success: "border-l-chart-2 bg-chart-2/10 dark:bg-chart-2/15",
   };
 
   const severityBadge: Record<string, string> = {
     info: "bg-chart-1/15 text-chart-1 dark:bg-chart-1/15",
-    warning: "bg-chart-4/15 text-chart-4 dark:bg-chart-4/15",
+    warning: "bg-warning/15 text-warning dark:bg-warning/15",
     critical: "bg-destructive/15 text-destructive dark:bg-destructive/15-foreground",
     success: "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15",
   };
@@ -407,7 +407,7 @@ function AssistedPlanningPanel() {
     <Card data-testid="assisted-planning-panel">
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
-          <Target className="h-5 w-5 text-chart-4" />
+          <Target className="h-5 w-5 text-warning" />
           AI-assisterad Planering
         </CardTitle>
         <CardDescription>Ge instruktioner på naturligt språk</CardDescription>
