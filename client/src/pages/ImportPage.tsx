@@ -2321,7 +2321,7 @@ export default function ImportPage() {
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const { data: workOrders = [] } = useQuery<{ id: string }[]>({ queryKey: ["/api/work-orders"] });
   const { data: resources = [] } = useQuery<Resource[]>({ queryKey: ["/api/resources"] });
-  const { data: objects = [] } = useQuery<ServiceObject[]>({ queryKey: ["/api/objects"] });
+  const { data: objects = [] } = useQuery<ServiceObject[]>({ queryKey: ["/api/objects", "lookup"] });
   const { data: importBatches = [], isLoading: batchesLoading } = useQuery<ImportBatch[]>({ queryKey: ["/api/import/batches"] });
 
   useEffect(() => {

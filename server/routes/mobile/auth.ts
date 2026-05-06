@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { mobileLoginLimiter } from "../../middleware/rate-limit";
   import {
     MobileAuthenticatedRequest,
     storage, db, eq,
@@ -22,7 +23,7 @@ import type { Express } from "express";
   const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 
 // Mobile login - authenticate with email and PIN
-app.post("/api/mobile/login", asyncHandler(async (req, res) => {
+app.post("/api/mobile/login", mobileLoginLimiter, asyncHandler(async (req, res) => {
     const clientIp = req.ip || req.socket.remoteAddress || "unknown";
     const now = Date.now();
     const attempt = loginAttempts.get(clientIp);

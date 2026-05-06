@@ -14,6 +14,7 @@ import { sendEmail } from "../replit_integrations/resend";
 import { isModuleEnabled } from "../feature-flags";
 import { ensureClusterAndAssign } from "../auto-cluster";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
+import { authLimiter } from "../middleware/rate-limit";
 
 export async function registerPortalRoutes(app: Express) {
 // ============================================
@@ -123,7 +124,7 @@ app.get("/api/portal/tenants", asyncHandler(async (req, res) => {
     res.json(tenants.map(t => ({ id: t.id, name: t.name })));
 }));
 
-app.post("/api/portal/auth/request-link", asyncHandler(async (req, res) => {
+app.post("/api/portal/auth/request-link", authLimiter, asyncHandler(async (req, res) => {
     const { email } = req.body;
     let { tenantId } = req.body;
     
@@ -185,7 +186,7 @@ app.post("/api/portal/auth/request-link", asyncHandler(async (req, res) => {
     });
 }));
 
-app.post("/api/portal/auth/verify", asyncHandler(async (req, res) => {
+app.post("/api/portal/auth/verify", authLimiter, asyncHandler(async (req, res) => {
     const { token } = req.body;
     
     if (!token) {
@@ -967,7 +968,7 @@ app.get("/api/portal/completed-jobs", asyncHandler(async (req, res) => {
     res.json(results);
 }));
 
-app.post("/api/portal/auth/demo-login", asyncHandler(async (req, res) => {
+app.post("/api/portal/auth/demo-login", authLimiter, asyncHandler(async (req, res) => {
     if (process.env.NODE_ENV === "production") {
       return res.status(404).json({ error: "Demo-inloggning är inte tillgänglig i produktion" });
     }

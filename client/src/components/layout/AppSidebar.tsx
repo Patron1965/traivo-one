@@ -22,7 +22,33 @@ import { useLanguage } from "@/hooks/use-language";
 import { useFeatures } from "@/lib/feature-context";
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { canAccessMenu, type NavMenuGroup } from "@/lib/role-config";
+
+// Karta: URL → primärnyckel(ar) som sidan hämtar vid render.
+// Vid hover triggas prefetchQuery så datan finns i cache när användaren klickar.
+const PREFETCH_KEYS_BY_URL: Record<string, readonly (readonly unknown[])[]> = {
+  "/assignments": [["/api/assignments"], ["/api/work-orders"], ["/api/resources"], ["/api/clusters"], ["/api/objects", "lookup"]],
+  "/order-stock": [["/api/work-orders"]],
+  "/customers": [["/api/customers"]],
+  "/articles": [["/api/articles"], ["/api/objects", "lookup"]],
+  "/resources": [["/api/resources"], ["/api/objects", "lookup"]],
+  "/clusters": [["/api/clusters"]],
+  "/vehicles": [["/api/vehicles"]],
+  "/portal-messages": [["/api/portal-messages"]],
+  "/work-sessions": [["/api/work-sessions"], ["/api/resources"], ["/api/teams"]],
+  "/subscriptions": [["/api/subscriptions"], ["/api/customers"], ["/api/objects", "lookup"]],
+  "/invoicing": [["/api/invoices"]],
+  "/price-lists": [["/api/price-lists"]],
+};
+
+function prefetchForUrl(url: string) {
+  const keys = PREFETCH_KEYS_BY_URL[url];
+  if (!keys) return;
+  for (const queryKey of keys) {
+    queryClient.prefetchQuery({ queryKey: [...queryKey] }).catch(() => {});
+  }
+}
 
 interface BadgeCounts {
   unassignedOrders: number;
@@ -155,7 +181,12 @@ function NavItemRow({
               {badgeCount !== undefined && badgeCount > 0 && <Badge count={badgeCount} />}
             </a>
           ) : (
-            <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
+            <Link
+              href={item.url}
+              data-testid={`nav-${item.url.replace("/", "") || "home"}`}
+              onMouseEnter={() => prefetchForUrl(item.url)}
+              onFocus={() => prefetchForUrl(item.url)}
+            >
               <item.icon className="h-4 w-4" />
               <span className="flex-1">{item.title}</span>
               {badgeCount !== undefined && badgeCount > 0 && <Badge count={badgeCount} />}
