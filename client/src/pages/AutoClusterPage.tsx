@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useMapConfig } from "@/hooks/use-map-config";
+import { QueryState } from "@/components/QueryState";
 
 type Strategy = "geographic" | "postalcode" | "kmeans" | "frequency" | "team" | "customer" | "manual";
 
@@ -952,12 +953,36 @@ export default function AutoClusterPage() {
         ))}
       </Tabs>
 
-      {generateMutation.isPending && (
+      {(generateMutation.isPending ||
+        generateMutation.isError ||
+        (generatedResult && strategy !== "manual" && generatedResult.suggestions.length === 0)) && (
         <Card>
-          <CardContent className="py-12 text-center">
-            <Loader2 className="h-12 w-12 mx-auto text-primary animate-spin mb-4" />
-            <h3 className="text-lg font-medium mb-2">Analyserar data...</h3>
-            <p className="text-muted-foreground">Grupperar objekt enligt vald strategi</p>
+          <CardContent className="p-0">
+            <QueryState
+              isLoading={generateMutation.isPending}
+              isError={generateMutation.isError}
+              isEmpty={
+                !!generatedResult &&
+                strategy !== "manual" &&
+                generatedResult.suggestions.length === 0
+              }
+              error={generateMutation.error as { message?: string } | null}
+              onRetry={() => handleGenerate()}
+              loadingVariant="spinner"
+              emptyTitle="Inga klusterförslag"
+              emptyDescription="Strategin gav inga förslag. Justera inställningarna och försök igen."
+              emptyAction={
+                <Button
+                  variant="outline"
+                  onClick={handleGenerate}
+                  data-testid="button-regenerate"
+                >
+                  <BarChart3 className="h-4 w-4 mr-2" /> Generera om
+                </Button>
+              }
+            >
+              <></>
+            </QueryState>
           </CardContent>
         </Card>
       )}

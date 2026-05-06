@@ -59,7 +59,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Loader2, Plus, Pencil, Trash2, Package, Layers } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { EmptyState } from "@/components/EmptyState";
+import { QueryState } from "@/components/QueryState";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { type Article, type ArticleComponent } from "@shared/schema";
@@ -101,7 +101,13 @@ export default function ArticleComponentsPage() {
     [articles, parentId]
   );
 
-  const { data: components = [], isLoading: loadingComponents } = useQuery<ArticleComponent[]>({
+  const {
+    data: components = [],
+    isLoading: loadingComponents,
+    isError: componentsError,
+    error: componentsErrorObj,
+    refetch: refetchComponents,
+  } = useQuery<ArticleComponent[]>({
     queryKey: ["/api/articles", parentId, "components"],
     enabled: !!parentId,
   });
@@ -239,23 +245,23 @@ export default function ArticleComponentsPage() {
             </Button>
           </CardHeader>
           <CardContent>
-            {loadingComponents ? (
-              <div className="flex justify-center py-10">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : components.length === 0 ? (
-              <EmptyState
-                icon={Package}
-                title="Inga komponenter ännu"
-                description="Lägg till artiklar som ska ingå när denna struktur expanderas."
-                action={
-                  <Button onClick={openCreate} data-testid="button-add-component-empty">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Lägg till komponent
-                  </Button>
-                }
-              />
-            ) : (
+            <QueryState
+              isLoading={loadingComponents}
+              isError={componentsError}
+              isEmpty={components.length === 0}
+              error={componentsErrorObj as { message?: string } | null}
+              onRetry={() => refetchComponents()}
+              loadingVariant="skeleton-rows"
+              skeletonRows={4}
+              emptyTitle="Inga komponenter ännu"
+              emptyDescription="Lägg till artiklar som ska ingå när denna struktur expanderas."
+              emptyAction={
+                <Button onClick={openCreate} data-testid="button-add-component-empty">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Lägg till komponent
+                </Button>
+              }
+            >
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -312,7 +318,7 @@ export default function ArticleComponentsPage() {
                   })}
                 </TableBody>
               </Table>
-            )}
+            </QueryState>
           </CardContent>
         </Card>
       )}

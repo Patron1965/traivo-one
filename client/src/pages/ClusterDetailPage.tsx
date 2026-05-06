@@ -53,6 +53,7 @@ import {
   DoorClosed,
 } from "lucide-react";
 import { QueryErrorState } from "@/components/ErrorBoundary";
+import { QueryState } from "@/components/QueryState";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
@@ -320,17 +321,35 @@ export default function ClusterDetailPage() {
     enabled: !!clusterId,
   });
 
-  const { data: clusterObjects = [], isLoading: objectsLoading } = useQuery<ServiceObject[]>({
+  const {
+    data: clusterObjects = [],
+    isLoading: objectsLoading,
+    isError: objectsIsError,
+    error: objectsError,
+    refetch: refetchObjects,
+  } = useQuery<ServiceObject[]>({
     queryKey: ["/api/clusters", clusterId, "objects"],
     enabled: !!clusterId,
   });
 
-  const { data: workOrders = [], isLoading: ordersLoading } = useQuery<WorkOrder[]>({
+  const {
+    data: workOrders = [],
+    isLoading: ordersLoading,
+    isError: ordersIsError,
+    error: ordersError,
+    refetch: refetchOrders,
+  } = useQuery<WorkOrder[]>({
     queryKey: ["/api/clusters", clusterId, "work-orders"],
     enabled: !!clusterId,
   });
 
-  const { data: subscriptions = [], isLoading: subsLoading } = useQuery<Subscription[]>({
+  const {
+    data: subscriptions = [],
+    isLoading: subsLoading,
+    isError: subsIsError,
+    error: subsError,
+    refetch: refetchSubs,
+  } = useQuery<Subscription[]>({
     queryKey: ["/api/clusters", clusterId, "subscriptions"],
     enabled: !!clusterId,
   });
@@ -600,15 +619,17 @@ export default function ClusterDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {objectsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : clusterObjects.length === 0 ? (
-                <div className="py-8 text-center space-y-4">
-                  <div className="text-muted-foreground">
-                    Inga objekt i detta kluster
-                  </div>
+              <QueryState
+                isLoading={objectsLoading}
+                isError={objectsIsError}
+                isEmpty={clusterObjects.length === 0}
+                error={objectsError as { message?: string } | null}
+                onRetry={() => refetchObjects()}
+                loadingVariant="skeleton-rows"
+                skeletonRows={5}
+                emptyTitle="Inga objekt i detta kluster"
+                emptyDescription="Lägg till objekt för att börja bygga klustrets hierarki."
+                emptyAction={
                   <Button
                     variant="outline"
                     onClick={() => setAddObjectsDialogOpen(true)}
@@ -617,8 +638,8 @@ export default function ClusterDetailPage() {
                     <Plus className="h-4 w-4 mr-2" />
                     Lägg till objekt
                   </Button>
-                </div>
-              ) : (
+                }
+              >
                 <>
                   <div className="flex flex-wrap gap-2 mb-4 pb-4 border-b">
                     {Object.entries(HIERARCHY_LEVELS).map(([key, info]) => {
@@ -643,7 +664,7 @@ export default function ClusterDetailPage() {
                     ))}
                   </div>
                 </>
-              )}
+              </QueryState>
             </CardContent>
           </Card>
         </TabsContent>
@@ -737,15 +758,17 @@ export default function ClusterDetailPage() {
         <TabsContent value="objects">
           <Card>
             <CardContent className="p-0">
-              {objectsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : clusterObjects.length === 0 ? (
-                <div className="py-8 text-center text-muted-foreground">
-                  Inga objekt i detta kluster
-                </div>
-              ) : (
+              <QueryState
+                isLoading={objectsLoading}
+                isError={objectsIsError}
+                isEmpty={clusterObjects.length === 0}
+                error={objectsError as { message?: string } | null}
+                onRetry={() => refetchObjects()}
+                loadingVariant="skeleton-rows"
+                skeletonRows={5}
+                emptyTitle="Inga objekt i detta kluster"
+                emptyDescription="Lägg till objekt för att se dem listade här."
+              >
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -790,7 +813,7 @@ export default function ClusterDetailPage() {
                     )}
                   </TableBody>
                 </Table>
-              )}
+              </QueryState>
             </CardContent>
           </Card>
         </TabsContent>
@@ -798,15 +821,17 @@ export default function ClusterDetailPage() {
         <TabsContent value="subscriptions">
           <Card>
             <CardContent className="p-0">
-              {subsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : subscriptions.length === 0 ? (
-                <div className="py-8 text-center text-muted-foreground">
-                  Inga abonnemang i detta kluster
-                </div>
-              ) : (
+              <QueryState
+                isLoading={subsLoading}
+                isError={subsIsError}
+                isEmpty={subscriptions.length === 0}
+                error={subsError as { message?: string } | null}
+                onRetry={() => refetchSubs()}
+                loadingVariant="skeleton-rows"
+                skeletonRows={4}
+                emptyTitle="Inga abonnemang i detta kluster"
+                emptyDescription="Skapa abonnemang för objekten för att se dem här."
+              >
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -837,7 +862,7 @@ export default function ClusterDetailPage() {
                     ))}
                   </TableBody>
                 </Table>
-              )}
+              </QueryState>
             </CardContent>
           </Card>
         </TabsContent>
@@ -845,15 +870,17 @@ export default function ClusterDetailPage() {
         <TabsContent value="orders">
           <Card>
             <CardContent className="p-0">
-              {ordersLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : workOrders.length === 0 ? (
-                <div className="py-8 text-center text-muted-foreground">
-                  Inga ordrar i detta kluster
-                </div>
-              ) : (
+              <QueryState
+                isLoading={ordersLoading}
+                isError={ordersIsError}
+                isEmpty={workOrders.length === 0}
+                error={ordersError as { message?: string } | null}
+                onRetry={() => refetchOrders()}
+                loadingVariant="skeleton-rows"
+                skeletonRows={5}
+                emptyTitle="Inga ordrar i detta kluster"
+                emptyDescription="Arbetsordrar kopplade till klustrets objekt visas här."
+              >
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -898,7 +925,7 @@ export default function ClusterDetailPage() {
                     )}
                   </TableBody>
                 </Table>
-              )}
+              </QueryState>
             </CardContent>
           </Card>
         </TabsContent>

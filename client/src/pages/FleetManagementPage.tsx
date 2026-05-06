@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { QueryState } from "@/components/QueryState";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, differenceInDays, addDays, isPast, isFuture } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -139,11 +140,23 @@ export default function FleetManagementPage() {
     queryKey: ["/api/vehicles"],
   });
 
-  const { data: fuelLogs = [], isLoading: loadingFuel } = useQuery<FuelLog[]>({
+  const {
+    data: fuelLogs = [],
+    isLoading: loadingFuel,
+    isError: fuelIsError,
+    error: fuelError,
+    refetch: refetchFuel,
+  } = useQuery<FuelLog[]>({
     queryKey: ["/api/fuel-logs"],
   });
 
-  const { data: maintenanceLogs = [], isLoading: loadingMaintenance } = useQuery<MaintenanceLog[]>({
+  const {
+    data: maintenanceLogs = [],
+    isLoading: loadingMaintenance,
+    isError: maintenanceIsError,
+    error: maintenanceError,
+    refetch: refetchMaintenance,
+  } = useQuery<MaintenanceLog[]>({
     queryKey: ["/api/maintenance-logs"],
   });
 
@@ -582,11 +595,26 @@ export default function FleetManagementPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                {loadingMaintenance ? (
-                  <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
-                ) : filteredMaintenanceLogs.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">Inga underhållsposter</div>
-                ) : (
+                <QueryState
+                  isLoading={loadingMaintenance}
+                  isError={maintenanceIsError}
+                  isEmpty={filteredMaintenanceLogs.length === 0}
+                  error={maintenanceError as { message?: string } | null}
+                  onRetry={() => refetchMaintenance()}
+                  loadingVariant="skeleton-rows"
+                  skeletonRows={5}
+                  emptyTitle="Inga underhållsposter"
+                  emptyDescription={
+                    selectedVehicle === "all"
+                      ? "Registrera service eller reparationer för att bygga upp historiken."
+                      : "Inga underhållsposter för det valda fordonet."
+                  }
+                  emptyAction={
+                    <Button variant="outline" onClick={() => { setMaintenanceForm(f => ({ ...f, vehicleId: "" })); setMaintenanceDialogOpen(true); }} data-testid="button-add-maintenance-empty">
+                      <Wrench className="h-4 w-4 mr-1" /> Registrera underhåll
+                    </Button>
+                  }
+                >
                   <div className="max-h-[400px] overflow-y-auto">
                     <Table>
                       <TableHeader>
@@ -619,7 +647,7 @@ export default function FleetManagementPage() {
                       </TableBody>
                     </Table>
                   </div>
-                )}
+                </QueryState>
               </CardContent>
             </Card>
           </TabsContent>
@@ -713,11 +741,26 @@ export default function FleetManagementPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                {loadingFuel ? (
-                  <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
-                ) : filteredFuelLogs.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">Inga tankningsposter</div>
-                ) : (
+                <QueryState
+                  isLoading={loadingFuel}
+                  isError={fuelIsError}
+                  isEmpty={filteredFuelLogs.length === 0}
+                  error={fuelError as { message?: string } | null}
+                  onRetry={() => refetchFuel()}
+                  loadingVariant="skeleton-rows"
+                  skeletonRows={5}
+                  emptyTitle="Inga tankningsposter"
+                  emptyDescription={
+                    selectedVehicle === "all"
+                      ? "Registrera tankningar för att följa bränsleförbrukning över tid."
+                      : "Inga tankningsposter för det valda fordonet."
+                  }
+                  emptyAction={
+                    <Button variant="outline" onClick={() => { setFuelForm(f => ({ ...f, vehicleId: "" })); setFuelDialogOpen(true); }} data-testid="button-add-fuel-empty">
+                      <Fuel className="h-4 w-4 mr-1" /> Registrera tankning
+                    </Button>
+                  }
+                >
                   <div className="max-h-[400px] overflow-y-auto">
                     <Table>
                       <TableHeader>
@@ -752,7 +795,7 @@ export default function FleetManagementPage() {
                       </TableBody>
                     </Table>
                   </div>
-                )}
+                </QueryState>
               </CardContent>
             </Card>
           </TabsContent>
