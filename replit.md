@@ -23,6 +23,17 @@ The platform employs a consistent page header pattern, full dark mode support, r
 ### Technical Implementations
 The frontend is built with React, TypeScript, and Vite, while the backend uses Express.js. PostgreSQL with Drizzle ORM handles data persistence, supporting tenant isolation and role-based access control. AI integration utilizes OpenAI for features like AI Cards, AI Planning Assistant, AI Auto-Scheduling, and Conversational AI Planner. Geocoding uses Geoapify with Nominatim fallback. Performance is optimized through database indexing, server-side pagination, and lazy loading. Real-time capabilities include WebSocket notifications and GPS tracking. An offline-first architecture is implemented for mobile field workers. The system includes an advanced Modus 2.0 Import System, anomaly monitoring, and a Customer Portal 2.0. Routing is handled by OSRM, Geoapify Routing API, and Haversine. An OR-Tools Optimization Service (Python FastAPI microservice) solves CVRPTW with complex constraints and an ALNS improvement phase, with pre-clustering for large stop sets using DBSCAN. Other features include QR-code reporting, environmental statistics, SMS infrastructure, route feedback, reporting and KPI dashboards, work session and time tracking, annual planning, equipment sharing, AI control templates, invoice generation with Fortnox export, team/user management, tenant configuration, fleet management, IoT API integration, event-driven disruption service, intelligent break placement, customer ETA notifications, slot preference system, and module-based tenant feature flags.
 
+### Roadmap — Sessionerna 2026-05-06 (planering, fakturering, kapacitet)
+Beslut och sprint-plan från Master Implementation Guide v1.0 + planeringssession 13:51 finns i `.local/tasks/adr-orderkoncept-v3-sessioner-2026-05-06.md`. Sammanfattning:
+- **F1:** additativa kolumner på `order_concepts` (`tolerance_days`, `billing_mode`, `annual_planned_value`, `season_name`), `priceLists` (`index_adjusted/date/percentage`), `articles` (`replaces_article_id`).
+- **F2:** team-kapacitet (28h/12h) och vilohantering (`rest_type/rest_until/last_position_*`).
+- **F3:** `planner_search_filters` (sparade sökmönster för planeraren).
+- **F4:** BOM (`article_components`) + beroende-graf (`work_order_dependencies`).
+- **F5:** `frozen_*` snapshot på WO + månadsfaktura med retroaktiv omräkning.
+- **F6:** indexjustering + Fortnox-export mot frozen-pris.
+- **F7 (frivillig):** Mobile v2 med BOM-checklista och beroende-status.
+Strategi: **expand-contract** — alla nya kolumner nullable/default, befintliga 3 750 WO och Mobile/VRP/Fortnox-kontrakt orörda. ADR v2 (`adr-orderkoncept-v2.md`) står fast som grundbeslut.
+
 ### Fortnox Invoice History → Contract Suggestions
 The system processes Fortnox invoice exports (xlsx) to generate contract suggestions by parsing invoice lines, grouping them by customer and article, detecting recurrence, inferring billing cycles, and scoring patterns. These suggestions can be reviewed, approved, or rejected in the UI, leading to the creation of `customer_service_contracts` records upon approval.
 
