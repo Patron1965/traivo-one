@@ -2,7 +2,35 @@
 
 **Task:** #421
 **Datum:** 2026-05-06
-**Status efter denna leverans:** Fas 0 KOMPLETT, Fas 1 SCAFFOLDING (inferens avstängd)
+**Status efter denna leverans:** Fas 0 KOMPLETT, Fas 1 SCAFFOLDING (inferens avstängd), Fas 1+ tillägg: Quantile Regression, blue-green lifecycle, counterfactual logging, readiness-tröskel
+
+## Tillägg 2026-05-06 (uppföljning från Abacus-feedback)
+
+### 1. Quantile Regression — multi-kvantil-träning
+`scripts/train_duration_model.py` tränar nu 4 modeller per körning: P10/P50/P75/P90 (LightGBM `objective=quantile`). Solver kan välja kvantil baserat på SLA-criticality:
+- Vanlig planering → P50, kritiska kunder → P75, hård deadline → P90, optimistisk slot-packning → P10.
+- Acceptanskriterium utökat: P90-kalibrering ska visa faktisk ≤ pred i ≥85% av valideringsraderna.
+
+### 2. Counterfactual logging för replanning (Fas 3-förberedelse)
+- **Ny tabell:** `replanning_decisions` (migration `0036`). Loggar varje replanning-beslut: trigger, kontext, regelbaserad action, ML-counterfactual (när shadow är på), faktisk utförd action, samt outcome i efterhand.
+- **Service:** `server/services/replanningCounterfactual.ts` — `logReplanningDecision()` + `recordReplanningOutcome()`. Fail-safe (sväljer fel, blockerar aldrig replanning).
+- **Användning:** Anropa från replanning-flödet (Fas 3) så fort beslut tas. Tills ML-shadow är på är `mlCounterfactualAction=null` — datan är ändå värdefull som baseline för regelbaserad policy.
+
+### 3. Readiness-tröskel 70/85 med shadow-mellansteg
+`runDataQualityAudit` returnerar nu `readinessLevel`:
+- `not_ready` (<70% valid actualDuration) → ML inaktiv, statisk fallback.
+- `shadow_only` (70–85%) → ML kan köras i shadow (loggar prediktioner, används inte i solver).
+- `production_eligible` (≥85%) → ML kan promoveras till `active` vid godkänd MAE-grind.
+
+Visas som badge i `Admin → ML datakvalitet`.
+
+### 4. Blue-green model lifecycle
+- **Migration `0036`:** `ml_models` utökad med `rollout_percentage` (0–100), `previous_model_id` (rollback-pekare), `promoted_at`, `rollback_reason`.
+- **Tillåtna statusövergångar:** `training → shadow → canary → active → deprecated` (samt `* → rolled_back` via rollback-route).
+- **Endpoints (platform-owner-only, kinab):**
+  - `POST /api/ml/models/:id/promote` — body `{ targetStatus, rolloutPercentage? }`. Vid promotion till `active` flyttas ev. existerande aktiv modell automatiskt → `deprecated` och sparas som `previousModelId`.
+  - `POST /api/ml/models/:id/rollback` — body `{ reason }`. Sätter aktuell modell → `rolled_back` och promotar `previousModelId` tillbaka till `active` (rolloutPct=100).
+- Canary-rollout är hårdklippt till 1–50% i route-laget. Solver-laget kommer (i Fas 1-aktivering) att läsa `rolloutPercentage` och hash-routa per WO-id för deterministisk fördelning.
 
 ## Vad som levererats i denna session
 

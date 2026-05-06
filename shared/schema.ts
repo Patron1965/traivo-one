@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, serial, timestamp, jsonb, boolean, real, index, unique, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, serial, timestamp, jsonb, boolean, real, doublePrecision, index, unique, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -5473,11 +5473,17 @@ export type InsertMlFeatureSnapshot = z.infer<typeof insertMlFeatureSnapshotSche
 
 export const mlModels = pgTable("ml_models", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  // 'duration_p50' | framtida varianter
+  // 'duration_p10' | 'duration_p50' | 'duration_p75' | 'duration_p90'
   modelType: text("model_type").notNull(),
   version: text("version").notNull(),
-  // 'training' | 'shadow' | 'assist' | 'retired'
+  // Lifecycle: 'training' | 'shadow' | 'canary' | 'active' | 'deprecated' | 'rolled_back'
   status: text("status").default("training").notNull(),
+  // Blue-green: andel trafik (0–100) som routas till modellen vid canary
+  rolloutPercentage: integer("rollout_percentage").default(0).notNull(),
+  // Föregående aktiv modell (för rollback)
+  previousModelId: varchar("previous_model_id"),
+  promotedAt: timestamp("promoted_at"),
+  rollbackReason: text("rollback_reason"),
   artifactPath: text("artifact_path"),
   trainedAt: timestamp("trained_at"),
   trainingRows: integer("training_rows"),
@@ -5493,3 +5499,27 @@ export const mlModels = pgTable("ml_models", {
 export type MlModel = typeof mlModels.$inferSelect;
 export const insertMlModelSchema = createInsertSchema(mlModels).omit({ id: true, createdAt: true });
 export type InsertMlModel = z.infer<typeof insertMlModelSchema>;
+
+export const replanningDecisions = pgTable("replanning_decisions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull(),
+  decidedAt: timestamp("decided_at").defaultNow().notNull(),
+  // 'eta_slip' | 'no_show' | 'traffic' | 'manual' | 'capacity_breach'
+  triggerKind: text("trigger_kind").notNull(),
+  context: jsonb("context").default({}).notNull(),
+  ruleBasedAction: jsonb("rule_based_action").notNull(),
+  mlCounterfactualAction: jsonb("ml_counterfactual_action"),
+  mlCounterfactualScore: doublePrecision("ml_counterfactual_score"),
+  // 'rule_based' | 'ml' | 'manual_override'
+  executedActionSource: text("executed_action_source").default("rule_based").notNull(),
+  outcome: jsonb("outcome"),
+  outcomeMeasuredAt: timestamp("outcome_measured_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_replanning_tenant_decided").on(table.tenantId, table.decidedAt),
+  index("idx_replanning_trigger").on(table.triggerKind),
+]);
+
+export type ReplanningDecision = typeof replanningDecisions.$inferSelect;
+export const insertReplanningDecisionSchema = createInsertSchema(replanningDecisions).omit({ id: true, createdAt: true, decidedAt: true });
+export type InsertReplanningDecision = z.infer<typeof insertReplanningDecisionSchema>;

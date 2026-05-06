@@ -153,4 +153,160 @@ export function registerMlRoutes(app: Express): void {
       res.json({ models, mlPredictionEnabled: process.env.ML_PREDICTION_ENABLED === "true" });
     })
   );
+
+  // POST /api/ml/models/:id/promote — Blue-green lifecycle.
+  // Tillåtna övergångar (target):
+  //   training  → shadow
+  //   shadow    → canary    (rolloutPercentage 1–50)
+  //   canary    → active    (sätter föregående aktiva → deprecated, sparar previousModelId)
+  //   active    → deprecated
+  // Endast platform-owner-tenant. Idempotent: omkörning med samma target+rollout är no-op.
+  const promoteSchema = z.object({
+    targetStatus: z.enum(["shadow", "canary", "active", "deprecated"]),
+    rolloutPercentage: z.number().int().min(0).max(100).optional(),
+  });
+  app.post(
+    "/api/ml/models/:id/promote",
+    isAuthenticated,
+    requireTenantWithFallback,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      if (tenantId !== PLATFORM_OWNER_TENANT) {
+        return res.status(403).json({ error: "Endast platform-owner kan ändra ML-modellstatus" });
+      }
+      const parsed = promoteSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "ogiltig payload", issues: parsed.error.issues });
+      }
+      const { targetStatus, rolloutPercentage } = parsed.data;
+
+      // Kör hela övergången i en transaktion + FOR UPDATE-lås för att förhindra
+      // race där två samtidiga promote:s skulle kunna skapa två actives.
+      // DB har även partial unique index "uq_ml_models_one_active_per_type" som
+      // sista försvarslinje (migration 0037).
+      try {
+        const result = await db.transaction(async (tx) => {
+          const lockedRows = await tx.execute(
+            sql`SELECT * FROM ml_models WHERE id = ${req.params.id} FOR UPDATE`
+          );
+          const model = (lockedRows.rows?.[0] as typeof mlModels.$inferSelect | undefined);
+          if (!model) return { status: 404 as const, body: { error: "modell saknas" } };
+
+          const allowed: Record<string, string[]> = {
+            training: ["shadow"],
+            shadow: ["canary", "deprecated"],
+            canary: ["active", "shadow", "deprecated"],
+            active: ["deprecated"],
+            deprecated: [],
+            rolled_back: ["shadow"],
+          };
+          const validNext = allowed[model.status] ?? [];
+          if (!validNext.includes(targetStatus)) {
+            return { status: 409 as const, body: { error: `ogiltig övergång ${model.status} → ${targetStatus}`, allowed: validNext } };
+          }
+
+          let previousModelId: string | null = model.previousModelId ?? null;
+          if (targetStatus === "active") {
+            // Lås + deprecate ev. existerande aktiv modell av samma typ.
+            const activeRows = await tx.execute(
+              sql`SELECT id FROM ml_models WHERE model_type = ${model.modelType} AND status = 'active' AND id <> ${model.id} FOR UPDATE`
+            );
+            const currentActiveId = activeRows.rows?.[0]?.id as string | undefined;
+            if (currentActiveId) {
+              await tx.update(mlModels)
+                .set({ status: "deprecated", rolloutPercentage: 0 })
+                .where(eq(mlModels.id, currentActiveId));
+              previousModelId = currentActiveId;
+            }
+          }
+
+          const newRollout =
+            targetStatus === "active" ? 100
+            : targetStatus === "canary" ? Math.max(1, Math.min(50, rolloutPercentage ?? 10))
+            : 0;
+
+          const [updated] = await tx.update(mlModels)
+            .set({
+              status: targetStatus,
+              rolloutPercentage: newRollout,
+              previousModelId,
+              promotedAt: new Date(),
+              rollbackReason: null,
+            })
+            .where(eq(mlModels.id, model.id))
+            .returning();
+
+          return { status: 200 as const, body: { model: updated, transition: `${model.status} → ${targetStatus}` } };
+        });
+        return res.status(result.status).json(result.body);
+      } catch (err) {
+        // Partial unique index kan kasta om två promote:s körs samtidigt.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("uq_ml_models_one_active_per_type") || msg.includes("uq_ml_models_one_canary_per_type")) {
+          return res.status(409).json({ error: "konflikt: en annan modell av samma typ är redan i mål-status. Försök igen." });
+        }
+        throw err;
+      }
+    })
+  );
+
+  // POST /api/ml/models/:id/rollback — instant rollback till previousModelId.
+  // Sätter aktuell modell → 'rolled_back' och promotar previousModelId tillbaka till 'active'.
+  const rollbackSchema = z.object({ reason: z.string().min(3).max(500) });
+  app.post(
+    "/api/ml/models/:id/rollback",
+    isAuthenticated,
+    requireTenantWithFallback,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      if (tenantId !== PLATFORM_OWNER_TENANT) {
+        return res.status(403).json({ error: "Endast platform-owner kan rollback:a ML-modell" });
+      }
+      const parsed = rollbackSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "ogiltig payload", issues: parsed.error.issues });
+      }
+      try {
+        const result = await db.transaction(async (tx) => {
+          // Lås både den modell som rollas tillbaka OCH previous-modellen.
+          const currentRows = await tx.execute(
+            sql`SELECT * FROM ml_models WHERE id = ${req.params.id} FOR UPDATE`
+          );
+          const model = currentRows.rows?.[0] as typeof mlModels.$inferSelect | undefined;
+          if (!model) return { status: 404 as const, body: { error: "modell saknas" } };
+          if (!["active", "canary"].includes(model.status)) {
+            return { status: 409 as const, body: { error: `kan endast rollback:a active/canary, nuvarande: ${model.status}` } };
+          }
+          if (!model.previousModelId) {
+            return { status: 409 as const, body: { error: "ingen previousModelId — kan inte rollback:a" } };
+          }
+          await tx.execute(sql`SELECT id FROM ml_models WHERE id = ${model.previousModelId} FOR UPDATE`);
+
+          // Steg 1: nuvarande → rolled_back. Frigör partial unique-index FÖRE vi sätter ny active.
+          await tx.update(mlModels)
+            .set({ status: "rolled_back", rolloutPercentage: 0, rollbackReason: parsed.data.reason })
+            .where(eq(mlModels.id, model.id));
+          // Steg 2: previous → active.
+          const [restored] = await tx.update(mlModels)
+            .set({ status: "active", rolloutPercentage: 100, promotedAt: new Date(), rollbackReason: null })
+            .where(eq(mlModels.id, model.previousModelId))
+            .returning();
+
+          return {
+            status: 200 as const,
+            body: { rolledBack: { id: model.id, reason: parsed.data.reason }, restored },
+          };
+        });
+        return res.status(result.status).json(result.body);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("uq_ml_models_one_active_per_type")) {
+          return res.status(409).json({ error: "konflikt: en annan modell är redan active. Försök igen." });
+        }
+        throw err;
+      }
+    })
+  );
 }

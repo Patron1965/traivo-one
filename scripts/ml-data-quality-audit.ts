@@ -47,12 +47,22 @@ interface ExecutionCodeStats {
   hasEnoughSamples: boolean;
 }
 
+/**
+ * Readiness-nivåer (per Abacus-feedback):
+ *   - 'not_ready'           (<70% valid actualDuration)  → fallback till statisk duration
+ *   - 'shadow_only'         (70–85%)                     → ML körs i shadow, prediktioner loggas men används inte
+ *   - 'production_eligible' (≥85%)                       → ML kan promoveras till active vid GO
+ */
+export type MlReadinessLevel = "not_ready" | "shadow_only" | "production_eligible";
+
 interface OverallReport {
   generatedAt: string;
   windowDays: number;
   totalCompletedWO: number;
+  globalValidActualRatio: number;
   passesVolumeGate: boolean;
   passesQualityGate: boolean;
+  readinessLevel: MlReadinessLevel;
   goNoGoRecommendation: "GO" | "NO_GO" | "WARN";
   reasoning: string[];
   tenants: TenantQualityReport[];
@@ -62,6 +72,15 @@ interface OverallReport {
     postCompletion: number;
     last7Days: number;
   };
+}
+
+const READINESS_SHADOW_THRESHOLD = 0.70;
+const READINESS_PRODUCTION_THRESHOLD = 0.85;
+
+function classifyReadiness(globalValidRatio: number): MlReadinessLevel {
+  if (globalValidRatio >= READINESS_PRODUCTION_THRESHOLD) return "production_eligible";
+  if (globalValidRatio >= READINESS_SHADOW_THRESHOLD) return "shadow_only";
+  return "not_ready";
 }
 
 async function buildReport(opts: { tenantId?: string } = {}): Promise<OverallReport> {
@@ -195,12 +214,17 @@ async function buildReport(opts: { tenantId?: string } = {}): Promise<OverallRep
     ? snapQuery.where(eq(mlFeatureSnapshots.tenantId, opts.tenantId))
     : snapQuery);
 
+  const readinessLevel = classifyReadiness(globalValidActualRatio);
+  reasoning.push(`Readiness-nivå: ${readinessLevel} (tröskel shadow ≥${READINESS_SHADOW_THRESHOLD * 100}%, production ≥${READINESS_PRODUCTION_THRESHOLD * 100}%)`);
+
   return {
     generatedAt: new Date().toISOString(),
     windowDays: WINDOW_DAYS,
     totalCompletedWO: totalCompleted,
+    globalValidActualRatio: Math.round(globalValidActualRatio * 1000) / 1000,
     passesVolumeGate: passesVolume,
     passesQualityGate: passesQuality,
+    readinessLevel,
     goNoGoRecommendation: recommendation,
     reasoning,
     tenants: tenantReports,

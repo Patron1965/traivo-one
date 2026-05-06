@@ -25,9 +25,13 @@ interface ExecutionCodeStat {
   hasEnoughSamples: boolean;
 }
 
+type MlReadinessLevel = "not_ready" | "shadow_only" | "production_eligible";
+
 interface QualityReport {
   generatedAt: string;
   windowDays: number;
+  globalValidActualRatio?: number;
+  readinessLevel?: MlReadinessLevel;
   totalCompletedWO: number;
   passesVolumeGate: boolean;
   passesQualityGate: boolean;
@@ -129,6 +133,39 @@ export default function MLDataQualityPage() {
           </ul>
         </CardContent>
       </Card>
+
+      {report.readinessLevel && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>ML readiness-nivå</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-3">
+              <Badge
+                variant={
+                  report.readinessLevel === "production_eligible" ? "default"
+                  : report.readinessLevel === "shadow_only" ? "secondary"
+                  : "destructive"
+                }
+                className="text-base px-3 py-1"
+                data-testid="badge-readiness"
+              >
+                {report.readinessLevel === "production_eligible" ? "Production eligible (≥85%)"
+                  : report.readinessLevel === "shadow_only" ? "Shadow only (70–85%)"
+                  : "Not ready (<70%)"}
+              </Badge>
+              {typeof report.globalValidActualRatio === "number" && (
+                <span className="text-sm text-muted-foreground" data-testid="text-valid-ratio">
+                  Global validActualRatio: {(report.globalValidActualRatio * 100).toFixed(1)}%
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              <strong>Not ready:</strong> ML inaktiv, statisk fallback. <strong>Shadow only:</strong> ML loggar prediktioner men används inte i solver. <strong>Production eligible:</strong> ML kan promoveras till active vid godkänd MAE-grind.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
