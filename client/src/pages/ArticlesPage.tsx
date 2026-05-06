@@ -1131,17 +1131,19 @@ export default function ArticlesPage() {
                     data-testid="input-production-time"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cost">Kostnad (öre)</Label>
-                  <Input
-                    id="cost"
-                    type="number"
-                    min="0"
-                    value={formData.cost}
-                    onChange={(e) => setFormData({ ...formData, cost: parseInt(e.target.value) || 0 })}
-                    data-testid="input-cost"
-                  />
-                </div>
+                {isAdmin && (
+                  <div className="space-y-2">
+                    <Label htmlFor="cost">Kostnad (öre)</Label>
+                    <Input
+                      id="cost"
+                      type="number"
+                      min="0"
+                      value={formData.cost}
+                      onChange={(e) => setFormData({ ...formData, cost: parseInt(e.target.value) || 0 })}
+                      data-testid="input-cost"
+                    />
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="listPrice">Listpris (öre)</Label>
                   <Input
@@ -1182,7 +1184,7 @@ export default function ArticlesPage() {
               })()}
 
               <div className="space-y-2">
-                <Label htmlFor="quantityMode">Kvantitetsläge</Label>{/* */}
+                <Label htmlFor="quantityMode">Kvantitetsläge</Label>
                 <Select
                   value={formData.quantityMode}
                   onValueChange={(value) => setFormData({ ...formData, quantityMode: value })}

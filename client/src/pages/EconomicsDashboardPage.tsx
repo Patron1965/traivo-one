@@ -13,6 +13,7 @@ import {
 import { format, subDays, startOfMonth, endOfMonth, subMonths, eachDayOfInterval, eachMonthOfInterval } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { WorkOrder, Customer, Cluster } from "@shared/schema";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function EconomicsDashboardPage() {
   const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrder[]>({
