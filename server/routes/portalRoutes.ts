@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
-import { requireAdmin } from "../tenant-middleware";
+import { requireAdmin, requireRole } from "../tenant-middleware";
 import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema, type InsertObject, objectMetadata } from "@shared/schema";
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
@@ -1092,7 +1092,7 @@ app.get("/api/portal/customer/:customerId/orders", asyncHandler(async (req, res)
 // ============================================
 
 // Get all customers with messages (for staff inbox)
-app.get("/api/staff/portal-messages", asyncHandler(async (req, res) => {
+app.get("/api/staff/portal-messages", requireRole("owner", "admin", "planner"), asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const customerIds = await storage.getCustomersWithMessages(tenantId);
     const customers = await Promise.all(
@@ -1128,7 +1128,7 @@ app.get("/api/staff/portal-messages", asyncHandler(async (req, res) => {
 }));
 
 // Get messages for a specific customer (staff view)
-app.get("/api/staff/portal-messages/:customerId", asyncHandler(async (req, res) => {
+app.get("/api/staff/portal-messages/:customerId", requireRole("owner", "admin", "planner"), asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { customerId } = req.params;
     
@@ -1152,7 +1152,7 @@ app.get("/api/staff/portal-messages/:customerId", asyncHandler(async (req, res) 
 }));
 
 // Send message to customer (staff)
-app.post("/api/staff/portal-messages/:customerId", asyncHandler(async (req, res) => {
+app.post("/api/staff/portal-messages/:customerId", requireRole("owner", "admin", "planner"), asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { customerId } = req.params;
     const { message } = req.body;
@@ -1647,7 +1647,7 @@ app.get("/api/technician-ratings/average/:resourceId", asyncHandler(async (req, 
 }));
 
 // Staff API - View visit confirmations
-app.get("/api/visit-confirmations", asyncHandler(async (req, res) => {
+app.get("/api/visit-confirmations", requireRole("owner", "admin", "planner"), asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { customerId, workOrderId } = req.query;
     
@@ -1663,7 +1663,7 @@ app.get("/api/visit-confirmations", asyncHandler(async (req, res) => {
 // QR CODE LINKS API
 // ============================================
 
-app.get("/api/qr-code-links", asyncHandler(async (req, res) => {
+app.get("/api/qr-code-links", requireRole("owner", "admin", "planner"), asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { objectId } = req.query;
     
@@ -1671,7 +1671,7 @@ app.get("/api/qr-code-links", asyncHandler(async (req, res) => {
     res.json(links);
 }));
 
-app.get("/api/qr-code-links/:id", asyncHandler(async (req, res) => {
+app.get("/api/qr-code-links/:id", requireRole("owner", "admin", "planner"), asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const link = await storage.getQrCodeLink(req.params.id);
     
@@ -1682,7 +1682,7 @@ app.get("/api/qr-code-links/:id", asyncHandler(async (req, res) => {
     res.json(link);
 }));
 
-app.post("/api/qr-code-links", asyncHandler(async (req, res) => {
+app.post("/api/qr-code-links", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const user = (req as any).user;
     
@@ -1701,7 +1701,7 @@ app.post("/api/qr-code-links", asyncHandler(async (req, res) => {
     res.status(201).json(link);
 }));
 
-app.patch("/api/qr-code-links/:id", asyncHandler(async (req, res) => {
+app.patch("/api/qr-code-links/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const existing = await storage.getQrCodeLink(req.params.id);
@@ -1713,7 +1713,7 @@ app.patch("/api/qr-code-links/:id", asyncHandler(async (req, res) => {
     res.json(link);
 }));
 
-app.delete("/api/qr-code-links/:id", asyncHandler(async (req, res) => {
+app.delete("/api/qr-code-links/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const existing = await storage.getQrCodeLink(req.params.id);
@@ -1783,7 +1783,7 @@ app.get("/api/my-objects", asyncHandler(async (req, res) => {
 // PUBLIC ISSUE REPORTS API (Internal management)
 // ============================================
 
-app.get("/api/public-issue-reports", asyncHandler(async (req, res) => {
+app.get("/api/public-issue-reports", requireRole("owner", "admin", "planner"), asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { objectId, status } = req.query;
     
@@ -1795,7 +1795,7 @@ app.get("/api/public-issue-reports", asyncHandler(async (req, res) => {
     res.json(reports);
 }));
 
-app.get("/api/public-issue-reports/:id", asyncHandler(async (req, res) => {
+app.get("/api/public-issue-reports/:id", requireRole("owner", "admin", "planner"), asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const report = await storage.getPublicIssueReport(req.params.id);
     
@@ -1806,7 +1806,7 @@ app.get("/api/public-issue-reports/:id", asyncHandler(async (req, res) => {
     res.json(report);
 }));
 
-app.patch("/api/public-issue-reports/:id", asyncHandler(async (req, res) => {
+app.patch("/api/public-issue-reports/:id", requireRole("owner", "admin", "planner"), asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const existing = await storage.getPublicIssueReport(req.params.id);
@@ -1819,7 +1819,7 @@ app.patch("/api/public-issue-reports/:id", asyncHandler(async (req, res) => {
 }));
 
 // Convert public issue report to deviation report
-app.post("/api/public-issue-reports/:id/convert-to-deviation", asyncHandler(async (req, res) => {
+app.post("/api/public-issue-reports/:id/convert-to-deviation", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const user = (req as any).user;
     
@@ -1856,7 +1856,7 @@ app.post("/api/public-issue-reports/:id/convert-to-deviation", asyncHandler(asyn
     });
 }));
 
-app.post("/api/public-issue-reports/:id/create-interim-object", asyncHandler(async (req, res) => {
+app.post("/api/public-issue-reports/:id/create-interim-object", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const report = await storage.getPublicIssueReport(req.params.id);
     if (!report || !verifyTenantOwnership(report, tenantId)) {
@@ -2535,7 +2535,7 @@ app.get("/api/portal/notifications/summary", asyncHandler(async (req, res) => {
 }));
 
 // P19: Staff portal messages with unread counts
-app.get("/api/staff/portal-messages", asyncHandler(async (req, res) => {
+app.get("/api/staff/portal-messages", requireRole("owner", "admin", "planner"), asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { portalMessages, customers: customersTable } = await import("@shared/schema");
     
@@ -2558,7 +2558,7 @@ app.get("/api/staff/portal-messages", asyncHandler(async (req, res) => {
     res.json(conversations.rows || conversations);
 }));
 
-app.get("/api/staff/portal-messages/:customerId", asyncHandler(async (req, res) => {
+app.get("/api/staff/portal-messages/:customerId", requireRole("owner", "admin", "planner"), asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { portalMessages } = await import("@shared/schema");
     
@@ -2586,7 +2586,7 @@ app.get("/api/staff/portal-messages/:customerId", asyncHandler(async (req, res) 
     });
 }));
 
-app.post("/api/staff/portal-messages/:customerId", asyncHandler(async (req, res) => {
+app.post("/api/staff/portal-messages/:customerId", requireRole("owner", "admin", "planner"), asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { portalMessages } = await import("@shared/schema");
     const { message } = req.body;
