@@ -8,7 +8,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
-import { objects, workOrders, customerCommunications, objectContacts, orderConceptArticles, orderConceptObjects, articleObjectMappings } from "@shared/schema";
+import { objects, workOrders, customerCommunications, objectContacts, orderConceptArticles, orderConceptObjects, articleObjectMappings, type InsertOrderConceptArticle } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 
 export async function registerOrderConceptRoutes(app: Express) {
@@ -160,7 +160,7 @@ app.patch("/api/order-concepts/:id/articles/:articleId", asyncHandler(async (req
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
-    const allowed: any = {};
+    const allowed: Partial<Pick<InsertOrderConceptArticle, "quantity" | "unitPrice" | "quantityModeOverride">> = {};
     if (typeof req.body.quantity === "number") allowed.quantity = req.body.quantity;
     if (req.body.unitPrice === null || typeof req.body.unitPrice === "number") allowed.unitPrice = req.body.unitPrice;
     if (req.body.quantityModeOverride === null || typeof req.body.quantityModeOverride === "string") {

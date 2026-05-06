@@ -5445,7 +5445,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateOrderConceptArticle(id: string, orderConceptId: string, updates: Partial<InsertOrderConceptArticle>): Promise<OrderConceptArticle | undefined> {
-    const { id: _i, orderConceptId: _o, createdAt: _c, ...patch } = updates as any;
+    const patch: Partial<InsertOrderConceptArticle> = { ...updates };
+    delete (patch as { id?: unknown }).id;
+    delete (patch as { orderConceptId?: unknown }).orderConceptId;
+    delete (patch as { createdAt?: unknown }).createdAt;
     const [result] = await db.update(orderConceptArticles)
       .set(patch)
       .where(and(
