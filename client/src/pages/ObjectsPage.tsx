@@ -18,7 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
   Map as MapIcon, List, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
-  Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, ChevronDown, ChevronUp, XCircle,
+  Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, XCircle,
   Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, Layers, FileUp, Pyramid,
   ArrowUp, ArrowDown, ArrowUpDown
 } from "lucide-react";
@@ -39,11 +39,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import type { ServiceObject } from "@shared/schema";
 
 const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
-  koncern: { label: "Koncern", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
-  brf: { label: "BRF", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
-  fastighet: { label: "Fastighet", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
-  rum: { label: "Rum", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
-  karl: { label: "Kärl", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" },
+  koncern: { label: "Koncern", color: "bg-chart-5/15 text-chart-5 border border-chart-5/30" },
+  brf: { label: "BRF", color: "bg-chart-1/15 text-chart-1 border border-chart-1/30" },
+  fastighet: { label: "Fastighet", color: "bg-chart-2/15 text-chart-2 border border-chart-2/30" },
+  rum: { label: "Rum", color: "bg-chart-3/15 text-chart-3 border border-chart-3/30" },
+  karl: { label: "Kärl", color: "bg-chart-4/15 text-chart-4 border border-chart-4/30" },
   objekt: { label: "Objekt", color: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200" },
 };
 
@@ -210,7 +210,7 @@ export default function ObjectsPage() {
     }
   }, []);
 
-  const { data: objectsData, isLoading } = useQuery<{ objects: ServiceObject[]; total: number }>({
+  const { data: objectsData, isLoading, isError: objectsIsError, error: objectsError, refetch: objectsRefetch } = useQuery<{ objects: ServiceObject[]; total: number }>({
     queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, typeFilter, accessFilter, hierarchyFilter, clusterFilter, interimFilter, issueFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -944,6 +944,21 @@ export default function ObjectsPage() {
     );
   }
 
+  if (objectsIsError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-6 text-center" data-testid="text-objects-error">
+        <AlertCircle className="h-8 w-8 text-destructive mb-3" />
+        <p className="text-sm font-medium">Kunde inte hämta objekt</p>
+        {objectsError instanceof Error && (
+          <p className="text-xs text-muted-foreground mt-1 max-w-md break-words">{objectsError.message}</p>
+        )}
+        <Button variant="outline" size="sm" className="mt-4" onClick={() => objectsRefetch()} data-testid="button-objects-retry">
+          Försök igen
+        </Button>
+      </div>
+    );
+  }
+
   const renderObjectTree = (obj: ServiceObject, level: number = 0) => {
     const children = getChildren(obj.id);
     const isExpanded = expandedAreas.has(obj.id);
@@ -1259,9 +1274,9 @@ export default function ObjectsPage() {
   return (
     <div className="p-6 space-y-6">
       {issueFilter && (
-        <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800" data-testid="banner-issue-filter">
-          <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0" />
-          <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/30" data-testid="banner-issue-filter">
+          <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+          <span className="text-sm font-medium text-destructive">
             Filtrerat: {issueFilterLabels[issueFilter] || issueFilter}
           </span>
           <Button variant="ghost" size="sm" className="h-7 text-xs ml-auto" onClick={clearAllFilters} data-testid="button-clear-issue-filter">

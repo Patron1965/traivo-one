@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Building2, Search, Layers, Package, ClipboardList, ArrowRight, Users, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Building2, Search, Layers, Package, ClipboardList, ArrowRight, Users, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle } from "lucide-react";
 import { versionedUrl } from "@/lib/queryClient";
 import type { Customer } from "@shared/schema";
 
@@ -67,7 +67,7 @@ export default function CustomersPage() {
     setPage(1);
   }, [debouncedSearch]);
 
-  const { data: customersPage, isLoading: customersLoading, isFetching: customersFetching } = useQuery<CustomersPage>({
+  const { data: customersPage, isLoading: customersLoading, isFetching: customersFetching, isError: customersIsError, error: customersError, refetch: customersRefetch } = useQuery<CustomersPage>({
     queryKey: ["/api/customers", { page, limit: PAGE_SIZE, search: debouncedSearch }],
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
@@ -216,6 +216,17 @@ export default function CustomersPage() {
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
+          ) : customersIsError ? (
+            <div className="flex flex-col items-center justify-center py-12 px-4 text-center" data-testid="text-customers-error">
+              <AlertCircle className="h-8 w-8 text-destructive mb-3" />
+              <p className="text-sm font-medium">Kunde inte hämta kunder</p>
+              {customersError instanceof Error && (
+                <p className="text-xs text-muted-foreground mt-1 max-w-md break-words">{customersError.message}</p>
+              )}
+              <Button variant="outline" size="sm" className="mt-4" onClick={() => customersRefetch()} data-testid="button-customers-retry">
+                Försök igen
+              </Button>
+            </div>
           ) : tenantHasNoCustomers ? (
             <div className="py-12 text-center text-muted-foreground space-y-2" data-testid="text-empty-customers">
               <Building2 className="h-12 w-12 mx-auto text-muted-foreground/40" />
@@ -231,7 +242,7 @@ export default function CustomersPage() {
           ) : (
             <>
               <div className="rounded-md border overflow-x-auto">
-                <Table>
+                <Table density="compact">
                   <TableHeader>
                     <TableRow>
                       <TableHead>

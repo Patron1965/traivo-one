@@ -176,7 +176,6 @@ function NavDropdown({ label, items, icon: Icon, colorClass, badges, isFavorite,
                 <div className="flex items-center gap-1.5 mt-0.5">
                   {badgeCount > 0 && <DropdownBadge count={badgeCount} />}
                   <button
-                    tabIndex={-1}
                     onPointerDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -189,7 +188,7 @@ function NavDropdown({ label, items, icon: Icon, colorClass, badges, isFavorite,
                     className={`p-0.5 rounded transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100 ${
                       fav
                         ? "opacity-100 text-yellow-500"
-                        : "opacity-0 group-hover/fav:opacity-60 text-muted-foreground hover:text-yellow-500"
+                        : "opacity-0 group-hover/fav:opacity-60 focus-visible:opacity-100 text-muted-foreground hover:text-yellow-500"
                     }`}
                     data-testid={`button-fav-${item.url.replace("/", "") || "home"}`}
                     aria-label={fav ? tl("fav.remove") : tl("fav.add")}
@@ -258,7 +257,6 @@ function FavoritesDropdown({ allItems, badges, favorites, toggleFavorite }: Favo
                 <span className="flex-1 font-medium">{item.title}</span>
                 {badgeCount > 0 && <DropdownBadge count={badgeCount} />}
                 <button
-                  tabIndex={-1}
                   onPointerDown={(e) => {
                     e.preventDefault();
                     e.stopPropagation();

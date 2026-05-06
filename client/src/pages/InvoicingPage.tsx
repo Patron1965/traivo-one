@@ -139,12 +139,12 @@ function formatCurrency(amount: number): string {
 
 function ExportStatusBadge({ status }: { status: string }) {
   const variants: Record<string, string> = {
-    pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-    processing: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-    exported: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-    failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-    cancelled: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
-    credited: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+    pending: "bg-chart-3/15 text-chart-3 border border-chart-3/30",
+    processing: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
+    exported: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+    failed: "bg-destructive/15 text-destructive border border-destructive/30",
+    cancelled: "bg-muted text-muted-foreground border border-border",
+    credited: "bg-chart-5/15 text-chart-5 border border-chart-5/30",
   };
   return (
     <Badge data-testid={`badge-export-status-${status}`} className={variants[status] || variants.pending}>
@@ -635,7 +635,7 @@ export default function InvoicingPage() {
                                 </TableHeader>
                                 <TableBody>
                                   {invoice.lines.map((line, idx) => (
-                                    <TableRow key={idx} data-testid={`row-invoice-line-${idx}`} className={line.workOrderId.startsWith("manual:") ? "bg-blue-50/50 dark:bg-blue-900/10" : ""}>
+                                    <TableRow key={idx} data-testid={`row-invoice-line-${idx}`} className={line.workOrderId.startsWith("manual:") ? "bg-chart-1/5" : ""}>
                                       <TableCell className="font-medium">
                                         {line.description}
                                         {line.workOrderId.startsWith("manual:") && (
