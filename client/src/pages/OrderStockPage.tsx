@@ -1016,7 +1016,8 @@ export default function OrderStockPage() {
             ) : (
               displayOrders.map(order => {
                 const customer = customerMap.get(order.customerId);
-                const object = objectMap.get(order.objectId);
+                const object = order.objectId ? objectMap.get(order.objectId) : undefined;
+                const isAdmin = order.taskCategory && order.taskCategory !== "field";
                 const status = (order.orderStatus || 'skapad') as OrderStatus;
                 const StatusIcon = STATUS_ICONS[status] || AlertCircle;
                 const nextStatus = getNextStatus(status);
@@ -1043,11 +1044,17 @@ export default function OrderStockPage() {
                             Simulerad
                           </Badge>
                         )}
+                        {isAdmin && (
+                          <Badge variant="outline" className="text-xs gap-1 border-[#4A9B9B] text-[#1B4B6B] dark:text-[#7DBFB0]" data-testid={`badge-admin-${order.id}`}>
+                            <ClipboardList className="h-3 w-3" />
+                            {order.taskCategory === "logistics" ? "Logistik" : "Administrativ"}
+                          </Badge>
+                        )}
                       </div>
                       <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap mt-1">
                         <span>{customer?.name || "-"}</span>
                         <ChevronRight className="h-3 w-3" />
-                        <span>{object?.name || "-"}</span>
+                        <span>{object?.name || (isAdmin ? "Inget objekt" : "-")}</span>
                         {(order.desiredDeliveryStart || order.desiredDeliveryEnd) && (
                           <Badge variant="outline" className="text-xs gap-1" data-testid={`badge-desired-period-${order.id}`}>
                             <CalendarIcon className="h-3 w-3" />

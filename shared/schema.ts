@@ -255,7 +255,14 @@ export const workOrders = pgTable("work_orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   customerId: varchar("customer_id").references(() => customers.id).notNull(),
-  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  // Objekt som ordern utförs på. Nullable för administrativa uppgifter (task #381)
+  // som inte kräver fysiskt objekt (t.ex. förhandsavisering, kodkontroll).
+  objectId: varchar("object_id").references(() => objects.id),
+  // Uppgiftskategori — styr filtrering i VRP/karta/avstånd. Cachat värde
+  // som ärvs från order_concept_articles vid expansion (ändras aldrig efter).
+  // Värden: 'field' (fältuppgift, default), 'admin' (administrativ),
+  // 'logistics' (logistik utan objekt).
+  taskCategory: text("task_category").default("field").notNull(),
   // Kluster som ordern tillhör (ärvs från objekt eller sätts manuellt)
   clusterId: varchar("cluster_id").references(() => clusters.id, { onDelete: 'set null' }),
   resourceId: varchar("resource_id").references(() => resources.id),
@@ -358,6 +365,7 @@ export const workOrders = pgTable("work_orders", {
   index("idx_work_orders_tenant_customer").on(table.tenantId, table.customerId),
   index("idx_work_orders_tenant_desired_start").on(table.tenantId, table.desiredDeliveryStart),
   index("idx_work_orders_tenant_desired_end").on(table.tenantId, table.desiredDeliveryEnd),
+  index("idx_work_orders_task_category").on(table.taskCategory),
 ]);
 
 // Orderrader - artiklar kopplade till en order med beräknade priser
@@ -2662,6 +2670,16 @@ export const CUSTOMER_MODES = ["HARDCODED", "FROM_METADATA"] as const;
 export type CustomerMode = typeof CUSTOMER_MODES[number];
 
 // Scenario types for order concepts
+// Task #381 — uppgiftskategorier för work_orders och order_concept_articles.
+// 'admin'/'logistics' filtreras bort från VRP/karta/avstånd och kan saknas object_id.
+export const TASK_CATEGORIES = ["field", "admin", "logistics"] as const;
+export type TaskCategory = typeof TASK_CATEGORIES[number];
+export const TASK_CATEGORY_LABELS: Record<TaskCategory, string> = {
+  field: "Fältuppgift",
+  admin: "Administrativ",
+  logistics: "Logistik",
+};
+
 export const ORDER_CONCEPT_SCENARIOS = [
   "avrop",        // Engångs-/behovsbaserat (on-demand)
   "schema",       // Schemalagd med leveransschema
@@ -2767,6 +2785,10 @@ export const orderConceptArticles = pgTable("order_concept_articles", {
   unitPrice: real("unit_price"),
   priceOverride: boolean("price_override").default(false),
   metadataRules: jsonb("metadata_rules"),
+  // Uppgiftskategori (task #381) — källan för work_orders.task_category vid expansion.
+  // 'field' (default) skapar en uppgift per objekt; 'admin'/'logistics' skapar
+  // en uppgift per koncept-körning utan object_id.
+  taskCategory: text("task_category").default("field").notNull(),
   sortOrder: integer("sort_order").default(0),
   // Override för artikelns quantityMode på just denna orderkoncept-rad.
   // null = använd artikelns inställning. Värden: 'use_object_quantity' | 'single_per_task'

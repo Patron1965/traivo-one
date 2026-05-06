@@ -137,7 +137,7 @@ app.post("/api/order-concepts/:id/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
-    const { articleId, quantity, unitPrice } = req.body;
+    const { articleId, quantity, unitPrice, taskCategory } = req.body;
     if (!articleId || typeof articleId !== "string") {
       throw new ValidationError("articleId krävs");
     }
@@ -145,11 +145,15 @@ app.post("/api/order-concepts/:id/articles", asyncHandler(async (req, res) => {
     if (!tenantArticles.find(a => a.id === articleId)) {
       throw new ValidationError("Artikeln hittades inte");
     }
+    // Task #381 — uppgiftskategori styr om artikeln expanderas per objekt eller skapar admin-WO.
+    const validCategory = (taskCategory === "admin" || taskCategory === "logistics" || taskCategory === "field")
+      ? taskCategory : "field";
     const result = await storage.addOrderConceptArticle({
       orderConceptId: req.params.id,
       articleId,
       quantity: quantity || 1,
       unitPrice: unitPrice ?? null,
+      taskCategory: validCategory,
     });
     const allArticles = await storage.getOrderConceptArticles(req.params.id);
     await storage.updateOrderConcept(req.params.id, tenantId, { totalArticles: allArticles.length });

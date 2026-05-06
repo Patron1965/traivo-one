@@ -4,10 +4,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, Plus, Trash2, Package, Info } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Search, Plus, Trash2, Package, Info, ClipboardList, Truck, Briefcase } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { Article } from "@shared/schema";
+import type { Article, TaskCategory } from "@shared/schema";
+import { TASK_CATEGORY_LABELS, TASK_CATEGORIES } from "@shared/schema";
 
 type QuantityMode = "use_object_quantity" | "single_per_task";
 
@@ -18,16 +19,23 @@ interface ConceptArticle {
   unitPrice: number | null;
   priceOverride: boolean;
   quantityModeOverride?: string | null;
+  taskCategory?: TaskCategory | null;
   article?: Article;
 }
 
 interface Step6Props {
   conceptArticles: ConceptArticle[];
-  onAddArticle: (articleId: string, quantity: number, unitPrice: number | null) => void;
+  onAddArticle: (articleId: string, quantity: number, unitPrice: number | null, taskCategory: TaskCategory) => void;
   onRemoveArticle: (id: string) => void;
   onUpdateQuantity: (id: string, quantity: number) => void;
   onUpdateQuantityMode?: (id: string, mode: QuantityMode | null) => void;
 }
+
+const CATEGORY_ICONS: Record<TaskCategory, typeof Briefcase> = {
+  field: Briefcase,
+  admin: ClipboardList,
+  logistics: Truck,
+};
 
 export default function Step6Articles({
   conceptArticles,
@@ -37,6 +45,7 @@ export default function Step6Articles({
   onUpdateQuantityMode,
 }: Step6Props) {
   const [search, setSearch] = useState("");
+  const [pendingCategory, setPendingCategory] = useState<TaskCategory>("field");
 
   const { data: articles = [] } = useQuery<Article[]>({
     queryKey: ["/api/articles"],
@@ -68,16 +77,44 @@ export default function Step6Articles({
   return (
     <div className="space-y-4" data-testid="step6-articles">
       <div>
-        <label className="text-sm font-medium mb-1 block">Sök artikel</label>
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Sök på artikelnamn eller nummer..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-9"
-            data-testid="input-article-search"
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_220px] gap-2">
+          <div>
+            <label className="text-sm font-medium mb-1 block">Sök artikel</label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Sök på artikelnamn eller nummer..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pl-9"
+                data-testid="input-article-search"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-1 block">Uppgiftstyp för nästa artikel</label>
+            <Select value={pendingCategory} onValueChange={(v) => setPendingCategory(v as TaskCategory)}>
+              <SelectTrigger data-testid="select-task-category">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TASK_CATEGORIES.map(c => {
+                  const Icon = CATEGORY_ICONS[c];
+                  return (
+                    <SelectItem key={c} value={c} data-testid={`option-task-category-${c}`}>
+                      <span className="inline-flex items-center gap-2">
+                        <Icon className="h-3.5 w-3.5" />
+                        {TASK_CATEGORY_LABELS[c]}
+                      </span>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Administrativa/logistik-uppgifter skapas utan koppling till objekt och hoppas över i ruttoptimering.
+            </p>
+          </div>
         </div>
         {filteredArticles.length > 0 && (
           <div className="border rounded-md mt-1 max-h-60 overflow-y-auto bg-popover">
@@ -100,7 +137,7 @@ export default function Step6Articles({
                   size="sm"
                   disabled={addedArticleIds.has(article.id)}
                   onClick={() => {
-                    onAddArticle(article.id, 1, null);
+                    onAddArticle(article.id, 1, null, pendingCategory);
                     setSearch("");
                   }}
                   data-testid={`button-add-article-${article.id}`}
@@ -138,12 +175,20 @@ export default function Step6Articles({
                 const articleMode = (ca.article?.quantityMode as QuantityMode | null | undefined) || "use_object_quantity";
                 const effectiveMode: QuantityMode = (ca.quantityModeOverride as QuantityMode | null) || articleMode;
                 const selectValue = ca.quantityModeOverride ? `override:${ca.quantityModeOverride}` : "default";
+                const cat: TaskCategory = (ca.taskCategory as TaskCategory) || "field";
+                const CatIcon = CATEGORY_ICONS[cat];
                 return (
                   <div key={ca.id} className="p-3 space-y-2" data-testid={`article-row-${ca.id}`}>
                     <div className="flex items-center gap-3">
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm truncate">
+                        <div className="font-medium text-sm truncate flex items-center gap-2">
                           {ca.article?.name || "Okänd artikel"}
+                          {cat !== "field" && (
+                            <Badge variant="outline" className="gap-1" data-testid={`badge-category-${ca.id}`}>
+                              <CatIcon className="h-3 w-3" />
+                              {TASK_CATEGORY_LABELS[cat]}
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           {ca.article?.articleNumber && <span>{ca.article.articleNumber}</span>}

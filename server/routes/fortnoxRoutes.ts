@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, ensureResourc
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
-import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts } from "@shared/schema";
+import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, type InsertWorkOrder } from "@shared/schema";
 import { getISOWeek } from "./helpers";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 
@@ -1764,6 +1764,37 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
       createdAssignments.push(assignment);
     }
 
+    // Task #381 — Administrativa/logistik-artiklar (task_category != 'field')
+    // expanderas till EN work_order per artikel och konceptkörning, helt utan
+    // object_id. Flödet skapar en arbetsorder direkt (förbi assignments) eftersom
+    // dessa uppgifter saknar fysiskt objekt och inte ska kopplas till objektmatchning.
+    const conceptArticles = await storage.getOrderConceptArticles(concept.id);
+    const adminArticles = conceptArticles.filter(ca => ca.taskCategory && ca.taskCategory !== "field");
+    const createdAdminWorkOrders: Array<{ id: string; taskCategory: string; articleId: string }> = [];
+    if (adminArticles.length > 0 && concept.customerId) {
+      for (const ca of adminArticles) {
+        const article = await storage.getArticle(ca.articleId);
+        if (!article) continue;
+        const qty = ca.quantity ?? 1;
+        const wo = await storage.createWorkOrder({
+          tenantId,
+          customerId: concept.customerId,
+          objectId: null,
+          clusterId: concept.targetClusterId ?? null,
+          taskCategory: ca.taskCategory ?? "admin",
+          title: `${article.name} (${concept.name})`,
+          description: concept.description ?? null,
+          orderStatus: "ej_planerad",
+          priority: concept.priority || "normal",
+          scheduledDate,
+          estimatedDuration: (article.productionTime || 30) * qty,
+          creationMethod: "concept_execute",
+          createdBy: userId ?? null,
+        } as InsertWorkOrder);
+        createdAdminWorkOrders.push({ id: wo.id, taskCategory: wo.taskCategory, articleId: ca.articleId });
+      }
+    }
+
     // Update last run date
     await storage.updateOrderConcept(concept.id, tenantId, {
       lastRunDate: new Date()
@@ -1771,10 +1802,13 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
 
     res.json({
       success: true,
-      message: `Skapade ${createdAssignments.length} uppgifter från ${matchingObjects.length} matchande objekt`,
+      message: `Skapade ${createdAssignments.length} uppgifter från ${matchingObjects.length} matchande objekt` +
+        (createdAdminWorkOrders.length > 0 ? ` + ${createdAdminWorkOrders.length} administrativa uppgifter` : ""),
       assignmentsCreated: createdAssignments.length,
       objectsMatched: matchingObjects.length,
-      assignments: createdAssignments
+      assignments: createdAssignments,
+      adminWorkOrdersCreated: createdAdminWorkOrders.length,
+      adminWorkOrders: createdAdminWorkOrders,
     });
 }));
 

@@ -236,6 +236,9 @@ export async function optimizeResourceDayRoute(
 ): Promise<OptimizedRoute | null> {
   const dayOrders = workOrders.filter(wo => {
     if (!wo.scheduledDate || wo.resourceId !== resourceId) return false;
+    // Task #381 — admin/logistik-uppgifter ska inte ingå i ruttoptimering eller dagsrutt.
+    if (wo.taskCategory && wo.taskCategory !== "field") return false;
+    if (!wo.objectId) return false;
     const orderDate = wo.scheduledDate instanceof Date 
       ? wo.scheduledDate.toISOString().split("T")[0]
       : String(wo.scheduledDate).split("T")[0];
@@ -250,6 +253,7 @@ export async function optimizeResourceDayRoute(
   const objectMap = new Map(objects.map(o => [o.id, o]));
   
   for (const order of dayOrders) {
+    if (!order.objectId) continue;
     const obj = objectMap.get(order.objectId);
     if (!obj || !obj.latitude || !obj.longitude) continue;
     

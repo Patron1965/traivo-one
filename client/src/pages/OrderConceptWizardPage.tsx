@@ -585,13 +585,14 @@ export default function OrderConceptWizardPage() {
     setSelectedObjectIds(new Set());
   }, []);
 
-  const handleAddArticle = useCallback(async (articleId: string, quantity: number, unitPrice: number | null) => {
+  const handleAddArticle = useCallback(async (articleId: string, quantity: number, unitPrice: number | null, taskCategory: "field" | "admin" | "logistics" = "field") => {
     if (!conceptId) return;
     try {
       const res = await apiRequest("POST", `/api/order-concepts/${conceptId}/articles`, {
         articleId,
         quantity,
         unitPrice,
+        taskCategory,
       });
       const newArticle = await res.json();
       setConceptArticles(prev => [...prev, newArticle]);

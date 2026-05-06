@@ -74,6 +74,9 @@ async function buildOptimizationPayload(
       : String(o.scheduledDate).split("T")[0];
     if (orderDate !== date) return false;
     if (o.orderStatus === "utford" || o.orderStatus === "fakturerad") return false;
+    // Task #381 — admin/logistik-uppgifter saknar fysiskt objekt och får inte gå in i VRP.
+    if (o.taskCategory && o.taskCategory !== "field") return false;
+    if (!o.objectId) return false;
     const obj = objectMap.get(o.objectId);
     return obj?.latitude && obj?.longitude;
   });
@@ -257,6 +260,8 @@ export async function registerOptimizationRoutes(app: Express) {
     filteredOrders = filteredOrders.filter(o =>
       o.orderStatus !== "utford" && o.orderStatus !== "fakturerad"
     );
+    // Task #381 — exkludera administrativa/logistik-uppgifter (utan objekt) från VRP.
+    filteredOrders = filteredOrders.filter(o => (!o.taskCategory || o.taskCategory === "field") && !!o.objectId);
 
     const result = await optimizeRoutesVRP(filteredOrders, teamVehicles, objects, clusters, DEFAULT_BREAK_CONFIG, { ...constraints, teamMemberMap });
 
