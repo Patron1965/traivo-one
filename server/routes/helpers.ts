@@ -1,4 +1,5 @@
 import type { Request as ExpressRequest, Response as ExpressResponse, NextFunction } from "express";
+import { randomBytes } from "crypto";
 import { z } from "zod";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { storage } from "../storage";
@@ -156,7 +157,6 @@ export function notifyImportProgress(jobId: string) {
 export const mobileTokens = new Map<string, { resourceId: string; tenantId?: string; expiresAt: number }>();
 
 export function generateMobileToken(): string {
-  const { randomBytes } = require("crypto");
   return randomBytes(48).toString("hex");
 }
 
