@@ -1,0 +1,465 @@
+Traivo AI/ML-förslag: förbättrad schemaläggning och optimering
+1) Nulägesanalys av faktiskt implementation i traivo-one
+1.1 Övergripande arkitektur (idag)
+Traivo använder idag en hybridmodell:
+
+Node/Express backend orkestrerar jobb, constraints och fallback-logik.
+
+Python FastAPI optimization-service (optimization-service/main.py) löser CVRPTW via OR-Tools.
+
+ALNS-förbättringsfas (optimization-service/alns.py) körs efter OR-Tools för lokala förbättringar.
+
+Geoapify VRP fallback (server/route-optimizer.ts) används när OR-Tools-tjänsten inte är tillgänglig.
+
+Asynkrona jobb hanteras via optimization_jobs-tabellen och optimization-job-runner.ts.
+
+1.2 Det som redan fungerar bra
+Robust fallback-kedja
+
+OR-Tools service health check (/health)
+
+fallback till Geoapify / enklare heuristik vid fel
+
+Bra constraint-berikning i backend (server/vrp-constraints.ts)
+
+tidsfönster (hårda + mjuka preferenser)
+
+kompetenskrav
+
+kapacitet
+
+beroenden mellan uppgifter
+
+effektivitetsfaktorer via resourceArticles + resources.efficiencyFactor
+
+Bra avståndsinfrastruktur (server/distance-matrix-service.ts)
+
+OSRM table/route
+
+L1 + L2 cache (distance_cache)
+
+fallback till Geoapify/Haversine
+
+Skalningsmönster finns redan
+
+async threshold (20/30 beroende på väg)
+
+job queue med progress, retries och timeout
+
+1.3 Konkreta gaps/ förbättringsområden (från kod)
+A) Prediktioner är heuristiska, inte ML-drivna
+I server/ai-planner.ts (generatePredictivePlanning) används:
+
+historiskt snitt
+
+enkel trend (increasing/decreasing/stable)
+
+enkel exponentiell justering
+
+Detta ger låg precision vid:
+
+säsongseffekter
+
+väderpåverkan
+
+team-specifika kapacitetsskillnader
+
+B) Tidsestimat i optimeringen är statiska
+estimatedDuration går in som fast duration i både OR-Tools och fallback.
+
+Ingen explicit modell för att prediktera verklig duration per:
+
+objekttyp
+
+executionCode
+
+resurs/team
+
+setup-historik (setup_time_logs)
+
+C) Pre-clustering är geotemporal men ej lärd
+DBSCAN/KMeans används (Python + TS), men parametrar är statiska.
+
+Ingen lärd modell för:
+
+optimal cluster sizing
+
+sannolikhet för unassigned stop
+
+churn-risk mellan kluster
+
+D) Ingen online-lärande loop från utfall
+Resultat mäts men används inte systematiskt för modelluppdatering.
+
+Exempel på outcomefält finns i schema men inte i en aktiv ML-pipeline:
+
+actualDuration, setupTimeLogs, resourcePositions, outsidePreferredWindow
+
+E) Ingen policy-optimering för dynamisk omplanering
+Replanering är i huvudsak regelbaserad (jobbstatus/ny körning), inte policybaserad.
+
+Saknas komponent som beslutar när och hur mycket schema ska förändras vid realtidsstörningar.
+
+2) Målbild: AI-förstärkt optimeringsplattform
+Föreslagen målarkitektur:
+
+Prediction Layer (ML)
+
+ETA/duration-modeller
+
+sannolikheter för försening/unassignment
+
+belastnings-/volymprognoser
+
+Optimization Layer (OR-Tools + ALNS + learned priors)
+
+befintlig solver behålls
+
+ML används för bättre input och warm-start-beslut
+
+Replanning Policy Layer (RL/Contextual Bandit + regler)
+
+beslutar trigger för reoptimering
+
+begränsar schema-instabilitet
+
+Feedback Layer (MLOps)
+
+kontinuerlig utvärdering
+
+driftmonitorering
+
+retraining-cykler
+
+3) Specifika AI/ML-tekniker per förbättringsområde
+3.1 Prediktiv schemaläggning
+Tekniker
+Duration/ETA-modell: LightGBM/XGBoost (regression)
+
+Quantile regression (P50/P80/P95) för robust planering
+
+Demand forecasting per kluster/vecka:
+
+Prophet / LightGBM tidsserie-features
+
+alternativt Temporal Fusion Transformer senare
+
+Föreslagna features
+Order: priority, executionCode, taskCategory, estimatedDuration
+
+Objekt: objectType, geo, deliveryPreferences, outsidePreferredWindow
+
+Resurs/team: efficiencyFactor, drivingFactor, serviceArea-match
+
+Historik: setup_time_logs, tidigare faktisk duration, förseningar
+
+Kontext: veckodag, säsong, väder, trafikproxy (OSRM duration ratio)
+
+Integration i nuvarande flow
+Ersätt rå duration i stop payload med predikterad duration_p50.
+
+Lägg duration_p90 som buffert i tidsfönster för riskkänsliga order.
+
+// server/services/mlFeatureAdapter.ts (ny)
+export function mapPredictionsToStops(stops, preds) {
+  return stops.map(s => {
+    const p = preds[s.id];
+    return {
+      ...s,
+      duration: p?.durationP50Sec ?? s.duration,
+      metadata: {
+        durationP90Sec: p?.durationP90Sec,
+        delayRisk: p?.delayRisk,
+      },
+    };
+  });
+}
+3.2 Dynamisk omplanering
+Tekniker
+Fas 1: Contextual Bandit (LinUCB/Thompson Sampling)
+
+välj strategi: lokal reinsert / partiell reroute / full reopt
+
+Fas 2: RL-policy (PPO) i simulerad miljö
+
+state = pågående rutter + förseningar + nyinkomna jobb
+
+action = replanning-typ + scope
+
+reward = SLA - resekostnad - schemachurn
+
+Praktisk trigger-design
+Trigger events:
+
+ny akut order
+
+ETA-avvikelse > X min
+
+team offline
+
+Policy returnerar:
+
+strategy
+
+affectedTeams
+
+maxChurnPercent
+
+// server/routes/optimizationRoutes.ts (förslag)
+app.post('/api/optimization/replan', async (req, res) => {
+  const decision = await replanningPolicy.decide(req.body.state);
+  const result = await runPartialOrFullOptimization(decision);
+  res.json({ decision, result });
+});
+3.3 Intelligent resursallokering
+Tekniker
+Spatiotemporal clustering (HDBSCAN/DBSCAN + learned embeddings)
+
+Bipartite matching med learned compatibility score
+
+score(order, team) från modell
+
+Pattern mining
+
+återkommande kombinationer objekt-typ x team x tidsfönster
+
+Konkreta förbättringar mot nuvarande kod
+Ersätt statisk cluster-heuristik med modellstyrd cluster_count och epsilon.
+
+Prediktera unassignment risk innan solve och justera prioritet/tidsfönster.
+
+3.4 Realtidsanpassningar från historisk data
+Tekniker
+Online learning light: daglig batch + veckovis retrain
+
+Drift detection: PSI/KS för features och residualer
+
+Anomaly detection för setup/ETA (Isolation Forest)
+
+Data som redan finns och bör nyttjas
+setup_time_logs (historisk friktion/setup)
+
+resource_positions (faktisk rörelse/tempo)
+
+optimization_jobs.result (utfall per körning)
+
+work_orders.actualDuration vs estimatedDuration
+
+4) Teknisk implementationsplan (Replit-kompatibel)
+4.1 Föreslagen stack och bibliotek
+Python (optimization-service + ML service)
+fastapi, pydantic
+
+numpy, pandas
+
+scikit-learn
+
+lightgbm eller xgboost
+
+mlflow (experiment + modellregister)
+
+onnxruntime (valfritt för snabb inference)
+
+Node/TS (backend)
+Befintlig Express/Drizzle behålls
+
+Nya moduler:
+
+server/services/mlPredictionClient.ts
+
+server/services/replanningPolicy.ts
+
+server/services/featureStore.ts
+
+4.2 Datamodeller (nya tabeller)
+-- 1) Feature snapshots för träningsdata
+CREATE TABLE ml_feature_snapshots (
+  id uuid primary key,
+  tenant_id text not null,
+  order_id text,
+  team_id text,
+  snapshot_ts timestamptz not null,
+  features jsonb not null,
+  label_duration_sec int,
+  label_delay_sec int
+);
+
+-- 2) Modellmetadata
+CREATE TABLE ml_models (
+  id uuid primary key,
+  tenant_id text not null,
+  model_type text not null, -- duration, delay_risk, demand_forecast
+  version text not null,
+  metrics jsonb not null,
+  status text not null, -- candidate, prod, archived
+  created_at timestamptz not null default now()
+);
+
+-- 3) Replanning decisions (för RL/bandit feedback)
+CREATE TABLE replanning_events (
+  id uuid primary key,
+  tenant_id text not null,
+  event_ts timestamptz not null,
+  state jsonb not null,
+  action jsonb not null,
+  reward numeric,
+  outcome jsonb
+);
+4.3 API-endpoints och integration
+A) Prediction
+POST /api/ml/predict/durations
+
+POST /api/ml/predict/delay-risk
+
+POST /api/ml/predict/demand
+
+B) Replanning
+POST /api/optimization/replan (ny)
+
+POST /api/optimization/replan/simulate (ny)
+
+C) MLOps
+POST /api/ml/train/:modelType
+
+GET /api/ml/models/:modelType
+
+POST /api/ml/models/:id/promote
+
+GET /api/ml/monitoring/drift
+
+D) Injektionspunkt i befintlig kod
+I executeORToolsJob (server/optimization-job-runner.ts):
+
+bygg stops/vehicles (befintligt)
+
+hämta prediktioner
+
+injicera duration/risk i payload
+
+kalla OR-Tools service
+
+logga utfall för lärloop
+
+const preds = await mlPredictionClient.predictDurations({ tenantId, stops, vehicles });
+const enrichedStops = applyDurationPredictions(stops, preds);
+const orResult = await callOptimizationService({
+  stops: enrichedStops,
+  vehicles,
+  maxSolveSeconds: 60,
+  distanceMatrix,
+});
+await mlPredictionClient.logOutcome({ tenantId, orResult, enrichedStops });
+4.4 Prestanda- och kvalitetsmått (KPI/ML-metrics)
+Optimerings-KPI
+% tilldelade ordrar
+
+total restid / distans
+
+SLA-uppfyllnad
+
+schemachurn vid omplanering
+
+solve-tid p50/p95
+
+ML-metrics
+Duration model: MAE, P90 error
+
+Delay risk: AUC, precision@k
+
+Forecasting: wMAPE, bias
+
+Replanning policy: reward/episode, SLA delta, churn delta
+
+Drift-/driftssäkerhet
+prediktion latency p95 (<150ms per 100 stops batch)
+
+modell drift-alerts
+
+fallback-rate till baseline
+
+5) Stegvis roadmap
+Fas 0 (1–2 veckor): Instrumentering och datagrund
+Logga feature snapshots + labels
+
+Standardisera schema för optimization_jobs.result
+
+Lägg till dashboard för baseline-KPI
+
+Leverans: observability + träningsdata redo.
+
+Fas 1 (2–4 veckor): Duration/ETA-modell i produktion (shadow + assist)
+Träna första LightGBM-modell
+
+Kör shadow inference parallellt med befintligt flöde
+
+Aktivera gradvis (tenant flag)
+
+Mål: minst 15–25% lägre MAE än dagens statiska estimat.
+
+Fas 2 (3–5 veckor): Forecasting + smart resursallokering
+Ersätt enkel trendlogik i generatePredictivePlanning
+
+Introducera demand forecast + capacity warning v2
+
+Modellstyrd cluster-parameterisering
+
+Mål: bättre träffsäkerhet i veckoprognos och färre unassigned.
+
+Fas 3 (4–6 veckor): Dynamisk omplanering (bandit)
+Implementera replanningPolicy (contextual bandit)
+
+Koppla till realtidsevents (nya jobb/förseningar)
+
+Mät churn vs SLA-förbättring
+
+Mål: snabbare och stabilare omplanering med kontrollerad schemaförändring.
+
+Fas 4 (6–10 veckor): RL i simulering + kontrollerad rollout
+Bygg simuleringsmiljö från historiska Traivo-events
+
+Träna PPO-policy
+
+Human-in-the-loop och gradvis rollout
+
+Mål: förbättrad total reward utan SLA-regression.
+
+6) Risker och mitigering
+Datakvalitet: saknade/inkonsekventa labels
+
+Mitigering: datavalidering + confidence-gating
+
+Överanpassning per tenant
+
+Mitigering: global modell + tenant-finetune + fallback
+
+Operativ risk vid auto-replan
+
+Mitigering: max churn guardrails + godkännandeflöde
+
+Latency/Drift
+
+Mitigering: cache, batch inference, drift monitor + rollback
+
+7) Rekommenderad start (konkret nästa sprint)
+Implementera ml_feature_snapshots + outcome-loggning i optimization-job-runner.ts.
+
+Träna första duration-modellen på historik (estimatedDuration, actualDuration, setup/objekt/resurs-features).
+
+Lägg till endpoint POST /api/ml/predict/durations och injicera i OR-Tools payload.
+
+Mät KPI före/efter under 2 veckor med A/B per tenant.
+
+Detta ger snabb affärseffekt utan att ersätta befintlig OR-Tools/ALNS-kärna.
+
+8) Sammanfattning
+Traivo har redan en stark optimeringskärna (OR-Tools + ALNS + constraints + robust fallback). Den största hävstången nu är att göra inputen intelligent och adaptiv via ML:
+
+bättre duration/ETA,
+
+bättre prognoser,
+
+policybaserad omplanering,
+
+kontinuerlig lärloop från verkliga utfall.
+
+Det föreslagna upplägget minimerar risk genom att bygga ovanpå befintlig arkitektur i traivo-one, stegvis och mätbart.
