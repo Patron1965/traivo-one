@@ -183,6 +183,7 @@ app.get("/api/kpis/article-margins", asyncHandler(async (req, res) => {
       .where(and(
         eq(workOrderLines.tenantId, tenantId),
         sql`${workOrders.deletedAt} IS NULL`,
+        sql`${workOrderLines.isOptional} IS NOT TRUE`,
       ))
       .groupBy(workOrderLines.articleId, articles.articleNumber, articles.name, articles.cost, articles.listPrice)
       .orderBy(desc(sql`SUM(${workOrderLines.quantity} * COALESCE(${workOrderLines.resolvedPrice}, 0))`))
