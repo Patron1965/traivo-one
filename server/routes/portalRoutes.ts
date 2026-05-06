@@ -84,6 +84,12 @@ async function requirePortalAuth(req: ExpressRequest, res: ExpressResponse): Pro
   // Resolve per-objekt-scope. Bakåtkompat: portalUserId saknas eller scope tomt = full access.
   let scopedObjectIds: Set<string> | null = null;
   if (session.portalUserId) {
+    // Defense-in-depth: om portal-user blivit borttagen, neka åtkomst (fail-closed).
+    const portalUser = await storage.getPortalUser(session.portalUserId);
+    if (!portalUser || portalUser.tenantId !== session.tenantId) {
+      res.status(401).json({ error: "Sessionen är ogiltig" });
+      return null;
+    }
     try {
       scopedObjectIds = await storage.resolvePortalUserScopeObjectIds(session.portalUserId, session.tenantId);
     } catch (err) {
@@ -620,6 +626,11 @@ app.get("/api/portal/messages", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
+    // Legacy-meddelanden saknar objektkoppling — visa inte för objekt-scoped portal-användare.
+    if (session.scopedObjectIds) {
+      return res.json([]);
+    }
+
     const messages = await storage.getLegacyPortalMessages(session.tenantId!, session.customerId!);
     await storage.markLegacyPortalMessagesAsRead(session.tenantId!, session.customerId!);
     res.json(messages);
@@ -676,6 +687,11 @@ app.post("/api/portal/messages", asyncHandler(async (req, res) => {
 app.get("/api/portal/messages/unread-count", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
+
+    // Legacy-meddelanden saknar objektkoppling — räkna inte för objekt-scoped portal-användare.
+    if (session.scopedObjectIds) {
+      return res.json({ count: 0 });
+    }
 
     const count = await storage.getLegacyUnreadMessageCount(session.tenantId!, session.customerId!);
     res.json({ count });
@@ -2668,6 +2684,11 @@ app.delete("/api/portal-users/:id", requireAdmin, asyncHandler(async (req, res) 
     if (!user || user.tenantId !== tenantId) {
       throw new NotFoundError("Portal-användare");
     }
+    // Återkalla aktiva sessioner först — annars skulle session-rader bli kvar och
+    // (om FK var 'set null') förvandlas till full-access.
+    const { customerPortalSessions } = await import("@shared/schema");
+    await db.delete(customerPortalSessions)
+      .where(eq(customerPortalSessions.portalUserId, user.id));
     await storage.deletePortalUser(user.id);
     res.json({ success: true });
 }));

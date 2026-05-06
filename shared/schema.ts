@@ -3073,7 +3073,7 @@ export const customerPortalSessions = pgTable("customer_portal_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   customerId: varchar("customer_id").references(() => customers.id).notNull(),
-  portalUserId: varchar("portal_user_id").references(() => portalUsers.id, { onDelete: 'set null' }),
+  portalUserId: varchar("portal_user_id").references(() => portalUsers.id, { onDelete: 'cascade' }),
   sessionToken: text("session_token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
