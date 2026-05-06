@@ -305,9 +305,9 @@ export function CommandPalette({ onThemeToggle, currentTheme }: CommandPalettePr
                 data-testid={`command-search-${result.type}-${result.id}`}
               >
                 {result.type === "object" ? (
-                  <MapPin className="h-4 w-4 text-blue-500" />
+                  <MapPin className="h-4 w-4 text-chart-1" />
                 ) : (
-                  <User className="h-4 w-4 text-green-500" />
+                  <User className="h-4 w-4 text-chart-2" />
                 )}
                 <div className="flex flex-col">
                   <span className="text-sm">{result.title}</span>
@@ -363,9 +363,9 @@ export function CommandPalette({ onThemeToggle, currentTheme }: CommandPalettePr
             data-testid="command-action-toggle-theme"
           >
             {currentTheme === "dark" ? (
-              <Sun className="h-4 w-4 text-yellow-500" />
+              <Sun className="h-4 w-4 text-chart-3" />
             ) : (
-              <Moon className="h-4 w-4 text-blue-500" />
+              <Moon className="h-4 w-4 text-chart-1" />
             )}
             <span>Växla tema</span>
             <CommandShortcut>⌘T</CommandShortcut>

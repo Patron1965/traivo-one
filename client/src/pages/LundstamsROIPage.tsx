@@ -440,28 +440,28 @@ export default function LundstamsROIPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card data-testid="card-vehicles">
           <CardContent className="p-4 text-center">
-            <Truck className="h-8 w-8 mx-auto text-blue-500 mb-2" />
+            <Truck className="h-8 w-8 mx-auto text-chart-1 mb-2" />
             <div className="text-2xl font-bold" data-testid="text-vehicles-count">{companyInfo.vehicles}</div>
             <div className="text-sm text-muted-foreground">Fordon</div>
           </CardContent>
         </Card>
         <Card data-testid="card-drivers">
           <CardContent className="p-4 text-center">
-            <Users className="h-8 w-8 mx-auto text-purple-500 mb-2" />
+            <Users className="h-8 w-8 mx-auto text-chart-5 mb-2" />
             <div className="text-2xl font-bold" data-testid="text-drivers-count">{companyInfo.drivers}</div>
             <div className="text-sm text-muted-foreground">Chaufförer</div>
           </CardContent>
         </Card>
         <Card data-testid="card-customers">
           <CardContent className="p-4 text-center">
-            <Building2 className="h-8 w-8 mx-auto text-amber-500 mb-2" />
+            <Building2 className="h-8 w-8 mx-auto text-chart-4 mb-2" />
             <div className="text-2xl font-bold" data-testid="text-customers-count">{companyInfo.customers.toLocaleString()}</div>
             <div className="text-sm text-muted-foreground">Kunder</div>
           </CardContent>
         </Card>
         <Card data-testid="card-orders">
           <CardContent className="p-4 text-center">
-            <Calendar className="h-8 w-8 mx-auto text-green-500 mb-2" />
+            <Calendar className="h-8 w-8 mx-auto text-chart-2 mb-2" />
             <div className="text-2xl font-bold" data-testid="text-orders-count">{companyInfo.ordersPerWeek}</div>
             <div className="text-sm text-muted-foreground">Ordrar/vecka</div>
           </CardContent>
@@ -472,7 +472,7 @@ export default function LundstamsROIPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-blue-500" />
+              <Clock className="h-5 w-5 text-chart-1" />
               Tidsbesparingar - Administration
             </CardTitle>
           </CardHeader>
@@ -483,7 +483,7 @@ export default function LundstamsROIPage() {
                   <span className="text-sm">{item.label}</span>
                   <div className="flex items-center gap-4">
                     <span className="text-sm text-muted-foreground">{item.before} tim → {item.after} tim</span>
-                    <Badge variant="outline" className="text-green-600 border-green-600">
+                    <Badge variant="outline" className="text-chart-2 border-chart-2/60">
                       -{(item.before - item.after).toFixed(1)} tim/v
                     </Badge>
                   </div>
@@ -493,7 +493,7 @@ export default function LundstamsROIPage() {
                 <div className="flex justify-between items-center gap-4 flex-wrap">
                   <span className="font-semibold">Total besparing</span>
                   <div className="text-right">
-                    <div className="font-bold text-lg text-green-600">{adminSavings.weekly.toFixed(1)} tim/vecka</div>
+                    <div className="font-bold text-lg text-chart-2">{adminSavings.weekly.toFixed(1)} tim/vecka</div>
                     <div className="text-sm text-muted-foreground">{adminSavings.yearly.toFixed(0)} tim/år = {Math.round(adminSavings.yearlyCost).toLocaleString("sv-SE")} kr</div>
                   </div>
                 </div>
@@ -505,7 +505,7 @@ export default function LundstamsROIPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Truck className="h-5 w-5 text-purple-500" />
+              <Truck className="h-5 w-5 text-chart-5" />
               Tidsbesparingar - Fältpersonal
             </CardTitle>
           </CardHeader>
@@ -516,7 +516,7 @@ export default function LundstamsROIPage() {
                   <span className="text-sm">{item.label}</span>
                   <div className="flex items-center gap-4">
                     <span className="text-sm text-muted-foreground">{item.before} min → {item.after} min</span>
-                    <Badge variant="outline" className="text-green-600 border-green-600">
+                    <Badge variant="outline" className="text-chart-2 border-chart-2/60">
                       -{item.before - item.after} min/dag
                     </Badge>
                   </div>
@@ -526,7 +526,7 @@ export default function LundstamsROIPage() {
                 <div className="flex justify-between items-center gap-4 flex-wrap">
                   <span className="font-semibold">Total besparing ({companyInfo.drivers} chaufförer)</span>
                   <div className="text-right">
-                    <div className="font-bold text-lg text-green-600">{fieldSavings.dailyTotal.toFixed(1)} tim/dag</div>
+                    <div className="font-bold text-lg text-chart-2">{fieldSavings.dailyTotal.toFixed(1)} tim/dag</div>
                     <div className="text-sm text-muted-foreground">{fieldSavings.yearly.toFixed(0)} tim/år = {Math.round(fieldSavings.yearlyCost).toLocaleString("sv-SE")} kr</div>
                   </div>
                 </div>
@@ -539,14 +539,14 @@ export default function LundstamsROIPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Fuel className="h-5 w-5 text-amber-500" />
+            <Fuel className="h-5 w-5 text-chart-4" />
             Bränsle- och miljöbesparingar
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div className="text-center">
-              <div className="text-3xl font-bold text-amber-600">{savings.fuel.reductionPercent}%</div>
+              <div className="text-3xl font-bold text-chart-4">{savings.fuel.reductionPercent}%</div>
               <div className="text-sm text-muted-foreground">Minskad körsträcka</div>
             </div>
             <div className="text-center">
@@ -558,18 +558,18 @@ export default function LundstamsROIPage() {
               <div className="text-sm text-muted-foreground">Liter diesel/år</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-green-600">{fuelSavings.co2Tons.toFixed(1)}</div>
+              <div className="text-3xl font-bold text-chart-2">{fuelSavings.co2Tons.toFixed(1)}</div>
               <div className="text-sm text-muted-foreground">Ton CO₂/år</div>
             </div>
           </div>
           <div className="mt-6 pt-4 border-t flex justify-between items-center gap-4 flex-wrap">
             <span className="font-semibold">Bränslekostnadsbesparing</span>
-            <span className="text-2xl font-bold text-green-600" data-testid="text-fuel-savings">{Math.round(fuelSavings.cost).toLocaleString("sv-SE")} kr/år</span>
+            <span className="text-2xl font-bold text-chart-2" data-testid="text-fuel-savings">{Math.round(fuelSavings.cost).toLocaleString("sv-SE")} kr/år</span>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-to-br from-green-600 to-green-700 text-white border-0" data-testid="card-total-savings">
+      <Card className="bg-gradient-to-br from-chart-2 to-chart-2 text-white border-0" data-testid="card-total-savings">
         <CardContent className="p-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
@@ -597,26 +597,26 @@ export default function LundstamsROIPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Leaf className="h-5 w-5 text-green-500" />
+              <Leaf className="h-5 w-5 text-chart-2" />
               Miljövinster för hållbarhetsredovisning
             </CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="space-y-3">
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                <CheckCircle2 className="h-5 w-5 text-chart-2 mt-0.5 shrink-0" />
                 <span>Automatiska miljöcertifikat per kund med CO₂-beräkningar</span>
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                <CheckCircle2 className="h-5 w-5 text-chart-2 mt-0.5 shrink-0" />
                 <span>Spårning av bränsleförbrukning per fordon och rutt</span>
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                <CheckCircle2 className="h-5 w-5 text-chart-2 mt-0.5 shrink-0" />
                 <span>Dokumenterad klimatpåverkan stärker Lundstams varumärke</span>
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                <CheckCircle2 className="h-5 w-5 text-chart-2 mt-0.5 shrink-0" />
                 <span>Underlag för frivillig hållbarhetsredovisning enligt ÅRL</span>
               </li>
             </ul>
@@ -626,26 +626,26 @@ export default function LundstamsROIPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Wifi className="h-5 w-5 text-blue-500" />
+              <Wifi className="h-5 w-5 text-chart-1" />
               Specialfunktioner för Lundstams
             </CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="space-y-3">
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
+                <CheckCircle2 className="h-5 w-5 text-chart-1 mt-0.5 shrink-0" />
                 <span><strong>Multi-site:</strong> 4 anläggningar i ett system</span>
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
+                <CheckCircle2 className="h-5 w-5 text-chart-1 mt-0.5 shrink-0" />
                 <span><strong>Offline-app:</strong> Fungerar utan täckning i fjällen</span>
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
+                <CheckCircle2 className="h-5 w-5 text-chart-1 mt-0.5 shrink-0" />
                 <span><strong>Väderanpassning:</strong> AI justerar vid snö/kyla</span>
               </li>
               <li className="flex items-start gap-2">
-                <CheckCircle2 className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
+                <CheckCircle2 className="h-5 w-5 text-chart-1 mt-0.5 shrink-0" />
                 <span><strong>Fortnox:</strong> Direkt faktura-export</span>
               </li>
             </ul>

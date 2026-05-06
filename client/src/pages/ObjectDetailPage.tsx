@@ -33,12 +33,12 @@ import { PolylineEditor } from "@/components/PolylineEditor";
 import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors } from "@/lib/status-colors";
 
 const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
-  koncern: { label: "Koncern", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
-  brf: { label: "BRF", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
-  fastighet: { label: "Fastighet", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
-  rum: { label: "Rum", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
-  karl: { label: "Kärl", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" },
-  objekt: { label: "Objekt", color: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200" },
+  koncern: { label: "Koncern", color: "bg-chart-5/15 text-chart-5 border border-chart-5/30" },
+  brf: { label: "BRF", color: "bg-chart-1/15 text-chart-1 border border-chart-1/30" },
+  fastighet: { label: "Fastighet", color: "bg-chart-2/15 text-chart-2 border border-chart-2/30" },
+  rum: { label: "Rum", color: "bg-chart-3/15 text-chart-3 border border-chart-3/30" },
+  karl: { label: "Kärl", color: "bg-chart-4/15 text-chart-4 border border-chart-4/30" },
+  objekt: { label: "Objekt", color: "bg-muted text-muted-foreground border border-border" },
 };
 
 const objectTypeLabels: Record<string, string> = {
@@ -1365,13 +1365,13 @@ export default function ObjectDetailPage() {
                             return (
                               <div className="space-y-0.5">
                                 {favorable.map((s) => (
-                                  <div key={s.id} className="bg-green-100 dark:bg-green-900/40 border border-green-300 dark:border-green-700 rounded px-1 py-0.5" data-testid={`slot-favorable-${s.id}`}>
-                                    <div className="text-[10px] font-medium text-green-800 dark:text-green-300 truncate">{s.startTime || "Hela"}{s.endTime ? `–${s.endTime}` : ""}</div>
+                                  <div key={s.id} className="bg-chart-2/15 dark:bg-chart-2/15 border border-chart-2/30 dark:border-chart-2/70 rounded px-1 py-0.5" data-testid={`slot-favorable-${s.id}`}>
+                                    <div className="text-[10px] font-medium text-chart-2 truncate">{s.startTime || "Hela"}{s.endTime ? `–${s.endTime}` : ""}</div>
                                   </div>
                                 ))}
                                 {unfavorable.map((s) => (
-                                  <div key={s.id} className="bg-red-100 dark:bg-red-900/40 border border-red-300 dark:border-red-700 rounded px-1 py-0.5" data-testid={`slot-unfavorable-${s.id}`}>
-                                    <div className="text-[10px] font-medium text-red-800 dark:text-red-300 truncate">{s.startTime || "Hela"}{s.endTime ? `–${s.endTime}` : ""}</div>
+                                  <div key={s.id} className="bg-destructive/15 dark:bg-destructive/15 border border-destructive/30 dark:border-destructive/70 rounded px-1 py-0.5" data-testid={`slot-unfavorable-${s.id}`}>
+                                    <div className="text-[10px] font-medium text-destructive truncate">{s.startTime || "Hela"}{s.endTime ? `–${s.endTime}` : ""}</div>
                                   </div>
                                 ))}
                               </div>
@@ -1382,11 +1382,11 @@ export default function ObjectDetailPage() {
                     </div>
                     <div className="flex gap-4 mt-2">
                       <div className="flex items-center gap-1.5 text-xs">
-                        <div className="w-3 h-3 rounded bg-green-100 dark:bg-green-900/40 border border-green-300 dark:border-green-700" />
+                        <div className="w-3 h-3 rounded bg-chart-2/15 dark:bg-chart-2/15 border border-chart-2/30 dark:border-chart-2/70" />
                         Fördelaktig tid
                       </div>
                       <div className="flex items-center gap-1.5 text-xs">
-                        <div className="w-3 h-3 rounded bg-red-100 dark:bg-red-900/40 border border-red-300 dark:border-red-700" />
+                        <div className="w-3 h-3 rounded bg-destructive/15 dark:bg-destructive/15 border border-destructive/30 dark:border-destructive/70" />
                         Ofördelaktig tid
                       </div>
                     </div>
@@ -1399,11 +1399,11 @@ export default function ObjectDetailPage() {
                     {timeRestrictions.map((tr) => {
                       const isFavorable = tr.preference === "favorable";
                       return (
-                        <div key={tr.id} className={`py-3 border-l-2 pl-3 ${isFavorable ? "border-l-green-500" : "border-l-red-500"}`} data-testid={`restriction-row-${tr.id}`}>
+                        <div key={tr.id} className={`py-3 border-l-2 pl-3 ${isFavorable ? "border-l-chart-2" : "border-l-destructive"}`} data-testid={`restriction-row-${tr.id}`}>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium">{RESTRICTION_TYPES.find((t) => t.value === tr.restrictionType)?.label || tr.restrictionType || "Restriktion"}</span>
-                              <Badge variant="outline" className={isFavorable ? "border-green-500 text-green-700 dark:text-green-400" : "border-red-500 text-red-700 dark:text-red-400"}>
+                              <Badge variant="outline" className={isFavorable ? "border-chart-2/50 text-chart-2" : "border-destructive/50 text-destructive"}>
                                 {isFavorable ? "Fördelaktig" : "Ofördelaktig"}
                               </Badge>
                               <Badge variant={tr.isActive !== false ? "default" : "secondary"}>
@@ -1990,8 +1990,8 @@ export default function ObjectDetailPage() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             {!obj.customerId && (
-              <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md text-sm text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-orange-500 dark:text-orange-400" />
+              <div className="p-3 bg-chart-3/10 dark:bg-chart-3/15 border border-chart-3/20 dark:border-chart-3/80 rounded-md text-sm text-chart-3 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-chart-4" />
                 Objektet saknar kundkoppling. Koppla en kund innan du skapar en arbetsorder.
               </div>
             )}

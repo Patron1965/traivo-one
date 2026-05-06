@@ -90,9 +90,9 @@ function getCategoryLabel(value: string): string {
 
 function getStatusBadge(status: string) {
   switch (status) {
-    case "new": return <Badge className="bg-blue-500 text-white text-xs" data-testid="badge-status-new">Ny</Badge>;
-    case "reviewed": return <Badge className="bg-amber-500 text-white text-xs" data-testid="badge-status-reviewed">Granskas</Badge>;
-    case "resolved": return <Badge className="bg-green-500 text-white text-xs" data-testid="badge-status-resolved">Löst</Badge>;
+    case "new": return <Badge className="bg-chart-1 text-white text-xs" data-testid="badge-status-new">Ny</Badge>;
+    case "reviewed": return <Badge className="bg-chart-4 text-white text-xs" data-testid="badge-status-reviewed">Granskas</Badge>;
+    case "resolved": return <Badge className="bg-chart-2 text-white text-xs" data-testid="badge-status-resolved">Löst</Badge>;
     case "rejected": return <Badge variant="secondary" className="text-xs" data-testid="badge-status-rejected">Avvisad</Badge>;
     default: return <Badge variant="outline" className="text-xs">{status}</Badge>;
   }
@@ -390,15 +390,15 @@ export default function PortalFieldPage() {
             </div>
 
             {scanError && (
-              <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/20 rounded-lg text-sm text-red-600" data-testid="text-scan-error">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-orange-500 dark:text-orange-400" />
+              <div className="flex items-center gap-2 p-3 bg-destructive/10 dark:bg-destructive/15 rounded-lg text-sm text-destructive" data-testid="text-scan-error">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-chart-4" />
                 {scanError}
               </div>
             )}
 
             {errorMessage && (
-              <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/20 rounded-lg text-sm text-red-600" data-testid="text-error-message">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-orange-500 dark:text-orange-400" />
+              <div className="flex items-center gap-2 p-3 bg-destructive/10 dark:bg-destructive/15 rounded-lg text-sm text-destructive" data-testid="text-error-message">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-chart-4" />
                 {errorMessage}
                 <button className="ml-auto" onClick={() => setErrorMessage(null)}><X className="h-4 w-4" /></button>
               </div>
@@ -476,8 +476,8 @@ export default function PortalFieldPage() {
               <p className="text-center text-sm text-muted-foreground">Rikta kameran mot QR-koden på objektet</p>
             )}
             {scanError && (
-              <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/20 rounded-lg text-sm text-red-600" data-testid="text-scanner-error">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-orange-500 dark:text-orange-400" />
+              <div className="flex items-center gap-2 p-3 bg-destructive/10 dark:bg-destructive/15 rounded-lg text-sm text-destructive" data-testid="text-scanner-error">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-chart-4" />
                 {scanError}
               </div>
             )}
@@ -582,7 +582,7 @@ export default function PortalFieldPage() {
                   <Card data-testid="card-previous-reports">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+                        <AlertTriangle className="h-4 w-4 text-chart-4" />
                         Tidigare rapporter
                       </CardTitle>
                     </CardHeader>
@@ -597,7 +597,7 @@ export default function PortalFieldPage() {
                             <p className="text-xs text-muted-foreground line-clamp-2">{cr.description}</p>
                             <p className="text-[10px] text-muted-foreground mt-1">{new Date(cr.createdAt).toLocaleDateString("sv")}</p>
                             {cr.reviewNotes && (
-                              <p className="text-xs text-blue-600 mt-1">Svar: {cr.reviewNotes}</p>
+                              <p className="text-xs text-chart-1 mt-1">Svar: {cr.reviewNotes}</p>
                             )}
                           </div>
                         ))}
@@ -635,7 +635,7 @@ export default function PortalFieldPage() {
                       type="button"
                       className={`flex items-center gap-2 p-3 rounded-lg border text-left text-sm transition-colors ${
                         reportCategory === cat.value
-                          ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300"
+                          ? "border-chart-1/50 bg-chart-1/10 dark:bg-chart-1/15 text-chart-1"
                           : "border-muted hover:border-muted-foreground/30"
                       }`}
                       onClick={() => setReportCategory(cat.value)}
@@ -671,7 +671,7 @@ export default function PortalFieldPage() {
                       <Image className="h-6 w-6 text-muted-foreground opacity-30" />
                     </div>
                     <button
-                      className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white flex items-center justify-center z-10"
+                      className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center z-10"
                       onClick={() => removePhoto(i)}
                       data-testid={`button-remove-photo-${i}`}
                     >
@@ -715,8 +715,8 @@ export default function PortalFieldPage() {
             )}
 
             {errorMessage && (
-              <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/20 rounded-lg text-sm text-red-600" data-testid="text-report-error">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-orange-500 dark:text-orange-400" />
+              <div className="flex items-center gap-2 p-3 bg-destructive/10 dark:bg-destructive/15 rounded-lg text-sm text-destructive" data-testid="text-report-error">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-chart-4" />
                 {errorMessage}
                 <button className="ml-auto" onClick={() => setErrorMessage(null)}><X className="h-4 w-4" /></button>
               </div>

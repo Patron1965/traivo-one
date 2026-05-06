@@ -112,8 +112,8 @@ function KPICard({ title, value, subtitle, icon: Icon, trend, color }: {
             <p className="text-2xl font-bold" style={color ? { color } : undefined}>{value}</p>
             {subtitle && (
               <p className="text-xs text-muted-foreground flex items-center gap-1">
-                {trend === "up" && <ArrowUpRight className="h-3 w-3 text-green-600" />}
-                {trend === "down" && <ArrowDownRight className="h-3 w-3 text-red-500" />}
+                {trend === "up" && <ArrowUpRight className="h-3 w-3 text-chart-2" />}
+                {trend === "down" && <ArrowDownRight className="h-3 w-3 text-destructive" />}
                 {subtitle}
               </p>
             )}

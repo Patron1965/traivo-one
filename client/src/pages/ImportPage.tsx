@@ -304,9 +304,9 @@ function BatchDetailsDialog({ batchId, open, onClose }: { batchId: string | null
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-batch-details">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {phase === "in_progress" && <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />}
-            {phase === "completed" && <CheckCircle className="h-5 w-5 text-green-600" />}
-            {phase === "failed" && <AlertCircle className="h-5 w-5 text-red-600" />}
+            {phase === "in_progress" && <Loader2 className="h-5 w-5 text-chart-1 animate-spin" />}
+            {phase === "completed" && <CheckCircle className="h-5 w-5 text-chart-2" />}
+            {phase === "failed" && <AlertCircle className="h-5 w-5 text-destructive" />}
             {phase === "in_progress" ? "Berikning pågår" :
              phase === "completed" ? "Berikning klar" :
              phase === "failed" ? "Berikning misslyckades" :
@@ -342,11 +342,11 @@ function BatchDetailsDialog({ batchId, open, onClose }: { batchId: string | null
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
               <div className="p-3 bg-muted/30 rounded border">
-                <div className="text-2xl font-bold text-green-600" data-testid="text-dialog-created">{batch.created ?? 0}</div>
+                <div className="text-2xl font-bold text-chart-2" data-testid="text-dialog-created">{batch.created ?? 0}</div>
                 <div className="text-xs text-muted-foreground">Nya värden</div>
               </div>
               <div className="p-3 bg-muted/30 rounded border">
-                <div className="text-2xl font-bold text-orange-500" data-testid="text-dialog-updated">{batch.updated ?? 0}</div>
+                <div className="text-2xl font-bold text-chart-4" data-testid="text-dialog-updated">{batch.updated ?? 0}</div>
                 <div className="text-xs text-muted-foreground">Uppdaterade</div>
               </div>
               <div className="p-3 bg-muted/30 rounded border">
@@ -354,7 +354,7 @@ function BatchDetailsDialog({ batchId, open, onClose }: { batchId: string | null
                 <div className="text-xs text-muted-foreground">Oförändrade</div>
               </div>
               <div className="p-3 bg-muted/30 rounded border">
-                <div className="text-2xl font-bold text-amber-600" data-testid="text-dialog-errors">{batch.errors ?? 0}</div>
+                <div className="text-2xl font-bold text-chart-4" data-testid="text-dialog-errors">{batch.errors ?? 0}</div>
                 <div className="text-xs text-muted-foreground">Fel</div>
               </div>
             </div>
@@ -377,13 +377,13 @@ function BatchDetailsDialog({ batchId, open, onClose }: { batchId: string | null
             )}
 
             {phase === "failed" && batch.metadata?.failureReason && (
-              <div className="text-sm p-3 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" data-testid="text-dialog-failure-reason">
+              <div className="text-sm p-3 rounded bg-destructive/10 dark:bg-destructive/15 border border-destructive/20 dark:border-destructive/80" data-testid="text-dialog-failure-reason">
                 <strong>Felorsak:</strong> {batch.metadata.failureReason}
               </div>
             )}
 
             {(batch.errors ?? 0) > 0 && batch.metadata?.sampleErrors && batch.metadata.sampleErrors.length > 0 && (
-              <div className="text-sm p-3 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+              <div className="text-sm p-3 rounded bg-destructive/10 dark:bg-destructive/15 border border-destructive/20 dark:border-destructive/80">
                 <strong>Felmeddelanden</strong> (visar första {Math.min(10, batch.metadata.sampleErrors.length)}):
                 <ul className="mt-2 list-disc list-inside text-xs space-y-1">
                   {batch.metadata.sampleErrors.slice(0, 10).map((e, i) => <li key={i}>{e}</li>)}
@@ -515,7 +515,7 @@ function ImportHistorySection() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${isRolledBack ? "bg-gray-400" : isFailed ? "bg-destructive" : isInProgress ? "bg-blue-500 animate-pulse" : batch.errors > 0 ? "bg-amber-500" : "bg-green-500"}`} />
+                        <div className={`w-2 h-2 rounded-full ${isRolledBack ? "bg-gray-400" : isFailed ? "bg-destructive/15" : isInProgress ? "bg-chart-1/15 animate-pulse" : batch.errors > 0 ? "bg-chart-4/15" : "bg-chart-2/15"}`} />
                         <div>
                           <div className="font-medium text-sm">
                             {batch.batchId}
@@ -523,8 +523,8 @@ function ImportHistorySection() {
                             {isRolledBack && !isRestored && <Badge variant="outline" className="ml-2 text-xs">Ångrad</Badge>}
                             {isCleanup && !isRolledBack && <Badge variant="secondary" className="ml-2 text-xs">Sanering</Badge>}
                             {isEnrich && !isRolledBack && <Badge variant="secondary" className="ml-2 text-xs">Berikning</Badge>}
-                            {isInProgress && <Badge variant="outline" className="ml-2 text-xs border-blue-500 text-blue-700 dark:text-blue-300" data-testid={`badge-status-in-progress-${batch.batchId}`}>Pågår</Badge>}
-                            {isCompleted && !isRolledBack && <Badge variant="outline" className="ml-2 text-xs border-green-500 text-green-700 dark:text-green-300" data-testid={`badge-status-completed-${batch.batchId}`}>Klar</Badge>}
+                            {isInProgress && <Badge variant="outline" className="ml-2 text-xs border-chart-1/50 text-chart-1" data-testid={`badge-status-in-progress-${batch.batchId}`}>Pågår</Badge>}
+                            {isCompleted && !isRolledBack && <Badge variant="outline" className="ml-2 text-xs border-chart-2/50 text-chart-2" data-testid={`badge-status-completed-${batch.batchId}`}>Klar</Badge>}
                             {isFailed && <Badge variant="destructive" className="ml-2 text-xs" data-testid={`badge-status-failed-${batch.batchId}`}>Misslyckades</Badge>}
                           </div>
                           <div className="text-xs text-muted-foreground">
@@ -534,9 +534,9 @@ function ImportHistorySection() {
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="text-right text-xs">
-                          <span className="text-green-600 font-medium">{batch.created || 0} nya</span>
+                          <span className="text-chart-2 font-medium">{batch.created || 0} nya</span>
                           <span className="text-muted-foreground mx-1">|</span>
-                          <span className="text-orange-500 dark:text-orange-400">{batch.updated || 0} uppdaterade</span>
+                          <span className="text-chart-4">{batch.updated || 0} uppdaterade</span>
                           <span className="text-muted-foreground mx-1">|</span>
                           <span className={batch.errors > 0 ? "text-destructive font-medium" : "text-muted-foreground"}>{batch.errors || 0} fel</span>
                         </div>
@@ -615,7 +615,7 @@ function ImportHistorySection() {
                       }
                     }}
                     data-testid="button-confirm-rollback"
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    className="bg-destructive/15 text-destructive-foreground hover:bg-destructive/90"
                   >
                     <Undo2 className="h-4 w-4 mr-1" />
                     {buttonLabel}
@@ -847,10 +847,10 @@ function EnrichKarlSection() {
 
   return (
     <div className="space-y-4">
-      <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+      <Card className="border-chart-4/20 dark:border-chart-4/80 bg-chart-4/10 dark:bg-chart-4/15">
         <CardContent className="pt-6">
           <div className="flex items-start gap-3">
-            <Info className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+            <Info className="h-5 w-5 text-chart-4 mt-0.5 shrink-0" />
             <div className="space-y-2 text-sm">
               <p className="font-medium">Berika befintliga kärl med metadata</p>
               <p className="text-muted-foreground">
@@ -949,12 +949,12 @@ function EnrichKarlSection() {
           </CardHeader>
           <CardContent className="space-y-4">
             {preview.warning && (
-              <div className="text-sm p-3 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
+              <div className="text-sm p-3 rounded bg-chart-4/10 dark:bg-chart-4/15 border border-chart-4/20 dark:border-chart-4/80 text-chart-4">
                 {preview.warning}
               </div>
             )}
             {preview.missingMetadataTypes.length > 0 && (
-              <div className="text-sm p-3 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+              <div className="text-sm p-3 rounded bg-destructive/10 dark:bg-destructive/15 border border-destructive/20 dark:border-destructive/80">
                 <strong>Saknade metadatatyper:</strong> {preview.missingMetadataTypes.join(", ")}.
                 Klicka "Säkerställ standardtyper" eller skapa typerna manuellt först.
               </div>
@@ -976,8 +976,8 @@ function EnrichKarlSection() {
                         {field}
                         {stats.missingType && <Badge variant="destructive" className="ml-2 text-xs">Saknad typ</Badge>}
                       </TableCell>
-                      <TableCell className="text-right text-green-600">{stats.wouldCreate}</TableCell>
-                      <TableCell className="text-right text-orange-500">{stats.wouldUpdate}</TableCell>
+                      <TableCell className="text-right text-chart-2">{stats.wouldCreate}</TableCell>
+                      <TableCell className="text-right text-chart-4">{stats.wouldUpdate}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{stats.unchanged}</TableCell>
                     </TableRow>
                   ))}
@@ -999,10 +999,10 @@ function EnrichKarlSection() {
       )}
 
       {isBatchRunning && batchStatus && (
-        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/20" data-testid="card-enrich-progress">
+        <Card className="border-chart-1/20 dark:border-chart-1/80 bg-chart-1/10 dark:bg-chart-1/15" data-testid="card-enrich-progress">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+              <Loader2 className="h-5 w-5 text-chart-1 animate-spin" />
               Berikning pågår i bakgrunden
             </CardTitle>
             <CardDescription>
@@ -1024,13 +1024,13 @@ function EnrichKarlSection() {
             <Progress value={progressPct} className="h-2" data-testid="progress-enrich" />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm pt-2">
               <div className="p-3 bg-background rounded border">
-                <div className="text-xl font-bold text-green-600" data-testid="text-enrich-progress-created">
+                <div className="text-xl font-bold text-chart-2" data-testid="text-enrich-progress-created">
                   {(batchStatus.created ?? 0).toLocaleString("sv-SE")}
                 </div>
                 <div className="text-xs text-muted-foreground">Nya värden</div>
               </div>
               <div className="p-3 bg-background rounded border">
-                <div className="text-xl font-bold text-orange-500" data-testid="text-enrich-progress-updated">
+                <div className="text-xl font-bold text-chart-4" data-testid="text-enrich-progress-updated">
                   {(batchStatus.updated ?? 0).toLocaleString("sv-SE")}
                 </div>
                 <div className="text-xs text-muted-foreground">Uppdaterade</div>
@@ -1042,7 +1042,7 @@ function EnrichKarlSection() {
                 <div className="text-xs text-muted-foreground">Matchade rader</div>
               </div>
               <div className="p-3 bg-background rounded border">
-                <div className="text-xl font-bold text-amber-600" data-testid="text-enrich-progress-errors">
+                <div className="text-xl font-bold text-chart-4" data-testid="text-enrich-progress-errors">
                   {(batchStatus.errors ?? 0).toLocaleString("sv-SE")}
                 </div>
                 <div className="text-xs text-muted-foreground">Fel hittills</div>
@@ -1053,10 +1053,10 @@ function EnrichKarlSection() {
       )}
 
       {failure && (
-        <Card className="border-red-200 dark:border-red-800 bg-red-50/30 dark:bg-red-950/20" data-testid="card-enrich-failed">
+        <Card className="border-destructive/20 dark:border-destructive/80 bg-destructive/10 dark:bg-destructive/15" data-testid="card-enrich-failed">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-red-600" />
+              <AlertCircle className="h-5 w-5 text-destructive" />
               Berikning misslyckades
             </CardTitle>
             <CardDescription>
@@ -1075,10 +1075,10 @@ function EnrichKarlSection() {
       )}
 
       {applyResult && (
-        <Card className="border-green-200 dark:border-green-800 bg-green-50/30 dark:bg-green-950/20" data-testid="card-enrich-result">
+        <Card className="border-chart-2/20 dark:border-chart-2/80 bg-chart-2/10 dark:bg-chart-2/15" data-testid="card-enrich-result">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
+              <CheckCircle className="h-5 w-5 text-chart-2" />
               Berikning klar
             </CardTitle>
             <CardDescription>
@@ -1088,11 +1088,11 @@ function EnrichKarlSection() {
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
               <div className="p-3 bg-background rounded border">
-                <div className="text-2xl font-bold text-green-600" data-testid="text-enrich-created">{applyResult.created}</div>
+                <div className="text-2xl font-bold text-chart-2" data-testid="text-enrich-created">{applyResult.created}</div>
                 <div className="text-xs text-muted-foreground">Nya värden</div>
               </div>
               <div className="p-3 bg-background rounded border">
-                <div className="text-2xl font-bold text-orange-500" data-testid="text-enrich-updated">{applyResult.updated}</div>
+                <div className="text-2xl font-bold text-chart-4" data-testid="text-enrich-updated">{applyResult.updated}</div>
                 <div className="text-xs text-muted-foreground">Uppdaterade</div>
               </div>
               <div className="p-3 bg-background rounded border">
@@ -1100,7 +1100,7 @@ function EnrichKarlSection() {
                 <div className="text-xs text-muted-foreground">Oförändrade</div>
               </div>
               <div className="p-3 bg-background rounded border">
-                <div className="text-2xl font-bold text-amber-600" data-testid="text-enrich-unmatched">{applyResult.unmatchedCount}</div>
+                <div className="text-2xl font-bold text-chart-4" data-testid="text-enrich-unmatched">{applyResult.unmatchedCount}</div>
                 <div className="text-xs text-muted-foreground">Omatchade</div>
               </div>
             </div>
@@ -1115,7 +1115,7 @@ function EnrichKarlSection() {
               )}
             </div>
             {applyResult.errorCount > 0 && (
-              <div className="mt-4 text-sm p-3 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+              <div className="mt-4 text-sm p-3 rounded bg-destructive/10 dark:bg-destructive/15 border border-destructive/20 dark:border-destructive/80">
                 <strong>{applyResult.errorCount} fel</strong> (visar första {Math.min(10, applyResult.errors.length)}):
                 <ul className="mt-2 list-disc list-inside text-xs space-y-1">
                   {applyResult.errors.slice(0, 10).map((e, i) => <li key={i}>{e}</li>)}
@@ -1135,8 +1135,8 @@ function StepIndicator({ step, title, active, completed, skipped, onClick }: {
   return (
     <div
       className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-        active ? "bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800" :
-        completed ? "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800" :
+        active ? "bg-chart-1/10 dark:bg-chart-1/15 border border-chart-1/20 dark:border-chart-1/80" :
+        completed ? "bg-chart-2/10 dark:bg-chart-2/15 border border-chart-2/20 dark:border-chart-2/80" :
         skipped ? "bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 opacity-60" :
         "bg-muted/30 border border-transparent"
       } ${onClick ? "cursor-pointer hover:shadow-sm" : ""}`}
@@ -1144,17 +1144,17 @@ function StepIndicator({ step, title, active, completed, skipped, onClick }: {
       data-testid={`step-indicator-${step}`}
     >
       <div className={`flex items-center justify-center h-8 w-8 rounded-full text-sm font-bold ${
-        completed ? "bg-green-600 text-white" :
+        completed ? "bg-chart-2 text-white" :
         skipped ? "bg-gray-400 text-white" :
-        active ? "bg-blue-600 text-white" :
+        active ? "bg-chart-1 text-white" :
         "bg-muted text-muted-foreground"
       }`}>
         {completed ? <Check className="h-4 w-4" /> : skipped ? <Ban className="h-4 w-4" /> : step}
       </div>
       <div className="flex flex-col">
         <span className={`text-sm font-medium ${
-          active ? "text-blue-700 dark:text-blue-300" :
-          completed ? "text-green-700 dark:text-green-300" :
+          active ? "text-chart-1" :
+          completed ? "text-chart-2" :
           skipped ? "text-gray-400 dark:text-gray-500" :
           "text-muted-foreground"
         }`}>{title}</span>
@@ -1165,21 +1165,21 @@ function StepIndicator({ step, title, active, completed, skipped, onClick }: {
 }
 
 function getScorecardColor(score: number): string {
-  if (score > 90) return "text-green-600";
-  if (score >= 70) return "text-yellow-600";
-  return "text-red-600";
+  if (score > 90) return "text-chart-2";
+  if (score >= 70) return "text-chart-3";
+  return "text-destructive";
 }
 
 function getScorecardBg(score: number): string {
-  if (score > 90) return "bg-green-100 dark:bg-green-950/30 border-green-200 dark:border-green-800";
-  if (score >= 70) return "bg-yellow-100 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800";
-  return "bg-red-100 dark:bg-red-950/30 border-red-200 dark:border-red-800";
+  if (score > 90) return "bg-chart-2/15 dark:bg-chart-2/15 border-chart-2/20 dark:border-chart-2/80";
+  if (score >= 70) return "bg-chart-3/15 dark:bg-chart-3/15 border-chart-3/20 dark:border-chart-3/80";
+  return "bg-destructive/15 dark:bg-destructive/15 border-destructive/20 dark:border-destructive/80";
 }
 
 function getScorecardProgressColor(score: number): string {
-  if (score > 90) return "bg-green-500";
-  if (score >= 70) return "bg-yellow-500";
-  return "bg-red-500";
+  if (score > 90) return "bg-chart-2/15";
+  if (score >= 70) return "bg-chart-3/15";
+  return "bg-destructive/15";
 }
 
 function getScorecardLabel(score: number): string {
@@ -1189,9 +1189,9 @@ function getScorecardLabel(score: number): string {
 }
 
 function getScorecardIcon(score: number) {
-  if (score > 90) return <CheckCircle className="h-4 w-4 text-green-600" />;
-  if (score >= 70) return <AlertCircle className="h-4 w-4 text-yellow-600" />;
-  return <X className="h-4 w-4 text-red-600" />;
+  if (score > 90) return <CheckCircle className="h-4 w-4 text-chart-2" />;
+  if (score >= 70) return <AlertCircle className="h-4 w-4 text-chart-3" />;
+  return <X className="h-4 w-4 text-destructive" />;
 }
 
 function DataHealthScorecardView({ scorecard, validation, onExportProblems }: { 
@@ -1233,10 +1233,10 @@ function DataHealthScorecardView({ scorecard, validation, onExportProblems }: {
             key={key}
             onClick={() => setExpandedCategory(expandedCategory === key ? null : key)}
             className={`text-left p-3 rounded-lg border transition-all hover:shadow-sm ${
-              expandedCategory === key ? "ring-2 ring-blue-400" : ""
-            } ${cat.score > 90 ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800" : 
-                cat.score >= 70 ? "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800" : 
-                "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"}`}
+              expandedCategory === key ? "ring-2 ring-chart-1/40" : ""
+            } ${cat.score > 90 ? "bg-chart-2/10 dark:bg-chart-2/15 border-chart-2/20 dark:border-chart-2/80" : 
+                cat.score >= 70 ? "bg-chart-3/10 dark:bg-chart-3/15 border-chart-3/20 dark:border-chart-3/80" : 
+                "bg-destructive/10 dark:bg-destructive/15 border-destructive/20 dark:border-destructive/80"}`}
             data-testid={`scorecard-category-${key}`}
           >
             <div className="flex items-center gap-2 mb-1">
@@ -1479,10 +1479,10 @@ function FortnoxXlsxImportPanel() {
 
   return (
     <div className="space-y-4">
-      <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+      <Card className="border-chart-1/20 dark:border-chart-1/80 bg-chart-1/10 dark:bg-chart-1/15">
         <CardContent className="pt-6">
           <div className="flex items-start gap-3">
-            <Info className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+            <Info className="h-5 w-5 text-chart-1 mt-0.5 shrink-0" />
             <div className="space-y-2 text-sm">
               <p className="font-medium">Importera kunder från Fortnox-utdrag (xlsx)</p>
               <p className="text-muted-foreground">
@@ -1545,11 +1545,11 @@ function FortnoxXlsxImportPanel() {
               </div>
               <div className="rounded-md border p-3" data-testid="stat-new-rows">
                 <div className="text-xs text-muted-foreground">Nya att importera</div>
-                <div className="text-2xl font-semibold text-green-600">{preview.newCount}</div>
+                <div className="text-2xl font-semibold text-chart-2">{preview.newCount}</div>
               </div>
               <div className="rounded-md border p-3" data-testid="stat-duplicates">
                 <div className="text-xs text-muted-foreground">Dubbletter</div>
-                <div className="text-2xl font-semibold text-amber-600">{preview.duplicateCount}</div>
+                <div className="text-2xl font-semibold text-chart-4">{preview.duplicateCount}</div>
               </div>
               <div className="rounded-md border p-3" data-testid="stat-errors">
                 <div className="text-xs text-muted-foreground">Fel/hoppade</div>
@@ -1573,9 +1573,9 @@ function FortnoxXlsxImportPanel() {
             )}
 
             {preview.errorRows.length > 0 && (
-              <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 text-sm">
+              <div className="rounded-md border border-chart-4/20 bg-chart-4/10 dark:border-chart-4/80 dark:bg-chart-4/15 p-3 text-sm">
                 <div className="font-medium mb-1 flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertTriangle className="h-4 w-4 text-chart-4" />
                   {preview.errorRows.length} rader hoppas över
                 </div>
                 <ul className="text-xs text-muted-foreground space-y-0.5 max-h-24 overflow-y-auto">
@@ -1618,7 +1618,7 @@ function FortnoxXlsxImportPanel() {
                               Dubblett ({dupLabel})
                             </Badge>
                           ) : (
-                            <Badge className="text-xs bg-green-600">Ny</Badge>
+                            <Badge className="text-xs bg-chart-2/15">Ny</Badge>
                           )}
                         </TableCell>
                       </TableRow>
@@ -1656,10 +1656,10 @@ function FortnoxXlsxImportPanel() {
       )}
 
       {bulkResult && (
-        <Card className="border-green-200 dark:border-green-800 bg-green-50/30 dark:bg-green-950/10">
+        <Card className="border-chart-2/20 dark:border-chart-2/80 bg-chart-2/10 dark:bg-chart-2/15">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-green-600" />
+              <CheckCircle className="h-4 w-4 text-chart-2" />
               Import klar
             </CardTitle>
           </CardHeader>
@@ -1667,11 +1667,11 @@ function FortnoxXlsxImportPanel() {
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <div className="rounded-md border p-3" data-testid="stat-imported-customers">
                 <div className="text-xs text-muted-foreground">Kunder skapade</div>
-                <div className="text-2xl font-semibold text-green-600">{bulkResult.customers.created}</div>
+                <div className="text-2xl font-semibold text-chart-2">{bulkResult.customers.created}</div>
               </div>
               <div className="rounded-md border p-3" data-testid="stat-merged-customers">
                 <div className="text-xs text-muted-foreground">Kunder uppdaterade</div>
-                <div className="text-2xl font-semibold text-blue-600">{bulkResult.customers.merged}</div>
+                <div className="text-2xl font-semibold text-chart-1">{bulkResult.customers.merged}</div>
               </div>
               <div className="rounded-md border p-3" data-testid="stat-skipped">
                 <div className="text-xs text-muted-foreground">Hoppade över</div>
@@ -1679,7 +1679,7 @@ function FortnoxXlsxImportPanel() {
               </div>
               <div className="rounded-md border p-3" data-testid="stat-imported-objects">
                 <div className="text-xs text-muted-foreground">Objekt skapade</div>
-                <div className="text-2xl font-semibold text-green-600">{bulkResult.objects.created}</div>
+                <div className="text-2xl font-semibold text-chart-2">{bulkResult.objects.created}</div>
               </div>
               <div className="rounded-md border p-3" data-testid="stat-geocoding">
                 <div className="text-xs text-muted-foreground">Geokodning köad</div>
@@ -1687,9 +1687,9 @@ function FortnoxXlsxImportPanel() {
               </div>
             </div>
             {bulkResult.errorCount > 0 && (
-              <div className="rounded-md border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30 p-3 text-sm">
+              <div className="rounded-md border border-destructive/20 bg-destructive/10 dark:border-destructive/80 dark:bg-destructive/15 p-3 text-sm">
                 <div className="font-medium mb-1 flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <AlertCircle className="h-4 w-4 text-destructive" />
                   {bulkResult.errorCount} fel
                 </div>
                 <ul className="text-xs text-muted-foreground space-y-0.5 max-h-32 overflow-y-auto">
@@ -1866,10 +1866,10 @@ function FortnoxInvoiceImportPanel() {
 
   return (
     <div className="space-y-4">
-      <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+      <Card className="border-chart-1/20 dark:border-chart-1/80 bg-chart-1/10 dark:bg-chart-1/15">
         <CardContent className="pt-6">
           <div className="flex items-start gap-3">
-            <Info className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+            <Info className="h-5 w-5 text-chart-1 mt-0.5 shrink-0" />
             <div className="space-y-2 text-sm">
               <p className="font-medium">Importera Fortnox-fakturahistorik → avtalsförslag</p>
               <p className="text-muted-foreground">
@@ -1974,7 +1974,7 @@ function FortnoxInvoiceImportPanel() {
               </div>
               <div className="rounded-md border p-3" data-testid="stat-invoice-suggestions">
                 <div className="text-xs text-muted-foreground">Avtalsförslag</div>
-                <div className="text-2xl font-semibold text-green-600">{analysis.suggestionsCount}</div>
+                <div className="text-2xl font-semibold text-chart-2">{analysis.suggestionsCount}</div>
               </div>
               <div className="rounded-md border p-3" data-testid="stat-invoice-matched">
                 <div className="text-xs text-muted-foreground">Matchade kunder</div>
@@ -1982,7 +1982,7 @@ function FortnoxInvoiceImportPanel() {
               </div>
               <div className="rounded-md border p-3" data-testid="stat-invoice-unmatched">
                 <div className="text-xs text-muted-foreground">Omatchade kunder</div>
-                <div className="text-2xl font-semibold text-amber-600">{analysis.unmatchedCustomers}</div>
+                <div className="text-2xl font-semibold text-chart-4">{analysis.unmatchedCustomers}</div>
               </div>
             </div>
 
@@ -3086,10 +3086,10 @@ export default function ImportPage() {
         </TabsList>
 
         <TabsContent value="modus" className="space-y-6">
-          <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+          <Card className="border-chart-1/20 dark:border-chart-1/80 bg-chart-1/10 dark:bg-chart-1/15">
             <CardContent className="pt-6">
               <div className="flex items-start gap-3">
-                <Info className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+                <Info className="h-5 w-5 text-chart-1 mt-0.5 shrink-0" />
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Importera riktig data från Modus 2.0</p>
                   <p className="text-sm text-muted-foreground">
@@ -3140,7 +3140,7 @@ export default function ImportPage() {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-600 text-white text-sm font-bold">1</div>
+                <div className="flex items-center justify-center h-8 w-8 rounded-full bg-chart-1 text-white text-sm font-bold">1</div>
                 <div>
                   <CardTitle className="text-base">Förbered — Företagsinställningar</CardTitle>
                   <CardDescription>Konfigurera ert företag innan ni importerar data</CardDescription>
@@ -3176,7 +3176,7 @@ export default function ImportPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-teal-600 text-white text-sm font-bold">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-chart-2 text-white text-sm font-bold">
                     <Users className="h-4 w-4" />
                   </div>
                   <div>
@@ -3184,7 +3184,7 @@ export default function ImportPage() {
                       <Users className="h-4 w-4" />
                       Steg 0: Kundlista-import (valfritt)
                       {customerImportResult && (
-                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800" data-testid="badge-customer-import-done">
+                        <Badge variant="outline" className="text-xs ml-2 bg-chart-2/10 dark:bg-chart-2/15 text-chart-2 border-chart-2/20 dark:border-chart-2/80" data-testid="badge-customer-import-done">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           {customerImportResult.imported} importerade
                         </Badge>
@@ -3198,8 +3198,8 @@ export default function ImportPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="bg-teal-50 dark:bg-teal-950/20 p-3 rounded-md text-sm space-y-1">
-                <p className="font-medium text-teal-700 dark:text-teal-300">Förväntade kolumner (semikolon- eller komma-separerad CSV):</p>
+              <div className="bg-chart-2/10 dark:bg-chart-2/15 p-3 rounded-md text-sm space-y-1">
+                <p className="font-medium text-chart-2">Förväntade kolumner (semikolon- eller komma-separerad CSV):</p>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {["namn", "kundnummer", "adress", "postnr", "ort", "kontakt", "e-post", "telefon", "fakturareferens"].map(col => (
                     <Badge key={col} variant="secondary" className="text-xs font-mono">{col}</Badge>
@@ -3242,29 +3242,29 @@ export default function ImportPage() {
                 <div className="space-y-3">
                   <div className="grid grid-cols-3 gap-3 p-3 border rounded-lg bg-muted/30">
                     <div className="text-center">
-                      <div className="text-lg font-bold text-green-600" data-testid="text-customer-new">{customerValidation.newCount}</div>
+                      <div className="text-lg font-bold text-chart-2" data-testid="text-customer-new">{customerValidation.newCount}</div>
                       <div className="text-xs text-muted-foreground">Nya kunder</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-lg font-bold text-orange-500 dark:text-orange-400" data-testid="text-customer-duplicates">{customerValidation.duplicateCount}</div>
+                      <div className="text-lg font-bold text-chart-4" data-testid="text-customer-duplicates">{customerValidation.duplicateCount}</div>
                       <div className="text-xs text-muted-foreground">Dubbletter</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-lg font-bold text-red-600" data-testid="text-customer-errors">{customerValidation.errorCount}</div>
+                      <div className="text-lg font-bold text-destructive" data-testid="text-customer-errors">{customerValidation.errorCount}</div>
                       <div className="text-xs text-muted-foreground">Fel</div>
                     </div>
                   </div>
 
                   {customerValidation.duplicateCount > 0 && (
-                    <div className="bg-amber-50 dark:bg-amber-950/20 p-3 rounded-md text-sm">
+                    <div className="bg-chart-4/10 dark:bg-chart-4/15 p-3 rounded-md text-sm">
                       <div className="flex items-center gap-2 mb-2">
-                        <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
-                        <span className="font-medium text-amber-700 dark:text-amber-300">
+                        <AlertTriangle className="h-4 w-4 text-chart-4" />
+                        <span className="font-medium text-chart-4">
                           {customerValidation.duplicateCount} dubbletter hittade
                         </span>
                       </div>
                       <div className="max-h-32 overflow-y-auto">
-                        <ul className="text-xs space-y-1 text-amber-600 dark:text-amber-400">
+                        <ul className="text-xs space-y-1 text-chart-4">
                           {customerValidation.preview.filter(p => p.duplicate).slice(0, 20).map((p, i) => (
                             <li key={i}>
                               Rad {p.row}: <strong>{p.name}</strong> — matchar {p.duplicate!.type === "customerNumber" ? "kundnummer" : "namn"} "{p.duplicate!.existingName}"
@@ -3292,22 +3292,22 @@ export default function ImportPage() {
                         </TableHeader>
                         <TableBody>
                           {customerValidation.preview.slice(0, 50).map((p, i) => (
-                            <TableRow key={i} className={p.duplicate ? "bg-amber-50/50 dark:bg-amber-950/10" : p.errors.length > 0 ? "bg-red-50/50 dark:bg-red-950/10" : ""}>
+                            <TableRow key={i} className={p.duplicate ? "bg-chart-4/10 dark:bg-chart-4/15" : p.errors.length > 0 ? "bg-destructive/10 dark:bg-destructive/15" : ""}>
                               <TableCell className="text-xs">{p.row}</TableCell>
                               <TableCell className="text-xs font-medium">{p.name || "—"}</TableCell>
                               <TableCell className="text-xs font-mono">{p.customerNumber || "—"}</TableCell>
                               <TableCell className="text-xs">{[p.address, p.postalCode, p.city].filter(Boolean).join(", ") || "—"}</TableCell>
                               <TableCell className="text-xs">
                                 {p.duplicate ? (
-                                  <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800">
-                                    <AlertTriangle className="h-3 w-3 mr-1 text-orange-500 dark:text-orange-400" /> Dubblett
+                                  <Badge variant="outline" className="text-xs bg-chart-4/10 dark:bg-chart-4/15 text-chart-4 border-chart-4/20 dark:border-chart-4/80">
+                                    <AlertTriangle className="h-3 w-3 mr-1 text-chart-4" /> Dubblett
                                   </Badge>
                                 ) : p.errors.length > 0 ? (
-                                  <Badge variant="outline" className="text-xs bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800">
+                                  <Badge variant="outline" className="text-xs bg-destructive/10 dark:bg-destructive/15 text-destructive border-destructive/20 dark:border-destructive/80">
                                     <AlertCircle className="h-3 w-3 mr-1" /> Fel
                                   </Badge>
                                 ) : (
-                                  <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800">
+                                  <Badge variant="outline" className="text-xs bg-chart-2/10 dark:bg-chart-2/15 text-chart-2 border-chart-2/20 dark:border-chart-2/80">
                                     <CheckCircle className="h-3 w-3 mr-1" /> Ny
                                   </Badge>
                                 )}
@@ -3355,11 +3355,11 @@ export default function ImportPage() {
               {customerImportResult && (
                 <div className="grid grid-cols-4 gap-3 p-3 border rounded-lg bg-muted/30">
                   <div className="text-center">
-                    <div className="text-lg font-bold text-green-600">{customerImportResult.imported}</div>
+                    <div className="text-lg font-bold text-chart-2">{customerImportResult.imported}</div>
                     <div className="text-xs text-muted-foreground">Importerade</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-lg font-bold text-blue-600">{customerImportResult.merged}</div>
+                    <div className="text-lg font-bold text-chart-1">{customerImportResult.merged}</div>
                     <div className="text-xs text-muted-foreground">Sammanfogade</div>
                   </div>
                   <div className="text-center">
@@ -3367,13 +3367,13 @@ export default function ImportPage() {
                     <div className="text-xs text-muted-foreground">Hoppade över</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-lg font-bold text-red-500">{customerImportResult.errors.length}</div>
+                    <div className="text-lg font-bold text-destructive">{customerImportResult.errors.length}</div>
                     <div className="text-xs text-muted-foreground">Fel</div>
                   </div>
                   {customerImportResult.errors.length > 0 && (
                     <div className="col-span-full">
                       <details className="text-xs">
-                        <summary className="text-red-600 cursor-pointer font-medium">Visa fel</summary>
+                        <summary className="text-destructive cursor-pointer font-medium">Visa fel</summary>
                         <ul className="text-muted-foreground space-y-0.5 ml-4 list-disc mt-1">
                           {customerImportResult.errors.map((err, i) => (
                             <li key={i}>{err}</li>
@@ -3392,7 +3392,7 @@ export default function ImportPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-600 text-white text-sm font-bold">2</div>
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-chart-1 text-white text-sm font-bold">2</div>
                   <div>
                     <CardTitle className="text-base flex items-center gap-2">
                       <Building2 className="h-4 w-4" />
@@ -3416,9 +3416,9 @@ export default function ImportPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="bg-green-50 dark:bg-green-950/20 p-3 rounded-md text-sm space-y-1">
-                <p className="font-medium text-green-700 dark:text-green-300">Vad händer automatiskt:</p>
-                <ul className="text-green-600 dark:text-green-400 text-xs space-y-0.5 ml-4 list-disc">
+              <div className="bg-chart-2/10 dark:bg-chart-2/15 p-3 rounded-md text-sm space-y-1">
+                <p className="font-medium text-chart-2">Vad händer automatiskt:</p>
+                <ul className="text-chart-2 text-xs space-y-0.5 ml-4 list-disc">
                   <li>Kunder extraheras från "Kund"-kolumnen och skapas automatiskt</li>
                   <li>Koordinater rensas (komma → punkt) och valideras för Sverige</li>
                   <li>Objekthierarki byggs via "Parent"-kolumnen</li>
@@ -3473,7 +3473,7 @@ export default function ImportPage() {
                   </Badge>
                 )}
                 {modusResults.objects && (
-                  <Badge variant="default" className="bg-green-600">
+                  <Badge variant="default" className="bg-chart-2/15">
                     <CheckCircle className="h-3 w-3 mr-1" />
                     Importerad
                   </Badge>
@@ -3483,7 +3483,7 @@ export default function ImportPage() {
               {modusValidation && !modusResults.objects && (
                 <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
                   <div className="flex items-center gap-2 mb-2">
-                    <Eye className="h-4 w-4 text-blue-600" />
+                    <Eye className="h-4 w-4 text-chart-1" />
                     <span className="font-medium text-sm">Data Health Scorecard</span>
                     <Badge variant="secondary" className="text-xs">{modusObjectFile?.name}</Badge>
                   </div>
@@ -3494,11 +3494,11 @@ export default function ImportPage() {
                       <div className="text-xs text-muted-foreground">Totalt rader</div>
                     </div>
                     <div className="text-center p-2 bg-background rounded-md">
-                      <div className="text-lg font-bold text-green-600" data-testid="text-validation-new-objects">{modusValidation.objectsNew}</div>
+                      <div className="text-lg font-bold text-chart-2" data-testid="text-validation-new-objects">{modusValidation.objectsNew}</div>
                       <div className="text-xs text-muted-foreground">Nya objekt</div>
                     </div>
                     <div className="text-center p-2 bg-background rounded-md">
-                      <div className="text-lg font-bold text-blue-600" data-testid="text-validation-existing-objects">{modusValidation.objectsExisting}</div>
+                      <div className="text-lg font-bold text-chart-1" data-testid="text-validation-existing-objects">{modusValidation.objectsExisting}</div>
                       <div className="text-xs text-muted-foreground">Redan finns (uppdateras)</div>
                     </div>
                   </div>
@@ -3512,7 +3512,7 @@ export default function ImportPage() {
                           <span className="text-muted-foreground"> ({modusValidation.customersExisting.length} redan finns)</span>
                         )}
                         {modusValidation.customersNew.length > 0 && (
-                          <span className="text-green-600"> ({modusValidation.customersNew.length} nya)</span>
+                          <span className="text-chart-2"> ({modusValidation.customersNew.length} nya)</span>
                         )}
                       </span>
                     </div>
@@ -3534,13 +3534,13 @@ export default function ImportPage() {
 
                   {modusValidation.warnings.length > 0 && (
                     <div className="space-y-2 border-t pt-3">
-                      <p className="text-xs font-medium text-orange-600 flex items-center gap-1">
+                      <p className="text-xs font-medium text-chart-4 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         Övriga varningar
                       </p>
                       {modusValidation.warnings.map((w, i) => (
                         <div key={i} className="text-xs text-muted-foreground flex items-start gap-2">
-                          <AlertCircle className="h-3 w-3 text-orange-500 mt-0.5 shrink-0" />
+                          <AlertCircle className="h-3 w-3 text-chart-4 mt-0.5 shrink-0" />
                           <span>{w}</span>
                         </div>
                       ))}
@@ -3595,10 +3595,10 @@ export default function ImportPage() {
               )}
 
               {importProgress && importProgress.status === "running" && (
-                <Card className="border-blue-200 dark:border-blue-800" data-testid="card-import-progress">
+                <Card className="border-chart-1/20 dark:border-chart-1/80" data-testid="card-import-progress">
                   <CardContent className="pt-6 space-y-3">
                     <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                      <Loader2 className="h-4 w-4 animate-spin text-chart-1" />
                       <span className="text-sm font-medium">Importerar...</span>
                       <Badge variant="secondary" className="text-xs">
                         {importProgress.phase === "kunder" && "Skapar kunder"}
@@ -3615,10 +3615,10 @@ export default function ImportPage() {
                     />
                     <div className="flex items-center gap-4 text-xs text-muted-foreground">
                       <span>{importProgress.processed} / {importProgress.total} rader</span>
-                      <span className="text-green-600">{importProgress.created} skapade</span>
-                      <span className="text-blue-600">{importProgress.updated} uppdaterade</span>
+                      <span className="text-chart-2">{importProgress.created} skapade</span>
+                      <span className="text-chart-1">{importProgress.updated} uppdaterade</span>
                       {importProgress.errors > 0 && (
-                        <span className="text-orange-600">{importProgress.errors} fel</span>
+                        <span className="text-chart-4">{importProgress.errors} fel</span>
                       )}
                     </div>
                   </CardContent>
@@ -3626,10 +3626,10 @@ export default function ImportPage() {
               )}
 
               {modusResults.objects && (
-                <Card className="border-green-200 dark:border-green-800" data-testid="card-import-summary">
+                <Card className="border-chart-2/20 dark:border-chart-2/80" data-testid="card-import-summary">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <CheckCircle className="h-4 w-4 text-chart-2" />
                       Import slutförd
                     </CardTitle>
                     {modusResults.objects.importBatchId && (
@@ -3640,20 +3640,20 @@ export default function ImportPage() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      <div className="text-center p-2 bg-green-50 dark:bg-green-950/20 rounded-md">
-                        <div className="text-lg font-bold text-green-600" data-testid="text-summary-created">{modusResults.objects.created || 0}</div>
+                      <div className="text-center p-2 bg-chart-2/10 dark:bg-chart-2/15 rounded-md">
+                        <div className="text-lg font-bold text-chart-2" data-testid="text-summary-created">{modusResults.objects.created || 0}</div>
                         <div className="text-xs text-muted-foreground">Objekt skapade</div>
                       </div>
-                      <div className="text-center p-2 bg-blue-50 dark:bg-blue-950/20 rounded-md">
-                        <div className="text-lg font-bold text-blue-600" data-testid="text-summary-updated">{modusResults.objects.updated || 0}</div>
+                      <div className="text-center p-2 bg-chart-1/10 dark:bg-chart-1/15 rounded-md">
+                        <div className="text-lg font-bold text-chart-1" data-testid="text-summary-updated">{modusResults.objects.updated || 0}</div>
                         <div className="text-xs text-muted-foreground">Objekt uppdaterade</div>
                       </div>
-                      <div className="text-center p-2 bg-purple-50 dark:bg-purple-950/20 rounded-md">
-                        <div className="text-lg font-bold text-purple-600" data-testid="text-summary-customers">{modusResults.objects.customersCreated}</div>
+                      <div className="text-center p-2 bg-chart-5/10 dark:bg-chart-5/15 rounded-md">
+                        <div className="text-lg font-bold text-chart-5" data-testid="text-summary-customers">{modusResults.objects.customersCreated}</div>
                         <div className="text-xs text-muted-foreground">Kunder</div>
                       </div>
                       <div className="text-center p-2 rounded-md" style={{ background: modusResults.objects.errors.length > 0 ? undefined : undefined }}>
-                        <div className={`text-lg font-bold ${modusResults.objects.errors.length > 0 ? "text-orange-600" : "text-muted-foreground"}`} data-testid="text-summary-errors">
+                        <div className={`text-lg font-bold ${modusResults.objects.errors.length > 0 ? "text-chart-4" : "text-muted-foreground"}`} data-testid="text-summary-errors">
                           {modusResults.objects.errors.length}
                         </div>
                         <div className="text-xs text-muted-foreground">Fel</div>
@@ -3670,7 +3670,7 @@ export default function ImportPage() {
 
                     {modusResults.objects.errors.length > 0 && (
                       <div className="space-y-2">
-                        <p className="text-xs font-medium text-orange-600 flex items-center gap-1">
+                        <p className="text-xs font-medium text-chart-4 flex items-center gap-1">
                           <AlertCircle className="h-3 w-3" />
                           {modusResults.objects.errors.length} fel vid import
                         </p>
@@ -3706,25 +3706,25 @@ export default function ImportPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-600 text-white text-sm font-bold">3</div>
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-chart-1 text-white text-sm font-bold">3</div>
                   <div>
                     <CardTitle className="text-base flex items-center gap-2">
                       <Truck className="h-4 w-4" />
                       Importera uppgifter (arbetsordrar)
                       {objects.length === 0 && !completedSteps.has(2) && (
-                        <Badge variant="outline" className="text-xs ml-2 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800" data-testid="badge-quality-step-3">
+                        <Badge variant="outline" className="text-xs ml-2 bg-destructive/10 dark:bg-destructive/15 text-destructive border-destructive/20 dark:border-destructive/80" data-testid="badge-quality-step-3">
                           <AlertCircle className="h-3 w-3 mr-1" />
                           Importera objekt först
                         </Badge>
                       )}
                       {objects.length === 0 && completedSteps.has(2) && (
-                        <Badge variant="outline" className="text-xs ml-2 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800" data-testid="badge-quality-step-3">
+                        <Badge variant="outline" className="text-xs ml-2 bg-chart-4/10 dark:bg-chart-4/15 text-chart-4 border-chart-4/20 dark:border-chart-4/80" data-testid="badge-quality-step-3">
                           <AlertCircle className="h-3 w-3 mr-1" />
                           {modusResults.objects?.errors?.length ? `${modusResults.objects.errors.length} varningar` : "0 objekt"}
                         </Badge>
                       )}
                       {objects.length > 0 && (
-                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800" data-testid="badge-quality-step-3">
+                        <Badge variant="outline" className="text-xs ml-2 bg-chart-2/10 dark:bg-chart-2/15 text-chart-2 border-chart-2/20 dark:border-chart-2/80" data-testid="badge-quality-step-3">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           {objects.length} objekt redo
                         </Badge>
@@ -3742,9 +3742,9 @@ export default function ImportPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="bg-green-50 dark:bg-green-950/20 p-3 rounded-md text-sm space-y-1">
-                <p className="font-medium text-green-700 dark:text-green-300">Vad händer automatiskt:</p>
-                <ul className="text-green-600 dark:text-green-400 text-xs space-y-0.5 ml-4 list-disc">
+              <div className="bg-chart-2/10 dark:bg-chart-2/15 p-3 rounded-md text-sm space-y-1">
+                <p className="font-medium text-chart-2">Vad händer automatiskt:</p>
+                <ul className="text-chart-2 text-xs space-y-0.5 ml-4 list-disc">
                   <li>Uppgifter kopplas till importerade objekt via Modus objekt-ID</li>
                   <li>Resurser (team/chaufförer) skapas automatiskt om de inte redan finns</li>
                   <li>Uppgiftstyper mappas automatiskt till interna artikeltyper</li>
@@ -3753,7 +3753,7 @@ export default function ImportPage() {
               </div>
 
               {objects.length === 0 && (
-                <div className="flex items-center gap-2 p-3 bg-orange-50 dark:bg-orange-950/20 rounded-md text-sm text-orange-700 dark:text-orange-300">
+                <div className="flex items-center gap-2 p-3 bg-chart-4/10 dark:bg-chart-4/15 rounded-md text-sm text-chart-4">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   Importera objekt först (steg 2) innan uppgifter kan kopplas korrekt.
                 </div>
@@ -3849,7 +3849,7 @@ export default function ImportPage() {
                   Välj uppgifter-CSV från Modus
                 </Button>
                 {modusResults.tasks && (
-                  <Badge variant="default" className="bg-green-600">
+                  <Badge variant="default" className="bg-chart-2/15">
                     <CheckCircle className="h-3 w-3 mr-1" />
                     Importerad
                   </Badge>
@@ -3858,7 +3858,7 @@ export default function ImportPage() {
 
               {showTaskPreview && taskPreviewFile && (
                 <>
-                  <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/20">
+                  <Card className="border-chart-1/20 dark:border-chart-1/80 bg-chart-1/10 dark:bg-chart-1/15">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center gap-2">
                         <Eye className="h-4 w-4" />
@@ -3884,20 +3884,20 @@ export default function ImportPage() {
                             </div>
                             <div className="p-2 rounded border bg-background">
                               <div className="text-xs text-muted-foreground">Saknade objekt</div>
-                              <div className={`text-lg font-bold ${taskValidation.missingObjectsCount > 0 ? "text-amber-600" : "text-green-600"}`} data-testid="text-task-missing-objects">
+                              <div className={`text-lg font-bold ${taskValidation.missingObjectsCount > 0 ? "text-chart-4" : "text-chart-2"}`} data-testid="text-task-missing-objects">
                                 {taskValidation.missingObjectsCount}
                               </div>
                               <div className="text-xs text-muted-foreground">{taskValidation.missingObjectRowsTotal} rader</div>
                             </div>
                             <div className="p-2 rounded border bg-background">
                               <div className="text-xs text-muted-foreground">Saknade kunder</div>
-                              <div className={`text-lg font-bold ${taskValidation.missingCustomersCount > 0 ? "text-amber-600" : "text-green-600"}`} data-testid="text-task-missing-customers">
+                              <div className={`text-lg font-bold ${taskValidation.missingCustomersCount > 0 ? "text-chart-4" : "text-chart-2"}`} data-testid="text-task-missing-customers">
                                 {taskValidation.missingCustomersCount}
                               </div>
                             </div>
                             <div className="p-2 rounded border bg-background">
                               <div className="text-xs text-muted-foreground">Dubbletter / kollisioner</div>
-                              <div className={`text-lg font-bold ${(taskValidation.duplicatesInFileCount + taskValidation.collisionsWithExistingCount) > 0 ? "text-amber-600" : "text-green-600"}`} data-testid="text-task-duplicates">
+                              <div className={`text-lg font-bold ${(taskValidation.duplicatesInFileCount + taskValidation.collisionsWithExistingCount) > 0 ? "text-chart-4" : "text-chart-2"}`} data-testid="text-task-duplicates">
                                 {taskValidation.duplicatesInFileCount} / {taskValidation.collisionsWithExistingCount}
                               </div>
                               <div className="text-xs text-muted-foreground">i fil / mot befintlig</div>
@@ -3918,7 +3918,7 @@ export default function ImportPage() {
                               <button
                                 type="button"
                                 onClick={() => setShowMissingObjects(o => !o)}
-                                className="cursor-pointer font-medium text-amber-700 dark:text-amber-300 hover:underline"
+                                className="cursor-pointer font-medium text-chart-4 hover:underline"
                                 data-testid="button-toggle-missing-objects"
                               >
                                 {showMissingObjects ? "Dölj" : "Visa"} saknade objekt-ID ({taskValidation.missingObjectsCount})
@@ -3943,7 +3943,7 @@ export default function ImportPage() {
                               <button
                                 type="button"
                                 onClick={() => setShowMissingCustomers(o => !o)}
-                                className="cursor-pointer font-medium text-amber-700 dark:text-amber-300 hover:underline"
+                                className="cursor-pointer font-medium text-chart-4 hover:underline"
                                 data-testid="button-toggle-missing-customers"
                               >
                                 {showMissingCustomers ? "Dölj" : "Visa"} saknade kunder ({taskValidation.missingCustomersCount})
@@ -4014,7 +4014,7 @@ export default function ImportPage() {
                               <button
                                 type="button"
                                 onClick={() => setShowDuplicatesInFile(o => !o)}
-                                className="cursor-pointer font-medium text-amber-700 dark:text-amber-300 hover:underline"
+                                className="cursor-pointer font-medium text-chart-4 hover:underline"
                                 data-testid="button-toggle-duplicates"
                               >
                                 {showDuplicatesInFile ? "Dölj" : "Visa"} dubbletter i fil ({taskValidation.duplicatesInFileCount})
@@ -4032,7 +4032,7 @@ export default function ImportPage() {
                           )}
 
                           {taskValidation.collisionsWithExistingCount > 0 && (
-                            <div className="text-xs p-2 rounded bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200">
+                            <div className="text-xs p-2 rounded bg-chart-1/15 dark:bg-chart-1/15 text-chart-1">
                               <Info className="h-3 w-3 inline mr-1" />
                               {taskValidation.collisionsWithExistingCount} uppgifter finns redan (uppdateras via externalReference).
                             </div>
@@ -4065,17 +4065,17 @@ export default function ImportPage() {
               {modusResults.tasks && (
                 <div className="grid grid-cols-2 gap-3 p-3 border rounded-lg bg-muted/30">
                   <div className="text-center">
-                    <div className="text-lg font-bold text-green-600">{modusResults.tasks.imported}</div>
+                    <div className="text-lg font-bold text-chart-2">{modusResults.tasks.imported}</div>
                     <div className="text-xs text-muted-foreground">Uppgifter importerade</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-lg font-bold text-orange-600">{modusResults.tasks.errors.length}</div>
+                    <div className="text-lg font-bold text-chart-4">{modusResults.tasks.errors.length}</div>
                     <div className="text-xs text-muted-foreground">Varningar</div>
                   </div>
                   {modusResults.tasks.errors.length > 0 && (
                     <div className="col-span-full">
                       <details className="text-xs">
-                        <summary className="text-orange-600 cursor-pointer font-medium">
+                        <summary className="text-chart-4 cursor-pointer font-medium">
                           Visa varningar
                         </summary>
                         <ScrollArea className="h-24 mt-1">
@@ -4099,23 +4099,23 @@ export default function ImportPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-amber-600 text-white text-sm font-bold">4</div>
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-chart-4 text-white text-sm font-bold">4</div>
                   <div>
                     <CardTitle className="text-base flex items-center gap-2">
                       <FileSpreadsheet className="h-4 w-4" />
                       Importera fakturarader (valfritt)
                       {completedSteps.has(3) && modusResults.tasks ? (
-                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800" data-testid="badge-quality-step-4">
+                        <Badge variant="outline" className="text-xs ml-2 bg-chart-2/10 dark:bg-chart-2/15 text-chart-2 border-chart-2/20 dark:border-chart-2/80" data-testid="badge-quality-step-4">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           {modusResults.tasks.imported} uppgifter att koppla
                         </Badge>
                       ) : !completedSteps.has(3) ? (
-                        <Badge variant="outline" className="text-xs ml-2 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800" data-testid="badge-quality-step-4">
+                        <Badge variant="outline" className="text-xs ml-2 bg-chart-4/10 dark:bg-chart-4/15 text-chart-4 border-chart-4/20 dark:border-chart-4/80" data-testid="badge-quality-step-4">
                           <Info className="h-3 w-3 mr-1" />
                           Kräver uppgifter
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-xs ml-2 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800" data-testid="badge-quality-step-4">
+                        <Badge variant="outline" className="text-xs ml-2 bg-chart-1/10 dark:bg-chart-1/15 text-chart-1 border-chart-1/20 dark:border-chart-1/80" data-testid="badge-quality-step-4">
                           <Info className="h-3 w-3 mr-1" />
                           Valfritt
                         </Badge>
@@ -4133,9 +4133,9 @@ export default function ImportPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="bg-amber-50 dark:bg-amber-950/20 p-3 rounded-md text-sm space-y-1">
-                <p className="font-medium text-amber-700 dark:text-amber-300">Vad händer:</p>
-                <ul className="text-amber-600 dark:text-amber-400 text-xs space-y-0.5 ml-4 list-disc">
+              <div className="bg-chart-4/10 dark:bg-chart-4/15 p-3 rounded-md text-sm space-y-1">
+                <p className="font-medium text-chart-4">Vad händer:</p>
+                <ul className="text-chart-4 text-xs space-y-0.5 ml-4 list-disc">
                   <li>Kopplar fakturarader till importerade uppgifter via Uppgift Id</li>
                   <li>Skapar artiklar automatiskt baserat på Fortnox Artikel Id (K100, UJ100)</li>
                   <li>Importerar priser med korrekt hantering av komma-decimaler</li>
@@ -4182,7 +4182,7 @@ export default function ImportPage() {
                   Välj fakturarader-CSV från Modus
                 </Button>
                 {modusResults["invoice-lines"] && (
-                  <Badge variant="default" className="bg-green-600">
+                  <Badge variant="default" className="bg-chart-2/15">
                     <CheckCircle className="h-3 w-3 mr-1" />
                     {modusResults["invoice-lines"].imported} rader
                   </Badge>
@@ -4192,15 +4192,15 @@ export default function ImportPage() {
               {modusResults["invoice-lines"] && (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-3 border rounded-lg bg-muted/30">
                   <div className="text-center">
-                    <div className="text-lg font-bold text-orange-500 dark:text-orange-400">{modusResults["invoice-lines"].imported}</div>
+                    <div className="text-lg font-bold text-chart-4">{modusResults["invoice-lines"].imported}</div>
                     <div className="text-xs text-muted-foreground">Fakturarader importerade</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-lg font-bold text-orange-500 dark:text-orange-400">{(modusResults["invoice-lines"] as any).articlesAutoCreated || 0}</div>
+                    <div className="text-lg font-bold text-chart-4">{(modusResults["invoice-lines"] as any).articlesAutoCreated || 0}</div>
                     <div className="text-xs text-muted-foreground">Artiklar skapade</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-lg font-bold text-red-500">{modusResults["invoice-lines"].errors?.length || 0}</div>
+                    <div className="text-lg font-bold text-destructive">{modusResults["invoice-lines"].errors?.length || 0}</div>
                     <div className="text-xs text-muted-foreground">Fel</div>
                   </div>
                   {modusResults["invoice-lines"].errors && modusResults["invoice-lines"].errors.length > 0 && (
@@ -4210,7 +4210,7 @@ export default function ImportPage() {
                           Visa felmeddelanden ({modusResults["invoice-lines"].errors.length})
                         </summary>
                         <div className="max-h-32 overflow-y-auto mt-2">
-                          <ul className="text-xs text-red-500 space-y-0.5 ml-4 list-disc">
+                          <ul className="text-xs text-destructive space-y-0.5 ml-4 list-disc">
                             {modusResults["invoice-lines"].errors.map((e: string, i: number) => (
                               <li key={i}>{e}</li>
                             ))}
@@ -4230,23 +4230,23 @@ export default function ImportPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-600 text-white text-sm font-bold">5</div>
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-chart-1 text-white text-sm font-bold">5</div>
                   <div>
                     <CardTitle className="text-base flex items-center gap-2">
                       <Clock className="h-4 w-4" />
                       Analysera händelser (valfritt)
                       {completedSteps.has(3) && modusResults.tasks ? (
-                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800" data-testid="badge-quality-step-5">
+                        <Badge variant="outline" className="text-xs ml-2 bg-chart-2/10 dark:bg-chart-2/15 text-chart-2 border-chart-2/20 dark:border-chart-2/80" data-testid="badge-quality-step-5">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           {modusResults.tasks.imported} uppgifter att analysera
                         </Badge>
                       ) : !completedSteps.has(3) ? (
-                        <Badge variant="outline" className="text-xs ml-2 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800" data-testid="badge-quality-step-5">
+                        <Badge variant="outline" className="text-xs ml-2 bg-chart-4/10 dark:bg-chart-4/15 text-chart-4 border-chart-4/20 dark:border-chart-4/80" data-testid="badge-quality-step-5">
                           <Info className="h-3 w-3 mr-1" />
                           Kräver uppgifter
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-xs ml-2 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800" data-testid="badge-quality-step-5">
+                        <Badge variant="outline" className="text-xs ml-2 bg-chart-1/10 dark:bg-chart-1/15 text-chart-1 border-chart-1/20 dark:border-chart-1/80" data-testid="badge-quality-step-5">
                           <Info className="h-3 w-3 mr-1" />
                           Valfritt
                         </Badge>
@@ -4264,9 +4264,9 @@ export default function ImportPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="bg-blue-50 dark:bg-blue-950/20 p-3 rounded-md text-sm space-y-1">
-                <p className="font-medium text-blue-700 dark:text-blue-300">Vad händer:</p>
-                <ul className="text-blue-600 dark:text-blue-400 text-xs space-y-0.5 ml-4 list-disc">
+              <div className="bg-chart-1/10 dark:bg-chart-1/15 p-3 rounded-md text-sm space-y-1">
+                <p className="font-medium text-chart-1">Vad händer:</p>
+                <ul className="text-chart-1 text-xs space-y-0.5 ml-4 list-disc">
                   <li>Beräknar tid mellan "in_progress" och "done" för varje uppgift</li>
                   <li>Filtrerar bort extremvärden (över 4 timmar)</li>
                   <li>Skapar statistik och tidsfördelning som underlag för planering</li>
@@ -4313,7 +4313,7 @@ export default function ImportPage() {
                   Välj händelser-CSV från Modus
                 </Button>
                 {modusResults.events && (
-                  <Badge variant="default" className="bg-green-600">
+                  <Badge variant="default" className="bg-chart-2/15">
                     <CheckCircle className="h-3 w-3 mr-1" />
                     Analyserad
                   </Badge>
@@ -4323,15 +4323,15 @@ export default function ImportPage() {
               {modusResults.events && (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-3 border rounded-lg bg-muted/30">
                   <div className="text-center">
-                    <div className="text-lg font-bold text-blue-600">{modusResults.events.totalEvents}</div>
+                    <div className="text-lg font-bold text-chart-1">{modusResults.events.totalEvents}</div>
                     <div className="text-xs text-muted-foreground">Händelser analyserade</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-lg font-bold text-blue-600">{modusResults.events.uniqueTasks}</div>
+                    <div className="text-lg font-bold text-chart-1">{modusResults.events.uniqueTasks}</div>
                     <div className="text-xs text-muted-foreground">Unika uppgifter</div>
                   </div>
                   <div className="text-center col-span-2 md:col-span-1">
-                    <div className="text-2xl font-bold text-green-600">{modusResults.events.averageSetupTime} min</div>
+                    <div className="text-2xl font-bold text-chart-2">{modusResults.events.averageSetupTime} min</div>
                     <div className="text-xs text-muted-foreground">Snitt arbetstid</div>
                   </div>
                   <div className="col-span-full flex flex-wrap gap-2 justify-center pt-2 border-t">
@@ -4359,18 +4359,18 @@ export default function ImportPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-purple-600 text-white text-sm font-bold">6</div>
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-chart-5 text-white text-sm font-bold">6</div>
                   <div>
                     <CardTitle className="text-base flex items-center gap-2">
                       <Tag className="h-4 w-4" />
                       Metadata-tilldelning (valfritt)
                       {objects.length > 0 ? (
-                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 dark:bg-green-950/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800" data-testid="badge-quality-step-6">
+                        <Badge variant="outline" className="text-xs ml-2 bg-chart-2/10 dark:bg-chart-2/15 text-chart-2 border-chart-2/20 dark:border-chart-2/80" data-testid="badge-quality-step-6">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           {objects.length} objekt tillgängliga
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-xs ml-2 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800" data-testid="badge-quality-step-6">
+                        <Badge variant="outline" className="text-xs ml-2 bg-chart-4/10 dark:bg-chart-4/15 text-chart-4 border-chart-4/20 dark:border-chart-4/80" data-testid="badge-quality-step-6">
                           <AlertCircle className="h-3 w-3 mr-1" />
                           Importera objekt först
                         </Badge>
@@ -4395,9 +4395,9 @@ export default function ImportPage() {
                 </TabsList>
 
                 <TabsContent value="bulk" className="space-y-4 mt-4">
-                  <div className="bg-purple-50 dark:bg-purple-950/20 p-3 rounded-md text-sm space-y-1">
-                    <p className="font-medium text-purple-700 dark:text-purple-300">Välj objekt och tilldela en metadata-etikett med ett värde:</p>
-                    <ul className="text-purple-600 dark:text-purple-400 text-xs space-y-0.5 ml-4 list-disc">
+                  <div className="bg-chart-5/10 dark:bg-chart-5/15 p-3 rounded-md text-sm space-y-1">
+                    <p className="font-medium text-chart-5">Välj objekt och tilldela en metadata-etikett med ett värde:</p>
+                    <ul className="text-chart-5 text-xs space-y-0.5 ml-4 list-disc">
                       <li>Markera objekt i listan nedan</li>
                       <li>Ange etikett (t.ex. "Kärlstorlek") och värde (t.ex. "370L")</li>
                       <li>Klicka "Tilldela metadata" för att skriva till alla valda objekt</li>
@@ -4495,11 +4495,11 @@ export default function ImportPage() {
                   {metadataAssignResult && (
                     <div className="grid grid-cols-2 gap-3 p-3 border rounded-lg bg-muted/30">
                       <div className="text-center">
-                        <div className="text-lg font-bold text-green-600">{metadataAssignResult.written}</div>
+                        <div className="text-lg font-bold text-chart-2">{metadataAssignResult.written}</div>
                         <div className="text-xs text-muted-foreground">Objekt uppdaterade</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-lg font-bold text-red-500">{metadataAssignResult.errors.length}</div>
+                        <div className="text-lg font-bold text-destructive">{metadataAssignResult.errors.length}</div>
                         <div className="text-xs text-muted-foreground">Fel</div>
                       </div>
                     </div>
@@ -4507,9 +4507,9 @@ export default function ImportPage() {
                 </TabsContent>
 
                 <TabsContent value="csv" className="space-y-4 mt-4">
-                  <div className="bg-purple-50 dark:bg-purple-950/20 p-3 rounded-md text-sm space-y-1">
-                    <p className="font-medium text-purple-700 dark:text-purple-300">CSV med metadata per objekt:</p>
-                    <ul className="text-purple-600 dark:text-purple-400 text-xs space-y-0.5 ml-4 list-disc">
+                  <div className="bg-chart-5/10 dark:bg-chart-5/15 p-3 rounded-md text-sm space-y-1">
+                    <p className="font-medium text-chart-5">CSV med metadata per objekt:</p>
+                    <ul className="text-chart-5 text-xs space-y-0.5 ml-4 list-disc">
                       <li>Kolumn "objektnummer" eller "objektnamn" identifierar objektet</li>
                       <li>Övriga kolumner blir metadata-etiketter med cellvärden som metadata-värden</li>
                       <li>Nya metadata-typer skapas automatiskt</li>
@@ -4548,15 +4548,15 @@ export default function ImportPage() {
                   {metadataCsvResult && (
                     <div className="grid grid-cols-3 gap-3 p-3 border rounded-lg bg-muted/30">
                       <div className="text-center">
-                        <div className="text-lg font-bold text-green-600">{metadataCsvResult.written}</div>
+                        <div className="text-lg font-bold text-chart-2">{metadataCsvResult.written}</div>
                         <div className="text-xs text-muted-foreground">Värden skrivna</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-lg font-bold text-purple-600">{metadataCsvResult.metadataColumns.length}</div>
+                        <div className="text-lg font-bold text-chart-5">{metadataCsvResult.metadataColumns.length}</div>
                         <div className="text-xs text-muted-foreground">Metadata-kolumner</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-lg font-bold text-red-500">{metadataCsvResult.errors.length}</div>
+                        <div className="text-lg font-bold text-destructive">{metadataCsvResult.errors.length}</div>
                         <div className="text-xs text-muted-foreground">Fel</div>
                       </div>
                       {metadataCsvResult.metadataColumns.length > 0 && (
@@ -4569,7 +4569,7 @@ export default function ImportPage() {
                       {metadataCsvResult.errors.length > 0 && (
                         <div className="col-span-full">
                           <details className="text-xs">
-                            <summary className="text-red-600 cursor-pointer font-medium">Visa fel ({metadataCsvResult.errors.length})</summary>
+                            <summary className="text-destructive cursor-pointer font-medium">Visa fel ({metadataCsvResult.errors.length})</summary>
                             <div className="max-h-24 overflow-y-auto mt-1">
                               <ul className="text-muted-foreground space-y-0.5 ml-4 list-disc">
                                 {metadataCsvResult.errors.map((err, i) => <li key={i}>{err}</li>)}
@@ -4673,16 +4673,16 @@ export default function ImportPage() {
             </Card>
           )}
 
-          <Card className="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20">
+          <Card className="border-chart-2/20 dark:border-chart-2/80 bg-chart-2/10 dark:bg-chart-2/15">
             <CardContent className="pt-6">
               <div className="flex items-start gap-3">
-                <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
+                <CheckCircle className="h-5 w-5 text-chart-2 mt-0.5 shrink-0" />
                 <div className="space-y-1">
-                  <p className="text-sm font-medium text-green-700 dark:text-green-300">Efter import — verifiera</p>
+                  <p className="text-sm font-medium text-chart-2">Efter import — verifiera</p>
                   <ul className="text-sm text-muted-foreground space-y-1">
-                    <li>Gå till <a href="/planner" className="text-blue-600 underline">Veckoplanering</a> och kontrollera att objekt och resurser syns</li>
-                    <li>Kontrollera att kundlistan under <a href="/customers" className="text-blue-600 underline">Kunder</a> ser korrekt ut</li>
-                    <li>Verifiera att hierarkin (Fastighet → Rum → Objekt) stämmer under <a href="/objects" className="text-blue-600 underline">Objekt</a></li>
+                    <li>Gå till <a href="/planner" className="text-chart-1 underline">Veckoplanering</a> och kontrollera att objekt och resurser syns</li>
+                    <li>Kontrollera att kundlistan under <a href="/customers" className="text-chart-1 underline">Kunder</a> ser korrekt ut</li>
+                    <li>Verifiera att hierarkin (Fastighet → Rum → Objekt) stämmer under <a href="/objects" className="text-chart-1 underline">Objekt</a></li>
                   </ul>
                 </div>
               </div>
@@ -4835,22 +4835,22 @@ export default function ImportPage() {
                     <CardHeader className="pb-3">
                       <CardTitle className="text-base flex items-center gap-2">
                         {lastResult.errors.length === 0 ? (
-                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <CheckCircle className="h-4 w-4 text-chart-2" />
                         ) : (
-                          <AlertCircle className="h-4 w-4 text-orange-500" />
+                          <AlertCircle className="h-4 w-4 text-chart-4" />
                         )}
                         Senaste import
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2">
                       <div className="flex items-center gap-2 text-sm">
-                        <Check className="h-4 w-4 text-green-600" />
+                        <Check className="h-4 w-4 text-chart-2" />
                         <span>{lastResult.imported} poster importerade</span>
                       </div>
                       
                       {lastResult.errors.length > 0 && (
                         <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-sm text-orange-600">
+                          <div className="flex items-center gap-2 text-sm text-chart-4">
                             <AlertCircle className="h-4 w-4" />
                             <span>{lastResult.errors.length} fel:</span>
                           </div>
@@ -4891,10 +4891,10 @@ export default function ImportPage() {
         </TabsContent>
 
         <TabsContent value="mapped" className="space-y-6">
-          <Card className="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20">
+          <Card className="border-chart-2/20 dark:border-chart-2/80 bg-chart-2/10 dark:bg-chart-2/15">
             <CardContent className="pt-6">
               <div className="flex items-start gap-3">
-                <Database className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
+                <Database className="h-5 w-5 text-chart-2 mt-0.5 shrink-0" />
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Mappad import med kolumnmappning</p>
                   <p className="text-sm text-muted-foreground">
@@ -4933,7 +4933,7 @@ export default function ImportPage() {
             <AlertDialogCancel data-testid="button-cancel-undo">Avbryt</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => { if (undoBatchId) undoBatchMutation.mutate(undoBatchId); }}
-              className="bg-destructive text-destructive-foreground"
+              className="bg-destructive/15 text-destructive-foreground"
               data-testid="button-confirm-undo"
             >
               {undoBatchMutation.isPending ? (
@@ -4963,7 +4963,7 @@ export default function ImportPage() {
             <Badge variant="secondary" className="gap-1">
               Totalt: {previewStats.total} rader
             </Badge>
-            <Badge variant="default" className="gap-1 bg-green-600">
+            <Badge variant="default" className="gap-1 bg-chart-2/15">
               <Check className="h-3 w-3" />
               Giltiga: {previewStats.valid}
             </Badge>
@@ -4990,14 +4990,14 @@ export default function ImportPage() {
                 {previewData.slice(0, 100).map((row) => (
                   <TableRow 
                     key={row.rowNumber}
-                    className={!row.isValid ? "bg-red-50 dark:bg-red-950/20" : ""}
+                    className={!row.isValid ? "bg-destructive/10 dark:bg-destructive/15" : ""}
                   >
                     <TableCell className="font-mono text-xs">{row.rowNumber}</TableCell>
                     <TableCell>
                       {row.isValid ? (
-                        <Check className="h-4 w-4 text-green-600" />
+                        <Check className="h-4 w-4 text-chart-2" />
                       ) : (
-                        <X className="h-4 w-4 text-red-500" />
+                        <X className="h-4 w-4 text-destructive" />
                       )}
                     </TableCell>
                     {previewTemplate.headers.slice(0, 6).map((header) => (
@@ -5019,14 +5019,14 @@ export default function ImportPage() {
           </ScrollArea>
 
           {previewStats.invalid > 0 && (
-            <div className="bg-orange-50 dark:bg-orange-950/20 p-3 rounded-md">
-              <p className="text-sm font-medium text-orange-700 dark:text-orange-300 mb-1">
+            <div className="bg-chart-4/10 dark:bg-chart-4/15 p-3 rounded-md">
+              <p className="text-sm font-medium text-chart-4 mb-1">
                 Ogiltiga rader (importeras inte):
               </p>
               <ScrollArea className="h-24">
                 <ul className="text-xs space-y-1">
                   {previewData.filter(r => !r.isValid).slice(0, 20).map((row) => (
-                    <li key={row.rowNumber} className="text-orange-600 dark:text-orange-400">
+                    <li key={row.rowNumber} className="text-chart-4">
                       Rad {row.rowNumber}: {row.errors.join(", ")}
                     </li>
                   ))}

@@ -34,7 +34,7 @@ export function ObjectCard({
   status,
   onClick,
 }: ObjectCardProps) {
-  const setupTimeColor = avgSetupTime < 10 ? "text-green-600 dark:text-green-400" : avgSetupTime < 20 ? "text-orange-500 dark:text-orange-400" : "text-red-500 dark:text-red-400";
+  const setupTimeColor = avgSetupTime < 10 ? "text-chart-2" : avgSetupTime < 20 ? "text-chart-4" : "text-destructive";
 
   return (
     <Card 
@@ -166,8 +166,8 @@ export function ObjectDetail({
               </div>
             )}
             {accessInfo.specialInstructions && (
-              <div className="p-2 bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800 rounded-md text-sm">
-                <div className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
+              <div className="p-2 bg-chart-4/10 dark:bg-chart-4/15 border border-chart-4/20 dark:border-chart-4/80 rounded-md text-sm">
+                <div className="flex items-center gap-2 text-chart-4">
                   <Info className="h-4 w-4" />
                   <span>{accessInfo.specialInstructions}</span>
                 </div>

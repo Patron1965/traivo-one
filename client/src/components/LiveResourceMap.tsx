@@ -201,7 +201,7 @@ export function LiveResourceMap({
         </Badge>
         <Badge 
           variant="outline" 
-          className={`text-xs bg-background/90 ${wsConnected ? 'border-green-500/50 text-green-600' : 'border-red-500/50 text-red-600'}`}
+          className={`text-xs bg-background/90 ${wsConnected ? 'border-chart-2/50 text-chart-2' : 'border-destructive/50 text-destructive'}`}
         >
           {wsConnected ? <Wifi className="h-3 w-3 mr-1" /> : <WifiOff className="h-3 w-3 mr-1" />}
           {wsConnected ? 'Live' : 'Offline'}
@@ -249,7 +249,7 @@ export function LiveResourceMap({
               <Popup>
                 <div className="text-sm">
                   <p className="font-medium">{resource.name}</p>
-                  <p className={`${isStale ? 'text-red-600' : 'text-muted-foreground'}`}>
+                  <p className={`${isStale ? 'text-destructive' : 'text-muted-foreground'}`}>
                     {statusLabels[resource.status || ""] || resource.status || "Okänd"}
                     {isStale && " (Inaktuell)"}
                   </p>

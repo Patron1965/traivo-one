@@ -74,9 +74,9 @@ interface AnalyzeResult {
 }
 
 const CONFIDENCE_CONFIG = {
-  high: { label: "H\u00f6g", color: "bg-green-500/10 text-green-600 border-green-500/20", icon: ShieldCheck },
-  medium: { label: "Medel", color: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20", icon: Shield },
-  low: { label: "L\u00e5g", color: "bg-red-500/10 text-red-600 border-red-500/20", icon: ShieldAlert },
+  high: { label: "H\u00f6g", color: "bg-chart-2/15 text-chart-2 border-chart-2/50", icon: ShieldCheck },
+  medium: { label: "Medel", color: "bg-chart-3/15 text-chart-3 border-chart-3/50", icon: Shield },
+  low: { label: "L\u00e5g", color: "bg-destructive/15 text-destructive border-destructive/50", icon: ShieldAlert },
 };
 
 function formatDate(dateStr: string): string {
@@ -91,7 +91,7 @@ function DaysUntilBadge({ days }: { days: number }) {
     return <Badge variant="destructive" data-testid="badge-urgent">{days} dagar</Badge>;
   }
   if (days <= 30) {
-    return <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20" variant="outline" data-testid="badge-upcoming">{days} dagar</Badge>;
+    return <Badge className="bg-chart-3/15 text-chart-3 border-chart-3/50" variant="outline" data-testid="badge-upcoming">{days} dagar</Badge>;
   }
   return <Badge variant="outline" data-testid="badge-normal">{days} dagar</Badge>;
 }
@@ -181,19 +181,19 @@ export default function PredictiveMaintenancePage() {
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3 text-center">
-            <div className="text-2xl font-bold text-red-600" data-testid="text-urgent-count">{urgentCount}</div>
+            <div className="text-2xl font-bold text-destructive" data-testid="text-urgent-count">{urgentCount}</div>
             <div className="text-xs text-muted-foreground">Inom 7 dagar</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3 text-center">
-            <div className="text-2xl font-bold text-yellow-600" data-testid="text-upcoming-count">{upcomingCount}</div>
+            <div className="text-2xl font-bold text-chart-3" data-testid="text-upcoming-count">{upcomingCount}</div>
             <div className="text-xs text-muted-foreground">Inom 30 dagar</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3 text-center">
-            <div className="text-2xl font-bold text-green-600" data-testid="text-later-count">{laterCount}</div>
+            <div className="text-2xl font-bold text-chart-2" data-testid="text-later-count">{laterCount}</div>
             <div className="text-xs text-muted-foreground">Senare</div>
           </CardContent>
         </Card>

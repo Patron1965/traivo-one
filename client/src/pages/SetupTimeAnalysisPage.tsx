@@ -46,9 +46,9 @@ interface SetupTimeAnalysisResult {
 }
 
 const severityColors: Record<string, string> = {
-  high: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800",
-  medium: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800",
-  low: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800",
+  high: "bg-destructive/15 text-destructive border-destructive/20 dark:border-destructive/80",
+  medium: "bg-chart-3/15 text-chart-3 border-chart-3/20 dark:border-chart-3/80",
+  low: "bg-chart-2/15 text-chart-2 border-chart-2/20 dark:border-chart-2/80",
 };
 
 const typeIcons: Record<string, typeof Timer> = {
@@ -111,7 +111,7 @@ export default function SetupTimeAnalysisPage() {
   }
 
   const accuracy = analysis?.overallAccuracy ?? 100;
-  const accuracyColor = accuracy >= 80 ? "text-green-600" : accuracy >= 50 ? "text-orange-500 dark:text-orange-400" : "text-red-600";
+  const accuracyColor = accuracy >= 80 ? "text-chart-2" : accuracy >= 50 ? "text-chart-4" : "text-destructive";
 
   return (
     <div className="space-y-6">
@@ -246,7 +246,7 @@ export default function SetupTimeAnalysisPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
+              <CheckCircle className="h-5 w-5 text-chart-2" />
               Pålitliga objekt
             </CardTitle>
             <CardDescription>
@@ -265,11 +265,11 @@ export default function SetupTimeAnalysisPage() {
                   {reliableInsights.map((insight) => (
                     <div
                       key={insight.id}
-                      className="p-3 rounded-md border bg-green-500/5 border-green-200 dark:border-green-800"
+                      className="p-3 rounded-md border bg-chart-2/15 border-chart-2/20 dark:border-chart-2/80"
                       data-testid={`insight-${insight.id}`}
                     >
                       <div className="flex items-start gap-2">
-                        <CheckCircle className="h-4 w-4 mt-0.5 text-green-600" />
+                        <CheckCircle className="h-4 w-4 mt-0.5 text-chart-2" />
                         <div className="flex-1 min-w-0">
                           <span className="font-medium text-sm">{insight.objectName}</span>
                           <p className="text-xs text-muted-foreground mt-1">{insight.description}</p>
@@ -288,7 +288,7 @@ export default function SetupTimeAnalysisPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
+              <AlertTriangle className="h-5 w-5 text-chart-4" />
               Avvikande mätningar
             </CardTitle>
             <CardDescription>
@@ -304,7 +304,7 @@ export default function SetupTimeAnalysisPage() {
                   data-testid={`insight-${insight.id}`}
                 >
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="h-4 w-4 mt-0.5 text-orange-500 dark:text-orange-400" />
+                    <AlertTriangle className="h-4 w-4 mt-0.5 text-chart-4" />
                     <div>
                       <span className="font-medium text-sm">{insight.title}</span>
                       <p className="text-xs opacity-80 mt-1">{insight.description}</p>
@@ -340,7 +340,7 @@ export default function SetupTimeAnalysisPage() {
                   <div className="flex items-center gap-2 text-sm">
                     <span className="text-muted-foreground">{update.currentEstimate} min</span>
                     <TrendingUp className="h-4 w-4" />
-                    <span className="font-medium text-green-600">{update.suggestedEstimate} min</span>
+                    <span className="font-medium text-chart-2">{update.suggestedEstimate} min</span>
                   </div>
                 </div>
               ))}

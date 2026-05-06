@@ -459,15 +459,15 @@ export function usePlannerData() {
   }, [resources, currentDate, getJobsForResourceAndDay]);
 
   const getCapacityPercentage = useCallback((h: number) => Math.min((h / HOURS_IN_DAY) * 100, 100), []);
-  const getCapacityColor = useCallback((p: number) => p >= 100 ? "bg-red-500" : p >= 85 ? "bg-orange-500" : p >= 65 ? "bg-yellow-500" : "bg-green-500", []);
-  const getCapacityBgColor = useCallback((p: number) => p >= 100 ? "bg-red-50 dark:bg-red-950/20" : p >= 85 ? "bg-orange-50 dark:bg-orange-950/20" : p >= 65 ? "bg-yellow-50 dark:bg-yellow-950/20" : "", []);
+  const getCapacityColor = useCallback((p: number) => p >= 100 ? "bg-destructive/15" : p >= 85 ? "bg-chart-4/15" : p >= 65 ? "bg-chart-3/15" : "bg-chart-2/15", []);
+  const getCapacityBgColor = useCallback((p: number) => p >= 100 ? "bg-destructive/10 dark:bg-destructive/15" : p >= 85 ? "bg-chart-4/10 dark:bg-chart-4/15" : p >= 65 ? "bg-chart-3/10 dark:bg-chart-3/15" : "", []);
   const getDropFitClass = useCallback((rid: string, dayStr: string, dur: number) => {
     const nh = (resourceDayJobMap.hours[rid]?.[dayStr] || 0) + dur / 60;
     const p = (nh / HOURS_IN_DAY) * 100;
-    if (p > 110) return { bg: "bg-red-100 dark:bg-red-950/40 ring-red-400", label: "Överbokning", color: "text-red-600" };
-    if (p > 85) return { bg: "bg-orange-100 dark:bg-orange-950/40 ring-orange-400", label: "Tight", color: "text-orange-600" };
-    if (p > 65) return { bg: "bg-yellow-100 dark:bg-yellow-950/40 ring-yellow-400", label: "Bra", color: "text-yellow-600" };
-    return { bg: "bg-green-100 dark:bg-green-950/40 ring-green-400", label: "Gott om plats", color: "text-green-600" };
+    if (p > 110) return { bg: "bg-destructive/15 dark:bg-destructive/15 ring-destructive/40", label: "Överbokning", color: "text-destructive" };
+    if (p > 85) return { bg: "bg-chart-4/15 dark:bg-chart-4/15 ring-chart-4/40", label: "Tight", color: "text-chart-4" };
+    if (p > 65) return { bg: "bg-chart-3/15 dark:bg-chart-3/15 ring-chart-3/40", label: "Bra", color: "text-chart-3" };
+    return { bg: "bg-chart-2/15 dark:bg-chart-2/15 ring-chart-2/40", label: "Gott om plats", color: "text-chart-2" };
   }, [resourceDayJobMap]);
 
   const resourceWeekSummary = useMemo(() => {

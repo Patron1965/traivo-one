@@ -480,7 +480,7 @@ export default function ArticlesPage() {
             </Badge>
           ))}
           {quickStats.activeCount > 0 && (
-            <Badge variant="outline" className="text-xs font-normal gap-1 text-green-600 border-green-300">
+            <Badge variant="outline" className="text-xs font-normal gap-1 text-chart-2 border-chart-2/30">
               <CircleCheck className="h-3 w-3" />
               {quickStats.activeCount} aktiva
             </Badge>
@@ -1178,8 +1178,8 @@ export default function ArticlesPage() {
                   <div
                     className={`rounded-md border px-3 py-2 text-sm flex items-center justify-between ${
                       positive
-                        ? "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-900 text-green-800 dark:text-green-300"
-                        : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900 text-red-800 dark:text-red-300"
+                        ? "bg-chart-2/10 dark:bg-chart-2/15 border-chart-2/20 dark:border-chart-2/90 text-chart-2"
+                        : "bg-destructive/10 dark:bg-destructive/15 border-destructive/20 dark:border-destructive/90 text-destructive"
                     }`}
                     data-testid="text-article-margin"
                   >
@@ -1666,7 +1666,7 @@ export default function ArticlesPage() {
             <AlertDialogCancel>Avbryt</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => articleToDelete && deleteMutation.mutate(articleToDelete.id)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive/15 text-destructive-foreground hover:bg-destructive/90"
               data-testid="button-confirm-delete"
             >
               {deleteMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -1731,7 +1731,7 @@ export default function ArticlesPage() {
 
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <CheckCircle2 className="h-4 w-4 text-chart-2" />
                     Giltiga artiklar ({applicableArticles.length})
                   </Label>
                   {isLoadingApplicable ? (

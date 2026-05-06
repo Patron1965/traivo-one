@@ -286,12 +286,12 @@ export default function ProcurementsPage() {
       </PageHeader>
 
       {(deadlineWarnings.length > 0 || overdueDeadlines.length > 0) && (
-        <Card className="border-amber-500/50 bg-amber-500/5">
+        <Card className="border-chart-4/50 bg-chart-4/15">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400 mt-0.5" />
+              <AlertTriangle className="h-5 w-5 text-chart-4 mt-0.5" />
               <div className="space-y-1">
-                <p className="font-medium text-amber-700 dark:text-amber-400">Deadline-varningar</p>
+                <p className="font-medium text-chart-4">Deadline-varningar</p>
                 {overdueDeadlines.length > 0 && (
                   <p className="text-sm text-destructive">
                     {overdueDeadlines.length} upphandling(ar) har passerat deadline!
@@ -329,13 +329,13 @@ export default function ProcurementsPage() {
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.won}</div>
+            <div className="text-2xl font-bold text-chart-2">{stats.won}</div>
             <div className="text-xs text-muted-foreground">Vunna</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.lost}</div>
+            <div className="text-2xl font-bold text-destructive">{stats.lost}</div>
             <div className="text-xs text-muted-foreground">Förlorade</div>
           </CardContent>
         </Card>

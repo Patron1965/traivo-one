@@ -422,7 +422,7 @@ export default function SubscriptionsPage() {
                     {getPeriodicityLabel(sub.periodicity)}
                   </Badge>
                   {sub.autoGenerate && (
-                    <Badge variant="outline" className="text-green-600">
+                    <Badge variant="outline" className="text-chart-2">
                       Auto
                     </Badge>
                   )}
@@ -768,7 +768,7 @@ export default function SubscriptionsPage() {
             <AlertDialogCancel>Avbryt</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => itemToDelete && deleteMutation.mutate(itemToDelete.id)}
-              className="bg-destructive text-destructive-foreground"
+              className="bg-destructive/15 text-destructive-foreground"
               data-testid="button-confirm-delete"
             >
               Ta bort

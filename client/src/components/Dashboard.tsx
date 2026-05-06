@@ -498,15 +498,15 @@ export function Dashboard() {
   };
 
   const insightColors = {
-    suggestion: "bg-blue-50 dark:bg-blue-950",
-    warning: "bg-orange-50 dark:bg-orange-950",
-    success: "bg-green-50 dark:bg-green-950",
+    suggestion: "bg-chart-1/10 dark:bg-chart-1/15",
+    warning: "bg-chart-4/10 dark:bg-chart-4/15",
+    success: "bg-chart-2/10 dark:bg-chart-2/15",
   };
 
   const insightIconColors = {
-    suggestion: "text-blue-500",
-    warning: "text-orange-500",
-    success: "text-green-500",
+    suggestion: "text-chart-1",
+    warning: "text-chart-4",
+    success: "text-chart-2",
   };
 
   const { toast } = useToast();
@@ -1154,7 +1154,7 @@ export function Dashboard() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+                <AlertTriangle className="h-4 w-4 text-chart-4" />
                 Top 5 objekt med högst ställtid
               </CardTitle>
               <Link href="/objects">
@@ -1324,7 +1324,7 @@ export function Dashboard() {
                   </div>
                   <Progress 
                     value={Math.min(resource.utilization, 100)} 
-                    className={resource.utilization > 100 ? "[&>div]:bg-red-500" : ""}
+                    className={resource.utilization > 100 ? "[&>div]:bg-destructive/15" : ""}
                   />
                 </div>
               ))
@@ -1367,7 +1367,7 @@ export function Dashboard() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-base flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-orange-500" />
+                <AlertCircle className="h-4 w-4 text-chart-4" />
                 Risker och förseningar
               </CardTitle>
               <Link href="/">
@@ -1385,14 +1385,14 @@ export function Dashboard() {
                   key={index} 
                   className={`flex items-center gap-3 p-3 rounded-md ${
                     risk.type === "overdue" 
-                      ? "bg-red-50 dark:bg-red-950" 
-                      : "bg-orange-50 dark:bg-orange-950"
+                      ? "bg-destructive/10 dark:bg-destructive/15" 
+                      : "bg-chart-4/10 dark:bg-chart-4/15"
                   }`}
                 >
                   {risk.type === "overdue" ? (
-                    <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                    <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
                   ) : (
-                    <Clock className="h-4 w-4 text-orange-500 shrink-0" />
+                    <Clock className="h-4 w-4 text-chart-4 shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm">{risk.workOrder.title}</div>
@@ -1561,9 +1561,9 @@ function AICapabilityCard({ icon: Icon, title, description, impact, status }: AI
   };
   
   const statusColors = {
-    active: "bg-green-500/15 text-green-500 border-green-500/30",
+    active: "bg-chart-2/15 text-chart-2 border-chart-2/50",
     planned: "bg-primary/15 text-primary border-primary/30",
-    coming: "bg-orange-500/15 text-orange-500 border-orange-500/30"
+    coming: "bg-chart-4/15 text-chart-4 border-chart-4/50"
   };
 
   return (
@@ -1610,8 +1610,8 @@ function StatCard({ title, value, subtitle, icon: Icon, trend }: StatCardProps) 
           <span className="text-2xl font-bold">{value}</span>
           {trend && (
             trend === "positive" ? 
-              <ArrowDownRight className="h-4 w-4 text-green-500" /> :
-              <ArrowUpRight className="h-4 w-4 text-red-500" />
+              <ArrowDownRight className="h-4 w-4 text-chart-2" /> :
+              <ArrowUpRight className="h-4 w-4 text-destructive" />
           )}
         </div>
         <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
@@ -1644,8 +1644,8 @@ function WeekCompareCard({ title, thisWeek, lastWeek, change, unit, invertColors
           <span className="text-2xl font-bold">{thisWeek.toLocaleString("sv-SE")}{unit}</span>
           {change !== 0 && (
             <span className={`flex items-center text-sm font-medium ${
-              isPositive ? "text-green-600 dark:text-green-400" : 
-              isNegative ? "text-red-600 dark:text-red-400" : 
+              isPositive ? "text-chart-2" : 
+              isNegative ? "text-destructive" : 
               "text-muted-foreground"
             }`}>
               {isPositive ? <TrendingUp className="h-3 w-3 mr-0.5" /> : 

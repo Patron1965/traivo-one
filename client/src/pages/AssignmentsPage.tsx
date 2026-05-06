@@ -93,19 +93,19 @@ function getStatusColor(status: string): string {
     case "not_planned":
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
     case "planned_rough":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+      return "bg-chart-1/15 text-chart-1 dark:bg-chart-1/15";
     case "planned_fine":
-      return "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200";
+      return "bg-chart-1/15 text-chart-1 dark:bg-chart-1/15";
     case "on_way":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+      return "bg-chart-3/15 text-chart-3 dark:bg-chart-3/15";
     case "on_site":
-      return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
+      return "bg-chart-4/15 text-chart-4 dark:bg-chart-4/15";
     case "completed":
-      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+      return "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15";
     case "inspected":
-      return "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200";
+      return "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15";
     case "invoiced":
-      return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
+      return "bg-chart-5/15 text-chart-5 dark:bg-chart-5/15";
     default:
       return "bg-gray-100 text-gray-800";
   }
@@ -251,7 +251,7 @@ export default function AssignmentsPage() {
               {filteredAssignments.length} av {assignments.length} visas
             </Badge>
             {assignments.filter(a => a.status === "not_planned").length > 0 && (
-              <Badge variant="outline" className="text-xs font-normal text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700">
+              <Badge variant="outline" className="text-xs font-normal text-chart-4 border-chart-4/30 dark:border-chart-4/70">
                 {assignments.filter(a => a.status === "not_planned").length} ej planerade
               </Badge>
             )}
@@ -277,28 +277,28 @@ export default function AssignmentsPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <DollarSign className="h-4 w-4 text-chart-2" />
               <span className="text-sm text-muted-foreground">Totalt värde</span>
             </div>
-            <div className="text-2xl font-bold mt-1 text-green-600 dark:text-green-400">{formatCurrency(totals.value)}</div>
+            <div className="text-2xl font-bold mt-1 text-chart-2">{formatCurrency(totals.value)}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-red-600 dark:text-red-400" />
+              <DollarSign className="h-4 w-4 text-destructive" />
               <span className="text-sm text-muted-foreground">Total kostnad</span>
             </div>
-            <div className="text-2xl font-bold mt-1 text-red-600 dark:text-red-400">{formatCurrency(totals.cost)}</div>
+            <div className="text-2xl font-bold mt-1 text-destructive">{formatCurrency(totals.cost)}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <Timer className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <Timer className="h-4 w-4 text-chart-1" />
               <span className="text-sm text-muted-foreground">Total tid</span>
             </div>
-            <div className="text-2xl font-bold mt-1 text-blue-600 dark:text-blue-400">{Math.round(totals.time / 60)} tim</div>
+            <div className="text-2xl font-bold mt-1 text-chart-1">{Math.round(totals.time / 60)} tim</div>
           </CardContent>
         </Card>
       </div>
@@ -479,7 +479,7 @@ export default function AssignmentsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                      <span className="text-sm font-medium text-chart-2">
                         {formatCurrency(assignment.cachedValue)}
                       </span>
                     </TableCell>
@@ -628,21 +628,21 @@ export default function AssignmentsPage() {
               <div className="border-t pt-4">
                 <Label className="text-muted-foreground">Ekonomi</Label>
                 <div className="grid grid-cols-3 gap-4 mt-2">
-                  <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-md">
+                  <div className="bg-chart-2/10 dark:bg-chart-2/15 p-3 rounded-md">
                     <div className="text-xs text-muted-foreground">Värde</div>
-                    <div className="font-medium text-green-700 dark:text-green-400">
+                    <div className="font-medium text-chart-2">
                       {formatCurrency(selectedAssignment.cachedValue)}
                     </div>
                   </div>
-                  <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-md">
+                  <div className="bg-destructive/10 dark:bg-destructive/15 p-3 rounded-md">
                     <div className="text-xs text-muted-foreground">Kostnad</div>
-                    <div className="font-medium text-red-700 dark:text-red-400">
+                    <div className="font-medium text-destructive">
                       {formatCurrency(selectedAssignment.cachedCost)}
                     </div>
                   </div>
-                  <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-md">
+                  <div className="bg-chart-1/10 dark:bg-chart-1/15 p-3 rounded-md">
                     <div className="text-xs text-muted-foreground">Marginal</div>
-                    <div className="font-medium text-blue-700 dark:text-blue-400">
+                    <div className="font-medium text-chart-1">
                       {formatCurrency((selectedAssignment.cachedValue || 0) - (selectedAssignment.cachedCost || 0))}
                     </div>
                   </div>
@@ -757,11 +757,11 @@ export default function AssignmentsPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           {candidate.available ? (
-                            <Badge variant="outline" className="bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400">
+                            <Badge variant="outline" className="bg-chart-2/10 dark:bg-chart-2/15 text-chart-2">
                               Tillgänglig
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400">
+                            <Badge variant="outline" className="bg-destructive/10 dark:bg-destructive/15 text-destructive">
                               Ej tillgänglig
                             </Badge>
                           )}

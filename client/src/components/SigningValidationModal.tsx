@@ -28,8 +28,8 @@ export function SigningValidationModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="dialog-signing-validation">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-amber-600">
-            <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
+          <DialogTitle className="flex items-center gap-2 text-chart-4">
+            <AlertTriangle className="h-5 w-5 text-chart-4" />
             Obligatoriska fält saknas
           </DialogTitle>
         </DialogHeader>
@@ -41,10 +41,10 @@ export function SigningValidationModal({
             {missingFields.map((field) => (
               <li
                 key={field.field}
-                className="flex items-center gap-2 p-2 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800"
+                className="flex items-center gap-2 p-2 rounded-md bg-chart-4/10 dark:bg-chart-4/15 border border-chart-4/20 dark:border-chart-4/80"
                 data-testid={`missing-field-${field.field}`}
               >
-                <X className="h-4 w-4 text-amber-500 shrink-0" />
+                <X className="h-4 w-4 text-chart-4 shrink-0" />
                 <span className="text-sm font-medium">{field.label}</span>
               </li>
             ))}

@@ -81,9 +81,9 @@ type FormData = z.infer<typeof formSchema>;
 
 function getSlaColor(slaLevel: string): string {
   switch (slaLevel) {
-    case "express": return "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200";
-    case "premium": return "bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200";
-    default: return "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200";
+    case "express": return "bg-destructive/15 dark:bg-destructive/15 text-destructive-foreground";
+    case "premium": return "bg-chart-4/15 dark:bg-chart-4/15 text-chart-4";
+    default: return "bg-chart-1/15 dark:bg-chart-1/15 text-chart-1";
   }
 }
 

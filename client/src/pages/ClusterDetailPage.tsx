@@ -75,26 +75,26 @@ interface ClusterWithStats extends Cluster {
 
 const SLA_LEVELS: Record<string, { label: string; color: string }> = {
   standard: { label: "Standard", color: "bg-muted text-muted-foreground" },
-  premium: { label: "Premium", color: "bg-blue-500/20 text-blue-700 dark:text-blue-300" },
-  enterprise: { label: "Enterprise", color: "bg-purple-500/20 text-purple-700 dark:text-purple-300" },
+  premium: { label: "Premium", color: "bg-chart-1/15 text-chart-1 border border-chart-1/30" },
+  enterprise: { label: "Enterprise", color: "bg-chart-5/15 text-chart-5 border border-chart-5/30" },
 };
 
 const ORDER_STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  skapad: { label: "Skapad", color: "bg-gray-500/20 text-gray-700 dark:text-gray-300" },
-  planerad_pre: { label: "Förplanerad", color: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-300" },
-  planerad_resurs: { label: "Resurs tilldelad", color: "bg-blue-500/20 text-blue-700 dark:text-blue-300" },
-  planerad_las: { label: "Låst", color: "bg-purple-500/20 text-purple-700 dark:text-purple-300" },
-  utford: { label: "Utförd", color: "bg-green-500/20 text-green-700 dark:text-green-300" },
-  fakturerad: { label: "Fakturerad", color: "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300" },
+  skapad: { label: "Skapad", color: "bg-muted text-muted-foreground border border-border" },
+  planerad_pre: { label: "Förplanerad", color: "bg-chart-3/15 text-chart-3 border border-chart-3/30" },
+  planerad_resurs: { label: "Resurs tilldelad", color: "bg-chart-1/15 text-chart-1 border border-chart-1/30" },
+  planerad_las: { label: "Låst", color: "bg-chart-5/15 text-chart-5 border border-chart-5/30" },
+  utford: { label: "Utförd", color: "bg-chart-2/15 text-chart-2 border border-chart-2/30" },
+  fakturerad: { label: "Fakturerad", color: "bg-chart-2/15 text-chart-2 border border-chart-2/30" },
 };
 
 const HIERARCHY_LEVELS: Record<string, { label: string; icon: typeof Building2; color: string }> = {
-  koncern: { label: "Koncern", icon: Pyramid, color: "text-purple-600 dark:text-purple-400" },
-  brf: { label: "BRF", icon: Building2, color: "text-blue-600 dark:text-blue-400" },
-  fastighet: { label: "Fastighet", icon: Home, color: "text-green-600 dark:text-green-400" },
-  rum: { label: "Rum", icon: DoorClosed, color: "text-yellow-600 dark:text-yellow-400" },
-  karl: { label: "Kärl", icon: Trash2, color: "text-orange-600 dark:text-orange-400" },
-  objekt: { label: "Objekt", icon: Package, color: "text-slate-600 dark:text-slate-400" },
+  koncern: { label: "Koncern", icon: Pyramid, color: "text-chart-5" },
+  brf: { label: "BRF", icon: Building2, color: "text-chart-1" },
+  fastighet: { label: "Fastighet", icon: Home, color: "text-chart-2" },
+  rum: { label: "Rum", icon: DoorClosed, color: "text-chart-3" },
+  karl: { label: "Kärl", icon: Trash2, color: "text-chart-4" },
+  objekt: { label: "Objekt", icon: Package, color: "text-muted-foreground" },
 };
 
 interface TreeNode {
@@ -195,7 +195,7 @@ function ObjectTreeNode({
                   <Phone className="h-3 w-3" />
                   <span className="truncate max-w-[120px]">{primaryContact.name}</span>
                   {primaryContact.inheritedFromObjectId && (
-                    <GitBranch className="h-3 w-3 text-blue-500" />
+                    <GitBranch className="h-3 w-3 text-chart-1" />
                   )}
                 </div>
               </TooltipTrigger>
@@ -230,7 +230,7 @@ function ObjectTreeNode({
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center">
-                  <GitBranch className="h-3 w-3 text-blue-500" />
+                  <GitBranch className="h-3 w-3 text-chart-1" />
                 </div>
               </TooltipTrigger>
               <TooltipContent side="top">
@@ -453,8 +453,8 @@ export default function ClusterDetailPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-md bg-blue-500/10">
-                <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <div className="p-3 rounded-md bg-chart-1/15">
+                <Package className="h-5 w-5 text-chart-1" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Objekt</p>
@@ -467,8 +467,8 @@ export default function ClusterDetailPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-md bg-yellow-500/10">
-                <FileText className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+              <div className="p-3 rounded-md bg-chart-3/15">
+                <FileText className="h-5 w-5 text-chart-3" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Aktiva ordrar</p>
@@ -481,8 +481,8 @@ export default function ClusterDetailPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-md bg-green-500/10">
-                <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+              <div className="p-3 rounded-md bg-chart-2/15">
+                <DollarSign className="h-5 w-5 text-chart-2" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Månadsvärde</p>
@@ -497,8 +497,8 @@ export default function ClusterDetailPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-md bg-purple-500/10">
-                <Clock className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              <div className="p-3 rounded-md bg-chart-5/15">
+                <Clock className="h-5 w-5 text-chart-5" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Snitt ställtid</p>
@@ -519,8 +519,8 @@ export default function ClusterDetailPage() {
         <CardContent>
           <div className="flex items-center justify-between gap-4 overflow-x-auto pb-2">
             <div className="flex flex-col items-center min-w-[120px]">
-              <div className="p-4 rounded-full bg-blue-500/10 mb-2">
-                <Building2 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              <div className="p-4 rounded-full bg-chart-1/15 mb-2">
+                <Building2 className="h-6 w-6 text-chart-1" />
               </div>
               <p className="font-medium">{clusterObjects.length}</p>
               <p className="text-sm text-muted-foreground">Objekt</p>
@@ -529,8 +529,8 @@ export default function ClusterDetailPage() {
             <div className="h-px flex-1 bg-border min-w-[40px]" />
 
             <div className="flex flex-col items-center min-w-[120px]">
-              <div className="p-4 rounded-full bg-orange-500/10 mb-2">
-                <RefreshCw className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+              <div className="p-4 rounded-full bg-chart-4/15 mb-2">
+                <RefreshCw className="h-6 w-6 text-chart-4" />
               </div>
               <p className="font-medium">{subscriptions.length}</p>
               <p className="text-sm text-muted-foreground">Abonnemang</p>
@@ -539,8 +539,8 @@ export default function ClusterDetailPage() {
             <div className="h-px flex-1 bg-border min-w-[40px]" />
 
             <div className="flex flex-col items-center min-w-[120px]">
-              <div className="p-4 rounded-full bg-yellow-500/10 mb-2">
-                <FileText className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
+              <div className="p-4 rounded-full bg-chart-3/15 mb-2">
+                <FileText className="h-6 w-6 text-chart-3" />
               </div>
               <p className="font-medium">{activeOrders.length}</p>
               <p className="text-sm text-muted-foreground">Aktiva ordrar</p>
@@ -549,8 +549,8 @@ export default function ClusterDetailPage() {
             <div className="h-px flex-1 bg-border min-w-[40px]" />
 
             <div className="flex flex-col items-center min-w-[120px]">
-              <div className="p-4 rounded-full bg-green-500/10 mb-2">
-                <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
+              <div className="p-4 rounded-full bg-chart-2/15 mb-2">
+                <CheckCircle2 className="h-6 w-6 text-chart-2" />
               </div>
               <p className="font-medium">{completedOrders.length}</p>
               <p className="text-sm text-muted-foreground">Utförda</p>
@@ -559,8 +559,8 @@ export default function ClusterDetailPage() {
             <div className="h-px flex-1 bg-border min-w-[40px]" />
 
             <div className="flex flex-col items-center min-w-[120px]">
-              <div className="p-4 rounded-full bg-emerald-500/10 mb-2">
-                <Receipt className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              <div className="p-4 rounded-full bg-chart-2/15 mb-2">
+                <Receipt className="h-6 w-6 text-chart-2" />
               </div>
               <p className="font-medium">{invoicedOrders.length}</p>
               <p className="text-sm text-muted-foreground">Fakturerade</p>

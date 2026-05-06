@@ -442,7 +442,7 @@ export default function ProjectReportPage() {
             <Banknote className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(avgCost)}</div>
+            <div className="text-2xl font-bold text-chart-2">{formatCurrency(avgCost)}</div>
             <p className="text-xs text-muted-foreground">genomsnittlig kostnad</p>
           </CardContent>
         </Card>
@@ -462,7 +462,7 @@ export default function ProjectReportPage() {
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden">
                 <div 
-                  className="h-full bg-blue-500 rounded-full" 
+                  className="h-full bg-chart-1/15 rounded-full" 
                   style={{ width: `${(stats.codeStats.frontend.lines / stats.codeStats.totalLines) * 100}%` }}
                 />
               </div>
@@ -474,7 +474,7 @@ export default function ProjectReportPage() {
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden">
                 <div 
-                  className="h-full bg-green-500 rounded-full" 
+                  className="h-full bg-chart-2/15 rounded-full" 
                   style={{ width: `${(stats.codeStats.backend.lines / stats.codeStats.totalLines) * 100}%` }}
                 />
               </div>
@@ -486,7 +486,7 @@ export default function ProjectReportPage() {
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden">
                 <div 
-                  className="h-full bg-purple-500 rounded-full" 
+                  className="h-full bg-chart-5/15 rounded-full" 
                   style={{ width: `${(stats.codeStats.shared.lines / stats.codeStats.totalLines) * 100}%` }}
                 />
               </div>
@@ -518,7 +518,7 @@ export default function ProjectReportPage() {
           <div className="grid gap-2 sm:grid-cols-2">
             {stats.features.map((feature, index) => (
               <div key={index} className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                <CheckCircle className="h-4 w-4 text-chart-2 flex-shrink-0" />
                 <span className="text-sm">{feature}</span>
               </div>
             ))}

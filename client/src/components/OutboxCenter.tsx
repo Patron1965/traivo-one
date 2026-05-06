@@ -202,7 +202,7 @@ export function OutboxCenter({ onBack }: OutboxCenterProps) {
           </div>
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center" data-testid="outbox-empty">
-            <CheckCircle className="h-12 w-12 text-green-500 dark:text-green-400 mb-3" />
+            <CheckCircle className="h-12 w-12 text-chart-2 mb-3" />
             <h3 className="text-lg font-medium">Allt synkroniserat</h3>
             <p className="text-sm text-muted-foreground mt-1">
               Det finns inga väntande ändringar i kön.
@@ -211,21 +211,21 @@ export function OutboxCenter({ onBack }: OutboxCenterProps) {
         ) : (
           <>
             <div className="grid grid-cols-3 gap-2">
-              <Card className="border-yellow-200 dark:border-yellow-800" data-testid="stat-pending">
+              <Card className="border-chart-3/20 dark:border-chart-3/80" data-testid="stat-pending">
                 <CardContent className="p-3 text-center">
-                  <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{pendingItems.length}</div>
+                  <div className="text-2xl font-bold text-chart-3">{pendingItems.length}</div>
                   <div className="text-xs text-muted-foreground">Väntande</div>
                 </CardContent>
               </Card>
-              <Card className="border-orange-200 dark:border-orange-800" data-testid="stat-retrying">
+              <Card className="border-chart-4/20 dark:border-chart-4/80" data-testid="stat-retrying">
                 <CardContent className="p-3 text-center">
-                  <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{retryingItems.length}</div>
+                  <div className="text-2xl font-bold text-chart-4">{retryingItems.length}</div>
                   <div className="text-xs text-muted-foreground">Försöker igen</div>
                 </CardContent>
               </Card>
-              <Card className="border-red-200 dark:border-red-800" data-testid="stat-failed">
+              <Card className="border-destructive/20 dark:border-destructive/80" data-testid="stat-failed">
                 <CardContent className="p-3 text-center">
-                  <div className="text-2xl font-bold text-red-600 dark:text-red-400">{failedItems.length}</div>
+                  <div className="text-2xl font-bold text-destructive">{failedItems.length}</div>
                   <div className="text-xs text-muted-foreground">Misslyckade</div>
                 </CardContent>
               </Card>
@@ -278,21 +278,21 @@ function OutboxGroup({
   const statusConfig = {
     pending: {
       icon: Clock,
-      color: "text-yellow-600 dark:text-yellow-400",
-      bg: "bg-yellow-50 dark:bg-yellow-900/20",
-      border: "border-yellow-200 dark:border-yellow-800",
+      color: "text-chart-3",
+      bg: "bg-chart-3/10 dark:bg-chart-3/15",
+      border: "border-chart-3/20 dark:border-chart-3/80",
     },
     retrying: {
       icon: RefreshCw,
-      color: "text-orange-600 dark:text-orange-400",
-      bg: "bg-orange-50 dark:bg-orange-900/20",
-      border: "border-orange-200 dark:border-orange-800",
+      color: "text-chart-4",
+      bg: "bg-chart-4/10 dark:bg-chart-4/15",
+      border: "border-chart-4/20 dark:border-chart-4/80",
     },
     failed: {
       icon: AlertCircle,
-      color: "text-red-600 dark:text-red-400",
-      bg: "bg-red-50 dark:bg-red-900/20",
-      border: "border-red-200 dark:border-red-800",
+      color: "text-destructive",
+      bg: "bg-destructive/10 dark:bg-destructive/15",
+      border: "border-destructive/20 dark:border-destructive/80",
     },
   };
 
@@ -330,13 +330,13 @@ function OutboxGroup({
                       {item.workOrderId && ` · Order ${item.workOrderId.slice(0, 8)}...`}
                     </p>
                     {item.lastError && (
-                      <div className="mt-1.5 p-2 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800" data-testid={`error-msg-${item.id}`}>
-                        <p className="text-xs text-red-700 dark:text-red-300 flex items-start gap-1.5">
+                      <div className="mt-1.5 p-2 rounded bg-destructive/10 dark:bg-destructive/15 border border-destructive/20 dark:border-destructive/80" data-testid={`error-msg-${item.id}`}>
+                        <p className="text-xs text-destructive flex items-start gap-1.5">
                           <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
                           {item.lastError}
                         </p>
                         {item.lastAttemptAt && (
-                          <p className="text-[10px] text-red-500 dark:text-red-400 mt-1">
+                          <p className="text-[10px] text-destructive mt-1">
                             Senaste försök: {formatTimeAgo(item.lastAttemptAt)}
                           </p>
                         )}

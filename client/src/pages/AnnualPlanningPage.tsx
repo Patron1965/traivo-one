@@ -146,14 +146,14 @@ interface AIProposal {
 }
 
 function ForecastIcon({ forecast }: { forecast: string }) {
-  if (forecast === "on_track") return <CheckCircle2 className="h-5 w-5 text-green-500" data-testid="icon-forecast-on-track" />;
-  if (forecast === "at_risk") return <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" data-testid="icon-forecast-at-risk" />;
-  return <XCircle className="h-5 w-5 text-red-500" data-testid="icon-forecast-behind" />;
+  if (forecast === "on_track") return <CheckCircle2 className="h-5 w-5 text-chart-2" data-testid="icon-forecast-on-track" />;
+  if (forecast === "at_risk") return <AlertTriangle className="h-5 w-5 text-chart-4" data-testid="icon-forecast-at-risk" />;
+  return <XCircle className="h-5 w-5 text-destructive" data-testid="icon-forecast-behind" />;
 }
 
 function ForecastBadge({ forecast }: { forecast: string }) {
-  if (forecast === "on_track") return <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">På plan</Badge>;
-  if (forecast === "at_risk") return <Badge variant="default" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">Risk</Badge>;
+  if (forecast === "on_track") return <Badge variant="default" className="bg-chart-2/15 text-chart-2 dark:bg-chart-2/15">På plan</Badge>;
+  if (forecast === "at_risk") return <Badge variant="default" className="bg-chart-3/15 text-chart-3 dark:bg-chart-3/15">Risk</Badge>;
   return <Badge variant="destructive">Kritisk</Badge>;
 }
 
@@ -435,19 +435,19 @@ export default function AnnualPlanningPage() {
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3 text-center">
-            <div className="text-2xl font-bold text-green-600" data-testid="text-on-track-count">{summary.onTrack}</div>
+            <div className="text-2xl font-bold text-chart-2" data-testid="text-on-track-count">{summary.onTrack}</div>
             <div className="text-xs text-muted-foreground">På plan <HelpTooltip content="Målet ligger i fas — tillräckligt många ordrar har utförts i förhållande till årets gång." /></div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3 text-center">
-            <div className="text-2xl font-bold text-yellow-600" data-testid="text-at-risk-count">{summary.atRisk}</div>
+            <div className="text-2xl font-bold text-chart-3" data-testid="text-at-risk-count">{summary.atRisk}</div>
             <div className="text-xs text-muted-foreground">Risk <HelpTooltip content="Målet ligger efter — framstegen är lägre än förväntat för denna tidpunkt på året." /></div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3 text-center">
-            <div className="text-2xl font-bold text-red-600" data-testid="text-behind-count">{summary.behind}</div>
+            <div className="text-2xl font-bold text-destructive" data-testid="text-behind-count">{summary.behind}</div>
             <div className="text-xs text-muted-foreground">Kritisk <HelpTooltip content="Målet är kraftigt efter — det krävs omedelbara åtgärder för att hinna ikapp under året." /></div>
           </CardContent>
         </Card>
@@ -466,7 +466,7 @@ export default function AnnualPlanningPage() {
             Alla mål ({goals.length})
           </TabsTrigger>
           <TabsTrigger value="warnings" data-testid="tab-warnings">
-            <AlertTriangle className="h-4 w-4 mr-2 text-orange-500 dark:text-orange-400" />
+            <AlertTriangle className="h-4 w-4 mr-2 text-chart-4" />
             Varningar ({behindGoals.length})
           </TabsTrigger>
           <TabsTrigger value="ai-distribute" data-testid="tab-ai-distribute">
@@ -584,7 +584,7 @@ export default function AnnualPlanningPage() {
                         <div className="space-y-1">
                           <div className="flex items-center justify-between text-sm">
                             <span>{goal.progressPercent}%</span>
-                            <span className={`text-xs ${goal.delta >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            <span className={`text-xs ${goal.delta >= 0 ? 'text-chart-2' : 'text-destructive'}`}>
                               {goal.delta >= 0 ? '+' : ''}{goal.delta} vs förväntat
                             </span>
                           </div>
@@ -618,7 +618,7 @@ export default function AnnualPlanningPage() {
           {behindGoals.length === 0 && atRiskGoals.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
-                <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-green-500 opacity-50" />
+                <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-chart-2 opacity-50" />
                 <p className="font-medium">Inga varningar</p>
                 <p className="text-sm">Alla mål ligger på plan!</p>
               </CardContent>
@@ -627,13 +627,13 @@ export default function AnnualPlanningPage() {
             <>
               {behindGoals.length > 0 && (
                 <div className="space-y-3">
-                  <h3 className="font-semibold flex items-center gap-2 text-red-600">
+                  <h3 className="font-semibold flex items-center gap-2 text-destructive">
                     <XCircle className="h-5 w-5" />
                     Kritiska — &gt;20% efter förväntat ({behindGoals.length})
                   </h3>
                   <div className="grid gap-3">
                     {behindGoals.map(goal => (
-                      <Card key={goal.id} className="border-red-200 dark:border-red-900" data-testid={`card-warning-critical-${goal.id}`}>
+                      <Card key={goal.id} className="border-destructive/20 dark:border-destructive/90" data-testid={`card-warning-critical-${goal.id}`}>
                         <CardContent className="pt-4 pb-3">
                           <div className="flex items-center justify-between gap-4">
                             <div className="flex-1">
@@ -645,7 +645,7 @@ export default function AnnualPlanningPage() {
                               <div className="flex items-center gap-3 mt-2 text-sm">
                                 <Badge variant="outline">{ARTICLE_TYPE_LABELS[goal.articleType] || goal.articleType}</Badge>
                                 <span>{goal.completedCount} / {goal.targetCount} ({goal.progressPercent}%)</span>
-                                <span className="text-red-600">{goal.delta} vs förväntat</span>
+                                <span className="text-destructive">{goal.delta} vs förväntat</span>
                               </div>
                             </div>
                             <div className="w-32">
@@ -661,13 +661,13 @@ export default function AnnualPlanningPage() {
 
               {atRiskGoals.length > 0 && (
                 <div className="space-y-3">
-                  <h3 className="font-semibold flex items-center gap-2 text-yellow-600">
-                    <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
+                  <h3 className="font-semibold flex items-center gap-2 text-chart-3">
+                    <AlertTriangle className="h-5 w-5 text-chart-4" />
                     Risk — takten räcker knappt ({atRiskGoals.length})
                   </h3>
                   <div className="grid gap-3">
                     {atRiskGoals.map(goal => (
-                      <Card key={goal.id} className="border-yellow-200 dark:border-yellow-900" data-testid={`card-warning-risk-${goal.id}`}>
+                      <Card key={goal.id} className="border-chart-3/20 dark:border-chart-3/90" data-testid={`card-warning-risk-${goal.id}`}>
                         <CardContent className="pt-4 pb-3">
                           <div className="flex items-center justify-between gap-4">
                             <div className="flex-1">
@@ -679,7 +679,7 @@ export default function AnnualPlanningPage() {
                               <div className="flex items-center gap-3 mt-2 text-sm">
                                 <Badge variant="outline">{ARTICLE_TYPE_LABELS[goal.articleType] || goal.articleType}</Badge>
                                 <span>{goal.completedCount} / {goal.targetCount} ({goal.progressPercent}%)</span>
-                                <span className="text-yellow-600">{goal.delta} vs förväntat</span>
+                                <span className="text-chart-3">{goal.delta} vs förväntat</span>
                               </div>
                             </div>
                             <div className="w-32">
@@ -1149,7 +1149,7 @@ export default function AnnualPlanningPage() {
             <AlertDialogCancel>Avbryt</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => itemToDelete && deleteMutation.mutate(itemToDelete.id)}
-              className="bg-destructive text-destructive-foreground"
+              className="bg-destructive/15 text-destructive-foreground"
               data-testid="button-confirm-delete-goal"
             >
               Ta bort

@@ -72,9 +72,9 @@ export interface PendingSchedule {
 }
 
 export const priorityDotColors: Record<string, string> = {
-  urgent: "bg-red-500",
-  high: "bg-orange-500",
-  normal: "bg-blue-500",
+  urgent: "bg-destructive/15",
+  high: "bg-chart-4/15",
+  normal: "bg-chart-1/15",
   low: "bg-gray-400",
 };
 
@@ -104,13 +104,13 @@ export const executionStatusLabels: Record<string, string> = {
 
 export const executionStatusColors: Record<string, string> = {
   not_planned: "bg-gray-400",
-  planned_rough: "bg-yellow-500",
-  planned_fine: "bg-blue-500",
-  on_way: "bg-purple-500",
-  on_site: "bg-teal-500",
-  completed: "bg-green-500",
-  inspected: "bg-blue-700",
-  invoiced: "bg-emerald-700",
+  planned_rough: "bg-chart-3/15",
+  planned_fine: "bg-chart-1/15",
+  on_way: "bg-chart-5/15",
+  on_site: "bg-chart-2/15",
+  completed: "bg-chart-2/15",
+  inspected: "bg-chart-1/15",
+  invoiced: "bg-chart-2/15",
 };
 
 export const executionStatusOrder = [
@@ -123,16 +123,16 @@ export const DAY_START_HOUR = 7;
 export const DAY_END_HOUR = 17;
 
 export const timeBlockColors: Record<TimeBlockCategory, string> = {
-  production: "bg-green-100 dark:bg-green-950/30",
-  travel: "bg-yellow-100 dark:bg-yellow-950/30",
-  break: "bg-blue-100 dark:bg-blue-950/30",
+  production: "bg-chart-2/15 dark:bg-chart-2/15",
+  travel: "bg-chart-3/15 dark:bg-chart-3/15",
+  break: "bg-chart-1/15 dark:bg-chart-1/15",
   free: "bg-gray-50 dark:bg-gray-950/20",
 };
 
 export const timeBlockBorders: Record<TimeBlockCategory, string> = {
-  production: "border-l-green-500",
-  travel: "border-l-yellow-400",
-  break: "border-l-blue-400",
+  production: "border-l-chart-2",
+  travel: "border-l-chart-3",
+  break: "border-l-chart-1",
   free: "border-l-gray-300",
 };
 

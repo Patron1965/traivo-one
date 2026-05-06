@@ -166,8 +166,8 @@ export function TeamMembersTab() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900">
-                <Users className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+              <div className="p-2 rounded-lg bg-chart-1/15 dark:bg-chart-1/15">
+                <Users className="h-5 w-5 text-chart-1" />
               </div>
               <div>
                 <p className="text-2xl font-bold" data-testid="text-team-count">{teams.length}</p>
@@ -179,8 +179,8 @@ export function TeamMembersTab() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900">
-                <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+              <div className="p-2 rounded-lg bg-chart-2/15 dark:bg-chart-2/15">
+                <CheckCircle2 className="h-5 w-5 text-chart-2" />
               </div>
               <div>
                 <p className="text-2xl font-bold" data-testid="text-assigned-count">
@@ -194,8 +194,8 @@ export function TeamMembersTab() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900">
-                <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
+              <div className="p-2 rounded-lg bg-chart-4/15 dark:bg-chart-4/15">
+                <AlertTriangle className="h-5 w-5 text-chart-4" />
               </div>
               <div>
                 <p className="text-2xl font-bold" data-testid="text-unassigned-count">
@@ -209,10 +209,10 @@ export function TeamMembersTab() {
       </div>
 
       {unassignedResources.length > 0 && (
-        <Card className="border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20">
+        <Card className="border-chart-4/30 dark:border-chart-4/70 bg-chart-4/10 dark:bg-chart-4/15">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <AlertTriangle className="h-4 w-4 text-orange-500" />
+              <AlertTriangle className="h-4 w-4 text-chart-4" />
               Resurser utan teamtillhörighet
             </CardTitle>
             <CardDescription>

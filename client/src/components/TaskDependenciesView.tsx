@@ -17,8 +17,8 @@ const DEPENDENCY_TYPE_LABELS: Record<string, string> = {
 };
 
 const DEPENDENCY_TYPE_COLORS: Record<string, string> = {
-  sequential: "bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700",
-  structural: "bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-700",
+  sequential: "bg-chart-1/10 dark:bg-chart-1/15 text-chart-1 border-chart-1/30 dark:border-chart-1/70",
+  structural: "bg-chart-5/10 dark:bg-chart-5/15 text-chart-5 border-chart-5/30 dark:border-chart-5/70",
   automatic: "bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-700",
 };
 
@@ -68,10 +68,10 @@ export function TaskDependenciesView({ workOrderId, className }: TaskDependencie
       case "completed":
       case "utford":
       case "fakturerad":
-        return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+        return <CheckCircle2 className="h-4 w-4 text-chart-2" />;
       case "on_way":
       case "on_site":
-        return <Clock className="h-4 w-4 text-amber-600 animate-pulse" />;
+        return <Clock className="h-4 w-4 text-chart-4 animate-pulse" />;
       default:
         return <AlertCircle className="h-4 w-4 text-muted-foreground" />;
     }
@@ -144,7 +144,7 @@ export function TaskDependenciesView({ workOrderId, className }: TaskDependencie
                   className={cn(
                     "flex items-center gap-2 p-2 rounded-md border",
                     isComplete
-                      ? "bg-green-50/50 dark:bg-green-950/30 border-green-200 dark:border-green-800"
+                      ? "bg-chart-2/10 dark:bg-chart-2/15 border-chart-2/20 dark:border-chart-2/80"
                       : "bg-muted/50 border-muted-foreground/20"
                   )}
                   data-testid={`dependency-item-${dep.id}`}
@@ -200,14 +200,14 @@ export function TaskDependenciesView({ workOrderId, className }: TaskDependencie
             <div className="flex items-center gap-2 text-xs">
               {dependencies.every(d => isOrderComplete(d.dependsOnOrder)) ? (
                 <>
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  <span className="text-green-700 dark:text-green-400">
+                  <CheckCircle2 className="h-4 w-4 text-chart-2" />
+                  <span className="text-chart-2">
                     Alla beroenden uppfyllda
                   </span>
                 </>
               ) : (
                 <>
-                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <AlertCircle className="h-4 w-4 text-chart-4" />
                   <span className="text-muted-foreground">
                     {dependencies.filter(d => !isOrderComplete(d.dependsOnOrder)).length} beroenden kvar
                   </span>

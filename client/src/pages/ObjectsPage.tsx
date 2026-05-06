@@ -1025,7 +1025,7 @@ export default function ObjectsPage() {
                       onClick={(e) => { e.stopPropagation(); navigate(`/customer-reports?objectId=${obj.id}`); }}
                       data-testid={`badge-reports-${obj.id}`}
                     >
-                      <Badge className="bg-teal-500 text-white text-xs gap-1 cursor-pointer hover:bg-teal-600">
+                      <Badge className="bg-chart-2 text-white text-xs gap-1 cursor-pointer hover:bg-chart-2">
                         <Camera className="h-3 w-3" />
                         {reportCounts[obj.id]} rapport{reportCounts[obj.id] !== 1 ? "er" : ""}
                       </Badge>
@@ -1077,7 +1077,7 @@ export default function ObjectsPage() {
               {(obj as any).entranceLatitude && (obj as any).entranceLongitude && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="flex items-center gap-1 text-green-600 dark:text-green-400 cursor-help">
+                    <span className="flex items-center gap-1 text-chart-2 cursor-help">
                       <DoorOpen className="h-3 w-3" />
                     </span>
                   </TooltipTrigger>
@@ -1092,8 +1092,8 @@ export default function ObjectsPage() {
               {obj.address && (!obj.city || obj.city.trim() === "") && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="flex items-center gap-1 text-orange-500 dark:text-orange-400 cursor-help">
-                      <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />
+                    <span className="flex items-center gap-1 text-chart-4 cursor-help">
+                      <AlertTriangle className="h-3 w-3 text-chart-4" />
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>Stad saknas</TooltipContent>
@@ -1103,7 +1103,7 @@ export default function ObjectsPage() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span
-                      className="flex items-center gap-1 cursor-pointer text-teal-600 dark:text-teal-400 hover:underline"
+                      className="flex items-center gap-1 cursor-pointer text-chart-2 hover:underline"
                       onClick={(e) => { e.stopPropagation(); navigate(`/clusters/${obj.clusterId}`); }}
                       data-testid={`link-cluster-${obj.id}`}
                     >
@@ -1159,7 +1159,7 @@ export default function ObjectsPage() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); saveQuickEdit(); }} data-testid="button-save-edit">
-                      <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      <Check className="h-4 w-4 text-chart-2" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent><p>Spara</p></TooltipContent>
@@ -1167,7 +1167,7 @@ export default function ObjectsPage() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditingObject(null); setEditField(null); }} data-testid="button-cancel-edit">
-                      <X className="h-4 w-4 text-red-600 dark:text-red-400" />
+                      <X className="h-4 w-4 text-destructive" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent><p>Avbryt</p></TooltipContent>
@@ -1218,7 +1218,7 @@ export default function ObjectsPage() {
                       <>
                         <DropdownMenuItem
                           onClick={(e) => { e.stopPropagation(); verifyObjectMutation.mutate(obj.id); }}
-                          className="text-green-600 dark:text-green-400"
+                          className="text-chart-2"
                           data-testid={`menu-verify-${obj.id}`}
                         >
                           <ShieldCheck className="h-4 w-4 mr-2" />
@@ -1226,7 +1226,7 @@ export default function ObjectsPage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={(e) => { e.stopPropagation(); rejectObjectMutation.mutate(obj.id); }}
-                          className="text-red-600 dark:text-red-400"
+                          className="text-destructive"
                           data-testid={`menu-reject-${obj.id}`}
                         >
                           <ShieldX className="h-4 w-4 mr-2" />
@@ -1791,16 +1791,16 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                 <div className="font-medium">Förhandsvisning</div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                   <div>Totalt rader:</div><div className="font-mono">{modusPreview.total}</div>
-                  <div className="text-emerald-700 dark:text-emerald-400">Skapas:</div>
+                  <div className="text-chart-2">Skapas:</div>
                   <div className="font-mono" data-testid="text-preview-create">{modusPreview.create}</div>
-                  <div className="text-blue-700 dark:text-blue-400">Uppdateras:</div>
+                  <div className="text-chart-1">Uppdateras:</div>
                   <div className="font-mono" data-testid="text-preview-update">{modusPreview.update}</div>
-                  <div className="text-amber-700 dark:text-amber-400">Hoppas över:</div>
+                  <div className="text-chart-4">Hoppas över:</div>
                   <div className="font-mono" data-testid="text-preview-skip">{modusPreview.skip}</div>
                 </div>
                 {modusPreview.unmatchedCustomers.length > 0 && (
                   <div className="pt-2 space-y-2">
-                    <div className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">
+                    <div className="text-xs font-medium text-chart-4 mb-1">
                       {modusPreview.unmatchedCustomers.length} kund(er) saknas i Traivo:
                     </div>
                     <div className="text-xs max-h-24 overflow-auto">
@@ -2020,7 +2020,7 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
             <TabsContent value="geocode" className="space-y-4 mt-4">
               {batchGeoPreview && !batchGeoPreview.googleAvailable && (
                 <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-orange-500 dark:text-orange-400" />
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-chart-4" />
                   Geoapify API-nyckel saknas. Kontrollera att GEOAPIFY_API_KEY är konfigurerad.
                 </div>
               )}
@@ -2088,7 +2088,7 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                             <div className="text-xs text-muted-foreground">Matchas av filter</div>
                           </div>
                           <div>
-                            <div className="text-2xl font-bold text-orange-500 dark:text-orange-400" data-testid="text-batch-geo-cost">${batchGeoPreview.estimatedCost.toFixed(2)}</div>
+                            <div className="text-2xl font-bold text-chart-4" data-testid="text-batch-geo-cost">${batchGeoPreview.estimatedCost.toFixed(2)}</div>
                             <div className="text-xs text-muted-foreground">Uppskattad kostnad</div>
                           </div>
                         </div>
@@ -2185,7 +2185,7 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                     <CardContent className="pt-4">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
-                          <Check className="h-5 w-5 text-green-500" />
+                          <Check className="h-5 w-5 text-chart-2" />
                           <span className="font-medium">Batch-geocodning klar</span>
                         </div>
                         {batchGeoMapObjects.length > 0 && (
@@ -2206,11 +2206,11 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                           <div className="text-xs text-muted-foreground">Skickade</div>
                         </div>
                         <div>
-                          <div className="text-2xl font-bold text-green-500">{batchGeoResult.geocoded}</div>
+                          <div className="text-2xl font-bold text-chart-2">{batchGeoResult.geocoded}</div>
                           <div className="text-xs text-muted-foreground">Geocodade</div>
                         </div>
                         <div>
-                          <div className="text-2xl font-bold text-blue-500">{batchGeoResult.updated}</div>
+                          <div className="text-2xl font-bold text-chart-1">{batchGeoResult.updated}</div>
                           <div className="text-xs text-muted-foreground">Uppdaterade</div>
                         </div>
                       </div>
@@ -2306,7 +2306,7 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                         <div className="text-xs text-muted-foreground">Totalt geocodade</div>
                       </div>
                       <div>
-                        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400" data-testid="text-explore-filtered">
+                        <div className="text-2xl font-bold text-chart-1" data-testid="text-explore-filtered">
                           {exploreData.objects.length > 0 ? exploreData.objects.length.toLocaleString("sv-SE") : exploreData.filteredCount.toLocaleString("sv-SE")}
                         </div>
                         <div className="text-xs text-muted-foreground">
@@ -2314,7 +2314,7 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                         </div>
                       </div>
                       <div>
-                        <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-explore-entrance">{exploreData.withEntrance.toLocaleString("sv-SE")}</div>
+                        <div className="text-2xl font-bold text-chart-2" data-testid="text-explore-entrance">{exploreData.withEntrance.toLocaleString("sv-SE")}</div>
                         <div className="text-xs text-muted-foreground">Med entrékoord.</div>
                       </div>
                     </div>
@@ -2353,11 +2353,11 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-md border text-center">
-                  <div className="text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-missing-city-total">{batchFillCityPreview.totalMissingCity.toLocaleString("sv")}</div>
+                  <div className="text-2xl font-bold text-chart-4" data-testid="text-missing-city-total">{batchFillCityPreview.totalMissingCity.toLocaleString("sv")}</div>
                   <div className="text-xs text-muted-foreground">Saknar stad</div>
                 </div>
                 <div className="p-3 rounded-md border text-center">
-                  <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-resolvable-count">
+                  <div className="text-2xl font-bold text-chart-2" data-testid="text-resolvable-count">
                     {(batchFillCityPreview.totalMissingCity - batchFillCityPreview.noResolvableInfo).toLocaleString("sv")}
                   </div>
                   <div className="text-xs text-muted-foreground">Kan fyllas i</div>
@@ -2378,7 +2378,7 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                   <span className="font-medium">{batchFillCityPreview.withAddress.toLocaleString("sv")}</span>
                 </div>
                 {batchFillCityPreview.noResolvableInfo > 0 && (
-                  <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                  <div className="flex justify-between text-chart-4">
                     <span>Kan ej avgöras</span>
                     <span className="font-medium">{batchFillCityPreview.noResolvableInfo.toLocaleString("sv")}</span>
                   </div>
@@ -2400,12 +2400,12 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
               )}
 
               {batchFillCityResult && (
-                <div className="p-3 rounded-md bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 space-y-1">
-                  <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                <div className="p-3 rounded-md bg-chart-2/10 dark:bg-chart-2/15 border border-chart-2/20 dark:border-chart-2/80 space-y-1">
+                  <div className="flex items-center gap-2 text-chart-2">
                     <Check className="h-4 w-4" />
                     <span className="font-medium">Batch-ifyllnad klar</span>
                   </div>
-                  <div className="text-sm text-green-600 dark:text-green-400">
+                  <div className="text-sm text-chart-2">
                     {batchFillCityResult.updated} av {batchFillCityResult.total} objekt fick stad ifylld.
                     {batchFillCityResult.remaining > 0 && ` ${batchFillCityResult.remaining} kunde inte avgöras.`}
                   </div>
@@ -2456,19 +2456,19 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2" data-testid="text-service-pattern-title">
-              <BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <BarChart3 className="h-5 w-5 text-chart-1" />
               Servicemönster — AI-analys
             </DialogTitle>
             <DialogDescription>Analys av servicehistorik och mönster för filtrerade objekt</DialogDescription>
           </DialogHeader>
           {servicePatternDialog.loading ? (
             <div className="flex flex-col items-center gap-3 py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-purple-600 dark:text-purple-400" />
+              <Loader2 className="h-8 w-8 animate-spin text-chart-5" />
               <p className="text-sm text-muted-foreground">AI analyserar servicemönster...</p>
             </div>
           ) : servicePatternDialog.data && (
             <div className="space-y-4">
-              <div className="p-3 rounded-md bg-purple-500/5 dark:bg-purple-400/10 border border-purple-500/20 dark:border-purple-400/20">
+              <div className="p-3 rounded-md bg-chart-5/15 dark:bg-chart-5/40 border border-chart-5/50 dark:border-chart-5/40">
                 <p className="text-sm" data-testid="text-service-pattern-summary">{servicePatternDialog.data.summary}</p>
               </div>
               {servicePatternDialog.data.patterns.length > 0 && (
@@ -2485,11 +2485,11 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
               {servicePatternDialog.data.anomalies.length > 0 && (
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                    <AlertTriangle className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />
+                    <AlertTriangle className="h-3.5 w-3.5 text-chart-4" />
                     Avvikande objekt ({servicePatternDialog.data.anomalies.length})
                   </p>
                   {servicePatternDialog.data.anomalies.map((a, i) => (
-                    <div key={i} className="p-2 rounded-md bg-amber-500/5 dark:bg-amber-400/10 border border-amber-500/20 dark:border-amber-400/20">
+                    <div key={i} className="p-2 rounded-md bg-chart-4/15 dark:bg-chart-4/40 border border-chart-4/50 dark:border-chart-4/40">
                       <p className="text-sm font-medium">{a.objectName}</p>
                       <p className="text-xs text-muted-foreground">{a.reason}</p>
                     </div>
@@ -2505,20 +2505,20 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2" data-testid="text-cluster-title">
-              <MapIcon className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              <MapIcon className="h-5 w-5 text-chart-5" />
               Gruppering — AI-förslag
             </DialogTitle>
             <DialogDescription>Förslag på optimal geografisk gruppering av objekt</DialogDescription>
           </DialogHeader>
           {clusterDialog.loading ? (
             <div className="flex flex-col items-center gap-3 py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-purple-600 dark:text-purple-400" />
+              <Loader2 className="h-8 w-8 animate-spin text-chart-5" />
               <p className="text-sm text-muted-foreground">AI analyserar gruppering...</p>
             </div>
           ) : clusterDialog.data && (
             <div className="space-y-4">
               {clusterDialog.data.message && (
-                <div className="p-3 rounded-md bg-purple-500/5 dark:bg-purple-400/10 border border-purple-500/20 dark:border-purple-400/20">
+                <div className="p-3 rounded-md bg-chart-5/15 dark:bg-chart-5/40 border border-chart-5/50 dark:border-chart-5/40">
                   <p className="text-sm" data-testid="text-cluster-message">{clusterDialog.data.message}</p>
                 </div>
               )}
@@ -2558,29 +2558,29 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2" data-testid="text-maintenance-title">
-              <Clock className="h-5 w-5 text-green-600 dark:text-green-400" />
+              <Clock className="h-5 w-5 text-chart-2" />
               Underhållsprognoser
             </DialogTitle>
             <DialogDescription>Predikterade servicebehov baserat på historisk data</DialogDescription>
           </DialogHeader>
           {maintenanceDialog.loading ? (
             <div className="flex flex-col items-center gap-3 py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-purple-600 dark:text-purple-400" />
+              <Loader2 className="h-8 w-8 animate-spin text-chart-5" />
               <p className="text-sm text-muted-foreground">Beräknar underhållsprognoser...</p>
             </div>
           ) : maintenanceDialog.data && (
             <div className="space-y-4">
-              <div className="p-3 rounded-md bg-green-500/5 dark:bg-green-400/10 border border-green-500/20 dark:border-green-400/20">
+              <div className="p-3 rounded-md bg-chart-2/15 dark:bg-chart-2/40 border border-chart-2/50 dark:border-chart-2/40">
                 <p className="text-sm" data-testid="text-maintenance-summary">{maintenanceDialog.data.summary}</p>
               </div>
               {maintenanceDialog.data.overdue.length > 0 && (
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-red-500 dark:text-red-400 uppercase tracking-wide flex items-center gap-1">
-                    <AlertTriangle className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />
+                  <p className="text-xs font-medium text-destructive uppercase tracking-wide flex items-center gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5 text-chart-4" />
                     Försenade ({maintenanceDialog.data.overdue.length})
                   </p>
                   {maintenanceDialog.data.overdue.map((item, i) => (
-                    <div key={i} className="flex justify-between items-center p-2 rounded-md bg-red-500/5 dark:bg-red-400/10 border border-red-500/20 dark:border-red-400/20">
+                    <div key={i} className="flex justify-between items-center p-2 rounded-md bg-destructive/15 dark:bg-destructive/40 border border-destructive/50 dark:border-destructive/40">
                       <div>
                         <p className="text-sm font-medium">{item.objectName}</p>
                         <p className="text-xs text-muted-foreground">Förväntad: {item.predictedDate}</p>

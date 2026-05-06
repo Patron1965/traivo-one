@@ -543,9 +543,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
           </div>
 
           {d.activeDragJob && d.activeDragJob.clusterId && d.clusterMatchedResourceIds.size === 0 && d.visibleResources.some(r => r.serviceArea && r.serviceArea.length > 0) && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 animate-in fade-in slide-in-from-top-1 duration-200" data-testid="drag-no-cluster-match-warning">
-              <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0" />
-              <span className="text-xs text-amber-700 dark:text-amber-300">
+            <div className="flex items-center gap-2 px-3 py-2 bg-chart-4/10 dark:bg-chart-4/15 border-b border-chart-4/20 dark:border-chart-4/80 animate-in fade-in slide-in-from-top-1 duration-200" data-testid="drag-no-cluster-match-warning">
+              <AlertTriangle className="h-4 w-4 text-chart-4 shrink-0" />
+              <span className="text-xs text-chart-4">
                 Ingen synlig resurs matchar klustret för detta jobb. Kontrollera resursernas serviceområden.
               </span>
             </div>
@@ -766,7 +766,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
         <SheetContent side="right" className="w-[420px] sm:max-w-[420px] flex flex-col p-0">
           <SheetHeader className="px-4 py-3 border-b">
             <SheetTitle className="flex items-center gap-2 text-base">
-              <ShieldAlert className="h-4 w-4 text-red-500" />
+              <ShieldAlert className="h-4 w-4 text-destructive" />
               SLA-tidigvarning
             </SheetTitle>
           </SheetHeader>

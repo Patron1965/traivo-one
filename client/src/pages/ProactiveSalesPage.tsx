@@ -92,8 +92,8 @@ export default function ProactiveSalesPage() {
   function SortIcon({ field }: { field: SortField }) {
     if (sortField !== field) return <ArrowUpDown className="h-3.5 w-3.5 ml-1 opacity-40" />;
     return sortDir === "asc"
-      ? <ArrowUp className="h-3.5 w-3.5 ml-1 text-blue-500 dark:text-blue-400" />
-      : <ArrowDown className="h-3.5 w-3.5 ml-1 text-blue-500 dark:text-blue-400" />;
+      ? <ArrowUp className="h-3.5 w-3.5 ml-1 text-chart-1" />
+      : <ArrowDown className="h-3.5 w-3.5 ml-1 text-chart-1" />;
   }
 
   if (isLoading) {
@@ -112,8 +112,8 @@ export default function ProactiveSalesPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
-                <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
+              <div className="p-2 rounded-lg bg-chart-4/15 dark:bg-chart-4/15">
+                <AlertTriangle className="h-5 w-5 text-chart-4" />
               </div>
               <div>
                 <p className="text-2xl font-bold" data-testid="stat-inactive-count">{summary.inactiveCount}</p>
@@ -125,8 +125,8 @@ export default function ProactiveSalesPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <div className="p-2 rounded-lg bg-chart-1/15 dark:bg-chart-1/15">
+                <Users className="h-5 w-5 text-chart-1" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{summary.totalCustomers}</p>
@@ -138,8 +138,8 @@ export default function ProactiveSalesPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
-                <TrendingDown className="h-5 w-5 text-red-600 dark:text-red-400" />
+              <div className="p-2 rounded-lg bg-destructive/15 dark:bg-destructive/15">
+                <TrendingDown className="h-5 w-5 text-destructive" />
               </div>
               <div>
                 <p className="text-2xl font-bold" data-testid="stat-lost-revenue">
@@ -153,8 +153,8 @@ export default function ProactiveSalesPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+              <div className="p-2 rounded-lg bg-chart-2/15 dark:bg-chart-2/15">
+                <DollarSign className="h-5 w-5 text-chart-2" />
               </div>
               <div>
                 <p className="text-2xl font-bold">
@@ -286,12 +286,12 @@ export default function ProactiveSalesPage() {
                       <TableCell className="hidden md:table-cell">
                         <div className="flex flex-col gap-1">
                           {cust.phone && (
-                            <a href={`tel:${cust.phone}`} className="text-blue-600 dark:text-blue-400 hover:underline text-sm flex items-center gap-1" data-testid={`link-phone-${cust.id}`}>
+                            <a href={`tel:${cust.phone}`} className="text-chart-1 hover:underline text-sm flex items-center gap-1" data-testid={`link-phone-${cust.id}`}>
                               <Phone className="h-3 w-3" />{cust.phone}
                             </a>
                           )}
                           {cust.email && (
-                            <a href={`mailto:${cust.email}`} className="text-blue-600 dark:text-blue-400 hover:underline text-sm flex items-center gap-1" data-testid={`link-email-${cust.id}`}>
+                            <a href={`mailto:${cust.email}`} className="text-chart-1 hover:underline text-sm flex items-center gap-1" data-testid={`link-email-${cust.id}`}>
                               <Mail className="h-3 w-3" />{cust.email}
                             </a>
                           )}

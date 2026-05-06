@@ -19,13 +19,13 @@ import type { LucideIcon } from "lucide-react";
 import type { MetadataKatalog, InsertMetadataKatalog } from "@shared/schema";
 
 const kategoriLabels: Record<string, { label: string; color: string }> = {
-  administrativ: { label: "Administrativ", color: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200" },
-  geografi: { label: "Geografi", color: "bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-200" },
-  produktion: { label: "Produktion", color: "bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-200" },
-  leverans: { label: "Leverans", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-200" },
-  kundreferens: { label: "Kundreferens", color: "bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-200" },
-  artikel: { label: "Artikel", color: "bg-orange-100 text-orange-800 dark:bg-orange-800 dark:text-orange-200" },
-  annat: { label: "Annat", color: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200" },
+  administrativ: { label: "Administrativ", color: "bg-muted text-muted-foreground border border-border" },
+  geografi: { label: "Geografi", color: "bg-chart-2/15 text-chart-2 border border-chart-2/30" },
+  produktion: { label: "Produktion", color: "bg-chart-1/15 text-chart-1 border border-chart-1/30" },
+  leverans: { label: "Leverans", color: "bg-chart-3/15 text-chart-3 border border-chart-3/30" },
+  kundreferens: { label: "Kundreferens", color: "bg-chart-5/15 text-chart-5 border border-chart-5/30" },
+  artikel: { label: "Artikel", color: "bg-chart-4/15 text-chart-4 border border-chart-4/30" },
+  annat: { label: "Annat", color: "bg-muted text-muted-foreground border border-border" },
 };
 
 const datatypLabels: Record<string, string> = {
@@ -260,7 +260,7 @@ export function MetadataLabelsTab() {
                                 <Badge variant="destructive" className="text-xs">Obligatorisk</Badge>
                               )}
                               {label.standardArvs && (
-                                <Badge variant="outline" className="text-xs text-blue-600 border-blue-300">Ärver</Badge>
+                                <Badge variant="outline" className="text-xs text-chart-1 border-chart-1/30">Ärver</Badge>
                               )}
                             </div>
                             <p className="text-xs text-muted-foreground mt-0.5">

@@ -29,9 +29,9 @@ interface WeatherForecastResp {
 }
 
 function getUtilizationColor(utilization: number) {
-  if (utilization > 90) return { bar: "bg-red-500", text: "text-red-600 dark:text-red-400", bg: "bg-red-500/10" };
-  if (utilization >= 60) return { bar: "bg-amber-500", text: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10" };
-  return { bar: "bg-green-500", text: "text-green-600 dark:text-green-400", bg: "bg-green-500/10" };
+  if (utilization > 90) return { bar: "bg-destructive/15", text: "text-destructive", bg: "bg-destructive/15" };
+  if (utilization >= 60) return { bar: "bg-chart-4/15", text: "text-chart-4", bg: "bg-chart-4/15" };
+  return { bar: "bg-chart-2/15", text: "text-chart-2", bg: "bg-chart-2/15" };
 }
 
 export function CapacityOverview() {
@@ -151,7 +151,7 @@ export function CapacityOverview() {
             </Badge>
           </div>
           {weatherActive && (
-            <Badge variant="outline" className="text-xs gap-1 border-amber-500/40 text-amber-700 dark:text-amber-400" data-testid="badge-weather-impact">
+            <Badge variant="outline" className="text-xs gap-1 border-chart-4/50 text-chart-4" data-testid="badge-weather-impact">
               <CloudRain className="h-3 w-3" />
               Väder +{weatherPctIncrease}% tid
             </Badge>
@@ -177,10 +177,10 @@ export function CapacityOverview() {
                         variant="outline"
                         className={`text-xs min-w-[52px] justify-center ${
                           r.utilization > 90
-                            ? "border-red-500/50 text-red-600"
+                            ? "border-destructive/50 text-destructive"
                             : r.utilization >= 60
-                              ? "border-amber-500/50 text-amber-600"
-                              : "border-green-500/50 text-green-600"
+                              ? "border-chart-4/50 text-chart-4"
+                              : "border-chart-2/50 text-chart-2"
                         }`}
                         data-testid={`badge-utilization-${r.resourceId}`}
                       >
@@ -203,15 +203,15 @@ export function CapacityOverview() {
 
         <div className="flex items-center justify-center gap-4 mt-4 pt-3 border-t">
           <div className="flex items-center gap-1.5">
-            <div className="h-2.5 w-2.5 rounded-full bg-green-500" />
+            <div className="h-2.5 w-2.5 rounded-full bg-chart-2/15" />
             <span className="text-xs text-muted-foreground">&lt;60%</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+            <div className="h-2.5 w-2.5 rounded-full bg-chart-4/15" />
             <span className="text-xs text-muted-foreground">60–90%</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="h-2.5 w-2.5 rounded-full bg-red-500" />
+            <div className="h-2.5 w-2.5 rounded-full bg-destructive/15" />
             <span className="text-xs text-muted-foreground">&gt;90%</span>
           </div>
         </div>
@@ -226,7 +226,7 @@ export function CapacityOverview() {
                   Teoretisk
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="inline-block h-2 w-3 rounded-sm bg-amber-500/70" />
+                  <span className="inline-block h-2 w-3 rounded-sm bg-chart-4/15" />
                   Väderjusterad
                 </span>
               </div>
@@ -240,12 +240,12 @@ export function CapacityOverview() {
                   catch { return imp.date; }
                 })();
                 const adjColor = imp.impactLevel === "severe" || imp.impactLevel === "high"
-                  ? "bg-red-500/70"
+                  ? "bg-destructive/15"
                   : imp.impactLevel === "medium"
-                    ? "bg-amber-500/70"
+                    ? "bg-chart-4/15"
                     : imp.impactLevel === "low"
-                      ? "bg-yellow-500/60"
-                      : "bg-green-500/60";
+                      ? "bg-chart-3/15"
+                      : "bg-chart-2/15";
                 return (
                   <div key={imp.date} className="flex items-center gap-2" data-testid={`horizon-day-${imp.date}`}>
                     <span className="text-[11px] w-14 text-muted-foreground capitalize">{dayLabel}</span>

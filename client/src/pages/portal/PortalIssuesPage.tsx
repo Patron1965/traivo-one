@@ -65,9 +65,9 @@ function IssueStatusBadge({ status }: { status: string }) {
 
 function IssuePriorityBadge({ priority }: { priority: string }) {
   const priorityMap: Record<string, { label: string; className: string }> = {
-    low: { label: "Låg", className: "bg-green-500/10 text-green-600 border-green-500/20" },
-    medium: { label: "Normal", className: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
-    high: { label: "Hög", className: "bg-red-500/10 text-red-600 border-red-500/20" },
+    low: { label: "Låg", className: "bg-chart-2/15 text-chart-2 border-chart-2/50" },
+    medium: { label: "Normal", className: "bg-chart-4/15 text-chart-4 border-chart-4/50" },
+    high: { label: "Hög", className: "bg-destructive/15 text-destructive border-destructive/50" },
   };
   const config = priorityMap[priority] || { label: priority, className: "" };
   return <Badge variant="outline" className={config.className}>{config.label}</Badge>;
@@ -239,11 +239,11 @@ export default function PortalIssuesPage() {
 
       <main className="container py-8 space-y-6">
         <div className="grid gap-4 sm:grid-cols-3">
-          <Card className="bg-gradient-to-br from-amber-500/10 to-transparent">
+          <Card className="bg-gradient-to-br from-chart-4 to-transparent">
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-amber-500/20 rounded-lg">
-                  <Clock className="h-5 w-5 text-amber-500" />
+                <div className="p-2 bg-chart-4/15 rounded-lg">
+                  <Clock className="h-5 w-5 text-chart-4" />
                 </div>
                 <div>
                   <div className="text-2xl font-bold">{pendingCount}</div>
@@ -252,11 +252,11 @@ export default function PortalIssuesPage() {
               </div>
             </CardContent>
           </Card>
-          <Card className="bg-gradient-to-br from-green-500/10 to-transparent">
+          <Card className="bg-gradient-to-br from-chart-2 to-transparent">
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-500/20 rounded-lg">
-                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                <div className="p-2 bg-chart-2/15 rounded-lg">
+                  <CheckCircle2 className="h-5 w-5 text-chart-2" />
                 </div>
                 <div>
                   <div className="text-2xl font-bold">{resolvedCount}</div>
@@ -295,7 +295,7 @@ export default function PortalIssuesPage() {
               </div>
             ) : issues.length === 0 ? (
               <div className="text-center py-12">
-                <CheckCircle2 className="h-12 w-12 mx-auto text-green-500/50 mb-3" />
+                <CheckCircle2 className="h-12 w-12 mx-auto text-chart-2 mb-3" />
                 <p className="font-medium">Inga aktiva ärenden</p>
                 <p className="text-sm text-muted-foreground mt-1">
                   Har du problem? Skapa ett nytt ärende så hjälper vi dig.

@@ -144,11 +144,11 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
   };
 
   const statusColors: Record<string, string> = {
-    idle: "bg-green-500",
-    on_job: "bg-blue-500",
-    traveling: "bg-amber-500",
+    idle: "bg-chart-2/15",
+    on_job: "bg-chart-1/15",
+    traveling: "bg-chart-4/15",
     on_break: "bg-gray-400",
-    offline: "bg-red-500",
+    offline: "bg-destructive/15",
   };
 
   if (!open) return null;
@@ -156,9 +156,9 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
   return (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-background border rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-auto" data-testid="dialog-urgent-job">
-        <div className="flex items-center gap-3 p-4 border-b bg-red-50 dark:bg-red-950/30">
-          <div className="bg-red-500 text-white p-2 rounded-full animate-pulse">
-            <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
+        <div className="flex items-center gap-3 p-4 border-b bg-destructive/10 dark:bg-destructive/15">
+          <div className="bg-destructive text-white p-2 rounded-full animate-pulse">
+            <AlertTriangle className="h-5 w-5 text-chart-4" />
           </div>
           <div>
             <h2 className="font-semibold text-lg">Akut Jobbhantering</h2>
@@ -182,12 +182,12 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
                   <Input value={address} onChange={e => setAddress(e.target.value)} placeholder="Gatuadress, stad" data-testid="input-urgent-address" />
                 </div>
                 {(latitude && longitude) ? (
-                  <div className="flex items-center gap-2 text-sm text-green-600">
+                  <div className="flex items-center gap-2 text-sm text-chart-2">
                     <MapPin className="h-4 w-4" />
                     <span>Koordinater: {latitude.toFixed(4)}, {longitude.toFixed(4)}</span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 text-sm text-amber-600">
+                  <div className="flex items-center gap-2 text-sm text-chart-4">
                     <MapPin className="h-4 w-4" />
                     <span>Inga koordinater — välj en order med position</span>
                   </div>
@@ -201,7 +201,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
                   <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Extra information..." rows={2} data-testid="input-urgent-notes" />
                 </div>
               </div>
-              <Button className="w-full bg-red-600 hover:bg-red-700 text-white" onClick={handleFindNearest} disabled={!latitude || !longitude} data-testid="button-find-nearest">
+              <Button className="w-full bg-destructive hover:bg-destructive text-white" onClick={handleFindNearest} disabled={!latitude || !longitude} data-testid="button-find-nearest">
                 <Navigation className="h-4 w-4 mr-2" />
                 Hitta närmaste tekniker
               </Button>
@@ -261,8 +261,8 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
                 ← Tillbaka
               </button>
               <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
-                <h3 className="font-medium text-red-600 flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+                <h3 className="font-medium text-destructive flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-chart-4" />
                   Bekräfta akut tilldelning
                 </h3>
                 <div className="space-y-2 text-sm">
@@ -302,7 +302,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
                 </div>
               </div>
               <Button
-                className="w-full bg-red-600 hover:bg-red-700 text-white"
+                className="w-full bg-destructive hover:bg-destructive text-white"
                 onClick={() => assignMutation.mutate()}
                 disabled={assignMutation.isPending}
                 data-testid="button-confirm-urgent-assign"
@@ -310,7 +310,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
                 {assignMutation.isPending ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Skickar...</>
                 ) : (
-                  <><AlertTriangle className="h-4 w-4 mr-2 text-orange-500 dark:text-orange-400" /> Skicka akut uppdrag nu</>
+                  <><AlertTriangle className="h-4 w-4 mr-2 text-chart-4" /> Skicka akut uppdrag nu</>
                 )}
               </Button>
             </>
@@ -318,7 +318,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
 
           {step === "sent" && (
             <div className="text-center py-6 space-y-3">
-              <div className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 p-3 rounded-full w-fit mx-auto">
+              <div className="bg-chart-2/15 dark:bg-chart-2/15 text-chart-2 p-3 rounded-full w-fit mx-auto">
                 <Check className="h-8 w-8" />
               </div>
               <h3 className="font-semibold text-lg">Akut jobb skickat!</h3>

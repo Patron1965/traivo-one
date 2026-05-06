@@ -174,10 +174,10 @@ function SuggestPlacementButton({ job, currentWeekStart, className, compact }: {
             <p className="text-xs text-muted-foreground py-2">Inga lämpliga platser hittades denna vecka.</p>
           )}
           {suggestions && suggestions.map((s, i) => (
-            <div key={i} className={`p-2 rounded-md border text-xs space-y-1 ${i === 0 ? "border-green-300 bg-green-50/50 dark:bg-green-950/20 dark:border-green-800" : "border-border"}`} data-testid={`suggestion-${job.id}-${i}`}>
+            <div key={i} className={`p-2 rounded-md border text-xs space-y-1 ${i === 0 ? "border-chart-2/30 bg-chart-2/10 dark:bg-chart-2/15 dark:border-chart-2/80" : "border-border"}`} data-testid={`suggestion-${job.id}-${i}`}>
               <div className="flex items-center justify-between">
                 <span className="font-medium">{s.resourceName}</span>
-                {i === 0 && <Badge className="text-[9px] h-4 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Bäst</Badge>}
+                {i === 0 && <Badge className="text-[9px] h-4 bg-chart-2/15 text-chart-2 dark:bg-chart-2/15">Bäst</Badge>}
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Clock className="h-3 w-3" />
@@ -186,7 +186,7 @@ function SuggestPlacementButton({ job, currentWeekStart, className, compact }: {
               <div className="space-y-0.5">
                 {s.reasons.map((r, ri) => (
                   <div key={ri} className="flex items-start gap-1 text-[10px] text-muted-foreground">
-                    <CheckCircle2 className="h-2.5 w-2.5 mt-0.5 text-green-500 shrink-0" />
+                    <CheckCircle2 className="h-2.5 w-2.5 mt-0.5 text-chart-2 shrink-0" />
                     <span>{r}</span>
                   </div>
                 ))}
@@ -248,25 +248,25 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
             </div>
           </div>
           {showDragNoMatch && (
-            <div className="flex items-center gap-1.5 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800" data-testid="sidebar-no-cluster-match-warning">
-              <AlertTriangle className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400 shrink-0" />
-              <span className="text-[10px] text-amber-700 dark:text-amber-300">Ingen resurs matchar klustret</span>
+            <div className="flex items-center gap-1.5 p-2 rounded-md bg-chart-4/10 dark:bg-chart-4/15 border border-chart-4/20 dark:border-chart-4/80" data-testid="sidebar-no-cluster-match-warning">
+              <AlertTriangle className="h-3.5 w-3.5 text-chart-4 shrink-0" />
+              <span className="text-[10px] text-chart-4">Ingen resurs matchar klustret</span>
             </div>
           )}
           <div className="flex items-center gap-1.5 flex-wrap" data-testid="sidebar-quick-stats">
             {sidebarQuickStats.urgentCount > 0 && (
               <Badge variant="destructive" className="text-[10px] h-5 gap-1">
-                <AlertTriangle className="h-2.5 w-2.5 text-orange-500 dark:text-orange-400" />
+                <AlertTriangle className="h-2.5 w-2.5 text-chart-4" />
                 {sidebarQuickStats.urgentCount} akut
               </Badge>
             )}
             {sidebarQuickStats.highCount > 0 && (
-              <Badge className="text-[10px] h-5 bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 border-orange-300">
+              <Badge className="text-[10px] h-5 bg-chart-4/15 text-chart-4 dark:bg-chart-4/15 border-chart-4/30">
                 {sidebarQuickStats.highCount} hög
               </Badge>
             )}
             {sidebarQuickStats.overdueCount > 0 && (
-              <Badge variant="outline" className="text-[10px] h-5 gap-1 text-red-600 border-red-300">
+              <Badge variant="outline" className="text-[10px] h-5 gap-1 text-destructive border-destructive/30">
                 <Clock className="h-2.5 w-2.5" />
                 {sidebarQuickStats.overdueCount} försenade
               </Badge>
@@ -369,15 +369,15 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
           )}
           {dateFilterActive && (filterDateField === "desired" || filterDateField === "sla") && unscheduledMissingDateCount > 0 && (
             <Collapsible open={missingDateExpanded} onOpenChange={setMissingDateExpanded}>
-              <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800" data-testid="sidebar-missing-date-info">
+              <div className="rounded-md bg-chart-1/10 dark:bg-chart-1/15 border border-chart-1/20 dark:border-chart-1/80" data-testid="sidebar-missing-date-info">
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
                     className="w-full flex items-start gap-1.5 p-2 text-left hover-elevate active-elevate-2 rounded-md"
                     data-testid="button-toggle-missing-date"
                   >
-                    <Info className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                    <span className="text-[10px] text-blue-700 dark:text-blue-300 leading-tight flex-1">
+                    <Info className="h-3.5 w-3.5 text-chart-1 shrink-0 mt-0.5" />
+                    <span className="text-[10px] text-chart-1 leading-tight flex-1">
                       {filterDateField === "desired"
                         ? `${unscheduledMissingDateCount} ordrar saknar önskat datum och visas inte i listan ovan.`
                         : `${unscheduledMissingDateCount} ordrar saknar SLA-deadline och visas inte i listan ovan.`}
@@ -386,22 +386,22 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                       </span>
                     </span>
                     {missingDateExpanded
-                      ? <ChevronUp className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                      : <ChevronDown className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />}
+                      ? <ChevronUp className="h-3.5 w-3.5 text-chart-1 shrink-0 mt-0.5" />
+                      : <ChevronDown className="h-3.5 w-3.5 text-chart-1 shrink-0 mt-0.5" />}
                   </button>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <div className="px-2 pb-2 space-y-1.5" data-testid="sidebar-missing-date-list">
                     {missingDateLoading && (
                       <div className="flex items-center justify-center py-3">
-                        <Loader2 className="h-4 w-4 animate-spin text-blue-600 dark:text-blue-400" />
+                        <Loader2 className="h-4 w-4 animate-spin text-chart-1" />
                       </div>
                     )}
                     {!missingDateLoading && missingDateJobs.length === 0 && (
-                      <p className="text-[10px] text-blue-700 dark:text-blue-300 py-2">Inga ordrar att visa.</p>
+                      <p className="text-[10px] text-chart-1 py-2">Inga ordrar att visa.</p>
                     )}
                     {!missingDateLoading && unscheduledMissingDateCount > missingDateJobs.length && missingDateJobs.length > 0 && (
-                      <p className="text-[10px] text-blue-700/80 dark:text-blue-300/80 italic" data-testid="text-missing-date-cap-info">
+                      <p className="text-[10px] text-chart-1 italic" data-testid="text-missing-date-cap-info">
                         Visar de första {missingDateJobs.length} av {unscheduledMissingDateCount}. Använd sökfältet för att filtrera vidare.
                       </p>
                     )}
@@ -638,7 +638,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                 return (
                   <DraggableJobCard key={job.id} id={job.id}>
                     <Card
-                      className={`p-3 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 touch-none ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${job.priority === "urgent" ? "bg-red-50/50 dark:bg-red-950/20" : ""}`}
+                      className={`p-3 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 touch-none ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${job.priority === "urgent" ? "bg-destructive/10 dark:bg-destructive/15" : ""}`}
                       onClick={() => onJobClick(job.id)}
                       data-testid={`unscheduled-job-${job.id}`}
                     >
@@ -653,7 +653,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             {customerLabel}
                           </span>
                           {job.priority === "urgent" && (
-                            <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
+                            <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />
                           )}
                         </div>
                         {showTitle && (
@@ -676,13 +676,13 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                         {(job.objectAccessCode || job.objectKeyNumber) && (
                           <div className="flex items-center gap-2 mt-1">
                             {job.objectAccessCode && (
-                              <span className="flex items-center gap-0.5 text-[10px] text-orange-500 dark:text-orange-400">
+                              <span className="flex items-center gap-0.5 text-[10px] text-chart-4">
                                 <DoorOpen className="h-2.5 w-2.5" />
                                 {job.objectAccessCode}
                               </span>
                             )}
                             {job.objectKeyNumber && (
-                              <span className="flex items-center gap-0.5 text-[10px] text-blue-600 dark:text-blue-400">
+                              <span className="flex items-center gap-0.5 text-[10px] text-chart-1">
                                 <Key className="h-2.5 w-2.5" />
                                 {job.objectKeyNumber}
                               </span>
@@ -701,7 +701,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             return (
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <div className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400" data-testid={`unscheduled-timewindow-${job.id}`}>
+                                  <div className="flex items-center gap-1 text-[10px] text-chart-1" data-testid={`unscheduled-timewindow-${job.id}`}>
                                     <Clock className="h-2.5 w-2.5" />
                                     <span className="truncate">{twLabel}</span>
                                   </div>
@@ -727,7 +727,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                               <Badge variant="destructive" className="text-[9px] h-4 ml-1">Försenad</Badge>
                             )}
                             {new Date(job.plannedWindowEnd) >= new Date() && new Date(job.plannedWindowEnd) < addDays(new Date(), 7) && (
-                              <Badge className="text-[9px] h-4 ml-1 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-amber-300">Snart</Badge>
+                              <Badge className="text-[9px] h-4 ml-1 bg-chart-4/15 text-chart-4 dark:bg-chart-4/15 border-chart-4/30">Snart</Badge>
                             )}
                           </div>
                         )}
@@ -767,7 +767,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="w-full mt-2 h-7 text-xs px-2 gap-1 border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-200 dark:hover:bg-blue-900/40"
+                                className="w-full mt-2 h-7 text-xs px-2 gap-1 border-chart-1/30 bg-chart-1/10 hover:bg-chart-1/15 text-chart-1 dark:bg-chart-1/15 dark:border-chart-1/80 dark:hover:bg-chart-1/15"
                                 onClick={(e) => { e.stopPropagation(); onCrossWindowAssign(job); }}
                                 data-testid={`button-cross-window-assign-${job.id}`}
                               >
@@ -784,7 +784,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             <TooltipTrigger asChild>
                               <Button
                                 size="sm"
-                                className="flex-1 min-w-0 h-7 text-xs px-2 overflow-hidden bg-green-600 hover:bg-green-700 text-white border border-green-700/40 dark:bg-green-600 dark:hover:bg-green-500 dark:text-white dark:border-green-500/40"
+                                className="flex-1 min-w-0 h-7 text-xs px-2 overflow-hidden bg-chart-2 hover:bg-chart-2 text-white border border-chart-2/70 dark:bg-chart-2 dark:hover:bg-chart-2 dark:text-white dark:border-chart-2/50"
                                 onClick={(e) => onOpenAssignDialog(job, e)}
                                 data-testid={`button-assign-job-${job.id}`}
                               >

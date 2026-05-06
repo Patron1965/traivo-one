@@ -162,17 +162,17 @@ export function ImportHealthOverview() {
 
   const severityColor = (severity: string) => {
     switch (severity) {
-      case "critical": return "text-red-600 bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800";
-      case "warning": return "text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800";
-      default: return "text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800";
+      case "critical": return "text-destructive bg-destructive/10 border-destructive/20 dark:bg-destructive/15 dark:border-destructive/80";
+      case "warning": return "text-chart-4 bg-chart-4/10 border-chart-4/20 dark:bg-chart-4/15 dark:border-chart-4/80";
+      default: return "text-chart-1 bg-chart-1/10 border-chart-1/20 dark:bg-chart-1/15 dark:border-chart-1/80";
     }
   };
 
   const severityIcon = (severity: string) => {
     switch (severity) {
-      case "critical": return <XCircle className="h-4 w-4 text-red-500" />;
-      case "warning": return <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />;
-      default: return <Activity className="h-4 w-4 text-blue-500" />;
+      case "critical": return <XCircle className="h-4 w-4 text-destructive" />;
+      case "warning": return <AlertTriangle className="h-4 w-4 text-chart-4" />;
+      default: return <Activity className="h-4 w-4 text-chart-1" />;
     }
   };
 
@@ -184,11 +184,11 @@ export function ImportHealthOverview() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className={`flex items-center justify-center h-8 w-8 rounded-full text-white text-sm font-bold ${
-              activeIssues.some(i => i.severity === "critical") ? "bg-red-600" :
-              activeIssues.some(i => i.severity === "warning") ? "bg-amber-600" :
-              allAccepted ? "bg-green-600" : "bg-blue-600"
+              activeIssues.some(i => i.severity === "critical") ? "bg-destructive/15" :
+              activeIssues.some(i => i.severity === "warning") ? "bg-chart-4/15" :
+              allAccepted ? "bg-chart-2/15" : "bg-chart-1/15"
             }`}>
-              {allAccepted ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />}
+              {allAccepted ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4 text-chart-4" />}
             </div>
             <div>
               <CardTitle className="text-base flex items-center gap-2">
@@ -199,7 +199,7 @@ export function ImportHealthOverview() {
                   </Badge>
                 )}
                 {allAccepted && (
-                  <Badge variant="outline" className="text-xs bg-green-50 text-green-600 border-green-200" data-testid="badge-all-accepted">
+                  <Badge variant="outline" className="text-xs bg-chart-2/10 text-chart-2 border-chart-2/20" data-testid="badge-all-accepted">
                     <ShieldCheck className="h-3 w-3 mr-1" />
                     Alla granskade
                   </Badge>
@@ -313,7 +313,7 @@ export function ImportHealthOverview() {
           )}
 
           {allAccepted && (
-            <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/20 rounded-md text-sm text-green-700 dark:text-green-300">
+            <div className="flex items-center gap-2 p-3 bg-chart-2/10 dark:bg-chart-2/15 rounded-md text-sm text-chart-2">
               <CheckCircle className="h-4 w-4 shrink-0" />
               Alla datakvalitetsvarningar har granskats.
             </div>

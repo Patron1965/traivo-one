@@ -46,10 +46,10 @@ const CATEGORY_LABELS: Record<PhotoCategory, string> = {
 };
 
 const CATEGORY_COLORS: Record<PhotoCategory, string> = {
-  before: "bg-blue-500",
-  after: "bg-green-500",
-  problem: "bg-red-500",
-  documentation: "bg-purple-500",
+  before: "bg-chart-1/15",
+  after: "bg-chart-2/15",
+  problem: "bg-destructive/15",
+  documentation: "bg-chart-5/15",
 };
 
 export function PhotoCapture({ 
@@ -153,7 +153,7 @@ export function PhotoCapture({
     switch (category) {
       case "before": return <Eye className="h-2.5 w-2.5" />;
       case "after": return <CheckCircle className="h-2.5 w-2.5" />;
-      case "problem": return <AlertTriangle className="h-2.5 w-2.5 text-orange-500 dark:text-orange-400" />;
+      case "problem": return <AlertTriangle className="h-2.5 w-2.5 text-chart-4" />;
       default: return <Image className="h-2.5 w-2.5" />;
     }
   };
@@ -214,7 +214,7 @@ export function PhotoCapture({
               {isUploading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
-                <Camera className="h-5 w-5 text-blue-500" />
+                <Camera className="h-5 w-5 text-chart-1" />
               )}
               <span className="text-xs">Ta foto</span>
             </Button>
@@ -228,7 +228,7 @@ export function PhotoCapture({
               {isUploading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
-                <Upload className="h-5 w-5 text-green-500" />
+                <Upload className="h-5 w-5 text-chart-2" />
               )}
               <span className="text-xs">Välj bild</span>
             </Button>

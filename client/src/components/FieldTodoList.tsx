@@ -155,7 +155,7 @@ export function FieldTodoList({ onBack }: FieldTodoListProps) {
                 <span className="flex-1 text-sm">{todo.text}</span>
                 <button
                   onClick={() => removeTodo(todo.id)}
-                  className="shrink-0 text-muted-foreground hover:text-red-500 transition-colors"
+                  className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
                   data-testid={`button-remove-todo-${todo.id}`}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -179,7 +179,7 @@ export function FieldTodoList({ onBack }: FieldTodoListProps) {
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => toggleTodo(todo.id)}
-                      className="shrink-0 text-green-500"
+                      className="shrink-0 text-chart-2"
                       data-testid={`button-toggle-todo-${todo.id}`}
                     >
                       <CheckCircle className="h-5 w-5" />
@@ -187,7 +187,7 @@ export function FieldTodoList({ onBack }: FieldTodoListProps) {
                     <span className="flex-1 text-sm line-through text-muted-foreground">{todo.text}</span>
                     <button
                       onClick={() => removeTodo(todo.id)}
-                      className="shrink-0 text-muted-foreground hover:text-red-500 transition-colors"
+                      className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
                       data-testid={`button-remove-todo-${todo.id}`}
                     >
                       <Trash2 className="h-4 w-4" />

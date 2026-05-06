@@ -316,28 +316,28 @@ export default function SmsSettingsPage() {
           <CardContent>
             <ul className="space-y-3">
               <li className="flex items-start gap-3">
-                <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
+                <CheckCircle2 className="h-4 w-4 text-chart-2 mt-0.5" />
                 <div>
                   <span className="font-medium">Tekniker på väg</span>
                   <p className="text-sm text-muted-foreground">Skickas när tekniker startar resan till kund</p>
                 </div>
               </li>
               <li className="flex items-start gap-3">
-                <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
+                <CheckCircle2 className="h-4 w-4 text-chart-2 mt-0.5" />
                 <div>
                   <span className="font-medium">Påminnelse om besök</span>
                   <p className="text-sm text-muted-foreground">Skickas dagen innan planerat besök</p>
                 </div>
               </li>
               <li className="flex items-start gap-3">
-                <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
+                <CheckCircle2 className="h-4 w-4 text-chart-2 mt-0.5" />
                 <div>
                   <span className="font-medium">Arbete slutfört</span>
                   <p className="text-sm text-muted-foreground">Skickas när tekniker markerar jobb som klart</p>
                 </div>
               </li>
               <li className="flex items-start gap-3">
-                <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
+                <CheckCircle2 className="h-4 w-4 text-chart-2 mt-0.5" />
                 <div>
                   <span className="font-medium">Bokning bekräftad</span>
                   <p className="text-sm text-muted-foreground">Skickas vid bekräftelse av självbokningar</p>

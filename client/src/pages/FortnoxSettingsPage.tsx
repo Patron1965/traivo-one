@@ -861,7 +861,7 @@ export default function FortnoxSettingsPage() {
             <CardContent>
               {!isConnected && (
                 <Alert>
-                  <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+                  <AlertTriangle className="h-4 w-4 text-chart-4" />
                   <AlertTitle>Fortnox ej anslutet</AlertTitle>
                   <AlertDescription>
                     Anslut till Fortnox först under "Anslutningsstatus" ovan för att kunna importera data.
@@ -1083,12 +1083,12 @@ export default function FortnoxSettingsPage() {
                                     Importerad
                                   </Badge>
                                 ) : ("existingMatch" in item && item.existingMatch) ? (
-                                  <Badge variant="outline" className="gap-1 text-yellow-600 border-yellow-300">
-                                    <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />
+                                  <Badge variant="outline" className="gap-1 text-chart-3 border-chart-3/30">
+                                    <AlertTriangle className="h-3 w-3 text-chart-4" />
                                     Matchning
                                   </Badge>
                                 ) : (
-                                  <Badge variant="outline" className="gap-1 text-green-600 border-green-300">
+                                  <Badge variant="outline" className="gap-1 text-chart-2 border-chart-2/30">
                                     <Plus className="h-3 w-3" />
                                     Ny
                                   </Badge>
@@ -1154,7 +1154,7 @@ export default function FortnoxSettingsPage() {
               />
             </div>
             <Alert>
-              <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+              <AlertTriangle className="h-4 w-4 text-chart-4" />
               <AlertTitle>OAuth 2.0-flöde</AlertTitle>
               <AlertDescription>
                 Efter att du sparat uppgifterna kommer du att omdirigeras till Fortnox för att godkänna åtkomst.

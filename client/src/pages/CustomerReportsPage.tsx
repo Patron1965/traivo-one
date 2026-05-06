@@ -57,9 +57,9 @@ interface Customer {
 
 function getStatusBadge(status: string) {
   switch (status) {
-    case "new": return <Badge className="bg-blue-500 text-white" data-testid={`badge-status-${status}`}>Ny</Badge>;
-    case "reviewed": return <Badge className="bg-amber-500 text-white" data-testid={`badge-status-${status}`}>Granskas</Badge>;
-    case "resolved": return <Badge className="bg-green-500 text-white" data-testid={`badge-status-${status}`}>Löst</Badge>;
+    case "new": return <Badge className="bg-chart-1 text-white" data-testid={`badge-status-${status}`}>Ny</Badge>;
+    case "reviewed": return <Badge className="bg-chart-4 text-white" data-testid={`badge-status-${status}`}>Granskas</Badge>;
+    case "resolved": return <Badge className="bg-chart-2 text-white" data-testid={`badge-status-${status}`}>Löst</Badge>;
     case "rejected": return <Badge variant="secondary" data-testid={`badge-status-${status}`}>Avvisad</Badge>;
     default: return <Badge variant="outline">{status}</Badge>;
   }
@@ -68,9 +68,9 @@ function getStatusBadge(status: string) {
 function getSeverityBadge(severity: string | null) {
   if (!severity) return null;
   switch (severity) {
-    case "critical": return <Badge className="bg-red-600 text-white text-[10px] px-1.5" data-testid={`badge-severity-${severity}`}>Kritisk</Badge>;
-    case "high": return <Badge className="bg-orange-500 text-white text-[10px] px-1.5" data-testid={`badge-severity-${severity}`}>Hög</Badge>;
-    case "medium": return <Badge className="bg-yellow-500 text-white text-[10px] px-1.5" data-testid={`badge-severity-${severity}`}>Medel</Badge>;
+    case "critical": return <Badge className="bg-destructive text-white text-[10px] px-1.5" data-testid={`badge-severity-${severity}`}>Kritisk</Badge>;
+    case "high": return <Badge className="bg-chart-4 text-white text-[10px] px-1.5" data-testid={`badge-severity-${severity}`}>Hög</Badge>;
+    case "medium": return <Badge className="bg-chart-3 text-white text-[10px] px-1.5" data-testid={`badge-severity-${severity}`}>Medel</Badge>;
     case "low": return <Badge variant="outline" className="text-[10px] px-1.5" data-testid={`badge-severity-${severity}`}>Låg</Badge>;
     default: return null;
   }
@@ -81,7 +81,7 @@ function getCategoryIcon(cat: string) {
     case "antal_karl_andrat": return <Package className="h-4 w-4" />;
     case "skadat_material": return <Wrench className="h-4 w-4" />;
     case "tillganglighet":
-    case "skador": return <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />;
+    case "skador": return <AlertTriangle className="h-4 w-4 text-chart-4" />;
     case "rengorings_behov": return <Trash2 className="h-4 w-4" />;
     default: return <HelpCircle className="h-4 w-4" />;
   }
@@ -247,8 +247,8 @@ export default function CustomerReportsPage() {
       </div>
 
       {objectIdFilter && (
-        <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg text-sm" data-testid="filter-banner-object">
-          <Filter className="h-4 w-4 text-blue-500 shrink-0" />
+        <div className="flex items-center gap-2 p-3 bg-chart-1/10 dark:bg-chart-1/15 rounded-lg text-sm" data-testid="filter-banner-object">
+          <Filter className="h-4 w-4 text-chart-1 shrink-0" />
           <span>Visar rapporter för ett specifikt objekt</span>
           <Button variant="ghost" size="sm" className="ml-auto h-7 text-xs" onClick={clearObjectFilter} data-testid="button-clear-object-filter">
             <X className="h-3 w-3 mr-1" />
@@ -258,21 +258,21 @@ export default function CustomerReportsPage() {
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className={`cursor-pointer hover:shadow-md transition-shadow ${statusFilter === "new" ? "ring-2 ring-blue-500" : ""}`} onClick={() => { setStatusFilter("new"); resetPage(); }} data-testid="stat-new">
+        <Card className={`cursor-pointer hover:shadow-md transition-shadow ${statusFilter === "new" ? "ring-2 ring-chart-1/50" : ""}`} onClick={() => { setStatusFilter("new"); resetPage(); }} data-testid="stat-new">
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-blue-500">{statusCounts["new"] || 0}</p>
+            <p className="text-2xl font-bold text-chart-1">{statusCounts["new"] || 0}</p>
             <p className="text-xs text-muted-foreground">Nya</p>
           </CardContent>
         </Card>
-        <Card className={`cursor-pointer hover:shadow-md transition-shadow ${statusFilter === "reviewed" ? "ring-2 ring-amber-500" : ""}`} onClick={() => { setStatusFilter("reviewed"); resetPage(); }} data-testid="stat-reviewed">
+        <Card className={`cursor-pointer hover:shadow-md transition-shadow ${statusFilter === "reviewed" ? "ring-2 ring-chart-4/50" : ""}`} onClick={() => { setStatusFilter("reviewed"); resetPage(); }} data-testid="stat-reviewed">
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-amber-500">{statusCounts["reviewed"] || 0}</p>
+            <p className="text-2xl font-bold text-chart-4">{statusCounts["reviewed"] || 0}</p>
             <p className="text-xs text-muted-foreground">Under granskning</p>
           </CardContent>
         </Card>
-        <Card className={`cursor-pointer hover:shadow-md transition-shadow ${statusFilter === "resolved" ? "ring-2 ring-green-500" : ""}`} onClick={() => { setStatusFilter("resolved"); resetPage(); }} data-testid="stat-resolved">
+        <Card className={`cursor-pointer hover:shadow-md transition-shadow ${statusFilter === "resolved" ? "ring-2 ring-chart-2/50" : ""}`} onClick={() => { setStatusFilter("resolved"); resetPage(); }} data-testid="stat-resolved">
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-green-500">{statusCounts["resolved"] || 0}</p>
+            <p className="text-2xl font-bold text-chart-2">{statusCounts["resolved"] || 0}</p>
             <p className="text-xs text-muted-foreground">Lösta</p>
           </CardContent>
         </Card>
@@ -391,8 +391,8 @@ export default function CustomerReportsPage() {
                       {getStatusBadge(report.status)}
                       {getSeverityBadge(report.severity)}
                       {report.linkedDeviationId && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 border-orange-300 text-orange-600 dark:text-orange-400" data-testid={`badge-deviation-link-${report.id}`}>
-                          <AlertTriangle className="h-3 w-3 mr-1 text-orange-500 dark:text-orange-400" />
+                        <Badge variant="outline" className="text-[10px] px-1.5 border-chart-4/30 text-chart-4" data-testid={`badge-deviation-link-${report.id}`}>
+                          <AlertTriangle className="h-3 w-3 mr-1 text-chart-4" />
                           Avvikelse
                         </Badge>
                       )}
@@ -483,9 +483,9 @@ export default function CustomerReportsPage() {
               </div>
 
               {selectedReport.linkedDeviationId && (
-                <div className="flex items-center gap-2 p-3 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-lg" data-testid="section-deviation-link">
-                  <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />
-                  <span className="text-sm text-orange-700 dark:text-orange-300">
+                <div className="flex items-center gap-2 p-3 bg-chart-4/10 dark:bg-chart-4/15 border border-chart-4/20 dark:border-chart-4/80 rounded-lg" data-testid="section-deviation-link">
+                  <AlertTriangle className="h-4 w-4 text-chart-4 shrink-0" />
+                  <span className="text-sm text-chart-4">
                     Skapad automatiskt från avvikelserapport
                   </span>
                 </div>
@@ -504,7 +504,7 @@ export default function CustomerReportsPage() {
                     {selectedReport.objectAddress && (
                       <p className="text-xs text-muted-foreground ml-6">{selectedReport.objectAddress}</p>
                     )}
-                    <Link href={`/objects?search=${encodeURIComponent(selectedReport.objectName || "")}`} className="text-xs text-blue-500 hover:underline ml-6 flex items-center gap-1" data-testid="link-goto-object">
+                    <Link href={`/objects?search=${encodeURIComponent(selectedReport.objectName || "")}`} className="text-xs text-chart-1 hover:underline ml-6 flex items-center gap-1" data-testid="link-goto-object">
                       <ExternalLink className="h-3 w-3" /> Visa objekt
                     </Link>
                   </div>
@@ -521,8 +521,8 @@ export default function CustomerReportsPage() {
                         className="block p-4 text-center hover:bg-muted/80 transition-colors"
                         data-testid="link-gps-map"
                       >
-                        <MapPin className="h-8 w-8 mx-auto text-red-500 mb-2" />
-                        <p className="text-sm font-medium text-blue-500 hover:underline flex items-center justify-center gap-1">
+                        <MapPin className="h-8 w-8 mx-auto text-destructive mb-2" />
+                        <p className="text-sm font-medium text-chart-1 hover:underline flex items-center justify-center gap-1">
                           <ExternalLink className="h-3 w-3" />
                           Öppna karta
                         </p>
@@ -564,7 +564,7 @@ export default function CustomerReportsPage() {
                 </p>
                 <div className="space-y-2">
                   <div className="flex items-start gap-3 text-sm">
-                    <div className="mt-1 w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                    <div className="mt-1 w-2 h-2 rounded-full bg-chart-1/15 shrink-0" />
                     <div className="flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium">Rapport skapad</span>
@@ -577,8 +577,8 @@ export default function CustomerReportsPage() {
                   {selectedReport.status !== "new" && (
                     <div className="flex items-start gap-3 text-sm">
                       <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${
-                        selectedReport.status === "reviewed" ? "bg-amber-500" :
-                        selectedReport.status === "resolved" ? "bg-green-500" :
+                        selectedReport.status === "reviewed" ? "bg-chart-4/15" :
+                        selectedReport.status === "resolved" ? "bg-chart-2/15" :
                         "bg-gray-400"
                       }`} />
                       <div className="flex-1">

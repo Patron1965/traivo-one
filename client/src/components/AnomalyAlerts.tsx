@@ -330,11 +330,11 @@ function CostAnomalyItem({ anomaly }: { anomaly: CostAnomaly }) {
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <div 
-        className="p-3 rounded-md border bg-yellow-500/5 border-yellow-500/20"
+        className="p-3 rounded-md border bg-chart-3/15 border-chart-3/50"
         data-testid={`cost-anomaly-${anomaly.orderId}`}
       >
         <div className="flex items-start gap-2">
-          <TrendingUp className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+          <TrendingUp className="h-4 w-4 text-chart-3 mt-0.5 flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-medium text-sm truncate">
@@ -342,7 +342,7 @@ function CostAnomalyItem({ anomaly }: { anomaly: CostAnomaly }) {
               </span>
               <Badge 
                 variant="outline" 
-                className="text-xs border-yellow-500/50 text-yellow-600"
+                className="text-xs border-chart-3/50 text-chart-3"
               >
                 +{anomaly.deviation}%
               </Badge>
@@ -390,11 +390,11 @@ function ImpossibleOrderItem({ order }: { order: WorkOrder }) {
 
   return (
     <div 
-      className="p-3 rounded-md border bg-orange-500/5 border-orange-500/20"
+      className="p-3 rounded-md border bg-chart-4/15 border-chart-4/50"
       data-testid={`impossible-order-${order.id}`}
     >
       <div className="flex items-start gap-2">
-        <Ban className="h-4 w-4 text-orange-600 mt-0.5 flex-shrink-0" />
+        <Ban className="h-4 w-4 text-chart-4 mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium text-sm truncate">
@@ -402,7 +402,7 @@ function ImpossibleOrderItem({ order }: { order: WorkOrder }) {
             </span>
             <Badge 
               variant="outline" 
-              className="text-xs border-orange-500/50 text-orange-600"
+              className="text-xs border-chart-4/50 text-chart-4"
             >
               {reasonLabel}
             </Badge>
@@ -476,15 +476,15 @@ function AlertItem({ alert }: { alert: SetupTimeInsight }) {
         className={`p-3 rounded-md border ${
           alert.severity === "high" 
             ? "bg-destructive/5 border-destructive/20" 
-            : "bg-yellow-500/5 border-yellow-500/20"
+            : "bg-chart-3/15 border-chart-3/50"
         }`}
         data-testid={`alert-item-${alert.id}`}
       >
         <div className="flex items-start gap-2">
           {isOverestimate ? (
-            <TrendingDown className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+            <TrendingDown className="h-4 w-4 text-chart-2 mt-0.5 flex-shrink-0" />
           ) : (
-            <TrendingUp className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+            <TrendingUp className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
           )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -496,7 +496,7 @@ function AlertItem({ alert }: { alert: SetupTimeInsight }) {
                 className={`text-xs ${
                   alert.severity === "high" 
                     ? "border-destructive/50 text-destructive" 
-                    : "border-yellow-500/50 text-yellow-600"
+                    : "border-chart-3/50 text-chart-3"
                 }`}
               >
                 {alert.severity === "high" ? "Kritisk" : "Varning"}

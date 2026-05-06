@@ -867,19 +867,19 @@ export default function AutoClusterPage() {
                   <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">Grupperar objekt per stad. Varje stad blir ett kluster med alla postnummerserier.</p>
                     {missingCityData && missingCityData.totalMissingCity > 0 && (
-                      <div className="p-3 rounded-md border border-amber-300/50 bg-amber-50/50 dark:bg-amber-950/20 space-y-2" data-testid="warning-missing-city">
+                      <div className="p-3 rounded-md border border-chart-4/30 bg-chart-4/10 dark:bg-chart-4/15 space-y-2" data-testid="warning-missing-city">
                         <div className="flex items-center gap-2">
-                          <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0" />
-                          <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                          <AlertTriangle className="h-4 w-4 text-chart-4 shrink-0" />
+                          <span className="text-sm font-medium text-chart-4">
                             {missingCityData.totalMissingCity.toLocaleString("sv")} objekt saknar stad och kommer exkluderas från klustringen
                           </span>
                         </div>
-                        <p className="text-xs text-orange-500 dark:text-orange-400 ml-6">
+                        <p className="text-xs text-chart-4 ml-6">
                           Dessa objekt hamnar i "Okänd stad" och kan inte tilldelas till något kluster. Du kan fylla i stad automatiskt via postnummeruppslag eller geocoding.
                         </p>
                         {batchFillCityResult ? (
-                          <div className="ml-6 p-2 rounded bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
-                            <div className="flex items-center gap-1.5 text-sm text-green-700 dark:text-green-400">
+                          <div className="ml-6 p-2 rounded bg-chart-2/10 dark:bg-chart-2/15 border border-chart-2/20 dark:border-chart-2/80">
+                            <div className="flex items-center gap-1.5 text-sm text-chart-2">
                               <Check className="h-3.5 w-3.5" />
                               {batchFillCityResult.updated} objekt fick stad ifylld.
                               {batchFillCityResult.remaining > 0 && ` ${batchFillCityResult.remaining} kvarstår.`}
@@ -889,7 +889,7 @@ export default function AutoClusterPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="ml-6 text-amber-700 border-amber-300 hover:bg-amber-100 dark:text-amber-300 dark:border-amber-700 dark:hover:bg-amber-950/40"
+                            className="ml-6 text-chart-4 border-chart-4/30 hover:bg-chart-4/15 dark:border-chart-4/70 dark:hover:bg-chart-4/15"
                             onClick={handleBatchFillCityFromCluster}
                             disabled={batchFillCityRunning}
                             data-testid="button-fill-city-from-cluster"
@@ -1086,8 +1086,8 @@ export default function AutoClusterPage() {
 
             <div className="border rounded-lg overflow-hidden">
               {overlappingPairs.length > 0 && (
-                <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 px-3 py-2 flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-orange-500 dark:text-orange-400" />
+                <div className="bg-chart-4/10 dark:bg-chart-4/15 border-b border-chart-4/20 dark:border-chart-4/80 px-3 py-2 flex items-center gap-2 text-sm text-chart-4">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-chart-4" />
                   <span>{overlappingPairs.length} klusterpar överlappar geografiskt</span>
                 </div>
               )}
@@ -1176,7 +1176,7 @@ export default function AutoClusterPage() {
                               title="Dubbelklicka för att byta namn"
                             >
                               <span className="truncate">{s.name}</span>
-                              {overlappingIds.has(s.id) && <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400 shrink-0" title="Överlappar med annat kluster" />}
+                              {overlappingIds.has(s.id) && <AlertTriangle className="h-3 w-3 text-chart-4 shrink-0" title="Överlappar med annat kluster" />}
                               <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
                             </div>
                           )}
@@ -1202,12 +1202,12 @@ export default function AutoClusterPage() {
           </div>
 
           {generatedResult!.unclusteredObjects && generatedResult!.unclusteredObjects.count > 0 && (
-            <Card className="border-amber-300/30 bg-amber-50/50 dark:bg-amber-950/20">
+            <Card className="border-chart-4/30 bg-chart-4/10 dark:bg-chart-4/15">
               <CardContent className="py-4 space-y-4">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-2">
-                    <Info className="h-4 w-4 text-orange-500 dark:text-orange-400" />
-                    <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                    <Info className="h-4 w-4 text-chart-4" />
+                    <span className="text-sm font-medium text-chart-4">
                       {generatedResult!.unclusteredObjects.count.toLocaleString("sv")} objekt utan stad
                     </span>
                   </div>
@@ -1316,11 +1316,11 @@ export default function AutoClusterPage() {
           )}
 
           {recentAssignments.length > 0 && (
-            <Card className="border-blue-300/30 bg-blue-50/50 dark:bg-blue-950/20">
+            <Card className="border-chart-1/30 bg-chart-1/10 dark:bg-chart-1/15">
               <CardContent className="py-4 space-y-3">
                 <div className="flex items-center gap-2">
-                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                  <Info className="h-4 w-4 text-chart-1" />
+                  <span className="text-sm font-medium text-chart-1">
                     Senaste tilldelningar — flytta om det automatiska blev fel
                   </span>
                 </div>
@@ -1375,7 +1375,7 @@ export default function AutoClusterPage() {
                             ({Math.round((generatedResult!.suggestions.filter(s => selectedSuggestions.has(s.id)).reduce((sum, s) => sum + s.objectCount, 0) / generatedResult!.summary.totalObjects) * 100)}% av {generatedResult!.summary.totalObjects.toLocaleString("sv")} totalt)
                           </span>
                           {(generatedResult!.unclusteredObjects?.count || 0) > 0 && (
-                            <span className="text-orange-500 dark:text-orange-400">
+                            <span className="text-chart-4">
                               {generatedResult!.unclusteredObjects!.count.toLocaleString("sv")} utan stad
                             </span>
                           )}
@@ -1386,8 +1386,8 @@ export default function AutoClusterPage() {
                       )}
                     </div>
                     {overlappingPairs.length > 0 && (
-                      <div className="flex items-center gap-1 text-orange-500 dark:text-orange-400">
-                        <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />
+                      <div className="flex items-center gap-1 text-chart-4">
+                        <AlertTriangle className="h-3 w-3 text-chart-4" />
                         <span>{overlappingPairs.length} överlappningar</span>
                       </div>
                     )}
@@ -1404,17 +1404,17 @@ export default function AutoClusterPage() {
       )}
 
       {applyMutation.isSuccess && applyMutation.data && (
-        <Card className="border-green-500/20 bg-green-50 dark:bg-green-950/20">
+        <Card className="border-chart-2/50 bg-chart-2/10 dark:bg-chart-2/15">
           <CardContent className="py-4">
-            <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+            <div className="flex items-center gap-2 text-chart-2">
               <Check className="h-5 w-5" />
               <span className="font-medium">{applyMutation.data.message}</span>
             </div>
             {applyMutation.data.errors && applyMutation.data.errors.length > 0 && (
               <div className="mt-2 space-y-1">
                 {applyMutation.data.errors.map((err, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm text-orange-500 dark:text-orange-400">
-                    <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />
+                  <div key={i} className="flex items-center gap-2 text-sm text-chart-4">
+                    <AlertTriangle className="h-3 w-3 text-chart-4" />
                     {err}
                   </div>
                 ))}

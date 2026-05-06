@@ -162,7 +162,7 @@ function ShareFieldAppButton() {
                 onClick={handleCopy}
                 data-testid="button-copy-field-url"
               >
-                {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                {copied ? <Check className="h-4 w-4 text-chart-2" /> : <Copy className="h-4 w-4" />}
               </Button>
             </div>
             
@@ -208,10 +208,10 @@ const competencyLabels: Record<string, string> = Object.fromEntries(
 );
 
 const availabilityOptions = [
-  { value: "available", label: "Tillgänglig", color: "bg-green-500" },
-  { value: "vacation", label: "Semester", color: "bg-blue-500" },
-  { value: "sick", label: "Sjuk", color: "bg-red-500" },
-  { value: "training", label: "Utbildning", color: "bg-yellow-500" },
+  { value: "available", label: "Tillgänglig", color: "bg-chart-2/15" },
+  { value: "vacation", label: "Semester", color: "bg-chart-1/15" },
+  { value: "sick", label: "Sjuk", color: "bg-destructive/15" },
+  { value: "training", label: "Utbildning", color: "bg-chart-3/15" },
   { value: "other", label: "Annat", color: "bg-gray-500" },
 ];
 
@@ -582,7 +582,7 @@ export default function ResourcesPage() {
     <div className="space-y-6 p-6">
       <PageHeader icon={Users} title={t("resource_plural")} description={`${resources.length} tekniker registrerade`}>
         <Badge variant="secondary" className="text-xs font-normal gap-1">
-          <CircleCheck className="h-3 w-3 text-green-600 dark:text-green-400" />
+          <CircleCheck className="h-3 w-3 text-chart-2" />
           {teamStats.availableToday} tillgängliga idag
         </Badge>
         <Badge variant="outline" className="text-xs font-normal gap-1">
@@ -721,7 +721,7 @@ export default function ResourcesPage() {
                         </Badge>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${availOption?.color || "bg-green-500"}`} />
+                            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${availOption?.color || "bg-chart-2/15"}`} />
                           </TooltipTrigger>
                           <TooltipContent><p>{availOption?.label || "Tillgänglig"}</p></TooltipContent>
                         </Tooltip>
@@ -826,7 +826,7 @@ export default function ResourcesPage() {
                       </div>
                       <Progress
                         value={workloadPercent}
-                        className={workloadPercent > 90 ? "[&>div]:bg-destructive" : workloadPercent > 70 ? "[&>div]:bg-amber-500" : ""}
+                        className={workloadPercent > 90 ? "[&>div]:bg-destructive/15" : workloadPercent > 70 ? "[&>div]:bg-chart-4/15" : ""}
                       />
                       {resourceJobs.length > 0 && (
                         <div className="text-xs text-muted-foreground mt-1">
@@ -1047,7 +1047,7 @@ export default function ResourcesPage() {
                 />
               </div>
               {!formData.phone && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
+                <p className="text-xs text-chart-4">
                   Lägg till ett telefonnummer för att kunna skicka SMS.
                 </p>
               )}
@@ -1342,7 +1342,7 @@ export default function ResourcesPage() {
             <AlertDialogCancel>Avbryt</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => resourceToDelete && deleteMutation.mutate(resourceToDelete.id)}
-              className="bg-destructive text-destructive-foreground"
+              className="bg-destructive/15 text-destructive-foreground"
               data-testid="button-confirm-delete-resource"
             >
               {deleteMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

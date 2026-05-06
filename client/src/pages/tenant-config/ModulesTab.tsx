@@ -76,9 +76,9 @@ export function ModulesTab() {
 
   const tierColors: Record<string, string> = {
     basic: "border-gray-300 bg-gray-50 dark:bg-gray-900",
-    standard: "border-blue-300 bg-blue-50 dark:bg-blue-900/20",
-    premium: "border-amber-300 bg-amber-50 dark:bg-amber-900/20",
-    custom: "border-purple-300 bg-purple-50 dark:bg-purple-900/20",
+    standard: "border-chart-1/30 bg-chart-1/10 dark:bg-chart-1/15",
+    premium: "border-chart-4/30 bg-chart-4/10 dark:bg-chart-4/15",
+    custom: "border-chart-5/30 bg-chart-5/10 dark:bg-chart-5/15",
   };
 
   const tierIcons: Record<string, typeof Crown> = {
@@ -93,7 +93,7 @@ export function ModulesTab() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Crown className="h-5 w-5 text-amber-500" />
+            <Crown className="h-5 w-5 text-chart-4" />
             Paketval
           </CardTitle>
         </CardHeader>

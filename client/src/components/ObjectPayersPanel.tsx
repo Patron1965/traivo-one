@@ -188,7 +188,7 @@ export function ObjectPayersPanel({ object, controlled, open: controlledOpen, on
                   <CardHeader className="py-3 px-4">
                     <div className="flex items-center justify-between gap-2">
                       <CardTitle className="text-sm font-medium flex items-center gap-1">
-                        {payer.isPrimary && <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />}
+                        {payer.isPrimary && <Star className="w-4 h-4 text-chart-3 fill-chart-3" />}
                         {getCustomerName(payer.customerId)}
                         {payer.payerLabel && (
                           <Badge variant="outline" className="text-xs ml-1">
@@ -199,7 +199,7 @@ export function ObjectPayersPanel({ object, controlled, open: controlledOpen, on
                       </CardTitle>
                       <div className="flex items-center gap-1">
                         {payer.isPrimary && (
-                          <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 text-xs">
+                          <Badge className="bg-chart-3/15 text-chart-3 dark:bg-chart-3/15 text-xs">
                             Primär
                           </Badge>
                         )}

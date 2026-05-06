@@ -77,13 +77,13 @@ function CapacityBar({ label, current, max, isNew }: { label: string; current: n
     <div className="space-y-1">
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted-foreground">{label}</span>
-        <span className={`font-medium ${overbooked ? "text-red-600 dark:text-red-400" : isNew ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`}>
+        <span className={`font-medium ${overbooked ? "text-destructive" : isNew ? "text-chart-1" : "text-muted-foreground"}`}>
           {current.toFixed(1)}h / {max}h
         </span>
       </div>
       <Progress
         value={Math.min(pct, 100)}
-        className={`h-2 ${overbooked ? "[&>div]:bg-red-500" : pct > 85 ? "[&>div]:bg-orange-500" : pct > 65 ? "[&>div]:bg-yellow-500" : "[&>div]:bg-green-500"}`}
+        className={`h-2 ${overbooked ? "[&>div]:bg-destructive/15" : pct > 85 ? "[&>div]:bg-chart-4/15" : pct > 65 ? "[&>div]:bg-chart-3/15" : "[&>div]:bg-chart-2/15"}`}
       />
     </div>
   );
@@ -100,7 +100,7 @@ export function WhatIfPreview({ open, onOpenChange, result, loading, jobTitle, o
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" data-testid="what-if-preview-dialog">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2" data-testid="what-if-title">
-            <Info className="h-5 w-5 text-blue-500" />
+            <Info className="h-5 w-5 text-chart-1" />
             Konsekvensanalys
           </DialogTitle>
           <p className="text-sm text-muted-foreground mt-1">
@@ -118,23 +118,23 @@ export function WhatIfPreview({ open, onOpenChange, result, loading, jobTitle, o
         {!loading && result && (
           <div className="space-y-4" data-testid="what-if-results">
             {noIssues && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800" data-testid="what-if-no-issues">
-                <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" />
-                <span className="text-sm text-green-700 dark:text-green-300">Inga konflikter — flytten ser bra ut!</span>
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-chart-2/10 dark:bg-chart-2/15 border border-chart-2/20 dark:border-chart-2/80" data-testid="what-if-no-issues">
+                <CheckCircle2 className="h-5 w-5 text-chart-2 shrink-0" />
+                <span className="text-sm text-chart-2">Inga konflikter — flytten ser bra ut!</span>
               </div>
             )}
 
             {hardViolations.length > 0 && (
               <div className="space-y-2" data-testid="what-if-hard-violations">
                 <div className="flex items-center gap-2">
-                  <XCircle className="h-4 w-4 text-red-500" />
-                  <span className="text-sm font-medium text-red-700 dark:text-red-400">Hårda begränsningar ({hardViolations.length})</span>
+                  <XCircle className="h-4 w-4 text-destructive" />
+                  <span className="text-sm font-medium text-destructive">Hårda begränsningar ({hardViolations.length})</span>
                 </div>
                 <div className="space-y-1.5">
                   {hardViolations.map((v, i) => (
-                    <div key={i} className="flex items-start gap-2 p-2 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" data-testid={`what-if-violation-hard-${i}`}>
-                      <ShieldAlert className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
-                      <span className="text-xs text-red-700 dark:text-red-300">{v.description}</span>
+                    <div key={i} className="flex items-start gap-2 p-2 rounded bg-destructive/10 dark:bg-destructive/15 border border-destructive/20 dark:border-destructive/80" data-testid={`what-if-violation-hard-${i}`}>
+                      <ShieldAlert className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                      <span className="text-xs text-destructive">{v.description}</span>
                     </div>
                   ))}
                 </div>
@@ -144,14 +144,14 @@ export function WhatIfPreview({ open, onOpenChange, result, loading, jobTitle, o
             {softViolations.length > 0 && (
               <div className="space-y-2" data-testid="what-if-soft-violations">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-500" />
-                  <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Varningar ({softViolations.length})</span>
+                  <AlertTriangle className="h-4 w-4 text-chart-4" />
+                  <span className="text-sm font-medium text-chart-4">Varningar ({softViolations.length})</span>
                 </div>
                 <div className="space-y-1.5">
                   {softViolations.map((v, i) => (
-                    <div key={i} className="flex items-start gap-2 p-2 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800" data-testid={`what-if-violation-soft-${i}`}>
-                      <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                      <span className="text-xs text-amber-700 dark:text-amber-300">{v.description}</span>
+                    <div key={i} className="flex items-start gap-2 p-2 rounded bg-chart-4/10 dark:bg-chart-4/15 border border-chart-4/20 dark:border-chart-4/80" data-testid={`what-if-violation-soft-${i}`}>
+                      <AlertTriangle className="h-4 w-4 text-chart-4 shrink-0 mt-0.5" />
+                      <span className="text-xs text-chart-4">{v.description}</span>
                     </div>
                   ))}
                 </div>
@@ -164,7 +164,7 @@ export function WhatIfPreview({ open, onOpenChange, result, loading, jobTitle, o
               {result.capacityImpact.source && (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-xs">
-                    <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-950/30 border-green-300 dark:border-green-700 text-green-700 dark:text-green-300">
+                    <Badge variant="outline" className="text-xs bg-chart-2/10 dark:bg-chart-2/15 border-chart-2/30 dark:border-chart-2/70 text-chart-2">
                       Frigör {result.capacityImpact.source.freed.toFixed(1)}h
                     </Badge>
                     <span className="text-muted-foreground">{result.capacityImpact.source.resourceName} ({result.capacityImpact.source.date})</span>
@@ -185,8 +185,8 @@ export function WhatIfPreview({ open, onOpenChange, result, loading, jobTitle, o
                 )}
                 <div className="flex items-center gap-2 text-xs">
                   <Badge variant="outline" className={`text-xs ${result.capacityImpact.target.overbooked
-                    ? "bg-red-50 dark:bg-red-950/30 border-red-300 dark:border-red-700 text-red-700 dark:text-red-300"
-                    : "bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300"
+                    ? "bg-destructive/10 dark:bg-destructive/15 border-destructive/30 dark:border-destructive/70 text-destructive"
+                    : "bg-chart-1/10 dark:bg-chart-1/15 border-chart-1/30 dark:border-chart-1/70 text-chart-1"
                   }`}>
                     +{result.jobDuration.toFixed(1)}h
                   </Badge>
@@ -215,7 +215,7 @@ export function WhatIfPreview({ open, onOpenChange, result, loading, jobTitle, o
                         {o.scheduledStartTime && <span className="text-muted-foreground">{o.scheduledStartTime}</span>}
                         <span className="text-muted-foreground">{(o.estimatedDuration / 60).toFixed(1)}h</span>
                         {o.etaDeltaMinutes !== null && o.etaDeltaMinutes > 0 && (
-                          <Badge variant="outline" className="text-[10px] px-1 py-0 bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300" data-testid={`what-if-eta-delta-${o.id}`}>
+                          <Badge variant="outline" className="text-[10px] px-1 py-0 bg-chart-4/10 dark:bg-chart-4/15 border-chart-4/30 dark:border-chart-4/70 text-chart-4" data-testid={`what-if-eta-delta-${o.id}`}>
                             +{o.etaDeltaMinutes}min
                           </Badge>
                         )}
@@ -229,23 +229,23 @@ export function WhatIfPreview({ open, onOpenChange, result, loading, jobTitle, o
             {result.slaRisks && result.slaRisks.length > 0 && (
               <div className="space-y-2" data-testid="what-if-sla-risks">
                 <div className="flex items-center gap-2">
-                  <ShieldAlert className="h-4 w-4 text-orange-500" />
-                  <span className="text-sm font-medium text-orange-700 dark:text-orange-400">SLA-risker ({result.slaRisks.length})</span>
+                  <ShieldAlert className="h-4 w-4 text-chart-4" />
+                  <span className="text-sm font-medium text-chart-4">SLA-risker ({result.slaRisks.length})</span>
                 </div>
                 <div className="space-y-1.5">
                   {result.slaRisks.map((r) => (
                     <div key={r.workOrderId} className={`flex items-center justify-between text-xs p-2 rounded border ${
                       r.risk === "high"
-                        ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
-                        : "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"
+                        ? "bg-destructive/10 dark:bg-destructive/15 border-destructive/20 dark:border-destructive/80"
+                        : "bg-chart-4/10 dark:bg-chart-4/15 border-chart-4/20 dark:border-chart-4/80"
                     }`} data-testid={`what-if-sla-risk-${r.workOrderId}`}>
                       <span className="truncate mr-2">{r.title}</span>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-muted-foreground">Deadline: {r.deadline}</span>
                         <Badge variant="outline" className={`text-[10px] px-1 py-0 ${
                           r.risk === "high"
-                            ? "bg-red-100 dark:bg-red-900/30 border-red-400 dark:border-red-600 text-red-700 dark:text-red-300"
-                            : "bg-amber-100 dark:bg-amber-900/30 border-amber-400 dark:border-amber-600 text-amber-700 dark:text-amber-300"
+                            ? "bg-destructive/15 dark:bg-destructive/15 border-destructive/40 dark:border-destructive/60 text-destructive"
+                            : "bg-chart-4/15 dark:bg-chart-4/15 border-chart-4/40 dark:border-chart-4/60 text-chart-4"
                         }`}>
                           {r.daysRemaining < 0 ? `${Math.abs(r.daysRemaining)}d försenad` : `${r.daysRemaining}d kvar`}
                         </Badge>
@@ -266,7 +266,7 @@ export function WhatIfPreview({ open, onOpenChange, result, loading, jobTitle, o
             onClick={onConfirm}
             disabled={loading || !result || hasHardViolations}
             variant={hasHardViolations ? "destructive" : softViolations.length > 0 ? "default" : "default"}
-            className={!hasHardViolations && softViolations.length === 0 && result ? "bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600" : ""}
+            className={!hasHardViolations && softViolations.length === 0 && result ? "bg-chart-2/15 hover:bg-chart-2/15 dark:bg-chart-2/15 dark:hover:bg-chart-2/15" : ""}
             data-testid="what-if-confirm"
           >
             {loading ? "Analyserar..." : !result ? "Väntar..." : hasHardViolations ? "Blockerad" : softViolations.length > 0 ? "Flytta ändå" : "Bekräfta flytt"}

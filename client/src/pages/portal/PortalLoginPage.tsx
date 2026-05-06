@@ -117,8 +117,8 @@ export default function PortalLoginPage() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
-              <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-chart-2/15 dark:bg-chart-2/15">
+              <CheckCircle className="h-8 w-8 text-chart-2" />
             </div>
             <CardTitle>Kolla din e-post</CardTitle>
             <CardDescription className="mt-2">

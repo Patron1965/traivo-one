@@ -371,7 +371,7 @@ export default function MonitorPopoutPage() {
               <Popup>
                 <div className="text-sm min-w-[180px]">
                   <p className="font-semibold text-base">{resource.name}</p>
-                  <p className={stale ? "text-red-600" : "text-muted-foreground"}>
+                  <p className={stale ? "text-destructive" : "text-muted-foreground"}>
                     {statusLabels[resource.status || ""] || "Okänd"}
                     {stale && " (Inaktuell)"}
                   </p>
@@ -503,7 +503,7 @@ export default function MonitorPopoutPage() {
           <img src="/traivo-icon.png" alt="" className="h-5 w-5" onError={e => (e.currentTarget.style.display = "none")} />
           <span className="font-semibold text-sm">Kartövervakning</span>
           <div className="w-px h-4 bg-border" />
-          <div className={`flex items-center gap-1 text-xs ${wsConnected ? "text-green-600" : "text-red-500"}`}>
+          <div className={`flex items-center gap-1 text-xs ${wsConnected ? "text-chart-2" : "text-destructive"}`}>
             {wsConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
             {wsConnected ? "Live" : "Offline"}
           </div>
@@ -519,10 +519,10 @@ export default function MonitorPopoutPage() {
         </div>
         <button
           onClick={() => setUrgentDialogOpen(true)}
-          className="bg-red-600 text-white rounded-lg shadow-lg px-3 py-2 hover:bg-red-700 transition-colors flex items-center gap-1.5 text-xs font-medium"
+          className="bg-destructive text-white rounded-lg shadow-lg px-3 py-2 hover:bg-destructive transition-colors flex items-center gap-1.5 text-xs font-medium"
           data-testid="button-open-urgent-job"
         >
-          <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+          <AlertTriangle className="h-4 w-4 text-chart-4" />
           Akut jobb
         </button>
         <button

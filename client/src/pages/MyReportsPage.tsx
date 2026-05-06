@@ -22,10 +22,10 @@ const statusLabels: Record<string, string> = {
 };
 
 const statusColors: Record<string, string> = {
-  new: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-  reviewed: "bg-amber-500/10 text-amber-500 border-amber-500/20",
-  converted: "bg-green-500/10 text-green-500 border-green-500/20",
-  rejected: "bg-red-500/10 text-red-500 border-red-500/20",
+  new: "bg-chart-1/15 text-chart-1 border-chart-1/50",
+  reviewed: "bg-chart-4/15 text-chart-4 border-chart-4/50",
+  converted: "bg-chart-2/15 text-chart-2 border-chart-2/50",
+  rejected: "bg-destructive/15 text-destructive border-destructive/50",
 };
 
 const statusIcons: Record<string, typeof Clock> = {

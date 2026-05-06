@@ -113,7 +113,7 @@ export function WorkOrderMetadataPanel({
         {metadataPreview.leave && isCompleted && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Badge variant="outline" className="gap-0.5 text-[10px] h-4 px-1 text-green-600 border-green-300">
+              <Badge variant="outline" className="gap-0.5 text-[10px] h-4 px-1 text-chart-2 border-chart-2/30">
                 <CheckCircle2 className="h-2.5 w-2.5" />
                 {metadataPreview.leave.katalogName}: auto-sparad
               </Badge>
@@ -122,7 +122,7 @@ export function WorkOrderMetadataPanel({
           </Tooltip>
         )}
         {writebackDone && !isCompleted && (
-          <Badge variant="outline" className="gap-0.5 text-[10px] h-4 px-1 text-green-600 border-green-300">
+          <Badge variant="outline" className="gap-0.5 text-[10px] h-4 px-1 text-chart-2 border-chart-2/30">
             <CheckCircle2 className="h-2.5 w-2.5" />
             Sparad
           </Badge>
@@ -240,7 +240,7 @@ export function WorkOrderMetadataPanel({
         )}
 
         {writebackDone && (
-          <div className="flex items-center gap-1 text-xs text-green-600" data-testid={`text-writeback-done-${workOrderId}`}>
+          <div className="flex items-center gap-1 text-xs text-chart-2" data-testid={`text-writeback-done-${workOrderId}`}>
             <CheckCircle2 className="h-3 w-3" />
             Metadata sparad
           </div>

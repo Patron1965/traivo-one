@@ -115,7 +115,7 @@ export default function BookingSlotsAdminPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <Calendar className="h-5 w-5 text-blue-500" />
+              <Calendar className="h-5 w-5 text-chart-1" />
               <div>
                 <div className="text-2xl font-bold">{slots.length}</div>
                 <div className="text-xs text-muted-foreground">Aktiva slots</div>
@@ -126,7 +126,7 @@ export default function BookingSlotsAdminPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
+              <CheckCircle2 className="h-5 w-5 text-chart-2" />
               <div>
                 <div className="text-2xl font-bold">{bookings.filter((b: any) => b.status === "confirmed").length}</div>
                 <div className="text-xs text-muted-foreground">Bekräftade</div>
@@ -137,7 +137,7 @@ export default function BookingSlotsAdminPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <Clock className="h-5 w-5 text-amber-500" />
+              <Clock className="h-5 w-5 text-chart-4" />
               <div>
                 <div className="text-2xl font-bold">{bookings.filter((b: any) => b.status === "pending").length}</div>
                 <div className="text-xs text-muted-foreground">Väntande</div>
@@ -357,9 +357,9 @@ export default function BookingSlotsAdminPage() {
                   <CardContent className="p-3 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className={`w-2 h-2 rounded-full ${
-                        booking.status === "confirmed" ? "bg-green-500" :
-                        booking.status === "cancelled" ? "bg-red-500" :
-                        booking.status === "pending" ? "bg-amber-500" : "bg-gray-400"
+                        booking.status === "confirmed" ? "bg-chart-2/15" :
+                        booking.status === "cancelled" ? "bg-destructive/15" :
+                        booking.status === "pending" ? "bg-chart-4/15" : "bg-gray-400"
                       }`} />
                       <div>
                         <span className="font-medium">{booking.customerName || "Okänd kund"}</span>

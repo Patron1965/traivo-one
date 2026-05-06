@@ -171,18 +171,18 @@ export default function InspectionSearchPage() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "ok": return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-      case "warning": return <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />;
-      case "error": return <AlertCircle className="h-4 w-4 text-red-500" />;
+      case "ok": return <CheckCircle2 className="h-4 w-4 text-chart-2" />;
+      case "warning": return <AlertTriangle className="h-4 w-4 text-chart-4" />;
+      case "error": return <AlertCircle className="h-4 w-4 text-destructive" />;
       default: return null;
     }
   };
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, string> = {
-      ok: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-      warning: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
-      error: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+      ok: "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15",
+      warning: "bg-chart-4/15 text-chart-4 dark:bg-chart-4/15",
+      error: "bg-destructive/15 text-destructive dark:bg-destructive/15",
     };
     return (
       <Badge className={`${variants[status] || ""} gap-1`} data-testid={`badge-status-${status}`}>
@@ -197,7 +197,7 @@ export default function InspectionSearchPage() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
-            <ClipboardCheck className="h-6 w-6 text-teal-600" />
+            <ClipboardCheck className="h-6 w-6 text-chart-2" />
             Besiktningsresultat
           </h1>
           <p className="text-muted-foreground mt-1">Sök, filtrera och agera på besiktningsdata</p>
@@ -229,7 +229,7 @@ export default function InspectionSearchPage() {
         </Card>
         <Card data-testid="card-stat-ok">
           <CardContent className="p-4 text-center">
-            <p className="text-3xl font-bold text-green-600">{stats.ok}</p>
+            <p className="text-3xl font-bold text-chart-2">{stats.ok}</p>
             <p className="text-sm text-muted-foreground flex items-center justify-center gap-1">
               <CheckCircle2 className="h-3 w-3" /> OK
             </p>
@@ -237,15 +237,15 @@ export default function InspectionSearchPage() {
         </Card>
         <Card data-testid="card-stat-warning">
           <CardContent className="p-4 text-center">
-            <p className="text-3xl font-bold text-amber-600">{stats.warnings}</p>
+            <p className="text-3xl font-bold text-chart-4">{stats.warnings}</p>
             <p className="text-sm text-muted-foreground flex items-center justify-center gap-1">
-              <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" /> Varning
+              <AlertTriangle className="h-3 w-3 text-chart-4" /> Varning
             </p>
           </CardContent>
         </Card>
         <Card data-testid="card-stat-error">
           <CardContent className="p-4 text-center">
-            <p className="text-3xl font-bold text-red-600">{stats.errors}</p>
+            <p className="text-3xl font-bold text-destructive">{stats.errors}</p>
             <p className="text-sm text-muted-foreground flex items-center justify-center gap-1">
               <AlertCircle className="h-3 w-3" /> Fel
             </p>

@@ -64,16 +64,16 @@ function RecommendationCard({ recommendation, onApply }: { recommendation: AIRec
     insight: TrendingUp,
   };
   const colorMap = {
-    optimization: "text-purple-500",
-    warning: "text-amber-500",
-    suggestion: "text-blue-500",
-    insight: "text-green-500",
+    optimization: "text-chart-5",
+    warning: "text-chart-4",
+    suggestion: "text-chart-1",
+    insight: "text-chart-2",
   };
   const bgMap = {
-    optimization: "bg-purple-500/10",
-    warning: "bg-amber-500/10",
-    suggestion: "bg-blue-500/10",
-    insight: "bg-green-500/10",
+    optimization: "bg-chart-5/15",
+    warning: "bg-chart-4/15",
+    suggestion: "bg-chart-1/15",
+    insight: "bg-chart-2/15",
   };
 
   const Icon = iconMap[recommendation.type];
@@ -104,7 +104,7 @@ function RecommendationCard({ recommendation, onApply }: { recommendation: AIRec
                   </span>
                 )}
                 {recommendation.savings && (
-                  <span className="text-green-600">
+                  <span className="text-chart-2">
                     <ArrowDownRight className="h-3 w-3 inline mr-1" />
                     {recommendation.savings}
                   </span>
@@ -133,10 +133,10 @@ function RecommendationCard({ recommendation, onApply }: { recommendation: AIRec
 }
 
 function WeatherIcon({ condition }: { condition: string }) {
-  if (condition.includes("rain")) return <CloudRain className="h-4 w-4 text-blue-500" />;
+  if (condition.includes("rain")) return <CloudRain className="h-4 w-4 text-chart-1" />;
   if (condition.includes("cloud")) return <Cloud className="h-4 w-4 text-gray-400" />;
-  if (condition.includes("wind")) return <Wind className="h-4 w-4 text-cyan-500" />;
-  return <Sun className="h-4 w-4 text-amber-500" />;
+  if (condition.includes("wind")) return <Wind className="h-4 w-4 text-chart-3" />;
+  return <Sun className="h-4 w-4 text-chart-4" />;
 }
 
 export default function AIPlanningPage() {
@@ -191,7 +191,7 @@ export default function AIPlanningPage() {
         <PageHeader icon={Sparkles} title="AI Planeringsassistent" />
         <div className="flex items-center justify-center py-16">
           <div className="text-center space-y-3">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto text-purple-500" />
+            <Loader2 className="h-8 w-8 animate-spin mx-auto text-chart-5" />
             <p className="text-muted-foreground">Analyserar planering...</p>
           </div>
         </div>
@@ -206,7 +206,7 @@ export default function AIPlanningPage() {
         <Card>
           <CardContent className="p-8">
             <div className="flex items-center gap-3">
-              <AlertTriangle className="h-6 w-6 text-orange-500 dark:text-orange-400 flex-shrink-0" />
+              <AlertTriangle className="h-6 w-6 text-chart-4 flex-shrink-0" />
               <div>
                 <p className="font-medium">Kunde inte hämta analysdata</p>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -277,10 +277,10 @@ export default function AIPlanningPage() {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div className="text-sm text-muted-foreground">Oplanerade</div>
-              <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+              <AlertTriangle className="h-4 w-4 text-chart-4" />
             </div>
             <div className="text-2xl font-bold mt-1">{analysis.summary.unplannedOrders}</div>
-            <div className="text-xs text-amber-600">
+            <div className="text-xs text-chart-4">
               Kräver tilldelning
             </div>
           </CardContent>
@@ -307,14 +307,14 @@ export default function AIPlanningPage() {
             <Progress value={analysis.summary.resourceUtilization} className="mt-2 h-1.5" />
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-purple-500/10 to-blue-500/10 border-purple-500/20">
+        <Card className="bg-gradient-to-br from-chart-5 to-chart-1 border-chart-5/50">
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div className="text-sm text-muted-foreground">Potential</div>
-              <Zap className="h-4 w-4 text-purple-500" />
+              <Zap className="h-4 w-4 text-chart-5" />
             </div>
-            <div className="text-2xl font-bold mt-1 text-purple-600">-{analysis.routeOptimization.savingsPercent}%</div>
-            <div className="text-xs text-purple-600">
+            <div className="text-2xl font-bold mt-1 text-chart-5">-{analysis.routeOptimization.savingsPercent}%</div>
+            <div className="text-xs text-chart-5">
               Möjlig körtidsbesparing
             </div>
           </CardContent>
@@ -347,10 +347,10 @@ export default function AIPlanningPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               {analysis.recommendations.length === 0 ? (
-                <div className="flex items-center gap-3 p-4 rounded-md bg-green-500/10 border border-green-500/20">
-                  <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />
+                <div className="flex items-center gap-3 p-4 rounded-md bg-chart-2/15 border border-chart-2/50">
+                  <CheckCircle2 className="h-5 w-5 text-chart-2 flex-shrink-0" />
                   <div>
-                    <p className="text-sm font-medium text-green-700 dark:text-green-400">Allt ser bra ut</p>
+                    <p className="text-sm font-medium text-chart-2">Allt ser bra ut</p>
                     <p className="text-xs text-muted-foreground mt-0.5">Inga rekommendationer just nu. Planeringen verkar vara i balans.</p>
                   </div>
                 </div>
@@ -402,13 +402,13 @@ export default function AIPlanningPage() {
                       <div className="relative h-3 bg-muted rounded-full overflow-hidden">
                         <div 
                           className={`h-full transition-all ${
-                            isOverloaded ? "bg-red-500" : isLow ? "bg-amber-400" : "bg-primary"
+                            isOverloaded ? "bg-destructive/15" : isLow ? "bg-chart-4/40" : "bg-primary"
                           }`}
                           style={{ width: `${Math.min(utilizationPercent, 100)}%` }}
                         />
                         {isOverloaded && (
                           <div 
-                            className="absolute top-0 h-full bg-red-300/50"
+                            className="absolute top-0 h-full bg-destructive/30"
                             style={{ left: "100%", width: `${utilizationPercent - 100}%` }}
                           />
                         )}
@@ -425,11 +425,11 @@ export default function AIPlanningPage() {
                     Normal (60-100%)
                   </div>
                   <div className="flex items-center gap-1">
-                    <div className="h-3 w-3 rounded-full bg-amber-400" />
+                    <div className="h-3 w-3 rounded-full bg-chart-4/40" />
                     Låg (&lt;60%)
                   </div>
                   <div className="flex items-center gap-1">
-                    <div className="h-3 w-3 rounded-full bg-red-500" />
+                    <div className="h-3 w-3 rounded-full bg-destructive/15" />
                     Överbelastad (&gt;100%)
                   </div>
                 </div>
@@ -457,21 +457,21 @@ export default function AIPlanningPage() {
               </CardContent>
             </Card>
 
-            <Card className="border-green-500/30 bg-gradient-to-br from-green-500/5 to-transparent">
+            <Card className="border-chart-2/50 bg-gradient-to-br from-chart-2 to-transparent">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-green-500" />
+                  <Sparkles className="h-5 w-5 text-chart-2" />
                   Optimerade rutter
                 </CardTitle>
                 <CardDescription>Efter AI-optimering</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="text-center py-8">
-                  <div className="text-4xl font-bold text-green-600">
+                  <div className="text-4xl font-bold text-chart-2">
                     {analysis.routeOptimization.optimizedDistance} km
                   </div>
                   <div className="text-sm text-muted-foreground mt-1">
-                    <span className="text-green-600 font-medium">
+                    <span className="text-chart-2 font-medium">
                       -{analysis.routeOptimization.currentDistance - analysis.routeOptimization.optimizedDistance} km
                     </span>
                     {" "}besparing ({analysis.routeOptimization.savingsPercent}%)

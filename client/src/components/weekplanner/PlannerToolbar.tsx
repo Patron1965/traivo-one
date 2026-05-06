@@ -68,15 +68,15 @@ interface PlannerToolbarProps {
 }
 
 const getGoalColor = (pct: number) => {
-  if (pct >= 80) return "bg-green-500";
-  if (pct >= 50) return "bg-yellow-500";
-  return "bg-red-500";
+  if (pct >= 80) return "bg-chart-2/15";
+  if (pct >= 50) return "bg-chart-3/15";
+  return "bg-destructive/15";
 };
 
 const getGoalTextColor = (pct: number) => {
-  if (pct >= 80) return "text-green-600 dark:text-green-400";
-  if (pct >= 50) return "text-yellow-600 dark:text-yellow-400";
-  return "text-red-600 dark:text-red-400";
+  if (pct >= 80) return "text-chart-2";
+  if (pct >= 50) return "text-chart-3";
+  return "text-destructive";
 };
 
 function CrossWindowSlotPicker({ resources, slot, onChange }: { resources: Resource[]; slot: AssignSlot | null; onChange?: (slot: AssignSlot | null) => void }) {
@@ -494,8 +494,8 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
           {onUrgentJob && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30" onClick={onUrgentJob} data-testid="button-urgent-job">
-                  <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/15 dark:hover:bg-destructive/15" onClick={onUrgentJob} data-testid="button-urgent-job">
+                  <AlertTriangle className="h-4 w-4 text-chart-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="top">Akut jobb</TooltipContent>
@@ -602,7 +602,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant={showAIPanel ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={onToggleAIPanel} data-testid="button-toggle-ai-panel">
-                  <Sparkles className="h-4 w-4 text-purple-500" />
+                  <Sparkles className="h-4 w-4 text-chart-5" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="top">AI-stöd</TooltipContent>
@@ -628,9 +628,9 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                 <div key={resource.id} className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-background border">
                   <span className="font-medium">{resource.initials || resource.name.split(" ")[0]}</span>
                   <div className="w-12 h-1.5 bg-muted rounded overflow-hidden">
-                    <div className={`h-full transition-all ${isOverbooked ? "bg-red-500" : isLow ? "bg-yellow-500" : "bg-green-500"}`} style={{ width: `${Math.min(utilization, 100)}%` }} />
+                    <div className={`h-full transition-all ${isOverbooked ? "bg-destructive/15" : isLow ? "bg-chart-3/15" : "bg-chart-2/15"}`} style={{ width: `${Math.min(utilization, 100)}%` }} />
                   </div>
-                  <span className={`${isOverbooked ? "text-red-600" : isLow ? "text-yellow-600" : "text-green-600"}`}>{utilization}%</span>
+                  <span className={`${isOverbooked ? "text-destructive" : isLow ? "text-chart-3" : "text-chart-2"}`}>{utilization}%</span>
                 </div>
               );
             })}
@@ -688,10 +688,10 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
             {weekTravelTotal.minutes > 0 && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800" data-testid="goal-bar-travel">
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-chart-3/15 dark:bg-chart-3/15 text-chart-3 border border-chart-3/20 dark:border-chart-3/80" data-testid="goal-bar-travel">
                     <Navigation className="h-3 w-3" />
                     <span className="font-medium">{weekTravelTotal.hours}h</span>
-                    <span className="text-yellow-500">({weekTravelTotal.km} km)</span>
+                    <span className="text-chart-3">({weekTravelTotal.km} km)</span>
                   </div>
                 </TooltipTrigger>
                 <TooltipContent side="top"><p>Total restid veckan: {weekTravelTotal.minutes} min, {weekTravelTotal.km} km</p></TooltipContent>
@@ -719,19 +719,19 @@ export const PlannerFooter = memo(function PlannerFooter({
     <div className="px-3 py-1.5 border-t bg-muted/50 flex items-center justify-between gap-4 flex-wrap">
       <div className="flex items-center gap-3 text-xs" data-testid="legend-block-categories">
         <span className="text-muted-foreground font-medium mr-1">Kategorier:</span>
-        <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-green-500 rounded-sm"></span><span>Produktion</span></div>
-        <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-yellow-400 rounded-sm"></span><span>Restid</span></div>
-        <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-blue-400 rounded-sm"></span><span>Rast</span></div>
+        <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-chart-2/15 rounded-sm"></span><span>Produktion</span></div>
+        <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-chart-3/40 rounded-sm"></span><span>Restid</span></div>
+        <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-chart-1/40 rounded-sm"></span><span>Rast</span></div>
         <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-gray-300 dark:bg-gray-600 rounded-sm"></span><span>Ledig</span></div>
         {jobConflictCount > 0 && (
           <>
             <span className="text-muted-foreground">|</span>
             <button
               onClick={onConflictClick}
-              className="flex items-center gap-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:underline cursor-pointer transition-colors"
+              className="flex items-center gap-1 text-destructive hover:text-destructive dark:hover:text-destructive hover:underline cursor-pointer transition-colors"
               data-testid="button-show-conflicts"
             >
-              <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />
+              <AlertTriangle className="h-3 w-3 text-chart-4" />
               <span>{jobConflictCount} konflikter</span>
             </button>
           </>

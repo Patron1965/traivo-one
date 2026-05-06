@@ -178,7 +178,7 @@ export function ImportPreviewPanel({
     <div className="space-y-4 p-4 border rounded-lg bg-muted/30" data-testid="import-preview-panel">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Pencil className="h-4 w-4 text-blue-600" />
+          <Pencil className="h-4 w-4 text-chart-1" />
           <span className="font-medium text-sm">
             Förhandsgranska & döp om
             <HelpTooltip content="Granska och ändra namn på kunder, objekt och metadata-fält innan de importeras. Allt kan även ändras efteråt i systemet." />
@@ -242,7 +242,7 @@ export function ImportPreviewPanel({
               </TableHeader>
               <TableBody>
                 {filteredObjectRows.map((row) => (
-                  <TableRow key={row.modusId} className={nameOverrides.objects[row.modusId] ? "bg-blue-50/50 dark:bg-blue-950/20" : ""}>
+                  <TableRow key={row.modusId} className={nameOverrides.objects[row.modusId] ? "bg-chart-1/10 dark:bg-chart-1/15" : ""}>
                     <TableCell className="font-mono text-xs text-muted-foreground" data-testid={`text-modus-id-${row.modusId}`}>
                       {row.modusId}
                     </TableCell>
@@ -287,7 +287,7 @@ export function ImportPreviewPanel({
               </TableHeader>
               <TableBody>
                 {customerNames.map((name) => (
-                  <TableRow key={name} className={nameOverrides.customers[name] ? "bg-blue-50/50 dark:bg-blue-950/20" : ""}>
+                  <TableRow key={name} className={nameOverrides.customers[name] ? "bg-chart-1/10 dark:bg-chart-1/15" : ""}>
                     <TableCell className="text-xs">{name}</TableCell>
                     <TableCell>
                       <Input
@@ -302,7 +302,7 @@ export function ImportPreviewPanel({
                       {existingCustomerSet.has(name.toLowerCase()) ? (
                         <Badge variant="secondary" className="text-xs">Finns</Badge>
                       ) : (
-                        <Badge variant="outline" className="text-xs text-green-600 border-green-300">Ny</Badge>
+                        <Badge variant="outline" className="text-xs text-chart-2 border-chart-2/30">Ny</Badge>
                       )}
                     </TableCell>
                   </TableRow>
@@ -331,7 +331,7 @@ export function ImportPreviewPanel({
                 </TableHeader>
                 <TableBody>
                   {metadataColumns.map((col) => (
-                    <TableRow key={col} className={nameOverrides.metadata[col] ? "bg-blue-50/50 dark:bg-blue-950/20" : ""}>
+                    <TableRow key={col} className={nameOverrides.metadata[col] ? "bg-chart-1/10 dark:bg-chart-1/15" : ""}>
                       <TableCell className="text-xs font-mono">{col}</TableCell>
                       <TableCell>
                         <Input
@@ -458,7 +458,7 @@ export function ResourcePreviewPanel({
     return (
       <div className="space-y-3 p-4 border rounded-lg bg-muted/30" data-testid="resource-preview-panel">
         <div className="flex items-center gap-2">
-          <Truck className="h-4 w-4 text-blue-600" />
+          <Truck className="h-4 w-4 text-chart-1" />
           <span className="font-medium text-sm">Inga nya resurser att skapa</span>
         </div>
         <div className="flex items-center gap-3 pt-2 border-t">
@@ -475,7 +475,7 @@ export function ResourcePreviewPanel({
   return (
     <div className="space-y-4 p-4 border rounded-lg bg-muted/30" data-testid="resource-preview-panel">
       <div className="flex items-center gap-2">
-        <Truck className="h-4 w-4 text-blue-600" />
+        <Truck className="h-4 w-4 text-chart-1" />
         <span className="font-medium text-sm">
           Granska resurser/team som skapas
           <HelpTooltip content="Dessa team/resurser finns inte i systemet och skapas automatiskt vid import. Döp om dem här om namnen från Modus inte stämmer." />
@@ -495,7 +495,7 @@ export function ResourcePreviewPanel({
           </TableHeader>
           <TableBody>
             {resourceNames.map((name) => (
-              <TableRow key={name} className={resourceOverrides[name] ? "bg-blue-50/50 dark:bg-blue-950/20" : ""}>
+              <TableRow key={name} className={resourceOverrides[name] ? "bg-chart-1/10 dark:bg-chart-1/15" : ""}>
                 <TableCell className="text-xs">{name}</TableCell>
                 <TableCell>
                   <Input

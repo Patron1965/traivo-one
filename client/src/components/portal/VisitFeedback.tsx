@@ -139,7 +139,7 @@ export function VisitFeedback({ workOrder, portalFetch }: VisitFeedbackProps) {
             <Star
               className={`h-6 w-6 ${
                 star <= (interactive ? (hoverRating || currentRating) : currentRating)
-                  ? "fill-yellow-400 text-yellow-400"
+                  ? "fill-chart-3 text-chart-3"
                   : "text-muted-foreground"
               }`}
             />

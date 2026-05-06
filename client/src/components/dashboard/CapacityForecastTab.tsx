@@ -247,7 +247,7 @@ export function CapacityForecastTab() {
         <Card data-testid="card-understaffed">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingUp className="h-4 w-4 text-red-500" />
+              <TrendingUp className="h-4 w-4 text-destructive" />
               Mest underbemannade kluster
             </CardTitle>
           </CardHeader>
@@ -266,7 +266,7 @@ export function CapacityForecastTab() {
                   {data.understaffed.map(c => (
                     <TableRow key={c.clusterId} data-testid={`row-understaffed-${c.clusterId}`}>
                       <TableCell className="font-medium">{c.clusterName}</TableCell>
-                      <TableCell className="text-right text-red-600 dark:text-red-400 font-mono">
+                      <TableCell className="text-right text-destructive font-mono">
                         +{c.totalGap.toFixed(1)}h
                       </TableCell>
                     </TableRow>
@@ -280,7 +280,7 @@ export function CapacityForecastTab() {
         <Card data-testid="card-overstaffed">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingDown className="h-4 w-4 text-green-500" />
+              <TrendingDown className="h-4 w-4 text-chart-2" />
               Mest överbemannade kluster
             </CardTitle>
           </CardHeader>
@@ -299,7 +299,7 @@ export function CapacityForecastTab() {
                   {data.overstaffed.map(c => (
                     <TableRow key={c.clusterId} data-testid={`row-overstaffed-${c.clusterId}`}>
                       <TableCell className="font-medium">{c.clusterName}</TableCell>
-                      <TableCell className="text-right text-green-600 dark:text-green-400 font-mono">
+                      <TableCell className="text-right text-chart-2 font-mono">
                         {Math.abs(c.totalGap).toFixed(1)}h
                       </TableCell>
                     </TableRow>
@@ -383,7 +383,7 @@ export function CapacityForecastTab() {
                   <TableCell className="font-medium">{c.clusterName}</TableCell>
                   <TableCell className="text-right font-mono">{c.totalDemand.toFixed(1)}h</TableCell>
                   <TableCell className="text-right font-mono">{c.totalCapacity.toFixed(1)}h</TableCell>
-                  <TableCell className={`text-right font-mono ${c.totalGap > 0 ? "text-red-600 dark:text-red-400" : c.totalGap < 0 ? "text-green-600 dark:text-green-400" : ""}`}>
+                  <TableCell className={`text-right font-mono ${c.totalGap > 0 ? "text-destructive" : c.totalGap < 0 ? "text-chart-2" : ""}`}>
                     {c.totalGap > 0 ? "+" : ""}{c.totalGap.toFixed(1)}h
                   </TableCell>
                 </TableRow>

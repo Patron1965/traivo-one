@@ -125,7 +125,7 @@ export default function Step7ArticleMapping({
                         const objName = objectNameMap.get(m.orderConceptObjectId);
                         return (
                           <div key={m.id} className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-chart-2/15" />
                             <span>{objName || "Okänt objekt"}</span>
                             <span className="text-muted-foreground">x{m.quantity}</span>
                           </div>

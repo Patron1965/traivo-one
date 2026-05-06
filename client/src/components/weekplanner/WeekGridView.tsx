@@ -59,10 +59,10 @@ interface WeekGridViewProps {
 }
 
 function getWeatherIcon(code: number) {
-  if ([0, 1].includes(code)) return <Sun className="h-3 w-3 text-yellow-500" />;
+  if ([0, 1].includes(code)) return <Sun className="h-3 w-3 text-chart-3" />;
   if ([2, 3].includes(code)) return <Cloud className="h-3 w-3 text-gray-400" />;
-  if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return <CloudRain className="h-3 w-3 text-blue-500" />;
-  if ([71, 73, 75, 77, 85, 86].includes(code)) return <Snowflake className="h-3 w-3 text-blue-300" />;
+  if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return <CloudRain className="h-3 w-3 text-chart-1" />;
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return <Snowflake className="h-3 w-3 text-chart-1" />;
   return <Cloud className="h-3 w-3 text-gray-400" />;
 }
 
@@ -115,10 +115,10 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                         {multiplierLabel && (
                           <span className={`text-[9px] font-medium px-1 rounded ${
                             weather.impact.impactLevel === "severe" || weather.impact.impactLevel === "high"
-                              ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                              ? "bg-destructive/15 text-destructive dark:bg-destructive/15"
                               : weather.impact.impactLevel === "medium"
-                              ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                              : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                              ? "bg-chart-3/15 text-chart-3 dark:bg-chart-3/15"
+                              : "bg-chart-1/15 text-chart-1 dark:bg-chart-1/15"
                           }`}>
                             {multiplierLabel}
                           </span>
@@ -129,7 +129,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                       <p className="font-medium">{weather.forecast.weatherDescription}</p>
                       <p>Temp: {weather.forecast.temperature}°C, Vind: {weather.forecast.windSpeed} m/s</p>
                       <p>Nederbörd: {weather.forecast.precipitation} mm</p>
-                      {multiplierLabel && <p className="text-amber-500">Kapacitetspåverkan: {multiplierLabel}</p>}
+                      {multiplierLabel && <p className="text-chart-4">Kapacitetspåverkan: {multiplierLabel}</p>}
                     </TooltipContent>
                   </Tooltip>
                 )}
@@ -140,21 +140,21 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
 
         {isTeamMode && showingUntiedUnderFilter && onHideUntiedTeamRows && (
           <div
-            className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] bg-blue-50 dark:bg-blue-950/20 border-b"
+            className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] bg-chart-1/10 dark:bg-chart-1/15 border-b"
             data-testid="banner-showing-untied-team"
           >
-            <div className="sticky left-0 z-10 px-3 py-2 border-r flex items-center gap-2 bg-blue-50 dark:bg-blue-950/20">
-              <EyeOff className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">Filter + utan team</span>
+            <div className="sticky left-0 z-10 px-3 py-2 border-r flex items-center gap-2 bg-chart-1/10 dark:bg-chart-1/15">
+              <EyeOff className="h-3.5 w-3.5 text-chart-1 shrink-0" />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-chart-1">Filter + utan team</span>
             </div>
             <div className="col-span-5 px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
-              <span className="text-xs text-blue-800 dark:text-blue-200">
+              <span className="text-xs text-chart-1">
                 Visar även rader utan teamtillhörighet trots aktivt team-filter.
               </span>
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 text-xs border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                className="h-7 text-xs border-chart-1/30 dark:border-chart-1/70 hover:bg-chart-1/15 dark:hover:bg-chart-1/15"
                 onClick={onHideUntiedTeamRows}
                 data-testid="button-hide-untied-team-rows"
               >
@@ -166,15 +166,15 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
 
         {isTeamMode && hiddenUntiedTeamSummary && (
           <div
-            className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] bg-amber-50 dark:bg-amber-950/20 border-b"
+            className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] bg-chart-4/10 dark:bg-chart-4/15 border-b"
             data-testid="banner-hidden-untied-team"
           >
-            <div className="sticky left-0 z-10 px-3 py-2 border-r flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20">
-              <EyeOff className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Dolt av filter</span>
+            <div className="sticky left-0 z-10 px-3 py-2 border-r flex items-center gap-2 bg-chart-4/10 dark:bg-chart-4/15">
+              <EyeOff className="h-3.5 w-3.5 text-chart-4 shrink-0" />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-chart-4">Dolt av filter</span>
             </div>
             <div className="col-span-5 px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
-              <span className="text-xs text-amber-800 dark:text-amber-200" data-testid="text-hidden-untied-summary">
+              <span className="text-xs text-chart-4" data-testid="text-hidden-untied-summary">
                 Team-filtret döljer{" "}
                 <strong className="font-semibold tabular-nums">{hiddenUntiedTeamSummary.totalJobs}</strong>{" "}
                 jobb
@@ -197,7 +197,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 text-xs border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                  className="h-7 text-xs border-chart-4/30 dark:border-chart-4/70 hover:bg-chart-4/15 dark:hover:bg-chart-4/15"
                   onClick={onShowUntiedTeamRows}
                   data-testid="button-show-untied-team-rows"
                 >
@@ -238,7 +238,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                       <span className="h-6 w-6 rounded-full shrink-0 flex items-center justify-center" style={{ backgroundColor: team.color }} data-testid={`avatar-team-color-${team.id}`} />
                     ) : !team.isUncategorized ? (
                       <span
-                        className={`h-6 w-6 rounded-full shrink-0 flex items-center justify-center text-[10px] font-semibold ${isFallback ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" : "bg-primary/15 text-primary"}`}
+                        className={`h-6 w-6 rounded-full shrink-0 flex items-center justify-center text-[10px] font-semibold ${isFallback ? "bg-chart-4/15 text-chart-4 dark:bg-chart-4/15" : "bg-primary/15 text-primary"}`}
                         data-testid={`avatar-team-initials-${team.id}`}
                       >
                         {team.name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() || "").join("") || team.name.slice(0, 2).toUpperCase()}
@@ -247,7 +247,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                     <div className="flex-1 min-w-0">
                       <div className={`text-sm font-medium truncate ${team.isUncategorized ? "text-muted-foreground italic" : ""}`} data-testid={`text-team-name-${team.id}`}>{team.name}</div>
                       {isFallback ? (
-                        <div className="text-[10px] text-amber-600 dark:text-amber-400">Saknar team</div>
+                        <div className="text-[10px] text-chart-4">Saknar team</div>
                       ) : !team.isUncategorized ? (
                         <div className="text-[10px] text-muted-foreground">{team.memberCount} medlem{team.memberCount === 1 ? "" : "mar"}</div>
                       ) : null}
@@ -275,10 +275,10 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                   if (activeDragJob && !team.isUncategorized && (isFallback || team.memberCount > 0)) {
                     const newHours = dayHours + (activeDragJob.estimatedDuration || 60) / 60;
                     const projectedPct = dayCapacity > 0 ? (newHours / dayCapacity) * 100 : 0;
-                    if (projectedPct > 110) teamDropFit = { bg: "bg-red-100 dark:bg-red-950/40 ring-red-400", label: isFallback ? "Överbokar resursen" : "Överbokar teamet", color: "text-red-600" };
-                    else if (projectedPct > 85) teamDropFit = { bg: "bg-orange-100 dark:bg-orange-950/40 ring-orange-400", label: "Tight", color: "text-orange-600" };
-                    else if (projectedPct > 65) teamDropFit = { bg: "bg-yellow-100 dark:bg-yellow-950/40 ring-yellow-400", label: "Belastad", color: "text-yellow-600" };
-                    else teamDropFit = { bg: "bg-green-100 dark:bg-green-950/40 ring-green-400", label: "Fri kapacitet", color: "text-green-600" };
+                    if (projectedPct > 110) teamDropFit = { bg: "bg-destructive/15 dark:bg-destructive/15 ring-destructive/40", label: isFallback ? "Överbokar resursen" : "Överbokar teamet", color: "text-destructive" };
+                    else if (projectedPct > 85) teamDropFit = { bg: "bg-chart-4/15 dark:bg-chart-4/15 ring-chart-4/40", label: "Tight", color: "text-chart-4" };
+                    else if (projectedPct > 65) teamDropFit = { bg: "bg-chart-3/15 dark:bg-chart-3/15 ring-chart-3/40", label: "Belastad", color: "text-chart-3" };
+                    else teamDropFit = { bg: "bg-chart-2/15 dark:bg-chart-2/15 ring-chart-2/40", label: "Fri kapacitet", color: "text-chart-2" };
                   }
                   return (
                     <DroppableCell
@@ -296,7 +296,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                           <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden">
                             <div className={`h-full rounded-full transition-all ${getCapacityColor(capacityPct)}`} style={{ width: `${Math.min(capacityPct, 100)}%` }} />
                           </div>
-                          <span className={`text-[10px] tabular-nums ${isOverbooked ? "text-red-600 dark:text-red-400 font-semibold" : capacityPct >= 85 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
+                          <span className={`text-[10px] tabular-nums ${isOverbooked ? "text-destructive font-semibold" : capacityPct >= 85 ? "text-chart-4" : "text-muted-foreground"}`}>
                             {dayHours.toFixed(1).replace(".", ",")}h
                           </span>
                         </div>
@@ -365,7 +365,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                   <DroppableCell
                     key={dayIndex}
                     id={droppableId}
-                    className={`${zoomPadClass} border-r last:border-r-0 transition-colors overflow-hidden min-w-0 ${getCapacityBgColor(capacityPct)} ${restrictedJobs.length > 0 ? "bg-red-50/50 dark:bg-red-950/20" : ""}`}
+                    className={`${zoomPadClass} border-r last:border-r-0 transition-colors overflow-hidden min-w-0 ${getCapacityBgColor(capacityPct)} ${restrictedJobs.length > 0 ? "bg-destructive/10 dark:bg-destructive/15" : ""}`}
                     dropFitInfo={cellDropFit}
                     style={{ minHeight: `${zoom.weekH}px` }}
                     dragOverConflicts={dragOverConflicts?.[droppableId]}
@@ -379,32 +379,32 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                         </div>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className={`text-[10px] tabular-nums cursor-help ${isOverbooked ? "text-red-600 dark:text-red-400 font-semibold" : capacityPct >= 85 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
+                            <span className={`text-[10px] tabular-nums cursor-help ${isOverbooked ? "text-destructive font-semibold" : capacityPct >= 85 ? "text-chart-4" : "text-muted-foreground"}`}>
                               {dayHours.toFixed(1).replace(".", ",")}h
                             </span>
                           </TooltipTrigger>
                           <TooltipContent>
                             <p>{dayHours.toFixed(1)}h planerat av {HOURS_IN_DAY}h</p>
                             <p>{Math.max(0, HOURS_IN_DAY - dayHours).toFixed(1)}h kvar</p>
-                            {isOverbooked && <p className="text-red-500 font-medium">Överbokad med {(dayHours - HOURS_IN_DAY).toFixed(1)}h</p>}
+                            {isOverbooked && <p className="text-destructive font-medium">Överbokad med {(dayHours - HOURS_IN_DAY).toFixed(1)}h</p>}
                           </TooltipContent>
                         </Tooltip>
                       </div>
                       {isOverbooked && (
-                        <div className="flex items-center gap-1 text-[10px] text-red-600 dark:text-red-400 mb-1 font-medium">
-                          <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" /><span>+{(dayHours - HOURS_IN_DAY).toFixed(1)}h över</span>
+                        <div className="flex items-center gap-1 text-[10px] text-destructive mb-1 font-medium">
+                          <AlertTriangle className="h-3 w-3 text-chart-4" /><span>+{(dayHours - HOURS_IN_DAY).toFixed(1)}h över</span>
                         </div>
                       )}
                       {restrictedJobs.length > 0 && (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <div className="flex items-center gap-1 text-[10px] text-red-600 dark:text-red-400 mb-1 cursor-help" data-testid={`cell-restriction-${resource.id}-${dayStr}`}>
-                              <AlertTriangle className="h-3 w-3 shrink-0 text-orange-500 dark:text-orange-400" /><span>{restrictedJobs.length} begränsad</span>
+                            <div className="flex items-center gap-1 text-[10px] text-destructive mb-1 cursor-help" data-testid={`cell-restriction-${resource.id}-${dayStr}`}>
+                              <AlertTriangle className="h-3 w-3 shrink-0 text-chart-4" /><span>{restrictedJobs.length} begränsad</span>
                             </div>
                           </TooltipTrigger>
                           <TooltipContent>
                             <div className="text-xs space-y-1">
-                              <p className="font-medium text-red-500">Tidsbegränsade uppdrag</p>
+                              <p className="font-medium text-destructive">Tidsbegränsade uppdrag</p>
                               {restrictedJobs.map(j => <p key={j.id}>{j.title} - {j.objectName}</p>)}
                             </div>
                           </TooltipContent>
@@ -414,7 +414,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                         const cellConstraint = constraintMap.get(`${resource.id}|${dayStr}`);
                         if (!cellConstraint) {
                           return (
-                            <div className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 mb-1 px-1 py-0.5 rounded bg-green-50 dark:bg-green-950/20" data-testid={`constraint-ok-${resource.id}-${dayStr}`}>
+                            <div className="flex items-center gap-1 text-[10px] text-chart-2 mb-1 px-1 py-0.5 rounded bg-chart-2/10 dark:bg-chart-2/15" data-testid={`constraint-ok-${resource.id}-${dayStr}`}>
                               <ShieldCheck className="h-3 w-3 shrink-0" />
                               <span>Tillgänglig</span>
                             </div>
@@ -423,11 +423,11 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                         const isBlocked = cellConstraint.status === "blocked";
                         const Icon = isBlocked ? ShieldX : ShieldAlert;
                         const colorCls = isBlocked
-                          ? "text-red-600 dark:text-red-400"
-                          : "text-amber-600 dark:text-amber-400";
+                          ? "text-destructive"
+                          : "text-chart-4";
                         const bgCls = isBlocked
-                          ? "bg-red-50 dark:bg-red-950/20"
-                          : "bg-amber-50 dark:bg-amber-950/20";
+                          ? "bg-destructive/10 dark:bg-destructive/15"
+                          : "bg-chart-4/10 dark:bg-chart-4/15";
                         return (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -439,12 +439,12 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                             </TooltipTrigger>
                             <TooltipContent side="right" className="max-w-xs">
                               <div className="text-xs space-y-1.5">
-                                <p className={`font-semibold ${isBlocked ? "text-red-500" : "text-amber-500"}`}>
+                                <p className={`font-semibold ${isBlocked ? "text-destructive" : "text-chart-4"}`}>
                                   {isBlocked ? "Hårda begränsningar" : "Mjuka begränsningar"}
                                 </p>
                                 {cellConstraint.constraints.map((c, i) => (
                                   <div key={i} className="flex items-start gap-1.5">
-                                    <span className={`mt-0.5 h-1.5 w-1.5 rounded-full shrink-0 ${c.severity === "critical" ? "bg-red-500" : "bg-amber-500"}`} />
+                                    <span className={`mt-0.5 h-1.5 w-1.5 rounded-full shrink-0 ${c.severity === "critical" ? "bg-destructive/15" : "bg-chart-4/15"}`} />
                                     <div>
                                       <span className="font-medium">{constraintCategoryLabels[c.category] || c.category}: </span>
                                       <span>{c.description}</span>
@@ -471,10 +471,10 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                       {totalTravelMin > 0 && (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <div className="flex items-center gap-1 mt-2 px-1.5 py-0.5 rounded text-[10px] bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800" data-testid={`travel-summary-${resource.id}-${dayStr}`}>
+                            <div className="flex items-center gap-1 mt-2 px-1.5 py-0.5 rounded text-[10px] bg-chart-3/15 dark:bg-chart-3/15 text-chart-3 border border-chart-3/20 dark:border-chart-3/80" data-testid={`travel-summary-${resource.id}-${dayStr}`}>
                               <Navigation className="h-2.5 w-2.5" />
                               <span>{totalTravelMin} min</span>
-                              <span className="text-yellow-500">({Math.round(totalTravelKm)} km)</span>
+                              <span className="text-chart-3">({Math.round(totalTravelKm)} km)</span>
                             </div>
                           </TooltipTrigger>
                           <TooltipContent><p>Total restid: {totalTravelMin} min, {Math.round(totalTravelKm * 10) / 10} km</p></TooltipContent>

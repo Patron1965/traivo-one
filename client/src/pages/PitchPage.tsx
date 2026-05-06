@@ -264,7 +264,7 @@ export default function PitchPage() {
       <Card className="bg-gradient-to-br from-slate-900 to-slate-800 text-white border-0">
         <CardContent className="p-8">
           <div className="flex items-center gap-3 mb-4">
-            <Sparkles className="h-8 w-8 text-green-400" />
+            <Sparkles className="h-8 w-8 text-chart-2" />
             <h2 className="text-2xl font-bold">UNICORN</h2>
           </div>
           <p className="text-slate-300 text-lg">
@@ -276,7 +276,7 @@ export default function PitchPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-xl">
-            <Zap className="h-6 w-6 text-amber-500" />
+            <Zap className="h-6 w-6 text-chart-4" />
             Problemen idag - Varför förändring behövs
           </CardTitle>
         </CardHeader>
@@ -287,24 +287,24 @@ export default function PitchPage() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
-              <h3 className="font-semibold text-red-600 dark:text-red-400">Planering & Schemaläggning</h3>
+              <h3 className="font-semibold text-destructive">Planering & Schemaläggning</h3>
               <ul className="space-y-3 text-sm">
                 <li className="flex items-start gap-2">
-                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <span className="text-destructive mt-0.5 font-bold">×</span>
                   <div>
                     <strong>Excel och papperslistor</strong>
                     <p className="text-muted-foreground">Manuell planering tar timmar varje dag. Ändringar kräver att hela schemat görs om.</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <span className="text-destructive mt-0.5 font-bold">×</span>
                   <div>
                     <strong>Ingen väderanpassning</strong>
                     <p className="text-muted-foreground">Regn och snö orsakar kaos - planering sker utan hänsyn till väderförhållanden.</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <span className="text-destructive mt-0.5 font-bold">×</span>
                   <div>
                     <strong>Ineffektiva rutter</strong>
                     <p className="text-muted-foreground">Chaufförer kör i sicksack istället för optimerade rutter. 20-30% onödig körsträcka.</p>
@@ -314,24 +314,24 @@ export default function PitchPage() {
             </div>
             
             <div className="space-y-4">
-              <h3 className="font-semibold text-red-600 dark:text-red-400">Kundkommunikation</h3>
+              <h3 className="font-semibold text-destructive">Kundkommunikation</h3>
               <ul className="space-y-3 text-sm">
                 <li className="flex items-start gap-2">
-                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <span className="text-destructive mt-0.5 font-bold">×</span>
                   <div>
                     <strong>Telefonstorm varje dag</strong>
                     <p className="text-muted-foreground">"När kommer ni?" - Kundtjänst spenderar 50%+ av tiden på att svara samma fråga.</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <span className="text-destructive mt-0.5 font-bold">×</span>
                   <div>
                     <strong>Ingen självbetjäning</strong>
                     <p className="text-muted-foreground">Kunder måste ringa för att boka om, avboka eller beställa extra tjänster.</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <span className="text-destructive mt-0.5 font-bold">×</span>
                   <div>
                     <strong>Orealistiska tidsuppskattningar</strong>
                     <p className="text-muted-foreground">"Vi kommer mellan 08-17" - Kunder väntar hela dagen utan besked.</p>
@@ -341,17 +341,17 @@ export default function PitchPage() {
             </div>
             
             <div className="space-y-4">
-              <h3 className="font-semibold text-red-600 dark:text-red-400">System & Integration</h3>
+              <h3 className="font-semibold text-destructive">System & Integration</h3>
               <ul className="space-y-3 text-sm">
                 <li className="flex items-start gap-2">
-                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <span className="text-destructive mt-0.5 font-bold">×</span>
                   <div>
                     <strong>Fragmenterade system</strong>
                     <p className="text-muted-foreground">Planering i ett system, fakturering i ett annat, kundregister på tredje stället.</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <span className="text-destructive mt-0.5 font-bold">×</span>
                   <div>
                     <strong>Dubbelinmatning överallt</strong>
                     <p className="text-muted-foreground">Samma information matas in flera gånger - fel och tidsslöseri.</p>
@@ -361,17 +361,17 @@ export default function PitchPage() {
             </div>
             
             <div className="space-y-4">
-              <h3 className="font-semibold text-red-600 dark:text-red-400">Fältarbete</h3>
+              <h3 className="font-semibold text-destructive">Fältarbete</h3>
               <ul className="space-y-3 text-sm">
                 <li className="flex items-start gap-2">
-                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <span className="text-destructive mt-0.5 font-bold">×</span>
                   <div>
                     <strong>Pappersprotokoll</strong>
                     <p className="text-muted-foreground">Chaufförer fyller i papper som sedan ska skrivas in manuellt på kontoret.</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <span className="text-destructive mt-0.5 font-bold">×</span>
                   <div>
                     <strong>Ingen realtidsöversikt</strong>
                     <p className="text-muted-foreground">Ledningen vet inte var fordonen är eller hur dagen fortskrider.</p>
@@ -383,9 +383,9 @@ export default function PitchPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20">
+      <Card className="border-chart-2/20 dark:border-chart-2/90 bg-chart-2/10 dark:bg-chart-2/15">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-xl text-green-700 dark:text-green-400">
+          <CardTitle className="flex items-center gap-2 text-xl text-chart-2">
             <CheckCircle2 className="h-6 w-6" />
             Traivo - En komplett lösning
           </CardTitle>
@@ -397,24 +397,24 @@ export default function PitchPage() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
-              <h3 className="font-semibold text-green-700 dark:text-green-400">AI-driven planering</h3>
+              <h3 className="font-semibold text-chart-2">AI-driven planering</h3>
               <ul className="space-y-3 text-sm">
                 <li className="flex items-start gap-2">
-                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <span className="text-chart-2 mt-0.5 font-bold">✓</span>
                   <div>
                     <strong>Automatisk schemaläggning</strong>
                     <p className="text-muted-foreground">AI skapar optimala scheman på sekunder. Ändringar hanteras automatiskt.</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <span className="text-chart-2 mt-0.5 font-bold">✓</span>
                   <div>
                     <strong>Väderintegrerad kapacitet</strong>
                     <p className="text-muted-foreground">Systemet justerar automatiskt vid regn, snö och extrem värme.</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <span className="text-chart-2 mt-0.5 font-bold">✓</span>
                   <div>
                     <strong>Optimerade rutter</strong>
                     <p className="text-muted-foreground">AI beräknar kortaste vägen - sparar 15-25% bränsle och tid.</p>
@@ -424,24 +424,24 @@ export default function PitchPage() {
             </div>
             
             <div className="space-y-4">
-              <h3 className="font-semibold text-green-700 dark:text-green-400">Kundportal med självbetjäning</h3>
+              <h3 className="font-semibold text-chart-2">Kundportal med självbetjäning</h3>
               <ul className="space-y-3 text-sm">
                 <li className="flex items-start gap-2">
-                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <span className="text-chart-2 mt-0.5 font-bold">✓</span>
                   <div>
                     <strong>Magic link-inloggning</strong>
                     <p className="text-muted-foreground">Inga lösenord - kunder loggar in via e-postlänk på sekunder.</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <span className="text-chart-2 mt-0.5 font-bold">✓</span>
                   <div>
                     <strong>Boka om själv</strong>
                     <p className="text-muted-foreground">Kunder hanterar ombokning, avbokning och extra tjänster utan att ringa.</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <span className="text-chart-2 mt-0.5 font-bold">✓</span>
                   <div>
                     <strong>"Tekniker på väg"-notis</strong>
                     <p className="text-muted-foreground">Chauffören skickar notis när det passar - kunden får realistisk ankomsttid.</p>
@@ -451,17 +451,17 @@ export default function PitchPage() {
             </div>
             
             <div className="space-y-4">
-              <h3 className="font-semibold text-green-700 dark:text-green-400">Nordisk integration</h3>
+              <h3 className="font-semibold text-chart-2">Nordisk integration</h3>
               <ul className="space-y-3 text-sm">
                 <li className="flex items-start gap-2">
-                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <span className="text-chart-2 mt-0.5 font-bold">✓</span>
                   <div>
                     <strong>Fortnox-koppling</strong>
                     <p className="text-muted-foreground">Fakturor exporteras direkt - ingen manuell inmatning.</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <span className="text-chart-2 mt-0.5 font-bold">✓</span>
                   <div>
                     <strong>Svenska adresser</strong>
                     <p className="text-muted-foreground">Inbyggt stöd för svenska adresser, postnummer och geocoding.</p>
@@ -471,17 +471,17 @@ export default function PitchPage() {
             </div>
             
             <div className="space-y-4">
-              <h3 className="font-semibold text-green-700 dark:text-green-400">Realtidsöversikt</h3>
+              <h3 className="font-semibold text-chart-2">Realtidsöversikt</h3>
               <ul className="space-y-3 text-sm">
                 <li className="flex items-start gap-2">
-                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <span className="text-chart-2 mt-0.5 font-bold">✓</span>
                   <div>
                     <strong>GPS-spårning</strong>
                     <p className="text-muted-foreground">Se alla fordon live på kartan med positionshistorik.</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <span className="text-chart-2 mt-0.5 font-bold">✓</span>
                   <div>
                     <strong>Digital rapportering</strong>
                     <p className="text-muted-foreground">Chaufförer rapporterar direkt i appen - data finns omedelbart.</p>
@@ -498,7 +498,7 @@ export default function PitchPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <Card className="hover-elevate">
             <CardContent className="p-5">
-              <Cloud className="h-8 w-8 text-blue-500 mb-3" />
+              <Cloud className="h-8 w-8 text-chart-1 mb-3" />
               <h3 className="font-semibold mb-1">Väderanpassad planering</h3>
               <p className="text-sm text-muted-foreground">
                 AI justerar kapacitet automatiskt vid regn, snö eller extrem värme
@@ -508,7 +508,7 @@ export default function PitchPage() {
 
           <Card className="hover-elevate">
             <CardContent className="p-5">
-              <Users className="h-8 w-8 text-purple-500 mb-3" />
+              <Users className="h-8 w-8 text-chart-5 mb-3" />
               <h3 className="font-semibold mb-1">Kundportal utan lösenord</h3>
               <p className="text-sm text-muted-foreground">
                 Magic link via e-post - kunder bokar om utan att ringa
@@ -518,7 +518,7 @@ export default function PitchPage() {
 
           <Card className="hover-elevate">
             <CardContent className="p-5">
-              <Bell className="h-8 w-8 text-amber-500 mb-3" />
+              <Bell className="h-8 w-8 text-chart-4 mb-3" />
               <h3 className="font-semibold mb-1">Förarstyrd notifiering</h3>
               <p className="text-sm text-muted-foreground">
                 Chauffören skickar "på väg" när det passar - realistiska tider
@@ -528,7 +528,7 @@ export default function PitchPage() {
 
           <Card className="hover-elevate">
             <CardContent className="p-5">
-              <MapPin className="h-8 w-8 text-red-500 mb-3" />
+              <MapPin className="h-8 w-8 text-destructive mb-3" />
               <h3 className="font-semibold mb-1">Realtids-GPS</h3>
               <p className="text-sm text-muted-foreground">
                 Spåra alla fordon live med WebSocket-uppdateringar
@@ -538,7 +538,7 @@ export default function PitchPage() {
 
           <Card className="hover-elevate">
             <CardContent className="p-5">
-              <TrendingUp className="h-8 w-8 text-green-500 mb-3" />
+              <TrendingUp className="h-8 w-8 text-chart-2 mb-3" />
               <h3 className="font-semibold mb-1">Hierarkisk data</h3>
               <p className="text-sm text-muted-foreground">
                 Information ärvs nedåt - fyll i en gång, använd överallt
@@ -558,26 +558,26 @@ export default function PitchPage() {
         </div>
       </div>
 
-      <Card className="border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-950/30">
+      <Card className="border-chart-2/20 dark:border-chart-2/90 bg-chart-2/10 dark:bg-chart-2/15">
         <CardHeader>
-          <CardTitle className="text-green-700 dark:text-green-400">Konkreta vinster</CardTitle>
+          <CardTitle className="text-chart-2">Konkreta vinster</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="text-center">
-              <div className="text-3xl font-bold text-green-600">30-50%</div>
+              <div className="text-3xl font-bold text-chart-2">30-50%</div>
               <p className="text-sm text-muted-foreground mt-1">Färre inkommande samtal</p>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-green-600">15-25%</div>
+              <div className="text-3xl font-bold text-chart-2">15-25%</div>
               <p className="text-sm text-muted-foreground mt-1">Minskad körsträcka</p>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-green-600">50%</div>
+              <div className="text-3xl font-bold text-chart-2">50%</div>
               <p className="text-sm text-muted-foreground mt-1">Snabbare fakturering</p>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-green-600">90%</div>
+              <div className="text-3xl font-bold text-chart-2">90%</div>
               <p className="text-sm text-muted-foreground mt-1">Färre missade jobb</p>
             </div>
           </div>

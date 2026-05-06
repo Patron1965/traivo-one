@@ -40,7 +40,7 @@ function TourItem({ tour, seen, onStart }: { tour: TourDefinition; seen: boolean
       data-testid={`tour-item-${tour.id}`}
     >
       {seen ? (
-        <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 text-green-500 flex-shrink-0" />
+        <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 text-chart-2 flex-shrink-0" />
       ) : (
         <Play className="h-3.5 w-3.5 mt-0.5 text-primary flex-shrink-0" />
       )}

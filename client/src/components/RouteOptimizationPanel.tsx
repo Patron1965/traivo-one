@@ -287,7 +287,7 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
     <Card className="h-full flex flex-col">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <Route className="h-5 w-5 text-blue-500" />
+          <Route className="h-5 w-5 text-chart-1" />
           VRP-ruttoptimering
         </CardTitle>
       </CardHeader>
@@ -375,8 +375,8 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
                   </SelectContent>
                 </Select>
                 {solver === "ortools" && ortoolsAvailable === false && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />
+                  <p className="text-xs text-chart-4 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3 text-chart-4" />
                     OR-Tools-tjänsten är offline — fallback till Geoapify
                   </p>
                 )}
@@ -418,9 +418,9 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
         )}
 
         {asyncJobId && (
-          <Card className="p-3 bg-blue-500/10 border-blue-500/30" data-testid="card-async-progress">
+          <Card className="p-3 bg-chart-1/15 border-chart-1/50" data-testid="card-async-progress">
             <div className="flex items-center gap-2 mb-2">
-              <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+              <Loader2 className="h-4 w-4 animate-spin text-chart-1" />
               <span className="text-sm font-medium">
                 {jobStatus === "queued" ? "Köad..." : "Optimerar..."}
               </span>
@@ -432,10 +432,10 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
         )}
 
         {isSimulation && vrpResult && (
-          <Card className="p-3 bg-amber-500/10 border-amber-500/30" data-testid="card-simulation-banner">
+          <Card className="p-3 bg-chart-4/15 border-chart-4/50" data-testid="card-simulation-banner">
             <div className="flex items-center gap-2">
-              <Eye className="h-4 w-4 text-amber-500" />
-              <span className="text-xs font-medium text-amber-700 dark:text-amber-300">Simuleringsresultat — inga ändringar sparade</span>
+              <Eye className="h-4 w-4 text-chart-4" />
+              <span className="text-xs font-medium text-chart-4">Simuleringsresultat — inga ändringar sparade</span>
             </div>
           </Card>
         )}
@@ -505,7 +505,7 @@ function VRPResultView({
           <div className="flex flex-wrap gap-1 mt-2" data-testid="constraints-applied">
             {result.constraintsApplied.map((c) => (
               <Badge key={c} variant="outline" className="text-[10px]">
-                <CheckCircle2 className="h-3 w-3 mr-1 text-green-500" />
+                <CheckCircle2 className="h-3 w-3 mr-1 text-chart-2" />
                 {c}
               </Badge>
             ))}
@@ -514,15 +514,15 @@ function VRPResultView({
       </Card>
 
       {result.unassignedOrders.length > 0 && (
-        <Card className="p-3 bg-red-500/10 border-red-500/30" data-testid="card-unassigned">
+        <Card className="p-3 bg-destructive/15 border-destructive/50" data-testid="card-unassigned">
           <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="h-4 w-4 text-red-500" />
+            <AlertTriangle className="h-4 w-4 text-destructive" />
             <span className="text-xs font-medium">{result.unassignedOrders.length} ej tilldelade</span>
           </div>
           <div className="space-y-1">
             {result.unassignedOrders.slice(0, 5).map((u) => (
               <div key={u.orderId} className="text-xs text-muted-foreground flex items-center gap-1">
-                <XCircle className="h-3 w-3 text-red-400 shrink-0" />
+                <XCircle className="h-3 w-3 text-destructive shrink-0" />
                 <span className="truncate">{u.orderId}</span>
                 <span className="text-[10px]">— {u.reason}</span>
               </div>
@@ -643,7 +643,7 @@ function MultiDayResultView({
     <div className="space-y-3" data-testid="multiday-results">
       <Card className="p-3 bg-muted/50">
         <div className="flex items-center gap-2 mb-2">
-          <Calendar className="h-4 w-4 text-blue-500" />
+          <Calendar className="h-4 w-4 text-chart-1" />
           <span className="text-sm font-medium">Veckosammanfattning</span>
         </div>
         <div className="grid grid-cols-2 gap-2 text-center">
@@ -666,9 +666,9 @@ function MultiDayResultView({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               {result.success ? (
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <CheckCircle2 className="h-4 w-4 text-chart-2" />
               ) : (
-                <XCircle className="h-4 w-4 text-red-500" />
+                <XCircle className="h-4 w-4 text-destructive" />
               )}
               <span className="text-sm font-medium">{date}</span>
             </div>

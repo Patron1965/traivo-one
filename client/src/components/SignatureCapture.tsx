@@ -179,10 +179,10 @@ export function SignatureCapture({
 
   if (existingSignature) {
     return (
-      <Card className="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20">
+      <Card className="border-chart-2/20 dark:border-chart-2/80 bg-chart-2/10 dark:bg-chart-2/15">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <Check className="h-4 w-4 text-green-500" />
+            <Check className="h-4 w-4 text-chart-2" />
             Signatur mottagen
           </CardTitle>
         </CardHeader>

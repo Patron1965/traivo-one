@@ -232,7 +232,7 @@ function SlideContent({ slide, slideNumber, totalSlides }: { slide: typeof slide
           <div className="mb-8">
             <Sparkles className="h-20 w-20 text-primary mx-auto mb-6" />
           </div>
-          <h1 className="text-6xl font-bold mb-4 bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+          <h1 className="text-6xl font-bold mb-4 bg-gradient-to-r from-primary to-chart-1 bg-clip-text text-transparent">
             {slide.title}
           </h1>
           <p className="text-2xl text-muted-foreground mb-6">{slide.subtitle}</p>
@@ -300,12 +300,12 @@ function SlideContent({ slide, slideNumber, totalSlides }: { slide: typeof slide
               <p className="text-4xl font-bold text-primary mb-2">{slide.tam?.value}</p>
               <p className="text-muted-foreground">{slide.tam?.label}</p>
             </Card>
-            <Card className="p-6 text-center bg-blue-500/5 border-blue-500/20">
-              <p className="text-4xl font-bold text-blue-500 mb-2">{slide.sam?.value}</p>
+            <Card className="p-6 text-center bg-chart-1/15 border-chart-1/50">
+              <p className="text-4xl font-bold text-chart-1 mb-2">{slide.sam?.value}</p>
               <p className="text-muted-foreground">{slide.sam?.label}</p>
             </Card>
-            <Card className="p-6 text-center bg-green-500/5 border-green-500/20">
-              <p className="text-4xl font-bold text-green-500 mb-2">{slide.som?.value}</p>
+            <Card className="p-6 text-center bg-chart-2/15 border-chart-2/50">
+              <p className="text-4xl font-bold text-chart-2 mb-2">{slide.som?.value}</p>
               <p className="text-muted-foreground">{slide.som?.label}</p>
             </Card>
           </div>
@@ -458,7 +458,7 @@ function SlideContent({ slide, slideNumber, totalSlides }: { slide: typeof slide
               <Card key={i} className={`p-4 ${phase.status === 'current' ? 'border-primary ring-2 ring-primary/20' : ''}`}>
                 <div className="flex items-center gap-4">
                   <div className={`w-24 font-semibold ${
-                    phase.status === 'done' ? 'text-green-500' : 
+                    phase.status === 'done' ? 'text-chart-2' : 
                     phase.status === 'current' ? 'text-primary' : 
                     'text-muted-foreground'
                   }`}>
@@ -471,7 +471,7 @@ function SlideContent({ slide, slideNumber, totalSlides }: { slide: typeof slide
                       </Badge>
                     ))}
                   </div>
-                  {phase.status === 'done' && <CheckCircle2 className="h-5 w-5 text-green-500" />}
+                  {phase.status === 'done' && <CheckCircle2 className="h-5 w-5 text-chart-2" />}
                   {phase.status === 'current' && <ArrowRight className="h-5 w-5 text-primary" />}
                 </div>
               </Card>
@@ -591,7 +591,7 @@ function SlideContent({ slide, slideNumber, totalSlides }: { slide: typeof slide
       return (
         <div className="flex flex-col items-center justify-center h-full text-center">
           <Sparkles className="h-16 w-16 text-primary mb-6" />
-          <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+          <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-primary to-chart-1 bg-clip-text text-transparent">
             {slide.title}
           </h1>
           <p className="text-2xl text-muted-foreground mb-8">{slide.subtitle}</p>

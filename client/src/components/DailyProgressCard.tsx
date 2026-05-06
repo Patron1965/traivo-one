@@ -57,7 +57,7 @@ export function DailyProgressCard({ completed, total, compact = false }: DailyPr
           </div>
           <Badge 
             variant={percentage === 100 ? "default" : "secondary"}
-            className={percentage === 100 ? "bg-green-600" : ""}
+            className={percentage === 100 ? "bg-chart-2/15" : ""}
             data-testid="badge-progress-percentage"
           >
             {percentage === 100 ? (
@@ -113,7 +113,7 @@ export function DailyProgressCard({ completed, total, compact = false }: DailyPr
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10">
                 {percentage === 100 ? (
-                  <Trophy className="h-5 w-5 text-green-600" />
+                  <Trophy className="h-5 w-5 text-chart-2" />
                 ) : (
                   <Target className="h-5 w-5 text-primary" />
                 )}
@@ -127,7 +127,7 @@ export function DailyProgressCard({ completed, total, compact = false }: DailyPr
             </div>
             <div 
               className={`text-2xl sm:text-3xl font-bold ${
-                percentage === 100 ? "text-green-600" : "text-primary"
+                percentage === 100 ? "text-chart-2" : "text-primary"
               }`}
               data-testid="text-progress-percentage"
             >
@@ -136,7 +136,7 @@ export function DailyProgressCard({ completed, total, compact = false }: DailyPr
           </div>
           <Progress value={percentage} className="h-2" />
           {percentage === 100 && (
-            <div className="flex items-center gap-2 mt-3 text-green-600">
+            <div className="flex items-center gap-2 mt-3 text-chart-2">
               <CheckCircle2 className="h-4 w-4" />
               <span className="text-sm font-medium">Fantastiskt! Alla jobb avklarade!</span>
             </div>

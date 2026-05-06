@@ -40,15 +40,15 @@ export function OfflineIndicator({
       return <Loader2 className="h-4 w-4 animate-spin" />;
     }
     if (justSynced) {
-      return <Check className="h-4 w-4 text-green-500" />;
+      return <Check className="h-4 w-4 text-chart-2" />;
     }
     if (!isOnline) {
       return <WifiOff className="h-4 w-4 text-destructive" />;
     }
     if (pendingChanges > 0) {
-      return <CloudUpload className="h-4 w-4 text-yellow-500" />;
+      return <CloudUpload className="h-4 w-4 text-chart-3" />;
     }
-    return <Wifi className="h-4 w-4 text-green-500" />;
+    return <Wifi className="h-4 w-4 text-chart-2" />;
   };
 
   const getStatusText = () => {
@@ -81,7 +81,7 @@ export function OfflineIndicator({
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             {isOnline ? (
-              <Wifi className="h-5 w-5 text-green-500" />
+              <Wifi className="h-5 w-5 text-chart-2" />
             ) : (
               <WifiOff className="h-5 w-5 text-destructive" />
             )}
@@ -98,7 +98,7 @@ export function OfflineIndicator({
 
           {pendingChanges > 0 && (
             <div className="flex items-center gap-2 text-sm">
-              <AlertCircle className="h-4 w-4 text-yellow-500" />
+              <AlertCircle className="h-4 w-4 text-chart-3" />
               <span>{pendingChanges} ändringar väntar på synkronisering</span>
             </div>
           )}

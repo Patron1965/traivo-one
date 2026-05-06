@@ -42,7 +42,7 @@ function PortalScopeBadge() {
   const extra = names.length > 3 ? ` +${names.length - 3}` : "";
   return (
     <div
-      className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 mb-2"
+      className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border bg-chart-4/10 dark:bg-chart-4/15 border-chart-4/30 dark:border-chart-4/70 text-chart-4 mb-2"
       data-testid="badge-portal-scope"
       title={names.join(", ")}
     >
@@ -370,7 +370,7 @@ export default function PortalDashboardPage() {
             {unreadCount > 0 && (
               <div className="relative">
                 <Bell className="h-5 w-5 text-muted-foreground" />
-                <span className="absolute -top-1 -right-1 h-4 min-w-4 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1">
+                <span className="absolute -top-1 -right-1 h-4 min-w-4 flex items-center justify-center rounded-full bg-destructive/15 text-destructive-foreground text-[10px] font-bold px-1">
                   {unreadCount}
                 </span>
               </div>
@@ -433,8 +433,8 @@ export default function PortalDashboardPage() {
             data-testid="card-quick-reschedule"
           >
             <CardContent className="p-5 flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
-                <RefreshCw className="h-6 w-6 text-blue-500" />
+              <div className="p-3 rounded-xl bg-chart-1/15 group-hover:bg-chart-1/15 transition-colors">
+                <RefreshCw className="h-6 w-6 text-chart-1" />
               </div>
               <div>
                 <h3 className="font-semibold">Ändra bokning</h3>
@@ -449,8 +449,8 @@ export default function PortalDashboardPage() {
             data-testid="card-quick-contact"
           >
             <CardContent className="p-5 flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
-                <MessageCircle className="h-6 w-6 text-green-500" />
+              <div className="p-3 rounded-xl bg-chart-2/15 group-hover:bg-chart-2/15 transition-colors">
+                <MessageCircle className="h-6 w-6 text-chart-2" />
               </div>
               <div>
                 <h3 className="font-semibold">Kontakta oss</h3>
@@ -465,8 +465,8 @@ export default function PortalDashboardPage() {
             data-testid="card-quick-new"
           >
             <CardContent className="p-5 flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-purple-500/10 group-hover:bg-purple-500/20 transition-colors">
-                <Plus className="h-6 w-6 text-purple-500" />
+              <div className="p-3 rounded-xl bg-chart-5/15 group-hover:bg-chart-5/15 transition-colors">
+                <Plus className="h-6 w-6 text-chart-5" />
               </div>
               <div>
                 <h3 className="font-semibold">Ny förfrågan</h3>
@@ -478,11 +478,11 @@ export default function PortalDashboardPage() {
 
         {/* Statistics Row */}
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-          <Card className="bg-gradient-to-br from-green-500/10 to-transparent">
+          <Card className="bg-gradient-to-br from-chart-2 to-transparent">
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-500/20 rounded-lg">
-                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                <div className="p-2 bg-chart-2/15 rounded-lg">
+                  <CheckCircle2 className="h-5 w-5 text-chart-2" />
                 </div>
                 <div>
                   <div className="text-2xl font-bold">{history.length}</div>
@@ -491,11 +491,11 @@ export default function PortalDashboardPage() {
               </div>
             </CardContent>
           </Card>
-          <Card className="bg-gradient-to-br from-blue-500/10 to-transparent">
+          <Card className="bg-gradient-to-br from-chart-1 to-transparent">
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-500/20 rounded-lg">
-                  <CalendarDays className="h-5 w-5 text-blue-500" />
+                <div className="p-2 bg-chart-1/15 rounded-lg">
+                  <CalendarDays className="h-5 w-5 text-chart-1" />
                 </div>
                 <div>
                   <div className="text-2xl font-bold">{upcoming.length}</div>
@@ -505,29 +505,29 @@ export default function PortalDashboardPage() {
             </CardContent>
           </Card>
           <Link href="/portal/clusters">
-            <Card className="bg-gradient-to-br from-purple-500/10 to-transparent hover-elevate cursor-pointer group" data-testid="card-cluster-overview">
+            <Card className="bg-gradient-to-br from-chart-5 to-transparent hover-elevate cursor-pointer group" data-testid="card-cluster-overview">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-500/20 rounded-lg group-hover:bg-purple-500/30 transition-colors">
-                    <TreeDeciduous className="h-5 w-5 text-purple-500" />
+                  <div className="p-2 bg-chart-5/15 rounded-lg group-hover:bg-chart-5/15 transition-colors">
+                    <TreeDeciduous className="h-5 w-5 text-chart-5" />
                   </div>
                   <div className="flex-1">
                     <div className="text-2xl font-bold">{objects.length}</div>
                     <div className="text-xs text-muted-foreground">Dina platser</div>
                   </div>
                   <div className="flex flex-col items-end">
-                    <ArrowRight className="h-4 w-4 text-purple-500" />
-                    <span className="text-xs text-purple-500 font-medium">Visa alla</span>
+                    <ArrowRight className="h-4 w-4 text-chart-5" />
+                    <span className="text-xs text-chart-5 font-medium">Visa alla</span>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </Link>
-          <Card className="bg-gradient-to-br from-orange-500/10 to-transparent">
+          <Card className="bg-gradient-to-br from-chart-4 to-transparent">
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-orange-500/20 rounded-lg">
-                  <FileText className="h-5 w-5 text-orange-500" />
+                <div className="p-2 bg-chart-4/15 rounded-lg">
+                  <FileText className="h-5 w-5 text-chart-4" />
                 </div>
                 <div>
                   <div className="text-2xl font-bold">
@@ -541,10 +541,10 @@ export default function PortalDashboardPage() {
         </div>
 
         {/* AI Insights Card */}
-        <Card className="bg-gradient-to-r from-purple-500/10 via-blue-500/5 to-transparent border-purple-500/20" data-testid="card-ai-insights">
+        <Card className="bg-gradient-to-r from-chart-5 via-chart-1 to-transparent border-chart-5/50" data-testid="card-ai-insights">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-purple-500" />
+              <Sparkles className="h-5 w-5 text-chart-5" />
               <CardTitle className="text-lg">Smarta tips</CardTitle>
             </div>
           </CardHeader>
@@ -552,8 +552,8 @@ export default function PortalDashboardPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               {upcoming.length > 0 && upcoming[0]?.scheduledDate ? (
                 <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50" data-testid="insight-next-visit">
-                  <div className="p-1.5 bg-blue-500/10 rounded-md">
-                    <CalendarDays className="h-4 w-4 text-blue-500" />
+                  <div className="p-1.5 bg-chart-1/15 rounded-md">
+                    <CalendarDays className="h-4 w-4 text-chart-1" />
                   </div>
                   <div>
                     <p className="text-sm font-medium">Påminnelse</p>
@@ -564,8 +564,8 @@ export default function PortalDashboardPage() {
                 </div>
               ) : (
                 <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50" data-testid="insight-no-visits">
-                  <div className="p-1.5 bg-green-500/10 rounded-md">
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  <div className="p-1.5 bg-chart-2/15 rounded-md">
+                    <CheckCircle2 className="h-4 w-4 text-chart-2" />
                   </div>
                   <div>
                     <p className="text-sm font-medium">Allt klart just nu</p>
@@ -577,8 +577,8 @@ export default function PortalDashboardPage() {
               )}
               {history.length >= 3 ? (
                 <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50" data-testid="insight-history">
-                  <div className="p-1.5 bg-green-500/10 rounded-md">
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  <div className="p-1.5 bg-chart-2/15 rounded-md">
+                    <CheckCircle2 className="h-4 w-4 text-chart-2" />
                   </div>
                   <div>
                     <p className="text-sm font-medium">Bra samarbete!</p>
@@ -602,8 +602,8 @@ export default function PortalDashboardPage() {
               )}
               {objects.length > 1 && (
                 <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50" data-testid="insight-objects">
-                  <div className="p-1.5 bg-purple-500/10 rounded-md">
-                    <Grid3X3 className="h-4 w-4 text-purple-500" />
+                  <div className="p-1.5 bg-chart-5/15 rounded-md">
+                    <Grid3X3 className="h-4 w-4 text-chart-5" />
                   </div>
                   <div>
                     <p className="text-sm font-medium">Översikt</p>
@@ -614,8 +614,8 @@ export default function PortalDashboardPage() {
                 </div>
               )}
               <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50" data-testid="insight-contact">
-                <div className="p-1.5 bg-amber-500/10 rounded-md">
-                  <Phone className="h-4 w-4 text-amber-500" />
+                <div className="p-1.5 bg-chart-4/15 rounded-md">
+                  <Phone className="h-4 w-4 text-chart-4" />
                 </div>
                 <div>
                   <p className="text-sm font-medium">Kontaktinfo uppdaterad?</p>
@@ -633,8 +633,8 @@ export default function PortalDashboardPage() {
           <Link href="/portal/invoices">
             <Card className="hover-elevate cursor-pointer group" data-testid="card-invoices">
               <CardContent className="p-5 flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-amber-500/10 group-hover:bg-amber-500/20 transition-colors">
-                  <FileText className="h-6 w-6 text-amber-500" />
+                <div className="p-3 rounded-xl bg-chart-4/15 group-hover:bg-chart-4/15 transition-colors">
+                  <FileText className="h-6 w-6 text-chart-4" />
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold">Fakturor</h3>
@@ -648,8 +648,8 @@ export default function PortalDashboardPage() {
           <Link href="/portal/contracts">
             <Card className="hover-elevate cursor-pointer group" data-testid="card-contracts">
               <CardContent className="p-5 flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-teal-500/10 group-hover:bg-teal-500/20 transition-colors">
-                  <Package className="h-6 w-6 text-teal-500" />
+                <div className="p-3 rounded-xl bg-chart-2/15 group-hover:bg-chart-2/15 transition-colors">
+                  <Package className="h-6 w-6 text-chart-2" />
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold">Tjänsteavtal</h3>
@@ -663,8 +663,8 @@ export default function PortalDashboardPage() {
           <Link href="/portal/issues">
             <Card className="hover-elevate cursor-pointer group" data-testid="card-issues">
               <CardContent className="p-5 flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-red-500/10 group-hover:bg-red-500/20 transition-colors">
-                  <AlertCircle className="h-6 w-6 text-red-500" />
+                <div className="p-3 rounded-xl bg-destructive/15 group-hover:bg-destructive/15 transition-colors">
+                  <AlertCircle className="h-6 w-6 text-destructive" />
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold">Mina ärenden</h3>
@@ -678,8 +678,8 @@ export default function PortalDashboardPage() {
           <Link href="/portal/field">
             <Card className="hover-elevate cursor-pointer group" data-testid="card-field-docs">
               <CardContent className="p-5 flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-teal-500/10 group-hover:bg-teal-500/20 transition-colors">
-                  <Camera className="h-6 w-6 text-teal-500" />
+                <div className="p-3 rounded-xl bg-chart-2/15 group-hover:bg-chart-2/15 transition-colors">
+                  <Camera className="h-6 w-6 text-chart-2" />
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold">Fältdokumentation</h3>
@@ -1124,8 +1124,8 @@ export default function PortalDashboardPage() {
             ) : history.length === 0 ? (
               <Card className="bg-gradient-to-br from-muted/30 to-transparent">
                 <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                  <div className="p-4 bg-green-500/10 rounded-full mb-4">
-                    <History className="h-10 w-10 text-green-500" />
+                  <div className="p-4 bg-chart-2/15 rounded-full mb-4">
+                    <History className="h-10 w-10 text-chart-2" />
                   </div>
                   <h3 className="text-lg font-semibold mb-2">Ingen historik ännu</h3>
                   <p className="text-muted-foreground max-w-sm">
@@ -1187,8 +1187,8 @@ export default function PortalDashboardPage() {
             ) : bookingRequests.length === 0 ? (
               <Card className="bg-gradient-to-br from-muted/30 to-transparent">
                 <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                  <div className="p-4 bg-purple-500/10 rounded-full mb-4">
-                    <FileText className="h-10 w-10 text-purple-500" />
+                  <div className="p-4 bg-chart-5/15 rounded-full mb-4">
+                    <FileText className="h-10 w-10 text-chart-5" />
                   </div>
                   <h3 className="text-lg font-semibold mb-2">Inga förfrågningar ännu</h3>
                   <p className="text-muted-foreground max-w-sm mb-6">
@@ -1280,12 +1280,12 @@ export default function PortalDashboardPage() {
                       </div>
                       {obj.what3words && (
                         <div className="flex items-center gap-2 text-sm">
-                          <Grid3X3 className="h-3 w-3 text-red-500 shrink-0" />
+                          <Grid3X3 className="h-3 w-3 text-destructive shrink-0" />
                           <a 
                             href={`https://what3words.com/${obj.what3words}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-red-600 hover:underline font-mono text-xs"
+                            className="text-destructive hover:underline font-mono text-xs"
                           >
                             ///{obj.what3words}
                           </a>
@@ -1295,7 +1295,7 @@ export default function PortalDashboardPage() {
                       <div className="pt-2 border-t space-y-1">
                         {lastVisit ? (
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <CheckCircle2 className="h-3 w-3 text-green-500" />
+                            <CheckCircle2 className="h-3 w-3 text-chart-2" />
                             <span>Senast: {format(new Date(lastVisit.completedAt || lastVisit.scheduledDate), "d MMM", { locale: sv })}</span>
                           </div>
                         ) : (
@@ -1329,7 +1329,7 @@ export default function PortalDashboardPage() {
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-red-500" />
+              <AlertCircle className="h-5 w-5 text-destructive" />
               Felanmälan
             </DialogTitle>
             <DialogDescription>

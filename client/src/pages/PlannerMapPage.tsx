@@ -23,7 +23,7 @@ export default function PlannerMapPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setUrgentDialogOpen(true)}
-            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-destructive text-white hover:bg-destructive transition-colors"
             data-testid="button-urgent-job"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>

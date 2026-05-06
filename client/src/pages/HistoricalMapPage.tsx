@@ -559,9 +559,9 @@ export default function HistoricalMapPage() {
                   className={`text-xs cursor-pointer ${
                     currentPosition ? (
                       currentPosition.status === "on_site" || currentPosition.status === "on_job"
-                        ? "border-green-500/50 text-green-600"
+                        ? "border-chart-2/50 text-chart-2"
                         : currentPosition.status === "traveling"
-                        ? "border-blue-500/50 text-blue-600"
+                        ? "border-chart-1/50 text-chart-1"
                         : ""
                     ) : ""
                   }`}

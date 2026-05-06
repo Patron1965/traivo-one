@@ -82,19 +82,19 @@ const SCENARIO_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  active: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  completed: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  active: "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15",
+  completed: "bg-chart-1/15 text-chart-1 dark:bg-chart-1/15",
   draft: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
-  pending: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-  exported: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  failed: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+  pending: "bg-chart-3/15 text-chart-3 dark:bg-chart-3/15",
+  exported: "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15",
+  failed: "bg-destructive/15 text-destructive dark:bg-destructive/15",
   cancelled: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
   skapad: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
-  planerad_pre: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-  planerad_resurs: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  planerad_las: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
-  utford: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  fakturerad: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+  planerad_pre: "bg-chart-3/15 text-chart-3 dark:bg-chart-3/15",
+  planerad_resurs: "bg-chart-1/15 text-chart-1 dark:bg-chart-1/15",
+  planerad_las: "bg-chart-1/15 text-chart-1 dark:bg-chart-1/15",
+  utford: "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15",
+  fakturerad: "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15",
 };
 
 function formatCurrency(amount: number | null): string {
@@ -237,7 +237,7 @@ export function ChainTracePanel({ workOrderId, open, onClose }: ChainTracePanelP
         )}
 
         {error && (
-          <div className="flex items-center gap-2 p-4 text-red-600 dark:text-red-400" data-testid="chain-trace-error">
+          <div className="flex items-center gap-2 p-4 text-destructive" data-testid="chain-trace-error">
             <AlertCircle className="w-5 h-5" />
             <span>{(error as Error).message || "Kunde inte ladda kedjedata"}</span>
           </div>
@@ -399,7 +399,7 @@ export function ChainTracePanel({ workOrderId, open, onClose }: ChainTracePanelP
                           <span className="text-sm font-medium">
                             {inv.fortnoxInvoiceNumber ? `Faktura #${inv.fortnoxInvoiceNumber}` : "Ej exporterad"}
                           </span>
-                          {inv.isCreditInvoice && <Badge variant="outline" className="ml-1.5 text-xs border-red-300 text-red-600 dark:border-red-700 dark:text-red-400">Kredit</Badge>}
+                          {inv.isCreditInvoice && <Badge variant="outline" className="ml-1.5 text-xs border-destructive/30 text-destructive dark:border-destructive/70">Kredit</Badge>}
                           {inv.exportedAt && (
                             <p className="text-xs text-muted-foreground">
                               {format(new Date(inv.exportedAt), "d MMM yyyy", { locale: sv })}

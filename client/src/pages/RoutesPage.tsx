@@ -285,13 +285,13 @@ export default function RoutesPage() {
       {recommendations && recommendations.weather && recommendations.weather.impact !== "none" && (
         <div className={`flex items-center gap-3 px-3 py-2 rounded-md border-l-4 ${
           recommendations.weather.impact === "severe" || recommendations.weather.impact === "high" 
-            ? "border-l-red-500 bg-red-50 dark:bg-red-950/20 dark:border-l-red-400" 
-            : "border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950/20 dark:border-l-yellow-400"
+            ? "border-l-destructive bg-destructive/10 dark:bg-destructive/15" 
+            : "border-l-chart-3 bg-chart-3/10 dark:bg-chart-3/15"
         }`} data-testid="card-weather-warning">
           <AlertTriangle className={`h-4 w-4 shrink-0 ${
             recommendations.weather.impact === "severe" || recommendations.weather.impact === "high"
-              ? "text-red-500 dark:text-red-400"
-              : "text-orange-500 dark:text-orange-400"
+              ? "text-destructive"
+              : "text-chart-4"
           }`} />
           <span className="text-sm">
             {Math.round(recommendations.weather.temperature)}°C, {recommendations.weather.precipitation} mm, {Math.round(recommendations.weather.windSpeed)} m/s — {recommendations.weather.description}
@@ -308,7 +308,7 @@ export default function RoutesPage() {
           {vrpResult && (
             <div className="space-y-4">
               {!vrpResult.success ? (
-                <div className="flex items-start gap-2 text-destructive text-sm p-3 bg-red-50 dark:bg-red-950/20 rounded-md border border-red-200 dark:border-red-800">
+                <div className="flex items-start gap-2 text-destructive text-sm p-3 bg-destructive/10 dark:bg-destructive/15 rounded-md border border-destructive/20 dark:border-destructive/80">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span className="break-words">{vrpResult.error}</span>
                 </div>
@@ -347,7 +347,7 @@ export default function RoutesPage() {
                               </div>
                             </div>
                             <div className="space-y-2 border-l pl-4">
-                              <p className="text-xs font-medium text-green-600 dark:text-green-400 uppercase tracking-wide">Optimerad</p>
+                              <p className="text-xs font-medium text-chart-2 uppercase tracking-wide">Optimerad</p>
                               <div className="space-y-1.5 text-sm">
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Ordrar</span>
@@ -358,7 +358,7 @@ export default function RoutesPage() {
                                   <span className="font-medium">
                                     {vrpResult.summary.totalDurationMinutes} min
                                     {currentStats.totalDurationMinutes > 0 && currentStats.totalDurationMinutes > vrpResult.summary.totalDurationMinutes && (
-                                      <Badge variant="secondary" className="ml-1 text-[10px] text-green-600">
+                                      <Badge variant="secondary" className="ml-1 text-[10px] text-chart-2">
                                         -{currentStats.totalDurationMinutes - vrpResult.summary.totalDurationMinutes} min
                                       </Badge>
                                     )}
@@ -369,7 +369,7 @@ export default function RoutesPage() {
                                   <span className="font-medium">
                                     {vrpResult.summary.totalDistanceKm} km
                                     {currentStats.totalDistanceKm > 0 && currentStats.totalDistanceKm > vrpResult.summary.totalDistanceKm && (
-                                      <Badge variant="secondary" className="ml-1 text-[10px] text-green-600">
+                                      <Badge variant="secondary" className="ml-1 text-[10px] text-chart-2">
                                         -{Math.round((currentStats.totalDistanceKm - vrpResult.summary.totalDistanceKm) * 10) / 10} km
                                       </Badge>
                                     )}
@@ -380,7 +380,7 @@ export default function RoutesPage() {
                                   <span className="font-medium">
                                     {vrpResult.summary.avgEfficiency}%
                                     {currentStats.avgEfficiency > 0 && vrpResult.summary.avgEfficiency > currentStats.avgEfficiency && (
-                                      <Badge variant="secondary" className="ml-1 text-[10px] text-green-600">
+                                      <Badge variant="secondary" className="ml-1 text-[10px] text-chart-2">
                                         +{vrpResult.summary.avgEfficiency - currentStats.avgEfficiency}%
                                       </Badge>
                                     )}
@@ -417,19 +417,19 @@ export default function RoutesPage() {
                               </div>
                             </div>
                             <div className="space-y-2 border-l pl-4">
-                              <p className="text-xs font-medium text-green-600 dark:text-green-400 uppercase tracking-wide">Optimerad ordning</p>
+                              <p className="text-xs font-medium text-chart-2 uppercase tracking-wide">Optimerad ordning</p>
                               <div className="space-y-2 max-h-[200px] overflow-y-auto">
                                 {vrpResult.routes.map((route, idx) => (
                                   <div key={route.resourceId || idx} className="text-xs">
                                     <div className="font-medium flex items-center gap-1 mb-0.5">
-                                      <Truck className="h-3 w-3 text-green-600" />
+                                      <Truck className="h-3 w-3 text-chart-2" />
                                       {route.resourceName}
                                       <Badge variant="outline" className="text-[10px] ml-auto">{route.stops.length} stopp</Badge>
                                     </div>
                                     <div className="flex flex-wrap gap-0.5">
                                       {route.stops.map((stop, i) => (
                                         <span key={stop.orderId} className="text-muted-foreground">
-                                          <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1 py-0.5 rounded text-[10px]">{i + 1}</span>
+                                          <span className="bg-chart-2/15 dark:bg-chart-2/15 text-chart-2 px-1 py-0.5 rounded text-[10px]">{i + 1}</span>
                                           <span className="truncate max-w-[80px] inline-block align-middle ml-0.5">{stop.orderTitle}</span>
                                           {i < route.stops.length - 1 && <span className="mx-0.5">→</span>}
                                         </span>
@@ -504,7 +504,7 @@ export default function RoutesPage() {
 
                   <div className="flex items-center gap-2 flex-wrap">
                     {vrpResult.unassignedOrders.length > 0 && (
-                      <div className="text-sm text-orange-600 dark:text-orange-400">
+                      <div className="text-sm text-chart-4">
                         {vrpResult.unassignedOrders.length} ordrar kunde inte tilldelas
                       </div>
                     )}

@@ -73,9 +73,9 @@ export default function WorkflowGuidePage() {
                 <Step number={2} icon={<Calendar />} title="Kontrollera WeekPlanner">
                   Se dagens resurser och kapacitet. Heatmap visar belastning:
                   <div className="flex gap-2 mt-2">
-                    <Badge className="bg-green-500">Grön = Ledig</Badge>
-                    <Badge className="bg-yellow-500">Gul = Normal</Badge>
-                    <Badge className="bg-red-500">Röd = Överbelastad</Badge>
+                    <Badge className="bg-chart-2/15">Grön = Ledig</Badge>
+                    <Badge className="bg-chart-3/15">Gul = Normal</Badge>
+                    <Badge className="bg-destructive/15">Röd = Överbelastad</Badge>
                   </div>
                 </Step>
                 <Step number={3} icon={<Zap />} title="Granska AI-rekommendationer">
@@ -143,25 +143,25 @@ export default function WorkflowGuidePage() {
                     step={1} 
                     title="Åka dit" 
                     description="GPS-spårning startar, kund kan aviseras"
-                    color="bg-blue-500"
+                    color="bg-chart-1/15"
                   />
                   <WorkflowStep 
                     step={2} 
                     title="Starta" 
                     description="Tidsregistrering börjar när du anländer"
-                    color="bg-yellow-500"
+                    color="bg-chart-3/15"
                   />
                   <WorkflowStep 
                     step={3} 
                     title="Utför" 
                     description="Gör jobbet, logga material och anteckningar"
-                    color="bg-orange-500"
+                    color="bg-chart-4/15"
                   />
                   <WorkflowStep 
                     step={4} 
                     title="Slutför" 
                     description="Signatur + Klar, protokoll genereras"
-                    color="bg-green-500"
+                    color="bg-chart-2/15"
                   />
                 </div>
               </Section>

@@ -127,11 +127,11 @@ export default function PortalInvoicesPage() {
               </div>
             </CardContent>
           </Card>
-          <Card className="bg-gradient-to-br from-green-500/10 to-transparent" data-testid="card-stat-paid">
+          <Card className="bg-gradient-to-br from-chart-2 to-transparent" data-testid="card-stat-paid">
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-500/20 rounded-lg">
-                  <CreditCard className="h-5 w-5 text-green-500" />
+                <div className="p-2 bg-chart-2/15 rounded-lg">
+                  <CreditCard className="h-5 w-5 text-chart-2" />
                 </div>
                 <div>
                   <div className="text-2xl font-bold">{paidCount}</div>
@@ -140,11 +140,11 @@ export default function PortalInvoicesPage() {
               </div>
             </CardContent>
           </Card>
-          <Card className="bg-gradient-to-br from-amber-500/10 to-transparent" data-testid="card-stat-unpaid">
+          <Card className="bg-gradient-to-br from-chart-4 to-transparent" data-testid="card-stat-unpaid">
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-amber-500/20 rounded-lg">
-                  <Calendar className="h-5 w-5 text-amber-500" />
+                <div className="p-2 bg-chart-4/15 rounded-lg">
+                  <Calendar className="h-5 w-5 text-chart-4" />
                 </div>
                 <div>
                   <div className="text-2xl font-bold">{unpaidCount}</div>
@@ -153,11 +153,11 @@ export default function PortalInvoicesPage() {
               </div>
             </CardContent>
           </Card>
-          <Card className={overdueCount > 0 ? "bg-gradient-to-br from-red-500/10 to-transparent border-red-500/30" : "bg-gradient-to-br from-slate-500/10 to-transparent"} data-testid="card-stat-overdue">
+          <Card className={overdueCount > 0 ? "bg-gradient-to-br from-destructive to-transparent border-destructive/50" : "bg-gradient-to-br from-slate-500/10 to-transparent"} data-testid="card-stat-overdue">
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${overdueCount > 0 ? "bg-red-500/20" : "bg-slate-500/20"}`}>
-                  <AlertCircle className={`h-5 w-5 ${overdueCount > 0 ? "text-red-500" : "text-slate-500"}`} />
+                <div className={`p-2 rounded-lg ${overdueCount > 0 ? "bg-destructive/15" : "bg-slate-500/20"}`}>
+                  <AlertCircle className={`h-5 w-5 ${overdueCount > 0 ? "text-destructive" : "text-slate-500"}`} />
                 </div>
                 <div>
                   <div className="text-2xl font-bold">{overdueCount}</div>
@@ -181,11 +181,11 @@ export default function PortalInvoicesPage() {
                 <div className="flex gap-6">
                   <div className="text-right">
                     <div className="text-xs text-muted-foreground">Betalt</div>
-                    <div className="text-lg font-semibold text-green-600">{totalPaid.toLocaleString("sv-SE")} SEK</div>
+                    <div className="text-lg font-semibold text-chart-2">{totalPaid.toLocaleString("sv-SE")} SEK</div>
                   </div>
                   <div className="text-right">
                     <div className="text-xs text-muted-foreground">Kvar att betala</div>
-                    <div className={`text-lg font-semibold ${totalUnpaid > 0 ? "text-amber-600" : "text-muted-foreground"}`}>
+                    <div className={`text-lg font-semibold ${totalUnpaid > 0 ? "text-chart-4" : "text-muted-foreground"}`}>
                       {totalUnpaid.toLocaleString("sv-SE")} SEK
                     </div>
                   </div>
@@ -196,10 +196,10 @@ export default function PortalInvoicesPage() {
         )}
 
         {unpaidCount > 0 && (
-          <Card className="border-amber-500/50 bg-amber-500/5">
+          <Card className="border-chart-4/50 bg-chart-4/15">
             <CardContent className="p-5 flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-amber-500/10">
-                <AlertCircle className="h-6 w-6 text-amber-500" />
+              <div className="p-3 rounded-xl bg-chart-4/15">
+                <AlertCircle className="h-6 w-6 text-chart-4" />
               </div>
               <div>
                 <h3 className="font-semibold">Obetalda fakturor</h3>

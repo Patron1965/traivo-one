@@ -83,12 +83,12 @@ interface UserData {
 }
 
 const ROLE_CONFIG: Record<string, { label: string; color: string; icon: typeof Shield; avatarBg: string }> = {
-  admin: { label: "Admin", color: "bg-red-500/10 text-red-500 border-red-500/20", icon: ShieldCheck, avatarBg: "bg-red-500" },
-  planner: { label: "Planerare", color: "bg-blue-500/10 text-blue-500 border-blue-500/20", icon: UserCog, avatarBg: "bg-blue-500" },
-  user: { label: "Användare", color: "bg-gray-500/10 text-gray-400 border-gray-500/20", icon: Users, avatarBg: "bg-gray-500" },
-  technician: { label: "Tekniker", color: "bg-green-500/10 text-green-500 border-green-500/20", icon: Shield, avatarBg: "bg-green-500" },
-  customer: { label: "Kund", color: "bg-teal-500/10 text-teal-500 border-teal-500/20", icon: Building2, avatarBg: "bg-teal-500" },
-  reporter: { label: "Anmälare", color: "bg-amber-500/10 text-amber-500 border-amber-500/20", icon: MessageSquare, avatarBg: "bg-amber-500" },
+  admin: { label: "Admin", color: "bg-destructive/10 text-destructive border-destructive/20", icon: ShieldCheck, avatarBg: "bg-destructive/15" },
+  planner: { label: "Planerare", color: "bg-chart-1/10 text-chart-1 border-chart-1/20", icon: UserCog, avatarBg: "bg-chart-1/15" },
+  user: { label: "Användare", color: "bg-muted text-muted-foreground border-border", icon: Users, avatarBg: "bg-muted-foreground" },
+  technician: { label: "Tekniker", color: "bg-chart-2/10 text-chart-2 border-chart-2/20", icon: Shield, avatarBg: "bg-chart-2/15" },
+  customer: { label: "Kund", color: "bg-chart-3/10 text-chart-3 border-chart-3/20", icon: Building2, avatarBg: "bg-chart-3/15" },
+  reporter: { label: "Anmälare", color: "bg-chart-4/10 text-chart-4 border-chart-4/20", icon: MessageSquare, avatarBg: "bg-chart-4/15" },
 };
 
 function formatRelativeTime(dateStr: string | null): string {
@@ -546,8 +546,8 @@ export default function UserManagementPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-500/10">
-                <UserCircle className="h-5 w-5 text-green-500" />
+              <div className="p-2 rounded-lg bg-chart-2/15">
+                <UserCircle className="h-5 w-5 text-chart-2" />
               </div>
               <div>
                 <p className="text-2xl font-bold" data-testid="text-active-users">{activeCount}</p>
@@ -559,8 +559,8 @@ export default function UserManagementPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-red-500/10">
-                <ShieldCheck className="h-5 w-5 text-red-500" />
+              <div className="p-2 rounded-lg bg-destructive/15">
+                <ShieldCheck className="h-5 w-5 text-destructive" />
               </div>
               <div>
                 <p className="text-2xl font-bold" data-testid="text-admin-count">{adminCount}</p>
@@ -572,8 +572,8 @@ export default function UserManagementPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-500/10">
-                <UsersRound className="h-5 w-5 text-blue-500" />
+              <div className="p-2 rounded-lg bg-chart-1/15">
+                <UsersRound className="h-5 w-5 text-chart-1" />
               </div>
               <div>
                 <p className="text-2xl font-bold" data-testid="text-team-count">{activeTeamsCount}</p>
@@ -824,7 +824,7 @@ export default function UserManagementPage() {
                           <TableCell>
                             <Badge
                               variant="outline"
-                              className={`cursor-pointer ${user.isActive !== false ? "bg-green-500/10 text-green-500 border-green-500/20" : "bg-gray-500/10 text-gray-400 border-gray-500/20"}`}
+                              className={`cursor-pointer ${user.isActive !== false ? "bg-chart-2/15 text-chart-2 border-chart-2/50" : "bg-gray-500/10 text-gray-400 border-gray-500/20"}`}
                               onClick={() => toggleActiveMutation.mutate({ id: user.id, isActive: user.isActive === false })}
                               data-testid={`badge-status-${user.id}`}
                             >
@@ -1352,7 +1352,7 @@ export default function UserManagementPage() {
             <AlertDialogDescription asChild>
               <div className="space-y-2">
                 <p>Är du säker på att du vill ta bort {deleteTarget?.firstName} {deleteTarget?.lastName} ({deleteTarget?.email})?</p>
-                <p className="text-sm text-amber-500 dark:text-amber-400">Detta kommer även att ta bort användarens rolltilldelningar och nollställa kopplingar i relaterade poster (t.ex. granskningar, tilldelningar, loggar).</p>
+                <p className="text-sm text-chart-4">Detta kommer även att ta bort användarens rolltilldelningar och nollställa kopplingar i relaterade poster (t.ex. granskningar, tilldelningar, loggar).</p>
                 <p>Denna åtgärd kan inte ångras.</p>
               </div>
             </AlertDialogDescription>
@@ -1361,7 +1361,7 @@ export default function UserManagementPage() {
             <AlertDialogCancel data-testid="button-cancel-delete">Avbryt</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive/15 text-destructive-foreground hover:bg-destructive/90"
               data-testid="button-confirm-delete"
             >
               {deleteMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -1384,7 +1384,7 @@ export default function UserManagementPage() {
             <AlertDialogCancel data-testid="button-cancel-delete-team">Avbryt</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deleteTeamTarget && deleteTeamMutation.mutate(deleteTeamTarget.id)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive/15 text-destructive-foreground hover:bg-destructive/90"
               data-testid="button-confirm-delete-team"
             >
               {deleteTeamMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

@@ -58,9 +58,9 @@ interface ParentPreviewResp { total: number; proposals: ParentProposal[]; trunca
 interface AddressPreviewResp { total: number; proposals: AddressProposal[]; truncated: boolean; note: string | null }
 
 const KIND_META: Record<NameProposal["kind"], { label: string; icon: typeof Phone; color: string }> = {
-  phone: { label: "Telefonnummer", icon: Phone, color: "text-blue-600" },
-  person: { label: "Personnamn", icon: User, color: "text-purple-600" },
-  instruction: { label: "Instruktion", icon: MessageSquare, color: "text-amber-600" },
+  phone: { label: "Telefonnummer", icon: Phone, color: "text-chart-1" },
+  person: { label: "Personnamn", icon: User, color: "text-chart-5" },
+  instruction: { label: "Instruktion", icon: MessageSquare, color: "text-chart-4" },
   numeric: { label: "Siffror", icon: Hash, color: "text-slate-600" },
 };
 
@@ -76,10 +76,10 @@ export function CleanupPanels() {
 
   return (
     <>
-      <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/20">
+      <Card className="border-chart-2/20 dark:border-chart-2/80 bg-chart-2/10 dark:bg-chart-2/15">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-emerald-600" />
+            <Sparkles className="h-5 w-5 text-chart-2" />
             Sanering av kärl-data
           </CardTitle>
         </CardHeader>
@@ -95,7 +95,7 @@ export function CleanupPanels() {
               data-testid="button-open-cleanup-names"
             >
               <div className="flex items-start gap-3 text-left">
-                <div className="mt-0.5"><Phone className="h-4 w-4 text-blue-600" /></div>
+                <div className="mt-0.5"><Phone className="h-4 w-4 text-chart-1" /></div>
                 <div>
                   <div className="font-medium text-sm">Namn-rensning</div>
                   <div className="text-xs text-muted-foreground">Telefonnummer, personnamn och instruktioner i namn-fältet</div>
@@ -109,7 +109,7 @@ export function CleanupPanels() {
               data-testid="button-open-cleanup-parents"
             >
               <div className="flex items-start gap-3 text-left">
-                <div className="mt-0.5"><GitBranch className="h-4 w-4 text-purple-600" /></div>
+                <div className="mt-0.5"><GitBranch className="h-4 w-4 text-chart-5" /></div>
                 <div>
                   <div className="font-medium text-sm">Föräldra-koppling</div>
                   <div className="text-xs text-muted-foreground">Föreslå rum/fastighet för föräldralösa kärl</div>
@@ -123,7 +123,7 @@ export function CleanupPanels() {
               data-testid="button-open-cleanup-address"
             >
               <div className="flex items-start gap-3 text-left">
-                <div className="mt-0.5"><MapPinned className="h-4 w-4 text-orange-600" /></div>
+                <div className="mt-0.5"><MapPinned className="h-4 w-4 text-chart-4" /></div>
                 <div>
                   <div className="font-medium text-sm">Adress-backfill</div>
                   <div className="text-xs text-muted-foreground">Ärv adress från förälder eller omvänd-geokoda</div>
@@ -367,7 +367,7 @@ function ParentCleanupDialog({ open, onClose, onApplied, toast }: { open: boolea
                           {p.candidates.map(c => (
                             <label
                               key={c.id}
-                              className={`flex items-start gap-2 p-2 rounded border cursor-pointer hover-elevate ${chosen[p.id] === c.id ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20" : "border-border"}`}
+                              className={`flex items-start gap-2 p-2 rounded border cursor-pointer hover-elevate ${chosen[p.id] === c.id ? "border-chart-2/50 bg-chart-2/10 dark:bg-chart-2/15" : "border-border"}`}
                               data-testid={`label-parent-candidate-${p.id}-${c.id}`}
                             >
                               <input

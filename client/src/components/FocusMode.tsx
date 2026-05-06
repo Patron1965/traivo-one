@@ -44,9 +44,9 @@ export function FocusTimeline({ currentStep }: FocusTimelineProps) {
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
                       state === "done"
-                        ? "bg-green-500 text-white"
+                        ? "bg-chart-2 text-white"
                         : state === "active"
-                        ? "bg-blue-500 text-white ring-2 ring-blue-300 dark:ring-blue-700 animate-pulse"
+                        ? "bg-chart-1 text-white ring-2 ring-chart-1/30 dark:ring-chart-1/70 animate-pulse"
                         : "bg-muted border-2 border-muted-foreground/20 text-muted-foreground"
                     }`}
                     data-testid={`timeline-step-${step.key}`}
@@ -58,13 +58,13 @@ export function FocusTimeline({ currentStep }: FocusTimelineProps) {
                     )}
                   </div>
                   <span className={`text-[10px] mt-1 font-medium ${
-                    state === "active" ? "text-blue-600 dark:text-blue-400" : 
-                    state === "done" ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
+                    state === "active" ? "text-chart-1" : 
+                    state === "done" ? "text-chart-2" : "text-muted-foreground"
                   }`}>{step.label}</span>
                 </div>
                 {idx < TIMELINE_STEPS.length - 1 && (
                   <div className={`flex-1 h-0.5 mx-1 -mt-4 transition-all ${
-                    state === "done" ? "bg-green-500" : state === "active" ? "bg-blue-300 dark:bg-blue-700" : "bg-muted-foreground/20"
+                    state === "done" ? "bg-chart-2/15" : state === "active" ? "bg-chart-1/30 dark:bg-chart-1/15" : "bg-muted-foreground/20"
                   }`} />
                 )}
               </div>
@@ -78,13 +78,13 @@ export function FocusTimeline({ currentStep }: FocusTimelineProps) {
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   skapad: { bg: "bg-gray-100 dark:bg-gray-800", text: "text-gray-700 dark:text-gray-300", label: "Skapad" },
-  scheduled: { bg: "bg-blue-100 dark:bg-blue-900/30", text: "text-blue-700 dark:text-blue-300", label: "Schemalagd" },
-  tilldelad: { bg: "bg-blue-100 dark:bg-blue-900/30", text: "text-blue-700 dark:text-blue-300", label: "Tilldelad" },
-  paborjad: { bg: "bg-amber-100 dark:bg-amber-900/30", text: "text-amber-700 dark:text-amber-300", label: "Pågår" },
-  utford: { bg: "bg-green-100 dark:bg-green-900/30", text: "text-green-700 dark:text-green-300", label: "Utförd" },
-  avbruten: { bg: "bg-red-100 dark:bg-red-900/30", text: "text-red-700 dark:text-red-300", label: "Avbruten" },
-  omojlig: { bg: "bg-red-100 dark:bg-red-900/30", text: "text-red-700 dark:text-red-300", label: "Omöjlig" },
-  fakturerad: { bg: "bg-emerald-100 dark:bg-emerald-900/30", text: "text-emerald-700 dark:text-emerald-300", label: "Fakturerad" },
+  scheduled: { bg: "bg-chart-1/15 dark:bg-chart-1/15", text: "text-chart-1", label: "Schemalagd" },
+  tilldelad: { bg: "bg-chart-1/15 dark:bg-chart-1/15", text: "text-chart-1", label: "Tilldelad" },
+  paborjad: { bg: "bg-chart-4/15 dark:bg-chart-4/15", text: "text-chart-4", label: "Pågår" },
+  utford: { bg: "bg-chart-2/15 dark:bg-chart-2/15", text: "text-chart-2", label: "Utförd" },
+  avbruten: { bg: "bg-destructive/15 dark:bg-destructive/15", text: "text-destructive", label: "Avbruten" },
+  omojlig: { bg: "bg-destructive/15 dark:bg-destructive/15", text: "text-destructive", label: "Omöjlig" },
+  fakturerad: { bg: "bg-chart-2/15 dark:bg-chart-2/15", text: "text-chart-2", label: "Fakturerad" },
 };
 
 export function OrderStatusBadge({ status }: { status: string }) {
@@ -109,7 +109,7 @@ export function FocusCTA({ jobStarted, hasAddress, onStart, onNavigate, onReport
     <div className="grid grid-cols-3 gap-3" data-testid="focus-cta-buttons">
       <Button
         variant={jobStarted ? "outline" : "default"}
-        className={`h-auto py-4 flex-col gap-2 ${!jobStarted ? "bg-green-600 hover:bg-green-700 text-white" : ""}`}
+        className={`h-auto py-4 flex-col gap-2 ${!jobStarted ? "bg-chart-2 hover:bg-chart-2 text-white" : ""}`}
         onClick={onStart}
         disabled={jobStarted}
         data-testid="focus-button-start"
@@ -124,7 +124,7 @@ export function FocusCTA({ jobStarted, hasAddress, onStart, onNavigate, onReport
         disabled={!hasAddress}
         data-testid="focus-button-navigate"
       >
-        <Navigation className={`h-6 w-6 ${hasAddress ? "text-blue-500" : "text-muted-foreground"}`} />
+        <Navigation className={`h-6 w-6 ${hasAddress ? "text-chart-1" : "text-muted-foreground"}`} />
         <span className="text-xs font-medium">Navigera</span>
       </Button>
       <Button
@@ -133,7 +133,7 @@ export function FocusCTA({ jobStarted, hasAddress, onStart, onNavigate, onReport
         onClick={onReport}
         data-testid="focus-button-report"
       >
-        <AlertTriangle className="h-6 w-6 text-orange-500" />
+        <AlertTriangle className="h-6 w-6 text-chart-4" />
         <span className="text-xs font-medium">Rapportera</span>
       </Button>
     </div>

@@ -74,24 +74,24 @@ export function TodayOverview() {
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="rounded-lg bg-green-500/10 p-3 text-center" data-testid="today-completed">
-            <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 mx-auto mb-1" />
-            <div className="text-2xl font-bold text-green-700 dark:text-green-300">{kpis.completedTasks}</div>
+          <div className="rounded-lg bg-chart-2/15 p-3 text-center" data-testid="today-completed">
+            <CheckCircle2 className="h-5 w-5 text-chart-2 mx-auto mb-1" />
+            <div className="text-2xl font-bold text-chart-2">{kpis.completedTasks}</div>
             <div className="text-xs text-muted-foreground">Klara</div>
           </div>
-          <div className="rounded-lg bg-blue-500/10 p-3 text-center" data-testid="today-remaining">
-            <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400 mx-auto mb-1" />
-            <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">{kpis.remainingTasks}</div>
+          <div className="rounded-lg bg-chart-1/15 p-3 text-center" data-testid="today-remaining">
+            <Clock className="h-5 w-5 text-chart-1 mx-auto mb-1" />
+            <div className="text-2xl font-bold text-chart-1">{kpis.remainingTasks}</div>
             <div className="text-xs text-muted-foreground">Kvar</div>
           </div>
-          <div className="rounded-lg bg-purple-500/10 p-3 text-center" data-testid="today-resources">
-            <User className="h-5 w-5 text-purple-600 dark:text-purple-400 mx-auto mb-1" />
-            <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">{activeResources.length}</div>
+          <div className="rounded-lg bg-chart-5/15 p-3 text-center" data-testid="today-resources">
+            <User className="h-5 w-5 text-chart-5 mx-auto mb-1" />
+            <div className="text-2xl font-bold text-chart-5">{activeResources.length}</div>
             <div className="text-xs text-muted-foreground">Resurser ute</div>
           </div>
-          <div className="rounded-lg bg-amber-500/10 p-3 text-center" data-testid="today-avg-time">
-            <Truck className="h-5 w-5 text-amber-600 dark:text-amber-400 mx-auto mb-1" />
-            <div className="text-2xl font-bold text-amber-700 dark:text-amber-300">{kpis.avgTimePerTask}<span className="text-sm font-normal">min</span></div>
+          <div className="rounded-lg bg-chart-4/15 p-3 text-center" data-testid="today-avg-time">
+            <Truck className="h-5 w-5 text-chart-4 mx-auto mb-1" />
+            <div className="text-2xl font-bold text-chart-4">{kpis.avgTimePerTask}<span className="text-sm font-normal">min</span></div>
             <div className="text-xs text-muted-foreground">Snittid</div>
           </div>
         </div>

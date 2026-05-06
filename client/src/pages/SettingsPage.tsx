@@ -279,7 +279,7 @@ export default function SettingsPage() {
                 <div className="space-y-0.5">
                   <Label className="flex items-center gap-2">
                     Akuta jobb
-                    <AlertTriangle className="h-3 w-3 text-orange-500" />
+                    <AlertTriangle className="h-3 w-3 text-chart-4" />
                   </Label>
                   <p className="text-sm text-muted-foreground">Notifiera omedelbart vid akuta jobb</p>
                 </div>

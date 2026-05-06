@@ -446,13 +446,13 @@ export default function Step1ObjectSelection({
                   return (
                     <div className="space-y-0.5">
                       {favorable.length > 0 && (
-                        <div className="bg-green-100 dark:bg-green-900/40 border border-green-300 dark:border-green-700 rounded px-0.5 py-0.5">
-                          <div className="text-[9px] font-medium text-green-800 dark:text-green-300">{favorable.length}</div>
+                        <div className="bg-chart-2/15 dark:bg-chart-2/15 border border-chart-2/30 dark:border-chart-2/70 rounded px-0.5 py-0.5">
+                          <div className="text-[9px] font-medium text-chart-2">{favorable.length}</div>
                         </div>
                       )}
                       {unfavorable.length > 0 && (
-                        <div className="bg-red-100 dark:bg-red-900/40 border border-red-300 dark:border-red-700 rounded px-0.5 py-0.5">
-                          <div className="text-[9px] font-medium text-red-800 dark:text-red-300">{unfavorable.length}</div>
+                        <div className="bg-destructive/15 dark:bg-destructive/15 border border-destructive/30 dark:border-destructive/70 rounded px-0.5 py-0.5">
+                          <div className="text-[9px] font-medium text-destructive">{unfavorable.length}</div>
                         </div>
                       )}
                     </div>
@@ -463,8 +463,8 @@ export default function Step1ObjectSelection({
           </div>
           <div className="space-y-1 max-h-32 overflow-y-auto">
             {slotPreferences.map((sp) => (
-              <div key={sp.id} className={`flex items-center gap-2 text-xs px-2 py-1 rounded ${sp.preference === "favorable" ? "bg-green-50 dark:bg-green-900/20" : "bg-red-50 dark:bg-red-900/20"}`} data-testid={`agg-slot-${sp.id}`}>
-                <span className={`w-2 h-2 rounded-full shrink-0 ${sp.preference === "favorable" ? "bg-green-500" : "bg-red-500"}`} />
+              <div key={sp.id} className={`flex items-center gap-2 text-xs px-2 py-1 rounded ${sp.preference === "favorable" ? "bg-chart-2/10 dark:bg-chart-2/15" : "bg-destructive/10 dark:bg-destructive/15"}`} data-testid={`agg-slot-${sp.id}`}>
+                <span className={`w-2 h-2 rounded-full shrink-0 ${sp.preference === "favorable" ? "bg-chart-2/15" : "bg-destructive/15"}`} />
                 <span className="font-medium truncate">{sp.objectName}</span>
                 {sp.reason && <span className="text-muted-foreground truncate italic">{sp.reason}</span>}
                 {sp.startTime && <span className="text-muted-foreground">{sp.startTime}{sp.endTime ? `–${sp.endTime}` : ""}</span>}
@@ -473,10 +473,10 @@ export default function Step1ObjectSelection({
           </div>
           <div className="flex gap-3 mt-2">
             <div className="flex items-center gap-1 text-[10px]">
-              <span className="w-2 h-2 rounded-full bg-green-500" /> Fördelaktig
+              <span className="w-2 h-2 rounded-full bg-chart-2/15" /> Fördelaktig
             </div>
             <div className="flex items-center gap-1 text-[10px]">
-              <span className="w-2 h-2 rounded-full bg-red-500" /> Ofördelaktig
+              <span className="w-2 h-2 rounded-full bg-destructive/15" /> Ofördelaktig
             </div>
           </div>
         </div>

@@ -48,13 +48,13 @@ const STATUS_ICONS: Record<string, LucideIcon> = {
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   not_planned: { bg: "bg-muted", text: "text-muted-foreground", border: "border-muted-foreground/30" },
-  planned_rough: { bg: "bg-blue-50 dark:bg-blue-950", text: "text-blue-700 dark:text-blue-300", border: "border-blue-300 dark:border-blue-700" },
-  planned_fine: { bg: "bg-indigo-50 dark:bg-indigo-950", text: "text-indigo-700 dark:text-indigo-300", border: "border-indigo-300 dark:border-indigo-700" },
-  on_way: { bg: "bg-amber-50 dark:bg-amber-950", text: "text-amber-700 dark:text-amber-300", border: "border-amber-300 dark:border-amber-700" },
-  on_site: { bg: "bg-orange-50 dark:bg-orange-950", text: "text-orange-700 dark:text-orange-300", border: "border-orange-300 dark:border-orange-700" },
-  completed: { bg: "bg-green-50 dark:bg-green-950", text: "text-green-700 dark:text-green-300", border: "border-green-300 dark:border-green-700" },
-  inspected: { bg: "bg-teal-50 dark:bg-teal-950", text: "text-teal-700 dark:text-teal-300", border: "border-teal-300 dark:border-teal-700" },
-  invoiced: { bg: "bg-emerald-50 dark:bg-emerald-950", text: "text-emerald-700 dark:text-emerald-300", border: "border-emerald-300 dark:border-emerald-700" },
+  planned_rough: { bg: "bg-chart-1/10 dark:bg-chart-1/15", text: "text-chart-1", border: "border-chart-1/30 dark:border-chart-1/70" },
+  planned_fine: { bg: "bg-chart-1/10 dark:bg-chart-1/15", text: "text-chart-1", border: "border-chart-1/30 dark:border-chart-1/70" },
+  on_way: { bg: "bg-chart-4/10 dark:bg-chart-4/15", text: "text-chart-4", border: "border-chart-4/30 dark:border-chart-4/70" },
+  on_site: { bg: "bg-chart-4/10 dark:bg-chart-4/15", text: "text-chart-4", border: "border-chart-4/30 dark:border-chart-4/70" },
+  completed: { bg: "bg-chart-2/10 dark:bg-chart-2/15", text: "text-chart-2", border: "border-chart-2/30 dark:border-chart-2/70" },
+  inspected: { bg: "bg-chart-2/10 dark:bg-chart-2/15", text: "text-chart-2", border: "border-chart-2/30 dark:border-chart-2/70" },
+  invoiced: { bg: "bg-chart-2/10 dark:bg-chart-2/15", text: "text-chart-2", border: "border-chart-2/30 dark:border-chart-2/70" },
 };
 
 interface ExecutionStatusTrackerProps {

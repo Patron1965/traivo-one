@@ -364,7 +364,7 @@ function ArticleRow({
         </div>
         <div className="flex flex-wrap gap-1 shrink-0">
           {ap.isManual && (
-            <Badge className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+            <Badge className="text-xs bg-chart-1/15 text-chart-1 dark:bg-chart-1/15">
               Manuell
             </Badge>
           )}

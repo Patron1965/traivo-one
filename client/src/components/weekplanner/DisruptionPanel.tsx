@@ -49,15 +49,15 @@ const typeIcons: Record<string, typeof AlertTriangle> = {
 };
 
 const severityColors: Record<string, string> = {
-  critical: "border-red-500 bg-red-50 dark:bg-red-950/30",
-  warning: "border-amber-500 bg-amber-50 dark:bg-amber-950/30",
-  info: "border-blue-500 bg-blue-50 dark:bg-blue-950/30",
+  critical: "border-destructive/50 bg-destructive/10 dark:bg-destructive/15",
+  warning: "border-chart-4/50 bg-chart-4/10 dark:bg-chart-4/15",
+  info: "border-chart-1/50 bg-chart-1/10 dark:bg-chart-1/15",
 };
 
 const severityBadge: Record<string, string> = {
-  critical: "bg-red-500 text-white",
-  warning: "bg-amber-500 text-white",
-  info: "bg-blue-500 text-white",
+  critical: "bg-destructive text-white",
+  warning: "bg-chart-4 text-white",
+  info: "bg-chart-1 text-white",
 };
 
 export function DisruptionPanel() {
@@ -102,7 +102,7 @@ export function DisruptionPanel() {
   return (
     <div className="space-y-2" data-testid="disruption-panel">
       <div className="flex items-center gap-2 px-1">
-        <Activity className="h-4 w-4 text-amber-500" />
+        <Activity className="h-4 w-4 text-chart-4" />
         <span className="text-sm font-medium">Störningar</span>
         <Badge variant="secondary" className="text-xs" data-testid="disruption-count">
           {activeDisruptions.length}

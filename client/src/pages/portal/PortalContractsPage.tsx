@@ -108,11 +108,11 @@ export default function PortalContractsPage() {
               </div>
             </CardContent>
           </Card>
-          <Card className="bg-gradient-to-br from-green-500/10 to-transparent">
+          <Card className="bg-gradient-to-br from-chart-2 to-transparent">
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-500/20 rounded-lg">
-                  <Package className="h-5 w-5 text-green-500" />
+                <div className="p-2 bg-chart-2/15 rounded-lg">
+                  <Package className="h-5 w-5 text-chart-2" />
                 </div>
                 <div>
                   <div className="text-2xl font-bold">{contracts.length}</div>

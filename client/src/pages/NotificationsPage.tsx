@@ -233,7 +233,7 @@ export default function NotificationsPage() {
                       {n.isRead ? (
                         <span className="h-2 w-2 rounded-full bg-transparent block" />
                       ) : (
-                        <span className="h-2 w-2 rounded-full bg-red-500 block" />
+                        <span className="h-2 w-2 rounded-full bg-destructive/15 block" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">

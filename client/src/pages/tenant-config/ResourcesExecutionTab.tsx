@@ -72,8 +72,8 @@ export function ResourcesExecutionTab() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900">
-                <Users className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+              <div className="p-2 rounded-lg bg-chart-1/15 dark:bg-chart-1/15">
+                <Users className="h-5 w-5 text-chart-1" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{activeResources.length}</p>
@@ -85,8 +85,8 @@ export function ResourcesExecutionTab() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900">
-                <Shield className="h-5 w-5 text-green-600 dark:text-green-400" />
+              <div className="p-2 rounded-lg bg-chart-2/15 dark:bg-chart-2/15">
+                <Shield className="h-5 w-5 text-chart-2" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{withCodes.length}</p>
@@ -98,8 +98,8 @@ export function ResourcesExecutionTab() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900">
-                <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
+              <div className="p-2 rounded-lg bg-chart-4/15 dark:bg-chart-4/15">
+                <AlertTriangle className="h-5 w-5 text-chart-4" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{activeResources.length - withCodes.length}</p>

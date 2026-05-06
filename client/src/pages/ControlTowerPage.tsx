@@ -61,18 +61,18 @@ type HeatmapData = {
 
 const LEVEL_COLORS: Record<HeatmapCell["level"], string> = {
   empty: "bg-gray-100 dark:bg-gray-800",
-  low: "bg-emerald-100 dark:bg-emerald-900/40",
-  medium: "bg-amber-100 dark:bg-amber-900/40",
-  high: "bg-orange-200 dark:bg-orange-900/50",
-  overloaded: "bg-red-300 dark:bg-red-900/60",
+  low: "bg-chart-2/15 dark:bg-chart-2/15",
+  medium: "bg-chart-4/15 dark:bg-chart-4/15",
+  high: "bg-chart-4/20 dark:bg-chart-4/15",
+  overloaded: "bg-destructive/30 dark:bg-destructive/15",
 };
 
 const LEVEL_BORDERS: Record<HeatmapCell["level"], string> = {
   empty: "border-gray-200 dark:border-gray-700",
-  low: "border-emerald-300 dark:border-emerald-700",
-  medium: "border-amber-300 dark:border-amber-700",
-  high: "border-orange-400 dark:border-orange-700",
-  overloaded: "border-red-500 dark:border-red-600",
+  low: "border-chart-2/30 dark:border-chart-2/70",
+  medium: "border-chart-4/30 dark:border-chart-4/70",
+  high: "border-chart-4/40 dark:border-chart-4/70",
+  overloaded: "border-destructive/50 dark:border-destructive/60",
 };
 
 const LEVEL_LABELS: Record<HeatmapCell["level"], string> = {
@@ -138,20 +138,20 @@ function CellDetailDialog({ cell, resourceName, open, onClose }: {
             </div>
           </div>
           {cell.slaAtRisk > 0 && (
-            <div className="flex items-center gap-2 rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 p-3">
-              <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
+            <div className="flex items-center gap-2 rounded-lg border border-destructive/30 dark:border-destructive/70 bg-destructive/10 dark:bg-destructive/15 p-3">
+              <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
               <div>
-                <p className="text-sm font-medium text-red-700 dark:text-red-400">SLA-risk</p>
-                <p className="text-xs text-red-600 dark:text-red-300">{cell.slaAtRisk} ordrar nära deadline</p>
+                <p className="text-sm font-medium text-destructive">SLA-risk</p>
+                <p className="text-xs text-destructive">{cell.slaAtRisk} ordrar nära deadline</p>
               </div>
             </div>
           )}
           {cell.deviationCount > 0 && (
-            <div className="flex items-center gap-2 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3">
-              <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+            <div className="flex items-center gap-2 rounded-lg border border-chart-4/30 dark:border-chart-4/70 bg-chart-4/10 dark:bg-chart-4/15 p-3">
+              <AlertTriangle className="h-4 w-4 text-chart-4 flex-shrink-0" />
               <div>
-                <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Avvikelser</p>
-                <p className="text-xs text-amber-600 dark:text-amber-300">{cell.deviationCount} rapporterade avvikelser</p>
+                <p className="text-sm font-medium text-chart-4">Avvikelser</p>
+                <p className="text-xs text-chart-4">{cell.deviationCount} rapporterade avvikelser</p>
               </div>
             </div>
           )}
@@ -162,7 +162,7 @@ function CellDetailDialog({ cell, resourceName, open, onClose }: {
                 {cell.orders.map(order => (
                   <div
                     key={order.id}
-                    className={`flex items-center justify-between rounded border p-2 text-xs dark:border-gray-700 ${order.slaAtRisk ? "border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-900/10" : ""}`}
+                    className={`flex items-center justify-between rounded border p-2 text-xs dark:border-gray-700 ${order.slaAtRisk ? "border-destructive/30 dark:border-destructive/70 bg-destructive/10 dark:bg-destructive/15" : ""}`}
                     data-testid={`order-row-${order.id}`}
                   >
                     <div className="min-w-0 flex-1">
@@ -170,7 +170,7 @@ function CellDetailDialog({ cell, resourceName, open, onClose }: {
                       <p className="text-muted-foreground">{order.estimatedDuration} min · {STATUS_LABELS[order.status] || order.status}</p>
                     </div>
                     {order.slaAtRisk && (
-                      <AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0 ml-2" />
+                      <AlertTriangle className="h-3.5 w-3.5 text-destructive flex-shrink-0 ml-2" />
                     )}
                   </div>
                 ))}
@@ -202,12 +202,12 @@ function HeatmapCellComponent({ cell, onClick }: { cell: HeatmapCell; onClick: (
             )}
           </div>
           {cell.slaAtRisk > 0 && (
-            <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-red-500 flex items-center justify-center">
+            <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-destructive/15 flex items-center justify-center">
               <span className="text-[8px] text-white font-bold">{cell.slaAtRisk}</span>
             </div>
           )}
           {cell.deviationCount > 0 && (
-            <div className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-amber-500 flex items-center justify-center">
+            <div className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-chart-4/15 flex items-center justify-center">
               <span className="text-[8px] text-white font-bold">{cell.deviationCount}</span>
             </div>
           )}
@@ -219,10 +219,10 @@ function HeatmapCellComponent({ cell, onClick }: { cell: HeatmapCell; onClick: (
           <p className="text-xs">Ordrar: {cell.orderCount} ({cell.completedCount} klara)</p>
           <p className="text-xs">Beläggning: {cell.capacityPercent}% ({cell.totalMinutes} min)</p>
           {cell.slaAtRisk > 0 && (
-            <p className="text-xs text-red-400">SLA-risk: {cell.slaAtRisk} ordrar</p>
+            <p className="text-xs text-destructive">SLA-risk: {cell.slaAtRisk} ordrar</p>
           )}
           {cell.deviationCount > 0 && (
-            <p className="text-xs text-amber-400">Avvikelser: {cell.deviationCount}</p>
+            <p className="text-xs text-chart-4">Avvikelser: {cell.deviationCount}</p>
           )}
           <p className="text-[10px] text-muted-foreground italic">Klicka för detaljer</p>
         </div>
@@ -365,8 +365,8 @@ export default function ControlTowerPage() {
           <SummaryCard icon={Users} label="Resurser" value={data.summary.totalResources} color="bg-[#1B4B6B]" />
           <SummaryCard icon={ClipboardList} label="Ordrar" value={data.summary.totalOrders} color="bg-[#4A9B9B]" />
           <SummaryCard icon={TrendingUp} label="Snittbeläggning" value={`${data.summary.avgCapacity}%`} color="bg-[#7DBFB0]" />
-          <SummaryCard icon={AlertTriangle} label="Överbelastade" value={data.summary.overloadedCells} color="bg-orange-500" />
-          <SummaryCard icon={AlertTriangle} label="SLA-risk" value={data.summary.slaRiskTotal} color="bg-red-500" />
+          <SummaryCard icon={AlertTriangle} label="Överbelastade" value={data.summary.overloadedCells} color="bg-chart-4/15" />
+          <SummaryCard icon={AlertTriangle} label="SLA-risk" value={data.summary.slaRiskTotal} color="bg-destructive/15" />
         </div>
       )}
 
@@ -375,7 +375,7 @@ export default function ControlTowerPage() {
           {isError ? (
             <div className="flex items-center justify-center h-48" data-testid="error-heatmap">
               <div className="flex flex-col items-center gap-2 text-center">
-                <AlertTriangle className="h-6 w-6 text-red-500" />
+                <AlertTriangle className="h-6 w-6 text-destructive" />
                 <p className="text-sm text-muted-foreground">Kunde inte ladda heatmap-data</p>
               </div>
             </div>
@@ -415,14 +415,14 @@ export default function ControlTowerPage() {
                       return (
                         <th
                           key={dh.date}
-                          className={`p-1 text-center text-[10px] font-normal ${dh.isWeekend ? "text-red-400 dark:text-red-500" : "text-muted-foreground"}`}
+                          className={`p-1 text-center text-[10px] font-normal ${dh.isWeekend ? "text-destructive" : "text-muted-foreground"}`}
                         >
                           <div>{dh.dayName}</div>
                           <div className="font-medium">{dh.dayNum}</div>
                           {unassignedSla > 0 && (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="mx-auto mt-0.5 w-4 h-4 rounded-full bg-red-500/80 flex items-center justify-center cursor-help" data-testid={`unassigned-sla-${dh.date}`}>
+                                <div className="mx-auto mt-0.5 w-4 h-4 rounded-full bg-destructive/15 flex items-center justify-center cursor-help" data-testid={`unassigned-sla-${dh.date}`}>
                                   <span className="text-[8px] text-white font-bold">{unassignedSla}</span>
                                 </div>
                               </TooltipTrigger>
@@ -470,7 +470,7 @@ export default function ControlTowerPage() {
       {showRiskLayer && (
         <div className="space-y-3" data-testid="sla-risk-layer">
           <div className="flex items-center gap-2">
-            <ShieldAlert className="h-4 w-4 text-red-500" />
+            <ShieldAlert className="h-4 w-4 text-destructive" />
             <h3 className="text-sm font-semibold">SLA-tidigvarning — kommande 7 dagar</h3>
             <span className="text-xs text-muted-foreground">Aggregerad risk per kluster och topp-25 risker</span>
           </div>
@@ -498,11 +498,11 @@ export default function ControlTowerPage() {
         ))}
         <span className="ml-2">|</span>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-red-500" />
+          <div className="w-3 h-3 rounded-full bg-destructive/15" />
           <span>SLA-risk</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-amber-500" />
+          <div className="w-3 h-3 rounded-full bg-chart-4/15" />
           <span>Avvikelser</span>
         </div>
       </div>

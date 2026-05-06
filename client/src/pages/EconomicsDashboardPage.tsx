@@ -207,8 +207,8 @@ export default function EconomicsDashboardPage() {
     <div className="space-y-6">
       <PageHeader icon={TrendingUp} title="Ekonomisk översikt" description="Analysera lönsamhet per kluster och kund" testId="text-page-title" />
       {ordersWithoutEconomicData > 0 && (
-        <div className="flex items-center gap-2 p-2 rounded bg-yellow-500/10 text-yellow-700 dark:text-yellow-300 text-sm">
-          <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+        <div className="flex items-center gap-2 p-2 rounded bg-chart-3/15 text-chart-3 text-sm">
+          <AlertTriangle className="h-4 w-4 text-chart-4" />
           <span>
             {ordersWithoutEconomicData} av {workOrders.length} ordrar saknar ekonomisk data och exkluderas från beräkningarna.
           </span>
@@ -241,16 +241,16 @@ export default function EconomicsDashboardPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Marginal</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${totalMargin >= 0 ? "text-green-600" : "text-red-600"}`}>
+            <div className={`text-2xl font-bold ${totalMargin >= 0 ? "text-chart-2" : "text-destructive"}`}>
               {(totalMargin / 1000).toFixed(0)}k SEK
             </div>
             <div className="flex items-center gap-1 text-xs">
               {totalMargin >= 0 ? (
-                <TrendingUp className="h-3 w-3 text-green-600" />
+                <TrendingUp className="h-3 w-3 text-chart-2" />
               ) : (
-                <TrendingDown className="h-3 w-3 text-red-600" />
+                <TrendingDown className="h-3 w-3 text-destructive" />
               )}
-              <span className={totalMargin >= 0 ? "text-green-600" : "text-red-600"}>
+              <span className={totalMargin >= 0 ? "text-chart-2" : "text-destructive"}>
                 {marginPercent}% marginal
               </span>
             </div>
@@ -372,7 +372,7 @@ export default function EconomicsDashboardPage() {
                         <span>Kostnad</span>
                       </div>
                       <div>
-                        <span className={`block font-medium ${cluster.margin >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        <span className={`block font-medium ${cluster.margin >= 0 ? "text-chart-2" : "text-destructive"}`}>
                           {cluster.margin.toLocaleString()} SEK
                         </span>
                         <span>Marginal</span>
@@ -462,7 +462,7 @@ export default function EconomicsDashboardPage() {
                       <div className="text-xs text-muted-foreground">
                         {(a.totalRevenue / 100).toLocaleString()} kr intäkt
                       </div>
-                      <div className={`text-sm font-medium ${a.totalMargin >= 0 ? "text-green-600" : "text-red-600"}`}>
+                      <div className={`text-sm font-medium ${a.totalMargin >= 0 ? "text-chart-2" : "text-destructive"}`}>
                         {a.totalMargin >= 0 ? "+" : ""}{(a.totalMargin / 100).toLocaleString()} kr
                         <span className="ml-1 text-xs opacity-75">({a.marginPercent}%)</span>
                       </div>
@@ -505,7 +505,7 @@ export default function EconomicsDashboardPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <span className="font-medium text-green-600">+{customer.margin.toLocaleString()} SEK</span>
+                      <span className="font-medium text-chart-2">+{customer.margin.toLocaleString()} SEK</span>
                       <span className="text-xs text-muted-foreground block">{customer.marginPercent}%</span>
                     </div>
                   </div>
@@ -546,7 +546,7 @@ export default function EconomicsDashboardPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <span className={`font-medium ${customer.margin >= 0 ? "text-yellow-600" : "text-red-600"}`}>
+                      <span className={`font-medium ${customer.margin >= 0 ? "text-chart-3" : "text-destructive"}`}>
                         {customer.margin >= 0 ? "+" : ""}{customer.margin.toLocaleString()} SEK
                       </span>
                       <span className="text-xs text-muted-foreground block">{customer.marginPercent}%</span>

@@ -401,7 +401,7 @@ export default function SystemOverviewPage() {
             <Badge variant="outline" className="text-xs">
               Uppdaterad: {format(new Date(), "d MMM yyyy", { locale: sv })}
             </Badge>
-            <Badge variant="secondary" className="text-xs bg-green-500/10 text-green-600 dark:text-green-400">
+            <Badge variant="secondary" className="text-xs bg-chart-2/15 text-chart-2">
               {systemFeatures.reduce((acc, s) => acc + s.features.length, 0)} funktioner live
             </Badge>
           </div>

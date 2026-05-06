@@ -81,11 +81,11 @@ const hierarchyLevelIcons: Record<string, React.ReactNode> = {
 };
 
 const hierarchyLevelColors: Record<string, string> = {
-  koncern: "bg-purple-500/10 text-purple-500",
-  brf: "bg-blue-500/10 text-blue-500",
-  fastighet: "bg-green-500/10 text-green-500",
-  rum: "bg-orange-500/10 text-orange-500",
-  karl: "bg-red-500/10 text-red-500",
+  koncern: "bg-chart-5/15 text-chart-5",
+  brf: "bg-chart-1/15 text-chart-1",
+  fastighet: "bg-chart-2/15 text-chart-2",
+  rum: "bg-chart-4/15 text-chart-4",
+  karl: "bg-destructive/15 text-destructive",
   omrade: "bg-gray-500/10 text-gray-500",
 };
 

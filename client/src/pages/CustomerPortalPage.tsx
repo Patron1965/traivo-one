@@ -55,13 +55,13 @@ const orderStatusLabels: Record<string, string> = {
 
 const orderStatusColors: Record<string, string> = {
   skapad: "bg-gray-500",
-  planerad_pre: "bg-blue-400",
-  planerad_resurs: "bg-blue-500",
-  planerad_las: "bg-indigo-500",
-  utford: "bg-green-500",
-  fakturerad: "bg-emerald-600",
-  omojlig: "bg-red-600",
-  avbruten: "bg-red-500",
+  planerad_pre: "bg-chart-1/40",
+  planerad_resurs: "bg-chart-1/15",
+  planerad_las: "bg-chart-1/15",
+  utford: "bg-chart-2/15",
+  fakturerad: "bg-chart-2/15",
+  omojlig: "bg-destructive/15",
+  avbruten: "bg-destructive/15",
 };
 
 export default function CustomerPortalPage() {
@@ -488,7 +488,7 @@ export default function CustomerPortalPage() {
                               <p className="font-medium">{obj?.name || "Okänt objekt"}</p>
                               <p className="text-sm text-muted-foreground">{obj?.address}</p>
                             </div>
-                            <Badge variant="secondary" className="bg-green-500 text-white">
+                            <Badge variant="secondary" className="bg-chart-2 text-white">
                               Utförd
                             </Badge>
                           </div>
@@ -580,7 +580,7 @@ export default function CustomerPortalPage() {
                                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">{obj.objectType}</span>
                                     )}
                                     {sub && (
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">Aktivt abonnemang</span>
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-chart-2/15 text-chart-2">Aktivt abonnemang</span>
                                     )}
                                   </div>
                                 </div>
@@ -620,7 +620,7 @@ export default function CustomerPortalPage() {
                                 <Badge variant="outline" className="text-xs">{obj.objectType}</Badge>
                               )}
                               {sub && (
-                                <Badge variant="secondary" className="text-xs bg-green-500/20 text-green-600">
+                                <Badge variant="secondary" className="text-xs bg-chart-2/15 text-chart-2">
                                   Aktivt abonnemang
                                 </Badge>
                               )}
@@ -694,7 +694,7 @@ export default function CustomerPortalPage() {
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">{obj.objectType}</span>
                           )}
                           {sub && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">Aktivt abonnemang</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-chart-2/15 text-chart-2">Aktivt abonnemang</span>
                           )}
                         </div>
                       </div>

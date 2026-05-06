@@ -165,7 +165,7 @@ export default function ArchitecturePage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <ArchitectureBox title="Webbplanerare" icon={Monitor} color="bg-blue-50 dark:bg-blue-950/30" borderColor="border-blue-200 dark:border-blue-800">
+              <ArchitectureBox title="Webbplanerare" icon={Monitor} color="bg-chart-1/10 dark:bg-chart-1/15" borderColor="border-chart-1/20 dark:border-chart-1/80">
                 <FeatureItem>Drag-and-drop veckoplanering</FeatureItem>
                 <FeatureItem>Interaktiv kartvyn med GPS</FeatureItem>
                 <FeatureItem>Dashboard med KPI:er</FeatureItem>
@@ -174,7 +174,7 @@ export default function ArchitecturePage() {
                 <FeatureItem>Artikelhantering på jobb</FeatureItem>
               </ArchitectureBox>
               
-              <ArchitectureBox title="Traivo Go" icon={Smartphone} color="bg-green-50 dark:bg-green-950/30" borderColor="border-green-200 dark:border-green-800">
+              <ArchitectureBox title="Traivo Go" icon={Smartphone} color="bg-chart-2/10 dark:bg-chart-2/15" borderColor="border-chart-2/20 dark:border-chart-2/80">
                 <FeatureItem>Touch-optimerat gränssnitt</FeatureItem>
                 <FeatureItem>Digital signaturinsamling</FeatureItem>
                 <FeatureItem>Kategoriserad fotodokumentation</FeatureItem>
@@ -183,7 +183,7 @@ export default function ArchitecturePage() {
                 <FeatureItem>Offline-stöd</FeatureItem>
               </ArchitectureBox>
               
-              <ArchitectureBox title="Kundportal" icon={Globe} color="bg-teal-50 dark:bg-teal-950/30" borderColor="border-teal-200 dark:border-teal-800">
+              <ArchitectureBox title="Kundportal" icon={Globe} color="bg-chart-2/10 dark:bg-chart-2/15" borderColor="border-chart-2/20 dark:border-chart-2/80">
                 <FeatureItem>Magic link-inloggning</FeatureItem>
                 <FeatureItem>Visa kommande besök</FeatureItem>
                 <FeatureItem>Bokningsförfrågningar</FeatureItem>
@@ -191,7 +191,7 @@ export default function ArchitecturePage() {
                 <FeatureItem>Klusteröversikt</FeatureItem>
               </ArchitectureBox>
               
-              <ArchitectureBox title="Admin & Rapporter" icon={BarChart3} color="bg-purple-50 dark:bg-purple-950/30" borderColor="border-purple-200 dark:border-purple-800">
+              <ArchitectureBox title="Admin & Rapporter" icon={BarChart3} color="bg-chart-5/10 dark:bg-chart-5/15" borderColor="border-chart-5/20 dark:border-chart-5/80">
                 <FeatureItem>Användarrollhantering</FeatureItem>
                 <FeatureItem>Företagsinställningar</FeatureItem>
                 <FeatureItem>Metadatakatalog (EAV)</FeatureItem>
@@ -216,14 +216,14 @@ export default function ArchitecturePage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <ArchitectureBox title="API-lager" icon={Zap} color="bg-orange-50 dark:bg-orange-950/30" borderColor="border-orange-200 dark:border-orange-800">
+              <ArchitectureBox title="API-lager" icon={Zap} color="bg-chart-4/10 dark:bg-chart-4/15" borderColor="border-chart-4/20 dark:border-chart-4/80">
                 <FeatureItem>RESTful API (200+ endpoints)</FeatureItem>
                 <FeatureItem>WebSocket realtidsnotiser</FeatureItem>
                 <FeatureItem>MCP Server för AI-assistenter</FeatureItem>
                 <FeatureItem>Mobil API för Traivo Go</FeatureItem>
               </ArchitectureBox>
               
-              <ArchitectureBox title="Säkerhetslager" icon={Shield} color="bg-red-50 dark:bg-red-950/30" borderColor="border-red-200 dark:border-red-800">
+              <ArchitectureBox title="Säkerhetslager" icon={Shield} color="bg-destructive/10 dark:bg-destructive/15" borderColor="border-destructive/20 dark:border-destructive/80">
                 <FeatureItem>Flerföretagsstöd-middleware</FeatureItem>
                 <FeatureItem>106+ ownership-verifieringar</FeatureItem>
                 <FeatureItem>Rollbaserad åtkomstkontroll</FeatureItem>
@@ -265,7 +265,7 @@ export default function ArchitecturePage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <ArchitectureBox title="OpenAI Integration" icon={Brain} color="bg-emerald-50 dark:bg-emerald-950/30" borderColor="border-emerald-200 dark:border-emerald-800">
+            <ArchitectureBox title="OpenAI Integration" icon={Brain} color="bg-chart-2/10 dark:bg-chart-2/15" borderColor="border-chart-2/20 dark:border-chart-2/80">
               <FeatureItem>GPT-4o för komplexa beslut</FeatureItem>
               <FeatureItem>GPT-4o-mini för snabbanalyser</FeatureItem>
               <FeatureItem>Strukturerad JSON-output</FeatureItem>
@@ -292,7 +292,7 @@ export default function ArchitecturePage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ArchitectureBox title="PostgreSQL + Drizzle ORM" icon={Database} color="bg-cyan-50 dark:bg-cyan-950/30" borderColor="border-cyan-200 dark:border-cyan-800">
+            <ArchitectureBox title="PostgreSQL + Drizzle ORM" icon={Database} color="bg-chart-3/10 dark:bg-chart-3/15" borderColor="border-chart-3/20 dark:border-chart-3/80">
               <FeatureItem>50+ tabeller</FeatureItem>
               <FeatureItem>Flerföretagsstöd-isolering</FeatureItem>
               <FeatureItem>Transaktionssäkerhet</FeatureItem>
@@ -310,21 +310,21 @@ export default function ArchitecturePage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <ArchitectureBox title="Fortnox" icon={FileText} color="bg-yellow-50 dark:bg-yellow-950/30" borderColor="border-yellow-200 dark:border-yellow-800">
+              <ArchitectureBox title="Fortnox" icon={FileText} color="bg-chart-3/10 dark:bg-chart-3/15" borderColor="border-chart-3/20 dark:border-chart-3/80">
                 <FeatureItem>OAuth-integration</FeatureItem>
                 <FeatureItem>Fakturaexport</FeatureItem>
                 <FeatureItem>Kundsynkronisering</FeatureItem>
                 <FeatureItem>Artikelmappning</FeatureItem>
               </ArchitectureBox>
               
-              <ArchitectureBox title="Kartjänster" icon={MapPin} color="bg-indigo-50 dark:bg-indigo-950/30" borderColor="border-indigo-200 dark:border-indigo-800">
+              <ArchitectureBox title="Kartjänster" icon={MapPin} color="bg-chart-1/10 dark:bg-chart-1/15" borderColor="border-chart-1/20 dark:border-chart-1/80">
                 <FeatureItem>Geoapify (rutter)</FeatureItem>
                 <FeatureItem>Nominatim (geocoding)</FeatureItem>
                 <FeatureItem>What3Words</FeatureItem>
                 <FeatureItem>Leaflet-kartor</FeatureItem>
               </ArchitectureBox>
               
-              <ArchitectureBox title="Övriga" icon={Bell} color="bg-pink-50 dark:bg-pink-950/30" borderColor="border-pink-200 dark:border-pink-800">
+              <ArchitectureBox title="Övriga" icon={Bell} color="bg-destructive/10 dark:bg-destructive/15" borderColor="border-destructive/20 dark:border-destructive/80">
                 <FeatureItem>Open-Meteo (väder)</FeatureItem>
                 <FeatureItem>Resend (e-post)</FeatureItem>
                 <FeatureItem>Object Storage</FeatureItem>
@@ -383,8 +383,8 @@ export default function ArchitecturePage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="p-4 bg-green-50 dark:bg-green-950/30 rounded-md border border-green-200 dark:border-green-800">
-              <h4 className="font-semibold text-green-700 dark:text-green-300 mb-3">Replit Agent</h4>
+            <div className="p-4 bg-chart-2/10 dark:bg-chart-2/15 rounded-md border border-chart-2/20 dark:border-chart-2/80">
+              <h4 className="font-semibold text-chart-2 mb-3">Replit Agent</h4>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span>Kostnad:</span>
@@ -401,8 +401,8 @@ export default function ArchitecturePage() {
               </div>
             </div>
             
-            <div className="p-4 bg-red-50 dark:bg-red-950/30 rounded-md border border-red-200 dark:border-red-800">
-              <h4 className="font-semibold text-red-700 dark:text-red-300 mb-3">Traditionell Byrå</h4>
+            <div className="p-4 bg-destructive/10 dark:bg-destructive/15 rounded-md border border-destructive/20 dark:border-destructive/80">
+              <h4 className="font-semibold text-destructive mb-3">Traditionell Byrå</h4>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span>Kostnad:</span>

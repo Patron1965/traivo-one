@@ -37,9 +37,9 @@ type ClusterAgg = {
 };
 
 const RISK_BADGE: Record<RiskLevel, { label: string; cls: string }> = {
-  ok: { label: "OK", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" },
-  warning: { label: "Varning", cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
-  critical: { label: "Kritisk", cls: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" },
+  ok: { label: "OK", cls: "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15" },
+  warning: { label: "Varning", cls: "bg-chart-4/15 text-chart-4 dark:bg-chart-4/15" },
+  critical: { label: "Kritisk", cls: "bg-destructive/15 text-destructive dark:bg-destructive/15" },
 };
 
 export function SlaRiskClusterGrid({ days = 7 }: { days?: number }) {
@@ -65,7 +65,7 @@ export function SlaRiskClusterGrid({ days = 7 }: { days?: number }) {
   if (clusters.length === 0) {
     return (
       <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground" data-testid="empty-sla-clusters">
-        <ShieldCheck className="h-4 w-4 text-emerald-500" />
+        <ShieldCheck className="h-4 w-4 text-chart-2" />
         Inga SLA-risker upptäckta för kommande {days} dagar.
       </div>
     );
@@ -75,13 +75,13 @@ export function SlaRiskClusterGrid({ days = 7 }: { days?: number }) {
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3" data-testid="grid-sla-clusters">
       {clusters.map(c => {
         const borderClass =
-          c.worst === "critical" ? "border-red-400 dark:border-red-700"
-          : c.worst === "warning" ? "border-amber-400 dark:border-amber-700"
-          : "border-emerald-300 dark:border-emerald-700";
+          c.worst === "critical" ? "border-destructive/40 dark:border-destructive/70"
+          : c.worst === "warning" ? "border-chart-4/40 dark:border-chart-4/70"
+          : "border-chart-2/30 dark:border-chart-2/70";
         const bgClass =
-          c.worst === "critical" ? "bg-red-50 dark:bg-red-900/10"
-          : c.worst === "warning" ? "bg-amber-50 dark:bg-amber-900/10"
-          : "bg-emerald-50/40 dark:bg-emerald-900/10";
+          c.worst === "critical" ? "bg-destructive/10 dark:bg-destructive/15"
+          : c.worst === "warning" ? "bg-chart-4/10 dark:bg-chart-4/15"
+          : "bg-chart-2/10 dark:bg-chart-2/15";
         return (
           <div
             key={c.clusterId || "_none"}
@@ -101,12 +101,12 @@ export function SlaRiskClusterGrid({ days = 7 }: { days?: number }) {
             </div>
             <div className="flex items-center gap-3 text-xs">
               <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-red-500" />
+                <span className="w-2 h-2 rounded-full bg-destructive/15" />
                 <span className="font-semibold">{c.critical}</span>
                 <span className="text-muted-foreground">krit.</span>
               </div>
               <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                <span className="w-2 h-2 rounded-full bg-chart-4/15" />
                 <span className="font-semibold">{c.warning}</span>
                 <span className="text-muted-foreground">varn.</span>
               </div>
@@ -160,7 +160,7 @@ export function SlaRiskJobsList({
   if (jobs.length === 0) {
     return (
       <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground" data-testid="empty-sla-jobs">
-        <ShieldCheck className="h-4 w-4 text-emerald-500" />
+        <ShieldCheck className="h-4 w-4 text-chart-2" />
         Inga jobb i risk just nu.
       </div>
     );
@@ -172,9 +172,9 @@ export function SlaRiskJobsList({
         {jobs.map(job => {
           const Icon = job.riskLevel === "critical" ? ShieldAlert : AlertTriangle;
           const colorCls = job.riskLevel === "critical"
-            ? "border-red-300 dark:border-red-700 bg-red-50/60 dark:bg-red-900/10"
-            : "border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-900/10";
-          const iconCls = job.riskLevel === "critical" ? "text-red-500" : "text-amber-500";
+            ? "border-destructive/30 dark:border-destructive/70 bg-destructive/10 dark:bg-destructive/15"
+            : "border-chart-4/30 dark:border-chart-4/70 bg-chart-4/10 dark:bg-chart-4/15";
+          const iconCls = job.riskLevel === "critical" ? "text-destructive" : "text-chart-4";
           const days = job.daysToBreach;
           const daysLabel = days < 0
             ? `${Math.abs(days).toFixed(1)} dagar över`
@@ -217,7 +217,7 @@ export function SlaRiskJobsList({
                     </span>
                   )}
                   {!job.assigned && (
-                    <span className="text-red-500 dark:text-red-400 font-medium">Otilldelad</span>
+                    <span className="text-destructive font-medium">Otilldelad</span>
                   )}
                 </div>
                 <p className="text-[11px] text-foreground/80 leading-snug">{job.reason}</p>

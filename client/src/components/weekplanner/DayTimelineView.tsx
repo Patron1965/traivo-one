@@ -50,9 +50,9 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
     <div className="flex-1 overflow-auto">
       <div style={{ minWidth: `${60 + visibleResources.length * 120}px` }}>
         {dayRestrictions.length > 0 && (
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800" data-testid="day-restrictions-banner">
-            <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
-            <span className="text-xs text-red-600 dark:text-red-400">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-destructive/10 dark:bg-destructive/15 border-b border-destructive/20 dark:border-destructive/80" data-testid="day-restrictions-banner">
+            <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+            <span className="text-xs text-destructive">
               {dayRestrictions.length} tidsbegränsning{dayRestrictions.length > 1 ? "ar" : ""} aktiv{dayRestrictions.length > 1 ? "a" : ""} idag
             </span>
           </div>
@@ -63,7 +63,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
             const dayHours = getResourceDayHours(resource.id, day);
             const capacityPct = getCapacityPercentage(dayHours);
             return (
-              <div key={resource.id} className={`p-2 border-r last:border-r-0 flex flex-col items-center justify-center gap-0.5 min-w-0 transition-colors ${activeDragJob && clusterMatchedResourceIds?.has(resource.id) ? "bg-emerald-50 dark:bg-emerald-950/30 ring-1 ring-inset ring-emerald-400/50" : ""}`}>
+              <div key={resource.id} className={`p-2 border-r last:border-r-0 flex flex-col items-center justify-center gap-0.5 min-w-0 transition-colors ${activeDragJob && clusterMatchedResourceIds?.has(resource.id) ? "bg-chart-2/10 dark:bg-chart-2/15 ring-1 ring-inset ring-chart-2/40" : ""}`}>
                 <div className="flex items-center gap-1.5">
                   <Avatar className="h-5 w-5 shrink-0">
                     <AvatarFallback className="text-[10px]">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
@@ -71,7 +71,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
                   <span className="text-xs font-medium truncate">{resource.name}</span>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className={`text-[10px] whitespace-nowrap cursor-help shrink-0 ${capacityPct >= 100 ? "text-red-600 dark:text-red-400 font-semibold" : capacityPct >= 85 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
+                      <span className={`text-[10px] whitespace-nowrap cursor-help shrink-0 ${capacityPct >= 100 ? "text-destructive font-semibold" : capacityPct >= 85 ? "text-chart-4" : "text-muted-foreground"}`}>
                         {dayHours.toFixed(1)}h
                       </span>
                     </TooltipTrigger>
@@ -110,8 +110,8 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
               const cellHasBreak = jobs.some(j => getJobCategory(j) === "break");
               const constraintCellKey = `${resource.id}|${dayStr}`;
               const slotConstraint = showConstraintLayer && constraintMap ? constraintMap.get(constraintCellKey) : undefined;
-              const constraintBg = slotConstraint?.status === "blocked" ? "bg-red-50/30 dark:bg-red-950/10" : slotConstraint?.status === "warning" ? "bg-amber-50/30 dark:bg-amber-950/10" : "";
-              const cellBg = constraintBg || (cellHasProduction ? "bg-green-50/50 dark:bg-green-950/10" : cellHasTravel ? "bg-yellow-50/50 dark:bg-yellow-950/10" : cellHasBreak ? "bg-blue-50/50 dark:bg-blue-950/10" : "bg-muted/20");
+              const constraintBg = slotConstraint?.status === "blocked" ? "bg-destructive/10 dark:bg-destructive/15" : slotConstraint?.status === "warning" ? "bg-chart-4/10 dark:bg-chart-4/15" : "";
+              const cellBg = constraintBg || (cellHasProduction ? "bg-chart-2/10 dark:bg-chart-2/15" : cellHasTravel ? "bg-chart-3/10 dark:bg-chart-3/15" : cellHasBreak ? "bg-chart-1/10 dark:bg-chart-1/15" : "bg-muted/20");
 
               const dayCellDropFit = activeDragJob ? getDropFitClass(resource.id, format(day, "yyyy-MM-dd"), activeDragJob.estimatedDuration || 60) : null;
 
@@ -131,7 +131,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
                       const cellConstraint = constraintMap.get(`${resource.id}|${dayStr}`);
                       if (!cellConstraint) {
                         return (
-                          <div className="flex items-center gap-1 text-[9px] text-green-600 dark:text-green-400 px-1 py-0.5 rounded bg-green-50 dark:bg-green-950/20 mb-1" data-testid={`constraint-ok-day-${resource.id}`}>
+                          <div className="flex items-center gap-1 text-[9px] text-chart-2 px-1 py-0.5 rounded bg-chart-2/10 dark:bg-chart-2/15 mb-1" data-testid={`constraint-ok-day-${resource.id}`}>
                             <ShieldCheck className="h-2.5 w-2.5 shrink-0" />
                             <span>Tillgänglig</span>
                           </div>
@@ -142,7 +142,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
                       return (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <div className={`flex items-center gap-1 text-[9px] cursor-help px-1 py-0.5 rounded mb-1 ${isBlocked ? "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20" : "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20"}`} data-testid={`constraint-day-${resource.id}`}>
+                            <div className={`flex items-center gap-1 text-[9px] cursor-help px-1 py-0.5 rounded mb-1 ${isBlocked ? "text-destructive bg-destructive/10 dark:bg-destructive/15" : "text-chart-4 bg-chart-4/10 dark:bg-chart-4/15"}`} data-testid={`constraint-day-${resource.id}`}>
                               <Icon className="h-2.5 w-2.5 shrink-0" />
                               <span>{isBlocked ? "Blockerad" : "Varning"} ({cellConstraint.constraints.length})</span>
                             </div>
@@ -151,7 +151,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
                             <div className="text-xs space-y-1">
                               {cellConstraint.constraints.map((c, i) => (
                                 <div key={i} className="flex items-start gap-1.5">
-                                  <span className={`mt-0.5 h-1.5 w-1.5 rounded-full shrink-0 ${c.severity === "critical" ? "bg-red-500" : "bg-amber-500"}`} />
+                                  <span className={`mt-0.5 h-1.5 w-1.5 rounded-full shrink-0 ${c.severity === "critical" ? "bg-destructive/15" : "bg-chart-4/15"}`} />
                                   <span><strong>{constraintCategoryLabels[c.category] || c.category}:</strong> {c.description}</span>
                                 </div>
                               ))}
@@ -170,10 +170,10 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
                           {travelAfter && (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="flex items-center gap-1.5 px-2 py-1 mt-1 rounded text-xs bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200" data-testid={`travel-block-${job.id}`}>
+                                <div className="flex items-center gap-1.5 px-2 py-1 mt-1 rounded text-xs bg-chart-3/15 dark:bg-chart-3/15 border border-chart-3/30 dark:border-chart-3/70 text-chart-3" data-testid={`travel-block-${job.id}`}>
                                   <Navigation className="h-3 w-3" />
                                   <span>Restid {travelAfter.minutes} min</span>
-                                  <span className="text-yellow-600 dark:text-yellow-400">({travelAfter.distanceKm} km)</span>
+                                  <span className="text-chart-3">({travelAfter.distanceKm} km)</span>
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent>
@@ -188,7 +188,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
                     {hourTravels.filter(t => !jobs.some(j => j.id === t.fromJobId)).map((t, i) => (
                       <Tooltip key={`travel-orphan-${i}`}>
                         <TooltipTrigger asChild>
-                          <div className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200">
+                          <div className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-chart-3/15 dark:bg-chart-3/15 border border-chart-3/30 dark:border-chart-3/70 text-chart-3">
                             <Navigation className="h-3 w-3" />
                             <span>Restid {t.minutes} min ({t.distanceKm} km)</span>
                           </div>

@@ -86,7 +86,7 @@ export function ImportSummaryView({
     <Card data-testid="card-import-summary-final">
       <CardHeader>
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center h-8 w-8 rounded-full bg-green-600 text-white text-sm font-bold">
+          <div className="flex items-center justify-center h-8 w-8 rounded-full bg-chart-2 text-white text-sm font-bold">
             <ClipboardList className="h-4 w-4" />
           </div>
           <div>
@@ -99,7 +99,7 @@ export function ImportSummaryView({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {stepConfig.map(({ step, label, icon, count, errorCount }) => (
             <div key={step} className={`p-3 rounded-lg border text-center ${
-              completedSteps.has(step) ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800" :
+              completedSteps.has(step) ? "bg-chart-2/10 dark:bg-chart-2/15 border-chart-2/20 dark:border-chart-2/80" :
               skippedSteps.has(step) ? "bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-700" :
               "bg-muted/30 border-transparent"
             }`} data-testid={`summary-step-${step}`}>
@@ -109,7 +109,7 @@ export function ImportSummaryView({
               </div>
               {completedSteps.has(step) ? (
                 <div>
-                  <Badge variant="default" className={`text-xs ${errorCount > 0 ? "bg-amber-600" : "bg-green-600"}`}>
+                  <Badge variant="default" className={`text-xs ${errorCount > 0 ? "bg-chart-4/15" : "bg-chart-2/15"}`}>
                     {errorCount > 0 ? (
                       <><AlertCircle className="h-3 w-3 mr-1" />Med varningar</>
                     ) : (
@@ -117,7 +117,7 @@ export function ImportSummaryView({
                     )}
                   </Badge>
                   {count && <p className="text-xs text-muted-foreground mt-1">{count}</p>}
-                  {errorCount > 0 && <p className="text-xs text-orange-600 mt-0.5">{errorCount} varningar</p>}
+                  {errorCount > 0 && <p className="text-xs text-chart-4 mt-0.5">{errorCount} varningar</p>}
                 </div>
               ) : skippedSteps.has(step) ? (
                 <Badge variant="secondary" className="text-xs">
@@ -132,7 +132,7 @@ export function ImportSummaryView({
         </div>
 
         {skippedSteps.size > 0 && (
-          <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-md text-sm text-amber-700 dark:text-amber-300">
+          <div className="flex items-center gap-2 p-3 bg-chart-4/10 dark:bg-chart-4/15 rounded-md text-sm text-chart-4">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{skippedSteps.size} steg hoppades över.</span>
             {firstSkippedStep && (
@@ -145,7 +145,7 @@ export function ImportSummaryView({
         )}
 
         {skippedSteps.size === 0 && completedSteps.size >= 4 && (
-          <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/20 rounded-md text-sm text-green-700 dark:text-green-300">
+          <div className="flex items-center gap-2 p-3 bg-chart-2/10 dark:bg-chart-2/15 rounded-md text-sm text-chart-2">
             <CheckCircle className="h-4 w-4 shrink-0" />
             Alla steg har genomförts. Importen är komplett.
           </div>
@@ -153,7 +153,7 @@ export function ImportSummaryView({
 
         {allWarnings.length > 0 && (
           <details className="border rounded-md p-3" data-testid="summary-warnings">
-            <summary className="text-sm font-medium text-orange-600 cursor-pointer flex items-center gap-2">
+            <summary className="text-sm font-medium text-chart-4 cursor-pointer flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
               {allWarnings.length} varningar/problem
             </summary>

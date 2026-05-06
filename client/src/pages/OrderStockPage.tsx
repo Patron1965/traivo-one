@@ -107,12 +107,12 @@ function getStatusLabels(tl: (key: string) => string): Record<OrderStatus, strin
 
 const STATUS_COLORS: Record<OrderStatus, string> = {
   skapad: "bg-muted text-muted-foreground",
-  planerad_pre: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  planerad_resurs: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
-  planerad_las: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-  utford: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  fakturerad: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-  omojlig: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"
+  planerad_pre: "bg-chart-1/15 text-chart-1 dark:bg-chart-1/15",
+  planerad_resurs: "bg-chart-1/15 text-chart-1 dark:bg-chart-1/15",
+  planerad_las: "bg-chart-4/15 text-chart-4 dark:bg-chart-4/15",
+  utford: "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15",
+  fakturerad: "bg-chart-5/15 text-chart-5 dark:bg-chart-5/15",
+  omojlig: "bg-destructive/15 text-destructive dark:bg-destructive/15"
 };
 
 const STATUS_ICONS: Record<OrderStatus, typeof ListChecks> = {
@@ -1065,10 +1065,10 @@ export default function OrderStockPage() {
                         )}
                       </div>
                       {status === "omojlig" && order.impossibleReason && (
-                        <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded-md text-xs" data-testid={`impossible-details-${order.id}`}>
+                        <div className="mt-2 p-2 bg-destructive/10 dark:bg-destructive/15 rounded-md text-xs" data-testid={`impossible-details-${order.id}`}>
                           <div className="flex items-center gap-2 flex-wrap">
-                            <XCircle className="h-3 w-3 text-red-600 dark:text-red-400" />
-                            <span className="font-medium text-red-700 dark:text-red-300">
+                            <XCircle className="h-3 w-3 text-destructive" />
+                            <span className="font-medium text-destructive">
                               {IMPOSSIBLE_REASON_LABELS[order.impossibleReason as keyof typeof IMPOSSIBLE_REASON_LABELS] || order.impossibleReason}
                             </span>
                             {order.impossibleAt && (
@@ -1124,8 +1124,8 @@ export default function OrderStockPage() {
                         variant="outline"
                         className={
                           (order as { deliveryPreferencePriority?: string }).deliveryPreferencePriority === "strict"
-                            ? "gap-1 shrink-0 bg-red-50 text-red-800 border-red-300 dark:bg-red-950/40 dark:text-red-200 dark:border-red-700"
-                            : "gap-1 shrink-0 bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-700"
+                            ? "gap-1 shrink-0 bg-destructive/10 text-destructive border-destructive/30 dark:bg-destructive/15-foreground dark:border-destructive/70"
+                            : "gap-1 shrink-0 bg-chart-4/10 text-chart-4 border-chart-4/30 dark:bg-chart-4/15 dark:border-chart-4/70"
                         }
                         data-testid={`badge-outside-preferred-${order.id}`}
                         title={
@@ -1895,7 +1895,7 @@ export default function OrderStockPage() {
                       }
                     }}
                     disabled={bulkDeletingLine || deleteLineMutation.isPending}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    className="bg-destructive/15 text-destructive-foreground hover:bg-destructive/90"
                     data-testid={`button-confirm-bulk-delete-line-${lineToDelete.id}`}
                   >
                     {bulkDeletingLine ? (

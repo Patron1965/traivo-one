@@ -31,11 +31,11 @@ import type { Resource, Team, WorkSession, WorkEntry, TimeSummaryResponse } from
 import type { LucideIcon } from "lucide-react";
 
 const ENTRY_TYPE_CONFIG: Record<string, { label: string; color: string; icon: LucideIcon }> = {
-  work: { label: "Arbete", color: "bg-green-500", icon: CheckCircle },
-  travel: { label: "Resa", color: "bg-blue-500", icon: Truck },
-  setup: { label: "Ställtid", color: "bg-yellow-500", icon: Wrench },
-  break: { label: "Rast", color: "bg-orange-400", icon: Coffee },
-  rest: { label: "Vila", color: "bg-purple-500", icon: Moon },
+  work: { label: "Arbete", color: "bg-chart-2/15", icon: CheckCircle },
+  travel: { label: "Resa", color: "bg-chart-1/15", icon: Truck },
+  setup: { label: "Ställtid", color: "bg-chart-3/15", icon: Wrench },
+  break: { label: "Rast", color: "bg-chart-4/15", icon: Coffee },
+  rest: { label: "Vila", color: "bg-chart-5/15", icon: Moon },
 };
 
 function getISOWeekNumber(date: Date): number {
@@ -333,16 +333,16 @@ export default function WorkSessionsPage() {
           </div>
 
           {timeSummary?.nightRestViolations?.length > 0 && (
-            <Card className="border-red-300 bg-red-50 dark:bg-red-950/20">
+            <Card className="border-destructive/30 bg-destructive/10 dark:bg-destructive/15">
               <CardHeader className="pb-2">
-                <CardTitle className="text-red-700 dark:text-red-400 flex items-center gap-2 text-base">
-                  <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />Nattvila-avvikelser (&lt;11h)
+                <CardTitle className="text-destructive flex items-center gap-2 text-base">
+                  <AlertTriangle className="h-5 w-5 text-chart-4" />Nattvila-avvikelser (&lt;11h)
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-1">
                   {timeSummary.nightRestViolations.map((v, i) => (
-                    <div key={i} className="text-sm text-red-700 dark:text-red-400" data-testid={`text-night-violation-${i}`}>
+                    <div key={i} className="text-sm text-destructive" data-testid={`text-night-violation-${i}`}>
                       {v.resourceName}: {v.restHours}h vila ({v.date})
                     </div>
                   ))}
@@ -352,16 +352,16 @@ export default function WorkSessionsPage() {
           )}
 
           {timeSummary?.weeklyRestViolations?.length > 0 && (
-            <Card className="border-orange-300 bg-orange-50 dark:bg-orange-950/20">
+            <Card className="border-chart-4/30 bg-chart-4/10 dark:bg-chart-4/15">
               <CardHeader className="pb-2">
-                <CardTitle className="text-orange-700 dark:text-orange-400 flex items-center gap-2 text-base">
-                  <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />Veckovila-avvikelser (&lt;36h)
+                <CardTitle className="text-chart-4 flex items-center gap-2 text-base">
+                  <AlertTriangle className="h-5 w-5 text-chart-4" />Veckovila-avvikelser (&lt;36h)
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-1">
                   {timeSummary.weeklyRestViolations.map((v, i) => (
-                    <div key={i} className="text-sm text-orange-700 dark:text-orange-400" data-testid={`text-weekly-violation-${i}`}>
+                    <div key={i} className="text-sm text-chart-4" data-testid={`text-weekly-violation-${i}`}>
                       {v.resourceName}: {v.totalRestHours}h total vila denna vecka
                     </div>
                   ))}
@@ -386,11 +386,11 @@ export default function WorkSessionsPage() {
                   </div>
                   <Separator />
                   <div className="grid grid-cols-2 gap-1 text-sm">
-                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500" />Arbete: {(s.work / 60).toFixed(1)}h</div>
-                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500" />Resa: {(s.travel / 60).toFixed(1)}h</div>
-                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-yellow-500" />Ställtid: {(s.setup / 60).toFixed(1)}h</div>
-                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-orange-400" />Rast: {(s.break_time / 60).toFixed(1)}h</div>
-                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-purple-500" />Vila: {(s.rest / 60).toFixed(1)}h</div>
+                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-chart-2/15" />Arbete: {(s.work / 60).toFixed(1)}h</div>
+                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-chart-1/15" />Resa: {(s.travel / 60).toFixed(1)}h</div>
+                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-chart-3/15" />Ställtid: {(s.setup / 60).toFixed(1)}h</div>
+                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-chart-4/40" />Rast: {(s.break_time / 60).toFixed(1)}h</div>
+                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-chart-5/15" />Vila: {(s.rest / 60).toFixed(1)}h</div>
                   </div>
                 </CardContent>
               </Card>
@@ -544,7 +544,7 @@ function SessionCard({ session, resource, team, onEdit, onDelete, onCheckIn, onC
   });
 
   const statusBadge = session.status === "active"
-    ? <Badge className="bg-green-500 text-white">Aktiv</Badge>
+    ? <Badge className="bg-chart-2 text-white">Aktiv</Badge>
     : session.status === "paused"
     ? <Badge variant="secondary">Pausad</Badge>
     : <Badge variant="outline">Avslutad</Badge>;

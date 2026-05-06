@@ -563,7 +563,7 @@ export default function PriceListsPage() {
             <AlertDialogCancel>Avbryt</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => priceListToDelete && deleteMutation.mutate(priceListToDelete.id)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive/15 text-destructive-foreground hover:bg-destructive/90"
               data-testid="button-confirm-delete"
             >
               {deleteMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -581,7 +581,7 @@ export default function PriceListsPage() {
               Justera alla priser i prislistan "{priceListForIndex?.name}" med en procentsats.
               Operationen är permanent — befintliga arbetsorder med fryst snapshot påverkas inte.
               {priceListForIndex?.indexAdjusted && (
-                <span className="block mt-2 text-amber-600 dark:text-amber-400">
+                <span className="block mt-2 text-chart-4">
                   Tidigare justering: {priceListForIndex.indexPercentage}% den{" "}
                   {priceListForIndex.indexDate
                     ? new Date(priceListForIndex.indexDate).toLocaleDateString("sv-SE")

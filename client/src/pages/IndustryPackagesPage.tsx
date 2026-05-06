@@ -164,12 +164,12 @@ export default function IndustryPackagesPage() {
           return (
             <Card 
               key={pkg.id} 
-              className={`relative overflow-hidden ${isInstalled ? "border-green-500/50" : ""}`}
+              className={`relative overflow-hidden ${isInstalled ? "border-chart-2/50" : ""}`}
               data-testid={`card-package-${pkg.slug}`}
             >
               {isInstalled && (
                 <div className="absolute top-3 right-3">
-                  <Badge variant="default" className="bg-green-600">
+                  <Badge variant="default" className="bg-chart-2/15">
                     <CheckCircle2 className="h-3 w-3 mr-1" />
                     Installerat
                   </Badge>

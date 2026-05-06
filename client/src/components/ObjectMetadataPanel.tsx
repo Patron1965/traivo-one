@@ -127,7 +127,7 @@ function getSourceBadge(entry: MetadataEntry) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 border-green-500 text-green-700 dark:text-green-400 cursor-help" data-testid={`badge-inherited-${entry.id}`}>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 border-chart-2/50 text-chart-2 cursor-help" data-testid={`badge-inherited-${entry.id}`}>
             <ArrowDown className="h-3 w-3" />
             {entry.fromObject ? `Arvt fran ${entry.fromObject.namn}` : "Arvt"}
           </Badge>
@@ -141,7 +141,7 @@ function getSourceBadge(entry: MetadataEntry) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 border-blue-500 text-blue-700 dark:text-blue-400 cursor-help" data-testid={`badge-local-${entry.id}`}>
+        <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 border-chart-1/50 text-chart-1 cursor-help" data-testid={`badge-local-${entry.id}`}>
           <Pencil className="h-3 w-3" />
           Eget varde
         </Badge>
@@ -154,9 +154,9 @@ function getSourceBadge(entry: MetadataEntry) {
 }
 
 function getSourceColor(entry: MetadataEntry): string {
-  if (entry.nivaLas) return "border-l-red-500";
-  if (entry.source === 'inherited') return "border-l-green-500";
-  return "border-l-blue-500";
+  if (entry.nivaLas) return "border-l-destructive";
+  if (entry.source === 'inherited') return "border-l-chart-2";
+  return "border-l-chart-1";
 }
 
 function MetadataHistoryModal({ metadataId, metadataName, tenantId }: { metadataId: string; metadataName: string; tenantId?: string }) {
@@ -268,11 +268,11 @@ function ObjectMetadataHistoryDialog({ objectId, objectName }: { objectId: strin
   };
 
   const metodColor: Record<string, string> = {
-    manuell: "bg-blue-500",
-    arvd: "bg-green-500",
-    utforande: "bg-amber-500",
-    import: "bg-purple-500",
-    auto: "bg-cyan-500",
+    manuell: "bg-chart-1/15",
+    arvd: "bg-chart-2/15",
+    utforande: "bg-chart-4/15",
+    import: "bg-chart-5/15",
+    auto: "bg-chart-3/15",
   };
 
   return (
@@ -353,8 +353,8 @@ function ObjectMetadataHistoryDialog({ objectId, objectName }: { objectId: strin
 function InheritanceTreeNode({ node, depth = 0 }: { node: InheritanceNode; depth?: number }) {
   const [expanded, setExpanded] = useState(depth < 2);
   const hasChildren = node.children.length > 0;
-  const sourceColor = node.metadataSource === 'local' ? 'text-blue-600 dark:text-blue-400' 
-    : node.metadataSource === 'inherited' ? 'text-green-600 dark:text-green-400' 
+  const sourceColor = node.metadataSource === 'local' ? 'text-chart-1' 
+    : node.metadataSource === 'inherited' ? 'text-chart-2' 
     : 'text-muted-foreground';
 
   return (
@@ -371,13 +371,13 @@ function InheritanceTreeNode({ node, depth = 0 }: { node: InheritanceNode; depth
         )}
         <span className="font-medium truncate">{node.namn}</span>
         <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">{node.typ}</Badge>
-        {node.nivaLas && <Lock className="h-3 w-3 text-red-500 shrink-0" />}
+        {node.nivaLas && <Lock className="h-3 w-3 text-destructive shrink-0" />}
         <span className={`ml-auto text-xs truncate max-w-[120px] ${sourceColor}`}>
           {node.metadataValue || '-'}
         </span>
         {node.metadataSource !== 'none' && (
           <Badge variant="outline" className={`text-[9px] px-1 py-0 shrink-0 ${
-            node.metadataSource === 'local' ? 'border-blue-500 text-blue-600' : 'border-green-500 text-green-600'
+            node.metadataSource === 'local' ? 'border-chart-1/50 text-chart-1' : 'border-chart-2/50 text-chart-2'
           }`}>
             {node.metadataSource === 'local' ? 'L' : 'A'}
           </Badge>
@@ -497,9 +497,9 @@ function PropagationPreviewDialog({
 
   const statusIcon = (status: string) => {
     switch (status) {
-      case 'will_receive': return <ArrowDown className="h-3.5 w-3.5 text-green-500" />;
-      case 'has_local': return <Lock className="h-3.5 w-3.5 text-amber-500" />;
-      case 'blocked': return <X className="h-3.5 w-3.5 text-red-500" />;
+      case 'will_receive': return <ArrowDown className="h-3.5 w-3.5 text-chart-2" />;
+      case 'has_local': return <Lock className="h-3.5 w-3.5 text-chart-4" />;
+      case 'blocked': return <X className="h-3.5 w-3.5 text-destructive" />;
       default: return null;
     }
   };
@@ -550,16 +550,16 @@ function PropagationPreviewDialog({
         ) : (
           <>
             <div className="flex gap-3 text-xs mb-3">
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-chart-2/10 dark:bg-chart-2/15 text-chart-2">
                 <ArrowDown className="h-3 w-3" />
                 <span className="font-medium">{preview.totalWillReceive}</span> far vardet
               </div>
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-400">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-chart-4/10 dark:bg-chart-4/15 text-chart-4">
                 <Lock className="h-3 w-3" />
                 <span className="font-medium">{preview.totalHasLocal}</span> har lokalt varde
               </div>
               {preview.totalBlocked > 0 && (
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-400">
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-destructive/10 dark:bg-destructive/15 text-destructive">
                   <X className="h-3 w-3" />
                   <span className="font-medium">{preview.totalBlocked}</span> blockerade
                 </div>
@@ -576,8 +576,8 @@ function PropagationPreviewDialog({
                   <div 
                     key={item.objektId} 
                     className={`flex items-center gap-2 px-3 py-2 text-sm ${
-                      item.status === 'has_local' ? 'bg-amber-50/50 dark:bg-amber-950/30' : 
-                      item.status === 'blocked' ? 'bg-red-50/50 dark:bg-red-950/30' : ''
+                      item.status === 'has_local' ? 'bg-chart-4/10 dark:bg-chart-4/15' : 
+                      item.status === 'blocked' ? 'bg-destructive/10 dark:bg-destructive/15' : ''
                     }`}
                     data-testid={`propagation-preview-item-${item.objektId}`}
                   >
@@ -587,14 +587,14 @@ function PropagationPreviewDialog({
                     </span>
                     <span className="shrink-0">
                       {item.status === 'will_receive' && (
-                        <Badge variant="outline" className="text-[10px] border-green-500 text-green-700 dark:text-green-400">
+                        <Badge variant="outline" className="text-[10px] border-chart-2/50 text-chart-2">
                           Ny
                         </Badge>
                       )}
                       {item.status === 'has_local' && (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Badge variant="outline" className="text-[10px] border-amber-500 text-amber-700 dark:text-amber-400 cursor-help">
+                            <Badge variant="outline" className="text-[10px] border-chart-4/50 text-chart-4 cursor-help">
                               {methodLabels[item.localMethod || ''] || 'Lokalt'}: {item.localValue || "–"}
                             </Badge>
                           </TooltipTrigger>
@@ -604,7 +604,7 @@ function PropagationPreviewDialog({
                         </Tooltip>
                       )}
                       {item.status === 'blocked' && (
-                        <Badge variant="outline" className="text-[10px] border-red-500 text-red-700 dark:text-red-400">
+                        <Badge variant="outline" className="text-[10px] border-destructive/50 text-destructive">
                           Blockerad
                         </Badge>
                       )}
@@ -822,13 +822,13 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
           </DialogTitle>
           <DialogDescription className="flex items-center gap-4 text-xs">
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Arvt varde
+              <span className="w-3 h-3 rounded-sm bg-chart-2/15 inline-block" /> Arvt varde
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-sm bg-blue-500 inline-block" /> Eget varde
+              <span className="w-3 h-3 rounded-sm bg-chart-1/15 inline-block" /> Eget varde
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-sm bg-red-500 inline-block" /> Niva-las
+              <span className="w-3 h-3 rounded-sm bg-destructive/15 inline-block" /> Niva-las
             </span>
             <span className="ml-auto">
               <ObjectMetadataHistoryDialog objectId={object.id} objectName={object.name} />
@@ -918,7 +918,7 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                                         <Button 
                                           variant="ghost" 
                                           size="icon" 
-                                          className="h-7 w-7 text-green-600 dark:text-green-400" 
+                                          className="h-7 w-7 text-chart-2" 
                                           onClick={() => {
                                             if (confirm("Vill du ta bort det egna vardet och aterstalla till arvt varde fran foraldern?")) {
                                               deleteMutation.mutate(entry.id);

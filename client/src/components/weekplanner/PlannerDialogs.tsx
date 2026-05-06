@@ -81,9 +81,9 @@ export const AssignDialog = memo(function AssignDialog(props: AssignDialogProps)
             <Input type="date" value={assignDate} onChange={(e) => setAssignDate(e.target.value)} data-testid="input-assign-date" />
           </div>
           {matchData?.noMatch && matchData?.clusterName && (
-            <div className="flex items-center gap-2 p-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800" data-testid="no-cluster-match-warning">
-              <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0" />
-              <span className="text-xs text-amber-700 dark:text-amber-300">Ingen resurs matchar klustret <strong>{matchData.clusterName}</strong>. Kontrollera resursernas serviceområden.</span>
+            <div className="flex items-center gap-2 p-2.5 rounded-md bg-chart-4/10 dark:bg-chart-4/15 border border-chart-4/20 dark:border-chart-4/80" data-testid="no-cluster-match-warning">
+              <AlertTriangle className="h-4 w-4 text-chart-4 shrink-0" />
+              <span className="text-xs text-chart-4">Ingen resurs matchar klustret <strong>{matchData.clusterName}</strong>. Kontrollera resursernas serviceområden.</span>
             </div>
           )}
           <div className="space-y-2">
@@ -95,7 +95,7 @@ export const AssignDialog = memo(function AssignDialog(props: AssignDialogProps)
                 return (
                   <div
                     key={resource.id}
-                    className={`p-3 rounded-md border cursor-pointer hover-elevate transition-colors ${assignResourceId === resource.id ? "ring-2 ring-primary" : ""} ${isMatch ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/20" : ""}`}
+                    className={`p-3 rounded-md border cursor-pointer hover-elevate transition-colors ${assignResourceId === resource.id ? "ring-2 ring-primary" : ""} ${isMatch ? "border-chart-2/30 dark:border-chart-2/70 bg-chart-2/10 dark:bg-chart-2/15" : ""}`}
                     onClick={() => setAssignResourceId(resource.id)}
                     data-testid={`assign-resource-${resource.id}`}
                   >
@@ -105,7 +105,7 @@ export const AssignDialog = memo(function AssignDialog(props: AssignDialogProps)
                       {isMatch && (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700 gap-0.5" data-testid={`badge-recommended-${resource.id}`}>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-chart-2/15 text-chart-2 dark:bg-chart-2/15 border-chart-2/20 dark:border-chart-2/70 gap-0.5" data-testid={`badge-recommended-${resource.id}`}>
                               <Sparkles className="h-3 w-3" />Rekommenderad
                             </Badge>
                           </TooltipTrigger>
@@ -241,7 +241,7 @@ export const SendScheduleDialog = memo(function SendScheduleDialog(props: SendSc
                 {lastResult && (
                   <div className="space-y-2 mt-2">
                     {lastResult.email && (
-                      <div className={`flex items-start gap-2 text-xs p-2 rounded ${lastResult.email.success ? "bg-green-50 text-green-800 dark:bg-green-950/40 dark:text-green-300" : "bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-300"}`} data-testid="status-email-result">
+                      <div className={`flex items-start gap-2 text-xs p-2 rounded ${lastResult.email.success ? "bg-chart-2/10 text-chart-2 dark:bg-chart-2/15" : "bg-destructive/10 text-destructive dark:bg-destructive/15"}`} data-testid="status-email-result">
                         {lastResult.email.success ? <Check className="h-3.5 w-3.5 mt-0.5 shrink-0" /> : <X className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
                         <div>
                           <div className="font-medium">E-post {lastResult.email.success ? "skickad" : "misslyckades"}</div>
@@ -250,7 +250,7 @@ export const SendScheduleDialog = memo(function SendScheduleDialog(props: SendSc
                       </div>
                     )}
                     {lastResult.sms && (
-                      <div className={`flex items-start gap-2 text-xs p-2 rounded ${lastResult.sms.success ? "bg-green-50 text-green-800 dark:bg-green-950/40 dark:text-green-300" : "bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-300"}`} data-testid="status-sms-result">
+                      <div className={`flex items-start gap-2 text-xs p-2 rounded ${lastResult.sms.success ? "bg-chart-2/10 text-chart-2 dark:bg-chart-2/15" : "bg-destructive/10 text-destructive dark:bg-destructive/15"}`} data-testid="status-sms-result">
                         {lastResult.sms.success ? <Check className="h-3.5 w-3.5 mt-0.5 shrink-0" /> : <X className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
                         <div>
                           <div className="font-medium">SMS {lastResult.sms.success ? "skickat" : "misslyckades"}</div>
@@ -272,7 +272,7 @@ export const SendScheduleDialog = memo(function SendScheduleDialog(props: SendSc
                 </Button>
 
                 <Button className="w-full justify-start gap-3" variant="outline" onClick={onCopyLink} data-testid="button-copy-field-link">
-                  {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                  {copied ? <Check className="h-4 w-4 text-chart-2" /> : <Copy className="h-4 w-4" />}
                   <div className="text-left flex-1">
                     <div>Kopiera länk till Traivo Go</div>
                     <div className="text-xs text-muted-foreground">Klistra in i annat meddelande</div>
@@ -392,11 +392,11 @@ export const BulkSendScheduleDialog = memo(function BulkSendScheduleDialog(props
                       {res && (
                         <div className="flex items-center gap-1">
                           {res.email && (res.email.success
-                            ? <Check className="h-4 w-4 text-green-600" data-testid={`bulk-status-email-ok-${r.id}`} />
-                            : <X className="h-4 w-4 text-red-500" data-testid={`bulk-status-email-fail-${r.id}`} />)}
+                            ? <Check className="h-4 w-4 text-chart-2" data-testid={`bulk-status-email-ok-${r.id}`} />
+                            : <X className="h-4 w-4 text-destructive" data-testid={`bulk-status-email-fail-${r.id}`} />)}
                           {res.sms && (res.sms.success
-                            ? <Check className="h-4 w-4 text-green-600" data-testid={`bulk-status-sms-ok-${r.id}`} />
-                            : <X className="h-4 w-4 text-red-500" data-testid={`bulk-status-sms-fail-${r.id}`} />)}
+                            ? <Check className="h-4 w-4 text-chart-2" data-testid={`bulk-status-sms-ok-${r.id}`} />
+                            : <X className="h-4 w-4 text-destructive" data-testid={`bulk-status-sms-fail-${r.id}`} />)}
                         </div>
                       )}
                     </label>
@@ -434,8 +434,8 @@ export const ConflictDialog = memo(function ConflictDialog(props: ConflictDialog
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
-            <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
+          <DialogTitle className="flex items-center gap-2 text-destructive">
+            <AlertTriangle className="h-5 w-5 text-chart-4" />
             {hasHardBlock ? "Tilldelning blockerad" : "Konflikt upptäckt"}
           </DialogTitle>
           <DialogDescription>
@@ -459,8 +459,8 @@ export const ConflictDialog = memo(function ConflictDialog(props: ConflictDialog
                 const isClusterWarning = !isHardBlock && conflict.includes("Kluster");
                 const displayText = isHardBlock ? conflict.replace("[BLOCK] ", "") : conflict;
                 return (
-                <div key={i} className={`flex items-start gap-2 p-2 rounded border ${isHardBlock ? "bg-red-100 dark:bg-red-950/50 border-red-300 dark:border-red-700" : isClusterWarning ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800" : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"}`}>
-                  <AlertTriangle className={`h-4 w-4 shrink-0 mt-0.5 ${isHardBlock ? "text-red-700 dark:text-red-300" : isClusterWarning ? "text-orange-500 dark:text-orange-400" : "text-red-500"}`} />
+                <div key={i} className={`flex items-start gap-2 p-2 rounded border ${isHardBlock ? "bg-destructive/15 dark:bg-destructive/15 border-destructive/30 dark:border-destructive/70" : isClusterWarning ? "bg-chart-4/10 dark:bg-chart-4/15 border-chart-4/20 dark:border-chart-4/80" : "bg-destructive/10 dark:bg-destructive/15 border-destructive/20 dark:border-destructive/80"}`}>
+                  <AlertTriangle className={`h-4 w-4 shrink-0 mt-0.5 ${isHardBlock ? "text-destructive" : isClusterWarning ? "text-chart-4" : "text-destructive"}`} />
                   <span className="text-sm">{displayText}</span>
                 </div>
                 );
@@ -474,7 +474,7 @@ export const ConflictDialog = memo(function ConflictDialog(props: ConflictDialog
           </Button>
           {!hasHardBlock && (
             <Button variant="destructive" onClick={onAccept} data-testid="button-accept-conflict">
-              <AlertTriangle className="h-4 w-4 mr-2 text-orange-500 dark:text-orange-400" />
+              <AlertTriangle className="h-4 w-4 mr-2 text-chart-4" />
               Schemalägg ändå
             </Button>
           )}
@@ -594,7 +594,7 @@ export const AutoFillDialog = memo(function AutoFillDialog(props: AutoFillDialog
                 <div className="text-xs text-muted-foreground space-y-0.5">
                   <p>{skipped} uppdrag ryms ej i schemat och förblir oplanerade i orderstocken.</p>
                   {diag && diag.clusterSkipped > 0 && (
-                    <p className="text-amber-500">{diag.clusterSkipped} av dessa saknar matchande resurs för sitt kluster.</p>
+                    <p className="text-chart-4">{diag.clusterSkipped} av dessa saknar matchande resurs för sitt kluster.</p>
                   )}
                 </div>
               )}
@@ -607,8 +607,8 @@ export const AutoFillDialog = memo(function AutoFillDialog(props: AutoFillDialog
                   <div className="grid grid-cols-5 gap-2">
                     {Object.entries(geoSpread).sort().map(([day, info]) => {
                       const focusPct = info.dominantZonePct;
-                      const quality = focusPct >= 80 ? "text-green-600" : focusPct >= 60 ? "text-amber-500" : "text-red-500";
-                      const bgColor = focusPct >= 80 ? "bg-green-500" : focusPct >= 60 ? "bg-amber-500" : "bg-red-500";
+                      const quality = focusPct >= 80 ? "text-chart-2" : focusPct >= 60 ? "text-chart-4" : "text-destructive";
+                      const bgColor = focusPct >= 80 ? "bg-chart-2/15" : focusPct >= 60 ? "bg-chart-4/15" : "bg-destructive/15";
                       return (
                         <div key={day} className="text-center text-xs" data-testid={`geo-spread-day-${day}`}>
                           <p className="font-medium">{format(new Date(day + "T12:00:00"), "EEE", { locale: sv })}</p>
@@ -653,7 +653,7 @@ export const AutoFillDialog = memo(function AutoFillDialog(props: AutoFillDialog
                   {diag && (
                     <div className="space-y-1 text-xs text-muted-foreground">
                       {diag.totalUnscheduled === 0 ? (
-                        <p className="flex items-center gap-1"><Check className="h-3.5 w-3.5 text-green-500" /> Alla uppdrag är redan planerade.</p>
+                        <p className="flex items-center gap-1"><Check className="h-3.5 w-3.5 text-chart-2" /> Alla uppdrag är redan planerade.</p>
                       ) : (
                         <>
                           <p>{diag.totalUnscheduled} oplanerade uppdrag hittades men ryms ej i schemat.</p>
@@ -667,7 +667,7 @@ export const AutoFillDialog = memo(function AutoFillDialog(props: AutoFillDialog
                                   <div key={day} className="text-center">
                                     <p className="font-medium">{day.slice(5)}</p>
                                     <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-0.5">
-                                      <div className={`h-full rounded-full ${fillPct >= 95 ? 'bg-red-500' : fillPct >= 70 ? 'bg-amber-500' : 'bg-green-500'}`} style={{ width: `${fillPct}%` }} />
+                                      <div className={`h-full rounded-full ${fillPct >= 95 ? 'bg-destructive/15' : fillPct >= 70 ? 'bg-chart-4/15' : 'bg-chart-2/15'}`} style={{ width: `${fillPct}%` }} />
                                     </div>
                                     <p className="mt-0.5">{fillPct}%</p>
                                   </div>
@@ -676,7 +676,7 @@ export const AutoFillDialog = memo(function AutoFillDialog(props: AutoFillDialog
                             </div>
                           )}
                           {diag.clusterSkipped > 0 && (
-                            <p className="text-amber-500 mt-1">{diag.clusterSkipped} uppdrag saknar matchande resurs för sitt kluster (geografiskt område).</p>
+                            <p className="text-chart-4 mt-1">{diag.clusterSkipped} uppdrag saknar matchande resurs för sitt kluster (geografiskt område).</p>
                           )}
                           <p className="mt-1">Prova att öka överbokningsprocenten eller byta till en annan vecka.</p>
                         </>
@@ -717,7 +717,7 @@ export const DepChainDialog = memo(function DepChainDialog(props: DepChainDialog
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Link2 className="h-5 w-5 text-orange-500" />
+            <Link2 className="h-5 w-5 text-chart-4" />
             Beroendekedja
           </DialogTitle>
           <DialogDescription>Visar alla uppgifter som är kopplade via beroenden.</DialogDescription>
@@ -732,9 +732,9 @@ export const DepChainDialog = memo(function DepChainDialog(props: DepChainDialog
           {depChainData?.chain && depChainData.chain.length > 0 ? (
             <div className="space-y-2">
               {depChainData.chain.map((item, i) => (
-                <div key={i} className={`p-3 border rounded-lg flex items-start gap-3 ${item.workOrder.creationMethod === "automatic" ? "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30" : ""}`}>
+                <div key={i} className={`p-3 border rounded-lg flex items-start gap-3 ${item.workOrder.creationMethod === "automatic" ? "border-chart-4/30 bg-chart-4/10 dark:border-chart-4/70 dark:bg-chart-4/15" : ""}`}>
                   <div className="shrink-0 mt-0.5">
-                    {item.type === "depends_on" ? <Link2 className="h-4 w-4 text-orange-500" /> : <ArrowRight className="h-4 w-4 text-blue-500" />}
+                    {item.type === "depends_on" ? <Link2 className="h-4 w-4 text-chart-4" /> : <ArrowRight className="h-4 w-4 text-chart-1" />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium">{item.workOrder.title}</div>
@@ -752,7 +752,7 @@ export const DepChainDialog = memo(function DepChainDialog(props: DepChainDialog
                         </span>
                       )}
                       {item.workOrder.creationMethod === "automatic" && (
-                        <Badge className="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">Plockuppgift</Badge>
+                        <Badge className="text-[10px] bg-chart-4/15 text-chart-4 dark:bg-chart-4/15">Plockuppgift</Badge>
                       )}
                     </div>
                   </div>
@@ -807,7 +807,7 @@ export const ConflictListDialog = memo(function ConflictListDialog({ open, onOpe
       <DialogContent className="max-w-lg max-h-[80vh] flex flex-col" data-testid="dialog-conflict-list">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-red-500" />
+            <AlertTriangle className="h-5 w-5 text-destructive" />
             {conflictEntries.length} konflikter
           </DialogTitle>
           <DialogDescription>
@@ -841,8 +841,8 @@ export const ConflictListDialog = memo(function ConflictListDialog({ open, onOpe
                     </div>
                     <div className="mt-1.5 space-y-0.5">
                       {reasons.map((reason, i) => (
-                        <div key={i} className="flex items-start gap-1.5 text-xs text-red-600 dark:text-red-400">
-                          <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5 text-orange-500 dark:text-orange-400" />
+                        <div key={i} className="flex items-start gap-1.5 text-xs text-destructive">
+                          <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5 text-chart-4" />
                           <span>{reason}</span>
                         </div>
                       ))}

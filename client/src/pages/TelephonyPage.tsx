@@ -378,11 +378,11 @@ function AvailabilitySection() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
-            <div className="h-2.5 w-2.5 rounded-full bg-green-500" />
+            <div className="h-2.5 w-2.5 rounded-full bg-chart-2/15" />
             <span className="text-sm" data-testid="text-free-count">Lediga: {freeCount}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="h-2.5 w-2.5 rounded-full bg-red-500" />
+            <div className="h-2.5 w-2.5 rounded-full bg-destructive/15" />
             <span className="text-sm" data-testid="text-busy-count">Upptagna: {busyCount}</span>
           </div>
         </div>
@@ -431,7 +431,7 @@ function ResourceAvailabilityCard({ resource }: { resource: ResourceAvailability
       <CardContent className="pt-4 pb-3 px-4">
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center gap-2">
-            <div className={`h-3 w-3 rounded-full ${resource.isBusy ? "bg-red-500" : "bg-green-500"}`} />
+            <div className={`h-3 w-3 rounded-full ${resource.isBusy ? "bg-destructive/15" : "bg-chart-2/15"}`} />
             <span className="font-medium text-sm" data-testid={`text-resource-name-${resource.resourceId}`}>
               {resource.resourceName}
             </span>

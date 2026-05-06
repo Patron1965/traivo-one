@@ -131,8 +131,8 @@ function AIAssistantPanel({
     <Card className="fixed bottom-4 right-4 w-[380px] max-w-[calc(100vw-2rem)] h-[500px] max-h-[calc(100vh-8rem)] flex flex-col shadow-lg z-50" data-testid="panel-ai-assistant">
       <CardHeader className="flex flex-row items-center justify-between gap-4 pb-3 border-b shrink-0">
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-lg bg-purple-500/10">
-            <Sparkles className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+          <div className="p-2 rounded-lg bg-chart-5/15">
+            <Sparkles className="h-5 w-5 text-chart-5" />
           </div>
           <div>
             <CardTitle className="text-base">AI-Assistent</CardTitle>
@@ -151,8 +151,8 @@ function AIAssistantPanel({
               className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
               {msg.role === "assistant" && (
-                <div className="p-1.5 rounded-full bg-purple-500/10 h-7 w-7 flex items-center justify-center shrink-0">
-                  <Bot className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                <div className="p-1.5 rounded-full bg-chart-5/15 h-7 w-7 flex items-center justify-center shrink-0">
+                  <Bot className="h-4 w-4 text-chart-5" />
                 </div>
               )}
               <div
@@ -173,8 +173,8 @@ function AIAssistantPanel({
           ))}
           {askMutation.isPending && (
             <div className="flex gap-2 justify-start">
-              <div className="p-1.5 rounded-full bg-purple-500/10 h-7 w-7 flex items-center justify-center shrink-0">
-                <Bot className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+              <div className="p-1.5 rounded-full bg-chart-5/15 h-7 w-7 flex items-center justify-center shrink-0">
+                <Bot className="h-4 w-4 text-chart-5" />
               </div>
               <div className="bg-muted rounded-lg px-3 py-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -224,19 +224,19 @@ function StatCard({
 }) {
   const styleMap = {
     warning: {
-      card: "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800",
-      iconBg: "bg-amber-100 dark:bg-amber-900/40",
-      iconColor: "text-amber-600 dark:text-amber-400",
+      card: "bg-chart-4/10 dark:bg-chart-4/15 border-chart-4/20 dark:border-chart-4/80",
+      iconBg: "bg-chart-4/15 dark:bg-chart-4/15",
+      iconColor: "text-chart-4",
     },
     success: {
-      card: "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800",
-      iconBg: "bg-emerald-100 dark:bg-emerald-900/40",
-      iconColor: "text-emerald-600 dark:text-emerald-400",
+      card: "bg-chart-2/10 dark:bg-chart-2/15 border-chart-2/20 dark:border-chart-2/80",
+      iconBg: "bg-chart-2/15 dark:bg-chart-2/15",
+      iconColor: "text-chart-2",
     },
     default: {
       card: "",
-      iconBg: "bg-sky-50 dark:bg-sky-900/30",
-      iconColor: "text-sky-600 dark:text-sky-400",
+      iconBg: "bg-chart-1/10 dark:bg-chart-1/15",
+      iconColor: "text-chart-1",
     },
   };
 
@@ -296,17 +296,17 @@ function QuickActionCard({
 
 function getRecentPageMap(tl: (key: string) => string): Record<string, { title: string; icon: React.ElementType; color: string }> {
   return {
-    "/": { title: tl("nav.today"), icon: Calendar, color: "text-blue-600 dark:text-blue-400" },
-    "/home": { title: tl("nav.today"), icon: Calendar, color: "text-blue-600 dark:text-blue-400" },
-    "/objects": { title: tl("nav.objects"), icon: Building2, color: "text-emerald-500" },
-    "/resources": { title: tl("nav.resources"), icon: Users, color: "text-purple-600 dark:text-purple-400" },
-    "/vehicles": { title: tl("nav.vehicles"), icon: Truck, color: "text-orange-500 dark:text-orange-400" },
-    "/clusters": { title: tl("nav.clusters"), icon: Target, color: "text-cyan-500" },
-    "/planner": { title: tl("nav.week-planner"), icon: Calendar, color: "text-green-600 dark:text-green-400" },
-    "/order-stock": { title: tl("nav.order-stock"), icon: FileText, color: "text-indigo-500" },
-    "/routes": { title: tl("nav.route-planning"), icon: Route, color: "text-amber-500 dark:text-amber-400" },
-    "/dashboard": { title: tl("nav.dashboard"), icon: BarChart3, color: "text-pink-500" },
-    "/mobile": { title: tl("nav.mobile-field"), icon: Smartphone, color: "text-teal-500" },
+    "/": { title: tl("nav.today"), icon: Calendar, color: "text-chart-1" },
+    "/home": { title: tl("nav.today"), icon: Calendar, color: "text-chart-1" },
+    "/objects": { title: tl("nav.objects"), icon: Building2, color: "text-chart-2" },
+    "/resources": { title: tl("nav.resources"), icon: Users, color: "text-chart-5" },
+    "/vehicles": { title: tl("nav.vehicles"), icon: Truck, color: "text-chart-4" },
+    "/clusters": { title: tl("nav.clusters"), icon: Target, color: "text-chart-3" },
+    "/planner": { title: tl("nav.week-planner"), icon: Calendar, color: "text-chart-2" },
+    "/order-stock": { title: tl("nav.order-stock"), icon: FileText, color: "text-chart-1" },
+    "/routes": { title: tl("nav.route-planning"), icon: Route, color: "text-chart-4" },
+    "/dashboard": { title: tl("nav.dashboard"), icon: BarChart3, color: "text-destructive" },
+    "/mobile": { title: tl("nav.mobile-field"), icon: Smartphone, color: "text-chart-2" },
   };
 }
 
@@ -333,8 +333,8 @@ function RecentPages() {
     <Card className="mb-8">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <div className="p-1 rounded-md bg-indigo-100 dark:bg-indigo-900/30">
-            <History className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+          <div className="p-1 rounded-md bg-chart-1/15 dark:bg-chart-1/15">
+            <History className="h-3.5 w-3.5 text-chart-1" />
           </div>
           Senast besökta
         </CardTitle>
@@ -370,11 +370,11 @@ function RecentChanges({ orders }: { orders: WorkOrder[] }) {
   if (recentlyChanged.length === 0) return null;
 
   const statusLabels: Record<string, { label: string; color: string }> = {
-    skapad: { label: tl("status.skapad"), color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
-    planerad_pre: { label: tl("status.pre-planned"), color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
-    planerad_resurs: { label: tl("status.planned"), color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
-    completed: { label: tl("status.utford"), color: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200" },
-    scheduled: { label: tl("status.scheduled"), color: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200" },
+    skapad: { label: tl("status.skapad"), color: "bg-chart-1/15 text-chart-1 border border-chart-1/30" },
+    planerad_pre: { label: tl("status.pre-planned"), color: "bg-chart-3/15 text-chart-3 border border-chart-3/30" },
+    planerad_resurs: { label: tl("status.planned"), color: "bg-chart-2/15 text-chart-2 border border-chart-2/30" },
+    completed: { label: tl("status.utford"), color: "bg-chart-2/15 text-chart-2 border border-chart-2/30" },
+    scheduled: { label: tl("status.scheduled"), color: "bg-chart-5/15 text-chart-5 border border-chart-5/30" },
   };
 
   const [isOpen, setIsOpen] = useState(false);
@@ -386,8 +386,8 @@ function RecentChanges({ orders }: { orders: WorkOrder[] }) {
           <CardHeader className="pb-3 cursor-pointer hover:bg-muted/30 transition-colors rounded-t-lg">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base">
-                <div className="p-1 rounded-md bg-orange-100 dark:bg-orange-900/30">
-                  <Activity className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
+                <div className="p-1 rounded-md bg-chart-4/15 dark:bg-chart-4/15">
+                  <Activity className="h-3.5 w-3.5 text-chart-4" />
                 </div>
                 Senaste aktivitet
                 <span className="text-xs font-normal text-muted-foreground">({recentlyChanged.length})</span>

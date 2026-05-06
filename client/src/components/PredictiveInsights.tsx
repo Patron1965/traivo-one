@@ -61,10 +61,10 @@ export function PredictiveInsights() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-3 p-4 rounded-md bg-yellow-500/10 border border-yellow-500/20" data-testid="status-prediction-error">
-            <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400 flex-shrink-0" />
+          <div className="flex items-center gap-3 p-4 rounded-md bg-chart-3/15 border border-chart-3/50" data-testid="status-prediction-error">
+            <AlertTriangle className="h-5 w-5 text-chart-4 flex-shrink-0" />
             <div>
-              <p className="text-sm font-medium text-yellow-700 dark:text-yellow-400">Analysen är inte tillgänglig</p>
+              <p className="text-sm font-medium text-chart-3">Analysen är inte tillgänglig</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Det gick inte att hämta prediktiv data just nu. Försök igen senare.
               </p>
@@ -94,10 +94,10 @@ export function PredictiveInsights() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-3 p-4 rounded-md bg-green-500/10 border border-green-500/20" data-testid="status-all-ok">
-            <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+          <div className="flex items-center gap-3 p-4 rounded-md bg-chart-2/15 border border-chart-2/50" data-testid="status-all-ok">
+            <CheckCircle className="h-5 w-5 text-chart-2 flex-shrink-0" />
             <div>
-              <p className="text-sm font-medium text-green-700 dark:text-green-400">Allt ser bra ut</p>
+              <p className="text-sm font-medium text-chart-2">Allt ser bra ut</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {data.totalPredicted > 0
                   ? `${data.totalPredicted} objekt analyserade — inga behöver åtgärd just nu.`
@@ -130,7 +130,7 @@ export function PredictiveInsights() {
         {data.overdue.length > 0 && (
           <div>
             <h4 className="text-sm font-medium text-destructive mb-2 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+              <AlertTriangle className="h-4 w-4 text-chart-4" />
               Passerat förväntat servicedatum
             </h4>
             <div className="space-y-2">

@@ -381,7 +381,7 @@ export function MetadataPanel({ objectId, readOnly = false }: MetadataPanelProps
                           {metadata.stoppaVidareArvning && (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Badge variant="outline" className="text-xs text-orange-500">
+                                <Badge variant="outline" className="text-xs text-chart-4">
                                   <Ban className="h-3 w-3" />
                                 </Badge>
                               </TooltipTrigger>

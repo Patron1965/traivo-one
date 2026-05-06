@@ -537,7 +537,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                               const cnt = addressCounts.get(k) || 1;
                               if (cnt <= 1) return null;
                               return (
-                                <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 no-default-hover-elevate">
+                                <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-destructive/10 text-destructive dark:bg-destructive/15 no-default-hover-elevate">
                                   {cnt} ordrar
                                 </Badge>
                               );
@@ -556,7 +556,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                               {accessTypeLabels[accessType]?.label || accessType}
                             </span>
                             {!hasCoords && (
-                              <Badge variant="outline" className="text-[10px] text-orange-600 no-default-hover-elevate">
+                              <Badge variant="outline" className="text-[10px] text-chart-4 no-default-hover-elevate">
                                 Saknar koordinater
                               </Badge>
                             )}
@@ -663,7 +663,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                             <>
                               <div className="text-sm text-gray-600">{obj.address}</div>
                               {stackCount > 1 && (
-                                <div className="mt-1 mb-1 px-1.5 py-0.5 bg-red-50 text-red-700 rounded text-xs font-medium inline-block">
+                                <div className="mt-1 mb-1 px-1.5 py-0.5 bg-destructive/10 text-destructive rounded text-xs font-medium inline-block">
                                   {stackCount} ordrar på denna adress
                                 </div>
                               )}
@@ -681,7 +681,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                                 return (
                                   <div key={cj.id} className={`${ci > 0 ? "mt-2 pt-2 border-t border-gray-200" : "mt-1"}`}>
                                     <div className="font-medium text-base flex items-center gap-2">
-                                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-600 text-white text-[10px] font-bold shrink-0">
+                                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-chart-2 text-white text-[10px] font-bold shrink-0">
                                         {cIdx + 1}
                                       </span>
                                       {cj.title}
@@ -693,12 +693,12 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                                         <span className="font-medium">Tillgång:</span>
                                         <span>{accessTypeLabels[cAccess]?.label || cAccess}</span>
                                         {showAccessCodes && co?.accessCode && (
-                                          <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-mono">
+                                          <span className="px-1.5 py-0.5 bg-chart-1/15 text-chart-1 rounded text-xs font-mono">
                                             {co.accessCode}
                                           </span>
                                         )}
                                         {showAccessCodes && co?.keyNumber && (
-                                          <span className="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-xs font-mono">
+                                          <span className="px-1.5 py-0.5 bg-chart-4/15 text-chart-4 rounded text-xs font-mono">
                                             Nyckel: {co.keyNumber}
                                           </span>
                                         )}
@@ -751,9 +751,9 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
 }
 
 function SetupTimeBadge({ minutes }: { minutes: number }) {
-  const color = minutes < 10 ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : 
-                minutes < 20 ? "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300" : 
-                "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300";
+  const color = minutes < 10 ? "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15" : 
+                minutes < 20 ? "bg-chart-4/15 text-chart-4 dark:bg-chart-4/15" : 
+                "bg-destructive/15 text-destructive dark:bg-destructive/15";
   
   return (
     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] shrink-0 ${color}`}>

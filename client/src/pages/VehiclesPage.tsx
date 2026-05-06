@@ -404,19 +404,19 @@ export default function VehiclesPage() {
           </Badge>
         )}
         {fleetStats.serviceOverdue > 0 && (
-          <Badge variant="outline" className="text-xs font-normal gap-1 text-red-600 border-red-300">
+          <Badge variant="outline" className="text-xs font-normal gap-1 text-destructive border-destructive/30">
             <CircleAlert className="h-3 w-3" />
             {fleetStats.serviceOverdue} service försenad
           </Badge>
         )}
         {fleetStats.serviceSoon > 0 && (
-          <Badge variant="outline" className="text-xs font-normal gap-1 text-amber-600 border-amber-300">
-            <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />
+          <Badge variant="outline" className="text-xs font-normal gap-1 text-chart-4 border-chart-4/30">
+            <AlertTriangle className="h-3 w-3 text-chart-4" />
             {fleetStats.serviceSoon} service snart
           </Badge>
         )}
         {fleetStats.serviceOk > 0 && fleetStats.serviceOverdue === 0 && fleetStats.serviceSoon === 0 && (
-          <Badge variant="outline" className="text-xs font-normal gap-1 text-green-600 border-green-300">
+          <Badge variant="outline" className="text-xs font-normal gap-1 text-chart-2 border-chart-2/30">
             <CircleCheck className="h-3 w-3" />
             Alla servade
           </Badge>
@@ -582,10 +582,10 @@ export default function VehiclesPage() {
                             Nästa service
                           </span>
                           <span className="flex items-center gap-1">
-                            {serviceStatus.status === "overdue" && <AlertTriangle className="h-3 w-3 text-red-500" />}
-                            {serviceStatus.status === "soon" && <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />}
-                            {serviceStatus.status === "ok" && <CheckCircle className="h-3 w-3 text-green-500" />}
-                            <span className={serviceStatus.status === "overdue" ? "text-red-500 font-medium" : serviceStatus.status === "soon" ? "text-orange-500 dark:text-orange-400" : ""}>
+                            {serviceStatus.status === "overdue" && <AlertTriangle className="h-3 w-3 text-destructive" />}
+                            {serviceStatus.status === "soon" && <AlertTriangle className="h-3 w-3 text-chart-4" />}
+                            {serviceStatus.status === "ok" && <CheckCircle className="h-3 w-3 text-chart-2" />}
+                            <span className={serviceStatus.status === "overdue" ? "text-destructive font-medium" : serviceStatus.status === "soon" ? "text-chart-4" : ""}>
                               {serviceStatus.status === "unknown" ? "Ej planerad" : serviceStatus.label}
                             </span>
                           </span>
@@ -736,9 +736,9 @@ export default function VehiclesPage() {
                 </Button>
               </div>
               <div className="flex items-center gap-3 text-xs">
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-100 border border-green-300" /> Ledig</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-100 border border-blue-300" /> Bokad</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100 border border-red-300" /> Kollision</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-chart-2/15 border border-chart-2/30" /> Ledig</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-chart-1/15 border border-chart-1/30" /> Bokad</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-destructive/15 border border-destructive/30" /> Kollision</span>
               </div>
             </div>
 
@@ -790,19 +790,19 @@ export default function VehiclesPage() {
                               return (
                                 <TableCell key={i} className="text-center p-1" data-testid={`cell-${vehicle.id}-${i}`}>
                                   {dayBookings.length === 0 ? (
-                                    <div className="h-8 rounded bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 flex items-center justify-center">
-                                      <span className="text-[10px] text-green-600 dark:text-green-400">Ledig</span>
+                                    <div className="h-8 rounded bg-chart-2/10 dark:bg-chart-2/15 border border-chart-2/20 dark:border-chart-2/80 flex items-center justify-center">
+                                      <span className="text-[10px] text-chart-2">Ledig</span>
                                     </div>
                                   ) : hasCollision ? (
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <div className="h-8 rounded bg-red-50 dark:bg-red-950/20 border border-red-300 dark:border-red-800 flex items-center justify-center cursor-help">
-                                          <AlertTriangle className="h-3 w-3 text-red-500 mr-0.5" />
-                                          <span className="text-[10px] text-red-600 dark:text-red-400 font-medium">{dayBookings.length}x</span>
+                                        <div className="h-8 rounded bg-destructive/10 dark:bg-destructive/15 border border-destructive/30 dark:border-destructive/80 flex items-center justify-center cursor-help">
+                                          <AlertTriangle className="h-3 w-3 text-destructive mr-0.5" />
+                                          <span className="text-[10px] text-destructive font-medium">{dayBookings.length}x</span>
                                         </div>
                                       </TooltipTrigger>
                                       <TooltipContent>
-                                        <p className="font-medium text-red-600">Kollision!</p>
+                                        <p className="font-medium text-destructive">Kollision!</p>
                                         {dayBookings.map(b => {
                                           const r = resources.find(res => res.id === b.resourceId);
                                           const t = teams.find(tm => tm.id === b.teamId);
@@ -813,8 +813,8 @@ export default function VehiclesPage() {
                                   ) : (
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <div className="h-8 rounded bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 flex items-center justify-center cursor-help">
-                                          <span className="text-[10px] text-blue-600 dark:text-blue-400">{(() => { const r = resources.find(res => res.id === dayBookings[0]?.resourceId); const t = teams.find(tm => tm.id === dayBookings[0]?.teamId); return t?.name || r?.name || "Bokad"; })()}</span>
+                                        <div className="h-8 rounded bg-chart-1/10 dark:bg-chart-1/15 border border-chart-1/20 dark:border-chart-1/80 flex items-center justify-center cursor-help">
+                                          <span className="text-[10px] text-chart-1">{(() => { const r = resources.find(res => res.id === dayBookings[0]?.resourceId); const t = teams.find(tm => tm.id === dayBookings[0]?.teamId); return t?.name || r?.name || "Bokad"; })()}</span>
                                         </div>
                                       </TooltipTrigger>
                                       <TooltipContent>
@@ -1156,7 +1156,7 @@ export default function VehiclesPage() {
             <AlertDialogCancel>Avbryt</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground"
+              className="bg-destructive/15 text-destructive-foreground"
               data-testid="button-confirm-delete"
             >
               Ta bort

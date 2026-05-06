@@ -56,18 +56,18 @@ export function LiveETAWidget({ workOrderId, objectAddress }: LiveETAWidgetProps
   }
 
   return (
-    <Card className="border-2 border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-900/20 animate-pulse-slow" data-testid={`eta-widget-${workOrderId}`}>
+    <Card className="border-2 border-chart-2/40 dark:border-chart-2/60 bg-chart-2/10 dark:bg-chart-2/15 animate-pulse-slow" data-testid={`eta-widget-${workOrderId}`}>
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
-          <div className="p-2 rounded-full bg-green-100 dark:bg-green-800">
-            <Truck className="h-5 w-5 text-green-600 dark:text-green-400" />
+          <div className="p-2 rounded-full bg-chart-2/15 dark:bg-chart-2/15">
+            <Truck className="h-5 w-5 text-chart-2" />
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
-              <span className="font-semibold text-green-800 dark:text-green-300">
+              <span className="font-semibold text-chart-2">
                 Tekniker på väg!
               </span>
-              <Badge variant="outline" className="border-green-500 text-green-700 dark:text-green-400 text-xs">
+              <Badge variant="outline" className="border-chart-2/50 text-chart-2 text-xs">
                 Live
               </Badge>
             </div>
@@ -82,9 +82,9 @@ export function LiveETAWidget({ workOrderId, objectAddress }: LiveETAWidgetProps
             <div className="grid grid-cols-2 gap-3 mt-2">
               {eta.etaTime && (
                 <div className="flex items-center gap-1.5">
-                  <Clock className="h-4 w-4 text-green-600" />
+                  <Clock className="h-4 w-4 text-chart-2" />
                   <div>
-                    <p className="text-lg font-bold text-green-800 dark:text-green-300">
+                    <p className="text-lg font-bold text-chart-2">
                       {eta.etaTime}
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -96,9 +96,9 @@ export function LiveETAWidget({ workOrderId, objectAddress }: LiveETAWidgetProps
 
               {eta.etaMinutes !== undefined && (
                 <div className="flex items-center gap-1.5">
-                  <Truck className="h-4 w-4 text-green-600" />
+                  <Truck className="h-4 w-4 text-chart-2" />
                   <div>
-                    <p className="text-lg font-bold text-green-800 dark:text-green-300">
+                    <p className="text-lg font-bold text-chart-2">
                       {eta.etaMinutes} min
                     </p>
                     <p className="text-xs text-muted-foreground">

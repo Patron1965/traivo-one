@@ -364,7 +364,7 @@ export function BrandingTab() {
                   <Alert
                     variant="destructive"
                     data-testid="alert-external-logo-warning"
-                    className="border-amber-500/50 text-amber-700 dark:text-amber-400 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400"
+                    className="border-chart-4/50 text-chart-4 [&>svg]:text-chart-4 dark:[&>svg]:text-chart-4"
                   >
                     <AlertTriangle className="h-4 w-4" />
                     <AlertTitle>Logon är hostad externt</AlertTitle>

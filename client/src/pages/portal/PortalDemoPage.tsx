@@ -42,7 +42,7 @@ export default function PortalDemoPage() {
   }, [setLocation]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-chart-1 to-chart-1 dark:from-gray-900 dark:to-gray-800">
       <Card className="w-full max-w-md mx-4" data-testid="card-demo-login">
         <CardHeader className="text-center">
           <CardTitle className="text-xl">Demo Kundportal</CardTitle>
@@ -50,20 +50,20 @@ export default function PortalDemoPage() {
         <CardContent className="flex flex-col items-center gap-4">
           {status === "loading" && (
             <>
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              <Loader2 className="h-8 w-8 animate-spin text-chart-1" />
               <p className="text-muted-foreground">Loggar in som demokund...</p>
             </>
           )}
           {status === "success" && (
             <>
-              <CheckCircle className="h-8 w-8 text-green-600" />
-              <p className="text-green-700 dark:text-green-400 font-medium">Inloggad! Omdirigerar till kundportalen...</p>
+              <CheckCircle className="h-8 w-8 text-chart-2" />
+              <p className="text-chart-2 font-medium">Inloggad! Omdirigerar till kundportalen...</p>
             </>
           )}
           {status === "error" && (
             <>
-              <AlertCircle className="h-8 w-8 text-red-600" />
-              <p className="text-red-700 dark:text-red-400">{errorMsg}</p>
+              <AlertCircle className="h-8 w-8 text-destructive" />
+              <p className="text-destructive">{errorMsg}</p>
               <Button variant="outline" onClick={() => setLocation("/portal")} data-testid="button-back-portal">
                 Tillbaka till inloggning
               </Button>

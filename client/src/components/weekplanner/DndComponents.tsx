@@ -40,7 +40,7 @@ export function SubStepsExpander({ jobId, isExpanded, onToggle }: { jobId: strin
         <div className="mt-1 space-y-0.5 pl-2 border-l border-muted">
           {subSteps.sort((a, b) => a.stepOrder - b.stepOrder).map(step => (
             <div key={step.id} className="flex items-center gap-1.5 text-[10px]">
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${step.status === "completed" ? "bg-green-500" : step.status === "in_progress" ? "bg-blue-500" : "bg-gray-300"}`} />
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${step.status === "completed" ? "bg-chart-2/15" : step.status === "in_progress" ? "bg-chart-1/15" : "bg-gray-300"}`} />
               <span className={step.status === "completed" ? "line-through text-muted-foreground" : ""}>{step.title}</span>
             </div>
           ))}
@@ -70,21 +70,21 @@ export function DroppableCell({ id, children, className = "", dropFitInfo, style
   // Remote drag highlight tier (only when no local drag interaction is happening on this cell)
   const remoteHighlight = !isOver && !hasConflict && remoteDragActive
     ? remoteHovered
-      ? "ring-2 ring-blue-500 bg-blue-100/40 dark:bg-blue-950/30 animate-pulse"
-      : "ring-1 ring-dashed ring-blue-400/50 bg-blue-50/30 dark:bg-blue-950/15"
+      ? "ring-2 ring-chart-1/50 bg-chart-1/15 dark:bg-chart-1/15 animate-pulse"
+      : "ring-1 ring-dashed ring-chart-1/40 bg-chart-1/10 dark:bg-chart-1/15"
     : "";
   return (
     <div
       ref={setNodeRef}
-      className={`${className} ${hasConflict ? (hasHardBlock ? "bg-red-100 dark:bg-red-950/50 ring-2 ring-red-600 cursor-not-allowed" : isClusterOnly ? "bg-amber-50 dark:bg-amber-950/30 ring-2 ring-amber-500" : "bg-red-50 dark:bg-red-950/30 ring-2 ring-red-500") : isOver ? dropFitInfo ? `${dropFitInfo.bg} ring-2 ${dropFitInfo.bg.includes("ring-") ? "" : "ring-primary"}` : "bg-primary/10 ring-2 ring-primary/30" : remoteHighlight}`}
+      className={`${className} ${hasConflict ? (hasHardBlock ? "bg-destructive/15 dark:bg-destructive/15 ring-2 ring-destructive/60 cursor-not-allowed" : isClusterOnly ? "bg-chart-4/10 dark:bg-chart-4/15 ring-2 ring-chart-4/50" : "bg-destructive/10 dark:bg-destructive/15 ring-2 ring-destructive/50") : isOver ? dropFitInfo ? `${dropFitInfo.bg} ring-2 ${dropFitInfo.bg.includes("ring-") ? "" : "ring-primary"}` : "bg-primary/10 ring-2 ring-primary/30" : remoteHighlight}`}
       style={style}
       data-testid={`droppable-cell-${id}`}
       data-remote-drag-active={remoteDragActive ? "true" : undefined}
       data-remote-hovered={remoteHovered ? "true" : undefined}
     >
       {hasConflict && (
-        <div className={`text-[10px] font-bold mb-1 flex items-center gap-1 ${hasHardBlock ? "text-red-700 dark:text-red-300" : isClusterOnly ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`} data-testid={`drag-conflict-${id}`}>
-          {hasHardBlock ? <Ban className="h-3 w-3 shrink-0" /> : <AlertTriangle className="h-3 w-3 shrink-0 text-orange-500 dark:text-orange-400" />}
+        <div className={`text-[10px] font-bold mb-1 flex items-center gap-1 ${hasHardBlock ? "text-destructive" : isClusterOnly ? "text-chart-4" : "text-destructive"}`} data-testid={`drag-conflict-${id}`}>
+          {hasHardBlock ? <Ban className="h-3 w-3 shrink-0" /> : <AlertTriangle className="h-3 w-3 shrink-0 text-chart-4" />}
           <span className="truncate">{(dragOverConflicts![0] || "").replace("[BLOCK] ", "")}</span>
         </div>
       )}
@@ -95,8 +95,8 @@ export function DroppableCell({ id, children, className = "", dropFitInfo, style
         </div>
       )}
       {remoteHovered && (
-        <div className="text-[10px] font-medium text-blue-700 dark:text-blue-300 mb-1 flex items-center gap-1" data-testid={`remote-hover-${id}`}>
-          <span className="w-2 h-2 rounded-full bg-blue-500" />
+        <div className="text-[10px] font-medium text-chart-1 mb-1 flex items-center gap-1" data-testid={`remote-hover-${id}`}>
+          <span className="w-2 h-2 rounded-full bg-chart-1/15" />
           Tilldelas här
         </div>
       )}
@@ -142,7 +142,7 @@ export const SortableRouteItem = memo(function SortableRouteItem({
             <GripVertical className="h-4 w-4 text-muted-foreground" />
           </div>
           <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${
-            index === 0 ? "bg-green-500" : index === totalCount - 1 ? "bg-red-500" : "bg-blue-500"
+            index === 0 ? "bg-chart-2/15" : index === totalCount - 1 ? "bg-destructive/15" : "bg-chart-1/15"
           }`}>
             {index + 1}
           </div>

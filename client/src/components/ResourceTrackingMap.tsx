@@ -135,8 +135,8 @@ export function ResourceTrackingMap({
           <Badge 
             variant="outline" 
             className={`text-xs bg-background/90 ${
-              latestPosition.status === "on_job" ? "border-green-500/50 text-green-600" :
-              latestPosition.status === "traveling" ? "border-blue-500/50 text-blue-600" :
+              latestPosition.status === "on_job" ? "border-chart-2/50 text-chart-2" :
+              latestPosition.status === "traveling" ? "border-chart-1/50 text-chart-1" :
               "border-gray-500/50 text-gray-600"
             }`}
           >

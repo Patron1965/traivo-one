@@ -155,19 +155,19 @@ export function DayReport({ workOrders, resourceId, onBack }: DayReportProps) {
             </div>
             <Progress value={completionRate} className="h-2" />
             <div className="flex items-center gap-4 mt-3 text-sm">
-              <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
+              <span className="flex items-center gap-1 text-chart-2">
                 <CheckCircle className="h-3.5 w-3.5" />
                 {completedOrders.length} klara
               </span>
               {pendingOrders.length > 0 && (
-                <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                <span className="flex items-center gap-1 text-chart-1">
                   <Clock className="h-3.5 w-3.5" />
                   {pendingOrders.length} kvar
                 </span>
               )}
               {impossibleOrders.length > 0 && (
-                <span className="flex items-center gap-1 text-red-600 dark:text-red-400">
-                  <AlertTriangle className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />
+                <span className="flex items-center gap-1 text-destructive">
+                  <AlertTriangle className="h-3.5 w-3.5 text-chart-4" />
                   {impossibleOrders.length} omöjliga
                 </span>
               )}
@@ -179,7 +179,7 @@ export function DayReport({ workOrders, resourceId, onBack }: DayReportProps) {
           <Card>
             <CardContent className="py-3 px-4">
               <div className="flex items-center gap-2 mb-1">
-                <Timer className="h-4 w-4 text-blue-500" />
+                <Timer className="h-4 w-4 text-chart-1" />
                 <p className="text-xs text-muted-foreground">Beräknad tid</p>
               </div>
               <p className="text-lg font-semibold" data-testid="text-estimated-time">
@@ -190,7 +190,7 @@ export function DayReport({ workOrders, resourceId, onBack }: DayReportProps) {
           <Card>
             <CardContent className="py-3 px-4">
               <div className="flex items-center gap-2 mb-1">
-                <Clock className="h-4 w-4 text-green-500" />
+                <Clock className="h-4 w-4 text-chart-2" />
                 <p className="text-xs text-muted-foreground">Faktisk tid</p>
               </div>
               <p className="text-lg font-semibold" data-testid="text-actual-time">
@@ -201,7 +201,7 @@ export function DayReport({ workOrders, resourceId, onBack }: DayReportProps) {
           <Card>
             <CardContent className="py-3 px-4">
               <div className="flex items-center gap-2 mb-1">
-                <Camera className="h-4 w-4 text-purple-500" />
+                <Camera className="h-4 w-4 text-chart-5" />
                 <p className="text-xs text-muted-foreground">Foton</p>
               </div>
               <p className="text-lg font-semibold" data-testid="text-photo-count">{totalPhotos}</p>
@@ -210,7 +210,7 @@ export function DayReport({ workOrders, resourceId, onBack }: DayReportProps) {
           <Card>
             <CardContent className="py-3 px-4">
               <div className="flex items-center gap-2 mb-1">
-                <FileSignature className="h-4 w-4 text-teal-500" />
+                <FileSignature className="h-4 w-4 text-chart-2" />
                 <p className="text-xs text-muted-foreground">Signaturer</p>
               </div>
               <p className="text-lg font-semibold" data-testid="text-signature-count">{ordersWithSignature.length}</p>
@@ -309,15 +309,15 @@ export function DayReport({ workOrders, resourceId, onBack }: DayReportProps) {
                   >
                     <div className={`mt-0.5 h-5 w-5 rounded-full flex items-center justify-center shrink-0 ${
                       completedStatuses.has(wo.orderStatus)
-                        ? "bg-green-100 dark:bg-green-900/30"
+                        ? "bg-chart-2/15 dark:bg-chart-2/15"
                         : wo.orderStatus === "omojlig"
-                        ? "bg-red-100 dark:bg-red-900/30"
+                        ? "bg-destructive/15 dark:bg-destructive/15"
                         : "bg-muted"
                     }`}>
                       {completedStatuses.has(wo.orderStatus) ? (
-                        <CheckCircle className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                        <CheckCircle className="h-3.5 w-3.5 text-chart-2" />
                       ) : wo.orderStatus === "omojlig" ? (
-                        <AlertTriangle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                        <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
                       ) : (
                         <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                       )}

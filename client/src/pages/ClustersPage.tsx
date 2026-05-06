@@ -87,8 +87,8 @@ import { useMapConfig } from "@/hooks/use-map-config";
 
 const SLA_LEVELS = [
   { value: "standard", label: "Standard", color: "bg-muted text-muted-foreground" },
-  { value: "premium", label: "Premium", color: "bg-blue-500/20 text-blue-700 dark:text-blue-300" },
-  { value: "enterprise", label: "Enterprise", color: "bg-purple-500/20 text-purple-700 dark:text-purple-300" },
+  { value: "premium", label: "Premium", color: "bg-chart-1/15 text-chart-1" },
+  { value: "enterprise", label: "Enterprise", color: "bg-chart-5/15 text-chart-5" },
 ];
 
 const SLA_COLORS: Record<string, string> = {
@@ -1154,7 +1154,7 @@ export default function ClustersPage() {
             <AlertDialogCancel>Avbryt</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => clusterToDelete && deleteMutation.mutate(clusterToDelete.id)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive/15 text-destructive-foreground hover:bg-destructive/90"
               data-testid="button-confirm-delete"
             >
               {deleteMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

@@ -265,19 +265,19 @@ export default function ApiCostsDashboardPage() {
 
       {budgetStatus && (
         <Card data-testid="card-budget-status" className={
-          budgetStatus.status === "exceeded" ? "border-red-500 bg-red-50 dark:bg-red-950/20" :
-          budgetStatus.status === "critical" ? "border-orange-500 bg-orange-50 dark:bg-orange-950/20" :
-          budgetStatus.status === "warning" ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20" :
-          "border-green-500/30"
+          budgetStatus.status === "exceeded" ? "border-destructive/50 bg-destructive/10 dark:bg-destructive/15" :
+          budgetStatus.status === "critical" ? "border-chart-4/50 bg-chart-4/10 dark:bg-chart-4/15" :
+          budgetStatus.status === "warning" ? "border-chart-3/50 bg-chart-3/10 dark:bg-chart-3/15" :
+          "border-chart-2/50"
         }>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Shield className={`h-5 w-5 ${
-                  budgetStatus.status === "exceeded" ? "text-red-500" :
-                  budgetStatus.status === "critical" ? "text-orange-500" :
-                  budgetStatus.status === "warning" ? "text-yellow-500" :
-                  "text-green-500"
+                  budgetStatus.status === "exceeded" ? "text-destructive" :
+                  budgetStatus.status === "critical" ? "text-chart-4" :
+                  budgetStatus.status === "warning" ? "text-chart-3" :
+                  "text-chart-2"
                 }`} />
                 <CardTitle className="text-base">AI-budgetstatus</CardTitle>
               </div>
@@ -308,7 +308,7 @@ export default function ApiCostsDashboardPage() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Prognos månadsslut</p>
-                <p className={`text-lg font-bold ${budgetStatus.projectedMonthEndUsd > budgetStatus.monthlyBudgetUsd ? "text-red-500" : ""}`} data-testid="text-budget-forecast">
+                <p className={`text-lg font-bold ${budgetStatus.projectedMonthEndUsd > budgetStatus.monthlyBudgetUsd ? "text-destructive" : ""}`} data-testid="text-budget-forecast">
                   {formatCostSEK(budgetStatus.projectedMonthEndUsd)}
                 </p>
                 <p className="text-xs text-muted-foreground">{budgetStatus.daysRemaining} dagar kvar</p>
@@ -318,8 +318,8 @@ export default function ApiCostsDashboardPage() {
                 <div className="flex items-center gap-2">
                   <Gauge className="h-4 w-4 text-muted-foreground" />
                   <span className={`text-lg font-bold ${
-                    budgetStatus.percentUsed >= 100 ? "text-red-500" :
-                    budgetStatus.percentUsed >= 80 ? "text-orange-500" :
+                    budgetStatus.percentUsed >= 100 ? "text-destructive" :
+                    budgetStatus.percentUsed >= 80 ? "text-chart-4" :
                     ""
                   }`} data-testid="text-budget-percent">{budgetStatus.percentUsed}%</span>
                 </div>
@@ -504,7 +504,7 @@ export default function ApiCostsDashboardPage() {
                         value={Math.min(alert.percentUsed, 100)}
                         className="h-2"
                       />
-                      <span className={`text-sm font-medium ${alert.isOverBudget ? "text-destructive" : "text-yellow-500"}`}>
+                      <span className={`text-sm font-medium ${alert.isOverBudget ? "text-destructive" : "text-chart-3"}`}>
                         {alert.percentUsed}%
                       </span>
                     </div>

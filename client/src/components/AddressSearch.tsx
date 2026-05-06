@@ -187,7 +187,7 @@ export function AddressSearch({ onSelect, placeholder = "Sök adress...", defaul
                       <span className="truncate block">{result.formattedAddress}</span>
                       <div className="flex items-center gap-2 mt-0.5">
                         {result.entranceLatitude && (
-                          <span className="flex items-center gap-1 text-xs text-green-600">
+                          <span className="flex items-center gap-1 text-xs text-chart-2">
                             <DoorOpen className="h-3 w-3" />
                             Entrékoordinater
                           </span>

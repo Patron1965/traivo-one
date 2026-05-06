@@ -128,7 +128,7 @@ export default function Step2ObjectConfirmation({
 
       {customerMode === "FROM_METADATA" && customerMetadataCheck && customerMetadataCheck.missingCustomer.length > 0 && (
         <Alert variant="destructive" data-testid="alert-missing-customer">
-          <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+          <AlertTriangle className="h-4 w-4 text-chart-4" />
           <AlertDescription>
             <strong>{customerMetadataCheck.missingCustomer.length} objekt</strong> saknar kundkoppling.
             Dessa objekt kan inte faktureras automatiskt vid FROM_METADATA-läge.
@@ -158,7 +158,7 @@ export default function Step2ObjectConfirmation({
           </thead>
           <tbody>
             {filteredObjects.map(obj => (
-              <tr key={obj.id} className={`border-t hover:bg-accent/30 ${customerMode === "FROM_METADATA" && missingCustomerIds.has(obj.id) ? "bg-red-50 dark:bg-red-900/10" : ""}`} data-testid={`row-object-${obj.id}`}>
+              <tr key={obj.id} className={`border-t hover:bg-accent/30 ${customerMode === "FROM_METADATA" && missingCustomerIds.has(obj.id) ? "bg-destructive/10 dark:bg-destructive/15" : ""}`} data-testid={`row-object-${obj.id}`}>
                 <td className="p-2">
                   <Checkbox
                     checked={selectedObjectIds.has(obj.id)}
@@ -181,7 +181,7 @@ export default function Step2ObjectConfirmation({
                     <Badge variant="default" className="text-xs">Aktiv</Badge>
                   ) : (
                     <Badge variant="secondary" className="text-xs">
-                      <AlertTriangle className="h-3 w-3 mr-1 text-orange-500 dark:text-orange-400" />
+                      <AlertTriangle className="h-3 w-3 mr-1 text-chart-4" />
                       {obj.status || "Okänd"}
                     </Badge>
                   )}
@@ -190,11 +190,11 @@ export default function Step2ObjectConfirmation({
                   <td className="p-2">
                     {missingCustomerIds.has(obj.id) ? (
                       <Badge variant="destructive" className="text-xs" data-testid={`badge-missing-customer-${obj.id}`}>
-                        <AlertTriangle className="h-3 w-3 mr-1 text-orange-500 dark:text-orange-400" />
+                        <AlertTriangle className="h-3 w-3 mr-1 text-chart-4" />
                         Saknar kund
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-xs text-green-700 dark:text-green-400" data-testid={`badge-has-customer-${obj.id}`}>
+                      <Badge variant="outline" className="text-xs text-chart-2" data-testid={`badge-has-customer-${obj.id}`}>
                         OK
                       </Badge>
                     )}

@@ -556,8 +556,8 @@ export default function OrderConceptsPage() {
       <div className="grid grid-cols-3 gap-4">
         <Card data-testid="stat-avrop">
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900">
-              <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <div className="p-2 rounded-lg bg-chart-1/15 dark:bg-chart-1/15">
+              <Package className="h-5 w-5 text-chart-1" />
             </div>
             <div>
               <div className="text-2xl font-bold">{scenarioCounts.avrop}</div>
@@ -567,8 +567,8 @@ export default function OrderConceptsPage() {
         </Card>
         <Card data-testid="stat-schema">
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900">
-              <Calendar className="h-5 w-5 text-green-600 dark:text-green-400" />
+            <div className="p-2 rounded-lg bg-chart-2/15 dark:bg-chart-2/15">
+              <Calendar className="h-5 w-5 text-chart-2" />
             </div>
             <div>
               <div className="text-2xl font-bold">{scenarioCounts.schema}</div>
@@ -578,8 +578,8 @@ export default function OrderConceptsPage() {
         </Card>
         <Card data-testid="stat-abonnemang">
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900">
-              <CreditCard className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+            <div className="p-2 rounded-lg bg-chart-5/15 dark:bg-chart-5/15">
+              <CreditCard className="h-5 w-5 text-chart-5" />
             </div>
             <div>
               <div className="text-2xl font-bold">{scenarioCounts.abonnemang}</div>
@@ -744,7 +744,7 @@ export default function OrderConceptsPage() {
                               disabled={rerunMutation.isPending}
                               data-testid={`button-rerun-${concept.id}`}
                             >
-                              <RefreshCw className={`h-4 w-4 text-orange-500 ${rerunMutation.isPending ? "animate-spin" : ""}`} />
+                              <RefreshCw className={`h-4 w-4 text-chart-4 ${rerunMutation.isPending ? "animate-spin" : ""}`} />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>Kör om (detektera ändringar)</TooltipContent>
@@ -989,7 +989,7 @@ export default function OrderConceptsPage() {
 
             {/* Schema-specific fields */}
             {formData.scenario === "schema" && (
-              <Card className="border-green-200 dark:border-green-800">
+              <Card className="border-chart-2/20 dark:border-chart-2/80">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm flex items-center gap-2">
                     <Calendar className="h-4 w-4" />
@@ -1119,7 +1119,7 @@ export default function OrderConceptsPage() {
 
             {/* Abonnemang-specific fields */}
             {formData.scenario === "abonnemang" && (
-              <Card className="border-purple-200 dark:border-purple-800">
+              <Card className="border-chart-5/20 dark:border-chart-5/80">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm flex items-center gap-2">
                     <CreditCard className="h-4 w-4" />
@@ -1253,7 +1253,7 @@ export default function OrderConceptsPage() {
               </div>
 
               {previewData.subscriptionCalc && (
-                <Card className="border-purple-200 dark:border-purple-800">
+                <Card className="border-chart-5/20 dark:border-chart-5/80">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm">Abonnemangskalkyl</CardTitle>
                   </CardHeader>
@@ -1264,11 +1264,11 @@ export default function OrderConceptsPage() {
                         <div className="text-xs text-muted-foreground">Enheter totalt</div>
                       </div>
                       <div>
-                        <div className="text-xl font-bold text-green-600">{previewData.subscriptionCalc.monthlyTotal.toLocaleString("sv-SE")} kr</div>
+                        <div className="text-xl font-bold text-chart-2">{previewData.subscriptionCalc.monthlyTotal.toLocaleString("sv-SE")} kr</div>
                         <div className="text-xs text-muted-foreground">Månadsintäkt</div>
                       </div>
                       <div>
-                        <div className="text-xl font-bold text-green-600">{previewData.subscriptionCalc.yearlyTotal.toLocaleString("sv-SE")} kr</div>
+                        <div className="text-xl font-bold text-chart-2">{previewData.subscriptionCalc.yearlyTotal.toLocaleString("sv-SE")} kr</div>
                         <div className="text-xs text-muted-foreground">Årsintäkt</div>
                       </div>
                     </div>
@@ -1277,7 +1277,7 @@ export default function OrderConceptsPage() {
               )}
 
               {(previewData.schedulePreview?.length ?? 0) > 0 && (
-                <Card className="border-green-200 dark:border-green-800">
+                <Card className="border-chart-2/20 dark:border-chart-2/80">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm">Leveranstidslinje</CardTitle>
                   </CardHeader>
@@ -1743,22 +1743,22 @@ export default function OrderConceptsPage() {
                     {log.changesDetected && typeof log.changesDetected === "object" && (
                       <div className="grid grid-cols-3 gap-2 mt-2">
                         {(log.changesDetected as any).newObjects > 0 && (
-                          <div className="text-xs p-2 bg-green-50 dark:bg-green-900/20 rounded text-green-700 dark:text-green-400">
+                          <div className="text-xs p-2 bg-chart-2/10 dark:bg-chart-2/15 rounded text-chart-2">
                             +{(log.changesDetected as any).newObjects} nya objekt
                           </div>
                         )}
                         {(log.changesDetected as any).removedObjects > 0 && (
-                          <div className="text-xs p-2 bg-red-50 dark:bg-red-900/20 rounded text-red-700 dark:text-red-400">
+                          <div className="text-xs p-2 bg-destructive/10 dark:bg-destructive/15 rounded text-destructive">
                             -{(log.changesDetected as any).removedObjects} borttagna
                           </div>
                         )}
                         {(log.changesDetected as any).quantityChanges > 0 && (
-                          <div className="text-xs p-2 bg-amber-50 dark:bg-amber-900/20 rounded text-amber-700 dark:text-amber-400">
+                          <div className="text-xs p-2 bg-chart-4/10 dark:bg-chart-4/15 rounded text-chart-4">
                             ~{(log.changesDetected as any).quantityChanges} ändringar
                           </div>
                         )}
                         {(log.changesDetected as any).newScheduleEntries > 0 && (
-                          <div className="text-xs p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-blue-700 dark:text-blue-400">
+                          <div className="text-xs p-2 bg-chart-1/10 dark:bg-chart-1/15 rounded text-chart-1">
                             +{(log.changesDetected as any).newScheduleEntries} nya scheman
                           </div>
                         )}

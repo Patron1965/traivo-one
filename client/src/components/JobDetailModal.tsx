@@ -473,10 +473,10 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       draft: "bg-gray-100 text-gray-800",
-      scheduled: "bg-blue-100 text-blue-800",
-      in_progress: "bg-yellow-100 text-yellow-800",
-      completed: "bg-green-100 text-green-800",
-      cancelled: "bg-red-100 text-red-800",
+      scheduled: "bg-chart-1/15 text-chart-1",
+      in_progress: "bg-chart-3/15 text-chart-3",
+      completed: "bg-chart-2/15 text-chart-2",
+      cancelled: "bg-destructive/15 text-destructive",
     };
     return colors[status] || "bg-gray-100 text-gray-800";
   };
@@ -629,16 +629,16 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                 </div>
               </div>
               {desiredStart && desiredEnd && desiredEnd < desiredStart && (
-                <Alert variant="default" className="border-orange-300 dark:border-orange-700" data-testid="alert-desired-range-invalid">
-                  <AlertTriangle className="h-4 w-4 text-orange-500" />
+                <Alert variant="default" className="border-chart-4/30 dark:border-chart-4/70" data-testid="alert-desired-range-invalid">
+                  <AlertTriangle className="h-4 w-4 text-chart-4" />
                   <AlertDescription className="text-sm">
                     Senaste datum ligger före tidigaste — kontrollera ordningen.
                   </AlertDescription>
                 </Alert>
               )}
               {isScheduledOutsideDesired && (
-                <Alert variant="default" className="border-orange-300 dark:border-orange-700" data-testid="alert-scheduled-outside-desired">
-                  <AlertTriangle className="h-4 w-4 text-orange-500" />
+                <Alert variant="default" className="border-chart-4/30 dark:border-chart-4/70" data-testid="alert-scheduled-outside-desired">
+                  <AlertTriangle className="h-4 w-4 text-chart-4" />
                   <AlertDescription className="text-sm">
                     Planerat datum ligger utanför kundens önskade period.
                   </AlertDescription>
@@ -1059,11 +1059,11 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             {comm.status === "sent" ? (
-                              <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                              <CheckCircle2 className="h-3.5 w-3.5 text-chart-2" />
                             ) : comm.status === "failed" ? (
-                              <XCircle className="h-3.5 w-3.5 text-red-500" />
+                              <XCircle className="h-3.5 w-3.5 text-destructive" />
                             ) : (
-                              <AlertCircle className="h-3.5 w-3.5 text-yellow-500" />
+                              <AlertCircle className="h-3.5 w-3.5 text-chart-3" />
                             )}
                             <Badge variant="outline" className="text-xs">
                               {comm.channel === "sms" ? "SMS" : comm.channel === "email" ? "E-post" : comm.channel}
@@ -1086,7 +1086,7 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                           <span className="text-xs text-muted-foreground">Till: {comm.recipientPhone}</span>
                         )}
                         {comm.errorMessage && (
-                          <p className="text-xs text-red-500">{comm.errorMessage}</p>
+                          <p className="text-xs text-destructive">{comm.errorMessage}</p>
                         )}
                       </div>
                     ))}

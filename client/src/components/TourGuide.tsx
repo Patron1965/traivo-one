@@ -261,7 +261,7 @@ export function TourGuide() {
             </p>
 
             {targetMissing && (
-              <p className="text-xs text-amber-500 mb-3 italic">
+              <p className="text-xs text-chart-4 mb-3 italic">
                 Elementet syns inte just nu. Hoppa vidare till nästa steg.
               </p>
             )}

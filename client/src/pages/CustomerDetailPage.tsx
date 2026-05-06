@@ -109,12 +109,12 @@ interface MapPoint {
 }
 
 const HIERARCHY_LEVELS: Record<string, { label: string; icon: typeof Building2; color: string; hex: string }> = {
-  koncern: { label: "Koncern", icon: Pyramid, color: "text-purple-600 dark:text-purple-400", hex: "#9333ea" },
-  brf: { label: "BRF", icon: Building2, color: "text-blue-600 dark:text-blue-400", hex: "#3b82f6" },
-  fastighet: { label: "Fastighet", icon: Home, color: "text-green-600 dark:text-green-400", hex: "#22c55e" },
-  rum: { label: "Rum", icon: DoorClosed, color: "text-yellow-600 dark:text-yellow-400", hex: "#eab308" },
-  karl: { label: "Kärl", icon: Trash2, color: "text-orange-600 dark:text-orange-400", hex: "#f97316" },
-  objekt: { label: "Objekt", icon: Package, color: "text-slate-600 dark:text-slate-400", hex: "#64748b" },
+  koncern: { label: "Koncern", icon: Pyramid, color: "text-chart-5", hex: "#2C3E50" },
+  brf: { label: "BRF", icon: Building2, color: "text-chart-1", hex: "#1B4B6B" },
+  fastighet: { label: "Fastighet", icon: Home, color: "text-chart-2", hex: "#4A9B9B" },
+  rum: { label: "Rum", icon: DoorClosed, color: "text-chart-3", hex: "#7DBFB0" },
+  karl: { label: "Kärl", icon: Trash2, color: "text-chart-4", hex: "#6B7C8C" },
+  objekt: { label: "Objekt", icon: Package, color: "text-muted-foreground", hex: "#6B7C8C" },
 };
 
 interface ClusterGroup {
@@ -282,7 +282,7 @@ function TreeRow({
           {node.accessInfoInherited && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <GitBranch className="h-3 w-3 text-blue-500" data-testid={`inherited-${node.id}`} />
+                <GitBranch className="h-3 w-3 text-chart-1" data-testid={`inherited-${node.id}`} />
               </TooltipTrigger>
               <TooltipContent side="top">
                 <p className="text-xs font-medium">Ärvda värden:</p>
@@ -549,7 +549,7 @@ function CustomerProfitabilityTab({ customerId }: { customerId: string }) {
         <Card data-testid="card-customer-margin">
           <CardContent className="p-4">
             <div className="text-xs text-muted-foreground">Marginal</div>
-            <div className={`text-xl font-bold flex items-center gap-1 ${positive ? "text-green-600" : "text-red-600"}`}>
+            <div className={`text-xl font-bold flex items-center gap-1 ${positive ? "text-chart-2" : "text-destructive"}`}>
               {positive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
               {positive ? "+" : ""}{(data.totalMargin / 100).toLocaleString()} kr
             </div>
@@ -591,7 +591,7 @@ function CustomerProfitabilityTab({ customerId }: { customerId: string }) {
                       <td className="py-1.5 pr-3 text-right">{m.orders}</td>
                       <td className="py-1.5 pr-3 text-right">{(m.revenue / 100).toLocaleString()} kr</td>
                       <td className="py-1.5 pr-3 text-right">{(m.cost / 100).toLocaleString()} kr</td>
-                      <td className={`py-1.5 pr-3 text-right font-medium ${m.margin >= 0 ? "text-green-600" : "text-red-600"}`}>
+                      <td className={`py-1.5 pr-3 text-right font-medium ${m.margin >= 0 ? "text-chart-2" : "text-destructive"}`}>
                         {m.margin >= 0 ? "+" : ""}{(m.margin / 100).toLocaleString()} kr
                       </td>
                       <td className="py-1.5 text-right text-xs text-muted-foreground">{m.marginPercent}%</td>

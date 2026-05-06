@@ -55,7 +55,7 @@ export default function LoginPage() {
                 href={MARKETING_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-5 inline-flex items-center gap-1 text-sm text-[#4A9B9B] hover:text-[#1B4B6B] dark:text-teal-300 dark:hover:text-teal-200 font-medium transition-colors"
+                className="mt-5 inline-flex items-center gap-1 text-sm text-[#4A9B9B] hover:text-[#1B4B6B] dark:hover:text-chart-2 font-medium transition-colors"
                 data-testid="link-marketing"
               >
                 Läs mer om Traivo →
@@ -68,8 +68,8 @@ export default function LoginPage() {
                 className="flex items-center gap-3 px-4 py-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors group"
                 data-testid="link-field-login"
               >
-                <div className="h-9 w-9 rounded-lg bg-teal-50 dark:bg-teal-900/30 flex items-center justify-center flex-shrink-0">
-                  <Smartphone className="h-4 w-4 text-[#4A9B9B] dark:text-teal-300" />
+                <div className="h-9 w-9 rounded-lg bg-chart-2/10 dark:bg-chart-2/15 flex items-center justify-center flex-shrink-0">
+                  <Smartphone className="h-4 w-4 text-[#4A9B9B]" />
                 </div>
                 <div className="flex-1 text-left">
                   <div className="text-sm font-medium text-slate-900 dark:text-white">
@@ -87,8 +87,8 @@ export default function LoginPage() {
                 className="flex items-center gap-3 px-4 py-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors group"
                 data-testid="link-portal-login"
               >
-                <div className="h-9 w-9 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-                  <UserCircle2 className="h-4 w-4 text-[#1B4B6B] dark:text-blue-300" />
+                <div className="h-9 w-9 rounded-lg bg-chart-1/10 dark:bg-chart-1/15 flex items-center justify-center flex-shrink-0">
+                  <UserCircle2 className="h-4 w-4 text-[#1B4B6B]" />
                 </div>
                 <div className="flex-1 text-left">
                   <div className="text-sm font-medium text-slate-900 dark:text-white">

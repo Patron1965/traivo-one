@@ -99,7 +99,7 @@ function NavBadge({ count }: { count: number }) {
   if (count === 0) return null;
   return (
     <span
-      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold leading-none flex-shrink-0"
+      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-destructive/15 text-destructive-foreground text-[10px] font-semibold leading-none flex-shrink-0"
       data-testid="badge-count"
     >
       {count > 99 ? "99+" : count}
@@ -111,7 +111,7 @@ function DropdownBadge({ count }: { count: number }) {
   if (count === 0) return null;
   return (
     <span
-      className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold leading-none"
+      className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive/15 text-destructive-foreground text-[10px] font-semibold leading-none"
       data-testid="badge-count"
     >
       {count > 99 ? "99+" : count}
@@ -187,13 +187,13 @@ function NavDropdown({ label, items, icon: Icon, colorClass, badges, isFavorite,
                     }}
                     className={`p-0.5 rounded transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100 ${
                       fav
-                        ? "opacity-100 text-yellow-500"
-                        : "opacity-0 group-hover/fav:opacity-60 focus-visible:opacity-100 text-muted-foreground hover:text-yellow-500"
+                        ? "opacity-100 text-chart-3"
+                        : "opacity-0 group-hover/fav:opacity-60 focus-visible:opacity-100 text-muted-foreground hover:text-chart-3"
                     }`}
                     data-testid={`button-fav-${item.url.replace("/", "") || "home"}`}
                     aria-label={fav ? tl("fav.remove") : tl("fav.add")}
                   >
-                    <Star className={`h-3.5 w-3.5 ${fav ? "fill-yellow-500" : ""}`} />
+                    <Star className={`h-3.5 w-3.5 ${fav ? "fill-chart-3" : ""}`} />
                   </button>
                 </div>
               </Link>
@@ -235,7 +235,7 @@ function FavoritesDropdown({ allItems, badges, favorites, toggleFavorite }: Favo
           className="gap-1 h-8 px-2 text-xs"
           data-testid="nav-dropdown-favoriter"
         >
-          <Star className="h-3.5 w-3.5 fill-yellow-500 text-yellow-500" />
+          <Star className="h-3.5 w-3.5 fill-chart-3 text-chart-3" />
           <span className="hidden xl:inline">{tl("nav.favorites")}</span>
           <ChevronDown className="h-2.5 w-2.5 opacity-50" />
         </Button>
@@ -266,11 +266,11 @@ function FavoritesDropdown({ allItems, badges, favorites, toggleFavorite }: Favo
                     e.stopPropagation();
                     toggleFavorite(item.url);
                   }}
-                  className="p-0.5 rounded text-yellow-500"
+                  className="p-0.5 rounded text-chart-3"
                   data-testid={`button-unfav-${item.url.replace("/", "") || "home"}`}
                   aria-label={tl("fav.remove")}
                 >
-                  <Star className="h-3.5 w-3.5 fill-yellow-500" />
+                  <Star className="h-3.5 w-3.5 fill-chart-3" />
                 </button>
               </Link>
             </DropdownMenuItem>
@@ -510,7 +510,7 @@ function NotificationsBell() {
           <Bell className="h-4 w-4" />
           {unread > 0 && (
             <span
-              className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold leading-none"
+              className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-destructive/15 text-destructive-foreground text-[10px] font-semibold leading-none"
               data-testid="badge-notifications-unread"
             >
               {unread > 99 ? "99+" : unread}
@@ -552,7 +552,7 @@ function NotificationsBell() {
                     data-testid={`notification-item-${n.id}`}
                   >
                     {!n.isRead && (
-                      <span className="mt-1.5 h-2 w-2 rounded-full bg-destructive flex-shrink-0" />
+                      <span className="mt-1.5 h-2 w-2 rounded-full bg-destructive/15 flex-shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate" data-testid={`text-notification-title-${n.id}`}>

@@ -681,7 +681,7 @@ export default function OrderConceptWizardPage() {
               placeholder="Namnge orderkonceptet..."
               value={conceptName}
               onChange={(e) => setConceptName(e.target.value)}
-              className={cn("w-64", !conceptName && currentStep === 1 && "border-orange-400 ring-1 ring-orange-400")}
+              className={cn("w-64", !conceptName && currentStep === 1 && "border-chart-4/40 ring-1 ring-chart-4/40")}
               data-testid="input-concept-name"
             />
           </div>
@@ -711,9 +711,9 @@ export default function OrderConceptWizardPage() {
                     currentStep === step.num
                       ? "bg-primary text-primary-foreground font-medium"
                       : status === "complete"
-                        ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50 cursor-pointer"
+                        ? "bg-chart-2/15 dark:bg-chart-2/15 text-chart-2 hover:bg-chart-2/20 dark:hover:bg-chart-2/15 cursor-pointer"
                         : status === "warning"
-                          ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/50 cursor-pointer"
+                          ? "bg-chart-4/15 dark:bg-chart-4/15 text-chart-4 hover:bg-chart-4/20 dark:hover:bg-chart-4/15 cursor-pointer"
                           : "bg-muted text-muted-foreground",
                     !conceptId && step.num > 1 && "opacity-50 cursor-not-allowed"
                   )}
@@ -725,7 +725,7 @@ export default function OrderConceptWizardPage() {
                       : status === "complete"
                         ? <Check className="h-2.5 w-2.5" />
                         : status === "warning"
-                          ? <AlertTriangle className="h-2.5 w-2.5 text-orange-500 dark:text-orange-400" />
+                          ? <AlertTriangle className="h-2.5 w-2.5 text-chart-4" />
                           : step.num}
                   </span>
                   <span className="hidden md:inline">{step.label}</span>
@@ -734,7 +734,7 @@ export default function OrderConceptWizardPage() {
                   <div className={cn(
                     "w-4 h-px mx-0.5",
                     step.num < currentStep
-                      ? status === "warning" ? "bg-orange-400" : "bg-green-500"
+                      ? status === "warning" ? "bg-chart-4/40" : "bg-chart-2/15"
                       : "bg-muted-foreground/30"
                   )} />
                 )}
@@ -748,17 +748,17 @@ export default function OrderConceptWizardPage() {
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-4xl mx-auto">
             {showResumeBanner && resumeStep && (
-              <Alert className="mb-4 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30" data-testid="resume-banner">
-                <PlayCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <Alert className="mb-4 border-chart-1/20 dark:border-chart-1/80 bg-chart-1/10 dark:bg-chart-1/15" data-testid="resume-banner">
+                <PlayCircle className="h-4 w-4 text-chart-1" />
                 <AlertDescription className="flex items-center justify-between">
-                  <span className="text-blue-800 dark:text-blue-300">
+                  <span className="text-chart-1">
                     Du fortsätter från steg {resumeStep} — <strong>{STEPS[resumeStep - 1]?.label}</strong>
                   </span>
                   <div className="flex items-center gap-2">
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-blue-600 hover:text-blue-800 h-7"
+                      className="text-chart-1 hover:text-chart-1 h-7"
                       onClick={() => setShowResumeBanner(false)}
                       data-testid="button-continue-wizard"
                     >
@@ -767,7 +767,7 @@ export default function OrderConceptWizardPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-blue-600 hover:text-blue-800 h-7"
+                      className="text-chart-1 hover:text-chart-1 h-7"
                       onClick={async () => {
                         setCurrentStep(1);
                         setShowResumeBanner(false);

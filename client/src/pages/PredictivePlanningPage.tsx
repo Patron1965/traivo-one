@@ -99,8 +99,8 @@ export default function PredictivePlanningPage() {
   });
 
   const TrendIcon = ({ trend }: { trend: string }) => {
-    if (trend === "increasing") return <TrendingUp className="h-4 w-4 text-green-500" />;
-    if (trend === "decreasing") return <TrendingDown className="h-4 w-4 text-red-500" />;
+    if (trend === "increasing") return <TrendingUp className="h-4 w-4 text-chart-2" />;
+    if (trend === "decreasing") return <TrendingDown className="h-4 w-4 text-destructive" />;
     return <Minus className="h-4 w-4 text-muted-foreground" />;
   };
 
@@ -190,7 +190,7 @@ export default function PredictivePlanningPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
+              <AlertTriangle className="h-5 w-5 text-chart-4" />
               Rekommendationer
             </CardTitle>
             <CardDescription>AI-genererade förslag baserat på historiska mönster</CardDescription>

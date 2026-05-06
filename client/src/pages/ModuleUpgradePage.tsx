@@ -17,8 +17,8 @@ export default function ModuleUpgradePage() {
     <div className="flex items-center justify-center min-h-[60vh] p-6" data-testid="module-upgrade-page">
       <Card className="max-w-lg w-full">
         <CardContent className="p-8 text-center space-y-6">
-          <div className="mx-auto w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-            <Lock className="h-8 w-8 text-amber-600 dark:text-amber-400" />
+          <div className="mx-auto w-16 h-16 rounded-full bg-chart-4/15 dark:bg-chart-4/15 flex items-center justify-center">
+            <Lock className="h-8 w-8 text-chart-4" />
           </div>
 
           <div className="space-y-2">
@@ -34,7 +34,7 @@ export default function ModuleUpgradePage() {
           {moduleDef && (
             <div className="bg-muted/50 rounded-lg p-4 text-left">
               <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="h-4 w-4 text-amber-500" />
+                <Sparkles className="h-4 w-4 text-chart-4" />
                 <span className="text-sm font-medium">{moduleDef.label}</span>
               </div>
               <p className="text-xs text-muted-foreground">{moduleDef.description}</p>

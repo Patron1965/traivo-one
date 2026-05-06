@@ -45,11 +45,11 @@ interface TimelineViewProps {
 }
 
 const ENTRY_COLORS: Record<string, { bg: string; border: string; text: string; icon: typeof Clock }> = {
-  travel: { bg: "bg-blue-100 dark:bg-blue-900/30", border: "border-blue-400", text: "text-blue-600 dark:text-blue-400", icon: Truck },
-  work: { bg: "bg-green-100 dark:bg-green-900/30", border: "border-green-400", text: "text-green-600 dark:text-green-400", icon: Wrench },
-  on_site: { bg: "bg-emerald-100 dark:bg-emerald-900/30", border: "border-emerald-400", text: "text-emerald-600 dark:text-emerald-400", icon: Wrench },
-  break: { bg: "bg-amber-100 dark:bg-amber-900/30", border: "border-amber-400", text: "text-amber-600 dark:text-amber-400", icon: Coffee },
-  rest: { bg: "bg-amber-100 dark:bg-amber-900/30", border: "border-amber-400", text: "text-amber-600 dark:text-amber-400", icon: Coffee },
+  travel: { bg: "bg-chart-1/15 dark:bg-chart-1/15", border: "border-chart-1/40", text: "text-chart-1", icon: Truck },
+  work: { bg: "bg-chart-2/15 dark:bg-chart-2/15", border: "border-chart-2/40", text: "text-chart-2", icon: Wrench },
+  on_site: { bg: "bg-chart-2/15 dark:bg-chart-2/15", border: "border-chart-2/40", text: "text-chart-2", icon: Wrench },
+  break: { bg: "bg-chart-4/15 dark:bg-chart-4/15", border: "border-chart-4/40", text: "text-chart-4", icon: Coffee },
+  rest: { bg: "bg-chart-4/15 dark:bg-chart-4/15", border: "border-chart-4/40", text: "text-chart-4", icon: Coffee },
 };
 
 const ENTRY_LABELS: Record<string, string> = {
@@ -184,8 +184,8 @@ export function TimelineView({ onBack, mobileApiCall }: TimelineViewProps) {
 
       <div className="flex-1 overflow-auto p-4 space-y-4">
         {authError && (
-          <Card className="border-red-300 dark:border-red-800">
-            <CardContent className="py-3 px-4 flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+          <Card className="border-destructive/30 dark:border-destructive/80">
+            <CardContent className="py-3 px-4 flex items-center gap-2 text-sm text-destructive">
               <AlertCircle className="h-4 w-4 shrink-0" />
               Session har gått ut. Gå tillbaka och logga in igen.
             </CardContent>
@@ -195,21 +195,21 @@ export function TimelineView({ onBack, mobileApiCall }: TimelineViewProps) {
         <div className="grid grid-cols-3 gap-3">
           <Card>
             <CardContent className="py-3 px-3 text-center">
-              <Wrench className="h-4 w-4 mx-auto text-green-500 mb-1" />
+              <Wrench className="h-4 w-4 mx-auto text-chart-2 mb-1" />
               <p className="text-xs text-muted-foreground">Arbete</p>
               <p className="text-sm font-semibold" data-testid="text-work-minutes">{formatMinutes(summary?.totalWork || 0)}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="py-3 px-3 text-center">
-              <Truck className="h-4 w-4 mx-auto text-blue-500 mb-1" />
+              <Truck className="h-4 w-4 mx-auto text-chart-1 mb-1" />
               <p className="text-xs text-muted-foreground">Resa</p>
               <p className="text-sm font-semibold" data-testid="text-travel-minutes">{formatMinutes(summary?.totalTravel || 0)}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="py-3 px-3 text-center">
-              <Coffee className="h-4 w-4 mx-auto text-amber-500 mb-1" />
+              <Coffee className="h-4 w-4 mx-auto text-chart-4 mb-1" />
               <p className="text-xs text-muted-foreground">Rast</p>
               <p className="text-sm font-semibold" data-testid="text-break-minutes">{formatMinutes(summary?.totalBreak || 0)}</p>
             </CardContent>
@@ -245,11 +245,11 @@ export function TimelineView({ onBack, mobileApiCall }: TimelineViewProps) {
                 })}
                 {nowPos !== null && (
                   <div
-                    className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
+                    className="absolute top-0 bottom-0 w-0.5 bg-destructive/15 z-10"
                     style={{ left: `${nowPos}%` }}
                     data-testid="timeline-now-indicator"
                   >
-                    <div className="absolute -top-1 -left-1 w-2.5 h-2.5 rounded-full bg-red-500" />
+                    <div className="absolute -top-1 -left-1 w-2.5 h-2.5 rounded-full bg-destructive/15" />
                   </div>
                 )}
               </div>
@@ -263,16 +263,16 @@ export function TimelineView({ onBack, mobileApiCall }: TimelineViewProps) {
               </div>
               <div className="flex items-center gap-3 mt-2 text-[10px]">
                 <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-green-400" /> Arbete
+                  <span className="w-2.5 h-2.5 rounded-sm bg-chart-2/40" /> Arbete
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-blue-400" /> Resa
+                  <span className="w-2.5 h-2.5 rounded-sm bg-chart-1/40" /> Resa
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-amber-400" /> Rast
+                  <span className="w-2.5 h-2.5 rounded-sm bg-chart-4/40" /> Rast
                 </span>
                 <span className="flex items-center gap-1 ml-auto">
-                  <span className="w-2.5 h-0.5 bg-red-500" /> Nu
+                  <span className="w-2.5 h-0.5 bg-destructive/15" /> Nu
                 </span>
               </div>
             </CardContent>

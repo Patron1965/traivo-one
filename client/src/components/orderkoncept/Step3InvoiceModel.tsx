@@ -139,7 +139,7 @@ export default function Step3InvoiceModel({
                 </p>
               )}
               {invoiceLock && (
-                <p className="text-amber-600 dark:text-amber-400">
+                <p className="text-chart-4">
                   Fakturering inväntar fullständig leverans
                 </p>
               )}

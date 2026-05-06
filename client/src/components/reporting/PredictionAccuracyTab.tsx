@@ -230,21 +230,21 @@ export function PredictionAccuracyTab() {
             : "snittavvikelse"}
           trend={kpis?.mapeTrend !== undefined ? (kpis.mapeTrend > 0 ? "up" : kpis.mapeTrend < 0 ? "down" : "flat") : "flat"}
           trendGood={kpis?.mapeTrend !== undefined ? kpis.mapeTrend <= 0 : true}
-          icon={<Gauge className="h-4 w-4 text-orange-500" />}
+          icon={<Gauge className="h-4 w-4 text-chart-4" />}
           data-testid="kpi-mape"
         />
         <KPISmall
           title="Medelfel"
           value={`${kpis?.maeMinutes || 0} min`}
           subtitle={`${kpis?.totalWithActual || 0} mätningar`}
-          icon={<Clock className="h-4 w-4 text-blue-500" />}
+          icon={<Clock className="h-4 w-4 text-chart-1" />}
           data-testid="kpi-mae"
         />
         <KPISmall
           title="Slutförandegrad"
           value={`${completionRate}%`}
           subtitle={`${carryOver?.totalIncomplete || 0} oavslutade`}
-          icon={<CheckCircle2 className="h-4 w-4 text-green-500" />}
+          icon={<CheckCircle2 className="h-4 w-4 text-chart-2" />}
           data-testid="kpi-completion"
         />
       </div>
@@ -365,7 +365,7 @@ export function PredictionAccuracyTab() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+              <AlertTriangle className="h-4 w-4 text-chart-4" />
               Carry-over-analys
             </CardTitle>
             <CardDescription>Vanligaste orsaker till oavslutade jobb</CardDescription>
@@ -430,8 +430,8 @@ function KPISmall({ title, value, subtitle, icon, trend, trendGood, ...props }: 
           <span className="text-xs font-medium text-muted-foreground uppercase">{title}</span>
           {trend && trend !== "flat" && (
             trend === "down"
-              ? <ArrowDownRight className={`h-3 w-3 ${trendGood ? "text-green-500" : "text-red-500"}`} />
-              : <ArrowUpRight className={`h-3 w-3 ${trendGood ? "text-green-500" : "text-red-500"}`} />
+              ? <ArrowDownRight className={`h-3 w-3 ${trendGood ? "text-chart-2" : "text-destructive"}`} />
+              : <ArrowUpRight className={`h-3 w-3 ${trendGood ? "text-chart-2" : "text-destructive"}`} />
           )}
         </div>
         <p className="text-xl font-bold">{value}</p>
@@ -502,7 +502,7 @@ function AdjustDurationsDialog({ open, onOpenChange, suggestions, onApply, isApp
                     </div>
                     <div>
                       <span className="text-muted-foreground">Ändring: </span>
-                      <span className={`font-medium ${diff > 0 ? "text-orange-600" : "text-green-600"}`}>
+                      <span className={`font-medium ${diff > 0 ? "text-chart-4" : "text-chart-2"}`}>
                         {diff > 0 ? "+" : ""}{diff} min
                       </span>
                     </div>

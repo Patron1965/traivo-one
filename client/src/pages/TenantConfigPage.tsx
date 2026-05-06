@@ -69,7 +69,7 @@ export default function TenantConfigPage() {
             {completionSteps.map((step, i) => (
               <div key={i} className="flex items-center gap-2">
                 {step.done ? (
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  <CheckCircle2 className="h-4 w-4 text-chart-2" />
                 ) : (
                   <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30" />
                 )}

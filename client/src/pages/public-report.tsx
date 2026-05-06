@@ -100,7 +100,7 @@ export default function PublicReportPage() {
       <div className="min-h-screen flex items-center justify-center bg-background p-4" data-testid="success-report">
         <Card className="max-w-md w-full">
           <CardContent className="pt-6 text-center">
-            <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-green-500" />
+            <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-chart-2" />
             <h2 className="text-xl font-semibold mb-2">Tack för din anmälan!</h2>
             <p className="text-muted-foreground mb-4">
               Vi har tagit emot din felanmälan och kommer att hantera ärendet.

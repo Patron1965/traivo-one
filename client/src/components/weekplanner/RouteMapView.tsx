@@ -251,9 +251,9 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
                   <div className="text-[10px] text-muted-foreground">h arbete</div>
                 </Card>
                 {routeStats.breakMinutes > 0 && (
-                  <Card className="p-2 text-center col-span-2 bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800" data-testid="route-break-stat">
+                  <Card className="p-2 text-center col-span-2 bg-chart-4/10 dark:bg-chart-4/15 border-chart-4/20 dark:border-chart-4/80" data-testid="route-break-stat">
                     <div className="flex items-center justify-center gap-1">
-                      <Coffee className="h-3.5 w-3.5 text-amber-600" />
+                      <Coffee className="h-3.5 w-3.5 text-chart-4" />
                       <span className="text-sm font-bold">{routeStats.breakMinutes} min rast</span>
                     </div>
                   </Card>
@@ -321,9 +321,9 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
                       onSelect={onJobClick}
                     />
                     {breakAfter && (
-                      <div className="flex items-center gap-2 px-3 py-1.5 mx-1 my-0.5 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800" data-testid="route-break-indicator">
-                        <Coffee className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                        <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                      <div className="flex items-center gap-2 px-3 py-1.5 mx-1 my-0.5 rounded bg-chart-4/10 dark:bg-chart-4/15 border border-chart-4/20 dark:border-chart-4/80" data-testid="route-break-indicator">
+                        <Coffee className="h-3.5 w-3.5 text-chart-4 shrink-0" />
+                        <span className="text-xs font-medium text-chart-4">
                           Rast {breakAfter.durationMinutes} min
                           {breakAfter.arrivalSeconds > 0 && ` (${Math.floor(breakAfter.arrivalSeconds / 3600).toString().padStart(2,"0")}:${Math.floor((breakAfter.arrivalSeconds % 3600) / 60).toString().padStart(2,"0")})`}
                         </span>
@@ -399,7 +399,7 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
                         {((job.estimatedDuration || 0) / 60).toFixed(1)}h
                       </span>
                       {job.scheduledStartTime && (
-                        <span className="text-xs bg-blue-100 px-1.5 py-0.5 rounded">
+                        <span className="text-xs bg-chart-1/15 px-1.5 py-0.5 rounded">
                           {job.scheduledStartTime}
                         </span>
                       )}
@@ -424,7 +424,7 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
                   <div className="min-w-[150px]">
                     <div className="font-medium flex items-center gap-1">☕ Rast</div>
                     <div className="text-sm text-gray-500">{brk.durationMinutes} min</div>
-                    {breakTime && <div className="text-xs bg-amber-100 px-1.5 py-0.5 rounded mt-1 inline-block">{breakTime}</div>}
+                    {breakTime && <div className="text-xs bg-chart-4/15 px-1.5 py-0.5 rounded mt-1 inline-block">{breakTime}</div>}
                   </div>
                 </Popup>
               </Marker>

@@ -47,7 +47,7 @@ export default function PortalROIReportPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
         <Card className="max-w-md w-full">
           <CardContent className="p-8 text-center">
-            <AlertCircle className="h-12 w-12 mx-auto mb-4 text-red-500" />
+            <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
             <h2 className="text-lg font-semibold mb-2">Ogiltig l\u00e4nk</h2>
             <p className="text-muted-foreground text-sm">Denna delningsl\u00e4nk saknar en giltig token.</p>
           </CardContent>
@@ -75,7 +75,7 @@ export default function PortalROIReportPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
         <Card className="max-w-md w-full">
           <CardContent className="p-8 text-center">
-            <AlertCircle className="h-12 w-12 mx-auto mb-4 text-red-500" />
+            <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
             <h2 className="text-lg font-semibold mb-2">Kunde inte ladda rapport</h2>
             <p className="text-muted-foreground text-sm">{(error as Error).message}</p>
           </CardContent>
@@ -108,7 +108,7 @@ export default function PortalROIReportPage() {
 
           <Card data-testid="kpi-completed-orders">
             <CardContent className="p-5 text-center">
-              <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-green-600" />
+              <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-chart-2" />
               <p className="text-3xl font-bold">{data.summary.completedOrders}</p>
               <p className="text-xs text-muted-foreground">Utf\u00f6rda ordrar</p>
             </CardContent>
@@ -149,7 +149,7 @@ export default function PortalROIReportPage() {
 
           <Card data-testid="kpi-co2">
             <CardContent className="p-5 text-center">
-              <Leaf className="h-6 w-6 mx-auto mb-2 text-green-600" />
+              <Leaf className="h-6 w-6 mx-auto mb-2 text-chart-2" />
               <p className="text-3xl font-bold">{data.summary.totalCo2Kg}</p>
               <p className="text-xs text-muted-foreground">CO2-utsl\u00e4pp (kg)</p>
             </CardContent>

@@ -66,9 +66,9 @@ export default function Step8Review({
       ) : validation ? (
         <div className="space-y-2">
           {validation.valid ? (
-            <Alert className="border-green-200 bg-green-50 dark:bg-green-950/20">
-              <CheckCircle2 className="h-4 w-4 text-green-600" />
-              <AlertDescription className="text-green-800 dark:text-green-200">
+            <Alert className="border-chart-2/20 bg-chart-2/10 dark:bg-chart-2/15">
+              <CheckCircle2 className="h-4 w-4 text-chart-2" />
+              <AlertDescription className="text-chart-2">
                 Orderkonceptet är komplett och redo att aktiveras.
               </AlertDescription>
             </Alert>
@@ -87,9 +87,9 @@ export default function Step8Review({
             </Alert>
           ))}
           {validation.warnings.map((warn, i) => (
-            <Alert key={i} className="py-2 border-amber-200 bg-amber-50 dark:bg-amber-950/20">
-              <AlertTriangle className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />
-              <AlertDescription className="text-sm text-amber-800 dark:text-amber-200">{warn.message}</AlertDescription>
+            <Alert key={i} className="py-2 border-chart-4/20 bg-chart-4/10 dark:bg-chart-4/15">
+              <AlertTriangle className="h-3.5 w-3.5 text-chart-4" />
+              <AlertDescription className="text-sm text-chart-4">{warn.message}</AlertDescription>
             </Alert>
           ))}
         </div>

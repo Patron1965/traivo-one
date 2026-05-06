@@ -130,9 +130,9 @@ function CountBadge({ value }: { value: number }) {
 
 function SyncMarker({ entry }: { entry: JobExpandSyncEntry }) {
   const map: Record<SyncStatus, { color: string; icon: typeof CheckCircle2; label: string }> = {
-    fresh: { color: "text-green-600 dark:text-green-400", icon: CheckCircle2, label: `Synkad ${formatRelative(entry.latestSyncAt)}` },
+    fresh: { color: "text-chart-2", icon: CheckCircle2, label: `Synkad ${formatRelative(entry.latestSyncAt)}` },
     stale: { color: "text-muted-foreground", icon: Clock, label: `Senast ${formatRelative(entry.latestSyncAt)}` },
-    pending: { color: "text-amber-600 dark:text-amber-400", icon: AlertTriangle, label: "Väntar på fältsync" },
+    pending: { color: "text-chart-4", icon: AlertTriangle, label: "Väntar på fältsync" },
     empty: { color: "text-muted-foreground/60", icon: Circle, label: "Ingen data" },
   };
   const { color, icon: Icon, label } = map[entry.status];
@@ -169,10 +169,10 @@ function relativeColorClass(d: string | null | undefined, opts?: { criticalDays?
   if (days === null) return "";
   const criticalDays = opts?.criticalDays ?? 1;
   const warningDays = opts?.warningDays ?? 3;
-  if (days < 0) return "text-red-600 dark:text-red-400";
-  if (days <= criticalDays) return "text-red-600 dark:text-red-400";
-  if (days <= warningDays) return "text-amber-600 dark:text-amber-400";
-  return "text-emerald-600 dark:text-emerald-400";
+  if (days < 0) return "text-destructive";
+  if (days <= criticalDays) return "text-destructive";
+  if (days <= warningDays) return "text-chart-4";
+  return "text-chart-2";
 }
 
 function ts(d: string | null | undefined): number | null {
@@ -225,7 +225,7 @@ function PeriodTimeline({ period }: { period: JobExpandPeriod }) {
         <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-border" />
         {desiredRange && (
           <div
-            className="absolute top-[calc(50%-7px)] h-1.5 rounded bg-blue-300/80 dark:bg-blue-700/80"
+            className="absolute top-[calc(50%-7px)] h-1.5 rounded bg-chart-1/30 dark:bg-chart-1/15"
             style={{ left: `${desiredRange.left}%`, width: `${desiredRange.width}%` }}
             title="Önskad leveransperiod"
             data-testid="timeline-desired"
@@ -233,7 +233,7 @@ function PeriodTimeline({ period }: { period: JobExpandPeriod }) {
         )}
         {plannedRange && (
           <div
-            className="absolute top-[calc(50%+1px)] h-1.5 rounded bg-purple-300/80 dark:bg-purple-700/80"
+            className="absolute top-[calc(50%+1px)] h-1.5 rounded bg-chart-5/30 dark:bg-chart-5/15"
             style={{ left: `${plannedRange.left}%`, width: `${plannedRange.width}%` }}
             title="Planerat fönster"
             data-testid="timeline-planned"
@@ -249,27 +249,27 @@ function PeriodTimeline({ period }: { period: JobExpandPeriod }) {
         )}
         {deadlinePos !== null && (
           <div
-            className="absolute top-[calc(50%-9px)] h-[18px] w-0.5 bg-red-500"
+            className="absolute top-[calc(50%-9px)] h-[18px] w-0.5 bg-destructive/15"
             style={{ left: `calc(${deadlinePos}% - 1px)` }}
             title="SLA-deadline"
             data-testid="timeline-deadline"
           />
         )}
         <div
-          className="absolute top-[calc(50%-7px)] h-3.5 w-px bg-amber-500"
+          className="absolute top-[calc(50%-7px)] h-3.5 w-px bg-chart-4/15"
           style={{ left: `calc(${nowPos}% - 0.5px)` }}
           title="Nu"
           data-testid="timeline-now"
         >
-          <div className="absolute -top-1 -left-[2px] h-1.5 w-1.5 rounded-full bg-amber-500" />
+          <div className="absolute -top-1 -left-[2px] h-1.5 w-1.5 rounded-full bg-chart-4/15" />
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] text-muted-foreground mt-1">
-        <span className="inline-flex items-center gap-1"><span className="h-1.5 w-2 rounded bg-blue-300/80 dark:bg-blue-700/80" />Önskad</span>
-        <span className="inline-flex items-center gap-1"><span className="h-1.5 w-2 rounded bg-purple-300/80 dark:bg-purple-700/80" />Planerad</span>
+        <span className="inline-flex items-center gap-1"><span className="h-1.5 w-2 rounded bg-chart-1/30 dark:bg-chart-1/15" />Önskad</span>
+        <span className="inline-flex items-center gap-1"><span className="h-1.5 w-2 rounded bg-chart-5/30 dark:bg-chart-5/15" />Planerad</span>
         <span className="inline-flex items-center gap-1"><span className="h-2.5 w-1 rounded-sm bg-foreground" />Schemalagd</span>
-        <span className="inline-flex items-center gap-1"><span className="h-2.5 w-0.5 bg-red-500" />Deadline</span>
-        <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />Nu</span>
+        <span className="inline-flex items-center gap-1"><span className="h-2.5 w-0.5 bg-destructive/15" />Deadline</span>
+        <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-chart-4/15" />Nu</span>
       </div>
     </div>
   );
@@ -348,8 +348,8 @@ function PeriodTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
         <div
           className={`flex items-start gap-1.5 rounded p-1.5 mb-2 text-[11px] border ${
             slaCritical
-              ? "bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300"
-              : "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-amber-700 dark:text-amber-300"
+              ? "bg-destructive/10 dark:bg-destructive/15 border-destructive/20 dark:border-destructive/90 text-destructive"
+              : "bg-chart-4/10 dark:bg-chart-4/15 border-chart-4/20 dark:border-chart-4/90 text-chart-4"
           }`}
           data-testid={`sla-risk-banner-${slaLevel}`}
         >
@@ -369,7 +369,7 @@ function PeriodTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
       )}
 
       {slaOk && period.slaDeadlineAt && (
-        <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 dark:text-emerald-400 mb-1.5" data-testid="sla-risk-banner-ok">
+        <div className="flex items-center gap-1.5 text-[10px] text-chart-2 mb-1.5" data-testid="sla-risk-banner-ok">
           <CheckCircle2 className="h-3 w-3" />
           <span>SLA inom marginal</span>
         </div>
@@ -458,7 +458,7 @@ function PeriodTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
           <div>
             <div className="text-muted-foreground">SLA-deadline</div>
             <div className="flex items-baseline gap-1.5 flex-wrap">
-              <span className={`font-medium ${slaCritical ? "text-red-600 dark:text-red-400" : slaWarning ? "text-amber-600 dark:text-amber-400" : ""}`}>
+              <span className={`font-medium ${slaCritical ? "text-destructive" : slaWarning ? "text-chart-4" : ""}`}>
                 {formatDate(period.slaDeadlineAt)}
               </span>
               {deadlineRelative && (
@@ -471,10 +471,10 @@ function PeriodTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
                   variant="outline"
                   className={`text-[9px] h-4 px-1 ${
                     slaCritical
-                      ? "border-red-400 text-red-700 dark:border-red-700 dark:text-red-300"
+                      ? "border-destructive/40 text-destructive dark:border-destructive/70"
                       : slaWarning
-                      ? "border-amber-400 text-amber-700 dark:border-amber-700 dark:text-amber-300"
-                      : "border-emerald-400 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300"
+                      ? "border-chart-4/40 text-chart-4 dark:border-chart-4/70"
+                      : "border-chart-2/40 text-chart-2 dark:border-chart-2/70"
                   }`}
                   data-testid={`sla-risk-badge-${slaLevel}`}
                 >
@@ -567,7 +567,7 @@ function CommunicationsTab({ data }: { data: JobExpandData }) {
               <div className="flex items-center gap-1.5 text-muted-foreground mt-0.5">
                 <span>{formatDate(c.sentAt || c.createdAt, true)}</span>
                 <span>·</span>
-                <span className={c.status === "sent" || c.status === "delivered" ? "text-green-600 dark:text-green-400" : c.status === "failed" ? "text-red-600 dark:text-red-400" : ""}>{c.status}</span>
+                <span className={c.status === "sent" || c.status === "delivered" ? "text-chart-2" : c.status === "failed" ? "text-destructive" : ""}>{c.status}</span>
               </div>
             </li>
           ))}
@@ -1111,7 +1111,7 @@ function MaterialRow({ jobId, line, bulkJobIds = [] }: { jobId: string; line: Jo
               <AlertDialogAction
                 onClick={(e) => { e.preventDefault(); handleConfirmBulkDelete(); }}
                 disabled={bulkDeleting || deleteMutation.isPending}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="bg-destructive/15 text-destructive-foreground hover:bg-destructive/90"
                 data-testid={`button-confirm-bulk-delete-line-${line.id}`}
               >
                 {bulkDeleting ? (

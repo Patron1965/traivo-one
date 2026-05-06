@@ -211,11 +211,11 @@ export default function EnvironmentalCertificatePage() {
 
   const getRatingColor = (rating: string) => {
     switch (rating) {
-      case "Klimatpositiv": return "bg-green-600";
-      case "Utmärkt": return "bg-green-500";
-      case "Bra": return "bg-green-400";
-      case "Medel": return "bg-yellow-500";
-      default: return "bg-orange-500";
+      case "Klimatpositiv": return "bg-chart-2/15";
+      case "Utmärkt": return "bg-chart-2/15";
+      case "Bra": return "bg-chart-2/40";
+      case "Medel": return "bg-chart-3/15";
+      default: return "bg-chart-4/15";
     }
   };
 
@@ -294,12 +294,12 @@ export default function EnvironmentalCertificatePage() {
 
       {certificateData && !certLoading && (
         <div className="space-y-6">
-          <Card className="border-green-200 dark:border-green-800" data-testid="certificate-header">
-            <CardHeader className="bg-green-50 dark:bg-green-950/30">
+          <Card className="border-chart-2/20 dark:border-chart-2/80" data-testid="certificate-header">
+            <CardHeader className="bg-chart-2/10 dark:bg-chart-2/15">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <CardTitle className="text-xl flex items-center gap-2">
-                    <Award className="h-5 w-5 text-green-600" />
+                    <Award className="h-5 w-5 text-chart-2" />
                     {certificateData.customerName}
                   </CardTitle>
                   <p className="text-sm text-muted-foreground mt-1">
@@ -331,8 +331,8 @@ export default function EnvironmentalCertificatePage() {
                 <Card className="hover-elevate cursor-help" data-testid="stat-co2">
                   <CardContent className="pt-6">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
-                        <Factory className="h-5 w-5 text-red-600" />
+                      <div className="p-2 rounded-lg bg-destructive/15 dark:bg-destructive/15">
+                        <Factory className="h-5 w-5 text-destructive" />
                       </div>
                       <div>
                         <p className="text-2xl font-bold">{certificateData.statistics.totalCo2Kg} kg</p>
@@ -350,8 +350,8 @@ export default function EnvironmentalCertificatePage() {
                 <Card className="hover-elevate cursor-help" data-testid="stat-savings">
                   <CardContent className="pt-6">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                        <TrendingDown className="h-5 w-5 text-green-600" />
+                      <div className="p-2 rounded-lg bg-chart-2/15 dark:bg-chart-2/15">
+                        <TrendingDown className="h-5 w-5 text-chart-2" />
                       </div>
                       <div>
                         <p className="text-2xl font-bold">{certificateData.statistics.estimatedCo2SavingsKg} kg</p>
@@ -369,8 +369,8 @@ export default function EnvironmentalCertificatePage() {
                 <Card className="hover-elevate cursor-help" data-testid="stat-waste">
                   <CardContent className="pt-6">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                        <Recycle className="h-5 w-5 text-blue-600" />
+                      <div className="p-2 rounded-lg bg-chart-1/15 dark:bg-chart-1/15">
+                        <Recycle className="h-5 w-5 text-chart-1" />
                       </div>
                       <div>
                         <p className="text-2xl font-bold">{certificateData.statistics.totalWasteCollectedKg} kg</p>
@@ -388,8 +388,8 @@ export default function EnvironmentalCertificatePage() {
                 <Card className="hover-elevate cursor-help" data-testid="stat-distance">
                   <CardContent className="pt-6">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                        <Truck className="h-5 w-5 text-purple-600" />
+                      <div className="p-2 rounded-lg bg-chart-5/15 dark:bg-chart-5/15">
+                        <Truck className="h-5 w-5 text-chart-5" />
                       </div>
                       <div>
                         <p className="text-2xl font-bold">{certificateData.statistics.totalDistanceKm} km</p>
@@ -407,7 +407,7 @@ export default function EnvironmentalCertificatePage() {
             <Card className="hover-elevate" data-testid="card-fuel">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Droplets className="h-5 w-5 text-blue-500" />
+                  <Droplets className="h-5 w-5 text-chart-1" />
                   Bränsleförbrukning
                 </CardTitle>
               </CardHeader>
@@ -433,7 +433,7 @@ export default function EnvironmentalCertificatePage() {
             <Card className="hover-elevate" data-testid="card-chemicals">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Droplets className="h-5 w-5 text-amber-500" />
+                  <Droplets className="h-5 w-5 text-chart-4" />
                   Kemikalieanvändning
                 </CardTitle>
               </CardHeader>
@@ -490,7 +490,7 @@ export default function EnvironmentalCertificatePage() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div className="bg-muted/50 rounded-lg p-3 hover-elevate cursor-help">
-                      <p className={`text-2xl font-bold ${certificateData.statistics.netCo2ImpactKg <= 0 ? "text-green-600" : "text-orange-600"}`}>
+                      <p className={`text-2xl font-bold ${certificateData.statistics.netCo2ImpactKg <= 0 ? "text-chart-2" : "text-chart-4"}`}>
                         {certificateData.statistics.netCo2ImpactKg} kg
                       </p>
                       <p className="text-sm text-muted-foreground">Netto CO2</p>

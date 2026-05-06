@@ -162,9 +162,9 @@ interface AISuggestionsPanelProps {
 }
 
 const priorityColors: Record<string, string> = {
-  high: "bg-red-500/20 text-red-700 dark:text-red-300",
-  medium: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-300",
-  low: "bg-blue-500/20 text-blue-700 dark:text-blue-300",
+  high: "bg-destructive/15 text-destructive",
+  medium: "bg-chart-3/15 text-chart-3",
+  low: "bg-chart-1/15 text-chart-1",
 };
 
 const typeIcons: Record<string, string> = {
@@ -556,7 +556,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
             className="text-xs whitespace-nowrap"
             data-testid="tab-varningar"
           >
-            <AlertTriangle className="h-3 w-3 mr-1 text-orange-500 dark:text-orange-400" />
+            <AlertTriangle className="h-3 w-3 mr-1 text-chart-4" />
             Varningar
             {workloadAnalysis && workloadAnalysis.warnings.length > 0 && (
               <Badge variant="destructive" className="ml-1 h-4 px-1 text-xs">
@@ -599,7 +599,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
 
             {autoScheduleMutation.isPending && (
               <div className="text-center py-6">
-                <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin text-purple-500" />
+                <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin text-chart-5" />
                 <p className="text-sm text-muted-foreground">AI optimerar schemaläggning...</p>
               </div>
             )}
@@ -663,7 +663,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
 
             {routeOptimizeMutation.isPending && (
               <div className="text-center py-6">
-                <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin text-blue-500" />
+                <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin text-chart-1" />
                 <p className="text-sm text-muted-foreground">Beräknar optimala rutter...</p>
               </div>
             )}
@@ -678,11 +678,11 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
 
             {routeResult && routeResult.routes.length > 0 && (
               <div className="space-y-3">
-                <Card className="p-3 bg-green-500/10 border-green-500/20">
+                <Card className="p-3 bg-chart-2/15 border-chart-2/50">
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-green-700 dark:text-green-300">Optimering klar</span>
+                    <span className="text-sm font-medium text-chart-2">Optimering klar</span>
                     {routeResult.totalCostSaved > 0 && (
-                      <Badge className="bg-green-500/20 text-green-700 dark:text-green-300">
+                      <Badge className="bg-chart-2/15 text-chart-2">
                         ~{routeResult.totalCostSaved} kr sparad
                       </Badge>
                     )}
@@ -746,15 +746,15 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
                           <CollapsibleContent>
                             <div className="mt-3 pt-3 border-t space-y-3">
                               {route.timeSaved > 0 && (
-                                <div className="p-2 rounded bg-green-500/10 text-xs">
+                                <div className="p-2 rounded bg-chart-2/15 text-xs">
                                   <div className="flex items-center justify-between">
                                     <span>Före: {formatTime(route.originalDriveTime)}, {route.originalDistance} km</span>
                                     <ArrowRight className="h-3 w-3" />
-                                    <span className="font-medium text-green-700 dark:text-green-300">
+                                    <span className="font-medium text-chart-2">
                                       Nu: {formatTime(route.totalDriveTime)}, {route.totalDistance} km
                                     </span>
                                   </div>
-                                  <p className="text-green-600 dark:text-green-400 mt-1">
+                                  <p className="text-chart-2 mt-1">
                                     Sparar {formatTime(route.timeSaved)} och {route.distanceSaved} km (~{route.estimatedCostSaved} kr)
                                   </p>
                                 </div>
@@ -844,7 +844,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
 
             {generateMutation.isPending && (
               <div className="text-center py-6">
-                <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin text-purple-500" />
+                <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin text-chart-5" />
                 <p className="text-sm text-muted-foreground">Analyserar planering...</p>
               </div>
             )}
@@ -888,7 +888,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
                     </div>
 
                     {suggestion.impact && (
-                      <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                      <div className="flex items-center gap-1 text-xs text-chart-2">
                         <Clock className="h-3 w-3" />
                         {suggestion.impact}
                       </div>
@@ -948,21 +948,21 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
               {workloadMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : (
-                <AlertTriangle className="h-4 w-4 mr-2 text-orange-500 dark:text-orange-400" />
+                <AlertTriangle className="h-4 w-4 mr-2 text-chart-4" />
               )}
               Analysera arbetsbelastning
             </Button>
 
             {workloadMutation.isPending && (
               <div className="text-center py-6">
-                <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin text-orange-500" />
+                <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin text-chart-4" />
                 <p className="text-sm text-muted-foreground">Analyserar balans...</p>
               </div>
             )}
 
             {!workloadMutation.isPending && !workloadAnalysis && (
               <div className="text-center py-6 text-muted-foreground">
-                <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50 text-orange-500 dark:text-orange-400" />
+                <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50 text-chart-4" />
                 <p className="text-sm">Klicka för att hitta obalanser i planeringen</p>
               </div>
             )}
@@ -974,9 +974,9 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
                   <div className="flex items-center gap-2">
                     <Progress value={workloadAnalysis.overallBalance} className="w-16 h-2" />
                     <span className={`text-sm font-bold ${
-                      workloadAnalysis.overallBalance >= 80 ? "text-green-600 dark:text-green-400" :
-                      workloadAnalysis.overallBalance >= 50 ? "text-yellow-600 dark:text-yellow-400" :
-                      "text-red-600 dark:text-red-400"
+                      workloadAnalysis.overallBalance >= 80 ? "text-chart-2" :
+                      workloadAnalysis.overallBalance >= 50 ? "text-chart-3" :
+                      "text-destructive"
                     }`}>
                       {workloadAnalysis.overallBalance}%
                     </span>
@@ -986,7 +986,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
                 <p className="text-xs text-muted-foreground">{workloadAnalysis.summary}</p>
 
                 {workloadAnalysis.warnings.length === 0 ? (
-                  <div className="text-center py-4 text-green-600 dark:text-green-400">
+                  <div className="text-center py-4 text-chart-2">
                     <Check className="h-8 w-8 mx-auto mb-2" />
                     <p className="text-sm font-medium">Planeringen är välbalanserad!</p>
                   </div>
@@ -1024,7 +1024,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
                             </div>
                           )}
 
-                          <div className="p-2 rounded bg-blue-500/10 text-xs text-blue-700 dark:text-blue-300">
+                          <div className="p-2 rounded bg-chart-1/15 text-xs text-chart-1">
                             <strong>Förslag:</strong> {warning.suggestion}
                           </div>
                         </div>

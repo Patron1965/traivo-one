@@ -37,7 +37,7 @@ export const ResourceColumn = memo(function ResourceColumn({ resource, summary, 
 
   return (
     <div
-      className={`p-2 border-r cursor-pointer hover:bg-muted/60 transition-colors group flex flex-col justify-between ${isClusterMatch ? "bg-emerald-50 dark:bg-emerald-950/30 ring-1 ring-emerald-400/50 dark:ring-emerald-500/40" : "bg-muted/30"}`}
+      className={`p-2 border-r cursor-pointer hover:bg-muted/60 transition-colors group flex flex-col justify-between ${isClusterMatch ? "bg-chart-2/10 dark:bg-chart-2/15 ring-1 ring-chart-2/40 dark:ring-chart-2/50" : "bg-muted/30"}`}
       onClick={() => onResourceClick(resource.id)}
       data-testid={`resource-cell-${resource.id}`}
     >
@@ -70,9 +70,9 @@ export const ResourceColumn = memo(function ResourceColumn({ resource, summary, 
         <div className="mt-1">
           <div className="flex items-center gap-1">
             <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
-              <div className={`h-full rounded-full transition-all ${summary.pct >= 100 ? "bg-red-500" : summary.pct >= 80 ? "bg-green-500" : summary.pct >= 50 ? "bg-yellow-500" : "bg-gray-400"}`} style={{ width: `${Math.min(summary.pct, 100)}%` }} />
+              <div className={`h-full rounded-full transition-all ${summary.pct >= 100 ? "bg-destructive/15" : summary.pct >= 80 ? "bg-chart-2/15" : summary.pct >= 50 ? "bg-chart-3/15" : "bg-gray-400"}`} style={{ width: `${Math.min(summary.pct, 100)}%` }} />
             </div>
-            <span className={`text-[9px] tabular-nums ${summary.pct >= 100 ? "text-red-600" : summary.pct >= 80 ? "text-green-600" : "text-muted-foreground"}`}>{summary.pct}%</span>
+            <span className={`text-[9px] tabular-nums ${summary.pct >= 100 ? "text-destructive" : summary.pct >= 80 ? "text-chart-2" : "text-muted-foreground"}`}>{summary.pct}%</span>
           </div>
           <div className="text-[9px] text-muted-foreground mt-0.5">{summary.totalHours.toFixed(1)}h / {summary.weeklyCapacity}h</div>
         </div>
@@ -94,7 +94,7 @@ export const ResourceColumn = memo(function ResourceColumn({ resource, summary, 
           ? "text-muted-foreground"
           : olderThanADay
             ? "text-foreground/60"
-            : "text-red-600 dark:text-red-400";
+            : "text-destructive";
 
         const labelText = lastPublishedAt && periodMatchesCurrent
           ? `Skickat ${format(lastPublishedAt, "EEE HH:mm", { locale: sv })}`

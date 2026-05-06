@@ -54,8 +54,8 @@ function StatCard({ title, value, icon: Icon, iconColor, iconBg, trend, isLoadin
               <div
                 className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md mt-2 ${
                   trend.up
-                    ? "bg-green-500/10 text-green-600 dark:text-green-400"
-                    : "bg-red-500/10 text-red-600 dark:text-red-400"
+                    ? "bg-chart-2/15 text-chart-2"
+                    : "bg-destructive/15 text-destructive"
                 }`}
               >
                 {trend.up ? (
@@ -109,8 +109,8 @@ export function QuickStats() {
         title="Utförda ordrar"
         value={completedOrders}
         icon={CheckCircle}
-        iconColor="text-green-600 dark:text-green-400"
-        iconBg="bg-green-500/10"
+        iconColor="text-chart-2"
+        iconBg="bg-chart-2/15"
         trend={hasData ? { value: `${completionRate}% av alla`, up: true } : undefined}
         isLoading={isLoading}
       />
@@ -118,8 +118,8 @@ export function QuickStats() {
         title="Pågående ordrar"
         value={pendingOrders}
         icon={ClipboardList}
-        iconColor="text-blue-600 dark:text-blue-400"
-        iconBg="bg-blue-500/10"
+        iconColor="text-chart-1"
+        iconBg="bg-chart-1/15"
         trend={hasData && scheduledOrders > 0 ? { value: `${scheduledOrders} schemalagda`, up: true } : undefined}
         isLoading={isLoading}
       />
@@ -127,8 +127,8 @@ export function QuickStats() {
         title="Omöjliga ordrar"
         value={impossibleOrders}
         icon={AlertTriangle}
-        iconColor="text-orange-600 dark:text-orange-400"
-        iconBg="bg-orange-500/10"
+        iconColor="text-chart-4"
+        iconBg="bg-chart-4/15"
         trend={hasData && impossibleOrders > 0 ? { value: `${impossibleRate}% av alla`, up: false } : undefined}
         isLoading={isLoading}
       />
@@ -136,8 +136,8 @@ export function QuickStats() {
         title="Aktiva resurser"
         value={activeResources}
         icon={Users}
-        iconColor="text-cyan-600 dark:text-cyan-400"
-        iconBg="bg-cyan-500/10"
+        iconColor="text-chart-3"
+        iconBg="bg-chart-3/15"
         trend={hasData ? { value: `${activeClusters} kluster`, up: true } : undefined}
         isLoading={isLoading}
       />
@@ -145,16 +145,16 @@ export function QuickStats() {
         title="Aktiva kunder"
         value={activeCustomers}
         icon={Target}
-        iconColor="text-amber-600 dark:text-amber-400"
-        iconBg="bg-amber-500/10"
+        iconColor="text-chart-4"
+        iconBg="bg-chart-4/15"
         isLoading={isLoading}
       />
       <StatCard
         title="Ordervärde"
         value={formattedValue}
         icon={DollarSign}
-        iconColor="text-purple-600 dark:text-purple-400"
-        iconBg="bg-purple-500/10"
+        iconColor="text-chart-5"
+        iconBg="bg-chart-5/15"
         trend={hasData && totalOrderValue > 0 ? { value: `${totalOrders} ordrar`, up: true } : undefined}
         isLoading={isLoading}
       />

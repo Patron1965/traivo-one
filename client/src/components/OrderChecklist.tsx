@@ -75,7 +75,7 @@ export function OrderChecklist({ workOrderId, orderType }: OrderChecklistProps) 
   const totalCount = items.length;
 
   return (
-    <Card className="border-violet-200 dark:border-violet-800" data-testid="card-order-checklist">
+    <Card className="border-chart-5/20 dark:border-chart-5/80" data-testid="card-order-checklist">
       <CardHeader
         className="pb-2 cursor-pointer"
         onClick={() => setExpanded(!expanded)}
@@ -83,7 +83,7 @@ export function OrderChecklist({ workOrderId, orderType }: OrderChecklistProps) 
       >
         <CardTitle className="text-base flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <ListChecks className="h-4 w-4 text-violet-600" />
+            <ListChecks className="h-4 w-4 text-chart-5" />
             Checklista
             {totalCount > 0 && (
               <Badge variant="secondary" className="text-xs" data-testid="badge-checklist-progress">
@@ -115,7 +115,7 @@ export function OrderChecklist({ workOrderId, orderType }: OrderChecklistProps) 
                     key={item.id}
                     className={`flex items-center gap-2 p-2 rounded-md border transition-colors ${
                       item.isCompleted
-                        ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+                        ? "bg-chart-2/10 dark:bg-chart-2/15 border-chart-2/20 dark:border-chart-2/80"
                         : "bg-background border-border hover:bg-muted/50"
                     }`}
                     data-testid={`checklist-item-${item.id}`}
@@ -127,7 +127,7 @@ export function OrderChecklist({ workOrderId, orderType }: OrderChecklistProps) 
                       data-testid={`button-toggle-checklist-${item.id}`}
                     >
                       {item.isCompleted ? (
-                        <CheckCircle className="h-5 w-5 text-green-500" />
+                        <CheckCircle className="h-5 w-5 text-chart-2" />
                       ) : (
                         <Circle className="h-5 w-5 text-muted-foreground" />
                       )}
@@ -137,7 +137,7 @@ export function OrderChecklist({ workOrderId, orderType }: OrderChecklistProps) 
                     </span>
                     <div className="flex items-center gap-1">
                       {item.isAiGenerated && (
-                        <Sparkles className="h-3 w-3 text-violet-400" />
+                        <Sparkles className="h-3 w-3 text-chart-5" />
                       )}
                       {!item.isAiGenerated && (
                         <button
@@ -188,7 +188,7 @@ export function OrderChecklist({ workOrderId, orderType }: OrderChecklistProps) 
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full gap-2 text-violet-600 border-violet-200 hover:bg-violet-50 dark:text-violet-400 dark:border-violet-800 dark:hover:bg-violet-950/30"
+                className="w-full gap-2 text-chart-5 border-chart-5/20 hover:bg-chart-5/10 dark:border-chart-5/80 dark:hover:bg-chart-5/15"
                 onClick={() => generateMutation.mutate()}
                 disabled={generateMutation.isPending}
                 data-testid="button-generate-checklist"

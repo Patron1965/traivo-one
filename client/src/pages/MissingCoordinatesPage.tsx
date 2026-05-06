@@ -513,11 +513,11 @@ export default function MissingCoordinatesPage() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-3">
-              <AlertTriangle className="h-8 w-8 text-amber-500" />
+              <AlertTriangle className="h-8 w-8 text-chart-4" />
               <div>
                 <div className="text-3xl font-bold" data-testid="text-missing-count">{currentMissing}</div>
                 {previousSnapshot && (
-                  <div className={`text-xs ${delta > 0 ? "text-red-500" : delta < 0 ? "text-green-600" : "text-muted-foreground"}`} data-testid="text-missing-delta">
+                  <div className={`text-xs ${delta > 0 ? "text-destructive" : delta < 0 ? "text-chart-2" : "text-muted-foreground"}`} data-testid="text-missing-delta">
                     {delta > 0 ? `+${delta}` : delta} sedan föregående mätning
                   </div>
                 )}
@@ -562,7 +562,7 @@ export default function MissingCoordinatesPage() {
               {trendSnapshots.map((s) => (
                 <div
                   key={s.date}
-                  className="flex-1 bg-amber-500/70 hover:bg-amber-500 rounded-t min-w-[6px]"
+                  className="flex-1 bg-chart-4/15 hover:bg-chart-4/15 rounded-t min-w-[6px]"
                   style={{ height: `${(s.missingCount / maxTrend) * 100}%` }}
                   title={`${s.date}: ${s.missingCount} utan koordinater`}
                   data-testid={`bar-trend-${s.date}`}
@@ -663,7 +663,7 @@ export default function MissingCoordinatesPage() {
                         {item.clusterName && <Badge variant="secondary" data-testid={`badge-cluster-${item.id}`}><Layers className="h-3 w-3 mr-1" />{item.clusterName}</Badge>}
                         {dirty && <Badge variant="destructive" data-testid={`badge-dirty-${item.id}`}>Ändrad</Badge>}
                         {hasCoords && (
-                          <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-700" data-testid={`badge-suggestion-${item.id}`}>
+                          <Badge variant="default" className="bg-chart-2/15 hover:bg-chart-2/15" data-testid={`badge-suggestion-${item.id}`}>
                             <Check className="h-3 w-3 mr-1" />Förslag valt
                           </Badge>
                         )}
@@ -924,7 +924,7 @@ export default function MissingCoordinatesPage() {
                       Standardmottagare (owners/admins)
                     </Label>
                     {notifSettings.defaultRecipients.length === 0 ? (
-                      <p className="text-sm text-amber-600" data-testid="text-no-default-recipients">
+                      <p className="text-sm text-chart-4" data-testid="text-no-default-recipients">
                         Inga owners/admins eller kontakt-e-post hittades. Lägg till minst en mottagare ovan, annars skickas inga notiser.
                       </p>
                     ) : (

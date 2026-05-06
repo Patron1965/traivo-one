@@ -84,7 +84,7 @@ export function BillingCustomerDialog({ open, onClose, objectId, onSelect }: Bil
                 <Label htmlFor={`payer-${payer.id}`} className="flex-1 cursor-pointer">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      {payer.isPrimary && <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />}
+                      {payer.isPrimary && <Star className="w-4 h-4 text-chart-3 fill-chart-3" />}
                       <span className="font-medium">{getCustomerName(payer.customerId)}</span>
                       {payer.payerLabel && (
                         <Badge variant="outline" className="text-xs">{payer.payerLabel}</Badge>

@@ -86,7 +86,7 @@ export default function InvoiceRecalculationLogPage() {
             <CardDescription>Total nettoförändring</CardDescription>
             <CardTitle
               className={`text-2xl tabular-nums flex items-center gap-2 ${
-                totalDelta >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                totalDelta >= 0 ? "text-chart-2" : "text-destructive"
               }`}
               data-testid="stat-total-delta"
             >
@@ -195,7 +195,7 @@ export default function InvoiceRecalculationLogPage() {
                       </TableCell>
                       <TableCell
                         className={`text-right tabular-nums font-medium ${
-                          delta >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                          delta >= 0 ? "text-chart-2" : "text-destructive"
                         }`}
                       >
                         {delta >= 0 ? "+" : ""}

@@ -224,7 +224,7 @@ export default function ChecklistTemplatesPage() {
             <Badge variant="secondary" className="text-xs font-normal">
               {templates.length} {templates.length === 1 ? "mall" : "mallar"}
             </Badge>
-            <Badge variant="outline" className="text-xs font-normal text-green-600 border-green-300">
+            <Badge variant="outline" className="text-xs font-normal text-chart-2 border-chart-2/30">
               <CheckCircle2 className="h-3 w-3 mr-1" />
               {templates.filter(t => t.isActive).length} aktiva
             </Badge>
@@ -291,7 +291,7 @@ export default function ChecklistTemplatesPage() {
                     </TableCell>
                     <TableCell>
                       {t.isActive ? (
-                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                        <Badge className="bg-chart-2/15 text-chart-2 dark:bg-chart-2/15">
                           <CheckCircle2 className="h-3 w-3 mr-1" />
                           Aktiv
                         </Badge>

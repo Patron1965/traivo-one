@@ -125,7 +125,7 @@ function KPIDiffTable({ trace }: { trace: DecisionTrace }) {
     },
     {
       label: "Övertid",
-      icon: <AlertTriangle className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />,
+      icon: <AlertTriangle className="h-3.5 w-3.5 text-chart-4" />,
       before: `${s.baselineOvertimeMinutes} min`,
       after: `${s.proposedOvertimeMinutes} min`,
       delta: overtimeDelta,
@@ -163,8 +163,8 @@ function KPIDiffTable({ trace }: { trace: DecisionTrace }) {
       <div className="space-y-1">
         {rows.map((row) => {
           const deltaColor = row.good
-            ? "text-green-600 dark:text-green-400"
-            : "text-orange-500 dark:text-orange-400";
+            ? "text-chart-2"
+            : "text-chart-4";
 
           return (
             <div key={row.label} className="grid grid-cols-[1fr_55px_55px_40px] gap-1 items-center text-xs" data-testid={`kpi-row-${row.label}`}>
@@ -187,13 +187,13 @@ function RiskBadge({ score, factors }: { score: number; factors: string[] }) {
   const [expanded, setExpanded] = useState(false);
   const pct = Math.round(score * 100);
 
-  let color = "bg-green-500/20 text-green-700 dark:text-green-300";
+  let color = "bg-chart-2/15 text-chart-2";
   let label = "Låg risk";
   if (pct >= 50) {
-    color = "bg-red-500/20 text-red-700 dark:text-red-300";
+    color = "bg-destructive/15 text-destructive";
     label = "Hög risk";
   } else if (pct >= 25) {
-    color = "bg-amber-500/20 text-amber-700 dark:text-amber-300";
+    color = "bg-chart-4/15 text-chart-4";
     label = "Måttlig risk";
   }
 
@@ -213,19 +213,19 @@ function RiskBadge({ score, factors }: { score: number; factors: string[] }) {
           {factors.length > 0 ? factors.map((factor, i) => {
             const lf = factor.toLowerCase();
             let FactorIcon = Info;
-            let iconColor = "text-orange-500 dark:text-orange-400";
+            let iconColor = "text-chart-4";
             if (lf.includes("väder") || lf.includes("prognos")) {
               FactorIcon = CloudRain;
-              iconColor = "text-blue-500";
+              iconColor = "text-chart-1";
             } else if (lf.includes("portkod") || lf.includes("åtkomst")) {
               FactorIcon = KeyRound;
-              iconColor = "text-orange-500";
+              iconColor = "text-chart-4";
             } else if (lf.includes("historik") || lf.includes("resurs")) {
               FactorIcon = UserX;
-              iconColor = "text-purple-500";
+              iconColor = "text-chart-5";
             } else if (lf.includes("tidsdata") || lf.includes("standardtid")) {
               FactorIcon = Clock;
-              iconColor = "text-red-500";
+              iconColor = "text-destructive";
             }
             return (
               <div key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
@@ -250,17 +250,17 @@ function ConstraintViolationsAlert({ violations }: { violations: ConstraintViola
   const soft = violations.filter(v => v.type === "soft");
 
   return (
-    <Card className="p-3 border-amber-500/50 bg-amber-50/50 dark:bg-amber-900/10" data-testid="constraint-violations">
+    <Card className="p-3 border-chart-4/50 bg-chart-4/10 dark:bg-chart-4/15" data-testid="constraint-violations">
       <button
         className="flex items-center gap-2 w-full text-left"
         onClick={() => setExpanded(!expanded)}
         data-testid="button-toggle-violations"
       >
-        <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0" />
+        <AlertTriangle className="h-4 w-4 text-chart-4 shrink-0" />
         <span className="text-xs font-medium flex-1">
           {violations.length} constraint-{violations.length === 1 ? "varning" : "varningar"}
-          {hard.length > 0 && <span className="text-red-600 dark:text-red-400 ml-1">({hard.length} hårda)</span>}
-          {soft.length > 0 && <span className="text-orange-500 dark:text-orange-400 ml-1">({soft.length} mjuka)</span>}
+          {hard.length > 0 && <span className="text-destructive ml-1">({hard.length} hårda)</span>}
+          {soft.length > 0 && <span className="text-chart-4 ml-1">({soft.length} mjuka)</span>}
         </span>
         {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
       </button>
@@ -271,15 +271,15 @@ function ConstraintViolationsAlert({ violations }: { violations: ConstraintViola
               key={i}
               className={`flex items-start gap-1.5 text-xs rounded px-2 py-1 ${
                 v.type === "hard"
-                  ? "bg-red-100/50 dark:bg-red-900/20 text-red-700 dark:text-red-300"
-                  : "bg-amber-100/50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300"
+                  ? "bg-destructive/15 dark:bg-destructive/15 text-destructive"
+                  : "bg-chart-4/15 dark:bg-chart-4/15 text-chart-4"
               }`}
               data-testid={`violation-${i}`}
             >
               {v.type === "hard" ? (
                 <ShieldAlert className="h-3 w-3 mt-0.5 shrink-0" />
               ) : (
-                <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0 text-orange-500 dark:text-orange-400" />
+                <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0 text-chart-4" />
               )}
               <span>{v.description}</span>
             </div>
@@ -302,16 +302,16 @@ function MoveCard({
   const [expanded, setExpanded] = useState(false);
 
   const statusIcon = move.constraintStatus === "valid"
-    ? <ShieldCheck className="h-3.5 w-3.5 text-green-500" />
+    ? <ShieldCheck className="h-3.5 w-3.5 text-chart-2" />
     : move.constraintStatus === "warning"
-    ? <AlertTriangle className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />
-    : <ShieldAlert className="h-3.5 w-3.5 text-red-500" />;
+    ? <AlertTriangle className="h-3.5 w-3.5 text-chart-4" />
+    : <ShieldAlert className="h-3.5 w-3.5 text-destructive" />;
 
   const confidenceColor = move.confidence >= 80
-    ? "bg-green-500/20 text-green-700 dark:text-green-300"
+    ? "bg-chart-2/15 text-chart-2"
     : move.confidence >= 60
-    ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
-    : "bg-red-500/20 text-red-700 dark:text-red-300";
+    ? "bg-chart-4/15 text-chart-4"
+    : "bg-destructive/15 text-destructive";
 
   return (
     <Card className="p-2.5 space-y-1.5" data-testid={`move-card-${move.workOrderId}`}>
@@ -363,7 +363,7 @@ function MoveCard({
                 onClick={onReject}
                 data-testid={`button-reject-move-${move.workOrderId}`}
               >
-                <X className="h-3 w-3 text-red-500" />
+                <X className="h-3 w-3 text-destructive" />
               </Button>
             )}
             {onAccept && (
@@ -374,7 +374,7 @@ function MoveCard({
                 onClick={onAccept}
                 data-testid={`button-accept-move-${move.workOrderId}`}
               >
-                <Check className="h-3 w-3 text-green-500" />
+                <Check className="h-3 w-3 text-chart-2" />
               </Button>
             )}
           </div>
@@ -441,7 +441,7 @@ export function ScheduleDiffView({
                     <p className="text-xs font-mono truncate">{a.workOrderId.slice(0, 8)}...</p>
                     <p className="text-xs text-muted-foreground truncate">{a.reason}</p>
                   </div>
-                  <Badge className={`text-[10px] px-1.5 shrink-0 ${a.confidence >= 80 ? "bg-green-500/20 text-green-700" : a.confidence >= 60 ? "bg-amber-500/20 text-amber-700" : "bg-red-500/20 text-red-700"}`}>
+                  <Badge className={`text-[10px] px-1.5 shrink-0 ${a.confidence >= 80 ? "bg-chart-2/15 text-chart-2" : a.confidence >= 60 ? "bg-chart-4/15 text-chart-4" : "bg-destructive/15 text-destructive"}`}>
                     {a.confidence}%
                   </Badge>
                 </div>
@@ -504,7 +504,7 @@ export function ScheduleDiffView({
 
       {filteredMoves.length === 0 && (
         <div className="text-center py-4 text-xs text-muted-foreground" data-testid="empty-moves">
-          <ShieldCheck className="h-6 w-6 mx-auto mb-1.5 text-green-500" />
+          <ShieldCheck className="h-6 w-6 mx-auto mb-1.5 text-chart-2" />
           {showOnlyChanges ? "Alla ordrar behåller sina nuvarande platser." : "Inga förslag att visa."}
         </div>
       )}

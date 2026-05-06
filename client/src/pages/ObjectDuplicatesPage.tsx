@@ -177,9 +177,9 @@ export default function ObjectDuplicatesPage() {
           <Card data-testid="card-duplicate-groups">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
-                <Copy className="h-5 w-5 text-orange-500 dark:text-orange-400" />
+                <Copy className="h-5 w-5 text-chart-4" />
                 <div>
-                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{summary.totalGroups.toLocaleString("sv-SE")}</p>
+                  <p className="text-2xl font-bold text-chart-4">{summary.totalGroups.toLocaleString("sv-SE")}</p>
                   <p className="text-xs text-muted-foreground">Dubblettgrupper</p>
                 </div>
               </div>
@@ -188,9 +188,9 @@ export default function ObjectDuplicatesPage() {
           <Card data-testid="card-removable">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
-                <Trash2 className="h-5 w-5 text-red-500" />
+                <Trash2 className="h-5 w-5 text-destructive" />
                 <div>
-                  <p className="text-2xl font-bold text-red-600 dark:text-red-400">{summary.removableCount.toLocaleString("sv-SE")}</p>
+                  <p className="text-2xl font-bold text-destructive">{summary.removableCount.toLocaleString("sv-SE")}</p>
                   <p className="text-xs text-muted-foreground">Kan tas bort</p>
                 </div>
               </div>
@@ -199,9 +199,9 @@ export default function ObjectDuplicatesPage() {
           <Card data-testid="card-after-cleanup">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
-                <Check className="h-5 w-5 text-green-500" />
+                <Check className="h-5 w-5 text-chart-2" />
                 <div>
-                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                  <p className="text-2xl font-bold text-chart-2">
                     {(summary.totalObjects - summary.removableCount).toLocaleString("sv-SE")}
                   </p>
                   <p className="text-xs text-muted-foreground">Efter städning</p>
@@ -263,7 +263,7 @@ export default function ObjectDuplicatesPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
+            <AlertTriangle className="h-5 w-5 text-chart-4" />
             Dubblettgrupper
           </CardTitle>
           <CardDescription>
@@ -275,7 +275,7 @@ export default function ObjectDuplicatesPage() {
             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
           ) : !duplicates?.groups.length ? (
             <div className="text-center py-8 text-muted-foreground">
-              <Check className="h-12 w-12 mx-auto mb-2 text-green-500" />
+              <Check className="h-12 w-12 mx-auto mb-2 text-chart-2" />
               <p className="font-medium">Inga dubbletter hittade</p>
             </div>
           ) : (
@@ -325,12 +325,12 @@ export default function ObjectDuplicatesPage() {
                             return (
                               <div
                                 key={member.id}
-                                className={`flex items-center gap-3 p-2 rounded-md border transition-colors ${isKeep ? "border-green-500 bg-green-50 dark:bg-green-950/20" : "border-transparent hover:bg-muted/30"}`}
+                                className={`flex items-center gap-3 p-2 rounded-md border transition-colors ${isKeep ? "border-chart-2/50 bg-chart-2/10 dark:bg-chart-2/15" : "border-transparent hover:bg-muted/30"}`}
                                 data-testid={`member-${member.id}`}
                               >
                                 <button
                                   type="button"
-                                  className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${isKeep ? "border-green-500 bg-green-500" : "border-muted-foreground/30"}`}
+                                  className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${isKeep ? "border-chart-2/50 bg-chart-2/15" : "border-muted-foreground/30"}`}
                                   onClick={() => setSelectedKeep(prev => ({ ...prev, [groupKey]: member.id }))}
                                   data-testid={`radio-keep-${member.id}`}
                                 >
@@ -372,7 +372,7 @@ export default function ObjectDuplicatesPage() {
                                   </div>
                                 </div>
                                 {isKeep && (
-                                  <Badge className="bg-green-600 text-white shrink-0">Behåll</Badge>
+                                  <Badge className="bg-chart-2 text-white shrink-0">Behåll</Badge>
                                 )}
                               </div>
                             );
@@ -432,7 +432,7 @@ export default function ObjectDuplicatesPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />
+              <AlertTriangle className="h-5 w-5 text-chart-4" />
               Bekräfta auto-sammanslagning
             </AlertDialogTitle>
             <AlertDialogDescription>

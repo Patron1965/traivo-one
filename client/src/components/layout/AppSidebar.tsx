@@ -77,7 +77,7 @@ function Badge({ count }: { count: number }) {
   if (count === 0) return null;
   return (
     <span
-      className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold leading-none"
+      className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive/15 text-destructive-foreground text-[10px] font-semibold leading-none"
       data-testid="badge-count"
     >
       {count > 99 ? "99+" : count}
@@ -170,13 +170,13 @@ function NavItemRow({
           }}
           className={`p-1 rounded-sm transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100 ${
             isFav
-              ? "opacity-100 text-yellow-500"
-              : "opacity-0 group-hover/fav:opacity-60 text-muted-foreground hover:text-yellow-500"
+              ? "opacity-100 text-chart-3"
+              : "opacity-0 group-hover/fav:opacity-60 text-muted-foreground hover:text-chart-3"
           }`}
           data-testid={`button-fav-${item.url.replace("/", "") || "home"}`}
           aria-label={isFav ? tl("fav.remove") : tl("fav.add")}
         >
-          <Star className={`h-3.5 w-3.5 ${isFav ? "fill-yellow-500" : ""}`} />
+          <Star className={`h-3.5 w-3.5 ${isFav ? "fill-chart-3" : ""}`} />
         </button>
       </div>
     </SidebarMenuItem>
@@ -302,7 +302,7 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel data-testid="nav-group-favoriter">
-            <Star className="h-3 w-3 mr-1 fill-yellow-500 text-yellow-500" />
+            <Star className="h-3 w-3 mr-1 fill-chart-3 text-chart-3" />
             {tl("nav.favorites")}
           </SidebarGroupLabel>
           <SidebarGroupContent>

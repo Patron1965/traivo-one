@@ -224,11 +224,11 @@ export default function AIAssistantPage() {
 
   const getImpactColor = (level: string) => {
     switch (level) {
-      case "severe": return "bg-red-500/20 text-red-700 dark:text-red-300";
-      case "high": return "bg-orange-500/20 text-orange-700 dark:text-orange-300";
-      case "medium": return "bg-yellow-500/20 text-yellow-700 dark:text-yellow-300";
-      case "low": return "bg-blue-500/20 text-blue-700 dark:text-blue-300";
-      default: return "bg-green-500/20 text-green-700 dark:text-green-300";
+      case "severe": return "bg-destructive/15 text-destructive";
+      case "high": return "bg-chart-4/15 text-chart-4";
+      case "medium": return "bg-chart-3/15 text-chart-3";
+      case "low": return "bg-chart-1/15 text-chart-1";
+      default: return "bg-chart-2/15 text-chart-2";
     }
   };
 
@@ -274,10 +274,10 @@ export default function AIAssistantPage() {
 
         <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card className="bg-gradient-to-br from-purple-500/10 to-transparent">
+            <Card className="bg-gradient-to-br from-chart-5 to-transparent">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <Target className="h-4 w-4 text-purple-500" />
+                  <Target className="h-4 w-4 text-chart-5" />
                   Effektivitet
                 </CardTitle>
               </CardHeader>
@@ -293,10 +293,10 @@ export default function AIAssistantPage() {
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-blue-500/10 to-transparent">
+            <Card className="bg-gradient-to-br from-chart-1 to-transparent">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-blue-500" />
+                  <Clock className="h-4 w-4 text-chart-1" />
                   Ställtid
                 </CardTitle>
               </CardHeader>
@@ -312,10 +312,10 @@ export default function AIAssistantPage() {
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-green-500/10 to-transparent">
+            <Card className="bg-gradient-to-br from-chart-2 to-transparent">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <Users className="h-4 w-4 text-green-500" />
+                  <Users className="h-4 w-4 text-chart-2" />
                   Resursutnyttjande
                 </CardTitle>
               </CardHeader>
@@ -340,10 +340,10 @@ export default function AIAssistantPage() {
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-amber-500/10 to-transparent">
+            <Card className="bg-gradient-to-br from-chart-4 to-transparent">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+                  <AlertTriangle className="h-4 w-4 text-chart-4" />
                   Förseningar
                 </CardTitle>
               </CardHeader>
@@ -367,7 +367,7 @@ export default function AIAssistantPage() {
                   <CardHeader className="cursor-pointer hover-elevate" onClick={() => toggleSection("weather")}>
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-lg flex items-center gap-2">
-                        <CloudSun className="h-5 w-5 text-blue-500" />
+                        <CloudSun className="h-5 w-5 text-chart-1" />
                         Väderprognos & Påverkan
                       </CardTitle>
                       {expandedSections.has("weather") ? (
@@ -416,7 +416,7 @@ export default function AIAssistantPage() {
                   <CardHeader className="cursor-pointer hover-elevate" onClick={() => toggleSection("maintenance")}>
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-lg flex items-center gap-2">
-                        <Truck className="h-5 w-5 text-orange-500" />
+                        <Truck className="h-5 w-5 text-chart-4" />
                         Underhållsbehov
                         {maintenanceData.alerts?.length > 0 && (
                           <Badge variant="secondary">{maintenanceData.alerts.length}</Badge>
@@ -452,7 +452,7 @@ export default function AIAssistantPage() {
                         ))}
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 text-green-600">
+                      <div className="flex items-center gap-2 text-chart-2">
                         <CheckCircle2 className="h-4 w-4" />
                         <span className="text-sm">Inga underhållsvarningar</span>
                       </div>
@@ -467,7 +467,7 @@ export default function AIAssistantPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Lightbulb className="h-5 w-5 text-yellow-500" />
+                  <Lightbulb className="h-5 w-5 text-chart-3" />
                   Proaktiva Tips
                 </CardTitle>
               </CardHeader>
@@ -476,12 +476,12 @@ export default function AIAssistantPage() {
                   {tips.slice(0, 4).map((tip: ProactiveTip) => (
                     <div key={tip.id} className="p-3 rounded-md bg-muted/50 border">
                       <div className="flex items-start gap-2">
-                        <Zap className="h-4 w-4 text-purple-500 mt-0.5 shrink-0" />
+                        <Zap className="h-4 w-4 text-chart-5 mt-0.5 shrink-0" />
                         <div>
                           <p className="font-medium text-sm">{tip.title}</p>
                           <p className="text-xs text-muted-foreground mt-1">{tip.description}</p>
                           {tip.impact && (
-                            <p className="text-xs text-green-600 mt-1">Effekt: {tip.impact}</p>
+                            <p className="text-xs text-chart-2 mt-1">Effekt: {tip.impact}</p>
                           )}
                         </div>
                       </div>
@@ -498,7 +498,7 @@ export default function AIAssistantPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Zap className="h-5 w-5 text-purple-500" />
+                  <Zap className="h-5 w-5 text-chart-5" />
                   Auto-schemaläggning
                 </CardTitle>
                 <CardDescription>
@@ -529,7 +529,7 @@ export default function AIAssistantPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Route className="h-5 w-5 text-blue-500" />
+                  <Route className="h-5 w-5 text-chart-1" />
                   Ruttoptimering
                 </CardTitle>
                 <CardDescription>
@@ -561,7 +561,7 @@ export default function AIAssistantPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-purple-500" />
+                <Sparkles className="h-5 w-5 text-chart-5" />
                 AI-förslag för planering
               </CardTitle>
             </CardHeader>
@@ -590,7 +590,7 @@ export default function AIAssistantPage() {
                           <p className="font-medium text-sm">{suggestion.title}</p>
                           <p className="text-xs text-muted-foreground mt-1">{suggestion.description}</p>
                           {suggestion.impact && (
-                            <p className="text-xs text-green-600 mt-1">{suggestion.impact}</p>
+                            <p className="text-xs text-chart-2 mt-1">{suggestion.impact}</p>
                           )}
                         </div>
                         <Badge variant={suggestion.priority === "high" ? "destructive" : "secondary"}>
@@ -615,7 +615,7 @@ export default function AIAssistantPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-green-500" />
+                <TrendingUp className="h-5 w-5 text-chart-2" />
                 Prediktiv planering
               </CardTitle>
               <CardDescription>
@@ -666,7 +666,7 @@ export default function AIAssistantPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5 text-blue-500" />
+                <Settings className="h-5 w-5 text-chart-1" />
                 Ställtidsinsikter
               </CardTitle>
             </CardHeader>
@@ -702,7 +702,7 @@ export default function AIAssistantPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Lightbulb className="h-5 w-5 text-yellow-500" />
+                <Lightbulb className="h-5 w-5 text-chart-3" />
                 Proaktiva rekommendationer
               </CardTitle>
               <CardDescription>
@@ -720,8 +720,8 @@ export default function AIAssistantPage() {
                   {tips.map((tip: ProactiveTip) => (
                     <div key={tip.id} className="p-4 rounded-md bg-muted/50 border">
                       <div className="flex items-start gap-3">
-                        <div className="p-2 rounded-md bg-yellow-500/20">
-                          <Zap className="h-4 w-4 text-yellow-600" />
+                        <div className="p-2 rounded-md bg-chart-3/15">
+                          <Zap className="h-4 w-4 text-chart-3" />
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
@@ -730,7 +730,7 @@ export default function AIAssistantPage() {
                           </div>
                           <p className="text-sm text-muted-foreground mt-1">{tip.description}</p>
                           {tip.impact && (
-                            <p className="text-sm text-green-600 mt-2">
+                            <p className="text-sm text-chart-2 mt-2">
                               Förväntad effekt: {tip.impact}
                             </p>
                           )}
@@ -746,7 +746,7 @@ export default function AIAssistantPage() {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <CheckCircle2 className="h-12 w-12 mx-auto text-green-500 mb-2" />
+                  <CheckCircle2 className="h-12 w-12 mx-auto text-chart-2 mb-2" />
                   <p className="text-muted-foreground">
                     Inga aktuella rekommendationer. Allt ser bra ut!
                   </p>
@@ -759,15 +759,15 @@ export default function AIAssistantPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <CloudSun className="h-5 w-5 text-blue-500" />
+                  <CloudSun className="h-5 w-5 text-chart-1" />
                   Väderbaserade rekommendationer
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
                   {weatherData.recommendations.map((rec: string, idx: number) => (
-                    <div key={idx} className="flex items-start gap-2 p-2 rounded-md bg-blue-500/10">
-                      <ArrowRight className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+                    <div key={idx} className="flex items-start gap-2 p-2 rounded-md bg-chart-1/15">
+                      <ArrowRight className="h-4 w-4 text-chart-1 mt-0.5 shrink-0" />
                       <p className="text-sm">{rec}</p>
                     </div>
                   ))}
@@ -781,7 +781,7 @@ export default function AIAssistantPage() {
           <Card className="h-[600px] flex flex-col">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-purple-500" />
+                <MessageSquare className="h-5 w-5 text-chart-5" />
                 Prata med AI-assistenten
               </CardTitle>
               <CardDescription>

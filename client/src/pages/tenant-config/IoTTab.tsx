@@ -85,8 +85,8 @@ export function IoTTab() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-teal-100 dark:bg-teal-900">
-                <Radio className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+              <div className="p-2 rounded-lg bg-chart-2/15 dark:bg-chart-2/15">
+                <Radio className="h-5 w-5 text-chart-2" />
               </div>
               <div>
                 <p className="text-2xl font-bold" data-testid="text-iot-device-count">{devices.length}</p>
@@ -98,8 +98,8 @@ export function IoTTab() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900">
-                <Key className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <div className="p-2 rounded-lg bg-chart-1/15 dark:bg-chart-1/15">
+                <Key className="h-5 w-5 text-chart-1" />
               </div>
               <div>
                 <p className="text-2xl font-bold" data-testid="text-iot-key-count">{apiKeys.length}</p>
@@ -111,8 +111,8 @@ export function IoTTab() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900">
-                <Signal className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <div className="p-2 rounded-lg bg-chart-4/15 dark:bg-chart-4/15">
+                <Signal className="h-5 w-5 text-chart-4" />
               </div>
               <div>
                 <p className="text-2xl font-bold" data-testid="text-iot-signal-count">{signals.length}</p>
@@ -217,7 +217,7 @@ export function IoTTab() {
                   <TableCell>
                     {d.batteryLevel !== null && d.batteryLevel !== undefined ? (
                       <div className="flex items-center gap-1">
-                        <Battery className={`h-4 w-4 ${d.batteryLevel < 20 ? "text-red-500" : d.batteryLevel < 50 ? "text-amber-500" : "text-green-500"}`} />
+                        <Battery className={`h-4 w-4 ${d.batteryLevel < 20 ? "text-destructive" : d.batteryLevel < 50 ? "text-chart-4" : "text-chart-2"}`} />
                         <span className="text-sm">{d.batteryLevel}%</span>
                       </div>
                     ) : "—"}

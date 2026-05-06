@@ -16,21 +16,21 @@ interface ProactiveTip {
 const severityConfig = {
   info: {
     icon: Info,
-    bgClass: "bg-blue-50 dark:bg-blue-950/30",
-    borderClass: "border-blue-200 dark:border-blue-800",
-    iconClass: "text-blue-500",
+    bgClass: "bg-chart-1/10 dark:bg-chart-1/15",
+    borderClass: "border-chart-1/20 dark:border-chart-1/80",
+    iconClass: "text-chart-1",
   },
   warning: {
     icon: AlertTriangle,
-    bgClass: "bg-amber-50 dark:bg-amber-950/30",
-    borderClass: "border-amber-200 dark:border-amber-800",
-    iconClass: "text-amber-500",
+    bgClass: "bg-chart-4/10 dark:bg-chart-4/15",
+    borderClass: "border-chart-4/20 dark:border-chart-4/80",
+    iconClass: "text-chart-4",
   },
   critical: {
     icon: AlertCircle,
-    bgClass: "bg-red-50 dark:bg-red-950/30",
-    borderClass: "border-red-200 dark:border-red-800",
-    iconClass: "text-red-500",
+    bgClass: "bg-destructive/10 dark:bg-destructive/15",
+    borderClass: "border-destructive/20 dark:border-destructive/80",
+    iconClass: "text-destructive",
   },
 };
 

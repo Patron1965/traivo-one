@@ -139,7 +139,7 @@ export function ObjectParentsPanel({ object, controlled, open: controlledOpen, o
           {object.parentId && (
             <div className="p-3 rounded-lg border bg-muted/50">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Star className="h-3 w-3 text-yellow-500" />
+                <Star className="h-3 w-3 text-chart-3" />
                 <span>Direkt förälder (objects.parentId)</span>
               </div>
               <p className="text-sm font-medium mt-1" data-testid="text-direct-parent">
@@ -170,14 +170,14 @@ export function ObjectParentsPanel({ object, controlled, open: controlledOpen, o
               {parents.map(p => (
                 <div
                   key={p.id}
-                  className={`flex items-center justify-between p-3 rounded-lg border ${p.isPrimary ? "border-yellow-500/50 bg-yellow-50/50 dark:bg-yellow-950/20" : ""}`}
+                  className={`flex items-center justify-between p-3 rounded-lg border ${p.isPrimary ? "border-chart-3/50 bg-chart-3/10 dark:bg-chart-3/15" : ""}`}
                   data-testid={`parent-relation-${p.id}`}
                 >
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{getObjectName(p.parentId)}</span>
                       {p.isPrimary && (
-                        <Badge variant="outline" className="text-yellow-600 border-yellow-500 text-xs">
+                        <Badge variant="outline" className="text-chart-3 border-chart-3/50 text-xs">
                           Primär
                         </Badge>
                       )}

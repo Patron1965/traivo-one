@@ -44,13 +44,13 @@ function HistoryRow({ item }: { item: DriverNotification }) {
   const meta = (() => {
     switch (item.type) {
       case "schedule_published":
-        return { icon: <MailCheck className="h-4 w-4 text-green-600" />, label: "Schemautskick", success: true };
+        return { icon: <MailCheck className="h-4 w-4 text-chart-2" />, label: "Schemautskick", success: true };
       case "schedule_send_failed":
-        return { icon: <AlertCircle className="h-4 w-4 text-red-600" />, label: "Schemautskick misslyckades", success: false };
+        return { icon: <AlertCircle className="h-4 w-4 text-destructive" />, label: "Schemautskick misslyckades", success: false };
       case "extra_job_sms":
-        return { icon: <PlusCircle className="h-4 w-4 text-blue-600" />, label: "Extrajobb-SMS", success: !data.error };
+        return { icon: <PlusCircle className="h-4 w-4 text-chart-1" />, label: "Extrajobb-SMS", success: !data.error };
       case "cancel_job_sms":
-        return { icon: <XCircle className="h-4 w-4 text-amber-600" />, label: "Borttaget jobb-SMS", success: !data.error };
+        return { icon: <XCircle className="h-4 w-4 text-chart-4" />, label: "Borttaget jobb-SMS", success: !data.error };
       default:
         return { icon: <MessageSquare className="h-4 w-4 text-muted-foreground" />, label: item.type, success: true };
     }
@@ -192,7 +192,7 @@ export const ResourceDetailSheet = memo(function ResourceDetailSheet(props: Reso
                 <div className="flex items-center gap-2">
                   <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full ${weekSummary.pct >= 100 ? "bg-red-500" : weekSummary.pct >= 80 ? "bg-green-500" : weekSummary.pct >= 50 ? "bg-yellow-500" : "bg-gray-400"}`}
+                      className={`h-full rounded-full ${weekSummary.pct >= 100 ? "bg-destructive/15" : weekSummary.pct >= 80 ? "bg-chart-2/15" : weekSummary.pct >= 50 ? "bg-chart-3/15" : "bg-gray-400"}`}
                       style={{ width: `${Math.min(weekSummary.pct, 100)}%` }}
                     />
                   </div>
@@ -210,8 +210,8 @@ export const ResourceDetailSheet = memo(function ResourceDetailSheet(props: Reso
               </div>
               <div className="flex items-center gap-2 text-sm" data-testid={`text-resource-last-published-${resource.id}`}>
                 {lastPublishedAt
-                  ? <><CheckCircle2 className="h-4 w-4 text-green-600" /><span>Senast publicerat {format(lastPublishedAt, "EEE d MMM HH:mm", { locale: sv })}</span></>
-                  : <><AlertCircle className="h-4 w-4 text-amber-600" /><span>Schemat har inte publicerats än</span></>}
+                  ? <><CheckCircle2 className="h-4 w-4 text-chart-2" /><span>Senast publicerat {format(lastPublishedAt, "EEE d MMM HH:mm", { locale: sv })}</span></>
+                  : <><AlertCircle className="h-4 w-4 text-chart-4" /><span>Schemat har inte publicerats än</span></>}
               </div>
               {resource.lastSchedulePeriodStart && resource.lastSchedulePeriodEnd && (
                 <div className="text-xs text-muted-foreground pl-6">

@@ -199,7 +199,7 @@ export const GeocodedObjectsMap = memo(function GeocodedObjectsMap({ objects }: 
                     <div className="font-medium">{obj.name}</div>
                     {obj.address && <div className="text-muted-foreground">{obj.address}</div>}
                     {obj.entranceLatitude && (
-                      <div className="text-green-600 text-xs mt-1 flex items-center gap-1">
+                      <div className="text-chart-2 text-xs mt-1 flex items-center gap-1">
                         <DoorOpen className="h-3 w-3" /> Entrékoordinater
                       </div>
                     )}
@@ -218,7 +218,7 @@ export const GeocodedObjectsMap = memo(function GeocodedObjectsMap({ objects }: 
                 >
                   <Popup>
                     <div className="text-sm">
-                      <div className="font-medium text-green-600">Entré: {obj.name}</div>
+                      <div className="font-medium text-chart-2">Entré: {obj.name}</div>
                       {obj.address && <div className="text-muted-foreground">{obj.address}</div>}
                     </div>
                   </Popup>

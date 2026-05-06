@@ -676,7 +676,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
               </SelectContent>
             </Select>
             {dateRangeError && (
-              <p className="text-xs text-orange-600 dark:text-orange-400 flex items-center gap-1" data-testid="text-date-range-error">
+              <p className="text-xs text-chart-4 flex items-center gap-1" data-testid="text-date-range-error">
                 <AlertTriangle className="h-3 w-3" />
                 {dateRangeError}
               </p>

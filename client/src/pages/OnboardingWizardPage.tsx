@@ -84,11 +84,11 @@ function getPasswordStrength(password: string): { level: number; label: string; 
   if (/[0-9]/.test(password)) score++;
   if (/[^A-Za-z0-9]/.test(password)) score++;
 
-  if (score <= 1) return { level: 1, label: "Svagt", color: "bg-red-500" };
-  if (score <= 2) return { level: 2, label: "Okej", color: "bg-orange-500" };
-  if (score <= 3) return { level: 3, label: "Bra", color: "bg-yellow-500" };
-  if (score <= 4) return { level: 4, label: "Starkt", color: "bg-green-500" };
-  return { level: 5, label: "Mycket starkt", color: "bg-green-600" };
+  if (score <= 1) return { level: 1, label: "Svagt", color: "bg-destructive/15" };
+  if (score <= 2) return { level: 2, label: "Okej", color: "bg-chart-4/15" };
+  if (score <= 3) return { level: 3, label: "Bra", color: "bg-chart-3/15" };
+  if (score <= 4) return { level: 4, label: "Starkt", color: "bg-chart-2/15" };
+  return { level: 5, label: "Mycket starkt", color: "bg-chart-2/15" };
 }
 
 function StepIndicator({ currentStep }: { currentStep: number }) {
@@ -101,13 +101,13 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
         return (
           <div key={index} className="flex items-center">
             <div className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-              isActive ? "bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300" :
-              isCompleted ? "bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300" :
+              isActive ? "bg-chart-1/15 dark:bg-chart-1/15 text-chart-1" :
+              isCompleted ? "bg-chart-2/15 dark:bg-chart-2/15 text-chart-2" :
               "bg-muted text-muted-foreground"
             }`}>
               <div className={`flex items-center justify-center h-6 w-6 rounded-full text-xs font-bold ${
-                isCompleted ? "bg-green-600 text-white" :
-                isActive ? "bg-blue-600 text-white" :
+                isCompleted ? "bg-chart-2 text-white" :
+                isActive ? "bg-chart-1 text-white" :
                 "bg-muted-foreground/30 text-muted-foreground"
               }`}>
                 {isCompleted ? <CheckCircle className="h-3.5 w-3.5" /> : index + 1}
@@ -281,8 +281,8 @@ export default function OnboardingWizardPage() {
     return (
       <div className="p-6 max-w-2xl mx-auto space-y-6">
         <div className="text-center space-y-2">
-          <div className="flex items-center justify-center h-16 w-16 rounded-full bg-green-100 dark:bg-green-950 mx-auto">
-            <CheckCircle className="h-8 w-8 text-green-600" />
+          <div className="flex items-center justify-center h-16 w-16 rounded-full bg-chart-2/15 dark:bg-chart-2/15 mx-auto">
+            <CheckCircle className="h-8 w-8 text-chart-2" />
           </div>
           <h1 className="text-2xl font-bold" data-testid="text-onboarding-success">Företagskonto skapat!</h1>
           <p className="text-muted-foreground">{result.tenant.name} är redo att användas</p>
@@ -336,7 +336,7 @@ export default function OnboardingWizardPage() {
               </div>
             </div>
             <Button variant="outline" size="sm" onClick={copyCredentials} data-testid="button-copy-credentials">
-              {copied ? <CheckCircle className="h-4 w-4 mr-2 text-green-600" /> : <Copy className="h-4 w-4 mr-2" />}
+              {copied ? <CheckCircle className="h-4 w-4 mr-2 text-chart-2" /> : <Copy className="h-4 w-4 mr-2" />}
               {copied ? "Kopierat!" : "Kopiera inloggningsuppgifter"}
             </Button>
           </CardContent>
@@ -350,15 +350,15 @@ export default function OnboardingWizardPage() {
             <CardContent>
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div>
-                  <div className="text-lg font-bold text-blue-600">{result.packageSummary.articlesInstalled}</div>
+                  <div className="text-lg font-bold text-chart-1">{result.packageSummary.articlesInstalled}</div>
                   <div className="text-xs text-muted-foreground">Artiklar</div>
                 </div>
                 <div>
-                  <div className="text-lg font-bold text-purple-600">{result.packageSummary.metadataInstalled}</div>
+                  <div className="text-lg font-bold text-chart-5">{result.packageSummary.metadataInstalled}</div>
                   <div className="text-xs text-muted-foreground">Metadata-fält</div>
                 </div>
                 <div>
-                  <div className="text-lg font-bold text-green-600">{result.packageSummary.structuralArticlesInstalled}</div>
+                  <div className="text-lg font-bold text-chart-2">{result.packageSummary.structuralArticlesInstalled}</div>
                   <div className="text-xs text-muted-foreground">Strukturartiklar</div>
                 </div>
               </div>
@@ -366,7 +366,7 @@ export default function OnboardingWizardPage() {
           </Card>
         )}
 
-        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+        <Card className="border-chart-1/20 dark:border-chart-1/80 bg-chart-1/10 dark:bg-chart-1/15">
           <CardContent className="pt-6">
             <p className="text-sm font-medium mb-3">Nästa steg</p>
             <div className="space-y-2 text-sm text-muted-foreground">
@@ -431,10 +431,10 @@ export default function OnboardingWizardPage() {
                 placeholder="XXXXXX-XXXX"
                 maxLength={11}
                 data-testid="input-org-number"
-                className={touchedFields.orgNumber && validationErrors.orgNumber ? "border-red-500" : ""}
+                className={touchedFields.orgNumber && validationErrors.orgNumber ? "border-destructive/50" : ""}
               />
               {touchedFields.orgNumber && validationErrors.orgNumber && (
-                <p className="text-xs text-red-500 flex items-center gap-1">
+                <p className="text-xs text-destructive flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" />
                   {validationErrors.orgNumber}
                 </p>
@@ -451,10 +451,10 @@ export default function OnboardingWizardPage() {
                   onBlur={() => markTouched("contactEmail")}
                   placeholder="info@foretag.se"
                   data-testid="input-contact-email"
-                  className={touchedFields.contactEmail && validationErrors.contactEmail ? "border-red-500" : ""}
+                  className={touchedFields.contactEmail && validationErrors.contactEmail ? "border-destructive/50" : ""}
                 />
                 {touchedFields.contactEmail && validationErrors.contactEmail && (
-                  <p className="text-xs text-red-500 flex items-center gap-1">
+                  <p className="text-xs text-destructive flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" />
                     {validationErrors.contactEmail}
                   </p>
@@ -530,7 +530,7 @@ export default function OnboardingWizardPage() {
                     key={pkg.id}
                     className={`p-4 border rounded-lg cursor-pointer transition-colors ${
                       selectedPackageId === pkg.id
-                        ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30"
+                        ? "border-chart-1/50 bg-chart-1/10 dark:bg-chart-1/15"
                         : "hover:border-muted-foreground/50"
                     }`}
                     onClick={() => setSelectedPackageId(selectedPackageId === pkg.id ? null : pkg.id)}
@@ -538,7 +538,7 @@ export default function OnboardingWizardPage() {
                   >
                     <div className="flex items-start gap-3">
                       <div className={`flex items-center justify-center h-10 w-10 rounded-lg text-lg ${
-                        selectedPackageId === pkg.id ? "bg-blue-100 dark:bg-blue-900" : "bg-muted"
+                        selectedPackageId === pkg.id ? "bg-chart-1/15 dark:bg-chart-1/15" : "bg-muted"
                       }`}>
                         {pkg.icon || "📦"}
                       </div>
@@ -549,7 +549,7 @@ export default function OnboardingWizardPage() {
                             {INDUSTRIES.find(i => i.value === pkg.industry)?.label || pkg.industry}
                           </Badge>
                           {selectedPackageId === pkg.id && (
-                            <Badge variant="default" className="text-xs bg-blue-600">Vald</Badge>
+                            <Badge variant="default" className="text-xs bg-chart-1/15">Vald</Badge>
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">{pkg.description}</p>
@@ -619,10 +619,10 @@ export default function OnboardingWizardPage() {
                 onBlur={() => markTouched("adminEmail")}
                 placeholder="admin@foretag.se"
                 data-testid="input-admin-email"
-                className={touchedFields.adminEmail && validationErrors.adminEmail ? "border-red-500" : ""}
+                className={touchedFields.adminEmail && validationErrors.adminEmail ? "border-destructive/50" : ""}
               />
               {touchedFields.adminEmail && validationErrors.adminEmail && (
-                <p className="text-xs text-red-500 flex items-center gap-1">
+                <p className="text-xs text-destructive flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" />
                   {validationErrors.adminEmail}
                 </p>
@@ -683,7 +683,7 @@ export default function OnboardingWizardPage() {
                       {passwordStrength.label}
                     </p>
                     {adminPassword.length < 6 && (
-                      <p className="text-xs text-red-500">Minst 6 tecken</p>
+                      <p className="text-xs text-destructive">Minst 6 tecken</p>
                     )}
                   </div>
                 </div>
@@ -699,16 +699,16 @@ export default function OnboardingWizardPage() {
                 onBlur={() => markTouched("adminPasswordConfirm")}
                 placeholder="Ange lösenordet igen"
                 data-testid="input-admin-password-confirm"
-                className={touchedFields.adminPasswordConfirm && validationErrors.adminPasswordConfirm ? "border-red-500" : ""}
+                className={touchedFields.adminPasswordConfirm && validationErrors.adminPasswordConfirm ? "border-destructive/50" : ""}
               />
               {touchedFields.adminPasswordConfirm && validationErrors.adminPasswordConfirm && (
-                <p className="text-xs text-red-500 flex items-center gap-1">
+                <p className="text-xs text-destructive flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" />
                   {validationErrors.adminPasswordConfirm}
                 </p>
               )}
               {adminPasswordConfirm && adminPassword === adminPasswordConfirm && (
-                <p className="text-xs text-green-600 flex items-center gap-1" data-testid="text-password-match">
+                <p className="text-xs text-chart-2 flex items-center gap-1" data-testid="text-password-match">
                   <CheckCircle className="h-3 w-3" />
                   Lösenorden matchar
                 </p>
@@ -747,7 +747,7 @@ export default function OnboardingWizardPage() {
                 <p className="text-xs text-muted-foreground font-medium">BRANSCHPAKET</p>
                 {selectedPackageId ? (
                   <p className="font-medium flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-blue-600" />
+                    <Sparkles className="h-4 w-4 text-chart-1" />
                     {packages.find(p => p.id === selectedPackageId)?.name || "Valt paket"}
                   </p>
                 ) : (

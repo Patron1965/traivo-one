@@ -100,18 +100,18 @@ function formatCurrency(amount: number): string {
 function getServiceStatus(vehicle: Vehicle): { label: string; color: string; urgency: number } {
   if (!vehicle.nextServiceDate) return { label: "Ej planerad", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300", urgency: 0 };
   const daysUntil = differenceInDays(new Date(vehicle.nextServiceDate), new Date());
-  if (daysUntil < 0) return { label: `${Math.abs(daysUntil)} dagar försenad`, color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400", urgency: 3 };
-  if (daysUntil <= 14) return { label: `Om ${daysUntil} dagar`, color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400", urgency: 2 };
-  if (daysUntil <= 30) return { label: `Om ${daysUntil} dagar`, color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400", urgency: 1 };
-  return { label: format(new Date(vehicle.nextServiceDate), "d MMM yyyy", { locale: sv }), color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400", urgency: 0 };
+  if (daysUntil < 0) return { label: `${Math.abs(daysUntil)} dagar försenad`, color: "bg-destructive/15 text-destructive dark:bg-destructive/15", urgency: 3 };
+  if (daysUntil <= 14) return { label: `Om ${daysUntil} dagar`, color: "bg-chart-3/15 text-chart-3 dark:bg-chart-3/15", urgency: 2 };
+  if (daysUntil <= 30) return { label: `Om ${daysUntil} dagar`, color: "bg-chart-1/15 text-chart-1 dark:bg-chart-1/15", urgency: 1 };
+  return { label: format(new Date(vehicle.nextServiceDate), "d MMM yyyy", { locale: sv }), color: "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15", urgency: 0 };
 }
 
 function getInspectionStatus(vehicle: Vehicle): { label: string; color: string } {
   if (!vehicle.inspectionDate) return { label: "Ej registrerad", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" };
   const daysUntil = differenceInDays(new Date(vehicle.inspectionDate), new Date());
-  if (daysUntil < 0) return { label: "Utgången", color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" };
-  if (daysUntil <= 30) return { label: `Om ${daysUntil} dagar`, color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" };
-  return { label: format(new Date(vehicle.inspectionDate), "d MMM yyyy", { locale: sv }), color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" };
+  if (daysUntil < 0) return { label: "Utgången", color: "bg-destructive/15 text-destructive dark:bg-destructive/15" };
+  if (daysUntil <= 30) return { label: `Om ${daysUntil} dagar`, color: "bg-chart-3/15 text-chart-3 dark:bg-chart-3/15" };
+  return { label: format(new Date(vehicle.inspectionDate), "d MMM yyyy", { locale: sv }), color: "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15" };
 }
 
 export default function FleetManagementPage() {
@@ -311,14 +311,14 @@ export default function FleetManagementPage() {
             </Badge>
           )}
           {kpis.overdueService > 0 && (
-            <Badge variant="outline" className="text-xs font-normal text-red-600 border-red-300 gap-1">
-              <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />
+            <Badge variant="outline" className="text-xs font-normal text-destructive border-destructive/30 gap-1">
+              <AlertTriangle className="h-3 w-3 text-chart-4" />
               {kpis.overdueService} försenad service
             </Badge>
           )}
           {kpis.overdueInspection > 0 && (
-            <Badge variant="outline" className="text-xs font-normal text-amber-600 border-amber-300 gap-1">
-              <AlertTriangle className="h-3 w-3 text-orange-500 dark:text-orange-400" />
+            <Badge variant="outline" className="text-xs font-normal text-chart-4 border-chart-4/30 gap-1">
+              <AlertTriangle className="h-3 w-3 text-chart-4" />
               {kpis.overdueInspection} utgången besiktning
             </Badge>
           )}
@@ -359,9 +359,9 @@ export default function FleetManagementPage() {
               <Card className="hover-elevate cursor-help" data-testid="card-kpi-service-alerts">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                    <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" /> Servicevarningar
+                    <AlertTriangle className="h-4 w-4 text-chart-4" /> Servicevarningar
                   </div>
-                  <div className="text-2xl font-bold text-red-600" data-testid="text-kpi-overdue">{kpis.overdueService}</div>
+                  <div className="text-2xl font-bold text-destructive" data-testid="text-kpi-overdue">{kpis.overdueService}</div>
                   <p className="text-xs text-muted-foreground">{kpis.upcomingService} kommande (30 dagar)</p>
                 </CardContent>
               </Card>
@@ -510,7 +510,7 @@ export default function FleetManagementPage() {
               <Card className="hover-elevate" data-testid="card-maintenance-alerts">
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-red-500" /> Serviceplanering
+                    <AlertTriangle className="h-4 w-4 text-destructive" /> Serviceplanering
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -531,7 +531,7 @@ export default function FleetManagementPage() {
                       })}
                       {sortedByServiceUrgency.every(v => getServiceStatus(v).urgency === 0) && (
                         <div className="text-center py-4 text-muted-foreground text-sm">
-                          <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                          <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-chart-2" />
                           Alla fordon har aktuell service
                         </div>
                       )}

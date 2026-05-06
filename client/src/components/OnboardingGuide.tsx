@@ -45,8 +45,8 @@ const STEPS: OnboardingStep[] = [
     description: "Hämta kunddata från Fortnox eller lägg till manuellt",
     icon: Users,
     href: "/fortnox",
-    color: "text-blue-600 dark:text-blue-400",
-    bgColor: "bg-blue-100 dark:bg-blue-900/40",
+    color: "text-chart-1",
+    bgColor: "bg-chart-1/15 dark:bg-chart-1/15",
     checkFn: (c) => c.customers > 0,
   },
   {
@@ -55,8 +55,8 @@ const STEPS: OnboardingStep[] = [
     description: "Lägg till objekt och koppla till rätt kund",
     icon: Building2,
     href: "/objects",
-    color: "text-emerald-600 dark:text-emerald-400",
-    bgColor: "bg-emerald-100 dark:bg-emerald-900/40",
+    color: "text-chart-2",
+    bgColor: "bg-chart-2/15 dark:bg-chart-2/15",
     checkFn: (c) => c.objects > 0,
   },
   {
@@ -65,8 +65,8 @@ const STEPS: OnboardingStep[] = [
     description: "Registrera personal och fordon som ska utföra arbetet",
     icon: Truck,
     href: "/resources",
-    color: "text-purple-600 dark:text-purple-400",
-    bgColor: "bg-purple-100 dark:bg-purple-900/40",
+    color: "text-chart-5",
+    bgColor: "bg-chart-5/15 dark:bg-chart-5/15",
     checkFn: (c) => c.resources > 0,
   },
   {
@@ -75,8 +75,8 @@ const STEPS: OnboardingStep[] = [
     description: "Öppna veckoplaneraren och fördela arbete",
     icon: CalendarDays,
     href: "/planner",
-    color: "text-amber-600 dark:text-amber-400",
-    bgColor: "bg-amber-100 dark:bg-amber-900/40",
+    color: "text-chart-4",
+    bgColor: "bg-chart-4/15 dark:bg-chart-4/15",
     checkFn: (c) => c.customers > 0 && c.objects > 0 && c.resources > 0,
   },
 ];
@@ -165,7 +165,7 @@ export function OnboardingGuide() {
                       <Icon className={`h-5 w-5 ${step.color}`} />
                     </div>
                     {done ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      <CheckCircle2 className="h-5 w-5 text-chart-2" />
                     ) : (
                       <Badge
                         variant="outline"

@@ -307,9 +307,9 @@ export function DataQualityDashboard() {
       count: containers.missingCoordinates,
       total: containers.total,
       icon: MapPin,
-      color: "text-orange-500",
-      bgColor: "bg-orange-50 dark:bg-orange-950/20",
-      borderColor: "border-orange-200 dark:border-orange-800",
+      color: "text-chart-4",
+      bgColor: "bg-chart-4/10 dark:bg-chart-4/15",
+      borderColor: "border-chart-4/20 dark:border-chart-4/80",
     },
     {
       key: "missing-address",
@@ -317,9 +317,9 @@ export function DataQualityDashboard() {
       count: containers.missingAddress,
       total: containers.total,
       icon: Navigation,
-      color: "text-red-500",
-      bgColor: "bg-red-50 dark:bg-red-950/20",
-      borderColor: "border-red-200 dark:border-red-800",
+      color: "text-destructive",
+      bgColor: "bg-destructive/10 dark:bg-destructive/15",
+      borderColor: "border-destructive/20 dark:border-destructive/80",
     },
     {
       key: "missing-parent",
@@ -327,9 +327,9 @@ export function DataQualityDashboard() {
       count: containers.missingParent,
       total: containers.total,
       icon: GitBranch,
-      color: "text-purple-500",
-      bgColor: "bg-purple-50 dark:bg-purple-950/20",
-      borderColor: "border-purple-200 dark:border-purple-800",
+      color: "text-chart-5",
+      bgColor: "bg-chart-5/10 dark:bg-chart-5/15",
+      borderColor: "border-chart-5/20 dark:border-chart-5/80",
     },
     {
       key: "customer-missing-address",
@@ -337,9 +337,9 @@ export function DataQualityDashboard() {
       count: stats.customers.missingAddress,
       total: stats.customers.total,
       icon: Building2,
-      color: "text-blue-500",
-      bgColor: "bg-blue-50 dark:bg-blue-950/20",
-      borderColor: "border-blue-200 dark:border-blue-800",
+      color: "text-chart-1",
+      bgColor: "bg-chart-1/10 dark:bg-chart-1/15",
+      borderColor: "border-chart-1/20 dark:border-chart-1/80",
     },
   ];
 
@@ -350,27 +350,27 @@ export function DataQualityDashboard() {
       label: "Telefonnummer som kärlnamn",
       tooltip: "Kärl där hela namnet bara består av siffror och separatorer (telefonnummer som råkat hamna i namn-fältet vid import).",
       count: cn.phone, total: cn.total,
-      icon: Phone, color: "text-blue-600",
-      bgColor: "bg-blue-50 dark:bg-blue-950/20",
-      borderColor: "border-blue-200 dark:border-blue-800",
+      icon: Phone, color: "text-chart-1",
+      bgColor: "bg-chart-1/10 dark:bg-chart-1/15",
+      borderColor: "border-chart-1/20 dark:border-chart-1/80",
     },
     {
       key: "name-person",
       label: "Personnamn som kärlnamn",
       tooltip: "Kärl där namnet ser ut som ett för- och efternamn (kontaktperson som råkat hamna som kärlnamn).",
       count: cn.person, total: cn.total,
-      icon: User, color: "text-purple-600",
-      bgColor: "bg-purple-50 dark:bg-purple-950/20",
-      borderColor: "border-purple-200 dark:border-purple-800",
+      icon: User, color: "text-chart-5",
+      bgColor: "bg-chart-5/10 dark:bg-chart-5/15",
+      borderColor: "border-chart-5/20 dark:border-chart-5/80",
     },
     {
       key: "name-instruction",
       label: "Instruktioner som kärlnamn",
       tooltip: "Kärl med instruktionstext i namn-fältet (t.ex. 'Ring en dag innan', 'Hämta nyckel hos vaktmästare').",
       count: cn.instruction, total: cn.total,
-      icon: MessageSquare, color: "text-amber-600",
-      bgColor: "bg-amber-50 dark:bg-amber-950/20",
-      borderColor: "border-amber-200 dark:border-amber-800",
+      icon: MessageSquare, color: "text-chart-4",
+      bgColor: "bg-chart-4/10 dark:bg-chart-4/15",
+      borderColor: "border-chart-4/20 dark:border-chart-4/80",
     },
     {
       key: "name-numeric",
@@ -432,9 +432,9 @@ export function DataQualityDashboard() {
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm text-muted-foreground">Datakvalitet</p>
               {overallScore >= 80 ? (
-                <CheckCircle className="h-6 w-6 text-green-500" />
+                <CheckCircle className="h-6 w-6 text-chart-2" />
               ) : (
-                <AlertTriangle className="h-6 w-6 text-orange-500" />
+                <AlertTriangle className="h-6 w-6 text-chart-4" />
               )}
             </div>
             <p className="text-2xl font-bold" data-testid="text-quality-score">{overallScore}%</p>
@@ -516,9 +516,9 @@ export function DataQualityDashboard() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 p-4 rounded-lg border bg-purple-50/50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800">
+            <div className="flex-1 p-4 rounded-lg border bg-chart-5/10 dark:bg-chart-5/15 border-chart-5/20 dark:border-chart-5/80">
               <h4 className="font-medium flex items-center gap-2 mb-2">
-                <GitBranch className="h-4 w-4 text-purple-500" />
+                <GitBranch className="h-4 w-4 text-chart-5" />
                 Bygg hierarki från CSV
               </h4>
               <p className="text-sm text-muted-foreground mb-3">
@@ -546,9 +546,9 @@ export function DataQualityDashboard() {
               </Button>
             </div>
 
-            <div className="flex-1 p-4 rounded-lg border bg-orange-50/50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800">
+            <div className="flex-1 p-4 rounded-lg border bg-chart-4/10 dark:bg-chart-4/15 border-chart-4/20 dark:border-chart-4/80">
               <h4 className="font-medium flex items-center gap-2 mb-2">
-                <MapPin className="h-4 w-4 text-orange-500" />
+                <MapPin className="h-4 w-4 text-chart-4" />
                 Geokoda saknade koordinater
               </h4>
               <p className="text-sm text-muted-foreground mb-3">
@@ -571,9 +571,9 @@ export function DataQualityDashboard() {
           </div>
 
           {(stats.workOrders.pastStillCreated > 0 || stats.workOrders.noDateStillCreated > 0) && (
-            <div className="p-4 rounded-lg border bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+            <div className="p-4 rounded-lg border bg-chart-4/10 dark:bg-chart-4/15 border-chart-4/20 dark:border-chart-4/80">
               <h4 className="font-medium flex items-center gap-2 mb-2">
-                <Truck className="h-4 w-4 text-amber-600" />
+                <Truck className="h-4 w-4 text-chart-4" />
                 Markera importerade ordrar som utförda
               </h4>
               <p className="text-sm text-muted-foreground mb-3">
@@ -596,23 +596,23 @@ export function DataQualityDashboard() {
           )}
 
           {(hierarchyCsvMutation.data || geocodeMutation.data || workOrderStatusMutation.data) && (
-            <div className="p-3 rounded-lg border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
-              <p className="text-sm font-medium text-green-700 dark:text-green-400 flex items-center gap-2">
+            <div className="p-3 rounded-lg border bg-chart-2/10 dark:bg-chart-2/15 border-chart-2/20 dark:border-chart-2/80">
+              <p className="text-sm font-medium text-chart-2 flex items-center gap-2">
                 <CheckCircle className="h-4 w-4" />
                 Senaste resultat
               </p>
               {hierarchyCsvMutation.data && (
-                <p className="text-sm text-green-600 dark:text-green-300 mt-1">
+                <p className="text-sm text-chart-2 mt-1">
                   Hierarki: {hierarchyCsvMutation.data.linked} objekt länkade, {hierarchyCsvMutation.data.parentNotFound} föräldrar ej hittade
                 </p>
               )}
               {geocodeMutation.data && (
-                <p className="text-sm text-green-600 dark:text-green-300 mt-1">
+                <p className="text-sm text-chart-2 mt-1">
                   Geokodning: {geocodeMutation.data.geocoded} lyckade, {geocodeMutation.data.failed} misslyckade
                 </p>
               )}
               {workOrderStatusMutation.data && (
-                <p className="text-sm text-green-600 dark:text-green-300 mt-1">
+                <p className="text-sm text-chart-2 mt-1">
                   Orderstatus: {workOrderStatusMutation.data.totalUpdated} ordrar markerade som utförda
                 </p>
               )}
@@ -689,22 +689,22 @@ export function DataQualityDashboard() {
                     {notInExportReport.csvIdCount.toLocaleString("sv-SE")}
                   </div>
                 </div>
-                <div className="p-3 rounded border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
+                <div className="p-3 rounded border bg-chart-2/10 dark:bg-chart-2/15 border-chart-2/20 dark:border-chart-2/80">
                   <div className="text-xs text-muted-foreground">Finns i exporten</div>
-                  <div className="text-xl font-bold text-green-700 dark:text-green-400" data-testid="text-not-in-export-matched">
+                  <div className="text-xl font-bold text-chart-2" data-testid="text-not-in-export-matched">
                     {notInExportReport.inExportCount.toLocaleString("sv-SE")}
                   </div>
                 </div>
-                <div className="p-3 rounded border bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800">
+                <div className="p-3 rounded border bg-chart-4/10 dark:bg-chart-4/15 border-chart-4/20 dark:border-chart-4/80">
                   <div className="text-xs text-muted-foreground">Saknas i exporten</div>
-                  <div className="text-xl font-bold text-orange-700 dark:text-orange-400" data-testid="text-not-in-export-missing">
+                  <div className="text-xl font-bold text-chart-4" data-testid="text-not-in-export-missing">
                     {notInExportReport.notInExportCount.toLocaleString("sv-SE")}
                   </div>
                 </div>
               </div>
 
               {(notInExportReport.nonStandardFormatCount > 0 || notInExportReport.noObjectNumberCount > 0) && (
-                <div className="text-sm p-3 rounded border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+                <div className="text-sm p-3 rounded border bg-chart-4/10 dark:bg-chart-4/15 border-chart-4/20 dark:border-chart-4/80">
                   Av de saknade kärlen har{" "}
                   <strong data-testid="text-not-in-export-non-standard">
                     {notInExportReport.nonStandardFormatCount.toLocaleString("sv-SE")}
@@ -903,8 +903,8 @@ export function DataQualityDashboard() {
               )}
 
               {notInExportReport.notInExportCount === 0 && (
-                <div className="text-sm p-3 rounded border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800 flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-green-600" />
+                <div className="text-sm p-3 rounded border bg-chart-2/10 dark:bg-chart-2/15 border-chart-2/20 dark:border-chart-2/80 flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-chart-2" />
                   Alla kärl i DB finns även i den uppladdade Modus-exporten.
                 </div>
               )}
@@ -1034,7 +1034,7 @@ export function DataQualityDashboard() {
                               disabled={saveObjectMutation.isPending}
                               data-testid={`button-save-${row.id}`}
                             >
-                              {saveObjectMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 text-green-600" />}
+                              {saveObjectMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 text-chart-2" />}
                             </Button>
                             <Button
                               size="icon"

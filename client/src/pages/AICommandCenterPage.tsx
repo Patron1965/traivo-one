@@ -61,17 +61,17 @@ interface CommunicationEntry {
 
 function InsightCardComponent({ card }: { card: InsightCard }) {
   const severityStyles: Record<string, string> = {
-    info: "border-l-blue-500 bg-blue-50/50 dark:bg-blue-950/20",
-    warning: "border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/20",
-    critical: "border-l-red-500 bg-red-50/50 dark:bg-red-950/20",
-    success: "border-l-green-500 bg-green-50/50 dark:bg-green-950/20",
+    info: "border-l-chart-1 bg-chart-1/10 dark:bg-chart-1/15",
+    warning: "border-l-chart-4 bg-chart-4/10 dark:bg-chart-4/15",
+    critical: "border-l-destructive bg-destructive/10 dark:bg-destructive/15",
+    success: "border-l-chart-2 bg-chart-2/10 dark:bg-chart-2/15",
   };
 
   const severityBadge: Record<string, string> = {
-    info: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-    warning: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
-    critical: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-    success: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+    info: "bg-chart-1/15 text-chart-1 dark:bg-chart-1/15",
+    warning: "bg-chart-4/15 text-chart-4 dark:bg-chart-4/15",
+    critical: "bg-destructive/15 text-destructive dark:bg-destructive/15-foreground",
+    success: "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15",
   };
 
   const typeIcons: Record<string, any> = {
@@ -105,7 +105,7 @@ function InsightCardComponent({ card }: { card: InsightCard }) {
                 <div className="flex items-center gap-2 mt-2">
                   <span className="text-xs text-muted-foreground">{card.metric}:</span>
                   <span className="font-bold text-lg" data-testid={`text-insight-value-${card.id}`}>{card.metricValue}</span>
-                  {card.trend && <TrendIcon className={`h-4 w-4 ${card.trend === "up" ? "text-green-600" : card.trend === "down" ? "text-red-600" : "text-gray-400"}`} />}
+                  {card.trend && <TrendIcon className={`h-4 w-4 ${card.trend === "up" ? "text-chart-2" : card.trend === "down" ? "text-destructive" : "text-gray-400"}`} />}
                 </div>
               )}
             </div>
@@ -185,7 +185,7 @@ function PlannerChat() {
     <Card className="h-[500px] flex flex-col" data-testid="planner-chat">
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
-          <Brain className="h-5 w-5 text-purple-600" />
+          <Brain className="h-5 w-5 text-chart-5" />
           AI Planeringsassistent
         </CardTitle>
         <CardDescription>Ställ frågor och ge instruktioner på naturligt språk</CardDescription>
@@ -292,7 +292,7 @@ function ETAPanel() {
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="text-base flex items-center gap-2">
-              <Navigation className="h-5 w-5 text-blue-600" />
+              <Navigation className="h-5 w-5 text-chart-1" />
               ETA & Förseningar
             </CardTitle>
             <CardDescription>Realtids-ETA för dagens ordrar</CardDescription>
@@ -305,19 +305,19 @@ function ETAPanel() {
       </CardHeader>
       <CardContent className="p-4 pt-0">
         {delayCheckMutation.data && (
-          <div className="mb-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-sm">
+          <div className="mb-3 p-3 rounded-lg bg-chart-1/10 dark:bg-chart-1/15 text-sm">
             <p>{delayCheckMutation.data.message || `${delayCheckMutation.data.notified || 0} förseningsnotiser skickade`}</p>
           </div>
         )}
         {delayed.length === 0 ? (
           <div className="text-center py-6 text-muted-foreground">
-            <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-500" />
+            <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-chart-2" />
             <p className="text-sm">Inga signifikanta förseningar just nu</p>
           </div>
         ) : (
           <div className="space-y-2">
             {delayed.slice(0, 6).map(entry => (
-              <div key={entry.orderId} className="flex items-center justify-between p-2.5 rounded-lg bg-red-50/50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/30" data-testid={`eta-entry-${entry.orderId}`}>
+              <div key={entry.orderId} className="flex items-center justify-between p-2.5 rounded-lg bg-destructive/10 dark:bg-destructive/15 border border-destructive/20 dark:border-destructive/80" data-testid={`eta-entry-${entry.orderId}`}>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{entry.title}</p>
                   <p className="text-xs text-muted-foreground">{entry.customerName}</p>
@@ -345,7 +345,7 @@ function CommunicationsPanel() {
     <Card data-testid="communications-panel">
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
-          <MessageCircle className="h-5 w-5 text-green-600" />
+          <MessageCircle className="h-5 w-5 text-chart-2" />
           Kundkommunikation
         </CardTitle>
         <CardDescription>Automatiska AI-meddelanden</CardDescription>
@@ -407,7 +407,7 @@ function AssistedPlanningPanel() {
     <Card data-testid="assisted-planning-panel">
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
-          <Target className="h-5 w-5 text-orange-600" />
+          <Target className="h-5 w-5 text-chart-4" />
           AI-assisterad Planering
         </CardTitle>
         <CardDescription>Ge instruktioner på naturligt språk</CardDescription>
@@ -479,7 +479,7 @@ export default function AICommandCenterPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             <div className="md:col-span-2 xl:col-span-2 space-y-3">
               <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Lightbulb className="h-5 w-5 text-yellow-600" />
+                <Lightbulb className="h-5 w-5 text-chart-3" />
                 AI-Insikter
               </h2>
               {insightsLoading ? (

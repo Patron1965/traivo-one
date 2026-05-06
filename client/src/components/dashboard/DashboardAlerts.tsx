@@ -117,11 +117,11 @@ export function DashboardAlerts() {
   }
 
   return (
-    <Card className="border-orange-500/30" data-testid="card-dashboard-alerts">
+    <Card className="border-chart-4/50" data-testid="card-dashboard-alerts">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-lg">
-            <AlertTriangle className="h-5 w-5 text-orange-500" />
+            <AlertTriangle className="h-5 w-5 text-chart-4" />
             Kräver uppmärksamhet
             <Badge variant="destructive" className="ml-1" data-testid="badge-alerts-count">
               {total}
@@ -135,9 +135,9 @@ export function DashboardAlerts() {
             {overdue.length > 0 && (
               <div data-testid="alerts-section-overdue">
                 <div className="flex items-center gap-2 mb-2">
-                  <Clock className="h-4 w-4 text-red-500" />
+                  <Clock className="h-4 w-4 text-destructive" />
                   <span className="text-sm font-medium">Försenade ordrar</span>
-                  <Badge variant="outline" className="text-xs border-red-500/50 text-red-600">
+                  <Badge variant="outline" className="text-xs border-destructive/50 text-destructive">
                     {overdue.length}
                   </Badge>
                 </div>
@@ -152,7 +152,7 @@ export function DashboardAlerts() {
                         href="/planner"
                       >
                         <div
-                          className="flex items-center justify-between p-2.5 rounded-md border bg-red-500/5 border-red-500/20 cursor-pointer hover:bg-red-500/10 transition-colors"
+                          className="flex items-center justify-between p-2.5 rounded-md border bg-destructive/15 border-destructive/50 cursor-pointer hover:bg-destructive/15 transition-colors"
                           data-testid={`alert-overdue-${alert.id}`}
                         >
                           <div className="flex-1 min-w-0">
@@ -183,9 +183,9 @@ export function DashboardAlerts() {
             {idle.length > 0 && (
               <div data-testid="alerts-section-idle">
                 <div className="flex items-center gap-2 mb-2">
-                  <UserX className="h-4 w-4 text-amber-500" />
+                  <UserX className="h-4 w-4 text-chart-4" />
                   <span className="text-sm font-medium">Utan jobb idag</span>
-                  <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-600">
+                  <Badge variant="outline" className="text-xs border-chart-4/50 text-chart-4">
                     {idle.length}
                   </Badge>
                 </div>
@@ -193,7 +193,7 @@ export function DashboardAlerts() {
                   {idle.slice(0, 5).map((r) => (
                     <Link key={r.id} href="/planner">
                       <div
-                        className="flex items-center justify-between p-2.5 rounded-md border bg-amber-500/5 border-amber-500/20 cursor-pointer hover:bg-amber-500/10 transition-colors"
+                        className="flex items-center justify-between p-2.5 rounded-md border bg-chart-4/15 border-chart-4/50 cursor-pointer hover:bg-chart-4/15 transition-colors"
                         data-testid={`alert-idle-${r.id}`}
                       >
                         <div className="flex-1 min-w-0">
@@ -220,9 +220,9 @@ export function DashboardAlerts() {
             {doubles.length > 0 && (
               <div data-testid="alerts-section-double-bookings">
                 <div className="flex items-center gap-2 mb-2">
-                  <Layers className="h-4 w-4 text-purple-500" />
+                  <Layers className="h-4 w-4 text-chart-5" />
                   <span className="text-sm font-medium">Dubbelbokningar</span>
-                  <Badge variant="outline" className="text-xs border-purple-500/50 text-purple-600">
+                  <Badge variant="outline" className="text-xs border-chart-5/50 text-chart-5">
                     {doubles.length}
                   </Badge>
                 </div>
@@ -230,7 +230,7 @@ export function DashboardAlerts() {
                   {doubles.slice(0, 5).map((db, i) => (
                     <Link key={i} href="/planner">
                       <div
-                        className="flex items-center justify-between p-2.5 rounded-md border bg-purple-500/5 border-purple-500/20 cursor-pointer hover:bg-purple-500/10 transition-colors"
+                        className="flex items-center justify-between p-2.5 rounded-md border bg-chart-5/15 border-chart-5/50 cursor-pointer hover:bg-chart-5/15 transition-colors"
                         data-testid={`alert-double-${i}`}
                       >
                         <div className="flex-1 min-w-0">

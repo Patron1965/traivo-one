@@ -39,9 +39,9 @@ interface KPICardProps {
 function KPICard({ title, value, subtitle, change, changeLabel, icon, variant = "default" }: KPICardProps) {
   const variantStyles = {
     default: "bg-card",
-    success: "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800",
-    warning: "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800",
-    danger: "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+    success: "bg-chart-2/10 dark:bg-chart-2/15 border-chart-2/20 dark:border-chart-2/80",
+    warning: "bg-chart-3/10 dark:bg-chart-3/15 border-chart-3/20 dark:border-chart-3/80",
+    danger: "bg-destructive/10 dark:bg-destructive/15 border-destructive/20 dark:border-destructive/80"
   };
 
   return (
@@ -55,11 +55,11 @@ function KPICard({ title, value, subtitle, change, changeLabel, icon, variant = 
             {change !== undefined && (
               <div className="flex items-center gap-1 mt-2">
                 {change >= 0 ? (
-                  <ArrowUpRight className="h-3 w-3 text-green-600 dark:text-green-400" />
+                  <ArrowUpRight className="h-3 w-3 text-chart-2" />
                 ) : (
-                  <ArrowDownRight className="h-3 w-3 text-red-600 dark:text-red-400" />
+                  <ArrowDownRight className="h-3 w-3 text-destructive" />
                 )}
-                <span className={`text-xs font-medium ${change >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                <span className={`text-xs font-medium ${change >= 0 ? "text-chart-2" : "text-destructive"}`}>
                   {change >= 0 ? "+" : ""}{change}%
                 </span>
                 {changeLabel && <span className="text-xs text-muted-foreground">{changeLabel}</span>}
@@ -239,23 +239,23 @@ function RouteFeedbackTab() {
         <KPICard
           title="Snittbetyg"
           value={`${summary.avgRating}/5`}
-          icon={<Star className="h-4 w-4 text-yellow-500" />}
+          icon={<Star className="h-4 w-4 text-chart-3" />}
           subtitle={`Baserat på ${summary.totalCount} svar`}
         />
         <KPICard
           title="Antal svar"
           value={summary.totalCount}
-          icon={<MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+          icon={<MessageSquare className="h-4 w-4 text-chart-1" />}
         />
         <KPICard
           title="Nöjda förare (4-5)"
           value={`${summary.totalCount > 0 ? Math.round((((summary.ratingDistribution[4] || 0) + (summary.ratingDistribution[5] || 0)) / summary.totalCount) * 100) : 0}%`}
-          icon={<Award className="h-4 w-4 text-green-600 dark:text-green-400" />}
+          icon={<Award className="h-4 w-4 text-chart-2" />}
         />
         <KPICard
           title="Kategorier"
           value={Object.keys(summary.byCategory).length}
-          icon={<BarChart3 className="h-4 w-4 text-purple-600 dark:text-purple-400" />}
+          icon={<BarChart3 className="h-4 w-4 text-chart-5" />}
           subtitle="unika orsaker"
         />
       </div>
@@ -311,7 +311,7 @@ function RouteFeedbackTab() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+                <AlertTriangle className="h-4 w-4 text-chart-4" />
                 Orsaker
               </CardTitle>
             </CardHeader>
@@ -347,7 +347,7 @@ function RouteFeedbackTab() {
                     <Progress value={(r.avgRating / 5) * 100} className="h-2" />
                   </div>
                   <div className="flex items-center gap-1 w-20 justify-end">
-                    <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
+                    <Star className="h-3 w-3 text-chart-3 fill-chart-3" />
                     <span className="text-sm font-medium">{r.avgRating}</span>
                     <span className="text-xs text-muted-foreground">({r.count})</span>
                   </div>
@@ -375,7 +375,7 @@ function RouteFeedbackTab() {
                       {[1, 2, 3, 4, 5].map((s) => (
                         <Star
                           key={s}
-                          className={`h-3.5 w-3.5 ${s <= fb.rating ? "text-yellow-500 fill-yellow-500" : "text-gray-300"}`}
+                          className={`h-3.5 w-3.5 ${s <= fb.rating ? "text-chart-3 fill-chart-3" : "text-gray-300"}`}
                         />
                       ))}
                     </div>
@@ -947,7 +947,7 @@ export default function ReportingDashboardPage() {
           subtitle={`${kpis.completionRate}% slutförandegrad`}
           change={kpis.completionChange}
           changeLabel="vs föreg."
-          icon={<CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />}
+          icon={<CheckCircle2 className="h-5 w-5 text-chart-2" />}
           variant={kpis.completionRate >= 80 ? "success" : kpis.completionRate >= 50 ? "default" : "warning"}
         />
         <KPICard
@@ -962,7 +962,7 @@ export default function ReportingDashboardPage() {
           title="Marginal"
           value={`${kpis.marginPercent}%`}
           subtitle={`${Math.round(kpis.margin / 1000)}k kr`}
-          icon={<TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />}
+          icon={<TrendingUp className="h-5 w-5 text-chart-2" />}
           variant={kpis.marginPercent >= 30 ? "success" : kpis.marginPercent >= 15 ? "default" : "warning"}
         />
         <KPICard
@@ -977,7 +977,7 @@ export default function ReportingDashboardPage() {
           subtitle={`${deviationKpis.open} öppna`}
           change={deviationKpis.change}
           changeLabel="vs föreg."
-          icon={<AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />}
+          icon={<AlertTriangle className="h-5 w-5 text-chart-4" />}
           variant={deviationKpis.critical > 3 ? "danger" : deviationKpis.total > 0 ? "warning" : "default"}
         />
       </div>
@@ -1275,7 +1275,7 @@ export default function ReportingDashboardPage() {
               subtitle={`av ${kpis.totalOrders} totalt`}
               change={kpis.completionChange}
               changeLabel="vs föreg."
-              icon={<CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />}
+              icon={<CheckCircle2 className="h-5 w-5 text-chart-2" />}
               variant="success"
             />
             <KPICard
@@ -1295,7 +1295,7 @@ export default function ReportingDashboardPage() {
               title="Misslyckade"
               value={filteredOrders.filter(wo => wo.orderStatus === "omojlig").length}
               subtitle="markerade omöjliga"
-              icon={<CircleSlash className="h-5 w-5 text-red-600 dark:text-red-400" />}
+              icon={<CircleSlash className="h-5 w-5 text-destructive" />}
               variant={filteredOrders.filter(wo => wo.orderStatus === "omojlig").length > 3 ? "danger" : "default"}
             />
           </div>
@@ -1405,21 +1405,21 @@ export default function ReportingDashboardPage() {
               value={deviationKpis.total}
               change={deviationKpis.change}
               changeLabel="vs föreg."
-              icon={<AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" />}
+              icon={<AlertTriangle className="h-5 w-5 text-chart-4" />}
               variant={deviationKpis.total > 10 ? "danger" : deviationKpis.total > 0 ? "warning" : "default"}
             />
             <KPICard
               title="Åtgärdsgrad"
               value={`${deviationKpis.resolutionRate}%`}
               subtitle={`${deviationKpis.resolved} åtgärdade`}
-              icon={<CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />}
+              icon={<CheckCircle2 className="h-5 w-5 text-chart-2" />}
               variant={deviationKpis.resolutionRate >= 80 ? "success" : deviationKpis.resolutionRate >= 50 ? "default" : "warning"}
             />
             <KPICard
               title="Kritiska"
               value={deviationKpis.critical}
               subtitle="hög/kritisk allvarlighet"
-              icon={<ShieldAlert className="h-5 w-5 text-red-600 dark:text-red-400" />}
+              icon={<ShieldAlert className="h-5 w-5 text-destructive" />}
               variant={deviationKpis.critical > 0 ? "danger" : "default"}
             />
             <KPICard
@@ -1572,9 +1572,9 @@ export default function ReportingDashboardPage() {
                     {filteredDeviations.slice(0, 8).map(d => (
                       <div key={d.id} className="flex items-start gap-2 p-2 rounded-lg border text-sm">
                         <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                          d.severityLevel === "critical" ? "bg-red-500" :
-                          d.severityLevel === "high" ? "bg-orange-500" :
-                          d.severityLevel === "medium" ? "bg-yellow-500" : "bg-blue-500"
+                          d.severityLevel === "critical" ? "bg-destructive/15" :
+                          d.severityLevel === "high" ? "bg-chart-4/15" :
+                          d.severityLevel === "medium" ? "bg-chart-3/15" : "bg-chart-1/15"
                         }`} />
                         <div className="flex-1 min-w-0">
                           <p className="font-medium truncate">{d.title || (DEVIATION_CATEGORY_LABELS as Record<string, string>)[d.category] || d.category}</p>
@@ -1631,7 +1631,7 @@ export default function ReportingDashboardPage() {
                       </div>
                       <div>
                         <p className="text-muted-foreground text-xs">Effektivitet</p>
-                        <p className={`font-medium ${resource.efficiency > 120 ? "text-red-600" : resource.efficiency > 100 ? "text-amber-600" : "text-green-600"}`}>
+                        <p className={`font-medium ${resource.efficiency > 120 ? "text-destructive" : resource.efficiency > 100 ? "text-chart-4" : "text-chart-2"}`}>
                           {resource.efficiency > 0 ? `${resource.efficiency}%` : "–"}
                         </p>
                       </div>

@@ -57,7 +57,7 @@ function TreeNodeView({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
       <div
         className={`flex items-center gap-2 py-1 px-2 rounded text-sm hover:bg-accent/50 cursor-pointer ${
           !node.hasParentMatch ? "text-destructive" : ""
-        } ${node.isExistingInDb ? "text-amber-600 dark:text-amber-400" : ""}`}
+        } ${node.isExistingInDb ? "text-chart-4" : ""}`}
         style={{ paddingLeft: `${depth * 20 + 8}px` }}
         onClick={() => setExpanded(!expanded)}
         data-testid={`tree-node-${node.id}`}
@@ -71,12 +71,12 @@ function TreeNodeView({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
         <span className="text-xs text-muted-foreground">#{node.id}</span>
         {!node.hasParentMatch && (
           <Badge variant="destructive" className="text-[10px] h-4">
-            <AlertTriangle className="h-2.5 w-2.5 mr-0.5 text-orange-500 dark:text-orange-400" />
+            <AlertTriangle className="h-2.5 w-2.5 mr-0.5 text-chart-4" />
             Förälder saknas
           </Badge>
         )}
         {node.isExistingInDb && (
-          <Badge variant="outline" className="text-[10px] h-4 text-amber-600 border-amber-300">
+          <Badge variant="outline" className="text-[10px] h-4 text-chart-4 border-chart-4/30">
             Uppdatering
           </Badge>
         )}
@@ -224,7 +224,7 @@ export default function ImportColumnMapper({ onImportComplete }: ImportColumnMap
           <div key={s} className="flex items-center gap-2">
             <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
               step === s ? "bg-primary text-primary-foreground" :
-              ["upload", "mapping", "hierarchy", "done"].indexOf(step) > i ? "bg-green-500 text-white" :
+              ["upload", "mapping", "hierarchy", "done"].indexOf(step) > i ? "bg-chart-2 text-white" :
               "bg-muted text-muted-foreground"
             }`}>
               {["upload", "mapping", "hierarchy", "done"].indexOf(step) > i ? (
@@ -348,7 +348,7 @@ export default function ImportColumnMapper({ onImportComplete }: ImportColumnMap
                         />
                       </div>
                       {suggestion?.confidence >= 0.8 && !mapping.isIgnored && (
-                        <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                        <CheckCircle2 className="h-4 w-4 text-chart-2 shrink-0" />
                       )}
                     </div>
                   );
@@ -411,19 +411,19 @@ export default function ImportColumnMapper({ onImportComplete }: ImportColumnMap
             </Card>
             <Card>
               <CardContent className="p-3">
-                <div className="text-2xl font-bold text-green-600">{hierarchy.newCount}</div>
+                <div className="text-2xl font-bold text-chart-2">{hierarchy.newCount}</div>
                 <div className="text-xs text-muted-foreground">Nya objekt</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-3">
-                <div className="text-2xl font-bold text-amber-600">{hierarchy.updateCount}</div>
+                <div className="text-2xl font-bold text-chart-4">{hierarchy.updateCount}</div>
                 <div className="text-xs text-muted-foreground">Uppdateringar</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-3">
-                <div className={`text-2xl font-bold ${hierarchy.orphanCount > 0 ? "text-destructive" : "text-green-600"}`}>
+                <div className={`text-2xl font-bold ${hierarchy.orphanCount > 0 ? "text-destructive" : "text-chart-2"}`}>
                   {hierarchy.orphanCount}
                 </div>
                 <div className="text-xs text-muted-foreground">Saknar förälder</div>
@@ -485,11 +485,11 @@ export default function ImportColumnMapper({ onImportComplete }: ImportColumnMap
       {step === "done" && importResult && (
         <Card>
           <CardContent className="p-8 text-center">
-            <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-green-500" />
+            <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-chart-2" />
             <h3 className="text-lg font-semibold">Import slutförd!</h3>
             <div className="grid gap-2 grid-cols-3 max-w-sm mx-auto mt-4">
               <div>
-                <div className="text-2xl font-bold text-green-600">{importResult.imported}</div>
+                <div className="text-2xl font-bold text-chart-2">{importResult.imported}</div>
                 <div className="text-xs text-muted-foreground">Importerade</div>
               </div>
               <div>
@@ -497,7 +497,7 @@ export default function ImportColumnMapper({ onImportComplete }: ImportColumnMap
                 <div className="text-xs text-muted-foreground">Totalt</div>
               </div>
               <div>
-                <div className={`text-2xl font-bold ${importResult.errors?.length > 0 ? "text-destructive" : "text-green-600"}`}>
+                <div className={`text-2xl font-bold ${importResult.errors?.length > 0 ? "text-destructive" : "text-chart-2"}`}>
                   {importResult.errors?.length || 0}
                 </div>
                 <div className="text-xs text-muted-foreground">Fel</div>

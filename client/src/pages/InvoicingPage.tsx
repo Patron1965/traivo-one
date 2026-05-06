@@ -394,12 +394,12 @@ export default function InvoicingPage() {
     <div className="p-6 space-y-6" data-testid="invoicing-page">
         <PageHeader icon={Receipt} title="Fakturering" description="Förhandsgranska, hantera och exportera fakturor till Fortnox" testId="text-page-title">
           {fortnoxStatus?.connected ? (
-            <Badge variant="outline" className="border-green-500 text-green-600 dark:text-green-400" data-testid="badge-fortnox-connected">
+            <Badge variant="outline" className="border-chart-2/50 text-chart-2" data-testid="badge-fortnox-connected">
               <CheckCircle2 className="h-3 w-3 mr-1" /> Fortnox ansluten
             </Badge>
           ) : (
-            <Badge variant="outline" className="border-yellow-500 dark:border-yellow-700 text-yellow-600 dark:text-yellow-400" data-testid="badge-fortnox-disconnected">
-              <AlertTriangle className="h-3 w-3 mr-1 text-orange-500 dark:text-orange-400" /> Fortnox ej ansluten
+            <Badge variant="outline" className="border-chart-3/50 dark:border-chart-3/70 text-chart-3" data-testid="badge-fortnox-disconnected">
+              <AlertTriangle className="h-3 w-3 mr-1 text-chart-4" /> Fortnox ej ansluten
             </Badge>
           )}
         </PageHeader>
@@ -592,7 +592,7 @@ export default function InvoicingPage() {
                                 {INVOICE_TYPE_LABELS[invoice.invoiceType] || invoice.invoiceType}
                               </Badge>
                               {invoice.lines.some(l => l.workOrderId.startsWith("manual:")) && (
-                                <Badge variant="outline" className="text-xs border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400">
+                                <Badge variant="outline" className="text-xs border-chart-1/30 dark:border-chart-1/70 text-chart-1">
                                   Manuella rader
                                 </Badge>
                               )}
@@ -641,7 +641,7 @@ export default function InvoicingPage() {
                                       <TableCell className="font-medium">
                                         {line.description}
                                         {line.workOrderId.startsWith("manual:") && (
-                                          <Badge variant="outline" className="ml-2 text-xs border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400">Manuell</Badge>
+                                          <Badge variant="outline" className="ml-2 text-xs border-chart-1/30 dark:border-chart-1/70 text-chart-1">Manuell</Badge>
                                         )}
                                       </TableCell>
                                       <TableCell className="text-muted-foreground text-sm hidden md:table-cell">
@@ -777,7 +777,7 @@ export default function InvoicingPage() {
                             <TableCell data-testid={`text-manual-desc-${ml.id}`}>
                               {ml.description}
                               {ml.status === "queued" && (
-                                <Badge variant="outline" className="ml-2 text-xs border-yellow-300 dark:border-yellow-700 text-yellow-600 dark:text-yellow-400">Köad för export</Badge>
+                                <Badge variant="outline" className="ml-2 text-xs border-chart-3/30 dark:border-chart-3/70 text-chart-3">Köad för export</Badge>
                               )}
                               {ml.notes && <span className="block text-xs text-muted-foreground">{ml.notes}</span>}
                             </TableCell>
@@ -831,8 +831,8 @@ export default function InvoicingPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <Card data-testid="card-export-stat-pending">
                 <CardContent className="p-4 flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/30">
-                    <Clock className="h-5 w-5 text-yellow-600" />
+                  <div className="p-2 rounded-lg bg-chart-3/15 dark:bg-chart-3/15">
+                    <Clock className="h-5 w-5 text-chart-3" />
                   </div>
                   <div>
                     <div className="text-2xl font-bold">{exportStats.pending}</div>
@@ -842,8 +842,8 @@ export default function InvoicingPage() {
               </Card>
               <Card data-testid="card-export-stat-exported">
                 <CardContent className="p-4 flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  <div className="p-2 rounded-lg bg-chart-2/15 dark:bg-chart-2/15">
+                    <CheckCircle2 className="h-5 w-5 text-chart-2" />
                   </div>
                   <div>
                     <div className="text-2xl font-bold">{exportStats.exported}</div>
@@ -853,8 +853,8 @@ export default function InvoicingPage() {
               </Card>
               <Card data-testid="card-export-stat-credited">
                 <CardContent className="p-4 flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                    <CreditCard className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  <div className="p-2 rounded-lg bg-chart-5/15 dark:bg-chart-5/15">
+                    <CreditCard className="h-5 w-5 text-chart-5" />
                   </div>
                   <div>
                     <div className="text-2xl font-bold">{exportStats.credited}</div>
@@ -864,8 +864,8 @@ export default function InvoicingPage() {
               </Card>
               <Card data-testid="card-export-stat-failed">
                 <CardContent className="p-4 flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
-                    <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                  <div className="p-2 rounded-lg bg-destructive/15 dark:bg-destructive/15">
+                    <XCircle className="h-5 w-5 text-destructive" />
                   </div>
                   <div>
                     <div className="text-2xl font-bold">{exportStats.failed}</div>
@@ -915,13 +915,13 @@ export default function InvoicingPage() {
                     </TableHeader>
                     <TableBody>
                       {filteredExports.map(exp => (
-                        <TableRow key={exp.id} data-testid={`row-export-${exp.id}`} className={exp.isCreditInvoice ? "bg-purple-50/50 dark:bg-purple-900/10" : ""}>
+                        <TableRow key={exp.id} data-testid={`row-export-${exp.id}`} className={exp.isCreditInvoice ? "bg-chart-5/10 dark:bg-chart-5/15" : ""}>
                           <TableCell className="font-mono text-sm" data-testid={`text-export-order-${exp.id}`}>
                             {exp.sourceType === "manual" ? "Manuell" : exp.sourceType === "credit" ? "Kredit" : exp.workOrderId ? exp.workOrderId.slice(0, 8) + "..." : "-"}
                           </TableCell>
                           <TableCell>
                             {exp.isCreditInvoice ? (
-                              <Badge variant="outline" className="border-purple-300 dark:border-purple-700 text-purple-600 dark:text-purple-400 gap-1">
+                              <Badge variant="outline" className="border-chart-5/30 dark:border-chart-5/70 text-chart-5 gap-1">
                                 <Undo2 className="h-3 w-3" /> Kredit
                               </Badge>
                             ) : (
@@ -936,7 +936,7 @@ export default function InvoicingPage() {
                               <span className="font-medium">{exp.fortnoxInvoiceNumber}</span>
                             ) : "-"}
                           </TableCell>
-                          <TableCell className={`text-right font-medium ${(exp.totalAmount || 0) < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+                          <TableCell className={`text-right font-medium ${(exp.totalAmount || 0) < 0 ? "text-destructive" : ""}`}>
                             {exp.totalAmount != null ? formatCurrency(exp.totalAmount) : "-"}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">{exp.costCenter || "-"}</TableCell>
@@ -965,19 +965,19 @@ export default function InvoicingPage() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => setCreditDialogExport(exp)}
-                                  className="text-purple-600 dark:text-purple-400 border-purple-300 dark:border-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950/30"
+                                  className="text-chart-5 border-chart-5/30 dark:border-chart-5/70 hover:bg-chart-5/10 dark:hover:bg-chart-5/15"
                                   data-testid={`button-credit-${exp.id}`}
                                 >
                                   <Undo2 className="h-3 w-3 mr-1" /> Kreditera
                                 </Button>
                               )}
                               {exp.creditedByExportId && exp.status === "credited" && (
-                                <Badge variant="outline" className="text-xs border-purple-300 dark:border-purple-700 text-purple-600 dark:text-purple-400">
+                                <Badge variant="outline" className="text-xs border-chart-5/30 dark:border-chart-5/70 text-chart-5">
                                   Krediterad
                                 </Badge>
                               )}
                               {exp.creditedByExportId && exp.status !== "credited" && (
-                                <Badge variant="outline" className="text-xs border-yellow-300 dark:border-yellow-700 text-yellow-600 dark:text-yellow-400">
+                                <Badge variant="outline" className="text-xs border-chart-3/30 dark:border-chart-3/70 text-chart-3">
                                   Kredit väntar
                                 </Badge>
                               )}
@@ -1018,8 +1018,8 @@ export default function InvoicingPage() {
             ))}
           </div>
           {!fortnoxStatus?.connected && (
-            <div className="flex items-center gap-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-md text-sm">
-              <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400 shrink-0" />
+            <div className="flex items-center gap-2 p-3 bg-chart-3/10 dark:bg-chart-3/15 rounded-md text-sm">
+              <AlertTriangle className="h-4 w-4 text-chart-4 shrink-0" />
               <span>Fortnox är inte ansluten. Fakturorna sparas som väntande och kan skickas senare.</span>
             </div>
           )}
@@ -1089,12 +1089,12 @@ export default function InvoicingPage() {
                 </TableHeader>
                 <TableBody>
                   {previewDialogInvoice.lines.map((line, idx) => (
-                    <TableRow key={idx} className={line.workOrderId.startsWith("manual:") ? "bg-blue-50/50 dark:bg-blue-900/10" : ""}>
+                    <TableRow key={idx} className={line.workOrderId.startsWith("manual:") ? "bg-chart-1/10 dark:bg-chart-1/15" : ""}>
                       <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                       <TableCell>
                         <span className="font-medium">{line.description}</span>
                         {line.workOrderId.startsWith("manual:") && (
-                          <Badge variant="outline" className="ml-2 text-xs border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400">Manuell</Badge>
+                          <Badge variant="outline" className="ml-2 text-xs border-chart-1/30 dark:border-chart-1/70 text-chart-1">Manuell</Badge>
                         )}
                         {line.objectAddress && <span className="block text-xs text-muted-foreground">{line.objectAddress}</span>}
                       </TableCell>
@@ -1288,7 +1288,7 @@ export default function InvoicingPage() {
         <DialogContent data-testid="dialog-credit-confirm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Undo2 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              <Undo2 className="h-5 w-5 text-chart-5" />
               Skapa kreditfaktura
             </DialogTitle>
             <DialogDescription>
@@ -1321,13 +1321,13 @@ export default function InvoicingPage() {
                   <span className="font-medium">{creditDialogExport.totalAmount != null ? formatCurrency(creditDialogExport.totalAmount) : "-"}</span>
                 </div>
                 <Separator />
-                <div className="flex justify-between text-sm font-bold text-red-600 dark:text-red-400">
+                <div className="flex justify-between text-sm font-bold text-destructive">
                   <span>Kreditbelopp:</span>
                   <span>{creditDialogExport.totalAmount != null ? formatCurrency(-creditDialogExport.totalAmount) : "-"}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-md text-sm">
-                <AlertTriangle className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
+              <div className="flex items-center gap-2 p-3 bg-chart-5/10 dark:bg-chart-5/15 rounded-md text-sm">
+                <AlertTriangle className="h-4 w-4 text-chart-5 shrink-0" />
                 <span>Originalfakturan markeras som krediterad. Kreditfakturan skapas med status "Väntar" och kan skickas till Fortnox.</span>
               </div>
             </div>
@@ -1337,7 +1337,7 @@ export default function InvoicingPage() {
             <Button
               onClick={() => creditDialogExport && creditInvoiceMutation.mutate(creditDialogExport.id)}
               disabled={creditInvoiceMutation.isPending}
-              className="bg-purple-600 hover:bg-purple-700"
+              className="bg-chart-5/15 hover:bg-chart-5/15"
               data-testid="button-confirm-credit"
             >
               {creditInvoiceMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Undo2 className="h-4 w-4 mr-1" />}

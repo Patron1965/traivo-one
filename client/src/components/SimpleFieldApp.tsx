@@ -117,10 +117,10 @@ function MyReportsPanel({ mobileApiCall }: { mobileApiCall: (method: string, url
   const items = activeTab === "changes" ? changeRequests : deviations;
 
   return (
-    <Card className="border-orange-200 dark:border-orange-800" data-testid="panel-my-reports">
+    <Card className="border-chart-4/20 dark:border-chart-4/80" data-testid="panel-my-reports">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex items-center gap-2">
-          <Flag className="h-4 w-4 text-orange-500" />
+          <Flag className="h-4 w-4 text-chart-4" />
           Mina rapporter
         </CardTitle>
       </CardHeader>
@@ -1127,7 +1127,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       case "urgent":
         return <Badge variant="destructive" className="text-[10px]"><Flag className="h-3 w-3 mr-0.5" />Brådskande</Badge>;
       case "high":
-        return <Badge className="bg-orange-500 text-[10px]"><Flag className="h-3 w-3 mr-0.5" />Hög</Badge>;
+        return <Badge className="bg-chart-4/15 text-[10px]"><Flag className="h-3 w-3 mr-0.5" />Hög</Badge>;
       default:
         return null;
     }
@@ -1210,7 +1210,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           </div>
           <div className="flex items-center gap-2">
             {isOnBreak && (
-              <Badge className="bg-amber-500 animate-pulse font-mono text-sm gap-1">
+              <Badge className="bg-chart-4/15 animate-pulse font-mono text-sm gap-1">
                 <Coffee className="h-3 w-3" />
                 Rast
               </Badge>
@@ -1229,7 +1229,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               title={focusMode ? "Visa detaljvy" : "Aktivera fokusläge"}
               data-testid="button-toggle-focus-mode"
             >
-              {focusMode ? <Eye className="h-4 w-4 text-blue-500" /> : <EyeOff className="h-4 w-4 text-muted-foreground" />}
+              {focusMode ? <Eye className="h-4 w-4 text-chart-1" /> : <EyeOff className="h-4 w-4 text-muted-foreground" />}
             </Button>
           </div>
         </div>
@@ -1271,13 +1271,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           )}
 
           {selectedJob.plannedNotes && (
-            <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30" data-testid="card-planned-notes">
+            <Card className="border-chart-1/20 dark:border-chart-1/80 bg-chart-1/10 dark:bg-chart-1/15" data-testid="card-planned-notes">
               <CardContent className="py-3">
                 <div className="flex items-center gap-1.5 mb-2">
-                  <MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  <span className="text-xs font-medium text-blue-800 dark:text-blue-400">Meddelande från planerare</span>
+                  <MessageSquare className="h-4 w-4 text-chart-1" />
+                  <span className="text-xs font-medium text-chart-1">Meddelande från planerare</span>
                 </div>
-                <p className="text-sm text-blue-900 dark:text-blue-200">{selectedJob.plannedNotes}</p>
+                <p className="text-sm text-chart-1">{selectedJob.plannedNotes}</p>
               </CardContent>
             </Card>
           )}
@@ -1285,11 +1285,11 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           {focusMode && <ExpandableDetail>
             {/* Access info shown early in focus mode if present */}
             {(selectedJob.objectAccessCode || selectedJob.objectKeyNumber || accessInfo.gateCode) && (
-              <Card className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
+              <Card className="border-chart-4/20 dark:border-chart-4/80 bg-chart-4/10 dark:bg-chart-4/15">
                 <CardContent className="py-3">
                   <div className="flex items-center gap-1.5 mb-2">
-                    <DoorOpen className="h-4 w-4 text-amber-600" />
-                    <span className="text-xs font-medium text-amber-800 dark:text-amber-400">Åtkomstinformation</span>
+                    <DoorOpen className="h-4 w-4 text-chart-4" />
+                    <span className="text-xs font-medium text-chart-4">Åtkomstinformation</span>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     {(selectedJob.objectAccessCode || accessInfo.gateCode) && (
@@ -1316,11 +1316,11 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             )}
 
             {selectedCustomer && (
-              <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
+              <Card className="border-chart-1/20 dark:border-chart-1/80 bg-chart-1/10 dark:bg-chart-1/15">
                 <CardContent className="py-3">
                   <div className="flex items-center gap-1.5 mb-2">
-                    <User className="h-4 w-4 text-blue-600" />
-                    <span className="text-xs font-medium text-blue-800 dark:text-blue-400">Kontaktperson</span>
+                    <User className="h-4 w-4 text-chart-1" />
+                    <span className="text-xs font-medium text-chart-1">Kontaktperson</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
@@ -1331,7 +1331,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                     </div>
                     {selectedCustomer.phone && (
                       <Button size="icon" variant="outline" onClick={() => window.open(`tel:${selectedCustomer.phone}`)} data-testid="focus-button-call-contact">
-                        <Phone className="h-4 w-4 text-green-500" />
+                        <Phone className="h-4 w-4 text-chart-2" />
                       </Button>
                     )}
                   </div>
@@ -1360,11 +1360,11 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             /* Detail view metadata - only shown when focus mode is off */
             <div className="space-y-2" data-testid="panel-metadata-context">
               {metadataContext.articles.filter(a => a.isInfoCarrier).map(article => (
-                <Card key={article.articleId} className="border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30" data-testid={`card-info-carrier-${article.articleId}`}>
+                <Card key={article.articleId} className="border-chart-5/20 dark:border-chart-5/80 bg-chart-5/10 dark:bg-chart-5/15" data-testid={`card-info-carrier-${article.articleId}`}>
                   <CardContent className="py-3">
                     <div className="flex items-center gap-1.5 mb-1">
-                      <CircleDot className="h-4 w-4 text-violet-600" />
-                      <span className="text-xs font-medium text-violet-800 dark:text-violet-400">{article.articleName}</span>
+                      <CircleDot className="h-4 w-4 text-chart-5" />
+                      <span className="text-xs font-medium text-chart-5">{article.articleName}</span>
                     </div>
                     {article.fetchedValue && (
                       <p className="text-sm font-medium">{article.fetchMetadataLabel}: {article.fetchedValue}</p>
@@ -1374,11 +1374,11 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               ))}
 
               {metadataContext.articles.filter(a => !a.isInfoCarrier && (a.fetchMetadataLabel || a.canUpdateMetadata)).map(article => (
-                <Card key={article.articleId} className="border-teal-200 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-950/20" data-testid={`card-metadata-${article.articleId}`}>
+                <Card key={article.articleId} className="border-chart-2/20 dark:border-chart-2/80 bg-chart-2/10 dark:bg-chart-2/15" data-testid={`card-metadata-${article.articleId}`}>
                   <CardContent className="py-3 space-y-2">
                     <div className="flex items-center gap-1.5">
-                      <Database className="h-4 w-4 text-teal-600" />
-                      <span className="text-xs font-medium text-teal-800 dark:text-teal-400">{article.articleName}</span>
+                      <Database className="h-4 w-4 text-chart-2" />
+                      <span className="text-xs font-medium text-chart-2">{article.articleName}</span>
                     </div>
 
                     {article.fetchedValue !== null && (
@@ -1416,20 +1416,20 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="OK">
-                                  <span className="flex items-center gap-2 text-green-600 font-medium">
+                                  <span className="flex items-center gap-2 text-chart-2 font-medium">
                                     <CheckCircle className="h-4 w-4" /> OK
                                   </span>
                                 </SelectItem>
                                 <SelectItem value="EJ_OK">
-                                  <span className="flex items-center gap-2 text-red-600 font-medium">
-                                    <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" /> EJ OK
+                                  <span className="flex items-center gap-2 text-destructive font-medium">
+                                    <AlertTriangle className="h-4 w-4 text-chart-4" /> EJ OK
                                   </span>
                                 </SelectItem>
                               </SelectContent>
                             </Select>
 
                             {metadataUpdates[article.articleId]?.status === "EJ_OK" && (
-                              <div className="space-y-2 pl-2 border-l-2 border-red-300">
+                              <div className="space-y-2 pl-2 border-l-2 border-destructive/30">
                                 <Textarea
                                   placeholder="Beskriv avvikelsen..."
                                   value={metadataUpdates[article.articleId]?.comment || ""}
@@ -1564,11 +1564,11 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           )}
 
           {!focusMode && (selectedJob.objectAccessCode || selectedJob.objectKeyNumber || accessInfo.gateCode) && (
-            <Card className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
+            <Card className="border-chart-4/20 dark:border-chart-4/80 bg-chart-4/10 dark:bg-chart-4/15">
               <CardContent className="py-3">
                 <div className="flex items-center gap-1.5 mb-2">
-                  <DoorOpen className="h-4 w-4 text-amber-600" />
-                  <span className="text-xs font-medium text-amber-800 dark:text-amber-400">Åtkomstinformation</span>
+                  <DoorOpen className="h-4 w-4 text-chart-4" />
+                  <span className="text-xs font-medium text-chart-4">Åtkomstinformation</span>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   {(selectedJob.objectAccessCode || accessInfo.gateCode) && (
@@ -1595,11 +1595,11 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           )}
 
           {!focusMode && selectedCustomer && (
-            <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
+            <Card className="border-chart-1/20 dark:border-chart-1/80 bg-chart-1/10 dark:bg-chart-1/15">
               <CardContent className="py-3">
                 <div className="flex items-center gap-1.5 mb-2">
-                  <User className="h-4 w-4 text-blue-600" />
-                  <span className="text-xs font-medium text-blue-800 dark:text-blue-400">Kontaktperson</span>
+                  <User className="h-4 w-4 text-chart-1" />
+                  <span className="text-xs font-medium text-chart-1">Kontaktperson</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
@@ -1615,7 +1615,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                       onClick={() => window.open(`tel:${selectedCustomer.phone}`)}
                       data-testid="button-call-contact"
                     >
-                      <Phone className="h-4 w-4 text-green-500" />
+                      <Phone className="h-4 w-4 text-chart-2" />
                     </Button>
                   )}
                 </div>
@@ -1650,7 +1650,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 }}
                 data-testid="button-navigate"
               >
-                <Navigation className="h-5 w-5 text-blue-500" />
+                <Navigation className="h-5 w-5 text-chart-1" />
                 <span className="text-xs">Navigera</span>
               </Button>
             )}
@@ -1668,7 +1668,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               {notifyCustomerMutation.isPending ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
-                <Mail className="h-5 w-5 text-teal-500" />
+                <Mail className="h-5 w-5 text-chart-2" />
               )}
               <span className="text-xs">Meddela</span>
             </Button>
@@ -1682,7 +1682,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               }}
               data-testid="button-ask-ai"
             >
-              <HelpCircle className="h-5 w-5 text-purple-500" />
+              <HelpCircle className="h-5 w-5 text-chart-5" />
               <span className="text-xs">AI-hjälp</span>
             </Button>
           </div>}
@@ -1698,7 +1698,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               }}
               data-testid="button-add-note"
             >
-              <MessageSquare className="h-5 w-5 text-indigo-500" />
+              <MessageSquare className="h-5 w-5 text-chart-1" />
               <span className="text-xs">Anteckning</span>
             </Button>
             <Button
@@ -1711,13 +1711,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               }}
               data-testid="button-report-problem"
             >
-              <AlertTriangle className="h-5 w-5 text-orange-500" />
+              <AlertTriangle className="h-5 w-5 text-chart-4" />
               <span className="text-xs">Problem</span>
             </Button>
             {jobStarted && (
               <Button
                 variant={isOnBreak ? "default" : "outline"}
-                className={`h-auto py-3 flex-col gap-1 ${isOnBreak ? "bg-amber-500 hover:bg-amber-600" : ""}`}
+                className={`h-auto py-3 flex-col gap-1 ${isOnBreak ? "bg-chart-4/15 hover:bg-chart-4/15" : ""}`}
                 onClick={handleToggleBreak}
                 data-testid="button-toggle-break"
               >
@@ -1728,7 +1728,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                   </>
                 ) : (
                   <>
-                    <Coffee className="h-5 w-5 text-amber-500" />
+                    <Coffee className="h-5 w-5 text-chart-4" />
                     <span className="text-xs">Rast</span>
                   </>
                 )}
@@ -1737,10 +1737,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           </div>}
 
           {!focusMode && jobStarted && selectedJobId && (
-            <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
+            <Card className="border-chart-2/20 dark:border-chart-2/80 bg-chart-2/10 dark:bg-chart-2/15">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <Wrench className="h-4 w-4 text-emerald-600" />
+                  <Wrench className="h-4 w-4 text-chart-2" />
                   Snabbåtgärder
                 </CardTitle>
               </CardHeader>
@@ -1756,7 +1756,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                     {quickActionMutation.isPending ? (
                       <Loader2 className="h-7 w-7 animate-spin" />
                     ) : (
-                      <Wrench className="h-7 w-7 text-blue-500" />
+                      <Wrench className="h-7 w-7 text-chart-1" />
                     )}
                     <span className="text-xs leading-tight text-center">Behöver reservdel</span>
                   </Button>
@@ -1770,7 +1770,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                     {quickActionMutation.isPending ? (
                       <Loader2 className="h-7 w-7 animate-spin" />
                     ) : (
-                      <UserX className="h-7 w-7 text-orange-500" />
+                      <UserX className="h-7 w-7 text-chart-4" />
                     )}
                     <span className="text-xs leading-tight text-center">Kund ej hemma</span>
                   </Button>
@@ -1784,7 +1784,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                     {quickActionMutation.isPending ? (
                       <Loader2 className="h-7 w-7 animate-spin" />
                     ) : (
-                      <AlarmClock className="h-7 w-7 text-amber-500" />
+                      <AlarmClock className="h-7 w-7 text-chart-4" />
                     )}
                     <span className="text-xs leading-tight text-center">Tar längre tid</span>
                   </Button>
@@ -1794,10 +1794,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           )}
 
           {!focusMode && showNotesPanel && (
-            <Card className="border-indigo-200 dark:border-indigo-800">
+            <Card className="border-chart-1/20 dark:border-chart-1/80">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4 text-indigo-500" />
+                  <MessageSquare className="h-4 w-4 text-chart-1" />
                   Lägg till anteckning
                 </CardTitle>
               </CardHeader>
@@ -1840,10 +1840,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
 
 
           {showProblemPanel && (
-            <Card className="border-orange-200 dark:border-orange-800">
+            <Card className="border-chart-4/20 dark:border-chart-4/80">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-orange-500" />
+                  <AlertTriangle className="h-4 w-4 text-chart-4" />
                   Rapportera problem
                 </CardTitle>
               </CardHeader>
@@ -1862,13 +1862,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                         onClick={() => handleSelectImpossibleReason(reason)}
                         data-testid={`button-impossible-${reason}`}
                       >
-                        {reason === "locked_gate" && <Ban className="h-5 w-5 text-red-500" />}
-                        {reason === "no_access" && <Ban className="h-5 w-5 text-red-500" />}
-                        {reason === "wrong_address" && <MapPinOff className="h-5 w-5 text-yellow-600" />}
-                        {reason === "obstacle" && <Trash2 className="h-5 w-5 text-orange-500" />}
-                        {reason === "customer_absent" && <Clock className="h-5 w-5 text-blue-500" />}
+                        {reason === "locked_gate" && <Ban className="h-5 w-5 text-destructive" />}
+                        {reason === "no_access" && <Ban className="h-5 w-5 text-destructive" />}
+                        {reason === "wrong_address" && <MapPinOff className="h-5 w-5 text-chart-3" />}
+                        {reason === "obstacle" && <Trash2 className="h-5 w-5 text-chart-4" />}
+                        {reason === "customer_absent" && <Clock className="h-5 w-5 text-chart-1" />}
                         {reason === "weather" && <AlertTriangle className="h-5 w-5 text-gray-500" />}
-                        {reason === "equipment_issue" && <AlertTriangle className="h-5 w-5 text-purple-500" />}
+                        {reason === "equipment_issue" && <AlertTriangle className="h-5 w-5 text-chart-5" />}
                         {reason === "other" && <HelpCircle className="h-5 w-5 text-gray-500" />}
                         <span className="text-xs">{IMPOSSIBLE_REASON_LABELS[reason]}</span>
                       </Button>
@@ -2135,7 +2135,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                   {markImpossibleMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin mr-1" />
                   ) : (
-                    <AlertTriangle className="h-4 w-4 mr-1 text-orange-500 dark:text-orange-400" />
+                    <AlertTriangle className="h-4 w-4 mr-1 text-chart-4" />
                   )}
                   Markera som omöjlig
                 </Button>
@@ -2147,7 +2147,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-green-500" />
+                  <CheckCircle className="h-5 w-5 text-chart-2" />
                   Jobb slutfört!
                 </DialogTitle>
               </DialogHeader>
@@ -2203,11 +2203,11 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             }}
           />
 
-          {!focusMode && <Card className="border-teal-200 dark:border-teal-800">
+          {!focusMode && <Card className="border-chart-2/20 dark:border-chart-2/80">
             <CardHeader className="pb-2 cursor-pointer" onClick={() => setShowInspectionPanel(!showInspectionPanel)}>
               <CardTitle className="text-base flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <ClipboardCheck className="h-4 w-4 text-teal-600" />
+                  <ClipboardCheck className="h-4 w-4 text-chart-2" />
                   Besiktning
                 </div>
                 <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${showInspectionPanel ? 'rotate-90' : ''}`} />
@@ -2234,9 +2234,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                             variant={inspectionItems[type]?.status === status ? 'default' : 'outline'}
                             className={`h-7 px-2 text-xs ${
                               inspectionItems[type]?.status === status
-                                ? status === 'ok' ? 'bg-green-600 hover:bg-green-700' 
-                                  : status === 'warning' ? 'bg-amber-500 hover:bg-amber-600'
-                                  : 'bg-red-600 hover:bg-red-700'
+                                ? status === 'ok' ? 'bg-chart-2/15 hover:bg-chart-2/15' 
+                                  : status === 'warning' ? 'bg-chart-4/15 hover:bg-chart-4/15'
+                                  : 'bg-destructive/15 hover:bg-destructive/15'
                                 : ''
                             }`}
                             onClick={() => setInspectionItems(prev => ({
@@ -2317,7 +2317,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           )}
 
           {!focusMode && accessInfo.specialInstructions && (
-            <Card className="border-yellow-200 dark:border-yellow-800">
+            <Card className="border-chart-3/20 dark:border-chart-3/80">
               <CardContent className="py-4">
                 <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Viktig info</p>
                 <p className="text-sm">{accessInfo.specialInstructions}</p>
@@ -2389,7 +2389,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               </Button>
               <Button
                 size="mobile"
-                className="gap-2 bg-green-600"
+                className="gap-2 bg-chart-2/15"
                 onClick={() => setShowSignaturePanel(true)}
                 disabled={completeJobMutation.isPending}
                 data-testid="button-complete-with-signature"
@@ -2447,7 +2447,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               onSyncNow={syncNow}
             />
             {resourceId && (
-              <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${gpsActive ? "text-green-600 bg-green-50 dark:bg-green-950/30 dark:text-green-400" : "text-muted-foreground bg-muted"}`} data-testid="indicator-gps-status">
+              <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${gpsActive ? "text-chart-2 bg-chart-2/10 dark:bg-chart-2/15" : "text-muted-foreground bg-muted"}`} data-testid="indicator-gps-status">
                 <Navigation className="h-3 w-3" />
                 <span>{gpsActive ? "GPS" : "Ingen GPS"}</span>
               </div>
@@ -2460,9 +2460,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 onClick={handleOpenNotificationsPanel}
                 data-testid="button-toggle-notifications"
               >
-                <Bell className={`h-4 w-4 ${isConnected ? "text-green-500" : "text-muted-foreground"}`} />
+                <Bell className={`h-4 w-4 ${isConnected ? "text-chart-2" : "text-muted-foreground"}`} />
                 {unreadCount > 0 && (
-                  <span className="bg-red-500 text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center">
+                  <span className="bg-destructive text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center">
                     {unreadCount}
                   </span>
                 )}
@@ -2484,7 +2484,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               onClick={() => setShowMyReportsPanel(!showMyReportsPanel)}
               data-testid="button-toggle-my-reports"
             >
-              <Flag className={`h-4 w-4 ${showMyReportsPanel ? "text-orange-500" : "text-muted-foreground"}`} />
+              <Flag className={`h-4 w-4 ${showMyReportsPanel ? "text-chart-4" : "text-muted-foreground"}`} />
             </Button>
             {resourceId && (
               <Button
@@ -2503,7 +2503,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               onClick={() => setShowAiPanel(true)}
               data-testid="button-open-ai-assistant"
             >
-              <HelpCircle className="h-5 w-5 text-purple-500" />
+              <HelpCircle className="h-5 w-5 text-chart-5" />
             </Button>
           </div>
         </div>
@@ -2619,7 +2619,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           const dist = travelDistances[nextPendingJob.id];
           if (lat == null || lng == null) return null;
           return (
-            <Card className="bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-700 dark:to-blue-800 text-white border-0">
+            <Card className="bg-gradient-to-r from-chart-1 to-chart-1 dark:from-chart-1 dark:to-chart-1 text-white border-0">
               <CardContent className="py-3 px-4">
                 <div className="flex items-center gap-3">
                   <div className="flex-1 min-w-0">
@@ -2642,7 +2642,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                   </div>
                   <Button
                     size="sm"
-                    className="bg-white text-blue-600 hover:bg-blue-50 shrink-0 gap-1.5 font-semibold"
+                    className="bg-white text-chart-1 hover:bg-chart-1/10 shrink-0 gap-1.5 font-semibold"
                     onClick={(e) => {
                       e.stopPropagation();
                       openNavigation(Number(lat), Number(lng));
@@ -2750,7 +2750,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         )}
         {todayJobs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
-            <CheckCircle className="h-16 w-16 text-green-500" />
+            <CheckCircle className="h-16 w-16 text-chart-2" />
             <div>
               <p className="text-xl font-semibold">Alla jobb klara!</p>
               <p className="text-muted-foreground">Bra jobbat idag</p>
@@ -2760,7 +2760,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           todayJobs.map((job, index) => (
             <Card 
               key={job.id}
-              className={`hover-elevate active-elevate-2 cursor-pointer ${dependencyData[job.id]?.isLocked ? 'opacity-60 border-red-200 dark:border-red-800' : ''}`}
+              className={`hover-elevate active-elevate-2 cursor-pointer ${dependencyData[job.id]?.isLocked ? 'opacity-60 border-destructive/20 dark:border-destructive/80' : ''}`}
               onClick={() => {
                 if (dependencyData[job.id]?.isLocked) {
                   toast({ title: "Beroende ej klart", description: "Det finns olösta beroenden för detta jobb.", variant: "destructive" });
@@ -2780,13 +2780,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                         <p className="font-medium">{job.title}</p>
                         {getPriorityBadge(job.priority)}
                         {dependencyData[job.id]?.isLocked && (
-                          <Badge variant="outline" className="text-[10px] border-red-300 text-red-600 dark:text-red-400 gap-0.5">
+                          <Badge variant="outline" className="text-[10px] border-destructive/30 text-destructive gap-0.5">
                             <Lock className="h-3 w-3" />
                             Låst
                           </Badge>
                         )}
                         {dependencyData[job.id]?.isDependentTask && !dependencyData[job.id]?.isLocked && (
-                          <Badge variant="outline" className="text-[10px] border-green-300 text-green-600 dark:text-green-400 gap-0.5">
+                          <Badge variant="outline" className="text-[10px] border-chart-2/30 text-chart-2 gap-0.5">
                             <Unlock className="h-3 w-3" />
                             Upplåst
                           </Badge>
@@ -2804,9 +2804,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                       <span className="truncate">{job.objectAddress || job.objectName}</span>
                     </div>
                     {job.plannedNotes && (
-                      <div className="flex items-start gap-1.5 mt-1.5 p-1.5 rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800" data-testid={`planned-notes-preview-${job.id}`}>
-                        <MessageSquare className="h-3 w-3 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                        <span className="text-xs text-blue-700 dark:text-blue-300 line-clamp-2">{job.plannedNotes}</span>
+                      <div className="flex items-start gap-1.5 mt-1.5 p-1.5 rounded bg-chart-1/10 dark:bg-chart-1/15 border border-chart-1/20 dark:border-chart-1/80" data-testid={`planned-notes-preview-${job.id}`}>
+                        <MessageSquare className="h-3 w-3 text-chart-1 shrink-0 mt-0.5" />
+                        <span className="text-xs text-chart-1 line-clamp-2">{job.plannedNotes}</span>
                       </div>
                     )}
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -2843,7 +2843,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           onClick={() => setShowAiPanel(!showAiPanel)}
           data-testid="button-ask-ai-general"
         >
-          <HelpCircle className="h-5 w-5 text-purple-500" />
+          <HelpCircle className="h-5 w-5 text-chart-5" />
           {showAiPanel ? "Visa jobb" : "Fråga AI"}
         </Button>
         <Button
@@ -2852,12 +2852,12 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           onClick={() => setView("todo")}
           data-testid="button-open-todo-list"
         >
-          <ListTodo className="h-5 w-5 text-orange-500" />
+          <ListTodo className="h-5 w-5 text-chart-4" />
           Att göra
           {(() => {
             const count = getUncompletedTodoCount();
             return count > 0 ? (
-              <span className="absolute -top-1.5 -right-1.5 bg-orange-500 text-white text-[10px] font-bold rounded-full h-5 min-w-5 flex items-center justify-center px-1" data-testid="badge-todo-count">
+              <span className="absolute -top-1.5 -right-1.5 bg-chart-4 text-white text-[10px] font-bold rounded-full h-5 min-w-5 flex items-center justify-center px-1" data-testid="badge-todo-count">
                 {count}
               </span>
             ) : null;
@@ -2869,7 +2869,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           onClick={() => setView("timeline")}
           data-testid="button-open-timeline"
         >
-          <Clock className="h-5 w-5 text-teal-500" />
+          <Clock className="h-5 w-5 text-chart-2" />
           Tid
         </Button>
         <Button
@@ -2878,10 +2878,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           onClick={() => setView("outbox")}
           data-testid="button-open-outbox"
         >
-          <Database className="h-5 w-5 text-blue-500" />
+          <Database className="h-5 w-5 text-chart-1" />
           Synk
           {pendingChanges > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 bg-blue-500 text-white text-[10px] font-bold rounded-full h-5 min-w-5 flex items-center justify-center px-1" data-testid="badge-outbox-count">
+            <span className="absolute -top-1.5 -right-1.5 bg-chart-1 text-white text-[10px] font-bold rounded-full h-5 min-w-5 flex items-center justify-center px-1" data-testid="badge-outbox-count">
               {pendingChanges}
             </span>
           )}
@@ -2892,7 +2892,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           onClick={() => setView("report")}
           data-testid="button-open-day-report"
         >
-          <FileText className="h-5 w-5 text-teal-500" />
+          <FileText className="h-5 w-5 text-chart-2" />
           Rapport
         </Button>
       </div>

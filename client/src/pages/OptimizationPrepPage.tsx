@@ -199,10 +199,10 @@ export default function OptimizationPrepPage() {
   }, [weekOrders, objectMap]);
 
   const accessTypeLabels: Record<string, { label: string; icon: typeof Key; color: string }> = {
-    open: { label: "Öppen", icon: DoorOpen, color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
-    code: { label: "Kod", icon: Keyboard, color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400" },
-    key: { label: "Nyckel", icon: Key, color: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400" },
-    meeting: { label: "Möte", icon: Users, color: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400" },
+    open: { label: "Öppen", icon: DoorOpen, color: "bg-chart-2/15 text-chart-2 border border-chart-2/30" },
+    code: { label: "Kod", icon: Keyboard, color: "bg-chart-1/15 text-chart-1 border border-chart-1/30" },
+    key: { label: "Nyckel", icon: Key, color: "bg-chart-4/15 text-chart-4 border border-chart-4/30" },
+    meeting: { label: "Möte", icon: Users, color: "bg-chart-5/15 text-chart-5 border border-chart-5/30" },
   };
 
   const handlePreviousWeek = () => setSelectedWeek(prev => subWeeks(prev, 1));
@@ -226,9 +226,9 @@ export default function OptimizationPrepPage() {
 
   const getStatusIcon = (status: "ok" | "warning" | "error") => {
     switch (status) {
-      case "ok": return <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />;
-      case "warning": return <AlertTriangle className="h-4 w-4 text-orange-500 dark:text-orange-400" />;
-      case "error": return <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />;
+      case "ok": return <CheckCircle2 className="h-4 w-4 text-chart-2" />;
+      case "warning": return <AlertTriangle className="h-4 w-4 text-chart-4" />;
+      case "error": return <XCircle className="h-4 w-4 text-destructive" />;
     }
   };
 
@@ -555,7 +555,7 @@ export default function OptimizationPrepPage() {
 
             {optimizationStatus === "completed" && (
               <div className="space-y-3 w-full">
-                <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                <div className="flex items-center gap-2 text-chart-2">
                   <CheckCircle2 className="h-5 w-5" />
                   <span className="font-medium">Optimering slutförd!</span>
                 </div>
@@ -578,7 +578,7 @@ export default function OptimizationPrepPage() {
 
             {optimizationStatus === "error" && (
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                <div className="flex items-center gap-2 text-destructive">
                   <XCircle className="h-5 w-5" />
                   <span className="font-medium">Optimering misslyckades</span>
                 </div>
