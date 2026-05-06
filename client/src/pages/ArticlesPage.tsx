@@ -237,7 +237,7 @@ export default function ArticlesPage() {
   });
 
   const { data: objects = [] } = useQuery<ServiceObject[]>({
-    queryKey: ["/api/objects"],
+    queryKey: ["/api/objects", "lookup"],
   });
 
   const { data: metadataTypes = [] } = useQuery<{ id: string; namn: string; datatyp: string }[]>({

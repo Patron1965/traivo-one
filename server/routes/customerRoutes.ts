@@ -288,6 +288,26 @@ app.delete("/api/customers/:id", asyncHandler(async (req, res) => {
   res.status(204).send();
 }));
 
+app.get("/api/objects/lookup", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const rows = await db
+    .select({
+      id: objects.id,
+      name: objects.name,
+      objectNumber: objects.objectNumber,
+      hierarchyLevel: objects.hierarchyLevel,
+      objectType: objects.objectType,
+      accessCode: objects.accessCode,
+      customerId: objects.customerId,
+      parentId: objects.parentId,
+    })
+    .from(objects)
+    .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
+  res.setHeader("Cache-Control", "private, max-age=60, stale-while-revalidate=180");
+  res.setHeader("Vary", "Cookie, Accept-Encoding");
+  res.json(rows);
+}));
+
 app.get("/api/objects", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const limit = parseInt(req.query.limit as string) || 100;

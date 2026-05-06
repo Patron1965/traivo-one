@@ -146,7 +146,7 @@ export default function AssignmentsPage() {
   });
 
   const { data: objects = [] } = useQuery<ServiceObject[]>({
-    queryKey: ["/api/objects"],
+    queryKey: ["/api/objects", "lookup"],
   });
 
   const updateStatusMutation = useMutation({

@@ -19,7 +19,7 @@ export function IoTTab() {
   const { data: devices = [], isLoading: devicesLoading } = useQuery<IotDevice[]>({ queryKey: ["/api/iot/devices"] });
   const { data: apiKeys = [], isLoading: keysLoading } = useQuery<IotApiKey[]>({ queryKey: ["/api/iot/api-keys"] });
   const { data: signals = [] } = useQuery<IotSignal[]>({ queryKey: ["/api/iot/signals"] });
-  const { data: allObjects = [] } = useQuery<ServiceObject[]>({ queryKey: ["/api/objects"] });
+  const { data: allObjects = [] } = useQuery<ServiceObject[]>({ queryKey: ["/api/objects", "lookup"] });
 
   const [newDeviceOpen, setNewDeviceOpen] = useState(false);
   const [newKeyOpen, setNewKeyOpen] = useState(false);

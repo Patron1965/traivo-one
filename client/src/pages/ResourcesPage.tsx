@@ -286,7 +286,7 @@ export default function ResourcesPage() {
   });
 
   const { data: objects = [] } = useQuery<{ id: string; name: string }[]>({
-    queryKey: ["/api/objects"],
+    queryKey: ["/api/objects", "lookup"],
   });
 
   const { data: articles = [] } = useQuery<Article[]>({
