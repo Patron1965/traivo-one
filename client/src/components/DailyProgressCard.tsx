@@ -1,7 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Trophy, Target } from "lucide-react";
+import { CheckCircle2, Trophy, Target, Sunrise } from "lucide-react";
 import { Celebration } from "@/components/Celebration";
 import { useState, useEffect } from "react";
 
@@ -16,6 +16,7 @@ export function DailyProgressCard({ completed, total, compact = false }: DailyPr
   const [previousPercentage, setPreviousPercentage] = useState(0);
   
   const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const notStarted = completed === 0 && total > 0;
 
   useEffect(() => {
     if (percentage === 100 && previousPercentage < 100 && total > 0) {
@@ -27,6 +28,20 @@ export function DailyProgressCard({ completed, total, compact = false }: DailyPr
   if (total === 0) return null;
 
   if (compact) {
+    if (notStarted) {
+      return (
+        <div
+          className="flex items-center gap-3 p-3 rounded-lg bg-muted/40"
+          data-testid="progress-compact-ready"
+        >
+          <Sunrise className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground flex-1">
+            {total} {total === 1 ? "order" : "ordrar"} planerade idag
+          </span>
+          <Badge variant="outline" data-testid="badge-progress-ready">Inte påbörjad</Badge>
+        </div>
+      );
+    }
     return (
       <>
         <Celebration
@@ -56,6 +71,30 @@ export function DailyProgressCard({ completed, total, compact = false }: DailyPr
           </Badge>
         </div>
       </>
+    );
+  }
+
+  if (notStarted) {
+    return (
+      <Card
+        className="bg-muted/30 border-border"
+        data-testid="card-daily-progress-ready"
+      >
+        <CardContent className="py-4 sm:py-5">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-muted">
+              <Sunrise className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-sm sm:text-base">Dagen är redo</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                {total} {total === 1 ? "order planerad" : "ordrar planerade"} — starta första jobbet för att börja räkna framsteg
+              </p>
+            </div>
+            <Badge variant="outline" data-testid="badge-progress-ready">Inte påbörjad</Badge>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 

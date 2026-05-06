@@ -433,8 +433,30 @@ function DailyProgress({ orders }: { orders: WorkOrder[] }) {
   const completedToday = todaysOrders.filter((o) => o.orderStatus === "utford").length;
   const total = todaysOrders.length;
   const percentage = total > 0 ? Math.round((completedToday / total) * 100) : 0;
+  const notStarted = completedToday === 0 && total > 0;
 
   if (total === 0) return null;
+
+  if (notStarted) {
+    return (
+      <Card className="mb-8 bg-muted/30 border-border" data-testid="card-daily-progress-ready">
+        <CardContent className="py-5">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-muted">
+              <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold">Dagen är redo</p>
+              <p className="text-sm text-muted-foreground">
+                {total} {total === 1 ? "order planerad" : "ordrar planerade"} — starta första jobbet för att börja räkna framsteg
+              </p>
+            </div>
+            <Badge variant="outline" data-testid="badge-progress-ready">Inte påbörjad</Badge>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="mb-8 bg-gradient-to-r from-[#1B4B6B]/5 via-[#4A9B9B]/5 to-[#7DBFB0]/8 dark:from-[#1B4B6B]/15 dark:via-[#4A9B9B]/10 dark:to-[#7DBFB0]/15 border-[#4A9B9B]/20 dark:border-[#4A9B9B]/30">
