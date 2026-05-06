@@ -154,15 +154,18 @@ async function buildReport(opts: { tenantId?: string } = {}): Promise<OverallRep
   }));
 
   const totalCompleted = tenantReports.reduce((s, t) => s + t.totalCompletedWO, 0);
+  const totalValidActual = tenantReports.reduce((s, t) => s + t.withValidActualDuration, 0);
+  const globalValidActualRatio = totalCompleted > 0 ? totalValidActual / totalCompleted : 0;
   const passesVolume = totalCompleted >= VOLUME_GATE;
-  const passesQuality = tenantReports.length > 0 &&
-    tenantReports.filter(t => t.passes70Gate).length / tenantReports.length >= 0.5;
+  // HARD GATE per task #421: global validActualDuration / completedWO >= 0.70.
+  // Om denna grind inte passerar kan rekommendationen ALDRIG bli GO.
+  const passesQuality = globalValidActualRatio >= QUALITY_GATE;
 
   const reasoning: string[] = [];
   reasoning.push(`Mätfönster: senaste ${WINDOW_DAYS} dagarna (12 månader)`);
   reasoning.push(`Total utförda WO i fönstret: ${totalCompleted} (grind: ≥${VOLUME_GATE})`);
   reasoning.push(`actualDuration valideras till intervall ${VALID_DURATION_MIN}–${VALID_DURATION_MAX} min`);
-  reasoning.push(`Tenants som passerar 70%-grinden: ${tenantReports.filter(t => t.passes70Gate).length}/${tenantReports.length}`);
+  reasoning.push(`Global andel WO med valid actualDuration: ${(globalValidActualRatio * 100).toFixed(1)}% (HARD-grind: ≥${QUALITY_GATE * 100}%)`);
   const codesWithEnough = perExecutionCode.filter(c => c.hasEnoughSamples).length;
   reasoning.push(`ExecutionCodes med ≥${MIN_SAMPLES_PER_CODE} prov (för stratifiering): ${codesWithEnough}/${perExecutionCode.length}`);
 
@@ -170,9 +173,12 @@ async function buildReport(opts: { tenantId?: string } = {}): Promise<OverallRep
   if (passesVolume && passesQuality && codesWithEnough >= 3) {
     recommendation = "GO";
     reasoning.push("Rekommendation: GO för Fas 1 (träning + shadow).");
+  } else if (!passesQuality) {
+    recommendation = "NO_GO";
+    reasoning.push(`Rekommendation: NO_GO. Hard-grinden faller — endast ${(globalValidActualRatio * 100).toFixed(1)}% av WO har valid actualDuration. Verifiera att fältarbetare loggar tider.`);
   } else if (totalCompleted >= VOLUME_GATE * 0.5) {
     recommendation = "WARN";
-    reasoning.push("Rekommendation: VÄNTA. Datavolym växande men kvalitet/stratifiering otillräcklig. Verifiera att fältarbetare loggar actualDuration + executionCode.");
+    reasoning.push("Rekommendation: VÄNTA. Datavolym växande men volym eller stratifiering otillräcklig.");
   } else {
     recommendation = "NO_GO";
     reasoning.push("Rekommendation: NO_GO. För lite data för meningsfull träning.");
@@ -212,28 +218,62 @@ export async function runDataQualityAudit(opts: { tenantId?: string } = {}): Pro
   return buildReport(opts);
 }
 
+function buildMarkdown(report: OverallReport): string {
+  const lines: string[] = [];
+  lines.push(`# ML Data Quality Audit — ${report.generatedAt}`);
+  lines.push(``);
+  lines.push(`**Rekommendation:** ${report.goNoGoRecommendation}`);
+  lines.push(`**Mätfönster:** ${report.windowDays} dagar`);
+  lines.push(`**Volym-grind:** ${report.passesVolumeGate ? "PASS" : "FAIL"}`);
+  lines.push(`**Kvalitets-grind (hard):** ${report.passesQualityGate ? "PASS" : "FAIL"}`);
+  lines.push(``);
+  lines.push(`## Resonemang`);
+  report.reasoning.forEach(r => lines.push(`- ${r}`));
+  lines.push(``);
+  lines.push(`## Per tenant`);
+  lines.push(`| Tenant | WO | Valid actual | Med setup-log | Kvalitet | Passerar |`);
+  lines.push(`|---|---|---|---|---|---|`);
+  report.tenants.forEach(t => {
+    lines.push(`| ${t.tenantId} | ${t.totalCompletedWO} | ${t.withValidActualDuration} | ${t.withSetupLogLink} | ${(t.qualityScore * 100).toFixed(0)}% | ${t.passes70Gate ? "✓" : "✗"} |`);
+  });
+  lines.push(``);
+  lines.push(`## Per execution code (top 20)`);
+  lines.push(`| Kod | Prov | Snitt min | Stratifierbar |`);
+  lines.push(`|---|---|---|---|`);
+  report.perExecutionCode.slice(0, 20).forEach(c => {
+    lines.push(`| ${c.executionCode} | ${c.sampleCount} | ${c.meanActualMin ?? "—"} | ${c.hasEnoughSamples ? "✓" : "✗"} |`);
+  });
+  lines.push(``);
+  lines.push(`## Snapshot-instrumentering`);
+  lines.push(`- pre_optimization: ${report.snapshotStats.preOptimization}`);
+  lines.push(`- post_completion: ${report.snapshotStats.postCompletion}`);
+  lines.push(`- senaste 7 dagar: ${report.snapshotStats.last7Days}`);
+  return lines.join("\n");
+}
+
+/** Skriver baseline-rapport till docs/ml-data-quality-baseline-YYYY-MM.md (idempotent per månad). */
+export async function writeBaselineReport(report: OverallReport): Promise<string> {
+  const fs = await import("fs/promises");
+  const path = await import("path");
+  const date = new Date(report.generatedAt);
+  const ym = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  const filePath = path.resolve(process.cwd(), "docs", `ml-data-quality-baseline-${ym}.md`);
+  await fs.writeFile(filePath, buildMarkdown(report), "utf-8");
+  return filePath;
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   // CLI: cross-tenant per default (kräver DB-access — engineer/ops only).
   const cliTenant = process.argv.find(a => a.startsWith("--tenant="))?.split("=")[1];
-  buildReport({ tenantId: cliTenant }).then(report => {
+  const writeBaseline = process.argv.includes("--write-baseline");
+  buildReport({ tenantId: cliTenant }).then(async report => {
     console.log(JSON.stringify(report, null, 2));
     console.log("\n---\nMARKDOWN-SAMMANFATTNING:\n---");
-    console.log(`# ML Data Quality Audit — ${report.generatedAt}`);
-    console.log(`\n**Rekommendation:** ${report.goNoGoRecommendation}`);
-    console.log(`\n## Resonemang`);
-    report.reasoning.forEach(r => console.log(`- ${r}`));
-    console.log(`\n## Per tenant`);
-    console.log(`| Tenant | WO | Med valid actual | Med setup-log | Kvalitet | Passerar |`);
-    console.log(`|---|---|---|---|---|---|`);
-    report.tenants.forEach(t => {
-      console.log(`| ${t.tenantId} | ${t.totalCompletedWO} | ${t.withValidActualDuration} | ${t.withSetupLogLink} | ${(t.qualityScore * 100).toFixed(0)}% | ${t.passes70Gate ? "✓" : "✗"} |`);
-    });
-    console.log(`\n## Per execution code (top 50)`);
-    console.log(`| Kod | Prov | Snitt min | Stratifierbar |`);
-    console.log(`|---|---|---|---|`);
-    report.perExecutionCode.slice(0, 20).forEach(c => {
-      console.log(`| ${c.executionCode} | ${c.sampleCount} | ${c.meanActualMin ?? "—"} | ${c.hasEnoughSamples ? "✓" : "✗"} |`);
-    });
+    console.log(buildMarkdown(report));
+    if (writeBaseline) {
+      const p = await writeBaselineReport(report);
+      console.log(`\n[baseline skriven] ${p}`);
+    }
     process.exit(0);
   }).catch(err => {
     console.error("Audit failed:", err);

@@ -669,6 +669,7 @@ class PredictionResultRow(BaseModel):
     workOrderId: str
     predictedDurationMin: int
     p50: int
+    p90: int
     modelVersion: str
     fallbackUsed: bool
 
@@ -695,6 +696,7 @@ def predict_durations(req: PredictionBatchRequest):
                     workOrderId=r.workOrderId,
                     predictedDurationMin=r.estimatedDurationMin,
                     p50=r.estimatedDurationMin,
+                    p90=int(r.estimatedDurationMin * 1.3),
                     modelVersion=_loaded_model_version,
                     fallbackUsed=True,
                 )

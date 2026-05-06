@@ -11,10 +11,14 @@ import { requireTenantWithFallback, requireAdmin, getTenantIdWithFallback } from
 import { db } from "../db";
 import { mlFeatureSnapshots, mlModels } from "@shared/schema";
 import { sql, eq, desc } from "drizzle-orm";
-import { runDataQualityAudit } from "../../scripts/ml-data-quality-audit";
+import { runDataQualityAudit, writeBaselineReport } from "../../scripts/ml-data-quality-audit";
+import { predictDurations } from "../services/mlPredictionClient";
+
+const PLATFORM_OWNER_TENANT = "kinab";
 
 export function registerMlRoutes(app: Express): void {
-  // GET /api/ml/data-quality — kör audit on-demand (cachelös, under 5s)
+  // GET /api/ml/data-quality — kör audit on-demand
+  // Default: tenant-scoped. ?scope=platform tillåts endast för platform-owner-tenant.
   app.get(
     "/api/ml/data-quality",
     isAuthenticated,
@@ -22,8 +26,69 @@ export function registerMlRoutes(app: Express): void {
     requireAdmin,
     asyncHandler(async (req, res) => {
       const tenantId = getTenantIdWithFallback(req);
-      const report = await runDataQualityAudit({ tenantId });
-      res.json(report);
+      const wantsPlatform = req.query.scope === "platform";
+      const allowPlatform = wantsPlatform && tenantId === PLATFORM_OWNER_TENANT;
+      const report = await runDataQualityAudit(allowPlatform ? {} : { tenantId });
+      res.json({ ...report, scope: allowPlatform ? "platform" : "tenant" });
+    })
+  );
+
+  // POST /api/ml/data-quality/baseline — skriv baseline-rapport till docs/
+  // Endast platform-owner-tenant. Idempotent per månad (YYYY-MM).
+  app.post(
+    "/api/ml/data-quality/baseline",
+    isAuthenticated,
+    requireTenantWithFallback,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      if (tenantId !== PLATFORM_OWNER_TENANT) {
+        return res.status(403).json({ error: "Endast platform-owner kan skriva baseline" });
+      }
+      const report = await runDataQualityAudit({});
+      const filePath = await writeBaselineReport(report);
+      res.json({ filePath, recommendation: report.goNoGoRecommendation });
+    })
+  );
+
+  // POST /api/ml/predict/durations — admin-endpoint för manuell smoke-test av Fas 1.
+  // Body: { tenantId, jobs: [{ workOrderId, executionCode, estimatedDurationMin, ... }] }
+  // Response: { predictions: [{ workOrderId, durationP50Sec, durationP90Sec, fallbackUsed }] }
+  // Returnerar fallback (estimatedDurationMin * 60) om ML_PREDICTION_ENABLED!=true.
+  app.post(
+    "/api/ml/predict/durations",
+    isAuthenticated,
+    requireTenantWithFallback,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const jobs = Array.isArray(req.body?.jobs) ? req.body.jobs : [];
+      if (jobs.length === 0) {
+        return res.status(400).json({ error: "jobs[] krävs" });
+      }
+      const result = await predictDurations({ tenantId, jobs });
+      const predictions = jobs.map((j: any, i: number) => {
+        const fallbackSec = Math.round((Number(j.estimatedDurationMin) || 30) * 60);
+        const pred = result?.[i];
+        if (!pred) {
+          return {
+            workOrderId: j.workOrderId,
+            durationP50Sec: fallbackSec,
+            durationP90Sec: Math.round(fallbackSec * 1.3),
+            fallbackUsed: true,
+          };
+        }
+        return {
+          workOrderId: j.workOrderId,
+          durationP50Sec: pred.p50Sec ?? fallbackSec,
+          durationP90Sec: pred.p90Sec ?? Math.round((pred.p50Sec ?? fallbackSec) * 1.3),
+          fallbackUsed: pred.fallbackUsed === true,
+        };
+      });
+      res.json({
+        predictions,
+        mlPredictionEnabled: process.env.ML_PREDICTION_ENABLED === "true",
+      });
     })
   );
 
