@@ -232,21 +232,25 @@ app.get("/api/portal/me", asyncHandler(async (req, res) => {
     const tenant = await storage.getTenant(session.tenantId!);
 
     // Lös upp objekt-scope för portal-användaren (om någon).
-    let scope: { isFullAccess: boolean; objectCount: number; rootObjectIds: string[] } = {
+    let scope: { isFullAccess: boolean; objectCount: number; rootObjectIds: string[]; rootObjectNames: string[] } = {
       isFullAccess: true,
       objectCount: 0,
       rootObjectIds: [],
+      rootObjectNames: [],
     };
     if (session.portalUserId) {
       const rootIds = await storage.getPortalUserScopeRaw(session.portalUserId);
       if (rootIds.length === 0) {
-        scope = { isFullAccess: true, objectCount: 0, rootObjectIds: [] };
+        scope = { isFullAccess: true, objectCount: 0, rootObjectIds: [], rootObjectNames: [] };
       } else {
         const resolved = await storage.resolvePortalUserScopeObjectIds(session.portalUserId, session.tenantId!);
+        const rootObjs = await Promise.all(rootIds.map(id => storage.getObject(id)));
+        const rootNames = rootObjs.map((o, i) => o?.name || o?.address || rootIds[i]);
         scope = {
           isFullAccess: false,
           objectCount: resolved ? resolved.size : rootIds.length,
           rootObjectIds: rootIds,
+          rootObjectNames: rootNames,
         };
       }
     }

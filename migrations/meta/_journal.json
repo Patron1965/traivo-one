@@ -232,6 +232,13 @@
       "when": 1778058613651,
       "tag": "0032_powerful_stardust",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1778066239277,
+      "tag": "0033_shallow_the_stranger",
+      "breakpoints": true
     }
   ]
 }

@@ -179,6 +179,7 @@ export async function triggerETANotification(
       }],
       notificationType: "technician_on_way",
       channel,
+      scopeContext: { customerId: order.customerId, objectId: order.objectId },
       data: {
         customerName: customer.contactPerson || customer.name,
         resourceName: resource?.name || "Tekniker",

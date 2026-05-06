@@ -27,6 +27,56 @@ export interface NotificationOptions {
   channel: NotificationChannel;
   data: Record<string, string | number | boolean | null | undefined>;
   customMessage?: string;
+  // När angivet filtreras portal-user-mottagare bort om deras objekt-scope
+  // utesluter `objectId`. Kundens egna primärkontaktuppgifter passerar.
+  scopeContext?: {
+    customerId: string;
+    objectId?: string | null;
+  };
+}
+
+// Tar bort recipients vars email matchar en portal-user för kunden vars
+// objekt-scope inte täcker `objectId`. Recipients utan email-match (t.ex.
+// kundens primära kontakt) passerar oförändrat.
+async function filterRecipientsByPortalScope(
+  tenantId: string,
+  customerId: string,
+  objectId: string | null | undefined,
+  recipients: NotificationRecipient[]
+): Promise<NotificationRecipient[]> {
+  try {
+    const portalUsers = await storage.getPortalUsersByCustomer(tenantId, customerId);
+    if (portalUsers.length === 0) return recipients;
+
+    const scopedByEmail = new Map<string, { rootIds: string[]; userId: string }>();
+    for (const pu of portalUsers) {
+      if (pu.scopeObjectIds.length > 0 && pu.email) {
+        scopedByEmail.set(pu.email.toLowerCase(), { rootIds: pu.scopeObjectIds, userId: pu.id });
+      }
+    }
+    if (scopedByEmail.size === 0) return recipients;
+
+    const allowedByUser = new Map<string, Set<string> | null>();
+    for (const [, info] of scopedByEmail) {
+      if (!allowedByUser.has(info.userId)) {
+        const resolved = await storage.resolvePortalUserScopeObjectIds(info.userId, tenantId);
+        allowedByUser.set(info.userId, resolved);
+      }
+    }
+
+    return recipients.filter(r => {
+      if (!r.email) return true;
+      const info = scopedByEmail.get(r.email.toLowerCase());
+      if (!info) return true; // ej en scoped portal-user
+      if (!objectId) return false; // scoped portal-user, men inget objekt-kontext => utesluts
+      const allowed = allowedByUser.get(info.userId);
+      if (!allowed) return true; // tomt scope hanteras som full access (bakåtkompat)
+      return allowed.has(objectId);
+    });
+  } catch (err) {
+    console.error("[unified-notifications] scope filter failed:", err);
+    return recipients;
+  }
 }
 
 export interface NotificationResult {
@@ -258,7 +308,7 @@ function generateEmailHtml(
 }
 
 export async function sendNotification(options: NotificationOptions): Promise<NotificationResult> {
-  const { tenantId, recipients, notificationType, channel, data, customMessage } = options;
+  const { tenantId, recipients, notificationType, channel, data, customMessage, scopeContext } = options;
   const result: NotificationResult = {
     success: true,
     emailsSent: 0,
@@ -272,8 +322,13 @@ export async function sendNotification(options: NotificationOptions): Promise<No
   
   const shouldSendEmail = channel === "email" || channel === "both";
   const shouldSendSms = (channel === "sms" || channel === "both") && tenantSmsConfig.smsEnabled;
-  
-  for (const recipient of recipients) {
+
+  // Filtrera bort scoped portal-user-mottagare som ligger utanför objektet.
+  const effectiveRecipients = scopeContext
+    ? await filterRecipientsByPortalScope(tenantId, scopeContext.customerId, scopeContext.objectId, recipients)
+    : recipients;
+
+  for (const recipient of effectiveRecipients) {
     if (shouldSendEmail && recipient.email) {
       try {
         const subject = generateEmailSubject(notificationType, data);

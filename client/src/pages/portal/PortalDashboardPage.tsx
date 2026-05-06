@@ -30,20 +30,27 @@ function getGreeting() {
 }
 
 function PortalScopeBadge() {
-  const meQuery = useQuery<{ scope?: { isFullAccess: boolean; objectCount: number } }>({
+  const meQuery = useQuery<{ scope?: { isFullAccess: boolean; objectCount: number; rootObjectNames?: string[] } }>({
     queryKey: ["/api/portal/me"],
     queryFn: () => portalFetch("/api/portal/me"),
     staleTime: 60_000,
   });
   const scope = meQuery.data?.scope;
   if (!scope || scope.isFullAccess) return null;
+  const names = scope.rootObjectNames || [];
+  const shown = names.slice(0, 3).join(", ");
+  const extra = names.length > 3 ? ` +${names.length - 3}` : "";
   return (
     <div
       className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 mb-2"
       data-testid="badge-portal-scope"
+      title={names.join(", ")}
     >
       <Shield className="h-3 w-3" />
-      Du har åtkomst till {scope.objectCount} av kundens objekt
+      <span>
+        Ditt område: {shown}{extra}
+        <span className="opacity-70 ml-1">({scope.objectCount} {scope.objectCount === 1 ? "objekt" : "objekt"})</span>
+      </span>
     </div>
   );
 }
