@@ -33,6 +33,10 @@ Production security analysis should assume `NODE_ENV=production`, platform-manag
 - Important production-scope notes from this scan:
   - `POST /api/uploads/request-url` is not unauthenticated in production because it remains under the normal `/api` middleware path; storage risk comes from weak authorization and unsafe serving behavior, not from public upload URL issuance.
   - The suspected mobile `email + any 4-6 digit pin` fallback login issue appears fail-closed in production because `/api/mobile/login` depends on tenant context that is not populated on the bypassed mobile path.
+  - `/api/mobile/*` bypasses tenant middleware entirely. Handlers on that surface must derive tenant context from the authenticated mobile resource or `req.mobileTenantId`; reading `req.tenantId` on bypassed mobile routes is unsafe and can collapse traffic onto fallback/shared tenant identifiers.
+  - `GET /api/system/anomalies/check` is production-reachable to ordinary tenant members today and returns monitoring data sourced from all-tenant resource-position queries plus hard-coded `kinab` anomaly checks. Treat this endpoint as privileged and non-tenant-safe until it is both role-restricted and tenant-scoped.
+  - Ordinary tenant membership currently provides overly broad access to several operational control-plane routes, especially `/api/iot/*` management endpoints plus public-support/staff-support routes such as `/api/qr-code-links*`, `/api/public-issue-reports*`, `/api/staff/portal-messages*`, and `GET /api/visit-confirmations`. These surfaces require explicit server-side role enforcement beyond the default `/api` tenant gate.
+  - Portal auth, portal object scoping, portal media signed URLs, and object-storage ACL enforcement were re-reviewed in production scope and appeared sound in the inspected paths; the main portal-side risk is missing role checks on staff/public-support management routes rather than object-scope bypasses.
   - Usually ignore unless production reachability is shown: seed/reset scripts, migrations, test helpers, mockup-only UI, and local-only tooling under `.local/`, `scripts/`, and prototype assets.
 
 ## Threat Categories
