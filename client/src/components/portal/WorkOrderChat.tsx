@@ -33,22 +33,43 @@ export function WorkOrderChat({ workOrderId, workOrderTitle, portalFetch, trigge
   });
 
   const sendMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (text: string) => {
       return portalFetch(`/api/portal/work-order-chat/${workOrderId}`, {
         method: "POST",
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message: text }),
       });
     },
-    onSuccess: () => {
+    onMutate: async (text: string) => {
+      const key = ["/api/portal/work-order-chat", workOrderId];
+      await queryClient.cancelQueries({ queryKey: key });
+      const prev = queryClient.getQueryData<any>(key);
+      const optimisticMessage = {
+        id: `optimistic-${Date.now()}`,
+        message: text,
+        senderType: "customer",
+        senderName: "Du",
+        createdAt: new Date().toISOString(),
+        pending: true,
+      };
+      if (prev) {
+        queryClient.setQueryData(key, {
+          ...prev,
+          messages: [...(prev.messages || []), optimisticMessage],
+        });
+      }
       setMessage("");
-      queryClient.invalidateQueries({ queryKey: ["/api/portal/work-order-chat", workOrderId] });
+      return { prev, key };
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _vars, context) => {
+      if (context?.prev && context?.key) queryClient.setQueryData(context.key, context.prev);
       toast({
         title: "Kunde inte skicka meddelande",
         description: error.message,
         variant: "destructive",
       });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/work-order-chat", workOrderId] });
     },
   });
 
@@ -63,8 +84,9 @@ export function WorkOrderChat({ workOrderId, workOrderTitle, portalFetch, trigge
   const resource = chatQuery.data?.resource;
 
   const handleSend = () => {
-    if (message.trim()) {
-      sendMutation.mutate();
+    const text = message.trim();
+    if (text) {
+      sendMutation.mutate(text);
     }
   };
 

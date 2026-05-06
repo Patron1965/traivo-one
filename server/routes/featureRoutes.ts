@@ -73,6 +73,8 @@ export async function registerFeatureRoutes(app: Express) {
     const tenantId = getTenantIdWithFallback(req);
     const features = await getTenantFeatures(tenantId);
 
+    res.setHeader("Cache-Control", "private, max-age=120, stale-while-revalidate=300");
+    res.setHeader("Vary", "Cookie, Accept-Encoding");
     res.json({
       tenantId,
       packageTier: features.tier,

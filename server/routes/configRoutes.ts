@@ -1692,6 +1692,8 @@ app.get("/api/terminology", asyncHandler(async (req, res) => {
     for (const label of labels) {
       merged[label.labelKey] = label.labelValue;
     }
+    res.setHeader("Cache-Control", "private, max-age=300, stale-while-revalidate=600");
+    res.setHeader("Vary", "Cookie, Accept-Encoding");
     res.json({ labels: merged, customized: labels.map(l => l.labelKey), industry });
 }));
 

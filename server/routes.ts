@@ -237,6 +237,8 @@ export async function registerRoutes(
         if (!Array.isArray(rows) || rows.length === 0) return 0;
         return Number(rows[0]?.count ?? 0);
       };
+      res.setHeader("Cache-Control", "private, max-age=30, stale-while-revalidate=60");
+      res.setHeader("Vary", "Cookie, Accept-Encoding");
       res.json({
         unassignedOrders: getCount(unassignedRows),
         unplannedAssignments: getCount(unplannedRows),

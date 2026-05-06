@@ -360,14 +360,28 @@ export default function ResourcesPage() {
     mutationFn: async ({ id, data }: { id: string; data: Partial<ResourceFormData> }) => {
       return apiRequest("PATCH", `/api/resources/${id}`, data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
-      toast({ title: "Resurs uppdaterad" });
+    onMutate: async ({ id, data }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/resources"] });
+      const prev = queryClient.getQueryData<Resource[]>(["/api/resources"]);
+      if (prev) {
+        queryClient.setQueryData<Resource[]>(
+          ["/api/resources"],
+          prev.map((r) => (r.id === id ? { ...r, ...(data as Partial<Resource>) } : r)),
+        );
+      }
       closeDialog();
       setAvailabilityDialogOpen(false);
+      return { prev };
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _vars, context) => {
+      if (context?.prev) queryClient.setQueryData(["/api/resources"], context.prev);
       toast({ title: "Fel vid uppdatering", description: error.message, variant: "destructive" });
+    },
+    onSuccess: () => {
+      toast({ title: "Resurs uppdaterad" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
     },
   });
 
@@ -375,14 +389,28 @@ export default function ResourcesPage() {
     mutationFn: async (id: string) => {
       return apiRequest("DELETE", `/api/resources/${id}`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
-      toast({ title: "Resurs borttagen" });
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/resources"] });
+      const prev = queryClient.getQueryData<Resource[]>(["/api/resources"]);
+      if (prev) {
+        queryClient.setQueryData<Resource[]>(
+          ["/api/resources"],
+          prev.filter((r) => r.id !== id),
+        );
+      }
       setDeleteDialogOpen(false);
       setResourceToDelete(null);
+      return { prev };
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _id, context) => {
+      if (context?.prev) queryClient.setQueryData(["/api/resources"], context.prev);
       toast({ title: "Fel vid borttagning", description: error.message, variant: "destructive" });
+    },
+    onSuccess: () => {
+      toast({ title: "Resurs borttagen" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
     },
   });
 
@@ -410,12 +438,27 @@ export default function ResourcesPage() {
     mutationFn: async (data: { id: string; resourceId: string }) => {
       return apiRequest("DELETE", `/api/resource-articles/${data.id}`);
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/resources', variables.resourceId, 'articles'] });
+    onMutate: async (variables) => {
+      const key = ['/api/resources', variables.resourceId, 'articles'];
+      await queryClient.cancelQueries({ queryKey: key });
+      const prev = queryClient.getQueryData<ResourceArticle[]>(key);
+      if (prev) {
+        queryClient.setQueryData<ResourceArticle[]>(
+          key,
+          prev.filter((ra) => ra.id !== variables.id),
+        );
+      }
+      return { prev, key };
+    },
+    onError: (error: Error, _vars, context) => {
+      if (context?.prev && context?.key) queryClient.setQueryData(context.key, context.prev);
+      toast({ title: "Kunde inte ta bort resurskompetens", description: error.message, variant: "destructive" });
+    },
+    onSuccess: () => {
       toast({ title: "Resurskompetens borttagen" });
     },
-    onError: (error: Error) => {
-      toast({ title: "Kunde inte ta bort resurskompetens", description: error.message, variant: "destructive" });
+    onSettled: (_data, _err, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/resources', variables.resourceId, 'articles'] });
     },
   });
 

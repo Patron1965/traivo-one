@@ -274,6 +274,8 @@ app.get("/api/system/map-config", (_req, res) => {
 app.get("/api/system/tenant-branding", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const branding = await storage.getTenantBranding(tenantId);
+    res.setHeader("Cache-Control", "private, max-age=300, stale-while-revalidate=600");
+    res.setHeader("Vary", "Cookie, Accept-Encoding");
     res.json(branding || null);
 }));
 
