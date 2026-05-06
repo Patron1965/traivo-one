@@ -667,6 +667,8 @@ export default function OnboardingWizardPage() {
                 <div className="space-y-1">
                   <div className="flex gap-1 h-1.5">
                     {[1, 2, 3, 4, 5].map((level) => (
+                      // nosemgrep: generic.secrets.gitleaks.hashicorp-tf-password
+                      // Falsk positiv: variabeln 'passwordStrength' ar UI-state for losenordsstyrka-meter, inte ett losenord.
                       <div
                         key={level}
                         className={`flex-1 rounded-full transition-colors ${

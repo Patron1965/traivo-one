@@ -1019,6 +1019,8 @@ async function migrateDefaultTenantToKinab() {
     if (!oldExists && !newExists) {
       let orphans = 0;
       for (const table of childTables) {
+        // nosemgrep: javascript.drizzle-orm.security.audit.ban-drizzle-sql-raw
+        // childTables ar hardkodad lista, OLD_ID ar konstant fran denna fil.
         const r = await tx.execute(sql.raw(
           `SELECT 1 FROM "${table}" WHERE tenant_id = '${OLD_ID}' LIMIT 1`
         ));
@@ -1033,6 +1035,9 @@ async function migrateDefaultTenantToKinab() {
     console.log(`[migration] Renaming tenant '${OLD_ID}' → '${NEW_ID}' (oldExists=${oldExists}, newExists=${newExists})`);
 
     if (oldExists && !newExists) {
+      // nosemgrep: javascript.drizzle-orm.security.audit.ban-drizzle-sql-raw
+      // colList/selectList genereras fran Drizzle-schema-introspektion (interna identifierare),
+      // OLD_ID ar konstant. Ingen user-input.
       await tx.execute(sql.raw(`
         INSERT INTO tenants (${colList})
         SELECT ${selectList} FROM tenants WHERE id = '${OLD_ID}'
@@ -1041,6 +1046,8 @@ async function migrateDefaultTenantToKinab() {
 
     let totalRows = 0;
     for (const table of childTables) {
+      // nosemgrep: javascript.drizzle-orm.security.audit.ban-drizzle-sql-raw
+      // childTables hardkodad, OLD_ID/NEW_ID konstanter i denna fil. Ingen user-input.
       const result = await tx.execute(sql.raw(
         `UPDATE "${table}" SET tenant_id = '${NEW_ID}' WHERE tenant_id = '${OLD_ID}'`
       ));

@@ -104,6 +104,9 @@ async function main() {
 
     const quoted = wipeTables.map((t) => `"${t}"`).join(", ");
     console.log("TRUNCATE all business tables...");
+    // nosemgrep: javascript.drizzle-orm.security.audit.ban-drizzle-sql-raw
+    // wipeTables ar en hardkodad whitelist i denna fil — ingen user-input. TRUNCATE
+    // kraver dynamiska identifierare som inte kan parameteriseras via prepared statements.
     await tx.execute(sql.raw(`TRUNCATE TABLE ${quoted} RESTART IDENTITY CASCADE`));
 
     console.log("DELETE FROM sessions...");
