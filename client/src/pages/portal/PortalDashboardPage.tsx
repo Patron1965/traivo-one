@@ -21,6 +21,7 @@ import { VisitFeedback } from "@/components/portal/VisitFeedback";
 import { WorkOrderChat } from "@/components/portal/WorkOrderChat";
 import { SelfBookingWidget } from "@/components/portal/SelfBookingWidget";
 import { LiveETAWidget } from "@/components/portal/LiveETAWidget";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -375,15 +376,16 @@ export default function PortalDashboardPage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {unreadCount > 0 && (
-              <div className="relative">
+              <div className="relative mr-1">
                 <Bell className="h-5 w-5 text-muted-foreground" />
                 <span className="absolute -top-1 -right-1 h-4 min-w-4 flex items-center justify-center rounded-full bg-destructive/15 text-destructive-foreground text-[10px] font-bold px-1">
                   {unreadCount}
                 </span>
               </div>
             )}
+            <ThemeToggle />
             <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
               <LogOut className="h-4 w-4 mr-2" />
               Logga ut
@@ -394,28 +396,27 @@ export default function PortalDashboardPage() {
 
       <div className="flex">
         <PortalSidebar unreadCount={unreadCount} currentPath="/portal/dashboard" />
-        <main className="flex-1 container py-8 space-y-8">
+        <main className="flex-1 container py-4 space-y-4">
         {/* Welcome Hero Section */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/15 via-primary/5 to-background border border-primary/20 p-6 sm:p-8 shadow-sm">
-          <div className="pointer-events-none absolute -top-24 -right-24 w-72 h-72 bg-primary/10 rounded-full blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-32 -left-20 w-64 h-64 bg-chart-2/10 rounded-full blur-3xl" />
-          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-primary/15 via-primary/5 to-background border border-primary/20 px-4 py-3 sm:px-5 sm:py-4 shadow-sm">
+          <div className="pointer-events-none absolute -top-20 -right-20 w-56 h-56 bg-primary/10 rounded-full blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-24 -left-16 w-48 h-48 bg-chart-2/10 rounded-full blur-3xl" />
+          <div className="relative z-10 flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-background/60 backdrop-blur px-2.5 py-1 mb-3">
-                <Sparkles className="h-3.5 w-3.5 text-primary" />
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">{companyName} Kundportal</span>
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">{companyName} Kundportal</span>
+                <PortalScopeBadge />
               </div>
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight mb-0.5 truncate">
                 {getGreeting()}{greetingName ? `, ${greetingName}` : ""}!
               </h2>
-              <PortalScopeBadge />
-              <p className="text-muted-foreground max-w-xl text-sm sm:text-base">
-                Här kan du enkelt hantera dina tjänster, boka extra tömningar,
-                följa pågående uppdrag och kontakta oss direkt.
+              <p className="text-muted-foreground text-xs sm:text-sm">
+                Hantera tjänster, boka extra tömningar och följ pågående uppdrag.
               </p>
             </div>
-            <div className="hidden sm:flex shrink-0 items-center justify-center h-20 w-20 rounded-2xl bg-gradient-to-br from-primary/20 to-chart-2/15 ring-1 ring-primary/20">
-              <Recycle className="h-10 w-10 text-primary" />
+            <div className="hidden sm:flex shrink-0 items-center justify-center h-14 w-14 rounded-xl bg-gradient-to-br from-primary/20 to-chart-2/15 ring-1 ring-primary/20">
+              <Recycle className="h-7 w-7 text-primary" />
             </div>
           </div>
         </div>
@@ -430,9 +431,9 @@ export default function PortalDashboardPage() {
             }}
             data-testid="card-quick-extra"
           >
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                <Truck className="h-6 w-6 text-primary" />
+            <CardContent className="p-3.5 flex items-center gap-3">
+              <div className="p-2.5 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                <Truck className="h-5 w-5 text-primary" />
               </div>
               <div>
                 <h3 className="font-semibold">Boka extratömning</h3>
@@ -449,9 +450,9 @@ export default function PortalDashboardPage() {
             }}
             data-testid="card-quick-reschedule"
           >
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-chart-1/15 group-hover:bg-chart-1/15 transition-colors">
-                <RefreshCw className="h-6 w-6 text-chart-1" />
+            <CardContent className="p-3.5 flex items-center gap-3">
+              <div className="p-2.5 rounded-lg bg-chart-1/15 group-hover:bg-chart-1/15 transition-colors">
+                <RefreshCw className="h-5 w-5 text-chart-1" />
               </div>
               <div>
                 <h3 className="font-semibold">Ändra bokning</h3>
@@ -465,9 +466,9 @@ export default function PortalDashboardPage() {
             onClick={() => setChatOpen(true)}
             data-testid="card-quick-contact"
           >
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-chart-2/15 group-hover:bg-chart-2/15 transition-colors">
-                <MessageCircle className="h-6 w-6 text-chart-2" />
+            <CardContent className="p-3.5 flex items-center gap-3">
+              <div className="p-2.5 rounded-lg bg-chart-2/15 group-hover:bg-chart-2/15 transition-colors">
+                <MessageCircle className="h-5 w-5 text-chart-2" />
               </div>
               <div>
                 <h3 className="font-semibold">Kontakta oss</h3>
@@ -481,9 +482,9 @@ export default function PortalDashboardPage() {
             onClick={() => setBookingDialogOpen(true)}
             data-testid="card-quick-new"
           >
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-chart-5/15 group-hover:bg-chart-5/15 transition-colors">
-                <Plus className="h-6 w-6 text-chart-5" />
+            <CardContent className="p-3.5 flex items-center gap-3">
+              <div className="p-2.5 rounded-lg bg-chart-5/15 group-hover:bg-chart-5/15 transition-colors">
+                <Plus className="h-5 w-5 text-chart-5" />
               </div>
               <div>
                 <h3 className="font-semibold">Ny förfrågan</h3>
@@ -496,7 +497,7 @@ export default function PortalDashboardPage() {
         {/* Statistics Row */}
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
           <Card className="bg-gradient-to-br from-chart-2/10 to-transparent border-chart-2/20">
-            <CardContent className="p-5">
+            <CardContent className="p-3.5">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-chart-2/15 rounded-lg">
                   <CheckCircle2 className="h-5 w-5 text-chart-2" />
@@ -509,7 +510,7 @@ export default function PortalDashboardPage() {
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-chart-1/10 to-transparent border-chart-1/20">
-            <CardContent className="p-5">
+            <CardContent className="p-3.5">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-chart-1/15 rounded-lg">
                   <CalendarDays className="h-5 w-5 text-chart-1" />
@@ -523,7 +524,7 @@ export default function PortalDashboardPage() {
           </Card>
           <Link href="/portal/clusters">
             <Card className="bg-gradient-to-br from-chart-5/10 to-transparent border-chart-5/20 hover-elevate cursor-pointer group h-full" data-testid="card-cluster-overview">
-              <CardContent className="p-5">
+              <CardContent className="p-3.5">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-chart-5/15 rounded-lg">
                     <TreeDeciduous className="h-5 w-5 text-chart-5" />
@@ -541,7 +542,7 @@ export default function PortalDashboardPage() {
             </Card>
           </Link>
           <Card className="bg-gradient-to-br from-chart-4/10 to-transparent border-chart-4/20">
-            <CardContent className="p-5">
+            <CardContent className="p-3.5">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-chart-4/15 rounded-lg">
                   <FileText className="h-5 w-5 text-chart-4" />
@@ -649,9 +650,9 @@ export default function PortalDashboardPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Link href="/portal/invoices">
             <Card className="hover-elevate cursor-pointer group" data-testid="card-invoices">
-              <CardContent className="p-5 flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-chart-4/15 group-hover:bg-chart-4/15 transition-colors">
-                  <FileText className="h-6 w-6 text-chart-4" />
+              <CardContent className="p-3.5 flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-chart-4/15 group-hover:bg-chart-4/15 transition-colors">
+                  <FileText className="h-5 w-5 text-chart-4" />
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold">Fakturor</h3>
@@ -664,9 +665,9 @@ export default function PortalDashboardPage() {
           
           <Link href="/portal/contracts">
             <Card className="hover-elevate cursor-pointer group" data-testid="card-contracts">
-              <CardContent className="p-5 flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-chart-2/15 group-hover:bg-chart-2/15 transition-colors">
-                  <Package className="h-6 w-6 text-chart-2" />
+              <CardContent className="p-3.5 flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-chart-2/15 group-hover:bg-chart-2/15 transition-colors">
+                  <Package className="h-5 w-5 text-chart-2" />
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold">Tjänsteavtal</h3>
@@ -679,8 +680,8 @@ export default function PortalDashboardPage() {
           
           <Link href="/portal/issues">
             <Card className="hover-elevate cursor-pointer group" data-testid="card-issues">
-              <CardContent className="p-5 flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-destructive/15 group-hover:bg-destructive/15 transition-colors">
+              <CardContent className="p-3.5 flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-destructive/15 group-hover:bg-destructive/15 transition-colors">
                   <AlertCircle className="h-6 w-6 text-destructive" />
                 </div>
                 <div className="flex-1">
@@ -694,9 +695,9 @@ export default function PortalDashboardPage() {
           
           <Link href="/portal/field">
             <Card className="hover-elevate cursor-pointer group" data-testid="card-field-docs">
-              <CardContent className="p-5 flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-chart-2/15 group-hover:bg-chart-2/15 transition-colors">
-                  <Camera className="h-6 w-6 text-chart-2" />
+              <CardContent className="p-3.5 flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-chart-2/15 group-hover:bg-chart-2/15 transition-colors">
+                  <Camera className="h-5 w-5 text-chart-2" />
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold">Fältdokumentation</h3>
@@ -709,8 +710,8 @@ export default function PortalDashboardPage() {
           
           <Link href="/portal/settings">
             <Card className="hover-elevate cursor-pointer group" data-testid="card-settings">
-              <CardContent className="p-5 flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-slate-500/10 group-hover:bg-slate-500/20 transition-colors">
+              <CardContent className="p-3.5 flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-slate-500/10 group-hover:bg-slate-500/20 transition-colors">
                   <User className="h-6 w-6 text-slate-500" />
                 </div>
                 <div className="flex-1">
