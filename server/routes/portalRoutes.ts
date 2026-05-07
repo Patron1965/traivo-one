@@ -264,6 +264,7 @@ app.get("/api/portal/me", asyncHandler(async (req, res) => {
         name: session.customer?.name,
         email: session.customer?.email,
         phone: session.customer?.phone,
+        city: session.customer?.city,
       },
       tenant: {
         id: tenant?.id,

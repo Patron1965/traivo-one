@@ -229,6 +229,15 @@ export default function PortalDashboardPage() {
   const customer = getCustomer();
   const tenant = getTenant();
 
+  const meQuery = useQuery<{ customer?: { city?: string | null; name?: string } }>({
+    queryKey: ["/api/portal/me"],
+    queryFn: () => portalFetch("/api/portal/me"),
+    enabled: !!getSessionToken(),
+    staleTime: 60_000,
+  });
+  const customerCity = meQuery.data?.customer?.city?.trim();
+  const greetingName = customerCity || customer?.name?.split(" ")[0] || "";
+
   const form = useForm<BookingForm>({
     resolver: zodResolver(bookingSchema),
     defaultValues: {
@@ -397,7 +406,7 @@ export default function PortalDashboardPage() {
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">{companyName} Kundportal</span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
-                {getGreeting()}, {customer?.name?.split(" ")[0]}!
+                {getGreeting()}{greetingName ? `, ${greetingName}` : ""}!
               </h2>
               <PortalScopeBadge />
               <p className="text-muted-foreground max-w-xl text-sm sm:text-base">
