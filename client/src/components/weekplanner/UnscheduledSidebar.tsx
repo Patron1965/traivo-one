@@ -773,7 +773,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             onPointerDown={(e) => e.stopPropagation()}
                             onMouseDown={(e) => e.stopPropagation()}
                             onTouchStart={(e) => e.stopPropagation()}
-                            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-1 rounded hover-elevate shrink-0"
+                            className="flex items-center gap-1 text-[11px] font-medium text-foreground/80 hover:text-foreground transition-colors px-2 py-1 rounded-md border border-border bg-background hover-elevate shrink-0"
                             data-testid={`button-expand-job-${job.id}`}
                             aria-expanded={expandedJobs.has(job.id)}
                             title={expandedJobs.has(job.id) ? "Dölj jobbinfo" : "Visa jobbinfo"}
