@@ -387,19 +387,27 @@ export default function PortalDashboardPage() {
         <PortalSidebar unreadCount={unreadCount} currentPath="/portal/dashboard" />
         <main className="flex-1 container py-8 space-y-8">
         {/* Welcome Hero Section */}
-        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-primary/20 via-primary/10 to-background border border-primary/20 p-6 sm:p-8">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              <span className="text-sm font-medium text-primary">{companyName} Kundportal</span>
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/15 via-primary/5 to-background border border-primary/20 p-6 sm:p-8 shadow-sm">
+          <div className="pointer-events-none absolute -top-24 -right-24 w-72 h-72 bg-primary/10 rounded-full blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-32 -left-20 w-64 h-64 bg-chart-2/10 rounded-full blur-3xl" />
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-background/60 backdrop-blur px-2.5 py-1 mb-3">
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">{companyName} Kundportal</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
+                {getGreeting()}, {customer?.name?.split(" ")[0]}!
+              </h2>
+              <PortalScopeBadge />
+              <p className="text-muted-foreground max-w-xl text-sm sm:text-base">
+                Här kan du enkelt hantera dina tjänster, boka extra tömningar,
+                följa pågående uppdrag och kontakta oss direkt.
+              </p>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-bold mb-2">{getGreeting()}, {customer?.name?.split(" ")[0]}!</h2>
-            <PortalScopeBadge />
-            <p className="text-muted-foreground max-w-xl">
-              Välkommen till {companyName}. Här kan du enkelt hantera dina tjänster, 
-              boka extra tömningar och kontakta oss.
-            </p>
+            <div className="hidden sm:flex shrink-0 items-center justify-center h-20 w-20 rounded-2xl bg-gradient-to-br from-primary/20 to-chart-2/15 ring-1 ring-primary/20">
+              <Recycle className="h-10 w-10 text-primary" />
+            </div>
           </div>
         </div>
 
@@ -478,7 +486,7 @@ export default function PortalDashboardPage() {
 
         {/* Statistics Row */}
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-          <Card className="bg-gradient-to-br from-chart-2 to-transparent">
+          <Card className="bg-gradient-to-br from-chart-2/10 to-transparent border-chart-2/20">
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-chart-2/15 rounded-lg">
@@ -491,7 +499,7 @@ export default function PortalDashboardPage() {
               </div>
             </CardContent>
           </Card>
-          <Card className="bg-gradient-to-br from-chart-1 to-transparent">
+          <Card className="bg-gradient-to-br from-chart-1/10 to-transparent border-chart-1/20">
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-chart-1/15 rounded-lg">
@@ -505,10 +513,10 @@ export default function PortalDashboardPage() {
             </CardContent>
           </Card>
           <Link href="/portal/clusters">
-            <Card className="bg-gradient-to-br from-chart-5 to-transparent hover-elevate cursor-pointer group" data-testid="card-cluster-overview">
+            <Card className="bg-gradient-to-br from-chart-5/10 to-transparent border-chart-5/20 hover-elevate cursor-pointer group h-full" data-testid="card-cluster-overview">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-chart-5/15 rounded-lg group-hover:bg-chart-5/15 transition-colors">
+                  <div className="p-2 bg-chart-5/15 rounded-lg">
                     <TreeDeciduous className="h-5 w-5 text-chart-5" />
                   </div>
                   <div className="flex-1">
@@ -523,7 +531,7 @@ export default function PortalDashboardPage() {
               </CardContent>
             </Card>
           </Link>
-          <Card className="bg-gradient-to-br from-chart-4 to-transparent">
+          <Card className="bg-gradient-to-br from-chart-4/10 to-transparent border-chart-4/20">
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-chart-4/15 rounded-lg">
@@ -541,7 +549,7 @@ export default function PortalDashboardPage() {
         </div>
 
         {/* AI Insights Card */}
-        <Card className="bg-gradient-to-r from-chart-5 via-chart-1 to-transparent border-chart-5/50" data-testid="card-ai-insights">
+        <Card className="bg-gradient-to-r from-chart-5/10 via-chart-1/10 to-transparent border-chart-5/30" data-testid="card-ai-insights">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-chart-5" />

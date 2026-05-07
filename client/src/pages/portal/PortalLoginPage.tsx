@@ -147,80 +147,96 @@ export default function PortalLoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted">
-      <div className="container mx-auto px-4 py-8 lg:py-16">
-        <div className="grid lg:grid-cols-2 gap-12 items-center max-w-6xl mx-auto">
-          
+    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-background via-background to-muted">
+      <div className="pointer-events-none absolute -top-32 -right-32 h-[480px] w-[480px] rounded-full bg-primary/10 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-40 -left-32 h-[420px] w-[420px] rounded-full bg-chart-2/10 blur-3xl" />
+
+      <div className="relative container mx-auto px-4 py-10 lg:py-20">
+        <div className="grid lg:grid-cols-[1.1fr_1fr] gap-10 lg:gap-16 items-center max-w-6xl mx-auto">
+
           <div className="space-y-8">
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div className="flex items-center gap-3">
                 {logoIconUrl ? (
-                  <img 
-                    src={logoIconUrl} 
-                    alt={companyName} 
+                  <img
+                    src={logoIconUrl}
+                    alt={companyName}
                     className="h-12 w-12 object-contain"
                     data-testid="img-portal-logo"
                   />
                 ) : (
-                  <div 
-                    className="flex h-12 w-12 items-center justify-center rounded-xl text-white font-bold"
+                  <div
+                    className="flex h-12 w-12 items-center justify-center rounded-xl text-white font-bold shadow-md"
                     style={{ backgroundColor: primaryColor }}
                     data-testid="img-portal-logo-fallback"
                   >
                     {companyName.charAt(0).toUpperCase()}
                   </div>
                 )}
-                <span className="text-2xl font-bold">{companyName} Kundportal</span>
+                <div className="flex flex-col leading-tight">
+                  <span className="text-xl font-bold tracking-tight">{companyName}</span>
+                  <span className="text-xs uppercase tracking-wider text-muted-foreground">Kundportal</span>
+                </div>
               </div>
-              
-              <h1 className="text-3xl lg:text-4xl font-bold tracking-tight">
-                Hantera dina tjänster enkelt online
+
+              <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary">
+                <Recycle className="h-3.5 w-3.5" />
+                <span>Smart återvinning · enklare vardag</span>
+              </div>
+
+              <h1 className="text-4xl lg:text-5xl font-bold tracking-tight leading-[1.1]">
+                Allt om dina tjänster<br />
+                <span className="text-primary">samlat på ett ställe</span>
               </h1>
-              
-              <p className="text-lg text-muted-foreground">
-                Välkommen till kundportalen. Här kan du se fakturor, boka tjänster, 
-                följa leveranser och mycket mer – dygnet runt.
+
+              <p className="text-base lg:text-lg text-muted-foreground max-w-xl">
+                Se fakturor, boka extra tömningar, följ tekniker live och chatta med oss —
+                dygnet runt, från valfri enhet.
               </p>
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-4">
+            <div className="grid sm:grid-cols-2 gap-3">
               {features.map((feature) => (
-                <div 
+                <div
                   key={feature.title}
-                  className="flex items-start gap-3 p-4 rounded-lg bg-card border"
+                  className="group flex items-start gap-3 p-4 rounded-xl bg-card/80 backdrop-blur border border-border/60 hover:border-primary/30 hover:shadow-sm transition-all"
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <feature.icon className="h-5 w-5 text-primary" />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:bg-primary/15 transition-colors">
+                    <feature.icon className="h-5 w-5" />
                   </div>
-                  <div>
-                    <h3 className="font-semibold">{feature.title}</h3>
-                    <p className="text-sm text-muted-foreground">{feature.description}</p>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-sm">{feature.title}</h3>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{feature.description}</p>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="flex items-center gap-6 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
-                <Shield className="h-4 w-4" />
-                <span>Säker inloggning</span>
+                <Shield className="h-4 w-4 text-chart-2" />
+                <span>Säker BankID-klass inloggning</span>
               </div>
               <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4" />
+                <Clock className="h-4 w-4 text-chart-2" />
                 <span>Tillgänglig 24/7</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-chart-2" />
+                <span>Ingen app behövs</span>
               </div>
             </div>
           </div>
 
-          <div className="lg:pl-8">
-            <Card className="w-full max-w-md mx-auto shadow-lg">
+          <div className="lg:pl-4">
+            <Card className="w-full max-w-md mx-auto shadow-xl border-border/60 backdrop-blur bg-card/95">
               <CardHeader className="text-center pb-4">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 ring-1 ring-primary/20">
                   <Mail className="h-7 w-7 text-primary" />
                 </div>
-                <CardTitle className="text-xl">Logga in</CardTitle>
+                <CardTitle className="text-2xl tracking-tight">Logga in</CardTitle>
                 <CardDescription>
-                  Ange din e-postadress så skickar vi en säker inloggningslänk
+                  Ange din e-postadress — vi skickar en säker inloggningslänk
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -314,8 +330,9 @@ export default function PortalLoginPage() {
           </div>
         </div>
 
-        <footer className="mt-16 text-center text-sm text-muted-foreground">
-          <p>Har du frågor? Kontakta kundtjänst på telefon eller e-post.</p>
+        <footer className="mt-16 text-center text-xs text-muted-foreground">
+          <p>Har du frågor? Kontakta {companyName} kundtjänst på telefon eller e-post.</p>
+          <p className="mt-1 opacity-70">© {new Date().getFullYear()} {companyName} · Drivs av Traivo</p>
         </footer>
       </div>
     </div>
