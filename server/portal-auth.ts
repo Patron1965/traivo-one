@@ -162,8 +162,9 @@ export async function sendPortalMagicLinkEmail(
     }
     
     const resend = new Resend(apiKey);
+    const fromEmail = process.env.RESEND_FROM_EMAIL || "Traivo <onboarding@resend.dev>";
     const result = await resend.emails.send({
-      from: "Traivo <onboarding@resend.dev>",
+      from: fromEmail,
       to: email,
       subject: `Logga in på kundportalen - ${companyName}`,
       html: `

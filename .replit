@@ -57,6 +57,9 @@ defaultBucketID = "replit-objstore-83309b29-1b38-4584-a19c-e2db5578f98a"
 [userenv.production]
 ENABLE_DEMO_LOGIN = "true"
 
+[userenv.shared]
+RESEND_FROM_EMAIL = "Traivo <noreply@traivo.se>"
+
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 90000
