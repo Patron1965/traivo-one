@@ -68,6 +68,7 @@ const BATCH = parseInt(arg("batch", "500")!, 10);
 const LIMIT_RAW = arg("limit");
 const LIMIT: number | null = LIMIT_RAW ? parseInt(LIMIT_RAW, 10) : null;
 const CUSTOMER_ID_ARG = arg("customer-id"); // komma-separerad lista, valbar
+const STRICT_FK = arg("strict-fk-coverage") === "true";
 const DRY_RUN_FLAG = arg("dry-run") === "true";
 const CONFIRM = process.env.CONFIRM === "YES_MIGRATE_PROD";
 const DRY_RUN = DRY_RUN_FLAG || !CONFIRM;
@@ -730,17 +731,22 @@ async function migrateCustomers(prod: pg.PoolClient): Promise<void> {
   await copyTable(
     prod,
     "customer_notification_settings",
-    `customer_id = ANY($1::text[])`,
-    [customerIds],
+    `tenant_id = $1 AND customer_id = ANY($2::text[])`,
+    [TENANT, customerIds],
   );
   await copyTable(
     prod,
     "customer_service_contracts",
-    `customer_id = ANY($1::text[])`,
-    [customerIds],
+    `tenant_id = $1 AND customer_id = ANY($2::text[])`,
+    [TENANT, customerIds],
   );
 
-  await copyTable(prod, "portal_users", `customer_id = ANY($1::text[])`, [customerIds]);
+  await copyTable(
+    prod,
+    "portal_users",
+    `tenant_id = $1 AND customer_id = ANY($2::text[])`,
+    [TENANT, customerIds],
+  );
 
   await copyObjectsTopologically(prod, customerIds);
 
@@ -751,19 +757,20 @@ async function migrateCustomers(prod: pg.PoolClient): Promise<void> {
   const objectIds = objIds.rows.map((r) => r.id);
   log(`  Antal objekt att hänga av: ${objectIds.length}`);
 
-  await copyTable(prod, "object_parents", `object_id = ANY($1::text[])`, [objectIds]);
-  await copyTable(prod, "object_metadata", `object_id = ANY($1::text[])`, [objectIds]);
-  await copyTable(prod, "object_contacts", `object_id = ANY($1::text[])`, [objectIds]);
+  await copyTable(prod, "object_parents", `tenant_id = $1 AND object_id = ANY($2::text[])`, [TENANT, objectIds]);
+  await copyTable(prod, "object_metadata", `tenant_id = $1 AND object_id = ANY($2::text[])`, [TENANT, objectIds]);
+  await copyTable(prod, "object_contacts", `tenant_id = $1 AND object_id = ANY($2::text[])`, [TENANT, objectIds]);
   // object_images SKIPPAS avsiktligt — uppladdade media är out-of-scope för
   // slim-migreringen (object-storage-artefakter följer inte med dev→prod).
-  await copyTable(prod, "object_articles", `object_id = ANY($1::text[])`, [objectIds]);
+  skipped.push({ kind: "table", id: "object_images", reason: "out-of-scope (uppladdad media)" });
+  await copyTable(prod, "object_articles", `tenant_id = $1 AND object_id = ANY($2::text[])`, [TENANT, objectIds]);
   await copyTable(
     prod,
     "object_payers",
-    `object_id = ANY($1::text[]) AND customer_id = ANY($2::text[])`,
-    [objectIds, customerIds],
+    `tenant_id = $1 AND object_id = ANY($2::text[]) AND customer_id = ANY($3::text[])`,
+    [TENANT, objectIds, customerIds],
   );
-  await copyTable(prod, "object_time_restrictions", `object_id = ANY($1::text[])`, [objectIds]);
+  await copyTable(prod, "object_time_restrictions", `tenant_id = $1 AND object_id = ANY($2::text[])`, [TENANT, objectIds]);
 
   await copyTable(
     prod,
@@ -825,6 +832,11 @@ async function copyObjectsTopologically(
         // Markera dem som "rotnivå" — copyTable kommer hämta hela raden från
         // dev. Vi behöver patcha parent_id efter kopian.
         orphans.push(id);
+        skipped.push({
+          kind: "object",
+          id,
+          reason: "cykel/orphan i parent-träd — parent_id satt till NULL",
+        });
         level.set(id, pass);
         remaining.delete(id);
       }
@@ -921,9 +933,17 @@ async function preflightFkCoverage(prod: pg.PoolClient): Promise<void> {
     return;
   }
   log(`  [WARN] ${missing.length} FK saknas i cleanup-listorna:`);
-  for (const m of missing) log(`    - ${m}`);
+  for (const m of missing) {
+    log(`    - ${m}`);
+    skipped.push({ kind: "fk", id: m, reason: "saknas i cleanup-täckning" });
+  }
   log(`  Lägg till dem i OBJECT_CHILDREN/WORKORDER_CHILDREN/CUSTOMER_CHILDREN ` +
       `om de innehåller data, annars ignorera-listan.`);
+  if (STRICT_FK) {
+    throw new Error(
+      `--strict-fk-coverage: ${missing.length} otäckta FK upptäckta. Avbryter.`,
+    );
+  }
 }
 
 // ----------------------------- main ------------------------------
