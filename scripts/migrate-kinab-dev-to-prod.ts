@@ -404,6 +404,17 @@ async function cleanupTestCustomers(prod: pg.PoolClient): Promise<void> {
     log(`  [del] work_orders = ${r.rowCount}`);
   }
 
+  // Cascade: assignment_articles MÅSTE bort innan assignments raderas
+  // (assignments finns i OBJECT_CHILDREN och tas i loopen nedan).
+  if (objectIds.length) {
+    const asgR = await prod.query<{ id: string }>(
+      `SELECT id FROM assignments WHERE object_id = ANY($1::text[])`,
+      [objectIds],
+    );
+    const asgIds = asgR.rows.map((r) => r.id);
+    await deleteByColumn(prod, "assignment_articles", "assignment_id", asgIds);
+  }
+
   for (const t of OBJECT_CHILDREN) {
     await deleteByColumn(prod, t, "object_id", objectIds);
   }
@@ -423,16 +434,6 @@ async function cleanupTestCustomers(prod: pg.PoolClient): Promise<void> {
     );
     track("objects").deleted += r.rowCount ?? 0;
     log(`  [del] objects = ${r.rowCount}`);
-  }
-
-  // Cascade: assignment_articles måste bort innan assignments
-  if (objectIds.length) {
-    const asgR = await prod.query<{ id: string }>(
-      `SELECT id FROM assignments WHERE object_id = ANY($1::text[])`,
-      [objectIds],
-    );
-    const asgIds = asgR.rows.map((r) => r.id);
-    await deleteByColumn(prod, "assignment_articles", "assignment_id", asgIds);
   }
 
   // Cascade: price_list_articles innan price_lists
