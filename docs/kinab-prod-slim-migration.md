@@ -25,10 +25,13 @@ genom att importera en **ren delmängd** av dev-data istället för full kopieri
 - `customer_notification_settings`, `customer_service_contracts`
 - `portal_users`, `portal_user_object_scopes`
 - `objects` (kopieras nivå-för-nivå för parent-FK), `object_parents`,
-  `object_metadata`, `object_contacts`, `object_images`, `object_articles`,
+  `object_metadata`, `object_contacts`, `object_articles`,
   `object_payers`, `object_time_restrictions`
 - `planning_parameters` (kund/objekt-nivå)
 - `metadata_varden` utan koppling till `work_order_id`
+
+> `object_images` SKIPPAS avsiktligt — uppladdad media (object-storage-artefakter)
+> följer inte med dev→prod-migreringen.
 
 **Rensas i prod (cleanup-fas):**
 - De testkunder som finns i prod för `kinab` (max 10 — säkerhetslås)
@@ -87,6 +90,8 @@ PROD_DATABASE_URL='postgres://...' CONFIRM=YES_MIGRATE_PROD \
 | `--tenant` | `kinab` | Vilken tenant |
 | `--active-since` | `2024-01-01` | Tröskel för "aktiv kund" |
 | `--batch` | `500` | Insert-batch-storlek |
+| `--limit=N` | (av) | Kapa kund-listan till N (deterministisk via id-sort, för stegvis test) |
+| `--customer-id=id1,id2,...` | (av) | Selektiv import: ENBART dessa kunder. Användbart för senare återställning av enskilda vilande kunder. |
 
 ### Env-overrides
 

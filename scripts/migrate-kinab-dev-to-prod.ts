@@ -29,9 +29,16 @@
  *   --tenant=kinab                         (default: kinab)
  *   --active-since=2024-01-01              (default: 2024-01-01)
  *   --batch=500                            insert-batch-storlek
+ *   --limit=N                              kapa kund-listan till N (deterministisk via id-sort)
+ *   --customer-id=id1,id2,...              selektiv import: ENBART dessa kunder
+ *                                          (för senare återställning av enskilda vilande kunder)
  *
  * Env-overrides
  *   TEST_CUSTOMER_IDS=id1,id2,...   explicit lista som ska raderas i cleanup
+ *
+ * POST-RUN VALIDERING (innan COMMIT)
+ *   Skriptet kör FK-integritets- och tenant-leak-checkar inom samma transaktion.
+ *   Om någon felar → tvångs-rollback, ingen ändring persisterad.
  */
 
 import pg from "pg";
@@ -58,6 +65,9 @@ const PHASE = (arg("phase", "all") || "all") as
 const TENANT = arg("tenant", "kinab")!;
 const ACTIVE_SINCE = arg("active-since", "2024-01-01")!;
 const BATCH = parseInt(arg("batch", "500")!, 10);
+const LIMIT_RAW = arg("limit");
+const LIMIT: number | null = LIMIT_RAW ? parseInt(LIMIT_RAW, 10) : null;
+const CUSTOMER_ID_ARG = arg("customer-id"); // komma-separerad lista, valbar
 const DRY_RUN_FLAG = arg("dry-run") === "true";
 const CONFIRM = process.env.CONFIRM === "YES_MIGRATE_PROD";
 const DRY_RUN = DRY_RUN_FLAG || !CONFIRM;
@@ -96,6 +106,26 @@ function track(table: string) {
 
 type Querier = pg.Pool | pg.PoolClient;
 
+const pkCache = new Map<string, string | null>();
+/** Returnerar single-column PK eller null om sammansatt/saknas. */
+async function getPrimaryKey(qx: Querier, table: string, cacheKey: string): Promise<string | null> {
+  const ck = `${cacheKey}:${table}`;
+  if (pkCache.has(ck)) return pkCache.get(ck)!;
+  const r = await qx.query<{ column_name: string; n: number }>(
+    `SELECT kcu.column_name, count(*) OVER ()::int AS n
+     FROM information_schema.table_constraints tc
+     JOIN information_schema.key_column_usage kcu
+       ON tc.constraint_name=kcu.constraint_name AND tc.table_schema=kcu.table_schema
+     WHERE tc.constraint_type='PRIMARY KEY'
+       AND tc.table_schema='public' AND tc.table_name=$1
+     ORDER BY kcu.ordinal_position`,
+    [table],
+  );
+  const pk = r.rowCount === 1 ? r.rows[0].column_name : null;
+  pkCache.set(ck, pk);
+  return pk;
+}
+
 const colCache = new Map<string, string[]>();
 async function getColumns(qx: Querier, table: string, cacheKey: string): Promise<string[]> {
   const ck = `${cacheKey}:${table}`;
@@ -124,12 +154,26 @@ async function copyTable(
   opts: { conflictKey?: string } = {},
 ): Promise<number> {
   const t = track(table);
-  const conflictKey = opts.conflictKey ?? "id";
 
-  const [devCols, prodCols] = await Promise.all([
+  const [devCols, prodCols, devPk, prodPk] = await Promise.all([
     getColumns(dev, table, "dev"),
     getColumns(prod, table, "prod"),
+    getPrimaryKey(dev, table, "dev"),
+    getPrimaryKey(prod, table, "prod"),
   ]);
+  // Auto-detect PK; opts.conflictKey är override. Sammansatt PK → kräver explicit override.
+  const conflictKey = opts.conflictKey ?? prodPk ?? devPk;
+  if (!conflictKey) {
+    throw new Error(
+      `copyTable(${table}): kunde inte avgöra PK automatiskt (sammansatt eller saknas). ` +
+        `Sätt opts.conflictKey explicit.`,
+    );
+  }
+  if (devPk && prodPk && devPk !== prodPk) {
+    throw new Error(
+      `copyTable(${table}): PK-mismatch dev=${devPk} prod=${prodPk}. Schema måste synkas först.`,
+    );
+  }
   if (devCols.length === 0) {
     log(`  [skip] ${table}: tabell saknas i dev`);
     return 0;
@@ -588,7 +632,27 @@ async function migrateConfig(prod: pg.PoolClient): Promise<void> {
 
 // ----------------------------- phase: customers ------------------
 
+/** Skipped-rader för audit-rapport: { kind, id, reason } */
+const skipped: { kind: string; id: string; reason: string }[] = [];
+
 async function getActiveCustomerIds(): Promise<string[]> {
+  // Selektiv import via --customer-id=id1,id2,... — användbart vid återställning
+  // av specifika vilande kunder efter initial migrering.
+  if (CUSTOMER_ID_ARG) {
+    const ids = CUSTOMER_ID_ARG.split(",").map((s) => s.trim()).filter(Boolean);
+    log(`  --customer-id satt: importerar ${ids.length} explicita kund(er)`);
+    // Verifiera att de finns i dev under rätt tenant
+    const r = await dev.query<{ id: string }>(
+      `SELECT id FROM customers WHERE tenant_id = $1 AND id = ANY($2::text[])`,
+      [TENANT, ids],
+    );
+    const found = new Set(r.rows.map((x) => x.id));
+    for (const id of ids) {
+      if (!found.has(id)) skipped.push({ kind: "customer", id, reason: "ej i dev under rätt tenant" });
+    }
+    return [...found];
+  }
+
   const r = await dev.query<{ customer_id: string }>(
     `SELECT DISTINCT customer_id FROM work_orders
      WHERE tenant_id = $1
@@ -596,7 +660,29 @@ async function getActiveCustomerIds(): Promise<string[]> {
        AND customer_id IS NOT NULL`,
     [TENANT, ACTIVE_SINCE],
   );
-  return r.rows.map((x) => x.customer_id);
+  let ids = r.rows.map((x) => x.customer_id);
+
+  // Audit: lista kunder som SKIPPAS (vilande, work_order < ACTIVE_SINCE)
+  const dormant = await dev.query<{ id: string }>(
+    `SELECT id FROM customers
+     WHERE tenant_id = $1 AND id NOT IN (SELECT unnest($2::text[]))`,
+    [TENANT, ids],
+  );
+  for (const row of dormant.rows) {
+    skipped.push({ kind: "customer", id: row.id, reason: `vilande (work_order < ${ACTIVE_SINCE})` });
+  }
+
+  // --limit=N tar de N första kunderna (deterministisk via sort) — för stegvis test
+  if (LIMIT && LIMIT > 0 && ids.length > LIMIT) {
+    ids.sort();
+    const dropped = ids.slice(LIMIT);
+    for (const id of dropped) {
+      skipped.push({ kind: "customer", id, reason: `--limit=${LIMIT}` });
+    }
+    ids = ids.slice(0, LIMIT);
+    log(`  --limit=${LIMIT} satt: kapad till ${ids.length} kunder`);
+  }
+  return ids;
 }
 
 async function migrateCustomers(prod: pg.PoolClient): Promise<void> {
@@ -661,7 +747,8 @@ async function migrateCustomers(prod: pg.PoolClient): Promise<void> {
   await copyTable(prod, "object_parents", `object_id = ANY($1::text[])`, [objectIds]);
   await copyTable(prod, "object_metadata", `object_id = ANY($1::text[])`, [objectIds]);
   await copyTable(prod, "object_contacts", `object_id = ANY($1::text[])`, [objectIds]);
-  await copyTable(prod, "object_images", `object_id = ANY($1::text[])`, [objectIds]);
+  // object_images SKIPPAS avsiktligt — uppladdade media är out-of-scope för
+  // slim-migreringen (object-storage-artefakter följer inte med dev→prod).
   await copyTable(prod, "object_articles", `object_id = ANY($1::text[])`, [objectIds]);
   await copyTable(
     prod,
@@ -819,6 +906,73 @@ async function main() {
       `\n  Efter (i transaktion): prod=${cAfter.rows[0].c} kunder, ${oAfter.rows[0].c} objekt`,
     );
 
+    // ============ Post-run validering (innan COMMIT) ============
+    log("\n=== Post-run validation ===");
+    const validationErrors: string[] = [];
+
+    // 1) FK-integritet: alla objects.parent_id måste peka på existerande objekt
+    const orphParents = await prod.query<{ c: number }>(
+      `SELECT count(*)::int AS c FROM objects o
+       WHERE o.parent_id IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM objects p WHERE p.id = o.parent_id)`,
+    );
+    if (orphParents.rows[0].c > 0) {
+      validationErrors.push(`objects.parent_id: ${orphParents.rows[0].c} orphan(s)`);
+    }
+    log(`  objects.parent_id orphans: ${orphParents.rows[0].c}`);
+
+    // 2) FK-integritet: clusters.root_customer_id → customers.id
+    const orphClust = await prod.query<{ c: number }>(
+      `SELECT count(*)::int AS c FROM clusters c
+       WHERE c.root_customer_id IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM customers cu WHERE cu.id = c.root_customer_id)`,
+    );
+    if (orphClust.rows[0].c > 0) {
+      validationErrors.push(`clusters.root_customer_id: ${orphClust.rows[0].c} orphan(s)`);
+    }
+    log(`  clusters.root_customer_id orphans: ${orphClust.rows[0].c}`);
+
+    // 3) FK-integritet: price_list_articles → price_lists
+    const orphPla = await prod.query<{ c: number }>(
+      `SELECT count(*)::int AS c FROM price_list_articles pla
+       WHERE NOT EXISTS (SELECT 1 FROM price_lists pl WHERE pl.id = pla.price_list_id)`,
+    );
+    if (orphPla.rows[0].c > 0) {
+      validationErrors.push(`price_list_articles: ${orphPla.rows[0].c} orphan(s)`);
+    }
+    log(`  price_list_articles orphans: ${orphPla.rows[0].c}`);
+
+    // 4) Tenant-leak: alla kopierade objekt måste ha tenant_id = TENANT
+    const leakObj = await prod.query<{ c: number }>(
+      `SELECT count(*)::int AS c FROM objects o
+       JOIN customers c ON c.id = o.customer_id
+       WHERE c.tenant_id = $1 AND (o.tenant_id IS DISTINCT FROM $1)`,
+      [TENANT],
+    );
+    if (leakObj.rows[0].c > 0) {
+      validationErrors.push(`tenant-leak: ${leakObj.rows[0].c} objekt med fel tenant_id`);
+    }
+    log(`  Tenant-leak (objects): ${leakObj.rows[0].c}`);
+
+    const leakPl = await prod.query<{ c: number }>(
+      `SELECT count(*)::int AS c FROM price_lists pl
+       JOIN customers c ON c.id = pl.customer_id
+       WHERE c.tenant_id = $1 AND (pl.tenant_id IS DISTINCT FROM $1)`,
+      [TENANT],
+    );
+    if (leakPl.rows[0].c > 0) {
+      validationErrors.push(`tenant-leak: ${leakPl.rows[0].c} price_lists med fel tenant_id`);
+    }
+    log(`  Tenant-leak (price_lists): ${leakPl.rows[0].c}`);
+
+    if (validationErrors.length > 0) {
+      throw new Error(
+        `Post-run validation FAILED:\n  - ${validationErrors.join("\n  - ")}\n` +
+          `Tvångs-rollback. Fixa skriptet/datakällan och kör om.`,
+      );
+    }
+    log("  Alla post-run-checkar OK.");
+
     if (DRY_RUN) {
       await prod.query("ROLLBACK");
       log("\n[DRY-RUN] Rollback klar — inga ändringar persisterade.");
@@ -873,6 +1027,27 @@ async function main() {
   lines.push("|---|---:|---:|---:|");
   for (const [t, c] of Object.entries(counters).sort()) {
     lines.push(`| ${t} | ${c.fetched} | ${c.upserted} | ${c.deleted} |`);
+  }
+  lines.push("");
+  lines.push(`## Skippade entiteter (${skipped.length})`);
+  lines.push("");
+  if (skipped.length === 0) {
+    lines.push("Inga.");
+  } else {
+    lines.push("| Typ | ID | Anledning |");
+    lines.push("|---|---|---|");
+    // Visa max 50 + summering per anledning
+    const byReason: Record<string, number> = {};
+    for (const s of skipped) byReason[s.reason] = (byReason[s.reason] ?? 0) + 1;
+    for (const s of skipped.slice(0, 50)) {
+      lines.push(`| ${s.kind} | ${s.id} | ${s.reason} |`);
+    }
+    if (skipped.length > 50) lines.push(`| … | … | (${skipped.length - 50} fler) |`);
+    lines.push("");
+    lines.push("### Summering per anledning");
+    for (const [reason, n] of Object.entries(byReason).sort()) {
+      lines.push(`- ${reason}: ${n}`);
+    }
   }
   fs.writeFileSync(reportPath, lines.join("\n") + "\n", "utf8");
   log(`\nRapport sparad: ${reportPath}`);
