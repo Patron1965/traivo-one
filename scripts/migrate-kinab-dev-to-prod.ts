@@ -248,7 +248,7 @@ async function deleteByColumn(
 
 // ----------------------------- phase: cleanup --------------------
 
-async function getProdTestCustomerIds(prod: pg.PoolClient): Promise<string[]> {
+async function getProdTestCustomerIds(prod: pg.PoolClient): Promise<string[] | "skip"> {
   if (TEST_CUSTOMER_IDS_ENV) {
     return TEST_CUSTOMER_IDS_ENV.split(",")
       .map((s) => s.trim())
@@ -258,11 +258,15 @@ async function getProdTestCustomerIds(prod: pg.PoolClient): Promise<string[]> {
     `SELECT id FROM customers WHERE tenant_id=$1 AND deleted_at IS NULL`,
     [TENANT],
   );
+  // Idempotens: efter en lyckad full-migrering har prod många kunder. Då är
+  // cleanup-fasen ett no-op (det finns inga testkunder kvar att rensa).
+  // Den kan tvingas via TEST_CUSTOMER_IDS=... om man explicit vill.
   if (r.rowCount! > 10) {
-    throw new Error(
-      `Säkerhetslås: prod har ${r.rowCount} kunder för ${TENANT}. ` +
-        `Det är för många för en cleanup-fas. Sätt TEST_CUSTOMER_IDS=... explicit.`,
+    log(
+      `  [skip] cleanup: prod har ${r.rowCount} kunder för ${TENANT} (>10). ` +
+        `Antar att initial cleanup redan körts — no-op. Sätt TEST_CUSTOMER_IDS=... för att tvinga.`,
     );
+    return "skip";
   }
   return r.rows.map((x) => x.id);
 }
@@ -357,7 +361,9 @@ const CUSTOMER_CHILDREN = [
 
 async function cleanupTestCustomers(prod: pg.PoolClient): Promise<void> {
   log("\n=== PHASE: cleanup ===");
-  const customerIds = await getProdTestCustomerIds(prod);
+  const result = await getProdTestCustomerIds(prod);
+  if (result === "skip") return; // idempotent rerun
+  const customerIds = result;
   if (customerIds.length === 0) {
     log("  Inga testkunder att radera.");
     return;
@@ -855,6 +861,70 @@ async function copyObjectsTopologically(
   }
 }
 
+// ----------------------------- preflight -------------------------
+
+/**
+ * Pg_constraint-driven täckningskontroll: varnar om någon FK till
+ * customers/objects/work_orders inte finns i våra hardcodade cleanup-listor.
+ * Skydd mot framtida schema-tillägg som annars hade lett till tysta orphans
+ * eller misslyckad cleanup.
+ */
+async function preflightFkCoverage(prod: pg.PoolClient): Promise<void> {
+  log("\n=== Preflight: FK-täckningskontroll ===");
+  const r = await prod.query<{
+    parent_table: string;
+    child_table: string;
+    child_column: string;
+  }>(
+    `SELECT confrelid::regclass::text AS parent_table,
+            conrelid::regclass::text  AS child_table,
+            a.attname                  AS child_column
+     FROM pg_constraint c
+     JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=ANY(c.conkey)
+     WHERE c.contype='f'
+       AND confrelid::regclass::text IN ('customers','objects','work_orders')`,
+  );
+  // Tabeller vi avsiktligt INTE rör (cleanup ska ej kasta för dessa).
+  const ignored = new Set<string>([
+    // Self-FKs hanteras explicit
+    "objects.parent_id",
+    "object_parents.parent_id",
+    "object_contacts.inherited_from_object_id",
+    "work_orders.parent_work_order_id",
+    "task_dependencies.depends_on_work_order_id",
+    "task_dependency_instances.parent_work_order_id",
+    "task_dependency_instances.child_work_order_id",
+    "work_order_dependencies.depends_on_work_order_id",
+    "urgent_job_assignments.order_id",
+  ]);
+  const have = new Set<string>();
+  for (const t of OBJECT_CHILDREN) have.add(`${t}.object_id`);
+  for (const t of WORKORDER_CHILDREN) have.add(`${t}.work_order_id`);
+  for (const t of CUSTOMER_CHILDREN) have.add(`${t}.customer_id`);
+  // Specialnamn
+  have.add("metadata_historik.objekt_id");
+  have.add("metadata_varden.objekt_id");
+  have.add("clusters.root_customer_id");
+  have.add("objects.customer_id");
+  have.add("work_orders.customer_id");
+  have.add("work_orders.object_id");
+
+  const missing: string[] = [];
+  for (const row of r.rows) {
+    const key = `${row.child_table}.${row.child_column}`;
+    if (ignored.has(key)) continue;
+    if (!have.has(key)) missing.push(`${key} → ${row.parent_table}`);
+  }
+  if (missing.length === 0) {
+    log(`  Alla ${r.rowCount} FK till customers/objects/work_orders täcks av cleanup-listorna.`);
+    return;
+  }
+  log(`  [WARN] ${missing.length} FK saknas i cleanup-listorna:`);
+  for (const m of missing) log(`    - ${m}`);
+  log(`  Lägg till dem i OBJECT_CHILDREN/WORKORDER_CHILDREN/CUSTOMER_CHILDREN ` +
+      `om de innehåller data, annars ignorera-listan.`);
+}
+
 // ----------------------------- main ------------------------------
 
 async function main() {
@@ -882,6 +952,10 @@ async function main() {
   let committed = false;
   try {
     await prod.query("BEGIN");
+
+    // Preflight: pg_constraint-driven täckningskontroll. Varnar om någon FK
+    // till customers/objects/work_orders saknas i våra cleanup-listor.
+    await preflightFkCoverage(prod);
 
     if (PHASE === "cleanup" || PHASE === "all") {
       await cleanupTestCustomers(prod);
@@ -942,28 +1016,49 @@ async function main() {
     }
     log(`  price_list_articles orphans: ${orphPla.rows[0].c}`);
 
-    // 4) Tenant-leak: alla kopierade objekt måste ha tenant_id = TENANT
-    const leakObj = await prod.query<{ c: number }>(
-      `SELECT count(*)::int AS c FROM objects o
-       JOIN customers c ON c.id = o.customer_id
-       WHERE c.tenant_id = $1 AND (o.tenant_id IS DISTINCT FROM $1)`,
-      [TENANT],
+    // 4) Tenant-leak: för varje tabell vi rört som har BÅDE tenant_id OCH
+    //    customer_id/object_id, kontrollera att rader vars FK pekar på en
+    //    kinab-kund/objekt också har tenant_id = kinab. Vi kan inte göra en
+    //    bred check över tabellerna eftersom prod är multi-tenant och andra
+    //    tenants legitimt har egna rader.
+    const leakTables = await prod.query<{ table_name: string; has_cust: boolean; has_obj: boolean }>(
+      `SELECT t.table_name,
+              bool_or(c.column_name='customer_id') AS has_cust,
+              bool_or(c.column_name='object_id')   AS has_obj
+       FROM information_schema.columns c
+       JOIN (SELECT DISTINCT table_name FROM information_schema.columns
+             WHERE table_schema='public' AND column_name='tenant_id'
+               AND table_name = ANY($1::text[])) t
+         ON t.table_name=c.table_name
+       WHERE c.table_schema='public'
+         AND c.column_name IN ('customer_id','object_id')
+       GROUP BY t.table_name`,
+      [Object.keys(counters)],
     );
-    if (leakObj.rows[0].c > 0) {
-      validationErrors.push(`tenant-leak: ${leakObj.rows[0].c} objekt med fel tenant_id`);
+    let totalLeak = 0;
+    for (const row of leakTables.rows) {
+      const conds: string[] = [];
+      if (row.has_cust) {
+        conds.push(`customer_id IN (SELECT id FROM customers WHERE tenant_id = $1)`);
+      }
+      if (row.has_obj) {
+        conds.push(`object_id IN (SELECT id FROM objects WHERE tenant_id = $1)`);
+      }
+      if (conds.length === 0) continue;
+      const lk = await prod.query<{ c: number }>(
+        `SELECT count(*)::int AS c FROM "${row.table_name}"
+         WHERE (${conds.join(" OR ")})
+           AND tenant_id IS DISTINCT FROM $1`,
+        [TENANT],
+      );
+      if (lk.rows[0].c > 0) {
+        validationErrors.push(
+          `tenant-leak: ${row.table_name} har ${lk.rows[0].c} rader vars FK pekar på kinab men tenant_id ≠ kinab`,
+        );
+        totalLeak += lk.rows[0].c;
+      }
     }
-    log(`  Tenant-leak (objects): ${leakObj.rows[0].c}`);
-
-    const leakPl = await prod.query<{ c: number }>(
-      `SELECT count(*)::int AS c FROM price_lists pl
-       JOIN customers c ON c.id = pl.customer_id
-       WHERE c.tenant_id = $1 AND (pl.tenant_id IS DISTINCT FROM $1)`,
-      [TENANT],
-    );
-    if (leakPl.rows[0].c > 0) {
-      validationErrors.push(`tenant-leak: ${leakPl.rows[0].c} price_lists med fel tenant_id`);
-    }
-    log(`  Tenant-leak (price_lists): ${leakPl.rows[0].c}`);
+    log(`  Tenant-leak check (${leakTables.rowCount} tabeller): ${totalLeak} läckor`);
 
     if (validationErrors.length > 0) {
       throw new Error(

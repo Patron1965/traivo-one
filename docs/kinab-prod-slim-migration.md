@@ -102,14 +102,32 @@ PROD_DATABASE_URL='postgres://...' CONFIRM=YES_MIGRATE_PROD \
 
 ## Idempotens & säkerhet
 
-- **Upsert** via `INSERT ... ON CONFLICT (id) DO UPDATE SET ...`. Skriptet kan
-  köras om utan att duplicera rader; befintliga rader i prod skrivs över med
-  dev-version.
+- **Upsert** via `INSERT ... ON CONFLICT (PK) DO UPDATE SET ...`. PK auto-
+  detekteras per tabell via information_schema (rättar `tenant_features` som
+  har PK=`tenant_id` istället för `id`).
 - **En transaktion**: BEGIN ... COMMIT/ROLLBACK runt alla skrivningar. Inga
   delvis applicerade ändringar.
-- **Säkerhetslås**: cleanup vägrar köra om prod har > 10 kunder för tenanten
-  utan att `TEST_CUSTOMER_IDS` är explicit satt.
+- **Rerun-säker cleanup**: efter en lyckad full-migrering har prod många
+  kunder. Då blir cleanup-fasen ett **no-op** istället för att kasta. Den
+  kan tvingas via `TEST_CUSTOMER_IDS=...`. `--phase=all` är därmed
+  rerunnable utan manuella overrides.
 - **Schema-diff-tolerant**: kopierar bara kolumner som finns i båda DB.
+
+## Preflight & post-run validering
+
+Vid varje körning innanför transaktionen:
+
+1. **FK-täckningskontroll** (preflight): `pg_constraint`-driven listning av
+   alla FK till `customers`/`objects`/`work_orders`. Varnar om någon FK
+   saknas i `OBJECT_CHILDREN`/`WORKORDER_CHILDREN`/`CUSTOMER_CHILDREN` —
+   skydd mot framtida schema-tillägg.
+2. **FK-orphans efter skrivning**: `objects.parent_id`,
+   `clusters.root_customer_id`, `price_list_articles.price_list_id`.
+3. **Tenant-leak**: för varje tabell vi rört som har både `tenant_id` och
+   `customer_id`/`object_id`, kontrolleras att rader vars FK pekar på en
+   kinab-kund/objekt också har `tenant_id = kinab`.
+
+Vid fail → tvångs-`ROLLBACK`, ingen ändring persisterad.
 
 ## Output
 
