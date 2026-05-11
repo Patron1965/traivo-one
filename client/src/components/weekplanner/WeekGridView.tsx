@@ -1,12 +1,13 @@
-import { memo, useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { memo, useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { AlertTriangle, Plus, Navigation, Cloud, Sun, CloudRain, Snowflake, ShieldAlert, ShieldCheck, ShieldX, EyeOff, ChevronDown, X, UserPlus, Loader2 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { AlertTriangle, Plus, Navigation, Cloud, Sun, CloudRain, Snowflake, ShieldAlert, ShieldCheck, ShieldX, EyeOff, ChevronDown, ChevronRight, Trash2, UserPlus, Loader2, Repeat, Users } from "lucide-react";
 import { format, isSameDay } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject, ObjectTimeRestriction } from "@shared/schema";
@@ -65,29 +66,102 @@ interface WeekGridViewProps {
   teamMembersData?: Array<{ id: string; teamId: string; resourceId: string; role: string | null }>;
 }
 
-function TeamMembersDropdown({
+type TeamMemberRow = { id: string; teamId: string; resourceId: string; role: string | null };
+
+function deriveInitials(r: Resource | undefined, fallback: string) {
+  if (r?.initials) return r.initials.slice(0, 2).toUpperCase();
+  const name = r?.name ?? fallback;
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() || "").join("") || name.slice(0, 2).toUpperCase();
+}
+
+function ResourcePicker({
+  candidates,
+  triggerLabel,
+  triggerIcon,
+  triggerTestId,
+  triggerAriaLabel,
+  triggerVariant = "outline",
+  triggerClassName,
+  disabled,
+  onSelect,
+  emptyText = "Inga lediga resurser",
+}: {
+  candidates: Resource[];
+  triggerLabel?: string;
+  triggerIcon: React.ReactNode;
+  triggerTestId: string;
+  triggerAriaLabel: string;
+  triggerVariant?: "outline" | "ghost" | "default";
+  triggerClassName?: string;
+  disabled?: boolean;
+  onSelect: (resourceId: string) => void;
+  emptyText?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant={triggerVariant}
+          size={triggerLabel ? "sm" : "icon"}
+          className={triggerClassName ?? (triggerLabel ? "h-7 text-xs" : "h-7 w-7")}
+          disabled={disabled}
+          data-testid={triggerTestId}
+          aria-label={triggerAriaLabel}
+        >
+          {triggerIcon}
+          {triggerLabel ? <span className="ml-1">{triggerLabel}</span> : null}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Sök resurs…" data-testid={`${triggerTestId}-input`} />
+          <CommandList>
+            <CommandEmpty>{emptyText}</CommandEmpty>
+            {candidates.length > 0 && (
+              <CommandGroup heading="Resurser utan team">
+                {candidates.map(r => (
+                  <CommandItem
+                    key={r.id}
+                    value={`${r.name} ${r.email ?? ""}`}
+                    onSelect={() => { onSelect(r.id); setOpen(false); }}
+                    data-testid={`${triggerTestId}-option-${r.id}`}
+                  >
+                    <span className="h-5 w-5 rounded-full bg-primary/15 text-primary text-[10px] font-semibold flex items-center justify-center mr-2 shrink-0">
+                      {deriveInitials(r, r.name)}
+                    </span>
+                    <span className="truncate">{r.name}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function TeamMemberPanel({
   teamId,
   teamName,
-  members,
-  resources,
+  freeResources,
+  resourcesById,
 }: {
   teamId: string;
   teamName: string;
-  members: Array<{ id: string; resourceId: string; role: string | null }>;
-  resources: Resource[];
+  freeResources: Resource[];
+  resourcesById: Map<string, Resource>;
 }) {
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
-  const [pendingResourceId, setPendingResourceId] = useState<string>("");
+  const { data: members = [], isLoading } = useQuery<TeamMemberRow[]>({
+    queryKey: ["/api/team-members", teamId],
+  });
 
-  const memberResourceIds = useMemo(() => new Set(members.map(m => m.resourceId)), [members]);
-  const availableResources = useMemo(
-    () => resources.filter(r => !memberResourceIds.has(r.id)).sort((a, b) => a.name.localeCompare(b.name, "sv")),
-    [resources, memberResourceIds],
-  );
-
-  const invalidateMembers = () => {
+  const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/team-members"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/team-members", teamId] });
   };
 
   const removeMutation = useMutation({
@@ -95,7 +169,7 @@ function TeamMembersDropdown({
       await apiRequest("DELETE", `/api/team-member/${memberId}`);
     },
     onSuccess: () => {
-      invalidateMembers();
+      invalidateAll();
       toast({ title: "Resurs borttagen från team" });
     },
     onError: (err) => {
@@ -108,8 +182,7 @@ function TeamMembersDropdown({
       await apiRequest("POST", `/api/team-members/${teamId}`, { resourceId, role: "medlem" });
     },
     onSuccess: () => {
-      invalidateMembers();
-      setPendingResourceId("");
+      invalidateAll();
       toast({ title: "Resurs tillagd i team" });
     },
     onError: (err) => {
@@ -117,89 +190,118 @@ function TeamMembersDropdown({
     },
   });
 
+  const replaceMutation = useMutation({
+    mutationFn: async ({ memberId, newResourceId }: { memberId: string; newResourceId: string }) => {
+      await apiRequest("DELETE", `/api/team-member/${memberId}`);
+      try {
+        await apiRequest("POST", `/api/team-members/${teamId}`, { resourceId: newResourceId, role: "medlem" });
+      } catch (postErr) {
+        // Rollback: try to recreate the deleted membership so we don't leave the team short-handed.
+        const original = members.find(m => m.id === memberId);
+        if (original) {
+          try {
+            await apiRequest("POST", `/api/team-members/${teamId}`, { resourceId: original.resourceId, role: original.role ?? "medlem" });
+          } catch {
+            // Surface combined failure below.
+          }
+        }
+        throw postErr;
+      }
+    },
+    onSuccess: () => {
+      invalidateAll();
+      toast({ title: "Resurs utbytt" });
+    },
+    onError: (err) => {
+      invalidateAll();
+      toast({
+        title: "Kunde inte byta ut resurs",
+        description: err instanceof Error ? `${err.message}. Tidigare medlemskap har återställts om möjligt.` : "Försök igen",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const memberResourceIds = useMemo(() => new Set(members.map(m => m.resourceId)), [members]);
+  const candidatesForAdd = useMemo(
+    () => freeResources.filter(r => !memberResourceIds.has(r.id)),
+    [freeResources, memberResourceIds],
+  );
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-5 w-5 shrink-0"
-          onClick={(e) => e.stopPropagation()}
-          data-testid={`button-team-members-${teamId}`}
-          aria-label="Visa teamets resurser"
-        >
-          <ChevronDown className="h-3 w-3" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-72 p-3" align="start" data-testid={`popover-team-members-${teamId}`}>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold truncate" title={teamName}>{teamName}</p>
-            <span className="text-[10px] text-muted-foreground tabular-nums">{members.length} medlem{members.length === 1 ? "" : "mar"}</span>
-          </div>
-          <div className="max-h-48 overflow-y-auto -mx-1">
-            {members.length === 0 ? (
-              <p className="text-[11px] text-muted-foreground italic px-1 py-2">Inga resurser i teamet</p>
-            ) : (
-              <ul className="space-y-0.5">
-                {members.map(m => {
-                  const r = resources.find(rr => rr.id === m.resourceId);
-                  const name = r?.name ?? "Okänd resurs";
-                  return (
-                    <li key={m.id} className="flex items-center gap-2 px-1 py-1 rounded hover:bg-muted" data-testid={`row-team-member-${m.id}`}>
-                      <span className="flex-1 text-xs truncate" title={name}>{name}</span>
-                      {m.role && m.role !== "medlem" && (
-                        <span className="text-[10px] text-muted-foreground capitalize">{m.role}</span>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                        disabled={removeMutation.isPending}
-                        onClick={() => removeMutation.mutate(m.id)}
-                        data-testid={`button-remove-team-member-${m.id}`}
-                        aria-label={`Ta bort ${name}`}
-                      >
-                        {removeMutation.isPending && removeMutation.variables === m.id ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <X className="h-3 w-3" />
-                        )}
-                      </Button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-          <div className="border-t pt-2 space-y-1.5">
-            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Lägg till resurs</p>
-            <div className="flex items-center gap-1.5">
-              <Select value={pendingResourceId} onValueChange={setPendingResourceId} disabled={availableResources.length === 0 || addMutation.isPending}>
-                <SelectTrigger className="h-8 text-xs flex-1" data-testid={`select-add-team-member-${teamId}`}>
-                  <SelectValue placeholder={availableResources.length === 0 ? "Inga lediga resurser" : "Välj resurs…"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableResources.map(r => (
-                    <SelectItem key={r.id} value={r.id} data-testid={`option-add-resource-${r.id}`}>{r.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                size="icon"
-                className="h-8 w-8 shrink-0"
-                disabled={!pendingResourceId || addMutation.isPending}
-                onClick={() => pendingResourceId && addMutation.mutate(pendingResourceId)}
-                data-testid={`button-confirm-add-team-member-${teamId}`}
-                aria-label="Lägg till"
-              >
-                {addMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
-              </Button>
-            </div>
-          </div>
+    <div className="px-3 py-2 bg-muted/40 border-b" data-testid={`panel-team-members-${teamId}`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <Users className="h-3.5 w-3.5" />
+          <span>Medlemmar i {teamName}</span>
+          <span className="tabular-nums">({members.length})</span>
         </div>
-      </PopoverContent>
-    </Popover>
+        <ResourcePicker
+          candidates={candidatesForAdd}
+          triggerLabel="Lägg till medlem"
+          triggerIcon={<UserPlus className="h-3.5 w-3.5" />}
+          triggerTestId={`button-add-team-member-${teamId}`}
+          triggerAriaLabel="Lägg till medlem"
+          disabled={addMutation.isPending || candidatesForAdd.length === 0}
+          onSelect={(rid) => addMutation.mutate(rid)}
+        />
+      </div>
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Hämtar medlemmar…
+        </div>
+      ) : members.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic py-2">Teamet har inga medlemmar än.</p>
+      ) : (
+        <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+          {members.map(m => {
+            const r = resourcesById.get(m.resourceId);
+            const name = r?.name ?? "Okänd resurs";
+            const role = m.role && m.role !== "medlem" ? m.role : (r?.resourceType ?? "");
+            const removingThis = removeMutation.isPending && removeMutation.variables === m.id;
+            const replacingThis = replaceMutation.isPending && replaceMutation.variables?.memberId === m.id;
+            return (
+              <li
+                key={m.id}
+                className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-background border"
+                data-testid={`row-team-member-${m.id}`}
+              >
+                <span className="h-7 w-7 rounded-full bg-primary/15 text-primary text-[11px] font-semibold flex items-center justify-center shrink-0">
+                  {deriveInitials(r, name)}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium truncate" title={name}>{name}</div>
+                  {role && (
+                    <div className="text-[10px] text-muted-foreground truncate capitalize">{role}</div>
+                  )}
+                </div>
+                <ResourcePicker
+                  candidates={candidatesForAdd}
+                  triggerIcon={replacingThis ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Repeat className="h-3.5 w-3.5" />}
+                  triggerTestId={`button-replace-team-member-${m.id}`}
+                  triggerAriaLabel={`Byt ut ${name}`}
+                  triggerVariant="ghost"
+                  disabled={replaceMutation.isPending || removeMutation.isPending || candidatesForAdd.length === 0}
+                  onSelect={(newRid) => replaceMutation.mutate({ memberId: m.id, newResourceId: newRid })}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                  disabled={removingThis || replaceMutation.isPending}
+                  onClick={() => removeMutation.mutate(m.id)}
+                  data-testid={`button-remove-team-member-${m.id}`}
+                  aria-label={`Ta bort ${name}`}
+                >
+                  {removingThis ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -229,21 +331,194 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
     allResources = [], teamMembersData = [],
   } = props;
 
-  const membersByTeam = useMemo(() => {
-    const m = new Map<string, Array<{ id: string; resourceId: string; role: string | null }>>();
-    for (const tm of teamMembersData) {
-      const arr = m.get(tm.teamId);
-      if (arr) arr.push(tm);
-      else m.set(tm.teamId, [tm]);
-    }
+  const { user } = useAuth();
+  const fallbackStorageKey = `planner.fallbackRows.expanded.${user?.id ?? "anon"}`;
+
+  const resourcesById = useMemo(() => {
+    const m = new Map<string, Resource>();
+    for (const r of allResources) m.set(r.id, r);
     return m;
+  }, [allResources]);
+
+  const tiedResourceIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const tm of teamMembersData) s.add(tm.resourceId);
+    return s;
   }, [teamMembersData]);
+
+  const freeResources = useMemo(
+    () => allResources.filter(r => !tiedResourceIds.has(r.id)).sort((a, b) => a.name.localeCompare(b.name, "sv")),
+    [allResources, tiedResourceIds],
+  );
+
+  const { regularTeamRows, fallbackTeamRows } = useMemo(() => {
+    const regular: TeamRow[] = [];
+    const fallback: TeamRow[] = [];
+    for (const t of teamRows) {
+      if (t.isResourceFallback) fallback.push(t);
+      else regular.push(t);
+    }
+    return { regularTeamRows: regular, fallbackTeamRows: fallback };
+  }, [teamRows]);
+
+  const fallbackJobCount = useMemo(() => {
+    if (!getJobsForTeamAndDay || fallbackTeamRows.length === 0) return 0;
+    let total = 0;
+    for (const t of fallbackTeamRows) {
+      for (const d of visibleDates) total += getJobsForTeamAndDay(t.id, d).length;
+    }
+    return total;
+  }, [fallbackTeamRows, visibleDates, getJobsForTeamAndDay]);
+
+  const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
+  const [fallbackExpanded, setFallbackExpanded] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(fallbackStorageKey);
+      if (raw === "1") setFallbackExpanded(true);
+      else if (raw === "0") setFallbackExpanded(false);
+    } catch {
+      // ignore
+    }
+  }, [fallbackStorageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(fallbackStorageKey, fallbackExpanded ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [fallbackStorageKey, fallbackExpanded]);
 
   const zoomPadClass = zoom.scale <= 0.5 ? "p-0.5" : zoom.scale >= 2 ? "p-4" : "p-2";
   const zoomGapClass = zoom.scale <= 0.5 ? "space-y-0" : zoom.scale >= 2 ? "space-y-3" : "space-y-1";
 
   const isTeamMode = rowMode === "team";
   const headerLabel = isTeamMode ? "Team" : "Resurser";
+
+  const renderTeamRow = (team: TeamRow) => {
+    const summary = teamWeekSummary?.[team.id];
+    const pct = summary?.pct ?? 0;
+    const isFallback = !!team.isResourceFallback;
+    const dayCapacity = isFallback ? HOURS_IN_DAY : (team.memberCount || 1) * HOURS_IN_DAY;
+    const canExpand = !isFallback && !team.isUncategorized;
+    const isExpanded = canExpand && expandedTeamId === team.id;
+    return (
+      <div key={team.id}>
+        <div className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] border-b" data-testid={`team-row-${team.id}`}>
+          <div className="sticky left-0 bg-background z-10 p-3 border-r flex flex-col justify-between" style={{ minHeight: `${zoom.weekH}px` }}>
+            <div className="flex items-center gap-2">
+              {canExpand ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5 shrink-0 -ml-1"
+                  onClick={(e) => { e.stopPropagation(); setExpandedTeamId(isExpanded ? null : team.id); }}
+                  data-testid={`button-toggle-team-members-${team.id}`}
+                  aria-expanded={isExpanded}
+                  aria-label={isExpanded ? "Dölj medlemmar" : "Visa medlemmar"}
+                >
+                  {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                </Button>
+              ) : (
+                <span className="h-5 w-5 shrink-0 -ml-1" aria-hidden />
+              )}
+              {team.color ? (
+                <span className="h-6 w-6 rounded-full shrink-0 flex items-center justify-center" style={{ backgroundColor: team.color }} data-testid={`avatar-team-color-${team.id}`} />
+              ) : !team.isUncategorized ? (
+                <span
+                  className={`h-6 w-6 rounded-full shrink-0 flex items-center justify-center text-[10px] font-semibold ${isFallback ? "bg-warning/15 text-warning dark:bg-warning/15" : "bg-primary/15 text-primary"}`}
+                  data-testid={`avatar-team-initials-${team.id}`}
+                >
+                  {team.name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() || "").join("") || team.name.slice(0, 2).toUpperCase()}
+                </span>
+              ) : null}
+              <div className="flex-1 min-w-0">
+                <div className={`text-sm font-medium truncate ${team.isUncategorized ? "text-muted-foreground italic" : ""}`} data-testid={`text-team-name-${team.id}`}>{team.name}</div>
+                {isFallback ? (
+                  <div className="text-[10px] text-warning">Saknar team</div>
+                ) : !team.isUncategorized ? (
+                  <div className="text-[10px] text-muted-foreground">{team.memberCount} medlem{team.memberCount === 1 ? "" : "mar"}</div>
+                ) : null}
+              </div>
+            </div>
+            {summary && (
+              <div className="mt-2">
+                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${getCapacityColor(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-1 tabular-nums">{summary.totalHours.toFixed(1)}h / {summary.weeklyCapacity}h</div>
+              </div>
+            )}
+          </div>
+          {visibleDates.map((day, dayIndex) => {
+            const jobs = getJobsForTeamAndDay ? getJobsForTeamAndDay(team.id, day) : [];
+            const dayHours = getTeamDayHours ? getTeamDayHours(team.id, day) : 0;
+            const dayStr = format(day, "yyyy-MM-dd");
+            const droppableId = isFallback && team.resourceId
+              ? `${team.resourceId}|${dayStr}`
+              : `team:${team.id}|${dayStr}`;
+            const capacityPct = dayCapacity > 0 ? Math.round((dayHours / dayCapacity) * 100) : 0;
+            const isOverbooked = dayHours > dayCapacity;
+            let teamDropFit: { bg: string; label: string; color: string } | null = null;
+            if (activeDragJob && !team.isUncategorized && (isFallback || team.memberCount > 0)) {
+              const newHours = dayHours + (activeDragJob.estimatedDuration || 60) / 60;
+              const projectedPct = dayCapacity > 0 ? (newHours / dayCapacity) * 100 : 0;
+              if (projectedPct > 110) teamDropFit = { bg: "bg-destructive/15 dark:bg-destructive/15 ring-destructive/40", label: isFallback ? "Överbokar resursen" : "Överbokar teamet", color: "text-destructive" };
+              else if (projectedPct > 85) teamDropFit = { bg: "bg-warning/15 dark:bg-warning/15 ring-warning/40", label: "Tight", color: "text-warning" };
+              else if (projectedPct > 65) teamDropFit = { bg: "bg-chart-3/15 dark:bg-chart-3/15 ring-chart-3/40", label: "Belastad", color: "text-chart-3" };
+              else teamDropFit = { bg: "bg-chart-2/15 dark:bg-chart-2/15 ring-chart-2/40", label: "Fri kapacitet", color: "text-chart-2" };
+            }
+            return (
+              <DroppableCell
+                key={dayIndex}
+                id={droppableId}
+                className={`${zoomPadClass} border-r last:border-r-0 transition-colors overflow-hidden min-w-0 ${getCapacityBgColor(capacityPct)}`}
+                style={{ minHeight: `${zoom.weekH}px` }}
+                dragOverConflicts={dragOverConflicts?.[droppableId]}
+                dropFitInfo={teamDropFit}
+                remoteDragActive={remoteDragActive}
+                remoteHovered={remoteHoveredDropId === droppableId}
+              >
+                <div className="min-w-0 overflow-hidden" data-testid={isFallback ? `drop-zone-resource-fallback-${team.resourceId}-${dayStr}` : `drop-zone-team-${team.id}-${dayStr}`}>
+                  <div className="flex items-center gap-1 mb-2">
+                    <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${getCapacityColor(capacityPct)}`} style={{ width: `${Math.min(capacityPct, 100)}%` }} />
+                    </div>
+                    <span className={`text-[10px] tabular-nums ${isOverbooked ? "text-destructive font-semibold" : capacityPct >= 85 ? "text-warning" : "text-muted-foreground"}`}>
+                      {dayHours.toFixed(1).replace(".", ",")}h
+                    </span>
+                  </div>
+                  <div className={zoomGapClass}>
+                    {jobs.length === 0 && (
+                      <div className="flex items-center justify-center py-4 text-muted-foreground/40">
+                        <Plus className="h-4 w-4" />
+                      </div>
+                    )}
+                    {jobs.map((job) => (
+                      <DraggableJobCard key={job.id} id={job.id}>
+                        <JobCard job={job} compact {...jobCardProps} />
+                      </DraggableJobCard>
+                    ))}
+                  </div>
+                </div>
+              </DroppableCell>
+            );
+          })}
+        </div>
+        {isExpanded && (
+          <TeamMemberPanel
+            teamId={team.id}
+            teamName={team.name}
+            freeResources={freeResources}
+            resourcesById={resourcesById}
+          />
+        )}
+      </div>
+    );
+  };
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {filterBar}
@@ -362,114 +637,44 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
           </div>
         )}
 
-        {isTeamMode && teamRows.map((team, rowIdx) => {
-          const summary = teamWeekSummary?.[team.id];
-          const pct = summary?.pct ?? 0;
-          const isFallback = !!team.isResourceFallback;
-          // For fallback rows: drop on plain `${resourceId}|${dayStr}` so existing dnd routes via executeSchedule.
-          // For team rows: drop on `team:${teamId}|${dayStr}` so dnd routes via executeTeamSchedule.
-          const dayCapacity = isFallback ? HOURS_IN_DAY : (team.memberCount || 1) * HOURS_IN_DAY;
-          return (
-            <div key={team.id}>
-              <div className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] border-b" data-testid={`team-row-${team.id}`}>
-                <div className="sticky left-0 bg-background z-10 p-3 border-r flex flex-col justify-between" style={{ minHeight: `${zoom.weekH}px` }}>
-                  <div className="flex items-center gap-2">
-                    {team.color ? (
-                      <span className="h-6 w-6 rounded-full shrink-0 flex items-center justify-center" style={{ backgroundColor: team.color }} data-testid={`avatar-team-color-${team.id}`} />
-                    ) : !team.isUncategorized ? (
-                      <span
-                        className={`h-6 w-6 rounded-full shrink-0 flex items-center justify-center text-[10px] font-semibold ${isFallback ? "bg-warning/15 text-warning dark:bg-warning/15" : "bg-primary/15 text-primary"}`}
-                        data-testid={`avatar-team-initials-${team.id}`}
-                      >
-                        {team.name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() || "").join("") || team.name.slice(0, 2).toUpperCase()}
-                      </span>
-                    ) : null}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1 min-w-0">
-                        <div className={`text-sm font-medium truncate ${team.isUncategorized ? "text-muted-foreground italic" : ""}`} data-testid={`text-team-name-${team.id}`}>{team.name}</div>
-                        {!isFallback && !team.isUncategorized && (
-                          <TeamMembersDropdown
-                            teamId={team.id}
-                            teamName={team.name}
-                            members={membersByTeam.get(team.id) || []}
-                            resources={allResources}
-                          />
-                        )}
-                      </div>
-                      {isFallback ? (
-                        <div className="text-[10px] text-warning">Saknar team</div>
-                      ) : !team.isUncategorized ? (
-                        <div className="text-[10px] text-muted-foreground">{team.memberCount} medlem{team.memberCount === 1 ? "" : "mar"}</div>
-                      ) : null}
-                    </div>
-                  </div>
-                  {summary && (
-                    <div className="mt-2">
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${getCapacityColor(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
-                      </div>
-                      <div className="text-[10px] text-muted-foreground mt-1 tabular-nums">{summary.totalHours.toFixed(1)}h / {summary.weeklyCapacity}h</div>
-                    </div>
-                  )}
-                </div>
-                {visibleDates.map((day, dayIndex) => {
-                  const jobs = getJobsForTeamAndDay ? getJobsForTeamAndDay(team.id, day) : [];
-                  const dayHours = getTeamDayHours ? getTeamDayHours(team.id, day) : 0;
-                  const dayStr = format(day, "yyyy-MM-dd");
-                  const droppableId = isFallback && team.resourceId
-                    ? `${team.resourceId}|${dayStr}`
-                    : `team:${team.id}|${dayStr}`;
-                  const capacityPct = dayCapacity > 0 ? Math.round((dayHours / dayCapacity) * 100) : 0;
-                  const isOverbooked = dayHours > dayCapacity;
-                  let teamDropFit: { bg: string; label: string; color: string } | null = null;
-                  if (activeDragJob && !team.isUncategorized && (isFallback || team.memberCount > 0)) {
-                    const newHours = dayHours + (activeDragJob.estimatedDuration || 60) / 60;
-                    const projectedPct = dayCapacity > 0 ? (newHours / dayCapacity) * 100 : 0;
-                    if (projectedPct > 110) teamDropFit = { bg: "bg-destructive/15 dark:bg-destructive/15 ring-destructive/40", label: isFallback ? "Överbokar resursen" : "Överbokar teamet", color: "text-destructive" };
-                    else if (projectedPct > 85) teamDropFit = { bg: "bg-warning/15 dark:bg-warning/15 ring-warning/40", label: "Tight", color: "text-warning" };
-                    else if (projectedPct > 65) teamDropFit = { bg: "bg-chart-3/15 dark:bg-chart-3/15 ring-chart-3/40", label: "Belastad", color: "text-chart-3" };
-                    else teamDropFit = { bg: "bg-chart-2/15 dark:bg-chart-2/15 ring-chart-2/40", label: "Fri kapacitet", color: "text-chart-2" };
-                  }
-                  return (
-                    <DroppableCell
-                      key={dayIndex}
-                      id={droppableId}
-                      className={`${zoomPadClass} border-r last:border-r-0 transition-colors overflow-hidden min-w-0 ${getCapacityBgColor(capacityPct)}`}
-                      style={{ minHeight: `${zoom.weekH}px` }}
-                      dragOverConflicts={dragOverConflicts?.[droppableId]}
-                      dropFitInfo={teamDropFit}
-                      remoteDragActive={remoteDragActive}
-                      remoteHovered={remoteHoveredDropId === droppableId}
-                    >
-                      <div className="min-w-0 overflow-hidden" data-testid={isFallback ? `drop-zone-resource-fallback-${team.resourceId}-${dayStr}` : `drop-zone-team-${team.id}-${dayStr}`}>
-                        <div className="flex items-center gap-1 mb-2">
-                          <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full transition-all ${getCapacityColor(capacityPct)}`} style={{ width: `${Math.min(capacityPct, 100)}%` }} />
-                          </div>
-                          <span className={`text-[10px] tabular-nums ${isOverbooked ? "text-destructive font-semibold" : capacityPct >= 85 ? "text-warning" : "text-muted-foreground"}`}>
-                            {dayHours.toFixed(1).replace(".", ",")}h
-                          </span>
-                        </div>
-                        <div className={zoomGapClass}>
-                          {jobs.length === 0 && (
-                            <div className="flex items-center justify-center py-4 text-muted-foreground/40">
-                              <Plus className="h-4 w-4" />
-                            </div>
-                          )}
-                          {jobs.map((job) => (
-                            <DraggableJobCard key={job.id} id={job.id}>
-                              <JobCard job={job} compact {...jobCardProps} />
-                            </DraggableJobCard>
-                          ))}
-                        </div>
-                      </div>
-                    </DroppableCell>
-                  );
-                })}
-              </div>
+        {isTeamMode && regularTeamRows.map(team => renderTeamRow(team))}
+
+        {isTeamMode && fallbackTeamRows.length > 0 && (
+          <div
+            className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] bg-muted/40 border-b"
+            data-testid="banner-fallback-rows-toggle"
+          >
+            <div className="sticky left-0 z-10 px-3 py-2 border-r flex items-center gap-2 bg-muted/40">
+              <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Utan team</span>
             </div>
-          );
-        })}
+            <div className="col-span-5 px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
+              <span className="text-xs text-muted-foreground" data-testid="text-fallback-rows-summary">
+                <strong className="font-semibold tabular-nums">{fallbackTeamRows.length}</strong>{" "}
+                resurs{fallbackTeamRows.length === 1 ? "" : "er"} utan team
+                {fallbackJobCount > 0 && (
+                  <>
+                    {" "}har{" "}
+                    <strong className="font-semibold tabular-nums">{fallbackJobCount}</strong>{" "}
+                    jobb
+                  </>
+                )}.
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => setFallbackExpanded(v => !v)}
+                data-testid="button-toggle-fallback-rows"
+                aria-expanded={fallbackExpanded}
+              >
+                {fallbackExpanded ? "Dölj" : "Visa"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {isTeamMode && fallbackExpanded && fallbackTeamRows.map(team => renderTeamRow(team))}
 
         {!isTeamMode && visibleResources.map((resource) => {
           const summary = resourceWeekSummary[resource.id];
