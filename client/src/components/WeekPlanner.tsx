@@ -617,6 +617,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
               showingUntiedUnderFilter={d.selectedTeamIds.length > 0 && d.showUntiedTeamRows}
               onShowUntiedTeamRows={() => d.setShowUntiedTeamRows(true)}
               onHideUntiedTeamRows={() => d.setShowUntiedTeamRows(false)}
+              allResources={d.resources}
+              teamMembersData={d.teamMembersData}
             />
           )}
           {d.viewMode === "month" && (

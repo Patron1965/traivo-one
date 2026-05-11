@@ -1,7 +1,12 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Plus, Navigation, Cloud, Sun, CloudRain, Snowflake, ShieldAlert, ShieldCheck, ShieldX, EyeOff } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { AlertTriangle, Plus, Navigation, Cloud, Sun, CloudRain, Snowflake, ShieldAlert, ShieldCheck, ShieldX, EyeOff, ChevronDown, X, UserPlus, Loader2 } from "lucide-react";
 import { format, isSameDay } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject, ObjectTimeRestriction } from "@shared/schema";
@@ -56,6 +61,146 @@ interface WeekGridViewProps {
   showingUntiedUnderFilter?: boolean;
   onShowUntiedTeamRows?: () => void;
   onHideUntiedTeamRows?: () => void;
+  allResources?: Resource[];
+  teamMembersData?: Array<{ id: string; teamId: string; resourceId: string; role: string | null }>;
+}
+
+function TeamMembersDropdown({
+  teamId,
+  teamName,
+  members,
+  resources,
+}: {
+  teamId: string;
+  teamName: string;
+  members: Array<{ id: string; resourceId: string; role: string | null }>;
+  resources: Resource[];
+}) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [pendingResourceId, setPendingResourceId] = useState<string>("");
+
+  const memberResourceIds = useMemo(() => new Set(members.map(m => m.resourceId)), [members]);
+  const availableResources = useMemo(
+    () => resources.filter(r => !memberResourceIds.has(r.id)).sort((a, b) => a.name.localeCompare(b.name, "sv")),
+    [resources, memberResourceIds],
+  );
+
+  const invalidateMembers = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/team-members"] });
+  };
+
+  const removeMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      await apiRequest("DELETE", `/api/team-member/${memberId}`);
+    },
+    onSuccess: () => {
+      invalidateMembers();
+      toast({ title: "Resurs borttagen från team" });
+    },
+    onError: (err) => {
+      toast({ title: "Kunde inte ta bort resurs", description: err instanceof Error ? err.message : "Försök igen", variant: "destructive" });
+    },
+  });
+
+  const addMutation = useMutation({
+    mutationFn: async (resourceId: string) => {
+      await apiRequest("POST", `/api/team-members/${teamId}`, { resourceId, role: "medlem" });
+    },
+    onSuccess: () => {
+      invalidateMembers();
+      setPendingResourceId("");
+      toast({ title: "Resurs tillagd i team" });
+    },
+    onError: (err) => {
+      toast({ title: "Kunde inte lägga till resurs", description: err instanceof Error ? err.message : "Försök igen", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-5 w-5 shrink-0"
+          onClick={(e) => e.stopPropagation()}
+          data-testid={`button-team-members-${teamId}`}
+          aria-label="Visa teamets resurser"
+        >
+          <ChevronDown className="h-3 w-3" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-3" align="start" data-testid={`popover-team-members-${teamId}`}>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold truncate" title={teamName}>{teamName}</p>
+            <span className="text-[10px] text-muted-foreground tabular-nums">{members.length} medlem{members.length === 1 ? "" : "mar"}</span>
+          </div>
+          <div className="max-h-48 overflow-y-auto -mx-1">
+            {members.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground italic px-1 py-2">Inga resurser i teamet</p>
+            ) : (
+              <ul className="space-y-0.5">
+                {members.map(m => {
+                  const r = resources.find(rr => rr.id === m.resourceId);
+                  const name = r?.name ?? "Okänd resurs";
+                  return (
+                    <li key={m.id} className="flex items-center gap-2 px-1 py-1 rounded hover:bg-muted" data-testid={`row-team-member-${m.id}`}>
+                      <span className="flex-1 text-xs truncate" title={name}>{name}</span>
+                      {m.role && m.role !== "medlem" && (
+                        <span className="text-[10px] text-muted-foreground capitalize">{m.role}</span>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                        disabled={removeMutation.isPending}
+                        onClick={() => removeMutation.mutate(m.id)}
+                        data-testid={`button-remove-team-member-${m.id}`}
+                        aria-label={`Ta bort ${name}`}
+                      >
+                        {removeMutation.isPending && removeMutation.variables === m.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <X className="h-3 w-3" />
+                        )}
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+          <div className="border-t pt-2 space-y-1.5">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Lägg till resurs</p>
+            <div className="flex items-center gap-1.5">
+              <Select value={pendingResourceId} onValueChange={setPendingResourceId} disabled={availableResources.length === 0 || addMutation.isPending}>
+                <SelectTrigger className="h-8 text-xs flex-1" data-testid={`select-add-team-member-${teamId}`}>
+                  <SelectValue placeholder={availableResources.length === 0 ? "Inga lediga resurser" : "Välj resurs…"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableResources.map(r => (
+                    <SelectItem key={r.id} value={r.id} data-testid={`option-add-resource-${r.id}`}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                disabled={!pendingResourceId || addMutation.isPending}
+                onClick={() => pendingResourceId && addMutation.mutate(pendingResourceId)}
+                data-testid={`button-confirm-add-team-member-${teamId}`}
+                aria-label="Lägg till"
+              >
+                {addMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 function getWeatherIcon(code: number) {
@@ -81,15 +226,24 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
     showConstraintLayer, constraintMap, remoteDragActive, remoteHoveredDropId,
     rowMode = "resource", teamRows = [], getJobsForTeamAndDay, getTeamDayHours, teamWeekSummary,
     hiddenUntiedTeamSummary, showingUntiedUnderFilter, onShowUntiedTeamRows, onHideUntiedTeamRows,
+    allResources = [], teamMembersData = [],
   } = props;
+
+  const membersByTeam = useMemo(() => {
+    const m = new Map<string, Array<{ id: string; resourceId: string; role: string | null }>>();
+    for (const tm of teamMembersData) {
+      const arr = m.get(tm.teamId);
+      if (arr) arr.push(tm);
+      else m.set(tm.teamId, [tm]);
+    }
+    return m;
+  }, [teamMembersData]);
 
   const zoomPadClass = zoom.scale <= 0.5 ? "p-0.5" : zoom.scale >= 2 ? "p-4" : "p-2";
   const zoomGapClass = zoom.scale <= 0.5 ? "space-y-0" : zoom.scale >= 2 ? "space-y-3" : "space-y-1";
 
   const isTeamMode = rowMode === "team";
   const headerLabel = isTeamMode ? "Team" : "Resurser";
-  const firstFallbackIdx = useMemo(() => isTeamMode ? teamRows.findIndex(r => r.isResourceFallback) : -1, [isTeamMode, teamRows]);
-
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {filterBar}
@@ -212,25 +366,11 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
           const summary = teamWeekSummary?.[team.id];
           const pct = summary?.pct ?? 0;
           const isFallback = !!team.isResourceFallback;
-          const showFallbackHeader = isFallback && rowIdx === firstFallbackIdx;
           // For fallback rows: drop on plain `${resourceId}|${dayStr}` so existing dnd routes via executeSchedule.
           // For team rows: drop on `team:${teamId}|${dayStr}` so dnd routes via executeTeamSchedule.
           const dayCapacity = isFallback ? HOURS_IN_DAY : (team.memberCount || 1) * HOURS_IN_DAY;
           return (
             <div key={team.id}>
-              {showFallbackHeader && (
-                <div
-                  className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] bg-muted/30 border-b border-t border-dashed"
-                  data-testid="section-resource-fallback"
-                >
-                  <div className="sticky left-0 bg-muted/30 z-10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-r col-span-1">
-                    Resurser utan team
-                  </div>
-                  <div className="col-span-5 px-3 py-1.5 text-[10px] text-muted-foreground italic">
-                    Order ligger på dessa resurser men de saknar teamtillhörighet
-                  </div>
-                </div>
-              )}
               <div className="grid grid-cols-[160px_repeat(5,minmax(0,1fr))] border-b" data-testid={`team-row-${team.id}`}>
                 <div className="sticky left-0 bg-background z-10 p-3 border-r flex flex-col justify-between" style={{ minHeight: `${zoom.weekH}px` }}>
                   <div className="flex items-center gap-2">
@@ -245,7 +385,17 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                       </span>
                     ) : null}
                     <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-medium truncate ${team.isUncategorized ? "text-muted-foreground italic" : ""}`} data-testid={`text-team-name-${team.id}`}>{team.name}</div>
+                      <div className="flex items-center gap-1 min-w-0">
+                        <div className={`text-sm font-medium truncate ${team.isUncategorized ? "text-muted-foreground italic" : ""}`} data-testid={`text-team-name-${team.id}`}>{team.name}</div>
+                        {!isFallback && !team.isUncategorized && (
+                          <TeamMembersDropdown
+                            teamId={team.id}
+                            teamName={team.name}
+                            members={membersByTeam.get(team.id) || []}
+                            resources={allResources}
+                          />
+                        )}
+                      </div>
                       {isFallback ? (
                         <div className="text-[10px] text-warning">Saknar team</div>
                       ) : !team.isUncategorized ? (

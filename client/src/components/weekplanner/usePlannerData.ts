@@ -134,7 +134,7 @@ export function usePlannerData() {
   }, [filterCustomer, filterPriority, filterCluster, filterTeam, filterExecutionCode, hiddenResourceIds, zoomLevel, showUnscheduled, viewMode, weekRowMode, selectedTeamIds, showUntiedTeamRows]);
 
   const { data: teamsData = [] } = useQuery<Array<{ id: string; name: string; clusterId: string | null; color: string | null }>>({ queryKey: ["/api/teams"] });
-  const { data: teamMembersData = [] } = useQuery<Array<{ teamId: string; resourceId: string }>>({ queryKey: ["/api/team-members"] });
+  const { data: teamMembersData = [] } = useQuery<Array<{ id: string; teamId: string; resourceId: string; role: string | null }>>({ queryKey: ["/api/team-members"] });
   const teamResourceIds = useMemo(() => { if (filterTeam === "all") return null; const ids = new Set<string>(); teamMembersData.forEach(tm => { if (tm.teamId === filterTeam) ids.add(tm.resourceId); }); return ids; }, [filterTeam, teamMembersData]);
 
   const visibleDates = useMemo((): Date[] => {
