@@ -99,6 +99,8 @@ PROD_DATABASE_URL='postgres://...' CONFIRM=YES_MIGRATE_PROD \
 |---|---|
 | `CONFIRM=YES_MIGRATE_PROD` | Krävs för faktisk commit. Annars dry-run. |
 | `TEST_CUSTOMER_IDS=id1,id2` | Explicit lista vid cleanup. Annars: alla nuvarande prod-kunder för `kinab` (max 10). |
+| `--allow-missing-fk-coverage=true` | Default: hård-fail om FK till customers/objects/work_orders saknar cleanup-täckning. Sätt bara denna om du medvetet vill ignorera nya, otäckta dependencies. |
+| `--limit=N` / `--customer-id=ID,…` | Selektiv import för enskilda kunder (t.ex. återställning av en vilande kund senare). |
 
 ## Idempotens & säkerhet
 

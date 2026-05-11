@@ -68,7 +68,7 @@ const BATCH = parseInt(arg("batch", "500")!, 10);
 const LIMIT_RAW = arg("limit");
 const LIMIT: number | null = LIMIT_RAW ? parseInt(LIMIT_RAW, 10) : null;
 const CUSTOMER_ID_ARG = arg("customer-id"); // komma-separerad lista, valbar
-const STRICT_FK = arg("strict-fk-coverage") === "true";
+const ALLOW_MISSING_FK = arg("allow-missing-fk-coverage") === "true";
 const DRY_RUN_FLAG = arg("dry-run") === "true";
 const CONFIRM = process.env.CONFIRM === "YES_MIGRATE_PROD";
 const DRY_RUN = DRY_RUN_FLAG || !CONFIRM;
@@ -939,9 +939,11 @@ async function preflightFkCoverage(prod: pg.PoolClient): Promise<void> {
   }
   log(`  Lägg till dem i OBJECT_CHILDREN/WORKORDER_CHILDREN/CUSTOMER_CHILDREN ` +
       `om de innehåller data, annars ignorera-listan.`);
-  if (STRICT_FK) {
+  if (!ALLOW_MISSING_FK) {
     throw new Error(
-      `--strict-fk-coverage: ${missing.length} otäckta FK upptäckta. Avbryter.`,
+      `FK-täckning ofullständig: ${missing.length} otäckta FK upptäckta. ` +
+        `Lägg till dem i OBJECT_CHILDREN/WORKORDER_CHILDREN/CUSTOMER_CHILDREN, ` +
+        `eller kör med --allow-missing-fk-coverage=true för att medvetet ignorera.`,
     );
   }
 }
@@ -1147,26 +1149,40 @@ async function main() {
   lines.push("");
   lines.push(`## Skippade entiteter (${skipped.length})`);
   lines.push("");
+  const sidecarPath = reportPath.replace(/\.md$/, ".skipped.json");
   if (skipped.length === 0) {
     lines.push("Inga.");
   } else {
-    lines.push("| Typ | ID | Anledning |");
-    lines.push("|---|---|---|");
-    // Visa max 50 + summering per anledning
+    const byKind: Record<string, number> = {};
     const byReason: Record<string, number> = {};
-    for (const s of skipped) byReason[s.reason] = (byReason[s.reason] ?? 0) + 1;
-    for (const s of skipped.slice(0, 50)) {
-      lines.push(`| ${s.kind} | ${s.id} | ${s.reason} |`);
+    for (const s of skipped) {
+      byKind[s.kind] = (byKind[s.kind] ?? 0) + 1;
+      byReason[s.reason] = (byReason[s.reason] ?? 0) + 1;
     }
-    if (skipped.length > 50) lines.push(`| … | … | (${skipped.length - 50} fler) |`);
+    lines.push("### Summering per typ");
+    for (const [k, n] of Object.entries(byKind).sort()) lines.push(`- ${k}: ${n}`);
     lines.push("");
     lines.push("### Summering per anledning");
     for (const [reason, n] of Object.entries(byReason).sort()) {
       lines.push(`- ${reason}: ${n}`);
     }
+    lines.push("");
+    lines.push(`Fullständig lista (${skipped.length} rader, alla kinds inkl. customer/object): \`${path.basename(sidecarPath)}\``);
+    lines.push("");
+    lines.push("### Fullständig lista");
+    lines.push("");
+    lines.push("| Typ | ID | Anledning |");
+    lines.push("|---|---|---|");
+    for (const s of skipped) {
+      lines.push(`| ${s.kind} | ${s.id} | ${s.reason} |`);
+    }
   }
   fs.writeFileSync(reportPath, lines.join("\n") + "\n", "utf8");
   log(`\nRapport sparad: ${reportPath}`);
+  if (skipped.length) {
+    fs.writeFileSync(sidecarPath, JSON.stringify(skipped, null, 2) + "\n", "utf8");
+    log(`Skipped-sidecar: ${sidecarPath}`);
+  }
 
   await dev.end();
   await prodPool.end();
