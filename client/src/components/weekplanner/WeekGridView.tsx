@@ -332,7 +332,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
   } = props;
 
   const { user } = useAuth();
-  const fallbackStorageKey = `planner.fallbackRows.expanded.${user?.id ?? "anon"}`;
+  const fallbackStorageKey = `planner.fallbackRows.expanded.${user?.tenantId ?? "anon"}`;
 
   const resourcesById = useMemo(() => {
     const m = new Map<string, Resource>();

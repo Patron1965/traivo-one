@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { User } from "@shared/schema";
 
-type AuthUser = User & { accessGranted?: boolean };
+type AuthUser = User & { accessGranted?: boolean; tenantId?: string | null };
 
 async function fetchUser(): Promise<AuthUser | null> {
   const response = await fetch("/api/auth/user", {

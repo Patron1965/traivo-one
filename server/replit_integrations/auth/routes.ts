@@ -55,10 +55,14 @@ export function registerAuthRoutes(app: Express): void {
       );
 
       const tenantRole = getMostPrivilegedRole(roles);
+      const primaryTenantId = roles.find(r => r.tenantId !== "kinab" || r.assignedBy !== null || r.role !== "user")?.tenantId
+        ?? roles[0]?.tenantId
+        ?? null;
 
       res.json({
         ...user,
         role: tenantRole || user.role,
+        tenantId: primaryTenantId,
         accessGranted,
       });
     } catch (error) {
