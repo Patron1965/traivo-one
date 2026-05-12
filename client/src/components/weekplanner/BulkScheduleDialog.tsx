@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertTriangle, CalendarClock, CheckCircle2, Loader2, ShieldAlert, XCircle } from "lucide-react";
+import { AlertTriangle, CalendarClock, CheckCircle2, Loader2, Lock, ShieldAlert, XCircle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -25,6 +25,17 @@ interface BulkScheduleResponse {
   results: BulkScheduleResult[];
 }
 
+export interface BulkSchedulePrefill {
+  date: string;
+  resourceId?: string | null;
+  teamId?: string | null;
+  target: "resource" | "team";
+  /** Optional human-readable note shown in the locked summary (e.g. "Rutt från ankarjobb"). */
+  note?: string;
+  /** Lock target/date fields so user cannot change them (anchor-route mode). */
+  lockTargets?: boolean;
+}
+
 interface BulkScheduleDialogProps {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -33,10 +44,11 @@ interface BulkScheduleDialogProps {
   resources: Resource[];
   teams: Array<{ id: string; name: string }>;
   onSuccess: () => void;
+  prefill?: BulkSchedulePrefill | null;
 }
 
 export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkScheduleDialogProps) {
-  const { open, onOpenChange, workOrderIds, jobs, resources, teams, onSuccess } = props;
+  const { open, onOpenChange, workOrderIds, jobs, resources, teams, onSuccess, prefill } = props;
   const { toast } = useToast();
   const [target, setTarget] = useState<"resource" | "team">("resource");
   const [resourceId, setResourceId] = useState<string>("");
@@ -50,8 +62,20 @@ export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkSc
     if (open) {
       setResults(null);
       setShowConflictsOnly(false);
+      if (prefill) {
+        setTarget(prefill.target);
+        setResourceId(prefill.resourceId || "");
+        setTeamId(prefill.teamId || "");
+        setScheduledDate(prefill.date);
+      }
     }
-  }, [open]);
+  }, [open, prefill]);
+
+  const isLocked = !!prefill?.lockTargets;
+  const targetName = useMemo(() => {
+    if (target === "resource") return resources.find(r => r.id === resourceId)?.name || "—";
+    return teams.find(t => t.id === teamId)?.name || "—";
+  }, [target, resourceId, teamId, resources, teams]);
 
   const jobMap = useMemo(() => new Map(jobs.map(j => [j.id, j])), [jobs]);
 
@@ -140,6 +164,22 @@ export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkSc
 
         {!results && (
           <div className="space-y-4 py-2">
+            {isLocked ? (
+              <div
+                className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm space-y-1"
+                data-testid="text-bulk-prefill-summary"
+              >
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Lock className="h-3 w-3" />
+                  {prefill?.note || "Förvalt från ankarjobb"}
+                </div>
+                <div className="font-medium">
+                  {target === "resource" ? "Resurs" : "Team"}: {targetName}
+                </div>
+                <div className="text-xs text-muted-foreground">Datum: {scheduledDate}</div>
+              </div>
+            ) : (
+            <>
             <Tabs value={target} onValueChange={(v) => setTarget(v as "resource" | "team")}>
               <TabsList className="grid grid-cols-2 w-full">
                 <TabsTrigger value="resource" data-testid="tab-bulk-target-resource">Resurs</TabsTrigger>
@@ -203,6 +243,21 @@ export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkSc
                 />
               </div>
             </div>
+            </>
+            )}
+
+            {isLocked && (
+              <div className="space-y-1.5">
+                <Label htmlFor="bulk-time">Starttid (valfri)</Label>
+                <Input
+                  id="bulk-time"
+                  type="time"
+                  value={scheduledStartTime}
+                  onChange={(e) => setScheduledStartTime(e.target.value)}
+                  data-testid="input-bulk-time"
+                />
+              </div>
+            )}
 
             <div className="text-xs text-muted-foreground rounded border bg-muted/30 p-2.5">
               {workOrderIds.length} order kommer att kontrolleras mot konflikter (kapacitet, kluster, körschema, beroenden).

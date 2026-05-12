@@ -76,6 +76,13 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
   const [extraDraggableJobs, setExtraDraggableJobs] = useState<WorkOrderWithObject[]>([]);
   const [areaSelectedIds, setAreaSelectedIds] = useState<Set<string>>(new Set());
   const [bulkScheduleOpen, setBulkScheduleOpen] = useState(false);
+  const [bulkPrefill, setBulkPrefill] = useState<import("./weekplanner/BulkScheduleDialog").BulkSchedulePrefill | null>(null);
+  const [bulkOverrideIds, setBulkOverrideIds] = useState<string[] | null>(null);
+  const openBulkSchedule = useCallback((opts?: { overrideIds?: string[]; prefill?: import("./weekplanner/BulkScheduleDialog").BulkSchedulePrefill }) => {
+    setBulkPrefill(opts?.prefill ?? null);
+    setBulkOverrideIds(opts?.overrideIds ?? null);
+    setBulkScheduleOpen(true);
+  }, []);
   const toggleAreaSelection = useCallback((jobId: string) => {
     setAreaSelectedIds(prev => {
       const next = new Set(prev);
@@ -693,7 +700,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             onToggleSelection={toggleAreaSelection}
             onClearSelection={clearAreaSelection}
             onSelectAll={selectAllAreaJobs}
-            onBulkSchedule={() => setBulkScheduleOpen(true)}
+            onBulkSchedule={openBulkSchedule}
+            getResourceDayHours={(rid, dateStr) => d.getResourceDayHours(rid, new Date(dateStr + "T00:00:00"))}
+            getTeamDayHours={(tid, dateStr) => d.getTeamDayHours(tid, new Date(dateStr + "T00:00:00"))}
+            resourceNameById={new Map(d.resources.map(r => [r.id, r.name]))}
+            teamNameById={new Map(d.teamsData.map(t => [t.id, t.name]))}
           />
         )}
 
@@ -814,12 +825,20 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
       <UrgentJobDialog open={urgentDialogOpen} onClose={() => setUrgentDialogOpen(false)} preselectedOrder={urgentPreselectedOrder} />
       <BulkScheduleDialog
         open={bulkScheduleOpen}
-        onOpenChange={(o) => { setBulkScheduleOpen(o); if (!o) clearAreaSelection(); }}
-        workOrderIds={Array.from(areaSelectedIds)}
+        onOpenChange={(o) => {
+          setBulkScheduleOpen(o);
+          if (!o) {
+            setBulkPrefill(null);
+            setBulkOverrideIds(null);
+            clearAreaSelection();
+          }
+        }}
+        workOrderIds={bulkOverrideIds ?? Array.from(areaSelectedIds)}
         jobs={extraDraggableJobs}
         resources={d.resources}
         teams={d.teamsData}
         onSuccess={clearAreaSelection}
+        prefill={bulkPrefill}
       />
       <Sheet open={slaRiskOpen} onOpenChange={setSlaRiskOpen}>
         <SheetContent side="right" className="w-[420px] sm:max-w-[420px] flex flex-col p-0">

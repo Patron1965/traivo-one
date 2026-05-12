@@ -25,8 +25,14 @@ import {
   Repeat,
   CalendarClock,
   CalendarPlus,
+  Anchor,
+  Route,
+  AlertTriangle,
+  Navigation,
 } from "lucide-react";
 import { OBJECT_HIERARCHY_LEVELS, type WorkOrderWithObject } from "@shared/schema";
+import { haversineDistanceKm, estimateTravelMinutes, formatDistanceKm } from "@/lib/geo";
+import type { BulkSchedulePrefill } from "./BulkScheduleDialog";
 
 const HIERARCHY_LABELS: Record<string, string> = {
   koncern: "Koncern",
@@ -49,6 +55,8 @@ export type AreaSearchRow = WorkOrderWithObject & {
   objectCity: string | null;
   objectHierarchyLevel: string | null;
   objectLastServiceDate: string | null;
+  objectLatitude: number | null;
+  objectLongitude: number | null;
   conceptIntervalDays: number | null;
   conceptName: string | null;
 };
@@ -69,8 +77,17 @@ interface PlannerAreaSearchPanelProps {
   onToggleSelection: (jobId: string) => void;
   onClearSelection: () => void;
   onSelectAll: (jobIds: string[]) => void;
-  onBulkSchedule: () => void;
+  onBulkSchedule: (opts?: { overrideIds?: string[]; prefill?: BulkSchedulePrefill }) => void;
+  /** Hours already planned for a resource on a given date (yyyy-MM-dd). */
+  getResourceDayHours?: (resourceId: string, dateStr: string) => number;
+  /** Hours already planned for a team on a given date (yyyy-MM-dd). */
+  getTeamDayHours?: (teamId: string, dateStr: string) => number;
+  /** Lookup name for resources/teams shown in the route-budget row. */
+  resourceNameById?: Map<string, string>;
+  teamNameById?: Map<string, string>;
 }
+
+const HOURS_IN_DAY = 8;
 
 const PAGE_SIZE = 50;
 const EMPTY_TIMEWINDOW_MAP = new Map<string, Array<{ workOrderId: string; dayOfWeek: string | null; startTime: string | null; endTime: string | null; weekNumber: number | null }>>();
@@ -140,7 +157,12 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
   onClearSelection,
   onSelectAll,
   onBulkSchedule,
+  getResourceDayHours,
+  getTeamDayHours,
+  resourceNameById,
+  teamNameById,
 }: PlannerAreaSearchPanelProps) {
+  const [anchorJobId, setAnchorJobId] = useState<string | null>(null);
   const initial = useMemo(() => readUrlState(), []);
   const [city, setCity] = useState<string>(initial.city || "");
   const [cityInput, setCityInput] = useState<string>(initial.city || "");
@@ -227,6 +249,132 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
       onSelectAll(keep);
     }
   }, [rows, open, selectedJobIds, onSelectAll]);
+
+  // Clear anchor when panel closes or when the anchored job is no longer in the result set.
+  useEffect(() => {
+    if (!open) { setAnchorJobId(null); return; }
+    if (anchorJobId && !rows.some(r => r.id === anchorJobId)) {
+      setAnchorJobId(null);
+    }
+  }, [open, rows, anchorJobId]);
+
+  const anchorRow = useMemo(
+    () => (anchorJobId ? rows.find(r => r.id === anchorJobId) || null : null),
+    [anchorJobId, rows],
+  );
+
+  const anchorCoords = useMemo(() => {
+    if (!anchorRow) return null;
+    const lat = anchorRow.taskLatitude ?? anchorRow.objectLatitude ?? null;
+    const lng = anchorRow.taskLongitude ?? anchorRow.objectLongitude ?? null;
+    if (lat == null || lng == null) return null;
+    return { lat, lng };
+  }, [anchorRow]);
+
+  // Per-row distance/travel relative to anchor.
+  const rowDistances = useMemo(() => {
+    const m = new Map<string, { km: number | null; minutes: number | null }>();
+    if (!anchorCoords) return m;
+    for (const r of rows) {
+      if (r.id === anchorJobId) { m.set(r.id, { km: 0, minutes: 0 }); continue; }
+      const lat = r.taskLatitude ?? r.objectLatitude ?? null;
+      const lng = r.taskLongitude ?? r.objectLongitude ?? null;
+      if (lat == null || lng == null) { m.set(r.id, { km: null, minutes: null }); continue; }
+      const km = haversineDistanceKm(anchorCoords.lat, anchorCoords.lng, lat, lng);
+      m.set(r.id, { km, minutes: estimateTravelMinutes(km) });
+    }
+    return m;
+  }, [rows, anchorJobId, anchorCoords]);
+
+  // Sorted rows: anchor first, then by distance asc; rows without coords last.
+  const sortedRows = useMemo(() => {
+    if (!anchorJobId) return rows;
+    const copy = [...rows];
+    copy.sort((a, b) => {
+      if (a.id === anchorJobId) return -1;
+      if (b.id === anchorJobId) return 1;
+      const da = rowDistances.get(a.id)?.km;
+      const db = rowDistances.get(b.id)?.km;
+      const aHas = da != null;
+      const bHas = db != null;
+      if (!aHas && !bHas) return 0;
+      if (!aHas) return 1;
+      if (!bHas) return -1;
+      return (da as number) - (db as number);
+    });
+    return copy;
+  }, [rows, anchorJobId, rowDistances]);
+
+  // Route-budget for the anchor's resource/team on its scheduled date.
+  const routeBudget = useMemo(() => {
+    if (!anchorRow || !anchorRow.scheduledDate) return null;
+    const dateStr = format(new Date(anchorRow.scheduledDate), "yyyy-MM-dd");
+    let assigneeKind: "resource" | "team" | null = null;
+    let assigneeId: string | null = null;
+    let assigneeName = "—";
+    let plannedHours = 0;
+    if (anchorRow.resourceId && getResourceDayHours) {
+      assigneeKind = "resource";
+      assigneeId = anchorRow.resourceId;
+      assigneeName = resourceNameById?.get(anchorRow.resourceId) || "Resurs";
+      plannedHours = getResourceDayHours(anchorRow.resourceId, dateStr);
+    } else if (anchorRow.teamId && getTeamDayHours) {
+      assigneeKind = "team";
+      assigneeId = anchorRow.teamId;
+      assigneeName = teamNameById?.get(anchorRow.teamId) || "Team";
+      plannedHours = getTeamDayHours(anchorRow.teamId, dateStr);
+    } else {
+      return null;
+    }
+    // Travel of selected rows from anchor (heuristic: sum of distances anchor → selected).
+    let travelMinutes = 0;
+    if (anchorCoords) {
+      for (const id of Array.from(selectedJobIds)) {
+        if (id === anchorJobId) continue;
+        const d = rowDistances.get(id);
+        if (d?.minutes != null) travelMinutes += d.minutes;
+      }
+    }
+    const travelHours = travelMinutes / 60;
+    const totalHours = plannedHours + travelHours;
+    const pct = (totalHours / HOURS_IN_DAY) * 100;
+    const tone: "ok" | "warning" | "destructive" =
+      pct > 100 ? "destructive" : pct >= 85 ? "warning" : "ok";
+    return {
+      dateStr, assigneeKind, assigneeId, assigneeName,
+      plannedHours, travelMinutes, totalHours, pct, tone,
+    };
+  }, [anchorRow, anchorCoords, selectedJobIds, anchorJobId, rowDistances, getResourceDayHours, getTeamDayHours, resourceNameById, teamNameById]);
+
+  const anchorPrefill: BulkSchedulePrefill | null = useMemo(() => {
+    if (!anchorRow || !anchorRow.scheduledDate) return null;
+    const dateStr = format(new Date(anchorRow.scheduledDate), "yyyy-MM-dd");
+    if (anchorRow.resourceId) {
+      return { date: dateStr, resourceId: anchorRow.resourceId, target: "resource", note: `Rutt från ankarjobb · ${anchorRow.title || ""}`.trim(), lockTargets: true };
+    }
+    if (anchorRow.teamId) {
+      return { date: dateStr, teamId: anchorRow.teamId, target: "team", note: `Rutt från ankarjobb · ${anchorRow.title || ""}`.trim(), lockTargets: true };
+    }
+    return null;
+  }, [anchorRow]);
+
+  const anchorUnscheduled = !!anchorRow && (!anchorRow.scheduledDate || (!anchorRow.resourceId && !anchorRow.teamId));
+
+  const handleAddToRoute = useCallback(() => {
+    if (!anchorPrefill) return;
+    const ids = Array.from(selectedJobIds).filter(id => id !== anchorJobId);
+    if (ids.length === 0) return;
+    onBulkSchedule({ overrideIds: ids, prefill: anchorPrefill });
+  }, [anchorPrefill, selectedJobIds, anchorJobId, onBulkSchedule]);
+
+  const handleScheduleAnchorOnly = useCallback(() => {
+    if (!anchorJobId) return;
+    onBulkSchedule({ overrideIds: [anchorJobId] });
+  }, [anchorJobId, onBulkSchedule]);
+
+  const toggleAnchor = useCallback((id: string) => {
+    setAnchorJobId(prev => (prev === id ? null : id));
+  }, []);
 
   const toggleHierarchy = useCallback((h: string) => {
     setHierarchies(prev => prev.includes(h) ? prev.filter(x => x !== h) : [...prev, h]);
@@ -483,26 +631,95 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                 loadingVariant="skeleton-rows"
                 skeletonRows={6}
               >
+                {anchorRow && anchorUnscheduled && (
+                  <div
+                    className="mb-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 flex items-start gap-2"
+                    data-testid="banner-anchor-unscheduled"
+                  >
+                    <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0 text-xs">
+                      <div className="font-medium text-warning">Schemalägg ankaret först</div>
+                      <div className="text-muted-foreground mt-0.5 truncate">
+                        Ankarjobbet "{anchorRow.title || anchorRow.id.slice(0, 8)}" saknar datum eller resurs/team.
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs shrink-0"
+                      onClick={handleScheduleAnchorOnly}
+                      data-testid="button-anchor-schedule-first"
+                    >
+                      Schemalägg ankaret
+                    </Button>
+                  </div>
+                )}
+
+                {routeBudget && (
+                  <div
+                    className={`mb-2 rounded-md border px-3 py-2 text-xs flex flex-wrap items-center gap-x-3 gap-y-1 ${
+                      routeBudget.tone === "destructive"
+                        ? "border-destructive/40 bg-destructive/10 text-destructive"
+                        : routeBudget.tone === "warning"
+                        ? "border-warning/40 bg-warning/10 text-warning"
+                        : "border-border bg-muted/40"
+                    }`}
+                    data-testid="text-route-budget"
+                  >
+                    <Route className="h-3.5 w-3.5 shrink-0" />
+                    <span className="font-medium">
+                      {format(new Date(routeBudget.dateStr), "EEE d MMM", { locale: sv })}
+                    </span>
+                    <span className="text-muted-foreground">·</span>
+                    <span>{routeBudget.assigneeName}</span>
+                    <span className="text-muted-foreground">·</span>
+                    <span>
+                      {routeBudget.totalHours.toFixed(1).replace(".", ",")} / {HOURS_IN_DAY} h
+                    </span>
+                    {routeBudget.travelMinutes > 0 && (
+                      <span className="text-muted-foreground">+{routeBudget.travelMinutes} min restid</span>
+                    )}
+                  </div>
+                )}
+
                 <BulkActionBar
                   alwaysVisible
                   selectedCount={selectedJobIds.size}
-                  totalCount={rows.length}
-                  onSelectAll={() => onSelectAll(rows.map(r => r.id))}
+                  totalCount={sortedRows.length}
+                  onSelectAll={() => onSelectAll(sortedRows.map(r => r.id))}
                   onClearSelection={onClearSelection}
                 >
-                  <Button
-                    size="sm"
-                    onClick={onBulkSchedule}
-                    disabled={selectedJobIds.size === 0}
-                    data-testid="button-area-bulk-schedule"
-                  >
-                    <CalendarPlus className="h-4 w-4 mr-1.5" />
-                    Schemalägg{selectedJobIds.size > 0 ? ` ${selectedJobIds.size}` : ""}
-                  </Button>
+                  {anchorPrefill ? (
+                    <Button
+                      size="sm"
+                      onClick={handleAddToRoute}
+                      disabled={selectedJobIds.size === 0 || (selectedJobIds.size === 1 && selectedJobIds.has(anchorJobId || ""))}
+                      data-testid="button-add-to-route"
+                    >
+                      <Navigation className="h-4 w-4 mr-1.5" />
+                      Lägg till i rutten
+                      {(() => {
+                        const n = Array.from(selectedJobIds).filter(id => id !== anchorJobId).length;
+                        return n > 0 ? ` (${n})` : "";
+                      })()}
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      onClick={() => onBulkSchedule()}
+                      disabled={selectedJobIds.size === 0}
+                      data-testid="button-area-bulk-schedule"
+                    >
+                      <CalendarPlus className="h-4 w-4 mr-1.5" />
+                      Schemalägg{selectedJobIds.size > 0 ? ` ${selectedJobIds.size}` : ""}
+                    </Button>
+                  )}
                 </BulkActionBar>
                 <div className="space-y-1.5" data-testid="list-area-search-results">
-                  {rows.map((row) => {
+                  {sortedRows.map((row) => {
                     const job: WorkOrderWithObject = row;
+                    const isAnchor = anchorJobId === row.id;
+                    const dist = rowDistances.get(row.id);
                     const lastSvc = row.objectLastServiceDate ? new Date(row.objectLastServiceDate) : null;
                     const interval = row.conceptIntervalDays;
                     const freqLabel = frequencyLabelFromDays(interval);
@@ -532,17 +749,38 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                     return (
                       <div
                         key={job.id}
-                        className={`rounded-md border bg-card overflow-hidden hover-elevate ${isSelected ? "ring-2 ring-primary border-primary" : ""}`}
+                        className={`rounded-md border bg-card overflow-hidden hover-elevate ${
+                          isAnchor ? "ring-2 ring-primary border-primary" : isSelected ? "ring-2 ring-primary/60 border-primary/60" : ""
+                        }`}
                         data-testid={`row-area-result-${job.id}`}
                       >
+                        {isAnchor && (
+                          <div className="px-2 py-1 bg-primary/10 border-b border-primary/30 flex items-center gap-1.5">
+                            <Anchor className="h-3 w-3 text-primary" />
+                            <Badge variant="default" className="h-4 px-1.5 text-[10px]" data-testid={`badge-anchor-${job.id}`}>
+                              Ankare
+                            </Badge>
+                          </div>
+                        )}
                         <div className="flex items-start gap-1.5">
-                          <div className="pt-2 pl-2">
+                          <div className="pt-2 pl-2 flex flex-col gap-1">
                             <Checkbox
                               checked={isSelected}
                               onCheckedChange={() => onToggleSelection(job.id)}
                               aria-label={`Markera ${job.title}`}
                               data-testid={`checkbox-area-result-${job.id}`}
                             />
+                            <Button
+                              type="button"
+                              variant={isAnchor ? "default" : "ghost"}
+                              size="icon"
+                              className="h-5 w-5"
+                              title={isAnchor ? "Ta bort ankaret" : "Använd som ankare"}
+                              onClick={() => toggleAnchor(job.id)}
+                              data-testid={`button-set-anchor-${job.id}`}
+                            >
+                              <Anchor className="h-3 w-3" />
+                            </Button>
                           </div>
                           <div className="flex-1 min-w-0">
                             <DraggableJobCard id={job.id}>
@@ -562,6 +800,17 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                               />
                             </DraggableJobCard>
                             <div className="px-2 pb-2 pt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+                          {anchorJobId && !isAnchor && (
+                            <span
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded border border-primary/30 bg-primary/5 text-primary text-[10px]"
+                              data-testid={`chip-distance-${job.id}`}
+                            >
+                              <Navigation className="h-2.5 w-2.5" />
+                              {dist?.km != null
+                                ? `${formatDistanceKm(dist.km)} · ≈${dist.minutes} min`
+                                : "—"}
+                            </span>
+                          )}
                           {row.objectHierarchyLevel && (
                             <Badge variant="outline" className="text-[10px] py-0 h-4">
                               {HIERARCHY_LABELS[row.objectHierarchyLevel] || row.objectHierarchyLevel}
