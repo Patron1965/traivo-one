@@ -3,7 +3,7 @@ import { storage } from "../storage";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
-import { geocodeAddress, searchDestinations, batchGeocode, isGoogleGeocodingAvailable, reverseGeocode, lookupCityFromPostalCode, autocompleteAddress } from "../google-geocoding";
+import { geocodeAddress, searchDestinations, batchGeocode, isGoogleGeocodingAvailable, reverseGeocode, lookupCityFromPostalCode, autocompleteAddress } from "../services/geocoding";
 import { createInheritanceProcessor } from "../inheritance-processor";
 import { insertObjectParentSchema, objects, workOrders, workOrderObjects, objectArticles, objectContacts, objectImages, objectMetadata, objectParents, objectPayers, objectTimeRestrictions, geocodingMissingSnapshots } from "@shared/schema";
 import { asyncHandler } from "../asyncHandler";

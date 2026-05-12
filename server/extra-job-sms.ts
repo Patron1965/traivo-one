@@ -1,6 +1,30 @@
 import { storage } from "./storage";
 import type { WorkOrder } from "@shared/schema";
 
+// NOTE (server-utils-konsolidering, task #449): This module deliberately
+// stays separate from `server/unified-notifications.ts`. Reasons:
+//   1. It targets internal tekniker-resurser (`Resource.phone`/`smsOnExtraJob`),
+//      not customer recipients, so the unified `NotificationRecipient` flow
+//      with portal-scope filtering and tenant SMS-provider configuration does
+//      not apply.
+//   2. The opt-out is per-resource (`resource.smsOnExtraJob`) and the gating
+//      depends on the resource's last published period (`lastSchedulePeriodStart`
+//      / `lastSchedulePeriodEnd`) — the unified path does not model this.
+//   3. Each send is mirrored to `driverNotifications` so the planner can audit
+//      delivery; unified-notifications has no equivalent driver-side logging.
+//
+// SMS call-site-inventering (task #449):
+//   - Via unified-notifications.ts (kund-/portal-flöden):
+//       server/eta-notification-service.ts:173, server/ai-communication.ts:195,
+//       server/ai-communication.ts:378, server/routes/kpiRoutes.ts:762,
+//       server/notifications.ts:479 (legacy WS-notifier som delegerar).
+//   - Via extra-job-sms.ts (tekniker-resurser, dokumenterat undantag):
+//       server/routes/workOrderRoutes.ts (assign/reschedule/cancel-hooks).
+//   - Via customer-notifications.ts (driver-loggning + rik HTML-template,
+//     dokumenterat undantag): server/routes/orderConceptRoutes.ts (notify-
+//     technician-on-way, job-completed, send-schedule-to-resource).
+// Nya kund-utskick ska gå via `unified-notifications.ts`.
+
 function formatPhoneE164(phone: string): string | null {
   if (!phone) return null;
   let cleaned = phone.replace(/[\s\-().]/g, "");

@@ -1,6 +1,33 @@
 import { storage } from "../storage";
-import { geocodeAddress, searchDestinations } from "../google-geocoding";
+import {
+  geocodeAddress,
+  searchDestinations,
+  reverseGeocode,
+  autocompleteAddress,
+  batchGeocode,
+  isGoogleGeocodingAvailable,
+  lookupCityFromPostalCode,
+} from "../google-geocoding";
 import type { ServiceObject } from "@shared/schema";
+
+// Re-export the lower-level Geoapify/Nominatim primitives so all server-side
+// callers (importRoutes, objectRoutes, mobile) have a single entry point. The
+// raw `server/google-geocoding.ts` module remains the implementation detail
+// for retry/fallback/cache logic; new call-sites should import from here.
+export {
+  geocodeAddress,
+  searchDestinations,
+  reverseGeocode,
+  autocompleteAddress,
+  batchGeocode,
+  isGoogleGeocodingAvailable,
+  lookupCityFromPostalCode,
+};
+export type {
+  GeocodingResult,
+  SearchDestinationsResult,
+  AddressSuggestion,
+} from "../google-geocoding";
 
 export interface GeocodeObjectResult {
   objectId: string;

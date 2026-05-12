@@ -2,6 +2,19 @@ import { sendEmail } from "./replit_integrations/resend";
 import { storage } from "./storage";
 import type { WorkOrder, Customer, Resource, ServiceObject } from "@shared/schema";
 
+// NOTE (server-utils-konsolidering, task #449): The customer-facing email/SMS
+// flows in this module pre-date `server/unified-notifications.ts`. They are
+// kept here for now because:
+//   1. `sendScheduleToResource` targets internal tekniker-resurser and writes
+//      `driverNotifications` + `Resource.lastSchedulePublishedAt` —
+//      unified-notifications has neither responsibility.
+//   2. `sendCustomerNotification` builds rich HTML emails with object-/work-
+//      order-specific layout that unified-notifications' generic template
+//      does not produce.
+// Future customer SMS/email integrations should prefer `unified-notifications.ts`
+// (which already handles tenant SMS provider gating and portal-scope filtering)
+// and only land here if they need driver-side logging or the rich templates.
+
 export interface NotificationResult {
   success: boolean;
   recipient?: string;
