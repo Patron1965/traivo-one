@@ -98,7 +98,7 @@ const STATUS_COLORS: Record<string, string> = {
   fakturerad: "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15",
 };
 
-const formatCurrency = (amount: number | null) => formatSekFromOre(amount, { emptyDash: true });
+const formatCurrency = (amount: number | null) => formatSekFromOre(amount, { emptyDash: true, decimals: true });
 
 interface StepConfig {
   key: string;
