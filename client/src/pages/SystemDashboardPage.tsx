@@ -1,3 +1,6 @@
+// Plattform-/tenant-administration: branding, moduler, rollhantering, audit.
+// Distinkt ansvar från SystemOverviewPage (read-only feature-katalog) och
+// TenantConfigPage (formulär-driven konfig). Se docs/admin-page-overlap-review.md.
 import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";

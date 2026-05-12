@@ -65,6 +65,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { ClipboardList } from "lucide-react";
 import { QueryState } from "@/components/QueryState";
 import { formatSekFromOre } from "@/lib/format";
+import { executionStatusBadge, getExecutionStatusBadge } from "@/lib/status-colors";
 
 const formatCurrency = (value: number | null | undefined) => formatSekFromOre(value);
 
@@ -86,28 +87,12 @@ const priorityOptions = [
   { value: "urgent", label: "Brådskande" },
 ];
 
-function getStatusColor(status: string): string {
-  switch (status) {
-    case "not_planned":
-      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
-    case "planned_rough":
-      return "bg-chart-1/15 text-chart-1 dark:bg-chart-1/15";
-    case "planned_fine":
-      return "bg-chart-1/15 text-chart-1 dark:bg-chart-1/15";
-    case "on_way":
-      return "bg-chart-3/15 text-chart-3 dark:bg-chart-3/15";
-    case "on_site":
-      return "bg-chart-4/15 text-chart-4 dark:bg-chart-4/15";
-    case "completed":
-      return "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15";
-    case "inspected":
-      return "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15";
-    case "invoiced":
-      return "bg-chart-5/15 text-chart-5 dark:bg-chart-5/15";
-    default:
-      return "bg-gray-100 text-gray-800";
+const getStatusColor = (status: string): string => {
+  if (status === "invoiced") {
+    return "bg-chart-5/15 text-chart-5 border border-chart-5/30";
   }
-}
+  return executionStatusBadge[status] ?? getExecutionStatusBadge(status);
+};
 
 interface ResourceCandidate {
   resource: Resource;

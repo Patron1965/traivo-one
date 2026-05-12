@@ -220,7 +220,13 @@ export interface IStorage {
   createTenant(tenant: InsertTenant): Promise<Tenant>;
   ensureTenant(id: string, defaultData: Omit<InsertTenant, 'id'>): Promise<Tenant>;
   updateTenant(id: string, data: Partial<InsertTenant>): Promise<Tenant | undefined>;
+  /**
+   * Skriver godtyckliga nycklar i `tenants.settings` (jsonb merge). Föredra detta för
+   * generisk settings-uppdatering. `updateTenantSmsSettings` finns kvar som typ-säker
+   * convenience för SMS-fälten som även lever utanför `settings`-bloben.
+   */
   updateTenantSettings(id: string, settings: Record<string, unknown>): Promise<Tenant | undefined>;
+  /** Typ-säker variant för SMS-konfig (smsEnabled/smsProvider/smsFromName som top-level kolumner). */
   updateTenantSmsSettings(id: string, data: { smsEnabled?: boolean; smsProvider?: string; smsFromName?: string }): Promise<Tenant | undefined>;
   
   getCustomers(tenantId: string): Promise<Customer[]>;
@@ -247,9 +253,11 @@ export interface IStorage {
   updateCustomer(id: string, customer: Partial<InsertCustomer>): Promise<Customer | undefined>;
   deleteCustomer(id: string): Promise<void>;
   
+  /** Föredragen API: hämtar samtliga objekt för en tenant. */
   getObjects(tenantId: string): Promise<ServiceObject[]>;
   getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean; issue?: string; clusterId?: string }): Promise<{ objects: ServiceObject[]; total: number }>;
   getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]>;
+  /** @deprecated Tunn alias för {@link getObjects} — bibehållen för bakåtkompatibilitet. Använd `getObjects(tenantId)`. */
   getObjectsByTenant(tenantId: string): Promise<ServiceObject[]>;
   getObjectsWithIssues(tenantId: string, options?: { issueType?: string; status?: string; customerId?: string; limit?: number }): Promise<{
     totalObjectsWithIssues: number;
@@ -286,11 +294,17 @@ export interface IStorage {
   updateResource(id: string, resource: Partial<InsertResource>): Promise<Resource | undefined>;
   deleteResource(id: string): Promise<void>;
   
+  /**
+   * Hämtar arbetsorder för en tenant utan paginering. Använd för bakgrundsjobb
+   * (disruption/optimization/anomaly) där man behöver hela mängden, eller för små
+   * dataset. För UI-listor: använd {@link getWorkOrdersPaginated}.
+   */
   getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrderWithObject[]>;
   getWorkOrdersByExternalRefs(tenantId: string, refs: string[]): Promise<Array<{ id: string; externalReference: string | null; modusId: string | null; metadata: unknown }>>;
   getUnscheduledWorkOrders(tenantId: string, limit?: number): Promise<WorkOrderWithObject[]>;
   getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string, dateFilter?: { field: 'desired' | 'created' | 'sla'; from?: string; to?: string }): Promise<{ workOrders: WorkOrderWithObject[]; total: number; missingDateFieldCount?: number }>;
   getUnscheduledMissingDateField(tenantId: string, field: 'desired' | 'sla', search?: string, limit?: number): Promise<WorkOrderWithObject[]>;
+  /** Paginerad variant av {@link getWorkOrders} — föredragen för UI/list-vyer. */
   getWorkOrdersPaginated(tenantId: string, limit: number, offset: number, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, status?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }>;
   bulkUnscheduleWorkOrders(tenantId: string, startDate: Date, endDate: Date, resourceIds?: string[]): Promise<number>;
   getWorkOrder(id: string): Promise<WorkOrder | undefined>;

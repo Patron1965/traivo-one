@@ -58,10 +58,7 @@ const PLANNER_ROUTES = new Set([
   "/booking-slots",
   "/settings",
   "/mobile",
-  "/field",
-  "/simple",
   "/project-report",
-  "/metadata",
   "/invoicing",
   "/fleet",
   "/fortnox",
@@ -84,8 +81,6 @@ const TECHNICIAN_ROUTES = new Set([
   "/",
   "/home",
   "/mobile",
-  "/field",
-  "/simple",
   "/settings",
 ]);
 

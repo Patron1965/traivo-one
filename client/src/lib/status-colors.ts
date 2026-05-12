@@ -74,3 +74,45 @@ export function getWorkOrderStatusBadge(status: string | null | undefined): stri
   if (!status) return workOrderStatusBadge.unassigned;
   return workOrderStatusBadge[status] ?? workOrderStatusBadge.unassigned;
 }
+
+// Execution-status (orderns utförande-tillstånd) — används bl.a. på AssignmentsPage.
+export const executionStatusBadge: Record<string, string> = {
+  not_planned: "bg-muted text-muted-foreground border border-border",
+  planned_rough: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
+  planned_fine: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
+  dispatched: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
+  on_way: "bg-chart-3/15 text-chart-3 border border-chart-3/30",
+  on_site: "bg-chart-4/15 text-chart-4 border border-chart-4/30",
+  completed: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+  inspected: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+  impossible: "bg-destructive/15 text-destructive border border-destructive/30",
+};
+
+export function getExecutionStatusBadge(status: string | null | undefined): string {
+  if (!status) return executionStatusBadge.not_planned;
+  return executionStatusBadge[status] ?? executionStatusBadge.not_planned;
+}
+
+// Kund-rapport-status (issue reports/portal field reports).
+export const customerReportStatusBadge: Record<string, { className: string; label: string }> = {
+  new: { className: "bg-chart-1 text-white", label: "Ny" },
+  reviewed: { className: "bg-chart-4 text-white", label: "Granskas" },
+  resolved: { className: "bg-chart-2 text-white", label: "Löst" },
+  rejected: { className: "bg-muted text-muted-foreground", label: "Avvisad" },
+};
+
+export function getCustomerReportStatusBadge(status: string): { className: string; label: string } {
+  return customerReportStatusBadge[status] ?? { className: "bg-muted text-muted-foreground", label: status };
+}
+
+// Inspection-status (data-quality / verification).
+export const inspectionStatusBadge: Record<string, string> = {
+  ok: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+  warning: "bg-warning/15 text-warning border border-warning/30",
+  error: "bg-destructive/15 text-destructive border border-destructive/30",
+};
+
+export function getInspectionStatusBadge(status: string | null | undefined): string {
+  if (!status) return inspectionStatusBadge.ok;
+  return inspectionStatusBadge[status] ?? inspectionStatusBadge.ok;
+}

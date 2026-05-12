@@ -61,7 +61,6 @@ const SystemDashboardPage = lazy(() => import("@/pages/SystemDashboardPage"));
 const IndustryPackagesPage = lazy(() => import("@/pages/IndustryPackagesPage"));
 const MobileFieldPage = lazy(() => import("@/pages/MobileFieldPage"));
 const ProjectReportPage = lazy(() => import("@/pages/ProjectReportPage"));
-const MetadataPage = lazy(() => import("@/pages/MetadataPage"));
 const MetadataSettingsPage = lazy(() => import("@/pages/MetadataSettingsPage"));
 const FortnoxSettingsPage = lazy(() => import("@/pages/FortnoxSettingsPage"));
 const MyTasksPage = lazy(() => import("@/pages/MyTasksPage"));
@@ -70,7 +69,6 @@ const ArchitecturePage = lazy(() => import("@/pages/architecture"));
 const OrderConceptsPage = lazy(() => import("@/pages/OrderConceptsPage"));
 const OrderConceptWizardPage = lazy(() => import("@/pages/OrderConceptWizardPage"));
 const AssignmentsPage = lazy(() => import("@/pages/AssignmentsPage"));
-const PitchPage = lazy(() => import("@/pages/PitchPage"));
 const AIAssistantPage = lazy(() => import("@/pages/AIAssistantPage"));
 const ReportingDashboardPage = lazy(() => import("@/pages/ReportingDashboardPage"));
 const WorkflowGuidePage = lazy(() => import("@/pages/WorkflowGuidePage"));
@@ -177,7 +175,7 @@ function Router() {
         <Route path="/field">{() => <Redirect to="/mobile" />}</Route>
         <Route path="/simple">{() => <Redirect to="/mobile" />}</Route>
         <Route path="/project-report">{() => <ProtectedRoute component={ProjectReportPage} path="/project-report" />}</Route>
-        <Route path="/metadata">{() => <ProtectedRoute component={MetadataPage} path="/metadata" />}</Route>
+        <Route path="/metadata">{() => <Redirect to="/metadata-settings" />}</Route>
         <Route path="/metadata-settings">{() => <ProtectedRoute component={MetadataSettingsPage} path="/metadata-settings" />}</Route>
         <Route path="/invoicing">{() => <ProtectedRoute component={InvoicingPage} path="/invoicing" />}</Route>
         <Route path="/fleet">{() => <ProtectedRoute component={FleetManagementPage} path="/fleet" />}</Route>
@@ -191,7 +189,7 @@ function Router() {
         <Route path="/order-concepts/new">{() => <ProtectedRoute component={OrderConceptWizardPage} path="/order-concepts" />}</Route>
         <Route path="/order-concepts/:id/edit">{() => <ProtectedRoute component={OrderConceptWizardPage} path="/order-concepts" />}</Route>
         <Route path="/assignments">{() => <ProtectedRoute component={AssignmentsPage} path="/assignments" />}</Route>
-        <Route path="/pitch">{() => <ProtectedRoute component={PitchPage} path="/pitch" />}</Route>
+        <Route path="/pitch">{() => <Redirect to="/investor-pitch" />}</Route>
         <Route path="/ai-assistant">{() => <ProtectedRoute component={AIAssistantPage} path="/ai-assistant" />}</Route>
         <Route path="/reporting">{() => <ProtectedRoute component={ReportingDashboardPage} path="/reporting" />}</Route>
         <Route path="/proactive-sales">{() => <ProtectedRoute component={ProactiveSalesPage} path="/proactive-sales" />}</Route>
@@ -378,7 +376,7 @@ function AppContent() {
     );
   }
 
-  if (location === "/field" || location === "/field-login" || location === "/mobile" || location === "/simple") {
+  if (location === "/field-login" || location === "/mobile" || location === "/field" || location === "/simple") {
     if (isLoading) {
       return (
         <div className="flex items-center justify-center min-h-screen bg-background">
@@ -448,7 +446,7 @@ function TechnicianRedirect() {
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
-    if (user?.role === "technician" && location !== "/mobile" && location !== "/field" && location !== "/simple" && location !== "/settings") {
+    if (user?.role === "technician" && location !== "/mobile" && location !== "/settings") {
       setLocation("/mobile");
     }
   }, [user, location, setLocation]);
@@ -459,7 +457,7 @@ function TechnicianRedirect() {
 function AuthenticatedApp() {
   const { theme, toggleTheme } = useTheme();
   const [location] = useLocation();
-  const hideFloatingButton = location.startsWith("/order-concepts/new") || location.includes("/edit") || location.startsWith("/mobile") || location.startsWith("/field") || location.startsWith("/simple");
+  const hideFloatingButton = location.startsWith("/order-concepts/new") || location.includes("/edit") || location.startsWith("/mobile");
   
   return (
     <TourProvider>

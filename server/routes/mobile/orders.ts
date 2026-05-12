@@ -279,7 +279,12 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
     });
 }));
 
-// Update work order status from mobile
+// Update work order status from mobile.
+// Mobil-specifik handler — får inte slås ihop med `/api/work-orders/:id/status` eftersom
+// den (a) accepterar mobil-status-alias (paborjad/utford/en_route/...), (b) skriver
+// både `orderStatus` och `executionStatus` med tids-stämplar (`onWayAt`, `onSiteAt`,
+// `completedAt`, `impossibleAt`), (c) triggar ETA-notiser och (d) returnerar berikad
+// payload (object/customer/visitConfirmation). Se `docs/wo-status-endpoints.md`.
 app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;

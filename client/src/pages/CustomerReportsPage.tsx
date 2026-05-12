@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { customerReportStatusBadge, getCustomerReportStatusBadge } from "@/lib/status-colors";
 import { CATEGORY_LABELS, SEVERITY_LABELS as SHARED_SEVERITY_LABELS } from "@shared/changeRequestCategories";
 
 const CATEGORIES = CATEGORY_LABELS;
@@ -56,13 +57,11 @@ interface Customer {
 }
 
 function getStatusBadge(status: string) {
-  switch (status) {
-    case "new": return <Badge className="bg-chart-1 text-white" data-testid={`badge-status-${status}`}>Ny</Badge>;
-    case "reviewed": return <Badge className="bg-chart-4 text-white" data-testid={`badge-status-${status}`}>Granskas</Badge>;
-    case "resolved": return <Badge className="bg-chart-2 text-white" data-testid={`badge-status-${status}`}>Löst</Badge>;
-    case "rejected": return <Badge variant="secondary" data-testid={`badge-status-${status}`}>Avvisad</Badge>;
-    default: return <Badge variant="outline">{status}</Badge>;
+  const { className, label } = getCustomerReportStatusBadge(status);
+  if (!customerReportStatusBadge[status]) {
+    return <Badge variant="outline" data-testid={`badge-status-${status}`}>{label}</Badge>;
   }
+  return <Badge className={className} data-testid={`badge-status-${status}`}>{label}</Badge>;
 }
 
 function getSeverityBadge(severity: string | null) {

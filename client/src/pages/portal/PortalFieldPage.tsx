@@ -13,6 +13,7 @@ import {
   Clock, Image, X, Building2, FileText, Navigation, ChevronRight
 } from "lucide-react";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
+import { customerReportStatusBadge, getCustomerReportStatusBadge } from "@/lib/status-colors";
 import {
   FIELD_PHOTO_SIZE_HINT,
   FIELD_PHOTO_TOO_LARGE_TOAST,
@@ -97,13 +98,11 @@ function getCategoryLabel(value: string): string {
 }
 
 function getStatusBadge(status: string) {
-  switch (status) {
-    case "new": return <Badge className="bg-chart-1 text-white text-xs" data-testid="badge-status-new">Ny</Badge>;
-    case "reviewed": return <Badge className="bg-chart-4 text-white text-xs" data-testid="badge-status-reviewed">Granskas</Badge>;
-    case "resolved": return <Badge className="bg-chart-2 text-white text-xs" data-testid="badge-status-resolved">Löst</Badge>;
-    case "rejected": return <Badge variant="secondary" className="text-xs" data-testid="badge-status-rejected">Avvisad</Badge>;
-    default: return <Badge variant="outline" className="text-xs">{status}</Badge>;
+  const { className, label } = getCustomerReportStatusBadge(status);
+  if (!customerReportStatusBadge[status]) {
+    return <Badge variant="outline" className="text-xs">{label}</Badge>;
   }
+  return <Badge className={`${className} text-xs`} data-testid={`badge-status-${status}`}>{label}</Badge>;
 }
 
 type View = "list" | "object" | "report" | "scanner" | "success";

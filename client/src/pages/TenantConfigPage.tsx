@@ -1,3 +1,7 @@
+// Tenant-konfiguration via tabs (företag, artiklar, prislistor, resurser, IoT,
+// branding, moduler, metadata-etiketter). Distinkt ansvar från SystemDashboardPage
+// (plattform-admin) och SystemOverviewPage (feature-katalog).
+// Se docs/admin-page-overlap-review.md.
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

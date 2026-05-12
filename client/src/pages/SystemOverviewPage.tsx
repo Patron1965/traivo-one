@@ -1,3 +1,6 @@
+// Read-only feature-katalog + PDF-export. Distinkt ansvar från SystemDashboardPage
+// (skarpa admin-mutationer) och TenantConfigPage (tenant-konfig-formulär).
+// Se docs/admin-page-overlap-review.md.
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

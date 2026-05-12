@@ -1098,6 +1098,9 @@ app.delete("/api/mobile/push-token", isMobileAuthenticated, asyncHandler(async (
     res.json({ success: true });
 }));
 
+// OBS: Detta är **resurs**-status (online/offline för mobil-användaren), inte work-order-status.
+// Trots det missvisande namnet är endpoint:en behållen för bakåtkompatibilitet med
+// publicerade mobil-app-versioner. Se `docs/wo-status-endpoints.md`.
 app.post("/api/mobile/status", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const schema = z.object({

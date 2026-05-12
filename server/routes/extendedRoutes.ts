@@ -1060,6 +1060,10 @@ app.post("/api/field-worker/tasks/:id/start", asyncHandler(async (req, res) => {
     res.json(updated);
 }));
 
+// Smal field-worker-shortcut: tvingar status=completed + executionStatus=completed
+// och cascadar `taskDependencyInstances.completed`. Inte ersättningsbar av generiska
+// `/api/work-orders/:id/status` eftersom den senare inte rör dependency-tabellen.
+// Se `docs/wo-status-endpoints.md`.
 app.post("/api/field-worker/tasks/:id/complete", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);

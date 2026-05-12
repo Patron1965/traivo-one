@@ -4,7 +4,7 @@ import { Truck } from "lucide-react";
 
 export default function FieldLoginPage() {
   const handleLogin = () => {
-    sessionStorage.setItem("field_login_redirect", "/field");
+    sessionStorage.setItem("field_login_redirect", "/mobile");
     window.location.href = "/api/login";
   };
 

@@ -93,7 +93,7 @@ const allNavItems: NavItemConfig[] = [
   { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, category: "Avancerat", keywords: ["automatisk", "områdesindelning"] },
   { title: "Prediktiv planering", url: "/predictive-planning", icon: TrendingUp, category: "Avancerat", keywords: ["prognos", "ai"] },
   { title: "Ställtidsanalys", url: "/setup-analysis", icon: Timer, category: "Avancerat", keywords: ["tid", "effektivitet"] },
-  { title: "Metadata", url: "/metadata", icon: FileText, category: "Avancerat", keywords: ["fält", "anpassning"] },
+  { title: "Metadata", url: "/metadata-settings", icon: FileText, category: "Avancerat", keywords: ["fält", "anpassning"] },
   { title: "Upphandlingar", url: "/procurements", icon: Briefcase, category: "Avancerat", keywords: ["avtal", "kontrakt"] },
   { title: "Kundportal", url: "/customer-portal", icon: Building, category: "Avancerat", keywords: ["extern", "kund"] },
   { title: "Systemöversikt", url: "/system-overview", icon: Database, category: "Avancerat", keywords: ["data", "statistik"] },

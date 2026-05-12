@@ -47,6 +47,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { InspectionMetadata, ServiceObject } from "@shared/schema";
 import { INSPECTION_TYPE_LABELS, INSPECTION_STATUS_LABELS } from "@shared/schema";
+import { getInspectionStatusBadge } from "@/lib/status-colors";
 
 export default function InspectionSearchPage() {
   const { toast } = useToast();
@@ -178,19 +179,12 @@ export default function InspectionSearchPage() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    const variants: Record<string, string> = {
-      ok: "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15",
-      warning: "bg-chart-4/15 text-chart-4 dark:bg-chart-4/15",
-      error: "bg-destructive/15 text-destructive dark:bg-destructive/15",
-    };
-    return (
-      <Badge className={`${variants[status] || ""} gap-1`} data-testid={`badge-status-${status}`}>
-        {getStatusIcon(status)}
-        {INSPECTION_STATUS_LABELS[status] || status}
-      </Badge>
-    );
-  };
+  const getStatusBadge = (status: string) => (
+    <Badge className={`${getInspectionStatusBadge(status)} gap-1`} data-testid={`badge-status-${status}`}>
+      {getStatusIcon(status)}
+      {INSPECTION_STATUS_LABELS[status] || status}
+    </Badge>
+  );
 
   return (
     <div className="container mx-auto p-6 space-y-6 max-w-7xl">

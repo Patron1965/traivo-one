@@ -987,6 +987,15 @@ app.post("/api/order-stock/recalculate", asyncHandler(async (req, res) => {
   res.json({ matched: allIds.length, recalculated: recalcResult.recalculated, changed: recalcResult.changed });
 }));
 
+// Web/admin-endpoint: enkel `status`-uppdatering med strikt enum-validering (`ORDER_STATUSES`)
+// och övergångsregler i `storage.updateWorkOrderStatus`. Skiljer sig medvetet från:
+//  - `PATCH /api/mobile/orders/:id/status` (mobile, mappar paborjad/utford/en_route/...
+//    till executionStatus + sidoeffekter: ETA-SMS, signature, completion-time).
+//  - `POST /api/field-worker/tasks/:id/complete` (smal field-worker shortcut: alltid
+//    completed + dependency-cascade).
+//  - `POST /api/mobile/status` (gäller resurs online/offline, ej work-order — namnet
+//    är historiskt och bör inte ändras utan mobil-app-bump).
+// Se `docs/wo-status-endpoints.md` för beslutsmatris.
 app.post("/api/work-orders/:id/status", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const existing = await storage.getWorkOrder(req.params.id);
