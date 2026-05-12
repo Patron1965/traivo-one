@@ -10,7 +10,16 @@ import type { ViewMode, PlannerAction, WeatherForecastData, WeatherImpactDay, Co
 import { computeDateFilterParams, buildUnscheduledQueryString } from "./dateFilterUtils";
 import { HOURS_IN_DAY, DAY_START_HOUR, DAY_END_HOUR } from "./types";
 import type { WhatIfResult } from "./WhatIfPreview";
-import { haversineDistanceKm as haversineKm, estimateTravelMinutes } from "@/lib/geo";
+import { haversineDistanceKm as haversineKm, estimateTravelMinutes as estimateTravelMinutesGeo } from "@/lib/geo";
+
+// Plannerns ursprungliga semantik: minst 5 minuter per ben även för
+// 0 km (samlokaliserade jobb), för att matcha det överlappsskydd och
+// dagstotaler som plannern presenterar. Får inte ändras utan att
+// uppdatera UnscheduledSidebar/dagstotalerna i samma rörelse.
+function estimateTravelMinutes(distanceKm: number): number {
+  const m = estimateTravelMinutesGeo(distanceKm, 50);
+  return Math.max(5, m);
+}
 
 const UNSCHEDULED_PAGE_SIZE = 50;
 const PLANNER_FILTERS_KEY = "traivo-planner-filters";
