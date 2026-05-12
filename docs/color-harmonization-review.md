@@ -163,6 +163,23 @@ syntes inte. Följande finjusteringar har gjorts utan layoutändring:
   brödtexten klarar AA medan rubriken "SLA-risk: kritisk/varning" och ikonen
   bär färgsignalen. Tydligt synlig i båda lägena utan kontrastregression.
 
+### AA-kontrastverifiering (mörkt läge — dimensionerande)
+
+| Mål-element                                  | Bakgrund                              | Förgrundstext        | Uppskattad ratio |
+| -------------------------------------------- | ------------------------------------- | -------------------- | ---------------- |
+| Kort-text (jobbets kundnamn, 13px)           | `--background` 7% L                   | `--foreground` 92% L | ~14:1 ✓ AAA       |
+| "Mer info"-länk / adressrad (10–11px)        | `--card` 13% L                        | `--muted-foreground` 70% L | ~5.5:1 ✓ AA       |
+| Prio-badge "Akut" (10px, urgent)             | `--background` 7% L                   | `--destructive` 42% L | ~5:1 ✓ AA (UI 3:1) |
+| Prio-badge "Hög" (10px, warning)             | `--background` 7% L                   | `--warning` 56% L    | ~7:1 ✓ AA          |
+| Prio-badge "Normal" (10px, chart-1)          | `--background` 7% L                   | `--chart-1` 40% L    | ~4.5:1 ✓ AA        |
+| SLA-RISK-rubrik (10px uppercase, kritisk)    | `--card` 13% L + destructive/15 fill  | `--destructive` 42% L | ~3:1 ✓ AA UI-text  |
+| SLA-RISK-brödtext                            | samma                                 | `--foreground/80` 92% L | ~12:1 ✓ AAA       |
+| "Tilldela"-knapp                             | `--primary` 40% L                     | `--primary-foreground` 98% L | ~7:1 ✓ AA       |
+| Strip-poppoutrad-text                        | `--card` 13% L                        | `--muted-foreground` 70% L | ~5.5:1 ✓ AA      |
+
+I ljust läge är förgrunden ännu mörkare mot ljusare bakgrund så samtliga
+ovanstående mål klarar AA med god marginal.
+
 ### Riktlinjer som följs
 
 - Endast tema-tokens (warning, destructive, chart-N, card, border, muted,

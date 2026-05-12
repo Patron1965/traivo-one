@@ -35,6 +35,27 @@ export const invoiceStatusBadge: Record<string, string> = {
   credited: "bg-chart-5/15 text-chart-5 border border-chart-5/30",
 };
 
+export const priorityBadgeClasses: Record<string, string> = {
+  urgent: "bg-background text-destructive border border-destructive/60 dark:border-destructive/70",
+  high: "bg-background text-warning border border-warning/60 dark:border-warning/70",
+  normal: "bg-background text-chart-1 border border-chart-1/50 dark:border-chart-1/70",
+  low: "bg-muted text-muted-foreground border border-border",
+};
+
+export const priorityDotColors: Record<string, string> = {
+  urgent: "bg-destructive",
+  high: "bg-warning",
+  normal: "bg-chart-1",
+  low: "bg-muted-foreground/60",
+};
+
+export const priorityLabels: Record<string, string> = {
+  urgent: "Akut",
+  high: "Hög",
+  normal: "Normal",
+  low: "Låg",
+};
+
 export const hierarchyLevelBadge: Record<string, string> = {
   koncern: "bg-chart-5/15 text-chart-5 border border-chart-5/30",
   brf: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
