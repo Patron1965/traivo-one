@@ -38,6 +38,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { AssignmentDialog } from "@/components/weekplanner/BulkScheduleDialog";
 import { OrderFilterBar } from "@/components/orders/OrderFilterBar";
+import { CancelOrderDialog } from "@/components/orders/CancelOrderDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { WorkOrder, SimulationScenario, Customer, Article, WorkOrderLine, Team, Resource, MetadataKatalog } from "@shared/schema";
 import { formatSekFromOre } from "@/lib/format";
@@ -302,6 +303,7 @@ export default function OrderStockPage() {
   const [planningOrder, setPlanningOrder] = useState<WorkOrder | null>(null);
   const [showBatchPlanningDialog, setShowBatchPlanningDialog] = useState(false);
   const [chainTraceWorkOrderId, setChainTraceWorkOrderId] = useState<string | null>(null);
+  const [cancelOrder, setCancelOrder] = useState<WorkOrder | null>(null);
 
   const planningForm = useForm<PlanningFormData>({
     resolver: zodResolver(planningFormSchema),
@@ -1129,6 +1131,19 @@ export default function OrderStockPage() {
                           <ArrowRight className="h-4 w-4" />
                         </Button>
                       )}
+
+                      {status !== "utford" && status !== "fakturerad" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setCancelOrder(order)}
+                          className="gap-1 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          data-testid={`button-cancel-order-${order.id}`}
+                          title="Avbeställ order"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                       
                       {order.isSimulated && (
                         <Button
@@ -1597,6 +1612,14 @@ export default function OrderStockPage() {
         workOrderId={chainTraceWorkOrderId}
         open={!!chainTraceWorkOrderId}
         onClose={() => setChainTraceWorkOrderId(null)}
+      />
+
+      <CancelOrderDialog
+        open={!!cancelOrder}
+        onOpenChange={(o) => { if (!o) setCancelOrder(null); }}
+        workOrderId={cancelOrder?.id ?? null}
+        workOrderTitle={cancelOrder?.title ?? undefined}
+        onSuccess={() => setCancelOrder(null)}
       />
 
       <AlertDialog

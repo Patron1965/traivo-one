@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, MapPin, User, Calendar as CalendarIcon, Clock, Package, Check, ChevronsUpDown, Tag, ShoppingCart, DollarSign, MessageSquare, Send, CheckCircle2, XCircle, AlertCircle, Search, Copy, AlertTriangle } from "lucide-react";
+import { Loader2, Plus, Trash2, MapPin, User, Calendar as CalendarIcon, Clock, Package, Check, ChevronsUpDown, Tag, ShoppingCart, DollarSign, MessageSquare, Send, CheckCircle2, XCircle, AlertCircle, Search, Copy, AlertTriangle, Ban } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Calendar } from "@/components/ui/calendar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TaskTimewindowsEditor } from "@/components/TaskTimewindowsEditor";
+import { CancelOrderDialog } from "@/components/orders/CancelOrderDialog";
 import { workOrderStatusBadge } from "@/lib/status-colors";
 import type { WorkOrder, ServiceObject, Customer, Resource, WorkOrderObject, MetadataKatalog, WorkOrderLine, CustomerCommunication } from "@shared/schema";
 
@@ -81,6 +82,7 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
   const [selectedArticleId, setSelectedArticleId] = useState<string>("");
   const [articleQuantity, setArticleQuantity] = useState(1);
   const [showSmsDialog, setShowSmsDialog] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [smsMessage, setSmsMessage] = useState("");
   const [smsPhone, setSmsPhone] = useState("");
   const [desiredStart, setDesiredStart] = useState<Date | undefined>(undefined);
@@ -1095,7 +1097,33 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
             Kunde inte ladda jobbdetaljer.
           </div>
         )}
+
+        {workOrder && workOrder.orderStatus !== "utford" && workOrder.orderStatus !== "fakturerad" && (
+          <div className="pt-4 border-t flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCancelDialog(true)}
+              className="gap-2 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+              data-testid="button-cancel-order"
+            >
+              <Ban className="h-4 w-4" />
+              Avbeställ order
+            </Button>
+          </div>
+        )}
       </DialogContent>
+
+      <CancelOrderDialog
+        open={showCancelDialog}
+        onOpenChange={setShowCancelDialog}
+        workOrderId={workOrderId}
+        workOrderTitle={workOrder?.title}
+        onSuccess={() => {
+          setShowCancelDialog(false);
+          onClose();
+        }}
+      />
 
       <Dialog open={showSmsDialog} onOpenChange={setShowSmsDialog}>
         <DialogContent className="sm:max-w-md">

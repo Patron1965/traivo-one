@@ -903,7 +903,64 @@ app.delete("/api/work-orders/:id", asyncHandler(async (req, res) => {
   if (!verifyTenantOwnership(existing, tenantId)) {
     throw new NotFoundError("Arbetsorder");
   }
-  await storage.deleteWorkOrder(req.params.id);
+
+  const force = req.query.force === "true" || req.query.force === "1";
+  const role = (req as any).tenantRole as string | undefined;
+  const isAdmin = role === "owner" || role === "admin";
+  const reason = typeof req.body?.reason === "string"
+    ? req.body.reason.trim().slice(0, 500)
+    : undefined;
+  const userId = (req as any).user?.claims?.sub
+    ?? (req as any).user?.id
+    ?? null;
+
+  // Hård spärr: utförda eller fakturerade ordrar får aldrig avbeställas
+  // (audit/fakturahistorik måste bevaras).
+  if (existing!.orderStatus === "utford" || existing!.orderStatus === "fakturerad") {
+    throw new ConflictError(
+      existing!.orderStatus === "utford"
+        ? "Utförda ordrar kan inte avbeställas. Skapa en kreditfaktura eller markera som omöjlig istället."
+        : "Fakturerade ordrar kan inte avbeställas. Kreditera fakturan via Fortnox-flödet istället."
+    );
+  }
+
+  // Hård spärr: tekniker som är på väg / på plats / klar — orderhistoriken
+  // ska inte raderas mitt i ett pågående jobb. Kräver force + admin.
+  const activeExecution = ["on_way", "on_site", "completed", "inspected"].includes(
+    existing!.executionStatus ?? ""
+  );
+  if (activeExecution && !(force && isAdmin)) {
+    throw new ConflictError(
+      isAdmin
+        ? `Ordern är aktiv (executionStatus=${existing!.executionStatus}). Lägg till ?force=true för att radera ändå.`
+        : `Ordern är aktiv (${existing!.executionStatus}) — en tekniker är på väg eller har påbörjat jobbet. Endast administratör kan tvinga avbeställning.`
+    );
+  }
+
+  // Frusen WO snapshot — kräver force + admin (samma mönster som /freeze).
+  if (existing!.frozenAt && !(force && isAdmin)) {
+    throw new ConflictError(
+      isAdmin
+        ? "Ordern är fryst (frozen snapshot). Lägg till ?force=true för att radera ändå."
+        : "Ordern är fryst (frozen snapshot) och kan bara avbeställas av administratör med tvångsläge."
+    );
+  }
+
+  // Fortnox-export — kräver force + admin.
+  const exports = await db.select({ id: fortnoxInvoiceExports.id })
+    .from(fortnoxInvoiceExports)
+    .where(eq(fortnoxInvoiceExports.workOrderId, req.params.id))
+    .limit(1);
+  if (exports.length > 0 && !(force && isAdmin)) {
+    throw new ConflictError(
+      isAdmin
+        ? "Ordern har Fortnox-exporter kopplade till sig. Lägg till ?force=true för att radera ändå."
+        : "Ordern har Fortnox-exporter kopplade till sig och kan bara avbeställas av administratör med tvångsläge."
+    );
+  }
+
+  await storage.deleteWorkOrder(req.params.id, { reason, userId });
+  console.log(`[work-orders] cancelled id=${req.params.id} tenant=${tenantId} userId=${userId} force=${force} reason=${reason ?? ""}`);
   res.status(204).send();
 }));
 

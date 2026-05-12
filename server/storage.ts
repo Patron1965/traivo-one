@@ -312,7 +312,7 @@ export interface IStorage {
   getActiveResourceCount(tenantId: string): Promise<number>;
   createWorkOrder(workOrder: InsertWorkOrder): Promise<WorkOrder>;
   updateWorkOrder(id: string, workOrder: Partial<InsertWorkOrder>): Promise<WorkOrder | undefined>;
-  deleteWorkOrder(id: string): Promise<void>;
+  deleteWorkOrder(id: string, opts?: { reason?: string; userId?: string | null }): Promise<void>;
   getWorkOrderByModusId(tenantId: string, modusId: string): Promise<WorkOrder | undefined>;
   getRecentWorkOrdersForObject(tenantId: string, objectId: string, excludeId: string, limit?: number): Promise<WorkOrder[]>;
   getCustomerCommunicationsByWorkOrder(tenantId: string, workOrderId: string, limit?: number): Promise<CustomerCommunication[]>;
@@ -2726,9 +2726,23 @@ export class DatabaseStorage implements IStorage {
     return workOrder || undefined;
   }
 
-  async deleteWorkOrder(id: string): Promise<void> {
+  async deleteWorkOrder(
+    id: string,
+    opts?: { reason?: string; userId?: string | null },
+  ): Promise<void> {
+    const updates: Record<string, any> = { deletedAt: new Date() };
+    if (opts && (opts.reason || opts.userId)) {
+      const cancellation = {
+        cancellation: {
+          reason: opts.reason ?? null,
+          cancelledAt: new Date().toISOString(),
+          cancelledBy: opts.userId ?? null,
+        },
+      };
+      updates.metadata = sql`COALESCE(${workOrders.metadata}, '{}'::jsonb) || ${JSON.stringify(cancellation)}::jsonb`;
+    }
     const [row] = await db.update(workOrders)
-      .set({ deletedAt: new Date() })
+      .set(updates)
       .where(eq(workOrders.id, id))
       .returning({ tenantId: workOrders.tenantId });
     if (row?.tenantId) invalidateWorkflowCaches(row.tenantId);

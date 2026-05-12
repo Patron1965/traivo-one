@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Inbox, AlertTriangle, Clock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, X, UserPlus, Key, DoorOpen, Loader2, Sparkles, CheckCircle2, CalendarRange, Info, Calendar as CalendarIcon, Target } from "lucide-react";
+import { Inbox, AlertTriangle, Clock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, X, UserPlus, Key, DoorOpen, Loader2, Sparkles, CheckCircle2, CalendarRange, Info, Calendar as CalendarIcon, Target, Trash2 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { format, addDays, startOfWeek, getISOWeek } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -18,6 +18,7 @@ import { DraggableJobCard } from "./DndComponents";
 import { JobCardExpandPanel } from "./JobCardExpandPanel";
 import { apiRequest } from "@/lib/queryClient";
 import { OrderFilterBar } from "@/components/orders/OrderFilterBar";
+import { CancelOrderDialog } from "@/components/orders/CancelOrderDialog";
 import { useToast } from "@/hooks/use-toast";
 
 const EXPANDED_STORAGE_KEY = "traivo:orderlager:expanded";
@@ -227,6 +228,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
   const widthClass = expanded ? "w-full flex-1" : "w-[280px] border-r";
 
   const [expandedJobs, setExpandedJobs] = useState<Set<string>>(() => readExpandedSet());
+  const [cancelJob, setCancelJob] = useState<{ id: string; title: string } | null>(null);
   const toggleJobExpanded = useCallback((jobId: string) => {
     setExpandedJobs(prev => {
       const next = new Set(prev);
@@ -763,6 +765,26 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                               <TooltipTrigger asChild>
                                 <Button
                                   size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCancelJob({ id: job.id, title: job.title || customerLabel });
+                                  }}
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  data-testid={`button-cancel-order-${job.id}`}
+                                  aria-label="Avbeställ order"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Avbeställ order</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="sm"
                                   className="h-7 text-xs px-3 bg-primary hover:bg-primary/90 text-primary-foreground border border-primary-border"
                                   onClick={(e) => onOpenAssignDialog(job, e)}
                                   data-testid={`button-assign-job-${job.id}`}
@@ -818,6 +840,13 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
           </TooltipContent>
         </Tooltip>
       )}
+      <CancelOrderDialog
+        open={!!cancelJob}
+        onOpenChange={(o) => { if (!o) setCancelJob(null); }}
+        workOrderId={cancelJob?.id ?? null}
+        workOrderTitle={cancelJob?.title}
+        onSuccess={() => setCancelJob(null)}
+      />
     </Collapsible>
   );
 });
