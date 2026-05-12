@@ -193,6 +193,47 @@ hela scopen.
 4. Säg klart till Kinab — Modus-importen kan köras skarpt mot prod.
 5. Befintliga work_orders kommer skapas via Modus-importen (eller manuellt).
 
+## Selektiv import — återställ enskilda vilande kunder (Task #427)
+
+Slim-migreringen lämnar avsiktligt ~1809 vilande kunder utanför prod (kunder
+utan `work_order` `>= ACTIVE_SINCE`). När Kinab plötsligt behöver ta in en av
+dem finns ett operatör-wrapper-skript så ingen behöver SSH:a in och köra
+`migrate-kinab-dev-to-prod.ts` med `CONFIRM=YES_MIGRATE_PROD` direkt:
+
+```bash
+# 1) Sök fram kandidater i dev (read-only, ingen prod-koppling krävs):
+npx tsx scripts/restore-dormant-customer.ts --search="brf solgården"
+
+# 2) Dry-run mot prod (transaktion + ROLLBACK; ingen audit-rad skrivs):
+PROD_DATABASE_URL='postgres://...' \
+  npx tsx scripts/restore-dormant-customer.ts \
+    --customer-id=cust_abc,cust_def \
+    --actor=mats@traivo.se \
+    --dry-run
+
+# 3) Skarp återställning (committar + skriver audit-rad i prod):
+PROD_DATABASE_URL='postgres://...' CONFIRM=YES_MIGRATE_PROD \
+  npx tsx scripts/restore-dormant-customer.ts \
+    --customer-id=cust_abc,cust_def \
+    --actor=mats@traivo.se
+```
+
+Wrappern lägger bara på tre saker ovanpå migrate-skriptet:
+
+1. **Sökning** mot dev på id/namn/kundnummer/orgnummer med markering AKTIV /
+   VILAND och senaste `work_order`-datum.
+2. **Dormancy-preflight** — fail om någon av angivna ID:n redan har
+   `work_order >= ACTIVE_SINCE` i dev (skydd mot att skriptet missbrukas för
+   aktiva kunder). Kan tvingas via `--allow-active`.
+3. **Audit-rad** i prod (`audit_logs`) per skarp körning med
+   `action='restore_dormant_customer'`, `resource_type='customers'`,
+   `resource_id=<komma-separerade IDn>`, och metadata med actor, kundnamn,
+   objekträkning och `wasActiveInDev`-flagga per id.
+
+All idempotens, FK-täckning, tenant-leak-check, transaktionssemantik och
+post-run-validering återanvänds direkt från `migrate-kinab-dev-to-prod.ts`
+— wrappern spawnar det med `--phase=customers --customer-id=…`.
+
 ## Rollback
 
 Om något gått snett **efter commit**: Replit Publish → Database → Restore from
