@@ -417,7 +417,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     <DndContext sensors={dnd.sensors} collisionDetection={dnd.collisionDetection} onDragStart={dnd.handleDragStart} onDragOver={dnd.handleDragOver} onDragEnd={handleDragEndWithRemote}>
       <div className="flex flex-col h-full">
         {showPersistentPopoutStrip && (
-          <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-1.5 text-xs" data-testid="strip-popout-controls">
+          <div className="flex items-center justify-between gap-2 border-y border-card-border bg-card px-3 py-1.5 text-xs" data-testid="strip-popout-controls">
             <span className="text-muted-foreground truncate">
               {effectiveDisplayMode === "neither"
                 ? "Båda vyer i pop-out"

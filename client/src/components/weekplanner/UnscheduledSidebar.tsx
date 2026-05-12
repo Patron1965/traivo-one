@@ -13,7 +13,7 @@ import { format, addDays, startOfWeek, getISOWeek } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { WorkOrderWithObject, Customer, Cluster } from "@shared/schema";
 import { EXECUTION_CODE_LABELS, EXECUTION_CODE_ICONS } from "@shared/schema";
-import { priorityDotColors, priorityLabels } from "./types";
+import { priorityDotColors, priorityLabels, priorityBadgeClasses } from "./types";
 import type { AssignSlot } from "./usePlannerSync";
 import { DraggableJobCard } from "./DndComponents";
 import { JobCardExpandPanel } from "./JobCardExpandPanel";
@@ -238,7 +238,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
 
   return (
     <Collapsible open={expanded ? true : showUnscheduled} onOpenChange={expanded ? () => {} : setShowUnscheduled} className={`flex min-w-0 ${expanded ? "flex-1" : ""}`}>
-      <CollapsibleContent className={`${widthClass} bg-muted/20 flex flex-col min-w-0`}>
+      <CollapsibleContent className={`${widthClass} bg-card flex flex-col min-w-0`}>
         <div className="p-3 border-b space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -415,7 +415,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                       return (
                         <DraggableJobCard key={job.id} id={job.id}>
                           <Card
-                            className="p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 touch-none bg-white dark:bg-card"
+                            className="p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 touch-none bg-background border-card-border"
                             onClick={() => onJobClick(job.id)}
                             data-testid={`missing-date-job-${job.id}`}
                           >
@@ -638,7 +638,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                 return (
                   <DraggableJobCard key={job.id} id={job.id}>
                     <Card
-                      className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 touch-none ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${job.priority === "urgent" ? "bg-destructive/10 dark:bg-destructive/15" : ""}`}
+                      className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 touch-none border-card-border bg-background ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${job.priority === "urgent" ? "bg-destructive/10 dark:bg-destructive/15 border-destructive/40" : ""}`}
                       onClick={() => onJobClick(job.id)}
                       data-testid={`unscheduled-job-${job.id}`}
                     >
@@ -656,7 +656,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                             <AlertTriangle className="h-3 w-3 text-destructive shrink-0" />
                           )}
                           <span className="ml-auto flex items-center gap-1 shrink-0">
-                            <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                            <Badge className={`text-[10px] h-4 px-1.5 font-medium ${priorityBadgeClasses[job.priority] || priorityBadgeClasses.normal}`}>
                               {priorityLabels[job.priority] || job.priority}
                             </Badge>
                             <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
@@ -787,7 +787,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                               <TooltipTrigger asChild>
                                 <Button
                                   size="sm"
-                                  className="h-7 text-xs px-3 bg-chart-2 hover:bg-chart-2/90 text-white border border-chart-2/70 dark:bg-chart-2 dark:hover:bg-chart-2/90 dark:text-white dark:border-chart-2/50"
+                                  className="h-7 text-xs px-3 bg-primary hover:bg-primary/90 text-primary-foreground border border-primary-border"
                                   onClick={(e) => onOpenAssignDialog(job, e)}
                                   data-testid={`button-assign-job-${job.id}`}
                                 >

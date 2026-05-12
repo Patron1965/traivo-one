@@ -72,10 +72,17 @@ export interface PendingSchedule {
 }
 
 export const priorityDotColors: Record<string, string> = {
-  urgent: "bg-destructive/15",
-  high: "bg-warning/15",
-  normal: "bg-chart-1/15",
-  low: "bg-gray-400",
+  urgent: "bg-destructive",
+  high: "bg-warning",
+  normal: "bg-chart-1",
+  low: "bg-muted-foreground/60",
+};
+
+export const priorityBadgeClasses: Record<string, string> = {
+  urgent: "bg-background text-destructive border border-destructive/60 dark:border-destructive/70",
+  high: "bg-background text-warning border border-warning/60 dark:border-warning/70",
+  normal: "bg-background text-chart-1 border border-chart-1/50 dark:border-chart-1/70",
+  low: "bg-muted text-muted-foreground border border-border",
 };
 
 export const priorityLabels: Record<string, string> = {

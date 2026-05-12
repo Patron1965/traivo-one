@@ -346,21 +346,21 @@ function PeriodTab({ jobId, data }: { jobId: string; data: JobExpandData }) {
 
       {showSlaBanner && (
         <div
-          className={`flex items-start gap-1.5 rounded p-1.5 mb-2 text-[11px] border ${
+          className={`flex items-start gap-1.5 rounded p-1.5 mb-2 text-[11px] border-l-4 border ${
             slaCritical
-              ? "bg-destructive/10 dark:bg-destructive/15 border-destructive/20 dark:border-destructive/90 text-destructive"
-              : "bg-warning/10 dark:bg-warning/15 border-warning/20 dark:border-warning/90 text-warning"
-          }`}
+              ? "bg-destructive/10 dark:bg-destructive/15 border-destructive/30 dark:border-destructive/50 border-l-destructive"
+              : "bg-warning/10 dark:bg-warning/15 border-warning/30 dark:border-warning/50 border-l-warning"
+          } text-foreground`}
           data-testid={`sla-risk-banner-${slaLevel}`}
         >
-          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <AlertTriangle className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${slaCritical ? "text-destructive" : "text-warning"}`} />
           <div className="flex-1 min-w-0">
-            <div className="font-semibold uppercase text-[10px] tracking-wide">
+            <div className={`font-semibold uppercase text-[10px] tracking-wide ${slaCritical ? "text-destructive" : "text-warning"}`}>
               SLA-risk: {slaCritical ? "kritisk" : "varning"}
             </div>
-            {period.slaReason && <div className="text-[10px] opacity-90 truncate">{period.slaReason}</div>}
+            {period.slaReason && <div className="text-[10px] text-foreground/80 truncate">{period.slaReason}</div>}
             {predictedRelative && period.slaPredictedCompletionDate && (
-              <div className="text-[10px] opacity-90">
+              <div className="text-[10px] text-foreground/80">
                 Prognostiserad klart: {formatDate(period.slaPredictedCompletionDate)} ({predictedRelative})
               </div>
             )}

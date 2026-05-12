@@ -119,3 +119,56 @@ intensitet som i ljust läge (`32 80% 44%`).
   hård-blocker, överbelastning och fel.
 - Använd `text-chart-4` / `bg-chart-4/N` endast för neutrala
   kategoriska användningar (kärl, rast, diagramfärg, navigation).
+
+## Planerar-läsbarhet 2026-05 (Task #444)
+
+Planerare sitter med Orderlager + WeekPlanner hela arbetsdagar. Genomgång av
+ljust/mörkt läge avslöjade att kort smälte ihop med bakgrunden (~1% L-skillnad
+ljust, ~3% mörkt), gränser försvann, prio-badges var grå och strip-poppoutraden
+syntes inte. Följande finjusteringar har gjorts utan layoutändring:
+
+### Token-justeringar i `client/src/index.css`
+
+| Token                | Ljust (före → efter)   | Mörkt (före → efter)   | Effekt                                  |
+| -------------------- | ---------------------- | ---------------------- | --------------------------------------- |
+| `--background`       | `195 25% 98%` → `195 30% 97%` | `210 30% 8%` → `210 32% 7%` | Mjukare canvas, lite mer Arctic Ice / djupare Midnight Navy |
+| `--card`             | `195 18% 97%` → `195 22% 95%` | `210 28% 11%` → `210 26% 13%` | ~3% L-skillnad mot bg → kort syns som egen yta i båda lägena |
+| `--border`           | `210 14% 80%` → `210 14% 72%` | `210 18% 30%` → `210 18% 32%` | Synliga radavgränsare i orderlagret |
+| `--card-border`      | `210 14% 82%` → `210 14% 74%` | `210 18% 26%` → `210 18% 30%` | Tydligare kortgränser |
+| `--muted-foreground` (mörkt) | – | `209 12% 60%` → `209 14% 70%` | "Mer info", adressrad och småtexter klarar AA i mörkt läge |
+
+### Komponentändringar
+
+- `client/src/components/weekplanner/types.ts` — `priorityDotColors` ändrad från
+  `/15`-transparenta dots (som var nästan osynliga) till solida
+  `bg-destructive` / `bg-warning` / `bg-chart-1` / `bg-muted-foreground/60`. Ny
+  `priorityBadgeClasses`-mapp använder neutral `bg-background` + färgad text +
+  färgad border (urgent→destructive, high→warning, normal→chart-1, low→muted)
+  så färgsignalen syns på en halvsekund samtidigt som AA-kontrasten håller i
+  båda lägena (text på bg-background = hög kontrast).
+- `client/src/components/weekplanner/UnscheduledSidebar.tsx` — sidopanel-bg byts
+  från `bg-muted/20` till `bg-card`; jobb-korten får `bg-background
+  border-card-border` (rytm mot panelens `bg-card`); hårdkodat
+  `bg-white dark:bg-card` i missing-date-listan ersatt med `bg-background
+  border-card-border`; "Tilldela"-knappen byter från
+  `bg-chart-2 ... text-white` till tema-tokens
+  (`bg-primary text-primary-foreground border-primary-border`); prio-badge
+  använder `priorityBadgeClasses`.
+- `client/src/components/WeekPlanner.tsx` — strip-poppoutraden byter från osynlig
+  `bg-muted/30` till `bg-card border-y border-card-border` så planeraren ser att
+  en vy är poppad ut.
+- `client/src/components/weekplanner/JobCardExpandPanel.tsx` — SLA-RISK-banner
+  fått `border-l-4` accent-rand (destructive eller warning) över mjukt
+  `/10`-fill (mörkt `/15`), och body-text använder `text-foreground` så
+  brödtexten klarar AA medan rubriken "SLA-risk: kritisk/varning" och ikonen
+  bär färgsignalen. Tydligt synlig i båda lägena utan kontrastregression.
+
+### Riktlinjer som följs
+
+- Endast tema-tokens (warning, destructive, chart-N, card, border, muted,
+  primary). Inga raw `bg-amber-*` / `text-orange-*` / `bg-red-*` / `bg-white` /
+  `text-white`.
+- `chart-4` används fortfarande enbart kategoriskt (kärl, rast, diagram,
+  navigation) — inte i planerar-färgändringarna.
+- `warning` för soft-block / tight / SLA-warning, `destructive` för
+  hård-blocker / SLA-kritisk / akut prio.
