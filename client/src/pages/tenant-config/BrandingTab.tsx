@@ -180,24 +180,58 @@ export function BrandingTab() {
   });
 
   const handleLogoUpload = async (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Fel filtyp", description: "Välj en bildfil (PNG, JPG, SVG)", variant: "destructive" });
+    const EXT_TO_MIME: Record<string, string> = {
+      png: "image/png",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      gif: "image/gif",
+      webp: "image/webp",
+      svg: "image/svg+xml",
+      heic: "image/heic",
+      heif: "image/heif",
+      tif: "image/tiff",
+      tiff: "image/tiff",
+      bmp: "image/bmp",
+      ico: "image/x-icon",
+    };
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    const extMime = EXT_TO_MIME[ext];
+    const isImageByType = file.type.startsWith("image/");
+    const isImageByExt = Boolean(extMime);
+
+    if (!isImageByType && !isImageByExt) {
+      toast({
+        title: "Fel filtyp",
+        description: "Välj en bildfil (PNG, JPG, SVG, WebP, GIF, HEIC, TIFF, BMP eller ICO).",
+        variant: "destructive",
+        duration: 6000,
+      });
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      toast({ title: "Filen är för stor", description: "Max 5 MB", variant: "destructive" });
+      toast({
+        title: "Filen är för stor",
+        description: "Max 5 MB.",
+        variant: "destructive",
+        duration: 6000,
+      });
       return;
     }
 
+    const effectiveContentType = file.type && file.type.length > 0 ? file.type : (extMime ?? "application/octet-stream");
+
     setLogoUploading(true);
     try {
-      const resp = await apiRequest("POST", "/api/system/tenant-branding/upload-logo", {});
+      const resp = await apiRequest("POST", "/api/system/tenant-branding/upload-logo", {
+        contentType: effectiveContentType,
+        size: file.size,
+      });
       const { uploadURL, objectPath } = await resp.json();
 
       await fetch(uploadURL, {
         method: "PUT",
         body: file,
-        headers: { "Content-Type": file.type },
+        headers: { "Content-Type": effectiveContentType },
       });
 
       const confirmResp = await apiRequest("POST", "/api/system/tenant-branding/confirm-logo", { objectPath });
@@ -476,7 +510,7 @@ export function BrandingTab() {
                         <Upload className="h-8 w-8 text-muted-foreground" />
                         <p className="text-sm text-muted-foreground">Dra och släpp logotyp här</p>
                         <p className="text-xs text-muted-foreground">eller klicka för att välja fil</p>
-                        <p className="text-xs text-muted-foreground/60">PNG, JPG, SVG — max 5 MB, rekommenderad: 200×80px, transparent bakgrund</p>
+                        <p className="text-xs text-muted-foreground/60">PNG, JPG, SVG, WebP — max 5 MB, rekommenderad: 200×80px, transparent bakgrund</p>
                       </div>
                     )}
                   </div>
