@@ -61,8 +61,9 @@
 import pg from "pg";
 import { spawn } from "node:child_process";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
 
-const { Pool } = pg;
+const { Pool, Client } = pg;
 
 // ----------------------------- args ------------------------------
 
@@ -232,6 +233,66 @@ function runMigrate(customerIds: string[]): Promise<number> {
   });
 }
 
+/**
+ * Härled två int32-nycklar (key1, key2) för pg_advisory_lock från tenant +
+ * sorterade kund-ID:n. Sortering gör att två körningar med samma uppsättning
+ * ID:n (oavsett ordning eller dubbletter) konkurrerar om samma lås.
+ */
+function advisoryLockKeys(tenant: string, ids: string[]): [number, number] {
+  const normalized = Array.from(new Set(ids)).sort().join(",");
+  const payload = `restore-dormant-customer|${tenant}|${normalized}`;
+  const digest = createHash("sha256").update(payload).digest();
+  // Plocka två int32 ur första 8 bytes. readInt32BE returnerar signed int32,
+  // vilket är exakt vad pg_try_advisory_lock(int4, int4) tar.
+  const key1 = digest.readInt32BE(0);
+  const key2 = digest.readInt32BE(4);
+  return [key1, key2];
+}
+
+/**
+ * Försök ta session-level advisory-lock i prod runt hela körningen.
+ * Returnerar en client som håller låset; anroparen MÅSTE anropa
+ * release-funktionen i finally för att släppa låset och stänga klienten.
+ *
+ * Använder pg_try_advisory_lock (ej blocking) så att en parallell körning
+ * fail:ar direkt med ett tydligt felmeddelande istället för att vänta.
+ */
+async function acquireProdAdvisoryLock(
+  tenant: string,
+  ids: string[],
+): Promise<{ release: () => Promise<void>; key: [number, number] }> {
+  const key = advisoryLockKeys(tenant, ids);
+  const client = new Client({ connectionString: process.env.PROD_DATABASE_URL });
+  await client.connect();
+  try {
+    const r = await client.query<{ locked: boolean }>(
+      "SELECT pg_try_advisory_lock($1, $2) AS locked",
+      [key[0], key[1]],
+    );
+    if (!r.rows[0]?.locked) {
+      await client.end().catch(() => {});
+      fail(
+        `kunde inte ta advisory-lock i prod (key=${key[0]},${key[1]}). ` +
+          `En annan körning av restore-dormant-customer kör redan mot samma ` +
+          `tenant=${tenant} och kund-ID:n. Vänta tills den är klar och prova igen.`,
+      );
+    }
+  } catch (err) {
+    await client.end().catch(() => {});
+    throw err;
+  }
+  const release = async (): Promise<void> => {
+    try {
+      await client.query("SELECT pg_advisory_unlock($1, $2)", [key[0], key[1]]);
+    } catch {
+      // ignorera — sessionen stängs ändå nedan vilket släpper låset
+    } finally {
+      await client.end().catch(() => {});
+    }
+  };
+  return { release, key };
+}
+
 async function writeAuditRow(
   rows: PreflightRow[],
   customerIds: string[],
@@ -342,26 +403,37 @@ async function main(): Promise<void> {
   // 2) Stäng dev-poolen innan migrate-skriptet körs (det öppnar sin egen).
   await dev.end();
 
-  // 3) Delegera till migrate-skriptet — återanvänder transaktion, FK-checkar
-  //    och tenant-leak-check.
-  const code = await runMigrate(ids);
-  if (code !== 0) {
-    console.error(
-      `\nMigrate-skriptet exit-kodade ${code}. Ingen audit-rad skrivs.`,
-    );
-    process.exit(code);
-  }
+  // 3) Ta advisory-lock i prod runt hela körningen (migrate + audit). Två
+  //    parallella operatörer mot samma kund-ID:n ska fail:a tydligt istället
+  //    för att vänta in varandra och producera duplicerade audit-rader.
+  const lock = await acquireProdAdvisoryLock(TENANT, ids);
+  console.log(
+    `[lock] Tog advisory-lock i prod (key=${lock.key[0]},${lock.key[1]}).`,
+  );
+  try {
+    // 4) Delegera till migrate-skriptet — återanvänder transaktion, FK-checkar
+    //    och tenant-leak-check.
+    const code = await runMigrate(ids);
+    if (code !== 0) {
+      console.error(
+        `\nMigrate-skriptet exit-kodade ${code}. Ingen audit-rad skrivs.`,
+      );
+      process.exit(code);
+    }
 
-  // 4) Audit-rad — endast vid skarp körning. Dry-run skriver inget.
-  if (DRY_RUN) {
-    console.log(
-      "\n[DRY-RUN] Hoppar över audit-rad. Kör om utan --dry-run och med " +
-        "CONFIRM=YES_MIGRATE_PROD för att persistera.",
-    );
-    return;
+    // 5) Audit-rad — endast vid skarp körning. Dry-run skriver inget.
+    if (DRY_RUN) {
+      console.log(
+        "\n[DRY-RUN] Hoppar över audit-rad. Kör om utan --dry-run och med " +
+          "CONFIRM=YES_MIGRATE_PROD för att persistera.",
+      );
+      return;
+    }
+    await writeAuditRow(rows, ids);
+    console.log("\nKlart.");
+  } finally {
+    await lock.release();
   }
-  await writeAuditRow(rows, ids);
-  console.log("\nKlart.");
 }
 
 main().catch(async (err) => {
