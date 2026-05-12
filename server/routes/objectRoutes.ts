@@ -901,7 +901,7 @@ app.post("/api/objects/derive-hierarchy", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const customerId = typeof req.body?.customerId === "string" ? req.body.customerId : null;
 
-  const all = await storage.getObjectsByTenant(tenantId);
+  const all = await storage.getObjects(tenantId);
   const scope = customerId ? all.filter(o => o.customerId === customerId) : all;
   const scopeIds = new Set(scope.map(o => o.id));
 
@@ -1000,7 +1000,7 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
     }
   }
 
-  const existing = await storage.getObjectsByTenant(tenantId);
+  const existing = await storage.getObjects(tenantId);
   const existingByModusId = new Map<string, typeof existing[number]>();
   for (const obj of existing) {
     if (obj.objectNumber) existingByModusId.set(obj.objectNumber, obj);
@@ -1166,7 +1166,7 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
   // Pass 3: recompute hierarchyDepth (BFS, capped at 10)
   let depthUpdated = 0;
   try {
-    const refreshed = await storage.getObjectsByTenant(tenantId);
+    const refreshed = await storage.getObjects(tenantId);
     const byId = new Map(refreshed.map(o => [o.id, o]));
     const depthCache = new Map<string, number>();
     const computeDepth = (id: string, guard = 0): number => {
@@ -1203,7 +1203,7 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
   //   anything above brf            → koncern
   let hierarchyUpdated = 0;
   try {
-    const refreshed = await storage.getObjectsByTenant(tenantId);
+    const refreshed = await storage.getObjects(tenantId);
     const importedIds = new Set(
       refreshed.filter(o => o.objectNumber && modusIdToObjectId.has(o.objectNumber)).map(o => o.id)
     );

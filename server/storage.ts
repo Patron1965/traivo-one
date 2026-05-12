@@ -257,8 +257,6 @@ export interface IStorage {
   getObjects(tenantId: string): Promise<ServiceObject[]>;
   getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean; issue?: string; clusterId?: string }): Promise<{ objects: ServiceObject[]; total: number }>;
   getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]>;
-  /** @deprecated Tunn alias för {@link getObjects} — bibehållen för bakåtkompatibilitet. Använd `getObjects(tenantId)`. */
-  getObjectsByTenant(tenantId: string): Promise<ServiceObject[]>;
   getObjectsWithIssues(tenantId: string, options?: { issueType?: string; status?: string; customerId?: string; limit?: number }): Promise<{
     totalObjectsWithIssues: number;
     issueTypes: Record<string, number>;
@@ -1402,10 +1400,6 @@ export class DatabaseStorage implements IStorage {
         isNull(objects.deletedAt),
         inArray(objects.id, ids)
       ));
-  }
-
-  async getObjectsByTenant(tenantId: string): Promise<ServiceObject[]> {
-    return this.getObjects(tenantId);
   }
 
   async getObjectsWithIssues(tenantId: string, options?: { issueType?: string; status?: string; customerId?: string; limit?: number }) {
