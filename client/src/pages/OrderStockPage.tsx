@@ -1132,7 +1132,7 @@ export default function OrderStockPage() {
                         </Button>
                       )}
 
-                      {status !== "utford" && status !== "fakturerad" && (
+                      {(status === "skapad" || status === "planerad_pre" || status === "planerad_resurs" || status === "planerad_las") && (
                         <Button
                           size="sm"
                           variant="ghost"

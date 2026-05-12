@@ -1098,19 +1098,30 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
           </div>
         )}
 
-        {workOrder && workOrder.orderStatus !== "utford" && workOrder.orderStatus !== "fakturerad" && (
-          <div className="pt-4 border-t flex justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowCancelDialog(true)}
-              className="gap-2 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-              data-testid="button-cancel-order"
-            >
-              <Ban className="h-4 w-4" />
-              Avbeställ order
-            </Button>
-          </div>
+        {workOrder && (
+          (() => {
+            const cancellable =
+              (workOrder.orderStatus === "skapad" ||
+                workOrder.orderStatus === "planerad_pre" ||
+                workOrder.orderStatus === "planerad_resurs") &&
+              !workOrder.lockedAt &&
+              !workOrder.frozenAt;
+            if (!cancellable) return null;
+            return (
+              <div className="pt-4 border-t flex justify-start">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCancelDialog(true)}
+                  className="gap-2 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                  data-testid="button-cancel-order"
+                >
+                  <Ban className="h-4 w-4" />
+                  Avbeställ order
+                </Button>
+              </div>
+            );
+          })()
         )}
       </DialogContent>
 

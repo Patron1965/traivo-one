@@ -924,19 +924,6 @@ app.delete("/api/work-orders/:id", asyncHandler(async (req, res) => {
     );
   }
 
-  // Hård spärr: tekniker som är på väg / på plats / klar — orderhistoriken
-  // ska inte raderas mitt i ett pågående jobb. Kräver force + admin.
-  const activeExecution = ["on_way", "on_site", "completed", "inspected"].includes(
-    existing!.executionStatus ?? ""
-  );
-  if (activeExecution && !(force && isAdmin)) {
-    throw new ConflictError(
-      isAdmin
-        ? `Ordern är aktiv (executionStatus=${existing!.executionStatus}). Lägg till ?force=true för att radera ändå.`
-        : `Ordern är aktiv (${existing!.executionStatus}) — en tekniker är på väg eller har påbörjat jobbet. Endast administratör kan tvinga avbeställning.`
-    );
-  }
-
   // Frusen WO snapshot — kräver force + admin (samma mönster som /freeze).
   if (existing!.frozenAt && !(force && isAdmin)) {
     throw new ConflictError(
@@ -960,6 +947,26 @@ app.delete("/api/work-orders/:id", asyncHandler(async (req, res) => {
   }
 
   await storage.deleteWorkOrder(req.params.id, { reason, userId });
+
+  // Audit-spår: skriv 'cancelled'-rad i auditLogs (work_order_history-ekvivalent).
+  try {
+    await storage.createAuditLog({
+      tenantId,
+      userId: userId ?? null,
+      action: "cancelled",
+      resourceType: "work_order",
+      resourceId: req.params.id,
+      changes: {
+        before: { orderStatus: existing!.orderStatus, deletedAt: null },
+        after: { orderStatus: existing!.orderStatus, deletedAt: new Date().toISOString() },
+        reason: reason ?? null,
+      },
+      metadata: { force, frozenAt: existing!.frozenAt ?? null, hadFortnoxExports: exports.length > 0 },
+    });
+  } catch (auditErr) {
+    console.error(`[work-orders] failed to write cancellation audit log for ${req.params.id}:`, auditErr);
+  }
+
   console.log(`[work-orders] cancelled id=${req.params.id} tenant=${tenantId} userId=${userId} force=${force} reason=${reason ?? ""}`);
   res.status(204).send();
 }));
