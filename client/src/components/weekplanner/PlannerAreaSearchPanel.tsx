@@ -68,14 +68,28 @@ const PAGE_SIZE = 50;
 const EMPTY_TIMEWINDOW_MAP = new Map<string, Array<{ workOrderId: string; dayOfWeek: string | null; startTime: string | null; endTime: string | null; weekNumber: number | null }>>();
 const EMPTY_EXPANDED: Record<string, boolean> = {};
 
-function readUrlState() {
-  if (typeof window === "undefined") return {} as any;
+interface AreaSearchUrlState {
+  open: boolean;
+  city: string;
+  hierarchies: string[];
+  statuses: PlannerStatusCat[];
+  from: string;
+  to: string;
+  page: number;
+}
+const VALID_STATUS_CATS: ReadonlyArray<PlannerStatusCat> = ["oschemalagd", "forsenad", "schemalagd", "utford"];
+function readUrlState(): AreaSearchUrlState {
+  if (typeof window === "undefined") {
+    return { open: false, city: "", hierarchies: [], statuses: [], from: "", to: "", page: 1 };
+  }
   const sp = new URLSearchParams(window.location.search);
   return {
     open: sp.get("areaSearch") === "open",
     city: sp.get("areaCity") || "",
     hierarchies: (sp.get("areaHier") || "").split(",").filter(Boolean),
-    statuses: (sp.get("areaStatus") || "").split(",").filter(Boolean) as PlannerStatusCat[],
+    statuses: (sp.get("areaStatus") || "").split(",").filter((s): s is PlannerStatusCat =>
+      (VALID_STATUS_CATS as readonly string[]).includes(s)
+    ),
     from: sp.get("areaFrom") || "",
     to: sp.get("areaTo") || "",
     page: Math.max(1, parseInt(sp.get("areaPage") || "1", 10) || 1),
@@ -173,10 +187,12 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
     enabled: open && !!city,
   });
 
-  // Bubble up results so WeekPlanner can register them as draggable
-  const rows = searchQuery.data?.rows || [];
+  // Bubble up results so WeekPlanner can register them as draggable.
+  // AreaSearchRow extends WorkOrderWithObject with optional join columns,
+  // so it satisfies the draggable contract directly.
+  const rows: AreaSearchRow[] = searchQuery.data?.rows || [];
   useEffect(() => {
-    onResultsChange(rows as unknown as WorkOrderWithObject[]);
+    onResultsChange(rows);
   }, [rows, onResultsChange]);
 
   useEffect(() => {
@@ -440,7 +456,7 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
               >
                 <div className="space-y-1.5" data-testid="list-area-search-results">
                   {rows.map((row) => {
-                    const job = row as unknown as WorkOrderWithObject;
+                    const job: WorkOrderWithObject = row;
                     const lastSvc = row.objectLastServiceDate ? new Date(row.objectLastServiceDate) : null;
                     const interval = row.conceptIntervalDays;
                     const freqLabel = frequencyLabelFromDays(interval);
@@ -449,9 +465,11 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                     let dueState: "ok" | "warning" | "destructive" = "ok";
                     if (lastSvc && interval && interval > 0) {
                       nextDate = addDays(lastSvc, interval);
+                      // Per spec: warning when nextDate <= today (overdue or due today),
+                      // destructive when >30 days overdue.
                       const diffDays = Math.floor((nextDate.getTime() - today.getTime()) / 86400000);
                       if (diffDays < -30) dueState = "destructive";
-                      else if (diffDays <= 7) dueState = "warning";
+                      else if (diffDays <= 0) dueState = "warning";
                     }
                     const dueClass =
                       dueState === "destructive"

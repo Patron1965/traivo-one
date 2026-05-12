@@ -1915,13 +1915,15 @@ app.get("/api/planner/area-search/cities", isAuthenticated, requireTenantWithFal
   const result = q
     ? await db.execute(sql`
         SELECT DISTINCT city FROM objects
-        WHERE tenant_id = ${tenantId} AND city IS NOT NULL AND city <> ''
+        WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
+          AND city IS NOT NULL AND city <> ''
           AND lower(city) LIKE lower(${q + "%"})
         ORDER BY city ASC
         LIMIT 20`)
     : await db.execute(sql`
         SELECT DISTINCT city FROM objects
-        WHERE tenant_id = ${tenantId} AND city IS NOT NULL AND city <> ''
+        WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
+          AND city IS NOT NULL AND city <> ''
         ORDER BY city ASC
         LIMIT 20`);
   const cities = (result.rows as Array<{ city: string }>).map(r => r.city).filter(Boolean);
@@ -1952,6 +1954,8 @@ app.get("/api/planner/area-search", isAuthenticated, requireTenantWithFallback, 
 
   const conds = [
     sql`wo.tenant_id = ${tenantId}`,
+    sql`wo.deleted_at IS NULL`,
+    sql`o.deleted_at IS NULL`,
     sql`lower(o.city) = lower(${city})`,
   ];
   if (hierarchyLevels.length) conds.push(sql`o.hierarchy_level = ANY(${hierarchyLevels}::text[])`);
@@ -2021,7 +2025,29 @@ app.get("/api/planner/area-search", isAuthenticated, requireTenantWithFallback, 
   `);
   const total = (totalResult.rows[0] as { count: number })?.count ?? 0;
 
-  const rows = (dataResult.rows as any[]).map(r => ({
+  type AreaSearchSqlRow = {
+    id: string; tenant_id: string; title: string | null; description: string | null;
+    priority: string | null; status: string | null; order_status: string | null;
+    scheduled_date: string | null; scheduled_start_time: string | null;
+    estimated_duration: number | null; actual_duration: number | null;
+    resource_id: string | null; team_id: string | null; cluster_id: string | null;
+    object_id: string; customer_id: string | null;
+    task_category: string | null; metadata: unknown; execution_code: string | null;
+    creation_method: string | null;
+    planned_window_start: string | null; planned_window_end: string | null;
+    desired_delivery_start: string | null; desired_delivery_end: string | null;
+    order_type: string | null; cached_value: string | null; cached_cost: string | null;
+    cached_production_minutes: number | null;
+    is_simulated: boolean | null; completed_at: string | null;
+    locked_at: string | null; invoiced_at: string | null;
+    object_name: string | null; object_address: string | null; object_city: string | null;
+    object_hierarchy_level: string | null; object_last_service_date: string | null;
+    object_access_code: string | null; object_key_number: string | null;
+    object_latitude: number | null; object_longitude: number | null;
+    customer_name: string | null;
+    concept_interval_days: number | null; concept_name: string | null;
+  };
+  const rows = (dataResult.rows as AreaSearchSqlRow[]).map(r => ({
     id: r.id,
     tenantId: r.tenant_id,
     title: r.title,
