@@ -158,6 +158,7 @@ export function getAdminItems(tl?: (key: string) => string): NavItem[] {
     { title: "Objekt utan koordinater", url: "/objects/missing-coordinates", icon: Building2, description: "Lista över objekt som saknar lat/lng och kan geokodas på nytt" },
     { title: l("nav.api-costs"), url: "/api-costs", icon: Activity, description: l("nav.api-costs.desc") },
     { title: "ML datakvalitet", url: "/ml-data-quality", icon: Activity, description: "Go/no-go-grind för ML duration-prediktion (Task #421)" },
+    { title: "Återställ vilande kunder", url: "/restore-dormant-customers", icon: Database, description: "Sök fram en vilande kund och återställ den från dev till prod (platform-owner)" },
     { title: l("nav.system-overview"), url: "/system-overview", icon: FileText, description: l("nav.system-overview.desc") },
     { title: "Kundportal extern", url: "/portal", icon: Globe, description: "Öppna den externa kundportalen i ny flik", external: true },
   ];

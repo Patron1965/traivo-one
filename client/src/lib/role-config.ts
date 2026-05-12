@@ -24,6 +24,7 @@ const ADMIN_ONLY_ROUTES = new Set([
   "/system-overview",
   "/data-requirements",
   "/metadata-settings",
+  "/restore-dormant-customers",
 ]);
 
 const PLANNER_ROUTES = new Set([

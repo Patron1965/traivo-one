@@ -2,68 +2,31 @@
 /**
  * Restore individual dormant customer(s) from DEV → PROD (Task #427).
  *
- * Slim-migreringen (Task #423) lämnade ~1809 vilande kunder utanför prod
- * (kunder utan work_order >= ACTIVE_SINCE). Det här skriptet är en tunn
- * operatör-wrapper runt `scripts/migrate-kinab-dev-to-prod.ts` som låter
- * platform-owner ta in EN eller NÅGRA enstaka av dessa vilande kunder
- * tillbaka till prod utan att röra resten.
+ * Tunn CLI-wrapper runt `server/services/restoreDormantCustomerService.ts`
+ * (Task #428). All affärslogik (sökning, dormancy-preflight, spawn av migrate-
+ * skriptet, audit-rad i prod) ligger i serviceen så att admin-UI:t (Task #428)
+ * och denna CLI använder exakt samma kodväg.
  *
- * All tung logik (transaktion, FK-checkar, tenant-leak-check, idempotent
- * upsert, post-run validering) återanvänds från migrate-skriptet — den här
- * filen lägger bara till:
- *   1. Sökning efter kunder i dev (--search)
- *   2. Verifikation att kunderna verkligen är "vilande" (skydd mot
- *      missbruk: använd inte detta för aktiva kunder).
- *   3. Audit-rad i prod (audit_logs) med vem/när/vilka kund-IDn.
- *      OBS: audit-raden skrivs EFTER att migrate-skriptet committat sin egen
- *      transaktion — alltså inte i samma transaktion som dataimporten.
- *      Lyckas migrate men misslyckas audit-skrivningen så är datan
- *      återställd ändå; manuell audit kan då skrivas i efterhand.
- *
- * ANVÄNDNING
+ * ANVÄNDNING — oförändrad sedan Task #427:
  *   # Sök fram kandidater (read-only mot dev):
  *   PROD_DATABASE_URL=postgres://... \
- *     npx tsx scripts/restore-dormant-customer.ts \
- *       --search="brf solgården"
+ *     npx tsx scripts/restore-dormant-customer.ts --search="brf solgården"
  *
- *   # Dry-run (transaktion + ROLLBACK i prod, ingen audit-rad skrivs):
+ *   # Dry-run:
  *   PROD_DATABASE_URL=postgres://... \
  *     npx tsx scripts/restore-dormant-customer.ts \
- *       --customer-id=cust_abc,cust_def \
- *       --actor=mats@traivo.se \
- *       --dry-run
+ *       --customer-id=cust_abc,cust_def --actor=mats@traivo.se --dry-run
  *
- *   # Skarp körning (committar + skriver audit-rad):
+ *   # Skarp körning:
  *   PROD_DATABASE_URL=postgres://... CONFIRM=YES_MIGRATE_PROD \
  *     npx tsx scripts/restore-dormant-customer.ts \
- *       --customer-id=cust_abc,cust_def \
- *       --actor=mats@traivo.se
- *
- * FLAGGOR
- *   --search=<text>        Lista matchande kunder i dev (id/namn/kundnr/orgnr).
- *                          Read-only. PROD_DATABASE_URL behöver inte sättas.
- *   --customer-id=id,...   ID-lista att importera. Krävs vid återställning.
- *   --actor=<email|namn>   Vem som beställer återställningen. Skrivs i audit.
- *                          Krävs vid återställning.
- *   --tenant=<id>          Default: kinab.
- *   --active-since=<YYYY-MM-DD>  Default: 2024-01-01 (samma tröskel som migrate).
- *   --allow-active         Tillåt återställning av kunder som INTE är vilande.
- *                          Default: hård-fail om någon ID:n redan har work_order
- *                          >= ACTIVE_SINCE i dev.
- *   --dry-run              Tvinga rollback även med CONFIRM. Skriver INTE audit.
- *
- * ENV
- *   DATABASE_URL                källa (dev). Krävs.
- *   PROD_DATABASE_URL           mål (prod). Krävs vid restore (ej --search).
- *   CONFIRM=YES_MIGRATE_PROD    krävs för faktisk commit. Annars dry-run.
+ *       --customer-id=cust_abc,cust_def --actor=mats@traivo.se
  */
-
-import pg from "pg";
-import { spawn } from "node:child_process";
-import * as path from "node:path";
-import { createHash } from "node:crypto";
-
-const { Pool, Client } = pg;
+import {
+  restoreDormantCustomers,
+  searchDormantCustomers,
+  RestoreDormantError,
+} from "../server/services/restoreDormantCustomerService";
 
 // ----------------------------- args ------------------------------
 
@@ -85,73 +48,32 @@ const DRY_RUN_FLAG = arg("dry-run") === "true";
 const CONFIRM = process.env.CONFIRM === "YES_MIGRATE_PROD";
 const DRY_RUN = DRY_RUN_FLAG || !CONFIRM;
 
-// ----------------------------- env ------------------------------
-
-if (!process.env.DATABASE_URL) {
-  console.error("FEL: DATABASE_URL (dev) saknas.");
-  process.exit(1);
-}
-
-const dev = new Pool({ connectionString: process.env.DATABASE_URL });
-
-// ----------------------------- helpers --------------------------
-
 function fail(msg: string): never {
   console.error(`FEL: ${msg}`);
   process.exit(1);
 }
 
-async function searchCustomers(query: string): Promise<void> {
-  const like = `%${query.toLowerCase()}%`;
-  const r = await dev.query<{
-    id: string;
-    name: string;
-    customer_number: string | null;
-    org_number: string | null;
-    object_count: number;
-    last_wo_date: string | null;
-    is_active: boolean;
-  }>(
-    `SELECT c.id,
-            c.name,
-            c.customer_number,
-            c.org_number,
-            (SELECT count(*)::int FROM objects o
-              WHERE o.customer_id = c.id AND o.tenant_id = $1) AS object_count,
-            (SELECT max(scheduled_date)::text FROM work_orders w
-              WHERE w.customer_id = c.id AND w.tenant_id = $1) AS last_wo_date,
-            EXISTS(
-              SELECT 1 FROM work_orders w
-               WHERE w.customer_id = c.id
-                 AND w.tenant_id = $1
-                 AND w.scheduled_date >= $2
-            ) AS is_active
-     FROM customers c
-     WHERE c.tenant_id = $1
-       AND c.deleted_at IS NULL
-       AND (LOWER(c.id) LIKE $3
-            OR LOWER(c.name) LIKE $3
-            OR LOWER(COALESCE(c.customer_number,'')) LIKE $3
-            OR LOWER(COALESCE(c.org_number,'')) LIKE $3)
-     ORDER BY is_active DESC, c.name
-     LIMIT 50`,
-    [TENANT, ACTIVE_SINCE, like],
-  );
-  if (r.rowCount === 0) {
+async function doSearch(query: string): Promise<void> {
+  const rows = await searchDormantCustomers({
+    query,
+    tenant: TENANT,
+    activeSince: ACTIVE_SINCE,
+  });
+  if (rows.length === 0) {
     console.log(`Inga matchningar för "${query}" under tenant=${TENANT}.`);
     return;
   }
-  console.log(`Hittade ${r.rowCount} kund(er) i dev för "${query}":\n`);
+  console.log(`Hittade ${rows.length} kund(er) i dev för "${query}":\n`);
   console.log(
     "STATUS  ID                                   KUNDNR     ORGNR        OBJ  SENASTE WO   NAMN",
   );
-  for (const row of r.rows) {
-    const status = row.is_active ? "AKTIV " : "VILAND";
+  for (const row of rows) {
+    const status = row.isActive ? "AKTIV " : "VILAND";
     const id = row.id.padEnd(36);
-    const kn = (row.customer_number || "—").padEnd(10);
-    const on = (row.org_number || "—").padEnd(12);
-    const oc = String(row.object_count).padStart(4);
-    const wo = (row.last_wo_date || "—").padEnd(12);
+    const kn = (row.customerNumber || "—").padEnd(10);
+    const on = (row.orgNumber || "—").padEnd(12);
+    const oc = String(row.objectCount).padStart(4);
+    const wo = (row.lastWoDate || "—").padEnd(12);
     console.log(`${status}  ${id} ${kn} ${on} ${oc}  ${wo} ${row.name}`);
   }
   console.log(
@@ -160,190 +82,9 @@ async function searchCustomers(query: string): Promise<void> {
   );
 }
 
-interface PreflightRow {
-  id: string;
-  name: string;
-  is_active: boolean;
-  object_count: number;
-}
-
-async function preflightDormancy(ids: string[]): Promise<PreflightRow[]> {
-  const r = await dev.query<PreflightRow>(
-    `SELECT c.id,
-            c.name,
-            EXISTS(
-              SELECT 1 FROM work_orders w
-               WHERE w.customer_id = c.id
-                 AND w.tenant_id = $1
-                 AND w.scheduled_date >= $2
-            ) AS is_active,
-            (SELECT count(*)::int FROM objects o
-              WHERE o.customer_id = c.id AND o.tenant_id = $1) AS object_count
-     FROM customers c
-     WHERE c.tenant_id = $1
-       AND c.id = ANY($3::text[])`,
-    [TENANT, ACTIVE_SINCE, ids],
-  );
-  const found = new Set(r.rows.map((x) => x.id));
-  for (const id of ids) {
-    if (!found.has(id)) {
-      fail(
-        `kund-id "${id}" saknas i dev under tenant=${TENANT}. ` +
-          `Använd --search för att hitta rätt id.`,
-      );
-    }
-  }
-  return r.rows;
-}
-
-function runMigrate(customerIds: string[]): Promise<number> {
-  const scriptPath = path.join(
-    process.cwd(),
-    "scripts",
-    "migrate-kinab-dev-to-prod.ts",
-  );
-  const cmdArgs = [
-    "tsx",
-    scriptPath,
-    "--phase=customers",
-    `--tenant=${TENANT}`,
-    `--active-since=${ACTIVE_SINCE}`,
-    `--customer-id=${customerIds.join(",")}`,
-  ];
-  if (DRY_RUN_FLAG) cmdArgs.push("--dry-run");
-
-  // Vi proxar CONFIRM oförändrat. Migrate-skriptet hanterar dry-run-logiken
-  // (DRY_RUN=true om CONFIRM saknas eller --dry-run är satt).
-  return new Promise((resolve) => {
-    const child = spawn("npx", cmdArgs, {
-      stdio: "inherit",
-      env: { ...process.env },
-    });
-    let settled = false;
-    const done = (code: number) => {
-      if (settled) return;
-      settled = true;
-      resolve(code);
-    };
-    child.on("error", (err) => {
-      console.error(`\nFEL: kunde inte starta migrate-skriptet: ${err.message}`);
-      done(1);
-    });
-    child.on("exit", (code) => done(code ?? 1));
-  });
-}
-
-/**
- * Härled två int32-nycklar (key1, key2) för pg_advisory_lock från tenant +
- * sorterade kund-ID:n. Sortering gör att två körningar med samma uppsättning
- * ID:n (oavsett ordning eller dubbletter) konkurrerar om samma lås.
- */
-function advisoryLockKeys(tenant: string, ids: string[]): [number, number] {
-  const normalized = Array.from(new Set(ids)).sort().join(",");
-  const payload = `restore-dormant-customer|${tenant}|${normalized}`;
-  const digest = createHash("sha256").update(payload).digest();
-  // Plocka två int32 ur första 8 bytes. readInt32BE returnerar signed int32,
-  // vilket är exakt vad pg_try_advisory_lock(int4, int4) tar.
-  const key1 = digest.readInt32BE(0);
-  const key2 = digest.readInt32BE(4);
-  return [key1, key2];
-}
-
-/**
- * Försök ta session-level advisory-lock i prod runt hela körningen.
- * Returnerar en client som håller låset; anroparen MÅSTE anropa
- * release-funktionen i finally för att släppa låset och stänga klienten.
- *
- * Använder pg_try_advisory_lock (ej blocking) så att en parallell körning
- * fail:ar direkt med ett tydligt felmeddelande istället för att vänta.
- */
-async function acquireProdAdvisoryLock(
-  tenant: string,
-  ids: string[],
-): Promise<{ release: () => Promise<void>; key: [number, number] }> {
-  const key = advisoryLockKeys(tenant, ids);
-  const client = new Client({ connectionString: process.env.PROD_DATABASE_URL });
-  await client.connect();
-  try {
-    const r = await client.query<{ locked: boolean }>(
-      "SELECT pg_try_advisory_lock($1, $2) AS locked",
-      [key[0], key[1]],
-    );
-    if (!r.rows[0]?.locked) {
-      await client.end().catch(() => {});
-      fail(
-        `kunde inte ta advisory-lock i prod (key=${key[0]},${key[1]}). ` +
-          `En annan körning av restore-dormant-customer kör redan mot samma ` +
-          `tenant=${tenant} och kund-ID:n. Vänta tills den är klar och prova igen.`,
-      );
-    }
-  } catch (err) {
-    await client.end().catch(() => {});
-    throw err;
-  }
-  const release = async (): Promise<void> => {
-    try {
-      await client.query("SELECT pg_advisory_unlock($1, $2)", [key[0], key[1]]);
-    } catch {
-      // ignorera — sessionen stängs ändå nedan vilket släpper låset
-    } finally {
-      await client.end().catch(() => {});
-    }
-  };
-  return { release, key };
-}
-
-async function writeAuditRow(
-  rows: PreflightRow[],
-  customerIds: string[],
-): Promise<void> {
-  if (!process.env.PROD_DATABASE_URL) {
-    fail("PROD_DATABASE_URL saknas — kan inte skriva audit-rad i prod.");
-  }
-  const prodPool = new Pool({
-    connectionString: process.env.PROD_DATABASE_URL,
-  });
-  try {
-    const metadata = {
-      actor: ACTOR,
-      tenant: TENANT,
-      activeSince: ACTIVE_SINCE,
-      customers: rows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        wasActiveInDev: r.is_active,
-        objectCount: r.object_count,
-      })),
-      requestedIds: customerIds,
-      script: "scripts/restore-dormant-customer.ts",
-    };
-    await prodPool.query(
-      `INSERT INTO audit_logs
-         (tenant_id, user_id, action, resource_type, resource_id, changes, metadata)
-       VALUES ($1, NULL, $2, 'customers', $3, $4::jsonb, $5::jsonb)`,
-      [
-        TENANT,
-        "restore_dormant_customer",
-        customerIds.join(","),
-        JSON.stringify({ restoredCustomerIds: customerIds }),
-        JSON.stringify(metadata),
-      ],
-    );
-    console.log(
-      `\n[audit] Skrev audit_logs-rad i prod (action=restore_dormant_customer, ` +
-        `actor=${ACTOR}, customers=${customerIds.length}).`,
-    );
-  } finally {
-    await prodPool.end();
-  }
-}
-
-// ----------------------------- main ------------------------------
-
 async function main(): Promise<void> {
   if (SEARCH) {
-    await searchCustomers(SEARCH);
-    await dev.end();
+    await doSearch(SEARCH);
     return;
   }
 
@@ -356,12 +97,6 @@ async function main(): Promise<void> {
   if (!ACTOR) {
     fail("--actor=<epost eller namn> krävs vid återställning (för audit-spår).");
   }
-  if (!process.env.PROD_DATABASE_URL) {
-    fail("PROD_DATABASE_URL saknas. Lägg in den som Secret innan körning.");
-  }
-  if (process.env.DATABASE_URL === process.env.PROD_DATABASE_URL) {
-    fail("DATABASE_URL och PROD_DATABASE_URL pekar på samma DB.");
-  }
 
   const ids = CUSTOMER_ID_ARG.split(",")
     .map((s) => s.trim())
@@ -373,71 +108,74 @@ async function main(): Promise<void> {
   console.log(`  ACTIVE_SINCE : ${ACTIVE_SINCE}`);
   console.log(`  ACTOR        : ${ACTOR}`);
   console.log(`  KUND-IDn     : ${ids.length} st`);
-  console.log(`  DRY_RUN      : ${DRY_RUN ? "JA (rollback i slutet)" : "NEJ — committar"}`);
-  console.log("");
-
-  // 1) Verifiera att kunderna finns i dev och är vilande.
-  const rows = await preflightDormancy(ids);
-  const active = rows.filter((r) => r.is_active);
-  if (active.length > 0 && !ALLOW_ACTIVE) {
-    console.error(
-      `FEL: ${active.length} av kunderna har redan work_order >= ${ACTIVE_SINCE} i dev ` +
-        `och räknas alltså som AKTIVA, inte vilande:`,
-    );
-    for (const a of active) console.error(`  - ${a.id}  ${a.name}`);
-    console.error(
-      "\nDe är inte tänkta att tas in via det här skriptet. Använd det vanliga " +
-        "migrate-skriptet (--phase=customers) om du verkligen vill köra dem ändå, " +
-        "eller lägg till --allow-active för att tvinga återställning här.",
-    );
-    process.exit(2);
-  }
-  console.log("Kunder att återställa:");
-  for (const r of rows) {
-    console.log(
-      `  - ${r.id}  ${r.name}  (objekt=${r.object_count}, ${r.is_active ? "AKTIV" : "vilande"})`,
-    );
-  }
-  console.log("");
-
-  // 2) Stäng dev-poolen innan migrate-skriptet körs (det öppnar sin egen).
-  await dev.end();
-
-  // 3) Ta advisory-lock i prod runt hela körningen (migrate + audit). Två
-  //    parallella operatörer mot samma kund-ID:n ska fail:a tydligt istället
-  //    för att vänta in varandra och producera duplicerade audit-rader.
-  const lock = await acquireProdAdvisoryLock(TENANT, ids);
   console.log(
-    `[lock] Tog advisory-lock i prod (key=${lock.key[0]},${lock.key[1]}).`,
+    `  DRY_RUN      : ${DRY_RUN ? "JA (rollback i slutet)" : "NEJ — committar"}`,
   );
-  try {
-    // 4) Delegera till migrate-skriptet — återanvänder transaktion, FK-checkar
-    //    och tenant-leak-check.
-    const code = await runMigrate(ids);
-    if (code !== 0) {
-      console.error(
-        `\nMigrate-skriptet exit-kodade ${code}. Ingen audit-rad skrivs.`,
-      );
-      process.exit(code);
-    }
+  console.log("");
 
-    // 5) Audit-rad — endast vid skarp körning. Dry-run skriver inget.
-    if (DRY_RUN) {
+  try {
+    const result = await restoreDormantCustomers(
+      {
+        ids,
+        tenant: TENANT,
+        activeSince: ACTIVE_SINCE,
+        allowActive: ALLOW_ACTIVE,
+        dryRun: DRY_RUN,
+        userId: null, // CLI-mode: ingen inloggad user
+        actor: ACTOR ?? null,
+      },
+      "cli",
+    );
+
+    console.log("\nKunder att återställa:");
+    for (const r of result.preflight) {
+      console.log(
+        `  - ${r.id}  ${r.name}  (objekt=${r.objectCount}, ${r.isActive ? "AKTIV" : "vilande"})`,
+      );
+    }
+    console.log("");
+    process.stdout.write(result.migrateLog);
+
+    if (result.migrateExitCode !== 0) {
+      console.error(
+        `\nMigrate-skriptet exit-kodade ${result.migrateExitCode}. Ingen audit-rad skrivs.`,
+      );
+      process.exit(result.migrateExitCode);
+    }
+    if (result.dryRun) {
       console.log(
         "\n[DRY-RUN] Hoppar över audit-rad. Kör om utan --dry-run och med " +
           "CONFIRM=YES_MIGRATE_PROD för att persistera.",
       );
       return;
     }
-    await writeAuditRow(rows, ids);
+    if (result.auditWritten) {
+      console.log(
+        `\n[audit] Skrev audit_logs-rad i prod (action=restore_dormant_customer, ` +
+          `actor=${ACTOR}, customers=${ids.length}).`,
+      );
+    }
     console.log("\nKlart.");
-  } finally {
-    await lock.release();
+  } catch (err) {
+    if (err instanceof RestoreDormantError) {
+      if (err.code === "customer_active") {
+        const details = err.details as { active: { id: string; name: string }[] };
+        console.error(`FEL: ${err.message}`);
+        for (const a of details.active) console.error(`  - ${a.id}  ${a.name}`);
+        console.error(
+          "\nDe är inte tänkta att tas in via det här skriptet. Använd det vanliga " +
+            "migrate-skriptet (--phase=customers) om du verkligen vill köra dem ändå, " +
+            "eller lägg till --allow-active för att tvinga återställning här.",
+        );
+        process.exit(2);
+      }
+      fail(err.message);
+    }
+    throw err;
   }
 }
 
-main().catch(async (err) => {
+main().catch((err) => {
   console.error("\nFEL:", err);
-  await dev.end().catch(() => {});
   process.exit(1);
 });

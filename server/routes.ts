@@ -602,6 +602,8 @@ export async function registerRoutes(
   registerOptimizationRoutes(app);
   const { registerMlRoutes } = await import("./routes/mlRoutes");
   registerMlRoutes(app);
+  const { registerRestoreDormantRoutes } = await import("./routes/restoreDormantRoutes");
+  registerRestoreDormantRoutes(app);
   registerMobileRoutes(app);
   registerRealtimeTestRoutes(app);
   registerPlannerRoutes(app);
