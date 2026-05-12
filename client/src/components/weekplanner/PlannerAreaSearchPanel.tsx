@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { QueryState } from "@/components/QueryState";
+import { Checkbox } from "@/components/ui/checkbox";
+import { BulkActionBar } from "@/components/BulkActionBar";
 import { DraggableJobCard } from "./DndComponents";
 import { JobCard } from "./JobCard";
 import { format, formatDistanceToNowStrict, addDays } from "date-fns";
@@ -22,6 +24,7 @@ import {
   RotateCw,
   Repeat,
   CalendarClock,
+  CalendarPlus,
 } from "lucide-react";
 import { OBJECT_HIERARCHY_LEVELS, type WorkOrderWithObject } from "@shared/schema";
 
@@ -62,6 +65,11 @@ interface PlannerAreaSearchPanelProps {
   onClose: () => void;
   onSelectJob: (jobId: string) => void;
   onResultsChange: (jobs: WorkOrderWithObject[]) => void;
+  selectedJobIds: Set<string>;
+  onToggleSelection: (jobId: string) => void;
+  onClearSelection: () => void;
+  onSelectAll: (jobIds: string[]) => void;
+  onBulkSchedule: () => void;
 }
 
 const PAGE_SIZE = 50;
@@ -127,6 +135,11 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
   onClose,
   onSelectJob,
   onResultsChange,
+  selectedJobIds,
+  onToggleSelection,
+  onClearSelection,
+  onSelectAll,
+  onBulkSchedule,
 }: PlannerAreaSearchPanelProps) {
   const initial = useMemo(() => readUrlState(), []);
   const [city, setCity] = useState<string>(initial.city || "");
@@ -454,6 +467,21 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                 loadingVariant="skeleton-rows"
                 skeletonRows={6}
               >
+                <BulkActionBar
+                  selectedCount={Array.from(selectedJobIds).filter(id => rows.some(r => r.id === id)).length}
+                  totalCount={rows.length}
+                  onSelectAll={() => onSelectAll(rows.map(r => r.id))}
+                  onClearSelection={onClearSelection}
+                >
+                  <Button
+                    size="sm"
+                    onClick={onBulkSchedule}
+                    data-testid="button-area-bulk-schedule"
+                  >
+                    <CalendarPlus className="h-4 w-4 mr-1.5" />
+                    Schemalägg
+                  </Button>
+                </BulkActionBar>
                 <div className="space-y-1.5" data-testid="list-area-search-results">
                   {rows.map((row) => {
                     const job: WorkOrderWithObject = row;
@@ -482,29 +510,40 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                       ? formatDistanceToNowStrict(lastSvc, { locale: sv, addSuffix: true })
                       : null;
 
+                    const isSelected = selectedJobIds.has(job.id);
                     return (
                       <div
                         key={job.id}
-                        className="rounded-md border bg-card overflow-hidden hover-elevate"
+                        className={`rounded-md border bg-card overflow-hidden hover-elevate ${isSelected ? "ring-2 ring-primary border-primary" : ""}`}
                         data-testid={`row-area-result-${job.id}`}
                       >
-                        <DraggableJobCard id={job.id}>
-                          <JobCard
-                            job={job}
-                            selectedJob={null}
-                            jobConflicts={{}}
-                            dependenciesData={undefined}
-                            timewindowMap={EMPTY_TIMEWINDOW_MAP}
-                            expandedSubSteps={EMPTY_EXPANDED}
-                            onJobClick={(id) => onSelectJob(id)}
-                            onUnschedule={() => {}}
-                            onToggleSubStep={() => {}}
-                            onOpenDepChain={() => {}}
-                            selectedJobIds={new Set()}
-                            onToggleSelection={() => {}}
-                          />
-                        </DraggableJobCard>
-                        <div className="px-2 pb-2 pt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+                        <div className="flex items-start gap-1.5">
+                          <div className="pt-2 pl-2">
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => onToggleSelection(job.id)}
+                              aria-label={`Markera ${job.title}`}
+                              data-testid={`checkbox-area-result-${job.id}`}
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <DraggableJobCard id={job.id}>
+                              <JobCard
+                                job={job}
+                                selectedJob={null}
+                                jobConflicts={{}}
+                                dependenciesData={undefined}
+                                timewindowMap={EMPTY_TIMEWINDOW_MAP}
+                                expandedSubSteps={EMPTY_EXPANDED}
+                                onJobClick={(id) => onSelectJob(id)}
+                                onUnschedule={() => {}}
+                                onToggleSubStep={() => {}}
+                                onOpenDepChain={() => {}}
+                                selectedJobIds={selectedJobIds}
+                                onToggleSelection={onToggleSelection}
+                              />
+                            </DraggableJobCard>
+                            <div className="px-2 pb-2 pt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
                           {row.objectHierarchyLevel && (
                             <Badge variant="outline" className="text-[10px] py-0 h-4">
                               {HIERARCHY_LABELS[row.objectHierarchyLevel] || row.objectHierarchyLevel}
@@ -541,6 +580,8 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                               · {row.conceptName}
                             </span>
                           )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     );

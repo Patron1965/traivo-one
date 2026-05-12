@@ -17,6 +17,7 @@ import { UnscheduledSidebar } from "./weekplanner/UnscheduledSidebar";
 import { AssignDialog, SendScheduleDialog, BulkSendScheduleDialog, ConflictDialog, ClearDialog, AutoFillDialog, DepChainDialog, ConflictListDialog } from "./weekplanner/PlannerDialogs";
 import { PlannerToolbar, PlannerFooter } from "./weekplanner/PlannerToolbar";
 import { PlannerAreaSearchPanel } from "./weekplanner/PlannerAreaSearchPanel";
+import { BulkScheduleDialog } from "./weekplanner/BulkScheduleDialog";
 import { DisruptionPanel } from "./weekplanner/DisruptionPanel";
 import { DayTimelineView } from "./weekplanner/DayTimelineView";
 import { WeekGridView } from "./weekplanner/WeekGridView";
@@ -73,6 +74,17 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     return new URLSearchParams(window.location.search).get("areaSearch") === "open";
   });
   const [extraDraggableJobs, setExtraDraggableJobs] = useState<WorkOrderWithObject[]>([]);
+  const [areaSelectedIds, setAreaSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkScheduleOpen, setBulkScheduleOpen] = useState(false);
+  const toggleAreaSelection = useCallback((jobId: string) => {
+    setAreaSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(jobId)) next.delete(jobId); else next.add(jobId);
+      return next;
+    });
+  }, []);
+  const clearAreaSelection = useCallback(() => setAreaSelectedIds(new Set()), []);
+  const selectAllAreaJobs = useCallback((ids: string[]) => setAreaSelectedIds(new Set(ids)), []);
   const dndWorkOrders = useMemo(() => {
     if (extraDraggableJobs.length === 0) return null;
     const seen = new Set<string>();
@@ -677,6 +689,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             onClose={() => setAreaSearchOpen(false)}
             onSelectJob={(jobId) => { d.handleJobClick(jobId); onSelectJob?.(jobId); }}
             onResultsChange={setExtraDraggableJobs}
+            selectedJobIds={areaSelectedIds}
+            onToggleSelection={toggleAreaSelection}
+            onClearSelection={clearAreaSelection}
+            onSelectAll={selectAllAreaJobs}
+            onBulkSchedule={() => setBulkScheduleOpen(true)}
           />
         )}
 
@@ -795,6 +812,15 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
         onCancel={d.handleWhatIfCancel}
       />
       <UrgentJobDialog open={urgentDialogOpen} onClose={() => setUrgentDialogOpen(false)} preselectedOrder={urgentPreselectedOrder} />
+      <BulkScheduleDialog
+        open={bulkScheduleOpen}
+        onOpenChange={(o) => { setBulkScheduleOpen(o); if (!o) clearAreaSelection(); }}
+        workOrderIds={Array.from(areaSelectedIds)}
+        jobs={extraDraggableJobs}
+        resources={d.resources}
+        teams={d.teamsData}
+        onSuccess={clearAreaSelection}
+      />
       <Sheet open={slaRiskOpen} onOpenChange={setSlaRiskOpen}>
         <SheetContent side="right" className="w-[420px] sm:max-w-[420px] flex flex-col p-0">
           <SheetHeader className="px-4 py-3 border-b">

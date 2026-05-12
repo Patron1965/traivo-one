@@ -353,6 +353,230 @@ app.post("/api/work-orders/bulk-unschedule", asyncHandler(async (req, res) => {
   res.json({ count });
 }));
 
+const bulkScheduleSchema = z.object({
+  workOrderIds: z.array(z.string().min(1)).min(1).max(200),
+  scheduledDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ogiltigt datumformat (YYYY-MM-DD)"),
+  resourceId: z.string().min(1).optional(),
+  teamId: z.string().min(1).optional(),
+  scheduledStartTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  force: z.boolean().optional(),
+}).refine(d => Boolean(d.resourceId) !== Boolean(d.teamId), {
+  message: "Ange antingen resourceId eller teamId (en av dem)",
+});
+
+type BulkScheduleResultStatus = "scheduled" | "conflict" | "blocked" | "error";
+interface BulkScheduleResult {
+  workOrderId: string;
+  status: BulkScheduleResultStatus;
+  conflicts: string[];
+  message?: string;
+}
+
+app.post("/api/work-orders/bulk-schedule", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const parsed = bulkScheduleSchema.safeParse(req.body);
+  if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+  const { workOrderIds, scheduledDate, resourceId, teamId, scheduledStartTime, force } = parsed.data;
+
+  if (resourceId) await ensureResourceInTenant(resourceId, tenantId);
+  if (teamId) await ensureTeamInTenant(teamId, tenantId);
+
+  // Dedup
+  const uniqueIds = Array.from(new Set(workOrderIds));
+
+  // Pre-load all orders + tenant-ownership filter
+  const ordersById = new Map<string, Awaited<ReturnType<typeof storage.getWorkOrder>>>();
+  for (const id of uniqueIds) {
+    const wo = await storage.getWorkOrder(id);
+    ordersById.set(id, wo);
+  }
+
+  // Build constraint context (same shape as planner what-if)
+  const allOrders = await storage.getWorkOrders(tenantId);
+  const allResources = await storage.getResources(tenantId);
+  const resourceAvailability = await storage.getResourceAvailabilityByTenant(tenantId);
+  const vehicleSchedules = await storage.getVehicleSchedulesByTenant(tenantId);
+  const resourceIdsList = allResources.map(r => r.id);
+  const resourceVehicles = await storage.getResourceVehiclesByResourceIds(resourceIdsList);
+  const dependencyInstances = await storage.getTaskDependencyInstances(tenantId);
+  const resourceArticles = await storage.getResourceArticlesByResourceIds(resourceIdsList);
+  const teamMembers = await storage.getAllTeamMembers(tenantId);
+  const clustersList = await storage.getClusters(tenantId);
+  const tenant = await storage.getTenant(tenantId);
+  const tenantSettings = (tenant?.settings as Record<string, unknown>) || {};
+  const hardClusterBlocking = tenantSettings.hardClusterBlocking !== false;
+
+  const { validateSchedule } = await import("../planning/constraintEngine");
+
+  // Resolve resourceId for moves: if teamId given, pick first available active member resource id
+  // (we still mutate teamId on the WO directly; the constraint check needs *some* resourceId).
+  let effectiveResourceIdForCheck: string | null = resourceId || null;
+  if (!effectiveResourceIdForCheck && teamId) {
+    const tm = teamMembers.find(m => m.teamId === teamId);
+    effectiveResourceIdForCheck = tm?.resourceId || allResources[0]?.id || null;
+  }
+
+  const results: BulkScheduleResult[] = [];
+  // Track moves accepted earlier in the batch so subsequent items see intra-batch
+  // capacity/dependency conflicts. We mutate `allOrders` in-place to reflect
+  // simulated updates (resourceId/scheduledDate) for already-scheduled items.
+  const pendingMoves: Array<{ workOrderId: string; resourceId: string; scheduledDate: string }> = [];
+
+  for (const id of uniqueIds) {
+    const wo = ordersById.get(id);
+    if (!wo || !verifyTenantOwnership(wo, tenantId)) {
+      results.push({ workOrderId: id, status: "error", conflicts: [], message: "Arbetsorder hittades inte" });
+      continue;
+    }
+
+    let conflicts: string[] = [];
+    if (effectiveResourceIdForCheck) {
+      const timeRestrictions = wo.objectId
+        ? await storage.getObjectTimeRestrictions(wo.objectId)
+        : [];
+      const workOrderLines = await storage.getWorkOrderLines(id);
+      const movesForCheck = [
+        ...pendingMoves,
+        { workOrderId: id, resourceId: effectiveResourceIdForCheck, scheduledDate },
+      ];
+      const violations = validateSchedule(
+        movesForCheck,
+        {
+          allOrders,
+          resources: allResources,
+          resourceAvailability,
+          vehicleSchedules,
+          resourceVehicles,
+          dependencyInstances,
+          timeRestrictions,
+          resourceArticles,
+          workOrderLines,
+          teamMembers,
+          clusters: clustersList,
+          hardClusterBlocking,
+        }
+      );
+      conflicts = violations
+        .filter(v => v.workOrderId === id)
+        .map(v => (v.type === "hard" ? `[BLOCK] ${v.description}` : v.description));
+      // Capacity/cluster checks aggregate by resource+date across moves; surface
+      // those even when reported against a sibling pending move.
+      const aggregateExtras = violations
+        .filter(v => v.workOrderId !== id && (v.category === "capacity" || v.category === "cluster_geographic"))
+        .map(v => (v.type === "hard" ? `[BLOCK] ${v.description}` : v.description));
+      for (const extra of aggregateExtras) {
+        if (!conflicts.includes(extra)) conflicts.push(extra);
+      }
+    }
+
+    const hasHardBlock = conflicts.some(c => c.startsWith("[BLOCK]"));
+    if (hasHardBlock) {
+      results.push({ workOrderId: id, status: "blocked", conflicts });
+      continue;
+    }
+    if (conflicts.length > 0 && !force) {
+      results.push({ workOrderId: id, status: "conflict", conflicts });
+      continue;
+    }
+
+    try {
+      const updateData: Record<string, unknown> = {
+        scheduledDate: new Date(scheduledDate + "T12:00:00Z"),
+      };
+      if (resourceId) {
+        updateData.resourceId = resourceId;
+        updateData.teamId = null;
+      } else if (teamId) {
+        updateData.teamId = teamId;
+        updateData.resourceId = null;
+      }
+      if (scheduledStartTime) updateData.scheduledStartTime = scheduledStartTime;
+      if (wo.orderStatus === "skapad") updateData.orderStatus = "planerad_resurs";
+
+      const oldStatus = wo.orderStatus;
+      const updated = await storage.updateWorkOrder(id, updateData);
+      if (!updated) {
+        results.push({ workOrderId: id, status: "error", conflicts, message: "Uppdatering misslyckades" });
+        continue;
+      }
+
+      // Mirror status-change side effects from PATCH /api/work-orders/:id
+      if (updated.orderStatus !== oldStatus) {
+        handleWorkOrderStatusChange(updated.id, oldStatus, updated.orderStatus, tenantId).catch(err =>
+          console.error(`[bulk-schedule] status-change hook failed for ${id}:`, err)
+        );
+      }
+
+      // Track simulated state for downstream conflict checks
+      pendingMoves.push({
+        workOrderId: id,
+        resourceId: effectiveResourceIdForCheck || updated.resourceId || "",
+        scheduledDate,
+      });
+      const idxInAll = allOrders.findIndex(o => o.id === id);
+      if (idxInAll >= 0) {
+        allOrders[idxInAll] = {
+          ...allOrders[idxInAll],
+          resourceId: updated.resourceId,
+          teamId: updated.teamId,
+          scheduledDate: updated.scheduledDate,
+          scheduledStartTime: updated.scheduledStartTime,
+          orderStatus: updated.orderStatus,
+        };
+      }
+
+      // Notifications + extra-job-sms (mirror PATCH /api/work-orders/:id behavior)
+      const oldResourceId = wo.resourceId;
+      const newResourceId = updated.resourceId;
+      if (newResourceId && newResourceId !== oldResourceId) {
+        notificationService.notifyJobAssigned(updated, newResourceId);
+        if (oldResourceId) notificationService.notifyJobCancelled(wo, oldResourceId);
+        try {
+          const { maybeSendExtraJobSms, maybeSendCancellationSms } = await import("../extra-job-sms");
+          void maybeSendExtraJobSms({ workOrder: updated, resourceId: newResourceId, reason: "assigned" });
+          if (oldResourceId) {
+            void maybeSendCancellationSms({ workOrder: wo, previousResourceId: oldResourceId });
+          }
+        } catch (e) {
+          console.error("[extra-job-sms] hook failed (bulk-schedule):", e);
+        }
+      } else if (newResourceId) {
+        const oldDate = wo.scheduledDate?.toISOString().split("T")[0];
+        const newDate = updated.scheduledDate?.toISOString().split("T")[0];
+        if (oldDate !== newDate) {
+          notificationService.notifyScheduleChanged(updated, newResourceId, oldDate, newDate);
+          try {
+            const { maybeSendExtraJobSms } = await import("../extra-job-sms");
+            void maybeSendExtraJobSms({ workOrder: updated, resourceId: newResourceId, reason: "rescheduled" });
+          } catch (e) {
+            console.error("[extra-job-sms] hook failed (bulk-reschedule):", e);
+          }
+        }
+      }
+
+      results.push({ workOrderId: id, status: "scheduled", conflicts });
+    } catch (err) {
+      console.error(`[bulk-schedule] Failed to schedule ${id}:`, err);
+      results.push({
+        workOrderId: id,
+        status: "error",
+        conflicts,
+        message: err instanceof Error ? err.message : "Okänt fel",
+      });
+    }
+  }
+
+  const summary = {
+    total: results.length,
+    scheduled: results.filter(r => r.status === "scheduled").length,
+    conflict: results.filter(r => r.status === "conflict").length,
+    blocked: results.filter(r => r.status === "blocked").length,
+    error: results.filter(r => r.status === "error").length,
+  };
+
+  res.json({ summary, results });
+}));
+
 app.post("/api/work-orders/carry-over", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const { fromDate, toDate, resourceIds } = req.body;
