@@ -38,6 +38,7 @@ import {
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryState } from "@/components/QueryState";
 import { invoiceStatusBadge } from "@/lib/status-colors";
+import { formatSek } from "@/lib/format";
 import { format, subDays, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Customer, Article } from "@shared/schema";
@@ -135,9 +136,7 @@ const EXPORT_STATUS_LABELS: Record<string, string> = {
   credited: "Krediterad",
 };
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("sv-SE", { style: "currency", currency: "SEK" }).format(amount);
-}
+const formatCurrency = (amount: number) => formatSek(amount, { decimals: true });
 
 function ExportStatusBadge({ status }: { status: string }) {
   return (

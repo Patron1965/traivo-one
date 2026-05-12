@@ -38,6 +38,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { WorkOrder, SimulationScenario, Customer, Article, WorkOrderLine, Team, Resource, MetadataKatalog } from "@shared/schema";
+import { formatSekFromOre } from "@/lib/format";
 import { useLanguage } from "@/hooks/use-language";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { 
@@ -665,10 +666,8 @@ export default function OrderStockPage() {
     setCurrentPage(1);
   };
 
-  const formatCurrency = (amount: number | null | undefined) => {
-    if (amount == null) return "-";
-    return new Intl.NumberFormat("sv-SE", { style: "currency", currency: "SEK" }).format(amount / 100);
-  };
+  const formatCurrency = (amount: number | null | undefined) =>
+    formatSekFromOre(amount, { emptyDash: true, decimals: true });
 
   const formatMinutes = (minutes: number | null | undefined) => {
     if (minutes == null) return "-";

@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Calendar } from "@/components/ui/calendar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TaskTimewindowsEditor } from "@/components/TaskTimewindowsEditor";
+import { workOrderStatusBadge } from "@/lib/status-colors";
 import type { WorkOrder, ServiceObject, Customer, Resource, WorkOrderObject, MetadataKatalog, WorkOrderLine, CustomerCommunication } from "@shared/schema";
 
 interface JobDetailModalProps {
@@ -471,14 +472,8 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
   };
 
   const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      draft: "bg-gray-100 text-gray-800",
-      scheduled: "bg-chart-1/15 text-chart-1",
-      in_progress: "bg-chart-3/15 text-chart-3",
-      completed: "bg-chart-2/15 text-chart-2",
-      cancelled: "bg-destructive/15 text-destructive",
-    };
-    return colors[status] || "bg-gray-100 text-gray-800";
+    if (status === "draft") return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
+    return workOrderStatusBadge[status] ?? workOrderStatusBadge.unassigned;
   };
 
   if (!workOrderId) return null;

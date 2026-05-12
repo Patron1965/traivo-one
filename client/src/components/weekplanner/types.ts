@@ -1,4 +1,5 @@
 import type { Resource, WorkOrderWithObject, Customer, TaskDependency, Cluster, ObjectTimeRestriction } from "@shared/schema";
+import { haversineDistanceKm } from "@/lib/geo";
 
 export interface WeatherImpactDay {
   date: string;
@@ -170,15 +171,9 @@ export function getJobCategory(job: WorkOrderWithObject): TimeBlockCategory {
   return "production";
 }
 
-export function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+export const haversineDistance = haversineDistanceKm;
 
 export function calculateTravelTime(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const distance = haversineDistance(lat1, lon1, lat2, lon2);
+  const distance = haversineDistanceKm(lat1, lon1, lat2, lon2);
   return Math.round((distance / 40) * 60);
 }

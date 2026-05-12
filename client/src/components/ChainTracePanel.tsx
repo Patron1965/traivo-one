@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useLocation } from "wouter";
+import { formatSekFromOre } from "@/lib/format";
 
 interface ChainTracePanelProps {
   workOrderId: string | null;
@@ -97,10 +98,7 @@ const STATUS_COLORS: Record<string, string> = {
   fakturerad: "bg-chart-2/15 text-chart-2 dark:bg-chart-2/15",
 };
 
-function formatCurrency(amount: number | null): string {
-  if (amount == null) return "-";
-  return new Intl.NumberFormat("sv-SE", { style: "currency", currency: "SEK", minimumFractionDigits: 0 }).format(amount / 100);
-}
+const formatCurrency = (amount: number | null) => formatSekFromOre(amount, { emptyDash: true });
 
 interface StepConfig {
   key: string;

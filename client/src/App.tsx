@@ -1,5 +1,5 @@
 import { useEffect, useState, lazy, Suspense } from "react";
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route, useLocation, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -137,9 +137,9 @@ function Router() {
     <Suspense fallback={<PageLoader />}>
       <Switch>
         <Route path="/">{() => <ProtectedRoute component={MyTasksPage} path="/" />}</Route>
-        <Route path="/home">{() => <ProtectedRoute component={MyTasksPage} path="/home" />}</Route>
+        <Route path="/home">{() => <Redirect to="/" />}</Route>
         <Route path="/planner">{() => <ProtectedRoute component={WeekPlannerPage} path="/planner" />}</Route>
-        <Route path="/week-planner">{() => <ProtectedRoute component={WeekPlannerPage} path="/week-planner" />}</Route>
+        <Route path="/week-planner">{() => <Redirect to="/planner" />}</Route>
         <Route path="/clusters">{() => <ProtectedRoute component={ClustersPage} path="/clusters" />}</Route>
         <Route path="/clusters/:id">{() => <ProtectedRoute component={ClusterDetailPage} path="/clusters" />}</Route>
         <Route path="/routes">{() => <ProtectedRoute component={RoutesPage} path="/routes" />}</Route>
@@ -174,8 +174,8 @@ function Router() {
         <Route path="/system-dashboard">{() => <ProtectedRoute component={SystemDashboardPage} path="/system-dashboard" />}</Route>
         <Route path="/industry-packages">{() => <ProtectedRoute component={IndustryPackagesPage} path="/industry-packages" />}</Route>
         <Route path="/mobile">{() => <ProtectedRoute component={MobileFieldPage} path="/mobile" />}</Route>
-        <Route path="/field">{() => <ProtectedRoute component={MobileFieldPage} path="/field" />}</Route>
-        <Route path="/simple">{() => <ProtectedRoute component={MobileFieldPage} path="/simple" />}</Route>
+        <Route path="/field">{() => <Redirect to="/mobile" />}</Route>
+        <Route path="/simple">{() => <Redirect to="/mobile" />}</Route>
         <Route path="/project-report">{() => <ProtectedRoute component={ProjectReportPage} path="/project-report" />}</Route>
         <Route path="/metadata">{() => <ProtectedRoute component={MetadataPage} path="/metadata" />}</Route>
         <Route path="/metadata-settings">{() => <ProtectedRoute component={MetadataSettingsPage} path="/metadata-settings" />}</Route>

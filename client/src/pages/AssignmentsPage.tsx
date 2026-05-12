@@ -64,11 +64,9 @@ import { PageHelp } from "@/components/ui/help-tooltip";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ClipboardList } from "lucide-react";
 import { QueryState } from "@/components/QueryState";
+import { formatSekFromOre } from "@/lib/format";
 
-function formatCurrency(value: number | null | undefined): string {
-  if (!value) return "0 kr";
-  return new Intl.NumberFormat("sv-SE", { style: "currency", currency: "SEK", maximumFractionDigits: 0 }).format(value / 100);
-}
+const formatCurrency = (value: number | null | undefined) => formatSekFromOre(value);
 
 const statusOptions: { value: AssignmentStatus; label: string; icon: typeof Circle }[] = [
   { value: "not_planned", label: "Ej planerad", icon: Circle },

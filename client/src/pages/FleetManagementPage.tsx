@@ -38,6 +38,7 @@ import { QueryState } from "@/components/QueryState";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, differenceInDays, addDays, isPast, isFuture } from "date-fns";
 import { sv } from "date-fns/locale";
+import { formatSek } from "@/lib/format";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
   Tooltip as RechartsTooltip, LineChart, Line, PieChart, Pie, Cell, Legend
@@ -94,9 +95,7 @@ const FUEL_LABELS: Record<string, string> = {
 
 const CHART_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("sv-SE", { style: "currency", currency: "SEK", maximumFractionDigits: 0 }).format(amount);
-}
+const formatCurrency = (amount: number) => formatSek(amount);
 
 function getServiceStatus(vehicle: Vehicle): { label: string; color: string; urgency: number } {
   if (!vehicle.nextServiceDate) return { label: "Ej planerad", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300", urgency: 0 };

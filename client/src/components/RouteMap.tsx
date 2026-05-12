@@ -17,6 +17,7 @@ import type { Resource, WorkOrderWithObject, ServiceObject } from "@shared/schem
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { haversineDistanceKm } from "@/lib/geo";
 
 const createNumberedIcon = (number: number, color: string, stackCount?: number) => {
   const badge = stackCount && stackCount > 1
@@ -307,14 +308,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
     for (let i = 0; i < positions.length - 1; i++) {
       const [lat1, lon1] = positions[i];
       const [lat2, lon2] = positions[i + 1];
-      const R = 6371;
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                Math.sin(dLon/2) * Math.sin(dLon/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      total += R * c;
+      total += haversineDistanceKm(lat1, lon1, lat2, lon2);
     }
     return total;
   };

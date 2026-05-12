@@ -10,20 +10,9 @@ import type { ViewMode, PlannerAction, WeatherForecastData, WeatherImpactDay, Co
 import { computeDateFilterParams, buildUnscheduledQueryString } from "./dateFilterUtils";
 import { HOURS_IN_DAY, DAY_START_HOUR, DAY_END_HOUR } from "./types";
 import type { WhatIfResult } from "./WhatIfPreview";
+import { haversineDistanceKm as haversineKm, estimateTravelMinutes } from "@/lib/geo";
 
 const UNSCHEDULED_PAGE_SIZE = 50;
-
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function estimateTravelMinutes(distKm: number): number {
-  return Math.max(Math.round(distKm / 50 * 60), 5);
-}
 const PLANNER_FILTERS_KEY = "traivo-planner-filters";
 
 function loadSavedFilters(): {

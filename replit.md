@@ -59,6 +59,7 @@ _Populate as you build_
 - **BOM Self-Referencing:** Article components (`article_components`) prevent a child article from being its own parent (`childId ≠ parentId`).
 - **Portal User Scope:** An empty scope for a portal user grants full access (for backward compatibility).
 - **Fortnox Export with Frozen Prices:** Fortnox export uses `frozenUnitPrice` if available on a work order; otherwise, it defaults to `line.resolvedPrice`. Existing work orders with `frozen_*=NULL` are unaffected.
+- **Avduplicering rensningslogg (Task #448, delvis):** Klient-helpers konsoliderade — använd `formatSek(kronor)` / `formatSekFromOre(öre)` från `client/src/lib/format.ts` (öre-vs-kronor-konvention är **inte** utbytbar; DB-prisfält är öre, Fleet/Invoice-summor är kronor). Avstånd: använd `haversineDistanceKm` + `estimateTravelMinutes` från `client/src/lib/geo.ts` — lokala kopior i `RouteMap`, `weekplanner/types.ts` och `weekplanner/usePlannerData.ts` ersatta. Statusfärger: `JobDetailModal` använder nu `workOrderStatusBadge` från `lib/status-colors.ts`. Skugg-routes (`/home`, `/week-planner`, `/field`, `/simple`) är nu `wouter`-redirects till kanoniska `/`, `/planner`, `/mobile`. **Återstår (separata uppföljningstasks):** server-utils (geocoding/distansmatris/SMS), IStorage-dubletter, kart-komponentbas, planner BulkScheduleDialog/AssignDialog-sammanslagning, backend WO-status-route-överlapp, SystemDashboard+TenantConfig-sammanslagning.
 
 ## Pointers
 - **Master Implementation Guide v1.0:** For overarching sprint plans and decisions.
