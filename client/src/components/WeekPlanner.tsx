@@ -781,7 +781,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
 
       <AssignmentDialog
         open={d.assignDialogOpen}
-        onOpenChange={(v) => { d.setAssignDialogOpen(v); if (!v) { d.setAssignResourceId(null); d.setAssignTeamId(null); } }}
+        onOpenChange={(v) => { d.setAssignDialogOpen(v); }}
         workOrderIds={d.jobToAssign ? [d.jobToAssign.id] : []}
         jobs={d.jobToAssign ? [d.jobToAssign] : []}
         resources={d.resources}
@@ -790,7 +790,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
         recommendationContext={d.jobToAssign ? { objectId: d.jobToAssign.objectId, clusterId: d.jobToAssign.clusterId } : null}
         title="Tilldela resurs"
         description={d.jobToAssign ? `Välj resurs och datum för: ${d.jobToAssign.title}` : undefined}
-        onSuccess={() => { d.setAssignDialogOpen(false); d.setAssignResourceId(null); d.setAssignTeamId(null); }}
+        onSuccess={() => { d.setAssignDialogOpen(false); }}
       />
       <SendScheduleDialog
         open={d.sendScheduleDialogOpen}
