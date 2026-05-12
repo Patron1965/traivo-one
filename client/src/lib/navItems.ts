@@ -37,6 +37,8 @@ import {
   MessageCircle,
   Gauge,
   Globe,
+  Palette,
+  Presentation,
   type LucideIcon,
 } from "lucide-react";
 import { translate } from "./i18n";
@@ -144,6 +146,7 @@ export function getAdminItems(tl?: (key: string) => string): NavItem[] {
   const l = tl || svFallback;
   return [
     { title: l("nav.new-customer"), url: "/onboarding", icon: Building2, description: l("nav.new-customer.desc") },
+    { title: l("nav.platform-admin"), url: "/system-dashboard", icon: Palette, description: l("nav.platform-admin.desc") },
     { title: l("nav.company-settings"), url: "/tenant-config", icon: Settings2, description: l("nav.company-settings.desc") },
     { title: l("nav.production-control"), url: "/planning-parameters", icon: Settings2, description: l("nav.production-control.desc") },
     { title: l("nav.planner-search-filters"), url: "/planner-search-filters", icon: Sliders, description: l("nav.planner-search-filters.desc") },
@@ -160,6 +163,7 @@ export function getAdminItems(tl?: (key: string) => string): NavItem[] {
     { title: "ML datakvalitet", url: "/ml-data-quality", icon: Activity, description: "Go/no-go-grind för ML duration-prediktion (Task #421)" },
     { title: "Återställ vilande kunder", url: "/restore-dormant-customers", icon: Database, description: "Sök fram en vilande kund och återställ den från dev till prod (platform-owner)" },
     { title: l("nav.system-overview"), url: "/system-overview", icon: FileText, description: l("nav.system-overview.desc") },
+    { title: l("nav.investor-pitch"), url: "/investor-pitch", icon: Presentation, description: l("nav.investor-pitch.desc") },
     { title: "Kundportal extern", url: "/portal", icon: Globe, description: "Öppna den externa kundportalen i ny flik", external: true },
   ];
 }
