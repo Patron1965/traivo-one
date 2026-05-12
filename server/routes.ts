@@ -16,6 +16,8 @@ import { slaRiskScheduler } from "./services/sla-risk-scheduler";
 import { registerSlaRiskRoutes } from "./routes/slaRiskRoutes";
 import { geocodeScheduler } from "./services/geocode-scheduler";
 import { notificationCleanupScheduler, getRetentionConfig } from "./services/notification-cleanup-scheduler";
+import { prodHealthCheckScheduler } from "./services/prod-health-check-scheduler";
+import { registerProdHealthCheckRoutes } from "./routes/prodHealthCheckRoutes";
 import { startWeeklyReportScheduler } from "./weekly-report";
 import { metadataRouter } from "./metadata-routes";
 import { formatZodError, DEFAULT_TENANT_ID } from "./routes/helpers";
@@ -83,6 +85,7 @@ export async function registerRoutes(
   geocodeScheduler.start();
   notificationCleanupScheduler.start();
   capacityForecastScheduler.start();
+  prodHealthCheckScheduler.start();
 
   app.use((req: ExpressRequest, _res: ExpressResponse, next) => {
     if (req.url.startsWith(`/api/${API_VERSION}/`) || req.url === `/api/${API_VERSION}`) {
@@ -618,6 +621,7 @@ export async function registerRoutes(
   registerUrgentJobRoutes(app);
   registerSlaRiskRoutes(app);
   registerCapacityForecastRoutes(app);
+  registerProdHealthCheckRoutes(app);
 
   app.post("/api/route-geometry", async (req: ExpressRequest, res: ExpressResponse) => {
     try {

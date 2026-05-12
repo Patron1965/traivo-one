@@ -5523,3 +5523,35 @@ export const replanningDecisions = pgTable("replanning_decisions", {
 export type ReplanningDecision = typeof replanningDecisions.$inferSelect;
 export const insertReplanningDecisionSchema = createInsertSchema(replanningDecisions).omit({ id: true, createdAt: true, decidedAt: true });
 export type InsertReplanningDecision = z.infer<typeof insertReplanningDecisionSchema>;
+
+// Task #426 — Daglig hälsokoll på prod-data efter Modus-parallelldrift
+// Lagrar en rad per körning av prodHealthCheckService så drift kan upptäckas
+// över tid (t.ex. plötsligt tapp av kunder, orphans som dyker upp).
+export const prodHealthCheckRuns = pgTable("prod_health_check_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id", { length: 255 }).notNull(),
+  ranAt: timestamp("ran_at").defaultNow().notNull(),
+  // 'PASS' | 'WARN' | 'FAIL'
+  status: varchar("status", { length: 10 }).notNull(),
+  passCount: integer("pass_count").notNull().default(0),
+  warnCount: integer("warn_count").notNull().default(0),
+  failCount: integer("fail_count").notNull().default(0),
+  durationMs: integer("duration_ms").notNull().default(0),
+  // Räknesatser per nyckeltabell, t.ex. { "customers (aktiva)": 486, ... }
+  counts: jsonb("counts").notNull().default({}),
+  // Alla individuella checkar: [{ name, status, detail }, ...]
+  checks: jsonb("checks").notNull().default([]),
+  // Tröskelvärden som användes vid körningen (för senare rotorsaksanalys)
+  thresholds: jsonb("thresholds").notNull().default({}),
+  // 'sent' | 'skipped' | 'failed' | null (för WARN/FAIL-notiser)
+  alertStatus: varchar("alert_status", { length: 20 }),
+  alertDetail: text("alert_detail"),
+  errorMessage: text("error_message"),
+}, (table) => [
+  index("idx_prod_health_tenant_ran").on(table.tenantId, table.ranAt),
+  index("idx_prod_health_status").on(table.status),
+]);
+
+export type ProdHealthCheckRun = typeof prodHealthCheckRuns.$inferSelect;
+export const insertProdHealthCheckRunSchema = createInsertSchema(prodHealthCheckRuns).omit({ id: true, ranAt: true });
+export type InsertProdHealthCheckRun = z.infer<typeof insertProdHealthCheckRunSchema>;
