@@ -618,28 +618,22 @@ app.post("/api/routes/directions", asyncHandler(async (req, res) => {
       }
     }
 
-    const apiKey = process.env.GEOAPIFY_API_KEY;
-    if (!apiKey) {
+    const { fetchGeoapifyRouteWithStatus, isGeoapifyRoutingAvailable } = await import("../services/routing");
+    if (!isGeoapifyRoutingAvailable()) {
       return res.status(500).json({ error: "Geoapify API-nyckel saknas. Konfigurera den i inställningarna." });
     }
 
-    const waypoints = coordinates
-      .map(([lon, lat]: [number, number]) => `${lat},${lon}`)
-      .join("|");
-
     console.log(`[routing] Requesting Geoapify route with ${coordinates.length} waypoints`);
 
-    const response = await fetch(
-      `https://api.geoapify.com/v1/routing?waypoints=${waypoints}&mode=drive&apiKey=${apiKey}`
+    const result = await fetchGeoapifyRouteWithStatus(
+      (coordinates as [number, number][]).map(([lon, lat]) => ({ lat, lng: lon })),
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[routing] Geoapify routing error:", response.status, errorText);
-      return res.status(response.status).json({ error: "Kunde inte beräkna rutten" });
+    if (!result.ok) {
+      return res.status(result.status).json({ error: result.error || "Kunde inte beräkna rutten" });
     }
 
-    const data = await response.json();
+    const data = result.data;
     console.log(`[routing] Got ${data?.features?.length || 0} features, distance: ${data?.features?.[0]?.properties?.distance || 'N/A'}`);
     res.json(data);
 }));
@@ -647,33 +641,13 @@ app.post("/api/routes/directions", asyncHandler(async (req, res) => {
 app.post("/api/routes/optimize", asyncHandler(async (req, res) => {
     const { jobs, agents, vehicles } = req.body;
     const resolvedAgents = agents || vehicles;
-    
-    const apiKey = process.env.GEOAPIFY_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: "Geoapify API-nyckel saknas. Konfigurera den i inställningarna." });
+
+    const { callRoutePlanner } = await import("../services/routing");
+    const result = await callRoutePlanner({ jobs, agents: resolvedAgents });
+    if (!result.ok) {
+      return res.status(result.status).json({ error: result.error || "Route optimization failed" });
     }
-
-    const response = await fetch(
-      `https://api.geoapify.com/v1/routeplanner?apiKey=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: "drive",
-          jobs,
-          agents: resolvedAgents,
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Geoapify route planner error:", errorText);
-      return res.status(response.status).json({ error: "Route optimization failed" });
-    }
-
-    const data = await response.json();
-    res.json(data);
+    res.json(result.data);
 }));
 
 app.get("/api/import/progress/:jobId", (req, res) => {

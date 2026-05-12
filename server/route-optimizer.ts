@@ -1,9 +1,11 @@
 import type { WorkOrder, Resource, ServiceObject, Cluster } from "@shared/schema";
-import { trackApiUsage } from "./api-usage-tracker";
 import { getBatchDistances } from "./distance-matrix-service";
 import type { VRPConstraintOptions } from "./vrp-constraints";
-
-const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
+import {
+  callRoutePlanner,
+  getRouteSummary,
+  isGeoapifyRoutingAvailable,
+} from "./services/routing";
 
 interface RouteCache {
   result: { distance: number; duration: number };
@@ -171,59 +173,25 @@ async function getRouteFromGeoapify(coordinates: [number, number][]): Promise<{
   distance: number;
   duration: number;
 } | null> {
-  if (!GEOAPIFY_API_KEY || coordinates.length < 2) {
+  if (!isGeoapifyRoutingAvailable() || coordinates.length < 2) {
     return null;
   }
-  
+
   const cacheKey = getRouteCacheKey(coordinates);
   const cached = routeCache.get(cacheKey);
-  
+
   if (cached && Date.now() - cached.timestamp < ROUTE_CACHE_TTL) {
     return cached.result;
   }
-  
-  try {
-    const waypoints = coordinates
-      .map(([lng, lat]) => `${lat},${lng}`)
-      .join("|");
-    
-    const startTime = Date.now();
-    const response = await fetch(
-      `https://api.geoapify.com/v1/routing?waypoints=${waypoints}&mode=drive&apiKey=${GEOAPIFY_API_KEY}`
-    );
 
-    trackApiUsage({
-      service: "geoapify",
-      method: "routing",
-      endpoint: "/v1/routing",
-      units: 1,
-      statusCode: response.status,
-      durationMs: Date.now() - startTime,
-    });
-    
-    if (!response.ok) {
-      console.error("Geoapify routing error:", await response.text());
-      return null;
-    }
-    
-    const data = await response.json();
-    const feature = data.features?.[0];
-    const props = feature?.properties;
-    
-    if (props && props.distance !== undefined && props.time !== undefined) {
-      const result = {
-        distance: props.distance / 1000,
-        duration: props.time / 60,
-      };
-      routeCache.set(cacheKey, { result, timestamp: Date.now() });
-      return result;
-    }
-    
-    return null;
-  } catch (error) {
-    console.error("Geoapify routing fetch error:", error);
-    return null;
-  }
+  const summary = await getRouteSummary(
+    coordinates.map(([lng, lat]) => ({ lat, lng })),
+  );
+  if (!summary) return null;
+
+  const result = { distance: summary.distanceKm, duration: summary.durationMinutes };
+  routeCache.set(cacheKey, { result, timestamp: Date.now() });
+  return result;
 }
 
 export async function optimizeResourceDayRoute(
@@ -449,7 +417,6 @@ export interface VRPOptimizationResult {
   error?: string;
 }
 
-const GEOAPIFY_ROUTE_PLANNER_URL = "https://api.geoapify.com/v1/routeplanner";
 const DEFAULT_SERVICE_TIME_SECONDS = 30 * 60; // 30 min
 const DEFAULT_WORK_HOURS: [number, number] = [8 * 3600, 17 * 3600]; // 08-17
 
@@ -486,7 +453,7 @@ export async function optimizeRoutesVRP(
   breakConfig?: BreakConfig,
   constraintOptions?: VRPConstraintOptions,
 ): Promise<VRPOptimizationResult> {
-  if (!GEOAPIFY_API_KEY) {
+  if (!isGeoapifyRoutingAvailable()) {
     return {
       success: false,
       routes: [],
@@ -713,35 +680,20 @@ export async function optimizeRoutesVRP(
         if (clusterJobs.length === 0) continue;
 
         try {
-          const startTime = Date.now();
-          const response = await fetch(`${GEOAPIFY_ROUTE_PLANNER_URL}?apiKey=${GEOAPIFY_API_KEY}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              mode: "drive",
-              agents: clusterAgents,
-              jobs: clusterJobs,
-            })
+          const plannerResult = await callRoutePlanner({
+            agents: clusterAgents,
+            jobs: clusterJobs,
           });
 
-          trackApiUsage({
-            service: "geoapify",
-            method: "route-planner",
-            endpoint: "/v1/routeplanner",
-            units: 1,
-            statusCode: response.status,
-            durationMs: Date.now() - startTime,
-          });
-
-          if (!response.ok) {
-            console.warn(`[VRP] Cluster ${ci} API error ${response.status}`);
+          if (!plannerResult.ok) {
+            console.warn(`[VRP] Cluster ${ci} API error ${plannerResult.status}`);
             for (const job of clusterJobs) {
               allUnassigned.push({ orderId: job.id || "", reason: "Kluster-optimering misslyckades" });
             }
             continue;
           }
 
-          const data: GeoapifyRoutePlannerResponse = await response.json();
+          const data: GeoapifyRoutePlannerResponse = plannerResult.data;
           const clJobIndexToOrderId = new Map(clusterJobs.map((j, idx) => [idx, j.id || ""]));
 
           for (const feature of data.features) {
@@ -862,32 +814,16 @@ export async function optimizeRoutesVRP(
   }
 
   try {
-    const startTime = Date.now();
-    const response = await fetch(`${GEOAPIFY_ROUTE_PLANNER_URL}?apiKey=${GEOAPIFY_API_KEY}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mode: "drive",
-        agents: enrichedAgents,
-        jobs: enrichedJobs,
-      })
+    const plannerResult = await callRoutePlanner({
+      agents: enrichedAgents,
+      jobs: enrichedJobs,
     });
 
-    trackApiUsage({
-      service: "geoapify",
-      method: "route-planner",
-      endpoint: "/v1/routeplanner",
-      units: 1,
-      statusCode: response.status,
-      durationMs: Date.now() - startTime,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Geoapify Route Planner API error: ${response.status} - ${errorText}`);
+    if (!plannerResult.ok) {
+      throw new Error(`Geoapify Route Planner API error: ${plannerResult.status} - ${plannerResult.error}`);
     }
 
-    const data: GeoapifyRoutePlannerResponse = await response.json();
+    const data: GeoapifyRoutePlannerResponse = plannerResult.data;
 
     const orderMap = new Map(workOrders.map(o => [o.id, o]));
     const jobIndexToOrderId = new Map(validJobs.map(j => [j.index, j.order.id]));
