@@ -80,21 +80,18 @@ export const IMAGE_REJECT_TOAST = {
 } as const;
 
 /**
- * Max file size for photos taken in the field (mobile/portal field flows).
- * Modern phone cameras can produce 15–25 MB files; we cap at 15 MB so the
- * pre-signed upload step doesn't get a generic "Uppladdning misslyckades"
- * after the network round-trip. Help texts and toasts derive their number
- * from this constant — keep them in sync.
+ * Field-photo size constants live in `shared/upload-limits.ts` so the
+ * server can enforce the exact same limit. We re-export them here for
+ * backward compatibility with existing client imports.
  */
-export const MAX_FIELD_PHOTO_SIZE_MB = 15;
-export const MAX_FIELD_PHOTO_SIZE_BYTES = MAX_FIELD_PHOTO_SIZE_MB * 1024 * 1024;
+export {
+  MAX_FIELD_PHOTO_SIZE_MB,
+  MAX_FIELD_PHOTO_SIZE_BYTES,
+  FIELD_PHOTO_SIZE_HINT,
+  FIELD_PHOTO_TOO_LARGE_TOAST,
+} from "@shared/upload-limits";
 
-export const FIELD_PHOTO_SIZE_HINT = `Max ${MAX_FIELD_PHOTO_SIZE_MB} MB per bild.`;
-
-export const FIELD_PHOTO_TOO_LARGE_TOAST = {
-  title: "Bilden är för stor",
-  description: `Bilden överskrider gränsen på ${MAX_FIELD_PHOTO_SIZE_MB} MB. Ta ett nytt foto med lägre upplösning eller välj en mindre fil.`,
-} as const;
+import { MAX_FIELD_PHOTO_SIZE_BYTES as _MAX_FIELD_PHOTO_SIZE_BYTES } from "@shared/upload-limits";
 
 /**
  * Returns true when the file is within the field-photo size budget. Use
@@ -102,5 +99,5 @@ export const FIELD_PHOTO_TOO_LARGE_TOAST = {
  * instead of a generic upload failure after the signed URL is fetched.
  */
 export function isWithinFieldPhotoSizeLimit(file: File): boolean {
-  return file.size <= MAX_FIELD_PHOTO_SIZE_BYTES;
+  return file.size <= _MAX_FIELD_PHOTO_SIZE_BYTES;
 }

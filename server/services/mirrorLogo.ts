@@ -118,7 +118,8 @@ export async function mirrorExternalLogo(sourceUrl: string, owner?: string): Pro
     // Set ACL so the file is accessible via /api/storage/serve/objects/*.
     // Logos are public-readable (branding pages may be unauthenticated).
     const aclOwner = owner ?? "system";
-    await objectStorageService.validateUploadedFileAndSetAcl(objectPath, aclOwner, "public");
+    const { MAX_LOGO_SIZE_BYTES } = await import("@shared/upload-limits");
+    await objectStorageService.validateUploadedFileAndSetAcl(objectPath, aclOwner, "public", MAX_LOGO_SIZE_BYTES);
 
     const serveUrl = `/api/storage/serve${objectPath}`;
     return { ok: true, url: serveUrl, objectPath, contentType, bytes: buffer.length };

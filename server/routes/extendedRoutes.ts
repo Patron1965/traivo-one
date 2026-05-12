@@ -1123,12 +1123,13 @@ app.post("/api/field-worker/tasks/:id/upload-photo", asyncHandler(async (req, re
     }
 
     const { contentType, size } = req.body;
-    const { ObjectStorageService, ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES } = await import("../replit_integrations/object_storage/objectStorage");
+    const { ObjectStorageService, ALLOWED_UPLOAD_MIME_TYPES } = await import("../replit_integrations/object_storage/objectStorage");
+    const { MAX_FIELD_PHOTO_SIZE_BYTES, MAX_FIELD_PHOTO_SIZE_MB } = await import("@shared/upload-limits");
     if (!contentType || !ALLOWED_UPLOAD_MIME_TYPES.has(contentType)) {
       return res.status(400).json({ error: "File type not allowed. Only images and PDFs are permitted." });
     }
-    if (size !== undefined && size !== null && Number(size) > MAX_UPLOAD_SIZE_BYTES) {
-      return res.status(400).json({ error: `File too large. Maximum allowed size is ${MAX_UPLOAD_SIZE_BYTES} bytes.` });
+    if (size !== undefined && size !== null && Number(size) > MAX_FIELD_PHOTO_SIZE_BYTES) {
+      return res.status(413).json({ error: `Bilden är för stor. Maxgräns är ${MAX_FIELD_PHOTO_SIZE_MB} MB.` });
     }
 
     const objectStorageService = new ObjectStorageService();
@@ -1155,12 +1156,13 @@ app.post("/api/field-worker/tasks/:id/confirm-photo", asyncHandler(async (req, r
     }
 
     const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+    const { MAX_FIELD_PHOTO_SIZE_BYTES } = await import("@shared/upload-limits");
     const oss = new ObjectStorageService();
 
     // Tenant-scoped ownership so all members of this tenant can read the
     // photo while cross-tenant access is blocked.
     try {
-      await oss.validateUploadedFileAndSetAcl(objectPath, `tenant:${tenantId}`, "private");
+      await oss.validateUploadedFileAndSetAcl(objectPath, `tenant:${tenantId}`, "private", MAX_FIELD_PHOTO_SIZE_BYTES);
     } catch (err: any) {
       throw new ValidationError(err.message || "Fotot kunde inte verifieras i lagringen");
     }

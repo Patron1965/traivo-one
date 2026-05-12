@@ -1,7 +1,8 @@
 import type { Express } from "express";
-import { ObjectStorageService, ObjectNotFoundError, ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES } from "./objectStorage";
+import { ObjectStorageService, ObjectNotFoundError, ALLOWED_UPLOAD_MIME_TYPES } from "./objectStorage";
 import { isAuthenticated } from "../auth";
 import { getTenantIdWithFallback, requireTenantWithFallback } from "../../tenant-middleware";
+import { MAX_FIELD_PHOTO_SIZE_BYTES, MAX_FIELD_PHOTO_SIZE_MB } from "@shared/upload-limits";
 
 /**
  * Register object storage routes for file uploads.
@@ -54,10 +55,14 @@ export function registerObjectStorageRoutes(app: Express): void {
         });
       }
 
-      // Enforce maximum upload size
-      if (size !== undefined && size !== null && Number(size) > MAX_UPLOAD_SIZE_BYTES) {
-        return res.status(400).json({
-          error: `File too large. Maximum allowed size is ${MAX_UPLOAD_SIZE_BYTES} bytes.`,
+      // Enforce maximum upload size. The generic upload flow is used by
+      // PhotoCapture / SignatureCapture / use-upload for field photos and
+      // signatures, so we apply the same 15 MB cap as the dedicated photo
+      // routes to avoid letting a clever client bypass the per-flow limit
+      // by going through this generic endpoint.
+      if (size !== undefined && size !== null && Number(size) > MAX_FIELD_PHOTO_SIZE_BYTES) {
+        return res.status(413).json({
+          error: `Bilden är för stor. Maxgräns är ${MAX_FIELD_PHOTO_SIZE_MB} MB.`,
         });
       }
 
@@ -112,7 +117,7 @@ export function registerObjectStorageRoutes(app: Express): void {
       const tenantId = getTenantIdWithFallback(req);
       const owner = `tenant:${tenantId}`;
 
-      await objectStorageService.validateUploadedFileAndSetAcl(objectPath, owner, "private");
+      await objectStorageService.validateUploadedFileAndSetAcl(objectPath, owner, "private", MAX_FIELD_PHOTO_SIZE_BYTES);
       res.json({ confirmed: true, objectPath });
     } catch (error) {
       console.error("Error confirming upload:", error);

@@ -2088,13 +2088,14 @@ app.post("/api/portal/field/upload-photo", asyncHandler(async (req, res) => {
     if (!session) return;
 
     const { contentType, size } = req.body;
-    const { ObjectStorageService, ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES } = await import("../replit_integrations/object_storage/objectStorage");
+    const { ObjectStorageService, ALLOWED_UPLOAD_MIME_TYPES } = await import("../replit_integrations/object_storage/objectStorage");
+    const { MAX_FIELD_PHOTO_SIZE_BYTES, MAX_FIELD_PHOTO_SIZE_MB } = await import("@shared/upload-limits");
 
     if (!contentType || !ALLOWED_UPLOAD_MIME_TYPES.has(contentType)) {
       return res.status(400).json({ error: "File type not allowed. Only images and PDFs are permitted." });
     }
-    if (size !== undefined && size !== null && Number(size) > MAX_UPLOAD_SIZE_BYTES) {
-      return res.status(400).json({ error: `File too large. Maximum allowed size is ${MAX_UPLOAD_SIZE_BYTES} bytes.` });
+    if (size !== undefined && size !== null && Number(size) > MAX_FIELD_PHOTO_SIZE_BYTES) {
+      return res.status(413).json({ error: `Bilden är för stor. Maxgräns är ${MAX_FIELD_PHOTO_SIZE_MB} MB.` });
     }
 
     const objectStorageService = new ObjectStorageService();
@@ -2150,13 +2151,14 @@ app.post("/api/portal/field/confirm-photo", asyncHandler(async (req, res) => {
     }
 
     const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+    const { MAX_FIELD_PHOTO_SIZE_BYTES } = await import("@shared/upload-limits");
     const oss = new ObjectStorageService();
 
     // Validate file type server-side and bind ownership for portal customer.
     // Visibility is "private" — portal photos are only accessible via signed URLs.
     const owner = `portal:${session.tenantId}:${session.customerId}`;
     try {
-      await oss.validateUploadedFileAndSetAcl(objectPath, owner, "private");
+      await oss.validateUploadedFileAndSetAcl(objectPath, owner, "private", MAX_FIELD_PHOTO_SIZE_BYTES);
     } catch (err: any) {
       throw new ValidationError(err.message || "Fotot kunde inte verifieras i lagringen");
     }

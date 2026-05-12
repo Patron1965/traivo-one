@@ -289,7 +289,8 @@ export class ObjectStorageService {
   async validateUploadedFileAndSetAcl(
     objectPath: string,
     owner: string,
-    visibility: "public" | "private" = "private"
+    visibility: "public" | "private" = "private",
+    maxSizeBytes: number = MAX_UPLOAD_SIZE_BYTES
   ): Promise<void> {
     const objectFile = await this.getObjectEntityFile(objectPath);
     const [metadata] = await objectFile.getMetadata();
@@ -312,14 +313,15 @@ export class ObjectStorageService {
     // Server-side size enforcement using actual GCS object metadata.
     // Rejects uploads that exceed the limit even when the client lied about size.
     const storedSize = metadata.size !== undefined ? Number(metadata.size) : 0;
-    if (storedSize > MAX_UPLOAD_SIZE_BYTES) {
+    const effectiveMax = Math.min(maxSizeBytes, MAX_UPLOAD_SIZE_BYTES);
+    if (storedSize > effectiveMax) {
       try {
         await objectFile.delete();
       } catch {
         console.error(`Failed to delete oversized file at ${objectPath}`);
       }
       throw new Error(
-        `Uploaded file (${storedSize} bytes) exceeds the maximum allowed size of ${MAX_UPLOAD_SIZE_BYTES} bytes. File removed.`
+        `Uploaded file (${storedSize} bytes) exceeds the maximum allowed size of ${effectiveMax} bytes. File removed.`
       );
     }
 
