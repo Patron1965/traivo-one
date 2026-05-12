@@ -74,6 +74,7 @@ export function PhotoCapture({
   const [isUploading, setIsUploading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<PhotoCategory>("documentation");
   const [previewPhoto, setPreviewPhoto] = useState<PhotoItem | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -217,35 +218,65 @@ export function PhotoCapture({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              variant="outline"
-              className="h-auto py-3 flex-col gap-1"
-              onClick={() => cameraInputRef.current?.click()}
-              disabled={isUploading}
-              data-testid="button-take-photo"
-            >
-              {isUploading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Camera className="h-5 w-5 text-chart-1" />
-              )}
-              <span className="text-xs">Ta foto</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-auto py-3 flex-col gap-1"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              data-testid="button-upload-photo"
-            >
-              {isUploading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Upload className="h-5 w-5 text-chart-2" />
-              )}
-              <span className="text-xs">Välj bild</span>
-            </Button>
+          <div
+            className={`relative rounded-lg border-2 border-dashed p-2 transition-colors ${
+              isDragOver
+                ? "border-primary bg-primary/5"
+                : "border-transparent"
+            }`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!isUploading) setIsDragOver(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setIsDragOver(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragOver(false);
+              if (isUploading) return;
+              const file = e.dataTransfer.files?.[0];
+              if (file) uploadFile(file);
+            }}
+            data-testid="dropzone-photo-capture"
+          >
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                className="h-auto py-3 flex-col gap-1"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={isUploading}
+                data-testid="button-take-photo"
+              >
+                {isUploading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Camera className="h-5 w-5 text-chart-1" />
+                )}
+                <span className="text-xs">Ta foto</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="h-auto py-3 flex-col gap-1"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                data-testid="button-upload-photo"
+              >
+                {isUploading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Upload className="h-5 w-5 text-chart-2" />
+                )}
+                <span className="text-xs">Välj bild</span>
+              </Button>
+            </div>
+            {isDragOver && (
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center rounded-lg bg-background/85 backdrop-blur-sm">
+                <Upload className="h-6 w-6 text-primary" />
+                <p className="text-xs font-medium mt-1">Släpp foto här</p>
+              </div>
+            )}
           </div>
 
           {photos.length > 0 && (

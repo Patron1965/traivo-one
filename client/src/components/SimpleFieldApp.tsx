@@ -235,6 +235,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [changeRequestSeverity, setChangeRequestSeverity] = useState<string>("medium");
   const [changeRequestPhoto, setChangeRequestPhoto] = useState<string | null>(null);
   const [isUploadingChangePhoto, setIsUploadingChangePhoto] = useState(false);
+  const [changePhotoDragOver, setChangePhotoDragOver] = useState(false);
+  const [impossiblePhotoDragOver, setImpossiblePhotoDragOver] = useState(false);
   const [showMyReportsPanel, setShowMyReportsPanel] = useState(false);
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
 
@@ -290,6 +292,34 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     if (!res.ok) throw new Error(`Mobile API error: ${res.status}`);
     return res;
   }, [getMobileToken]);
+
+  const uploadChangeRequestPhoto = useCallback(async (
+    file: File,
+    setBusy: (b: boolean) => void,
+    setPhoto: (url: string | null) => void,
+  ) => {
+    if (!isAcceptableImage(file)) {
+      toast({ ...IMAGE_REJECT_TOAST, variant: "destructive", duration: 6000 });
+      return;
+    }
+    const effectiveContentType = getEffectiveContentType(file);
+    setBusy(true);
+    try {
+      const uploadRes = await mobileApiCall("POST", "/api/mobile/customer-change-requests/upload-photo", {});
+      const { uploadURL, objectPath } = await uploadRes.json();
+      const putRes = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": effectiveContentType } });
+      if (!putRes.ok) throw new Error("Uppladdning misslyckades");
+      const confirmRes = await mobileApiCall("POST", "/api/mobile/customer-change-requests/confirm-photo", { objectPath });
+      const { downloadURL } = await confirmRes.json();
+      setPhoto(downloadURL || objectPath);
+      toast({ title: "Foto uppladdat" });
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast({ title: "Fel vid uppladdning", description: "Kunde inte ladda upp bilden.", variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  }, [mobileApiCall, toast]);
 
   const [dismissedInstallBanner, setDismissedInstallBanner] = useState(() => {
     try {
@@ -1986,7 +2016,29 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                           </Button>
                         </div>
                       ) : (
-                        <>
+                        <div
+                          className={`relative rounded-md border-2 border-dashed transition-colors ${
+                            changePhotoDragOver
+                              ? "border-primary bg-primary/5"
+                              : "border-transparent"
+                          }`}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            if (!isUploadingChangePhoto) setChangePhotoDragOver(true);
+                          }}
+                          onDragLeave={(e) => {
+                            e.preventDefault();
+                            setChangePhotoDragOver(false);
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setChangePhotoDragOver(false);
+                            if (isUploadingChangePhoto) return;
+                            const file = e.dataTransfer.files?.[0];
+                            if (file) uploadChangeRequestPhoto(file, setIsUploadingChangePhoto, setChangeRequestPhoto);
+                          }}
+                          data-testid="dropzone-change-photo"
+                        >
                           <input
                             type="file"
                             accept="image/*"
@@ -1995,29 +2047,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                             id="change-request-photo-input"
                             onChange={async (e) => {
                               const file = e.target.files?.[0];
-                              if (file) {
-                                if (!isAcceptableImage(file)) {
-                                  toast({ ...IMAGE_REJECT_TOAST, variant: "destructive", duration: 6000 });
-                                  e.target.value = "";
-                                  return;
-                                }
-                                const effectiveContentType = getEffectiveContentType(file);
-                                setIsUploadingChangePhoto(true);
-                                try {
-                                  const uploadRes = await mobileApiCall("POST", "/api/mobile/customer-change-requests/upload-photo", {});
-                                  const { uploadURL, objectPath } = await uploadRes.json();
-                                  const putRes = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": effectiveContentType } });
-                                  if (!putRes.ok) throw new Error("Upload failed");
-                                  const confirmRes = await mobileApiCall("POST", "/api/mobile/customer-change-requests/confirm-photo", { objectPath });
-                                  const { downloadURL } = await confirmRes.json();
-                                  setChangeRequestPhoto(downloadURL || objectPath);
-                                  toast({ title: "Foto uppladdat" });
-                                } catch {
-                                  toast({ title: "Fel vid uppladdning", variant: "destructive" });
-                                } finally {
-                                  setIsUploadingChangePhoto(false);
-                                }
-                              }
+                              if (file) await uploadChangeRequestPhoto(file, setIsUploadingChangePhoto, setChangeRequestPhoto);
                               e.target.value = "";
                             }}
                             data-testid="input-change-photo"
@@ -2031,9 +2061,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                             data-testid="button-take-change-photo"
                           >
                             {isUploadingChangePhoto ? <Loader2 className="h-3 w-3 animate-spin" /> : <Camera className="h-3 w-3" />}
-                            {isUploadingChangePhoto ? "Laddar upp..." : "Ta foto"}
+                            {isUploadingChangePhoto ? "Laddar upp..." : changePhotoDragOver ? "Släpp foto här" : "Ta foto eller dra in bild"}
                           </Button>
-                        </>
+                        </div>
                       )}
                     </div>
                     <Button
@@ -2112,7 +2142,29 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                       </Button>
                     </div>
                   ) : (
-                    <div className="flex gap-2">
+                    <div
+                      className={`flex gap-2 rounded-md border-2 border-dashed p-1 transition-colors ${
+                        impossiblePhotoDragOver
+                          ? "border-primary bg-primary/5"
+                          : "border-transparent"
+                      }`}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (!isUploadingImpossiblePhoto) setImpossiblePhotoDragOver(true);
+                      }}
+                      onDragLeave={(e) => {
+                        e.preventDefault();
+                        setImpossiblePhotoDragOver(false);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setImpossiblePhotoDragOver(false);
+                        if (isUploadingImpossiblePhoto) return;
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) uploadChangeRequestPhoto(file, setIsUploadingImpossiblePhoto, setImpossiblePhoto);
+                      }}
+                      data-testid="dropzone-impossible-photo"
+                    >
                       <input
                         type="file"
                         accept="image/*"
@@ -2121,34 +2173,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                         id="impossible-photo-input"
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
-                          if (file) {
-                            if (!isAcceptableImage(file)) {
-                              toast({ ...IMAGE_REJECT_TOAST, variant: "destructive", duration: 6000 });
-                              e.target.value = "";
-                              return;
-                            }
-                            const effectiveContentType = getEffectiveContentType(file);
-                            setIsUploadingImpossiblePhoto(true);
-                            try {
-                              const uploadRes = await mobileApiCall("POST", "/api/mobile/customer-change-requests/upload-photo", {});
-                              const { uploadURL, objectPath } = await uploadRes.json();
-                              const putRes = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": effectiveContentType } });
-                              if (!putRes.ok) throw new Error("Uppladdning misslyckades");
-                              const confirmRes = await mobileApiCall("POST", "/api/mobile/customer-change-requests/confirm-photo", { objectPath });
-                              const { downloadURL } = await confirmRes.json();
-                              setImpossiblePhoto(downloadURL || objectPath);
-                              toast({ title: "Foto uppladdat" });
-                            } catch (error) {
-                              console.error("Upload error:", error);
-                              toast({ 
-                                title: "Fel vid uppladdning", 
-                                description: "Kunde inte ladda upp bilden.",
-                                variant: "destructive" 
-                              });
-                            } finally {
-                              setIsUploadingImpossiblePhoto(false);
-                            }
-                          }
+                          if (file) await uploadChangeRequestPhoto(file, setIsUploadingImpossiblePhoto, setImpossiblePhoto);
                           e.target.value = "";
                         }}
                         data-testid="input-impossible-photo"
@@ -2165,7 +2190,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                         ) : (
                           <Camera className="h-4 w-4 mr-2" />
                         )}
-                        {isUploadingImpossiblePhoto ? "Laddar upp..." : "Ta foto"}
+                        {isUploadingImpossiblePhoto ? "Laddar upp..." : impossiblePhotoDragOver ? "Släpp foto här" : "Ta foto eller dra in bild"}
                       </Button>
                     </div>
                   )}

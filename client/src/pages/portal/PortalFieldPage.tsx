@@ -128,6 +128,7 @@ export default function PortalFieldPage() {
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [gpsPosition, setGpsPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [photoDragOver, setPhotoDragOver] = useState(false);
 
   const scannerRef = useRef<any>(null);
   const scannerContainerRef = useRef<HTMLDivElement>(null);
@@ -225,10 +226,7 @@ export default function PortalFieldPage() {
     }
   }
 
-  async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  async function uploadPhotoFile(file: File) {
     if (!isAcceptableImage(file)) {
       setErrorMessage(IMAGE_REJECT_TOAST.description);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -274,6 +272,11 @@ export default function PortalFieldPage() {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  }
+
+  async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) await uploadPhotoFile(file);
   }
 
   function removePhoto(index: number) {
@@ -676,7 +679,29 @@ export default function PortalFieldPage() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Foton</label>
-              <div className="flex flex-wrap gap-2">
+              <div
+                className={`relative flex flex-wrap gap-2 rounded-lg border-2 border-dashed p-2 transition-colors ${
+                  photoDragOver
+                    ? "border-primary bg-primary/5"
+                    : "border-transparent"
+                }`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (!uploading) setPhotoDragOver(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  setPhotoDragOver(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setPhotoDragOver(false);
+                  if (uploading) return;
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) uploadPhotoFile(file);
+                }}
+                data-testid="dropzone-portal-field-photos"
+              >
                 {reportPhotos.filter(p => p.objectPath.startsWith("/objects/")).map((photo, i) => (
                   <div key={i} className="relative w-20 h-20 rounded-lg border bg-muted overflow-hidden" data-testid={`photo-${i}`}>
                     <img src={photo.displayUrl} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
