@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { MapContainer, TileLayer, Marker, useMap, Popup } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import { Marker, Popup } from "react-leaflet";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Navigation, RefreshCw, Wifi, WifiOff, Users } from "lucide-react";
-import { useMapConfig } from "@/hooks/use-map-config";
+import { Loader2, RefreshCw, Wifi, WifiOff, Users } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
+import { BaseMap, MapFitBounds, statusDivIcon, getResourceStatusColor } from "@/components/ui/map";
+
+const USER_SVG = '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>';
 
 interface ActiveResource {
   id: string;
@@ -25,52 +25,19 @@ interface LiveResourceMapProps {
   onResourceClick?: (resourceId: string) => void;
 }
 
-const createResourceIcon = (status: string, isStale: boolean) => {
-  let color = "#6b7280";
-  if (!isStale) {
-    if (status === "on_job") color = "#22c55e";
-    else if (status === "traveling") color = "#3b82f6";
-    else if (status === "break") color = "#f59e0b";
-  }
-  
-  return L.divIcon({
-    className: "custom-marker",
-    html: `<div style="
-      background-color: ${color};
-      color: white;
-      border-radius: 50%;
-      width: 36px;
-      height: 36px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: 3px solid white;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-      ${isStale ? 'opacity: 0.5;' : ''}
-    "><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>`,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
+const createResourceIcon = (status: string, isStale: boolean) =>
+  statusDivIcon({
+    color: getResourceStatusColor(status, isStale),
+    svg: USER_SVG,
+    size: 36,
+    iconPx: 18,
+    isStale,
   });
-};
-
-function MapFitBounds({ positions }: { positions: [number, number][] }) {
-  const map = useMap();
-  
-  useEffect(() => {
-    if (positions.length > 0) {
-      const bounds = L.latLngBounds(positions.map(p => L.latLng(p[0], p[1])));
-      map.fitBounds(bounds, { padding: [50, 50] });
-    }
-  }, [map, positions.length]);
-  
-  return null;
-}
 
 export function LiveResourceMap({ 
   className = "h-96",
   onResourceClick 
 }: LiveResourceMapProps) {
-  const mapConfig = useMapConfig();
   const [wsConnected, setWsConnected] = useState(false);
   const [livePositions, setLivePositions] = useState<Map<string, ActiveResource>>(new Map());
 
@@ -219,17 +186,7 @@ export function LiveResourceMap({
         </Button>
       </div>
       
-      <MapContainer
-        center={defaultCenter}
-        zoom={10}
-        style={{ height: "100%", width: "100%" }}
-        scrollWheelZoom={true}
-      >
-        <TileLayer
-          attribution={mapConfig.attribution}
-          url={mapConfig.tileUrl}
-        />
-        
+      <BaseMap center={defaultCenter} zoom={10}>
         {positions.length > 0 && <MapFitBounds positions={positions} />}
         
         {activeResources.map((resource) => {
@@ -274,7 +231,7 @@ export function LiveResourceMap({
             </Marker>
           );
         })}
-      </MapContainer>
+      </BaseMap>
     </Card>
   );
 }

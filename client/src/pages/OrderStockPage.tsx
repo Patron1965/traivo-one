@@ -36,6 +36,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { BulkActionBar } from "@/components/BulkActionBar";
+import { AssignmentDialog } from "@/components/weekplanner/BulkScheduleDialog";
+import { OrderFilterBar } from "@/components/orders/OrderFilterBar";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { WorkOrder, SimulationScenario, Customer, Article, WorkOrderLine, Team, Resource, MetadataKatalog } from "@shared/schema";
 import { formatSekFromOre } from "@/lib/format";
@@ -69,7 +71,6 @@ import {
   User,
   Database,
   X,
-  Search,
   Sparkles,
   Send,
   Mail,
@@ -489,86 +490,7 @@ export default function OrderStockPage() {
     }
   };
 
-  const batchPlanningForm = useForm<PlanningFormData>({
-    resolver: zodResolver(planningFormSchema),
-    defaultValues: { teamId: "", resourceId: "", scheduledDate: "" },
-  });
-
-  const batchPlanningMutation = useMutation({
-    mutationFn: async ({ orderIds, data }: { orderIds: string[]; data: PlanningFormData }) => {
-      const baseUpdates: Record<string, any> = {};
-      if (data.teamId) baseUpdates.teamId = data.teamId;
-      if (data.resourceId) baseUpdates.resourceId = data.resourceId;
-      if (data.scheduledDate) baseUpdates.scheduledDate = new Date(data.scheduledDate);
-
-      const ordersById = new Map(displayOrders.map(o => [o.id, o]));
-      const lockedStatuses: OrderStatus[] = ["planerad_las", "utford", "fakturerad", "omojlig"];
-
-      let success = 0;
-      let failed = 0;
-      let locked = 0;
-      for (const id of orderIds) {
-        try {
-          const existing = ordersById.get(id);
-          const updates: Record<string, any> = { ...baseUpdates };
-
-          // Compute final state by combining new values with existing ones,
-          // so batch planning advances status the same way single planning does
-          // (where the dialog pre-fills with existing values).
-          const finalResourceId = data.resourceId || existing?.resourceId;
-          const finalTeamId = data.teamId || existing?.teamId;
-          const currentStatus = (existing?.orderStatus || "skapad") as OrderStatus;
-          const isLocked = lockedStatuses.includes(currentStatus);
-
-          if (!isLocked) {
-            if (finalResourceId) {
-              updates.orderStatus = "planerad_resurs";
-            } else if (finalTeamId) {
-              updates.orderStatus = "planerad_pre";
-            }
-          }
-
-          await apiRequest("PATCH", `/api/work-orders/${id}`, updates);
-          success++;
-          if (isLocked) locked++;
-        } catch {
-          failed++;
-        }
-      }
-      return { success, failed, locked };
-    },
-    onSuccess: ({ success, failed, locked }) => {
-      const descriptionParts: string[] = [];
-      if (locked > 0) {
-        descriptionParts.push(
-          `${locked} låsta ordrar fick uppdaterade fält men behöll sin status`
-        );
-      }
-      if (failed > 0) {
-        descriptionParts.push(`${failed} kunde inte uppdateras`);
-      }
-      toast({
-        title: `${success} ordrar planerade`,
-        description: descriptionParts.length > 0 ? descriptionParts.join(". ") : undefined,
-        variant: failed > 0 ? "destructive" : "default",
-      });
-      setShowBatchPlanningDialog(false);
-      batchPlanningForm.reset();
-      setSelectedIds(new Set());
-      queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
-    },
-    onError: () => {
-      toast({ title: tl("toast.planning-error"), variant: "destructive" });
-    },
-  });
-
-  const onBatchPlanningSubmit = (data: PlanningFormData) => {
-    const orderIds = Array.from(selectedIds);
-    if (orderIds.length > 0) {
-      batchPlanningMutation.mutate({ orderIds, data });
-    }
-  };
+  // Batch planning is handled by the unified <AssignmentDialog /> below.
 
   const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c])), [customers]);
   const objectMap = useMemo(() => new Map(objects.map(o => [o.id, o])), [objects]);
@@ -937,14 +859,13 @@ export default function OrderStockPage() {
               <Filter className="h-5 w-5" />
               {tl("page.orderstock.order-list-title")}
             </CardTitle>
-            <div className="relative max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
+            <div className="max-w-sm w-full">
+              <OrderFilterBar
+                search={searchTerm}
+                onSearchChange={handleSearchChange}
                 placeholder={tl("page.orderstock.search")}
-                value={searchTerm}
-                onChange={e => handleSearchChange(e.target.value)}
-                className="pl-9"
-                data-testid="input-search-orders"
+                testIdPrefix="search-orders"
+                searchTestId="input-search-orders"
               />
             </div>
           </div>
@@ -992,7 +913,6 @@ export default function OrderStockPage() {
             size="sm"
             variant="outline"
             onClick={() => {
-              batchPlanningForm.reset({ teamId: "", resourceId: "", scheduledDate: "" });
               setShowBatchPlanningDialog(true);
             }}
             data-testid="button-batch-plan"
@@ -1409,102 +1329,19 @@ export default function OrderStockPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showBatchPlanningDialog} onOpenChange={setShowBatchPlanningDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CalendarPlus className="h-5 w-5" />
-              Batch Planera
-            </DialogTitle>
-            <DialogDescription>
-              Tilldela datum, team och resurs till {selectedIds.size} valda ordrar samtidigt.
-            </DialogDescription>
-          </DialogHeader>
-          <Form {...batchPlanningForm}>
-            <form onSubmit={batchPlanningForm.handleSubmit(onBatchPlanningSubmit)} className="space-y-4">
-              <div className="rounded-md bg-muted p-3 text-sm">
-                <span className="font-medium">{selectedIds.size}</span> ordrar valda
-              </div>
-
-              <FormField
-                control={batchPlanningForm.control}
-                name="scheduledDate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Datum</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} data-testid="input-batch-planning-date" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={batchPlanningForm.control}
-                name="teamId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{tl("page.orderstock.team-pre-plan")}</FormLabel>
-                    <Select value={field.value || "none"} onValueChange={(val) => field.onChange(val === "none" ? "" : val)}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-batch-planning-team">
-                          <SelectValue placeholder={tl("page.orderstock.select-team")} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">{tl("page.orderstock.no-team")}</SelectItem>
-                        {teams.map((team) => (
-                          <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={batchPlanningForm.control}
-                name="resourceId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{tl("page.orderstock.resource-detail")}</FormLabel>
-                    <Select value={field.value || "none"} onValueChange={(val) => field.onChange(val === "none" ? "" : val)}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-batch-planning-resource">
-                          <SelectValue placeholder={tl("page.orderstock.select-resource")} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">{tl("page.orderstock.no-resource")}</SelectItem>
-                        {resources.map((resource) => (
-                          <SelectItem key={resource.id} value={resource.id}>{resource.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setShowBatchPlanningDialog(false)}>
-                  Avbryt
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={batchPlanningMutation.isPending}
-                  data-testid="button-save-batch-planning"
-                >
-                  {batchPlanningMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  Planera {selectedIds.size} ordrar
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+      <AssignmentDialog
+        open={showBatchPlanningDialog}
+        onOpenChange={setShowBatchPlanningDialog}
+        workOrderIds={Array.from(selectedIds)}
+        jobs={displayOrders.filter(o => selectedIds.has(o.id))}
+        resources={resources}
+        teams={teams}
+        onSuccess={() => {
+          setShowBatchPlanningDialog(false);
+          setSelectedIds(new Set());
+          queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
+        }}
+      />
 
       <Dialog open={showLinesDialog} onOpenChange={(open) => !open && handleCloseLinesDialog()}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">

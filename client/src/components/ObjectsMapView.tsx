@@ -1,10 +1,10 @@
 import { Fragment, memo, useMemo, useState, useCallback, useEffect } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polygon, Polyline, useMap, useMapEvents } from "react-leaflet";
+import { Marker, Popup, Polygon, Polyline, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { DoorOpen, Key, Keyboard, Users, PenTool, Save, Undo, X, MapPin, Check, FolderPlus } from "lucide-react";
 import type { ServiceObject, Cluster } from "@shared/schema";
-import { useMapConfig } from "@/hooks/use-map-config";
+import { BaseMap, getAccessColor as sharedGetAccessColor } from "@/components/ui/map";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -32,15 +32,7 @@ const accessTypeLabels: Record<string, { label: string; icon: typeof Key }> = {
   meeting: { label: "Personligt möte", icon: Users },
 };
 
-const getAccessColor = (type: string) => {
-  switch (type) {
-    case "open": return "#22c55e";
-    case "code": return "#3b82f6";
-    case "key": return "#f97316";
-    case "meeting": return "#ef4444";
-    default: return "#6b7280";
-  }
-};
+const getAccessColor = sharedGetAccessColor;
 
 const createAccessIcon = (accessType: string) => {
   const color = getAccessColor(accessType);
@@ -156,7 +148,6 @@ export function BatchGeoMapFitter({ objects }: { objects: ServiceObject[] }) {
 }
 
 export const GeocodedObjectsMap = memo(function GeocodedObjectsMap({ objects }: { objects: Array<{ id: string; name: string; address?: string | null; latitude?: number | null; longitude?: number | null; entranceLatitude?: number | null; entranceLongitude?: number | null }> }) {
-  const mapConfig = useMapConfig();
   const validObjects = objects.filter(o => o.latitude && o.longitude);
   if (validObjects.length === 0) return null;
 
@@ -173,15 +164,7 @@ export const GeocodedObjectsMap = memo(function GeocodedObjectsMap({ objects }: 
         </div>
       </div>
       <div className="rounded-lg overflow-hidden border" style={{ height: "420px" }}>
-        <MapContainer
-          center={[62.39, 17.31]}
-          zoom={12}
-          style={{ height: "100%", width: "100%" }}
-        >
-          <TileLayer
-            attribution={mapConfig.attribution}
-            url={mapConfig.tileUrl}
-          />
+        <BaseMap center={[62.39, 17.31]} zoom={12}>
           <BatchGeoMapFitter objects={validObjects as any} />
           {validObjects.map((obj) => (
             <Fragment key={obj.id}>
@@ -226,7 +209,7 @@ export const GeocodedObjectsMap = memo(function GeocodedObjectsMap({ objects }: 
               )}
             </Fragment>
           ))}
-        </MapContainer>
+        </BaseMap>
       </div>
     </div>
   );
@@ -360,7 +343,6 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
   defaultCenter: [number, number];
   selectedObjectIds?: Set<string>;
 }) {
-  const mapConfig = useMapConfig();
   const { toast } = useToast();
   const [drawing, setDrawing] = useState(false);
   const [points, setPoints] = useState<L.LatLng[]>([]);
@@ -582,16 +564,11 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
       )}
       <div className="h-[500px]">
         <div className="p-0 h-full relative">
-          <MapContainer
+          <BaseMap
             center={defaultCenter}
             zoom={13}
-            style={{ height: "100%", width: "100%", cursor: drawing && !showClusterPanel ? "crosshair" : "" }}
-            scrollWheelZoom={true}
+            style={{ cursor: drawing && !showClusterPanel ? "crosshair" : "" }}
           >
-            <TileLayer
-              attribution={mapConfig.attribution}
-              url={mapConfig.tileUrl}
-            />
             <DrawToggleControl active={drawing} onClick={handleToggleDraw} />
             {drawing && !showClusterPanel && <DrawClickHandler onAddPoint={handleAddPoint} />}
             {!drawing && mapPositions.length > 0 && <MapFitBounds positions={mapPositions} />}
@@ -663,7 +640,7 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
             {drawing && points.map((point, idx) => (
               <Marker key={`vertex-${idx}`} position={[point.lat, point.lng]} icon={vertexIcon} />
             ))}
-          </MapContainer>
+          </BaseMap>
           <div className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-sm rounded-md shadow-md p-3 space-y-1.5 z-[1000]">
             <div className="text-xs font-medium">Tillgångstyp</div>
             {Object.entries(accessTypeLabels).map(([key, config]) => (

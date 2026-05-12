@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { OrderFilterBar } from "@/components/orders/OrderFilterBar";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -590,14 +591,13 @@ export default function OrderConceptsPage() {
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
+        <div className="flex-1 max-w-sm">
+          <OrderFilterBar
+            search={searchTerm}
+            onSearchChange={setSearchTerm}
             placeholder="Sök orderkoncept..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-            data-testid="input-search-concepts"
+            testIdPrefix="search-concepts"
+            searchTestId="input-search-concepts"
           />
         </div>
         <Button onClick={() => navigate("/order-concepts/new")} data-testid="button-add-concept">

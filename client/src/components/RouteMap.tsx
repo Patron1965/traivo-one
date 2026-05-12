@@ -8,78 +8,19 @@ import { MapPin, Clock, Car, ArrowRight, Route, GripVertical, Loader2, Key, Keyb
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, startOfDay, endOfDay, addDays, startOfWeek, endOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import { Marker, Popup, Polyline } from "react-leaflet";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
-import { useMapConfig } from "@/hooks/use-map-config";
+import { BaseMap, MapFitBounds, numberedDivIcon, entranceDivIcon, getAccessColor } from "@/components/ui/map";
 import type { Resource, WorkOrderWithObject, ServiceObject } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { haversineDistanceKm } from "@/lib/geo";
 
-const createNumberedIcon = (number: number, color: string, stackCount?: number) => {
-  const badge = stackCount && stackCount > 1
-    ? `<div style="
-        position: absolute;
-        top: -6px;
-        right: -8px;
-        background-color: #ef4444;
-        color: white;
-        border-radius: 50%;
-        width: 16px;
-        height: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 9px;
-        font-weight: bold;
-        border: 1.5px solid white;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.3);
-      ">${stackCount}</div>`
-    : "";
-  return L.divIcon({
-    className: "custom-marker",
-    html: `<div style="
-      position: relative;
-      background-color: ${color};
-      color: white;
-      border-radius: 50%;
-      width: 28px;
-      height: 28px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-      font-size: 12px;
-      border: 2px solid white;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-    ">${number}${badge}</div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-  });
-};
+const createNumberedIcon = (number: number, color: string, stackCount?: number) =>
+  numberedDivIcon({ number, color, size: 28, badge: stackCount });
 
-const createEntranceIcon = () => {
-  return L.divIcon({
-    className: "entrance-marker",
-    html: `<div style="
-      background-color: #22c55e;
-      color: white;
-      border-radius: 4px;
-      width: 20px;
-      height: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: 2px solid white;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-    "><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/></svg></div>`,
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
-  });
-};
+const createEntranceIcon = () => entranceDivIcon(20);
 
 const getSetupTimeColor = (minutes: number) => {
   if (minutes < 10) return "#22c55e";
@@ -87,15 +28,8 @@ const getSetupTimeColor = (minutes: number) => {
   return "#ef4444";
 };
 
-const getAccessTypeColor = (accessType: string) => {
-  switch (accessType) {
-    case "open": return "#22c55e"; // green
-    case "code": return "#3b82f6"; // blue
-    case "key": return "#f97316"; // orange
-    case "meeting": return "#a855f7"; // purple
-    default: return "#6b7280"; // gray
-  }
-};
+// Re-export so call-sites (and the access legend) keep working.
+const getAccessTypeColor = getAccessColor;
 
 const accessTypeLabels: Record<string, { label: string; icon: typeof Key }> = {
   open: { label: "Öppen", icon: DoorOpen },
@@ -103,23 +37,6 @@ const accessTypeLabels: Record<string, { label: string; icon: typeof Key }> = {
   key: { label: "Nyckel", icon: Key },
   meeting: { label: "Möte", icon: Users },
 };
-
-interface MapFitBoundsProps {
-  positions: [number, number][];
-}
-
-function MapFitBounds({ positions }: MapFitBoundsProps) {
-  const map = useMap();
-  
-  useEffect(() => {
-    if (positions.length > 0) {
-      const bounds = L.latLngBounds(positions.map(p => L.latLng(p[0], p[1])));
-      map.fitBounds(bounds, { padding: [50, 50] });
-    }
-  }, [map, positions.length]);
-  
-  return null;
-}
 
 interface RouteMapProps {
   onNavigate?: (jobId: string) => void;
@@ -133,7 +50,6 @@ interface RouteData {
 }
 
 export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
-  const mapConfig = useMapConfig();
   const [selectedResource, setSelectedResource] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     if (initialDate) {
@@ -574,17 +490,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
 
       <Card className="flex-1 overflow-hidden">
         <CardContent className="p-0 h-full relative">
-          <MapContainer
-            center={defaultCenter}
-            zoom={13}
-            style={{ height: "100%", width: "100%" }}
-            scrollWheelZoom={true}
-          >
-            <TileLayer
-              attribution={mapConfig.attribution}
-              url={mapConfig.tileUrl}
-            />
-            
+          <BaseMap center={defaultCenter} zoom={13}>
             {jobPositions.length > 0 && <MapFitBounds positions={jobPositions} />}
             
             {routeData?.geometry && routeData.geometry.coordinates ? (
@@ -736,7 +642,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                 </Fragment>
               );
             })}
-          </MapContainer>
+          </BaseMap>
           
         </CardContent>
       </Card>

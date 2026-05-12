@@ -7,55 +7,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Coffee, Loader2, LocateFixed, Send, Truck } from "lucide-react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
+import { Marker, Popup, Polyline } from "react-leaflet";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject, Customer } from "@shared/schema";
 import { calculateTravelTime, haversineDistance } from "./types";
 import { SortableRouteItem } from "./DndComponents";
-import { useMapConfig } from "@/hooks/use-map-config";
+import { BaseMap, MapFitBounds, numberedDivIcon, breakDivIcon, getRouteSegmentColor } from "@/components/ui/map";
 import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 
 // Hämta jobbets effektiva koordinater: task_latitude/longitude med fallback till objektets
 function jobCoords(j: WorkOrderWithObject): { lat: number; lng: number } | null {
   const lat = j.taskLatitude ?? j.objectLatitude;
   const lng = j.taskLongitude ?? j.objectLongitude;
   return lat != null && lng != null ? { lat, lng } : null;
-}
-
-function MapInvalidateSize() {
-  const map = useMap();
-  useEffect(() => {
-    map.invalidateSize();
-    const t1 = setTimeout(() => map.invalidateSize(), 100);
-    const t2 = setTimeout(() => map.invalidateSize(), 400);
-    const container = map.getContainer();
-    let observer: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== "undefined") {
-      observer = new ResizeObserver(() => map.invalidateSize());
-      observer.observe(container);
-    }
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      observer?.disconnect();
-    };
-  }, [map]);
-  return null;
-}
-
-function MapFitBounds({ bounds }: { bounds: L.LatLngBoundsExpression | null }) {
-  const map = useMap();
-  useEffect(() => {
-    if (bounds) {
-      setTimeout(() => {
-        map.invalidateSize();
-        map.fitBounds(bounds, { padding: [50, 50] });
-      }, 50);
-    }
-  }, [bounds, map]);
-  return null;
 }
 
 export interface VRPBreakStop {
@@ -92,7 +57,6 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
     vrpBreaks,
   } = props;
 
-  const mapConfig = useMapConfig();
   const fetchAbortRef = useRef<AbortController | null>(null);
 
   const orderedJobs = useMemo(() => {
@@ -353,16 +317,11 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
             <span className="text-xs text-muted-foreground">Laddar väggeometri...</span>
           </div>
         )}
-        <MapContainer
+        <BaseMap
           center={[59.33, 18.07]}
           zoom={10}
-          style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }}
+          style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1, height: "auto", width: "auto" }}
         >
-          <MapInvalidateSize />
-          <TileLayer
-            attribution={mapConfig.attribution}
-            url={mapConfig.tileUrl}
-          />
           {mapBounds && <MapFitBounds bounds={mapBounds} />}
           {routePolyline.length > 1 && (
             <Polyline
@@ -378,15 +337,8 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
           {orderedJobs.map((job, index) => {
             const c = jobCoords(job);
             if (!c) return null;
-            const isFirst = index === 0;
-            const isLast = index === orderedJobs.length - 1;
-            const color = isFirst ? "#22C55E" : isLast ? "#EF4444" : "#3B82F6";
-            const icon = L.divIcon({
-              className: "custom-div-icon",
-              html: `<div style="background:${color};color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.3)">${index + 1}</div>`,
-              iconSize: [24, 24],
-              iconAnchor: [12, 12],
-            });
+            const color = getRouteSegmentColor(index, orderedJobs.length);
+            const icon = numberedDivIcon({ number: index + 1, color, size: 24 });
             return (
               <Marker key={job.id} position={[c.lat, c.lng]} icon={icon}>
                 <Popup>
@@ -412,12 +364,7 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
           {(vrpBreaks || []).map((brk) => {
             if (!brk.location.lat || !brk.location.lng) return null;
             const breakTime = brk.arrivalSeconds ? `${Math.floor(brk.arrivalSeconds / 3600).toString().padStart(2,"0")}:${Math.floor((brk.arrivalSeconds % 3600) / 60).toString().padStart(2,"0")}` : "";
-            const breakIcon = L.divIcon({
-              className: "custom-div-icon",
-              html: `<div style="background:#F59E0B;color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.3)">☕</div>`,
-              iconSize: [28, 28],
-              iconAnchor: [14, 14],
-            });
+            const breakIcon = breakDivIcon(28);
             return (
               <Marker key={brk.orderId} position={[brk.location.lat, brk.location.lng]} icon={breakIcon}>
                 <Popup>
@@ -430,7 +377,7 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
               </Marker>
             );
           })}
-        </MapContainer>
+        </BaseMap>
       </div>
     </div>
   );

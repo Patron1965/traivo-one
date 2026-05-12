@@ -14,7 +14,8 @@ import { zoomLevels } from "./weekplanner/types";
 import { DroppableCell, DraggableJobCard } from "./weekplanner/DndComponents";
 import { JobCard, DragOverlayContent } from "./weekplanner/JobCard";
 import { UnscheduledSidebar } from "./weekplanner/UnscheduledSidebar";
-import { AssignDialog, SendScheduleDialog, BulkSendScheduleDialog, ConflictDialog, ClearDialog, AutoFillDialog, DepChainDialog, ConflictListDialog } from "./weekplanner/PlannerDialogs";
+import { SendScheduleDialog, BulkSendScheduleDialog, ConflictDialog, ClearDialog, AutoFillDialog, DepChainDialog, ConflictListDialog } from "./weekplanner/PlannerDialogs";
+import { AssignmentDialog } from "./weekplanner/BulkScheduleDialog";
 import { PlannerToolbar, PlannerFooter } from "./weekplanner/PlannerToolbar";
 import { PlannerAreaSearchPanel } from "./weekplanner/PlannerAreaSearchPanel";
 import { BulkScheduleDialog } from "./weekplanner/BulkScheduleDialog";
@@ -778,7 +779,19 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
         {d.activeDragJob && <DragOverlayContent job={d.activeDragJob} timewindowMap={d.timewindowMap} />}
       </DragOverlay>
 
-      <AssignDialog open={d.assignDialogOpen} onOpenChange={(v) => { d.setAssignDialogOpen(v); if (!v) { d.setAssignResourceId(null); d.setAssignTeamId(null); } }} jobToAssign={d.jobToAssign} assignDate={d.assignDate} setAssignDate={d.setAssignDate} assignResourceId={d.assignResourceId} setAssignResourceId={d.setAssignResourceId} assignTeamId={d.assignTeamId} setAssignTeamId={d.setAssignTeamId} resources={d.resources} teams={d.teamsData} onConfirm={d.handleQuickAssign} isPending={d.updateWorkOrderMutation.isPending || d.assignTeamMutation.isPending} />
+      <AssignmentDialog
+        open={d.assignDialogOpen}
+        onOpenChange={(v) => { d.setAssignDialogOpen(v); if (!v) { d.setAssignResourceId(null); d.setAssignTeamId(null); } }}
+        workOrderIds={d.jobToAssign ? [d.jobToAssign.id] : []}
+        jobs={d.jobToAssign ? [d.jobToAssign] : []}
+        resources={d.resources}
+        teams={d.teamsData}
+        prefill={d.jobToAssign ? { date: d.assignDate, target: "resource", resourceId: null, teamId: null } : null}
+        recommendationContext={d.jobToAssign ? { objectId: d.jobToAssign.objectId, clusterId: d.jobToAssign.clusterId } : null}
+        title="Tilldela resurs"
+        description={d.jobToAssign ? `Välj resurs och datum för: ${d.jobToAssign.title}` : undefined}
+        onSuccess={() => { d.setAssignDialogOpen(false); d.setAssignResourceId(null); d.setAssignTeamId(null); }}
+      />
       <SendScheduleDialog
         open={d.sendScheduleDialogOpen}
         onOpenChange={d.setSendScheduleDialogOpen}

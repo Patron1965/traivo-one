@@ -2,12 +2,11 @@ import { memo, useState, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Inbox, AlertTriangle, Clock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, X, UserPlus, Key, DoorOpen, Filter, XCircle, Loader2, Sparkles, CheckCircle2, CalendarRange, Info, Calendar as CalendarIcon, Target } from "lucide-react";
+import { Inbox, AlertTriangle, Clock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, X, UserPlus, Key, DoorOpen, Loader2, Sparkles, CheckCircle2, CalendarRange, Info, Calendar as CalendarIcon, Target } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { format, addDays, startOfWeek, getISOWeek } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -18,6 +17,7 @@ import type { AssignSlot } from "./usePlannerSync";
 import { DraggableJobCard } from "./DndComponents";
 import { JobCardExpandPanel } from "./JobCardExpandPanel";
 import { apiRequest } from "@/lib/queryClient";
+import { OrderFilterBar } from "@/components/orders/OrderFilterBar";
 import { useToast } from "@/hooks/use-toast";
 
 const EXPANDED_STORAGE_KEY = "traivo:orderlager:expanded";
@@ -275,41 +275,17 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
               {sidebarQuickStats.totalHours}h totalt
             </Badge>
           </div>
-          <Input
-            placeholder="Sök jobb, objekt, kund..."
-            value={orderstockSearch}
-            onChange={(e) => setOrderstockSearch(e.target.value)}
-            className="h-8 text-xs"
-            data-testid="input-orderstock-search"
+          <OrderFilterBar
+            search={orderstockSearch}
+            onSearchChange={setOrderstockSearch}
+            density="compact"
+            filtersOpen={sidebarFiltersOpen}
+            onToggleFilters={() => setSidebarFiltersOpen(!sidebarFiltersOpen)}
+            activeFilterCount={sidebarActiveFilterCount}
+            onClearFilters={clearAllSidebarFilters}
+            testIdPrefix="sidebar"
+            searchTestId="input-orderstock-search"
           />
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 flex-1"
-              onClick={() => setSidebarFiltersOpen(!sidebarFiltersOpen)}
-              data-testid="button-toggle-sidebar-filters"
-            >
-              <Filter className="h-3.5 w-3.5" />
-              Filter
-              {sidebarActiveFilterCount > 0 && (
-                <Badge variant="secondary" className="text-xs rounded-full">
-                  {sidebarActiveFilterCount}
-                </Badge>
-              )}
-              {sidebarFiltersOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            </Button>
-            {sidebarActiveFilterCount > 0 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" onClick={clearAllSidebarFilters} data-testid="button-clear-sidebar-filters">
-                    <XCircle className="h-4 w-4 text-muted-foreground" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Rensa alla filter</TooltipContent>
-              </Tooltip>
-            )}
-          </div>
           {sidebarActiveFilterCount > 0 && (
             <div className="flex items-center gap-1 flex-wrap" data-testid="sidebar-active-filters">
               {filterCustomer !== "all" && (

@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,11 +7,19 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertTriangle, CalendarClock, CheckCircle2, Loader2, Lock, ShieldAlert, XCircle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { AlertTriangle, CalendarClock, CheckCircle2, Loader2, Lock, ShieldAlert, Sparkles, XCircle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import type { Resource, WorkOrderWithObject } from "@shared/schema";
+
+type ResourceMatch = { resourceId: string; resourceName: string; score: number; reasons: string[]; clusterMatch: boolean };
+
+export interface AssignmentRecommendationContext {
+  objectId?: string | null;
+  clusterId?: string | null;
+}
 
 interface BulkScheduleResult {
   workOrderId: string;
@@ -40,15 +48,21 @@ interface BulkScheduleDialogProps {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   workOrderIds: string[];
-  jobs: WorkOrderWithObject[];
+  /** Only `id` + `title` are used to render conflict rows; pass any work-order shape that exposes them. */
+  jobs: Array<Pick<WorkOrderWithObject, "id" | "title">>;
   resources: Resource[];
   teams: Array<{ id: string; name: string }>;
   onSuccess: () => void;
   prefill?: BulkSchedulePrefill | null;
+  /** Optional cluster/object context for resource-match recommendations (single-order mode). */
+  recommendationContext?: AssignmentRecommendationContext | null;
+  /** Override dialog title (e.g. "Tilldela resurs" for single-order mode). */
+  title?: string;
+  description?: string;
 }
 
 export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkScheduleDialogProps) {
-  const { open, onOpenChange, workOrderIds, jobs, resources, teams, onSuccess, prefill } = props;
+  const { open, onOpenChange, workOrderIds, jobs, resources, teams, onSuccess, prefill, recommendationContext, title, description } = props;
   const { toast } = useToast();
   const [target, setTarget] = useState<"resource" | "team">("resource");
   const [resourceId, setResourceId] = useState<string>("");
@@ -79,6 +93,38 @@ export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkSc
 
   const jobMap = useMemo(() => new Map(jobs.map(j => [j.id, j])), [jobs]);
 
+  // Cluster-match recommendation (single-order assignment mode)
+  const matchQueryParam = recommendationContext?.clusterId
+    ? `clusterId=${recommendationContext.clusterId}`
+    : recommendationContext?.objectId
+      ? `objectId=${recommendationContext.objectId}`
+      : null;
+  const { data: matchData } = useQuery<{ matches: ResourceMatch[]; noMatch: boolean; clusterName: string | null }>({
+    queryKey: ["/api/clusters/resource-match", matchQueryParam],
+    queryFn: async () => {
+      if (!matchQueryParam) return { matches: [], noMatch: false, clusterName: null };
+      const res = await fetch(`/api/clusters/resource-match?${matchQueryParam}`, { credentials: "include" });
+      if (!res.ok) return { matches: [], noMatch: false, clusterName: null };
+      return res.json();
+    },
+    enabled: open && !!matchQueryParam,
+    staleTime: 30000,
+  });
+  const matchScoreMap = useMemo(() => {
+    const map = new Map<string, ResourceMatch>();
+    if (matchData?.matches) for (const m of matchData.matches) map.set(m.resourceId, m);
+    return map;
+  }, [matchData]);
+  const sortedResources = useMemo(() => {
+    if (!matchScoreMap.size) return resources;
+    return [...resources].sort((a, b) => {
+      const aScore = matchScoreMap.get(a.id)?.score ?? 50;
+      const bScore = matchScoreMap.get(b.id)?.score ?? 50;
+      if (bScore !== aScore) return bScore - aScore;
+      return a.name.localeCompare(b.name);
+    });
+  }, [resources, matchScoreMap]);
+
   const mutation = useMutation({
     mutationFn: async (vars: { force: boolean; ids?: string[] }) => {
       const ids = vars.ids && vars.ids.length > 0 ? vars.ids : workOrderIds;
@@ -95,6 +141,7 @@ export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkSc
       return { data: json, isPartial: !!vars.ids && vars.ids.length > 0 };
     },
     onSuccess: ({ data, isPartial }) => {
+      let mergedSummary = data.summary;
       setResults(prev => {
         if (!prev || !isPartial) return data;
         // Merge per-row retry results into existing state
@@ -107,19 +154,31 @@ export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkSc
           blocked: merged.filter(r => r.status === "blocked").length,
           error: merged.filter(r => r.status === "error").length,
         };
+        mergedSummary = summary;
         return { results: merged, summary };
       });
       queryClient.invalidateQueries({ queryKey: ["/api/v1/work-orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/alerts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/planner/area-search"] });
+      // Also refresh OrderStock so successful rows disappear from the batch
+      // page even when the user keeps the dialog open to retry conflicts.
+      queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
       if (data.summary.scheduled > 0) {
         toast({
           title: "Bulk-schemaläggning klar",
           description: `${data.summary.scheduled} av ${data.summary.total} order schemalagda${data.summary.conflict ? ` (${data.summary.conflict} konflikter)` : ""}${data.summary.blocked ? ` (${data.summary.blocked} blockerade)` : ""}.`,
         });
-        // Defer selection clearing until dialog is closed so a follow-up
-        // force-retry on remaining conflicts still has the original IDs.
+        // Notify parent (close dialog, clear selections) when there's nothing
+        // left to retry. If conflicts/blocked rows remain, keep the dialog open
+        // so the user can resolve them via per-row force/skip controls.
+        const noOutstanding =
+          mergedSummary.conflict === 0 &&
+          mergedSummary.blocked === 0 &&
+          mergedSummary.error === 0;
+        if (noOutstanding) {
+          onSuccess();
+        }
       } else if (data.summary.scheduled === 0 && data.summary.conflict + data.summary.blocked + data.summary.error > 0) {
         toast({
           title: "Inga order schemalagda",
@@ -155,10 +214,10 @@ export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkSc
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CalendarClock className="h-5 w-5 text-primary" />
-            Schemalägg {workOrderIds.length} order
+            {title ?? `Schemalägg ${workOrderIds.length} order`}
           </DialogTitle>
           <DialogDescription>
-            Välj datum och resurs eller team. Konflikter visas innan de schemaläggs.
+            {description ?? "Välj datum och resurs eller team. Konflikter visas innan de schemaläggs."}
           </DialogDescription>
         </DialogHeader>
 
@@ -190,16 +249,40 @@ export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkSc
             {target === "resource" ? (
               <div className="space-y-1.5">
                 <Label htmlFor="bulk-resource">Resurs</Label>
+                {matchData?.noMatch && matchData?.clusterName && (
+                  <div className="flex items-center gap-2 p-2 rounded-md bg-warning/10 border border-warning/20" data-testid="no-cluster-match-warning">
+                    <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
+                    <span className="text-xs text-warning">Ingen resurs matchar klustret <strong>{matchData.clusterName}</strong>.</span>
+                  </div>
+                )}
                 <Select value={resourceId} onValueChange={setResourceId}>
                   <SelectTrigger id="bulk-resource" data-testid="select-bulk-resource">
                     <SelectValue placeholder="Välj resurs" />
                   </SelectTrigger>
                   <SelectContent>
-                    {resources.map(r => (
-                      <SelectItem key={r.id} value={r.id} data-testid={`option-bulk-resource-${r.id}`}>
-                        {r.name}
-                      </SelectItem>
-                    ))}
+                    {sortedResources.map(r => {
+                      const matchInfo = matchScoreMap.get(r.id);
+                      const isMatch = matchInfo?.clusterMatch;
+                      return (
+                        <SelectItem key={r.id} value={r.id} data-testid={`option-bulk-resource-${r.id}`}>
+                          <span className="flex items-center gap-2">
+                            {r.name}
+                            {isMatch && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] text-chart-2" data-testid={`badge-recommended-${r.id}`}>
+                                    <Sparkles className="h-3 w-3" />Rek.
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {matchInfo?.reasons?.join(" · ") || `Resursen verkar i samma kluster (${matchData?.clusterName})`}
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -260,8 +343,9 @@ export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkSc
             )}
 
             <div className="text-xs text-muted-foreground rounded border bg-muted/30 p-2.5">
-              {workOrderIds.length} order kommer att kontrolleras mot konflikter (kapacitet, kluster, körschema, beroenden).
-              Konflikter kan accepteras manuellt i nästa steg.
+              {workOrderIds.length === 1
+                ? "Ordern kontrolleras mot konflikter (kapacitet, kluster, körschema, beroenden) innan tilldelning."
+                : `${workOrderIds.length} order kommer att kontrolleras mot konflikter (kapacitet, kluster, körschema, beroenden). Konflikter kan accepteras manuellt i nästa steg.`}
             </div>
           </div>
         )}
@@ -381,7 +465,7 @@ export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkSc
               data-testid="button-bulk-schedule-submit"
             >
               {mutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CalendarClock className="h-4 w-4 mr-2" />}
-              Schemalägg {workOrderIds.length}
+              {workOrderIds.length === 1 ? "Tilldela" : `Schemalägg ${workOrderIds.length}`}
             </Button>
           )}
           {results && hasRetryableConflicts && (
@@ -403,3 +487,11 @@ export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkSc
     </Dialog>
   );
 });
+
+/**
+ * AssignmentDialog is the canonical name for the unified 1..N order
+ * scheduling/assignment dialog. It is identical to BulkScheduleDialog and
+ * supports a single-order recommendation context for cluster-match hints.
+ */
+export const AssignmentDialog = BulkScheduleDialog;
+export type AssignmentDialogProps = BulkScheduleDialogProps;

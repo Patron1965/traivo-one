@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { MapContainer, TileLayer, Marker, Polyline, Popup, CircleMarker, useMap } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import { Marker, Polyline, Popup, CircleMarker } from "react-leaflet";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Maximize2, Minimize2, X, AlertTriangle, Clock, MapPin } from "lucide-react";
-import { useMapConfig } from "@/hooks/use-map-config";
+import { BaseMap, MapFitBounds, numberedDivIcon, getRouteSegmentColor, getClusterColor, CLUSTER_COLOR_PALETTE } from "@/components/ui/map";
 
 interface RouteStop {
   workOrderId: string;
@@ -44,45 +42,10 @@ interface OptimizedRouteMapProps {
   showClusters?: boolean;
 }
 
-const CLUSTER_COLORS = [
-  "#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6",
-  "#ec4899", "#14b8a6", "#f97316", "#6366f1", "#84cc16",
-];
+const CLUSTER_COLORS = CLUSTER_COLOR_PALETTE;
 
-const createNumberedIcon = (number: number, color: string) => {
-  return L.divIcon({
-    className: "custom-marker",
-    html: `<div style="
-      background-color: ${color};
-      color: white;
-      border-radius: 50%;
-      width: 24px;
-      height: 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-      font-size: 11px;
-      border: 2px solid white;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-    ">${number}</div>`,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-  });
-};
-
-function MapFitBounds({ positions }: { positions: [number, number][] }) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (positions.length > 0) {
-      const bounds = L.latLngBounds(positions.map((p) => L.latLng(p[0], p[1])));
-      map.fitBounds(bounds, { padding: [30, 30] });
-    }
-  }, [map, positions.length]);
-
-  return null;
-}
+const createNumberedIcon = (number: number, color: string) =>
+  numberedDivIcon({ number, color, size: 24 });
 
 async function fetchRouteGeometry(waypoints: { lat: number; lng: number }[]): Promise<[number, number][]> {
   try {
@@ -108,7 +71,6 @@ export function OptimizedRouteMap({
   onToggleExpand,
   showClusters = false,
 }: OptimizedRouteMapProps) {
-  const mapConfig = useMapConfig();
   const [roadGeometries, setRoadGeometries] = useState<Record<string, [number, number][]>>({});
   const [loadingGeometry, setLoadingGeometry] = useState(false);
 
@@ -242,15 +204,8 @@ export function OptimizedRouteMap({
           </>
         )}
       </div>
-      <MapContainer
-        center={defaultCenter}
-        zoom={13}
-        style={{ height: "100%", width: "100%" }}
-        scrollWheelZoom={true}
-      >
-        <TileLayer attribution={mapConfig.attribution} url={mapConfig.tileUrl} />
-
-        <MapFitBounds positions={allPositions} />
+      <BaseMap center={defaultCenter} zoom={13}>
+        <MapFitBounds positions={allPositions} padding={[30, 30]} />
 
         {vrpRoutes
           ? vrpRoutes.map((route, routeIdx) => {
@@ -323,13 +278,13 @@ export function OptimizedRouteMap({
                   position={[stop.latitude!, stop.longitude!]}
                   icon={createNumberedIcon(
                     idx + 1,
-                    idx === 0 ? "#22c55e" : idx === legacyValidStops.length - 1 ? "#ef4444" : "#3b82f6"
+                    getRouteSegmentColor(idx, legacyValidStops.length)
                   )}
                 />
               ))}
             </>
           )}
-      </MapContainer>
+      </BaseMap>
 
       {vrpRoutes && (
         <div className="absolute bottom-2 left-2 z-[1000] bg-background/90 rounded-md p-2 text-xs space-y-1 max-w-[200px]" data-testid="cluster-stats">

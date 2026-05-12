@@ -1,14 +1,14 @@
-import { useEffect, useMemo } from "react";
-import { MapContainer, TileLayer, Marker, Polyline, useMap, Popup, CircleMarker } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import { useMemo } from "react";
+import { Marker, Polyline, Popup, CircleMarker } from "react-leaflet";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, MapPin, Navigation } from "lucide-react";
-import { useMapConfig } from "@/hooks/use-map-config";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
+import { BaseMap, MapFitBounds, statusDivIcon, getResourceStatusColor } from "@/components/ui/map";
+
+const COMPASS_SVG = '<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>';
 
 interface ResourcePosition {
   id: string;
@@ -31,39 +31,13 @@ interface ResourceTrackingMapProps {
   className?: string;
 }
 
-const createResourceIcon = (status: string) => {
-  const color = status === "on_job" ? "#22c55e" : status === "traveling" ? "#3b82f6" : "#6b7280";
-  return L.divIcon({
-    className: "custom-marker",
-    html: `<div style="
-      background-color: ${color};
-      color: white;
-      border-radius: 50%;
-      width: 32px;
-      height: 32px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: 3px solid white;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-    "><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg></div>`,
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
+const createResourceIcon = (status: string) =>
+  statusDivIcon({
+    color: getResourceStatusColor(status),
+    svg: COMPASS_SVG,
+    size: 32,
+    iconPx: 16,
   });
-};
-
-function MapFitBounds({ positions }: { positions: [number, number][] }) {
-  const map = useMap();
-  
-  useEffect(() => {
-    if (positions.length > 0) {
-      const bounds = L.latLngBounds(positions.map(p => L.latLng(p[0], p[1])));
-      map.fitBounds(bounds, { padding: [30, 30] });
-    }
-  }, [map, positions.length]);
-  
-  return null;
-}
 
 export function ResourceTrackingMap({ 
   resourceId, 
@@ -72,7 +46,6 @@ export function ResourceTrackingMap({
   showCurrentPosition = true,
   className = "h-96"
 }: ResourceTrackingMapProps) {
-  const mapConfig = useMapConfig();
   const dateParam = date ? format(date, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
   
   const { data: positions, isLoading } = useQuery<ResourcePosition[]>({
@@ -145,18 +118,8 @@ export function ResourceTrackingMap({
         )}
       </div>
       
-      <MapContainer
-        center={defaultCenter}
-        zoom={13}
-        style={{ height: "100%", width: "100%" }}
-        scrollWheelZoom={true}
-      >
-        <TileLayer
-          attribution={mapConfig.attribution}
-          url={mapConfig.tileUrl}
-        />
-        
-        <MapFitBounds positions={polylinePositions} />
+      <BaseMap center={defaultCenter} zoom={13}>
+        <MapFitBounds positions={polylinePositions} padding={[30, 30]} />
         
         <Polyline
           positions={polylinePositions}
@@ -237,7 +200,7 @@ export function ResourceTrackingMap({
             />
           );
         })}
-      </MapContainer>
+      </BaseMap>
     </Card>
   );
 }

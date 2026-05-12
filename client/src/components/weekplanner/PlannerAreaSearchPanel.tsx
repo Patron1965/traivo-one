@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { OrderSearchInput } from "@/components/orders/OrderFilterBar";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -14,7 +15,6 @@ import { format, formatDistanceToNowStrict, addDays } from "date-fns";
 import { sv } from "date-fns/locale";
 import {
   X,
-  Search,
   MapPin,
   Filter,
   ChevronLeft,
@@ -468,12 +468,11 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
           </label>
           <Popover open={cityPopoverOpen} onOpenChange={setCityPopoverOpen}>
             <PopoverTrigger asChild>
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                <Input
+              <div>
+                <OrderSearchInput
                   value={cityInput}
-                  onChange={(e) => {
-                    setCityInput(e.target.value);
+                  onChange={(v) => {
+                    setCityInput(v);
                     setCityPopoverOpen(true);
                   }}
                   onFocus={() => setCityPopoverOpen(true)}
@@ -484,8 +483,8 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                     }
                   }}
                   placeholder="t.ex. Stockholm"
-                  className="h-8 pl-7 text-sm"
-                  data-testid="input-area-search"
+                  density="compact"
+                  testId="input-area-search"
                 />
               </div>
             </PopoverTrigger>
