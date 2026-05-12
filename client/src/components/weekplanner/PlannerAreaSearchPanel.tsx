@@ -468,7 +468,8 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                 skeletonRows={6}
               >
                 <BulkActionBar
-                  selectedCount={Array.from(selectedJobIds).filter(id => rows.some(r => r.id === id)).length}
+                  alwaysVisible
+                  selectedCount={selectedJobIds.size}
                   totalCount={rows.length}
                   onSelectAll={() => onSelectAll(rows.map(r => r.id))}
                   onClearSelection={onClearSelection}
@@ -476,10 +477,11 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                   <Button
                     size="sm"
                     onClick={onBulkSchedule}
+                    disabled={selectedJobIds.size === 0}
                     data-testid="button-area-bulk-schedule"
                   >
                     <CalendarPlus className="h-4 w-4 mr-1.5" />
-                    Schemalägg
+                    Schemalägg{selectedJobIds.size > 0 ? ` ${selectedJobIds.size}` : ""}
                   </Button>
                 </BulkActionBar>
                 <div className="space-y-1.5" data-testid="list-area-search-results">

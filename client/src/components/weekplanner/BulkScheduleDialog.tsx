@@ -16,7 +16,7 @@ import type { Resource, WorkOrderWithObject } from "@shared/schema";
 interface BulkScheduleResult {
   workOrderId: string;
   status: "scheduled" | "conflict" | "blocked" | "error";
-  conflicts: string[];
+  conflictReasons: string[];
   message?: string;
 }
 
@@ -67,10 +67,24 @@ export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkSc
       else body.teamId = teamId;
       if (scheduledStartTime) body.scheduledStartTime = scheduledStartTime;
       const res = await apiRequest("POST", "/api/work-orders/bulk-schedule", body);
-      return (await res.json()) as BulkScheduleResponse;
+      const json = (await res.json()) as BulkScheduleResponse;
+      return { data: json, isPartial: !!vars.ids && vars.ids.length > 0 };
     },
-    onSuccess: (data) => {
-      setResults(data);
+    onSuccess: ({ data, isPartial }) => {
+      setResults(prev => {
+        if (!prev || !isPartial) return data;
+        // Merge per-row retry results into existing state
+        const byId = new Map(data.results.map(r => [r.workOrderId, r]));
+        const merged = prev.results.map(r => byId.get(r.workOrderId) ?? r);
+        const summary = {
+          total: merged.length,
+          scheduled: merged.filter(r => r.status === "scheduled").length,
+          conflict: merged.filter(r => r.status === "conflict").length,
+          blocked: merged.filter(r => r.status === "blocked").length,
+          error: merged.filter(r => r.status === "error").length,
+        };
+        return { results: merged, summary };
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/v1/work-orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/alerts"] });
@@ -251,9 +265,9 @@ export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkSc
                         <div className="min-w-0 flex-1">
                           <div className="font-medium truncate">{job?.title || r.workOrderId.slice(0, 8)}</div>
                           {r.message && <div className="text-muted-foreground">{r.message}</div>}
-                          {r.conflicts.length > 0 && (
+                          {r.conflictReasons.length > 0 && (
                             <ul className="mt-1 space-y-0.5">
-                              {r.conflicts.map((c, i) => (
+                              {r.conflictReasons.map((c, i) => (
                                 <li key={i} className="text-muted-foreground">
                                   • {c.startsWith("[BLOCK] ") ? c.slice(8) : c}
                                 </li>
@@ -261,6 +275,33 @@ export const BulkScheduleDialog = memo(function BulkScheduleDialog(props: BulkSc
                             </ul>
                           )}
                         </div>
+                        {r.status === "conflict" && (
+                          <div className="flex flex-col gap-1 shrink-0">
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="h-6 px-2 text-[10px]"
+                              disabled={mutation.isPending}
+                              onClick={() => mutation.mutate({ force: true, ids: [r.workOrderId] })}
+                              data-testid={`button-bulk-row-force-${r.workOrderId}`}
+                            >
+                              Schemalägg ändå
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-[10px]"
+                              onClick={() => setResults(prev => prev ? {
+                                ...prev,
+                                results: prev.results.filter(x => x.workOrderId !== r.workOrderId),
+                                summary: { ...prev.summary, conflict: prev.summary.conflict - 1, total: prev.summary.total - 1 },
+                              } : prev)}
+                              data-testid={`button-bulk-row-skip-${r.workOrderId}`}
+                            >
+                              Hoppa över
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

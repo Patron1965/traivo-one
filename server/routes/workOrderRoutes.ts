@@ -368,7 +368,7 @@ type BulkScheduleResultStatus = "scheduled" | "conflict" | "blocked" | "error";
 interface BulkScheduleResult {
   workOrderId: string;
   status: BulkScheduleResultStatus;
-  conflicts: string[];
+  conflictReasons: string[];
   message?: string;
 }
 
@@ -418,18 +418,18 @@ app.post("/api/work-orders/bulk-schedule", asyncHandler(async (req, res) => {
 
   const results: BulkScheduleResult[] = [];
   // Track moves accepted earlier in the batch so subsequent items see intra-batch
-  // capacity/dependency conflicts. We mutate `allOrders` in-place to reflect
+  // capacity/dependency conflictReasons. We mutate `allOrders` in-place to reflect
   // simulated updates (resourceId/scheduledDate) for already-scheduled items.
   const pendingMoves: Array<{ workOrderId: string; resourceId: string; scheduledDate: string }> = [];
 
   for (const id of uniqueIds) {
     const wo = ordersById.get(id);
     if (!wo || !verifyTenantOwnership(wo, tenantId)) {
-      results.push({ workOrderId: id, status: "error", conflicts: [], message: "Arbetsorder hittades inte" });
+      results.push({ workOrderId: id, status: "error", conflictReasons: [], message: "Arbetsorder hittades inte" });
       continue;
     }
 
-    let conflicts: string[] = [];
+    let conflictReasons: string[] = [];
     if (effectiveResourceIdForCheck) {
       const timeRestrictions = wo.objectId
         ? await storage.getObjectTimeRestrictions(wo.objectId)
@@ -456,7 +456,7 @@ app.post("/api/work-orders/bulk-schedule", asyncHandler(async (req, res) => {
           hardClusterBlocking,
         }
       );
-      conflicts = violations
+      conflictReasons = violations
         .filter(v => v.workOrderId === id)
         .map(v => (v.type === "hard" ? `[BLOCK] ${v.description}` : v.description));
       // Capacity/cluster checks aggregate by resource+date across moves; surface
@@ -465,17 +465,17 @@ app.post("/api/work-orders/bulk-schedule", asyncHandler(async (req, res) => {
         .filter(v => v.workOrderId !== id && (v.category === "capacity" || v.category === "cluster_geographic"))
         .map(v => (v.type === "hard" ? `[BLOCK] ${v.description}` : v.description));
       for (const extra of aggregateExtras) {
-        if (!conflicts.includes(extra)) conflicts.push(extra);
+        if (!conflictReasons.includes(extra)) conflictReasons.push(extra);
       }
     }
 
-    const hasHardBlock = conflicts.some(c => c.startsWith("[BLOCK]"));
+    const hasHardBlock = conflictReasons.some(c => c.startsWith("[BLOCK]"));
     if (hasHardBlock) {
-      results.push({ workOrderId: id, status: "blocked", conflicts });
+      results.push({ workOrderId: id, status: "blocked", conflictReasons });
       continue;
     }
-    if (conflicts.length > 0 && !force) {
-      results.push({ workOrderId: id, status: "conflict", conflicts });
+    if (conflictReasons.length > 0 && !force) {
+      results.push({ workOrderId: id, status: "conflict", conflictReasons });
       continue;
     }
 
@@ -496,7 +496,7 @@ app.post("/api/work-orders/bulk-schedule", asyncHandler(async (req, res) => {
       const oldStatus = wo.orderStatus;
       const updated = await storage.updateWorkOrder(id, updateData);
       if (!updated) {
-        results.push({ workOrderId: id, status: "error", conflicts, message: "Uppdatering misslyckades" });
+        results.push({ workOrderId: id, status: "error", conflictReasons, message: "Uppdatering misslyckades" });
         continue;
       }
 
@@ -554,13 +554,13 @@ app.post("/api/work-orders/bulk-schedule", asyncHandler(async (req, res) => {
         }
       }
 
-      results.push({ workOrderId: id, status: "scheduled", conflicts });
+      results.push({ workOrderId: id, status: "scheduled", conflictReasons });
     } catch (err) {
       console.error(`[bulk-schedule] Failed to schedule ${id}:`, err);
       results.push({
         workOrderId: id,
         status: "error",
-        conflicts,
+        conflictReasons,
         message: err instanceof Error ? err.message : "Okänt fel",
       });
     }

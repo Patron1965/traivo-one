@@ -7,10 +7,12 @@ interface BulkActionBarProps {
   onSelectAll: () => void;
   onClearSelection: () => void;
   children: React.ReactNode;
+  alwaysVisible?: boolean;
 }
 
-export function BulkActionBar({ selectedCount, totalCount, onSelectAll, onClearSelection, children }: BulkActionBarProps) {
-  if (selectedCount === 0) return null;
+export function BulkActionBar({ selectedCount, totalCount, onSelectAll, onClearSelection, children, alwaysVisible }: BulkActionBarProps) {
+  if (selectedCount === 0 && !alwaysVisible) return null;
+  const allSelected = totalCount > 0 && selectedCount === totalCount;
 
   return (
     <div
@@ -24,10 +26,10 @@ export function BulkActionBar({ selectedCount, totalCount, onSelectAll, onClearS
       <Button
         variant="ghost"
         size="sm"
-        onClick={onSelectAll}
+        onClick={allSelected ? onClearSelection : onSelectAll}
         data-testid="button-select-all"
       >
-        Markera alla
+        {allSelected ? "Avmarkera alla" : "Markera alla synliga"}
       </Button>
       <div className="flex-1" />
       <div className="flex items-center gap-2">
