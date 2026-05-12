@@ -75,8 +75,11 @@ export function useUpload(options: UseUploadOptions = {}) {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to get upload URL");
+        // Servern svarar t.ex. 413 { error: "Bilden är för stor. Maxgräns är 15 MB." }
+        // för stor fil eller 400 { error: "..." } för otillåten filtyp — surfacea
+        // texten direkt så användaren får ett tydligt svenskt felmeddelande.
+        const errorData = await response.json().catch(() => ({} as { error?: string }));
+        throw new Error(errorData.error || "Kunde inte starta uppladdningen");
       }
 
       return response.json();
@@ -189,7 +192,8 @@ export function useUpload(options: UseUploadOptions = {}) {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to get upload URL");
+        const errorData = await response.json().catch(() => ({} as { error?: string }));
+        throw new Error(errorData.error || "Kunde inte starta uppladdningen");
       }
 
       const data = await response.json();

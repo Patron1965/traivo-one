@@ -274,6 +274,26 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   }, [resourceId]);
 
   const mobileApiCall = useCallback(async (method: string, url: string, body?: unknown) => {
+    const extractError = async (response: Response): Promise<string> => {
+      // Servern svarar konsekvent med { error: "..." } (svensk text) på 4xx/5xx,
+      // t.ex. 413 "Bilden är för stor. Maxgräns är 15 MB." vid uppladdning.
+      // Surfacea det meddelandet i stället för "Mobile API error: 413".
+      try {
+        const text = await response.text();
+        if (text) {
+          try {
+            const json = JSON.parse(text);
+            if (json && typeof json.error === "string" && json.error.trim()) {
+              return json.error;
+            }
+          } catch {
+            return text;
+          }
+        }
+      } catch {}
+      return `Mobile API error: ${response.status}`;
+    };
+
     const token = await getMobileToken();
     const options: RequestInit = {
       method,
@@ -289,10 +309,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       const newToken = await getMobileToken();
       options.headers = { ...options.headers as Record<string, string>, "Authorization": `Bearer ${newToken}` };
       const retry = await fetch(url, options);
-      if (!retry.ok) throw new Error(`Mobile API error: ${retry.status}`);
+      if (!retry.ok) throw new Error(await extractError(retry));
       return retry;
     }
-    if (!res.ok) throw new Error(`Mobile API error: ${res.status}`);
+    if (!res.ok) throw new Error(await extractError(res));
     return res;
   }, [getMobileToken]);
 
@@ -312,17 +332,31 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     const effectiveContentType = getEffectiveContentType(file);
     setBusy(true);
     try {
-      const uploadRes = await mobileApiCall("POST", "/api/mobile/customer-change-requests/upload-photo", {});
+      // mobileApiCall extraherar nu serverns { error } så att t.ex. 413
+      // "Bilden är för stor. Maxgräns är 15 MB." surfaceas i toasten.
+      // Skicka contentType + size så att servern kan returnera 413 tidigt.
+      const uploadRes = await mobileApiCall(
+        "POST",
+        "/api/mobile/customer-change-requests/upload-photo",
+        { contentType: effectiveContentType, size: file.size },
+      );
       const { uploadURL, objectPath } = await uploadRes.json();
       const putRes = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": effectiveContentType } });
       if (!putRes.ok) throw new Error("Uppladdning misslyckades");
+      // Confirm-rutten raderar filen och returnerar 4xx + svenskt error
+      // om den faktiska blob-storleken översteg gränsen — visa det som-is.
       const confirmRes = await mobileApiCall("POST", "/api/mobile/customer-change-requests/confirm-photo", { objectPath });
       const { downloadURL } = await confirmRes.json();
       setPhoto(downloadURL || objectPath);
       toast({ title: "Foto uppladdat" });
     } catch (error) {
       console.error("Upload error:", error);
-      toast({ title: "Fel vid uppladdning", description: "Kunde inte ladda upp bilden.", variant: "destructive" });
+      toast({
+        title: "Kunde inte ladda upp bilden",
+        description: error instanceof Error ? error.message : "Försök igen",
+        variant: "destructive",
+        duration: 6000,
+      });
     } finally {
       setBusy(false);
     }

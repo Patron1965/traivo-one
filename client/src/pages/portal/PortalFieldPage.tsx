@@ -247,6 +247,9 @@ export default function PortalFieldPage() {
     setUploading(true);
     setErrorMessage(null);
     try {
+      // portalFetch extraherar serverns { error } så att 413
+      // "Bilden är för stor. Maxgräns är 15 MB." och confirm-stegets
+      // 4xx-fel (filen raderad pga storlek) visas exakt i felrutan.
       const { uploadURL, objectPath } = await portalFetch("/api/portal/field/upload-photo", {
         method: "POST",
         body: JSON.stringify({ contentType: effectiveContentType, size: file.size }),
@@ -259,7 +262,7 @@ export default function PortalFieldPage() {
       });
 
       if (!uploadRes.ok) {
-        throw new Error("Kunde inte ladda upp fotot. Försök igen.");
+        throw new Error("Kunde inte ladda upp fotot till lagringen. Försök igen.");
       }
 
       await portalFetch("/api/portal/field/confirm-photo", {

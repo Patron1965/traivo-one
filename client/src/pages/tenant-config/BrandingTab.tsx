@@ -208,25 +208,37 @@ export function BrandingTab() {
 
     setLogoUploading(true);
     try {
+      // apiRequest extraherar serverns JSON-error så att 413
+      // "Logotypen är för stor. Maxgräns är 5 MB." surfaceas direkt i toasten.
       const resp = await apiRequest("POST", "/api/system/tenant-branding/upload-logo", {
         contentType: effectiveContentType,
         size: file.size,
       });
       const { uploadURL, objectPath } = await resp.json();
 
-      await fetch(uploadURL, {
+      const putRes = await fetch(uploadURL, {
         method: "PUT",
         body: file,
         headers: { "Content-Type": effectiveContentType },
       });
+      if (!putRes.ok) {
+        throw new Error("Kunde inte ladda upp logotypen till lagringen.");
+      }
 
+      // Confirm-rutten raderar filen och returnerar 4xx + svenskt error
+      // om den faktiska blob-storleken översteg 5 MB.
       const confirmResp = await apiRequest("POST", "/api/system/tenant-branding/confirm-logo", { objectPath });
       const { url } = await confirmResp.json();
 
       setForm(prev => ({ ...prev, logoUrl: url }));
       toast({ title: "Logotyp uppladdad", description: "Logotypen har laddats upp." });
     } catch (error: any) {
-      toast({ title: "Uppladdning misslyckades", description: error.message, variant: "destructive" });
+      toast({
+        title: "Logotypen kunde inte laddas upp",
+        description: error?.message || "Försök igen.",
+        variant: "destructive",
+        duration: 6000,
+      });
     } finally {
       setLogoUploading(false);
     }

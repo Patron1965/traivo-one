@@ -111,7 +111,10 @@ export function PhotoCapture({
         }),
       });
 
-      if (!response.ok) throw new Error("Kunde inte få uppladdnings-URL");
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || "Kunde inte få uppladdnings-URL");
+      }
 
       const { uploadURL, objectPath } = await response.json();
 
