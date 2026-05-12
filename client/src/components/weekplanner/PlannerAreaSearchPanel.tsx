@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { OrderSearchInput } from "@/components/orders/OrderFilterBar";
+import { OrderFilterBar, OrderSearchInput } from "@/components/orders/OrderFilterBar";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -467,27 +467,33 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
             Område / ort
           </label>
           <Popover open={cityPopoverOpen} onOpenChange={setCityPopoverOpen}>
-            <PopoverTrigger asChild>
-              <div>
-                <OrderSearchInput
-                  value={cityInput}
-                  onChange={(v) => {
-                    setCityInput(v);
-                    setCityPopoverOpen(true);
-                  }}
-                  onFocus={() => setCityPopoverOpen(true)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleApplyCity(cityInput.trim());
-                    }
-                  }}
-                  placeholder="t.ex. Stockholm"
-                  density="compact"
-                  testId="input-area-search"
-                />
-              </div>
-            </PopoverTrigger>
+            <OrderFilterBar
+              search={cityInput}
+              onSearchChange={(v) => {
+                setCityInput(v);
+                setCityPopoverOpen(true);
+              }}
+              placeholder="t.ex. Stockholm"
+              density="compact"
+              testIdPrefix="area-search"
+              searchTestId="input-area-search"
+              renderSearch={(props) => (
+                <PopoverTrigger asChild>
+                  <div>
+                    <OrderSearchInput
+                      {...props}
+                      onFocus={() => setCityPopoverOpen(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleApplyCity(cityInput.trim());
+                        }
+                      }}
+                    />
+                  </div>
+                </PopoverTrigger>
+              )}
+            />
             <PopoverContent className="w-[330px] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
               <div className="max-h-72 overflow-auto py-1">
                 {citiesQuery.isLoading && (

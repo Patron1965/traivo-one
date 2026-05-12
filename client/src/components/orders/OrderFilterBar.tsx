@@ -60,6 +60,21 @@ export interface OrderFilterBarProps {
   testIdPrefix?: string;
   /** Override the auto-generated input test id (defaults to `input-${testIdPrefix}-search`). */
   searchTestId?: string;
+  /**
+   * Optional render-prop slot that replaces the default `OrderSearchInput`
+   * in the search position. Use this for cases where the input must be wrapped
+   * in another element (e.g. a Popover trigger for autocomplete) while still
+   * reusing the bar's chrome and layout. The callback receives the same
+   * shape as `OrderSearchInput`'s props so the consumer can render an
+   * `<OrderSearchInput {...props} />` inside their wrapper.
+   */
+  renderSearch?: (props: {
+    value: string;
+    onChange: (v: string) => void;
+    placeholder?: string;
+    density: "default" | "compact";
+    testId: string;
+  }) => React.ReactNode;
 }
 
 /**
@@ -81,21 +96,33 @@ export function OrderFilterBar({
   rightSlot,
   testIdPrefix = "order-filter",
   searchTestId,
+  renderSearch,
 }: OrderFilterBarProps) {
   const compact = density === "compact";
   const hasFilterControls = showFilterButton ?? !!onToggleFilters;
+  const resolvedSearchTestId = searchTestId ?? `input-${testIdPrefix}-search`;
 
   return (
     <div className={`flex flex-col gap-2 ${className}`}>
       <div className="flex items-center gap-2">
         <div className="flex-1">
-          <OrderSearchInput
-            value={search}
-            onChange={onSearchChange}
-            placeholder={placeholder}
-            density={density}
-            testId={searchTestId ?? `input-${testIdPrefix}-search`}
-          />
+          {renderSearch ? (
+            renderSearch({
+              value: search,
+              onChange: onSearchChange,
+              placeholder,
+              density,
+              testId: resolvedSearchTestId,
+            })
+          ) : (
+            <OrderSearchInput
+              value={search}
+              onChange={onSearchChange}
+              placeholder={placeholder}
+              density={density}
+              testId={resolvedSearchTestId}
+            />
+          )}
         </div>
         {rightSlot}
       </div>
