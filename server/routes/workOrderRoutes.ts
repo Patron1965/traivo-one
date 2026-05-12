@@ -971,9 +971,54 @@ app.delete("/api/work-orders/:id", asyncHandler(async (req, res) => {
   res.status(204).send();
 }));
 
+// Återställ en avbeställd (soft-deleted) work order. Admin-only; idempotent
+// (kan köras på redan återställd order). Tar bort metadata.cancellation och
+// nollställer deletedAt så ordern dyker upp i normala vyer igen.
+app.post("/api/work-orders/:id/restore", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getWorkOrder(req.params.id);
+  if (!existing || existing.tenantId !== tenantId) {
+    throw new NotFoundError("Arbetsorder");
+  }
+  if (!existing.deletedAt) {
+    // Inte avbeställd — returnera ordern som den är (idempotent).
+    return res.json(existing);
+  }
+  const restored = await storage.restoreWorkOrder(req.params.id);
+  if (!restored) {
+    throw new NotFoundError("Arbetsorder");
+  }
+
+  const userId = (req as any).user?.claims?.sub
+    ?? (req as any).user?.id
+    ?? null;
+  try {
+    await storage.createAuditLog({
+      tenantId,
+      userId: userId ?? null,
+      action: "restored",
+      resourceType: "work_order",
+      resourceId: req.params.id,
+      changes: {
+        before: { deletedAt: existing.deletedAt },
+        after: { deletedAt: null },
+      },
+      metadata: {
+        cancellation: (existing.metadata as any)?.cancellation ?? null,
+      },
+    });
+  } catch (auditErr) {
+    console.error(`[work-orders] failed to write restore audit log for ${req.params.id}:`, auditErr);
+  }
+
+  console.log(`[work-orders] restored id=${req.params.id} tenant=${tenantId} userId=${userId}`);
+  res.json(restored);
+}));
+
 app.get("/api/order-stock", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const includeSimulated = req.query.includeSimulated === "true";
+  const includeCancelled = req.query.includeCancelled === "true";
   const scenarioId = req.query.scenarioId as string | undefined;
   const orderStatus = req.query.orderStatus as OrderStatus | undefined;
   const activeOnly = req.query.activeOnly !== "false";
@@ -993,7 +1038,7 @@ app.get("/api/order-stock", asyncHandler(async (req, res) => {
   }
 
   const { orders, total, byStatus, aggregates } = await storage.getOrderStock(tenantId, {
-    includeSimulated, scenarioId, orderStatus, activeOnly, startDate, endDate, page, pageSize, search, metadataFilters,
+    includeSimulated, scenarioId, orderStatus, activeOnly, startDate, endDate, page, pageSize, search, metadataFilters, includeCancelled,
   });
 
   const summary = {

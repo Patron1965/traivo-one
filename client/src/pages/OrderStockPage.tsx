@@ -79,7 +79,8 @@ import {
   CalendarPlus,
   Link2,
   RefreshCw,
-  Info
+  Info,
+  Undo2
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -161,6 +162,7 @@ export default function OrderStockPage() {
   const STATUS_LABELS = getStatusLabels(tl);
   const [, setLocation] = useLocation();
   const [includeSimulated, setIncludeSimulated] = useState(false);
+  const [showCancelled, setShowCancelled] = useState(false);
   const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
 
   const { initialStatus, initialSearch } = useMemo(() => {
@@ -213,10 +215,17 @@ export default function OrderStockPage() {
   }, [metadataFilters]);
   
   const { data: orderStockData, isLoading: ordersLoading } = useQuery<OrderStockResponse>({
-    queryKey: ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, activeOnly: statusFilter === "all", page: currentPage, search: debouncedSearch, metadataFilter: metadataFilterString }],
+    queryKey: ["/api/order-stock", { includeSimulated, includeCancelled: showCancelled, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, activeOnly: statusFilter === "all" && !showCancelled, page: currentPage, search: debouncedSearch, metadataFilter: metadataFilterString }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (includeSimulated) params.set("includeSimulated", "true");
+      if (showCancelled) {
+        params.set("includeCancelled", "true");
+        // När vi visar avbeställda ska även "completed"-statusar (utford,
+        // fakturerad, omojlig, avbruten) komma med — annars filtreras de bort
+        // av activeOnly-default på server-sidan.
+        params.set("activeOnly", "false");
+      }
       if (selectedScenario) params.set("scenarioId", selectedScenario);
       if (statusFilter !== "all") {
         params.set("orderStatus", statusFilter);
@@ -228,6 +237,22 @@ export default function OrderStockPage() {
       params.set("pageSize", ORDERS_PER_PAGE.toString());
       const response = await fetch(`/api/order-stock?${params.toString()}`);
       return response.json();
+    }
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      return apiRequest("POST", `/api/work-orders/${orderId}/restore`);
+    },
+    onSuccess: () => {
+      toast({ title: "Ordern är återställd" });
+      queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/planner"] });
+    },
+    onError: (err: Error) => {
+      const msg = err?.message ? String(err.message).replace(/^\d+:\s*/, "") : "Försök igen senare.";
+      toast({ title: "Kunde inte återställa ordern", description: msg, variant: "destructive" });
     }
   });
   
@@ -324,7 +349,7 @@ export default function OrderStockPage() {
     enabled: !!selectedOrderForLines?.id
   });
 
-  const currentQueryKey = ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, activeOnly: statusFilter === "all", page: currentPage, search: debouncedSearch, metadataFilter: metadataFilterString }];
+  const currentQueryKey = ["/api/order-stock", { includeSimulated, includeCancelled: showCancelled, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, activeOnly: statusFilter === "all", page: currentPage, search: debouncedSearch, metadataFilter: metadataFilterString }];
   
   const OPERATOR_LABELS: Record<string, string> = {
     eq: "=", neq: "≠", gt: ">", gte: "≥", lt: "<", lte: "≤", contains: "innehaller",
@@ -638,6 +663,17 @@ export default function OrderStockPage() {
             data-testid="switch-include-simulated"
           />
         </div>
+
+        <div className="flex items-center gap-2">
+          <Trash2 className="h-4 w-4 text-muted-foreground" />
+          <Label htmlFor="cancelled-toggle" className="text-sm">Visa avbeställda</Label>
+          <Switch
+            id="cancelled-toggle"
+            checked={showCancelled}
+            onCheckedChange={(v) => { setShowCancelled(v); setCurrentPage(1); }}
+            data-testid="switch-show-cancelled"
+          />
+        </div>
         
         {includeSimulated && scenarios.length > 0 && (
           <Select value={selectedScenario || "all"} onValueChange={v => setSelectedScenario(v === "all" ? null : v)}>
@@ -943,19 +979,26 @@ export default function OrderStockPage() {
                 const StatusIcon = STATUS_ICONS[status] || AlertCircle;
                 const nextStatus = getNextStatus(status);
 
+                const cancellation = (order.metadata as any)?.cancellation as
+                  | { reason?: string | null; cancelledAt?: string | null; cancelledBy?: string | null }
+                  | undefined;
+                const isCancelled = !!order.deletedAt;
+
                 return (
                   <div 
                     key={order.id} 
-                    className={`p-4 flex items-center gap-4 hover-elevate ${selectedIds.has(order.id) ? 'bg-primary/5' : ''}`}
+                    className={`p-4 flex items-center gap-4 hover-elevate ${selectedIds.has(order.id) ? 'bg-primary/5' : ''} ${isCancelled ? 'opacity-75' : ''}`}
                     data-testid={`row-order-${order.id}`}
                   >
-                    <Checkbox
-                      checked={selectedIds.has(order.id)}
-                      onCheckedChange={() => toggleSelected(order.id)}
-                      onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                      className="shrink-0"
-                      data-testid={`checkbox-order-${order.id}`}
-                    />
+                    {!isCancelled && (
+                      <Checkbox
+                        checked={selectedIds.has(order.id)}
+                        onCheckedChange={() => toggleSelected(order.id)}
+                        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                        className="shrink-0"
+                        data-testid={`checkbox-order-${order.id}`}
+                      />
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium truncate">{order.title}</span>
@@ -985,6 +1028,28 @@ export default function OrderStockPage() {
                           </Badge>
                         )}
                       </div>
+                      {isCancelled && (
+                        <div className="mt-2 p-2 bg-destructive/10 dark:bg-destructive/15 rounded-md text-xs" data-testid={`cancellation-details-${order.id}`}>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Trash2 className="h-3 w-3 text-destructive" />
+                            <span className="font-medium text-destructive">Avbeställd</span>
+                            {(cancellation?.cancelledAt || order.deletedAt) && (
+                              <span className="text-muted-foreground">
+                                {new Date(cancellation?.cancelledAt || order.deletedAt!).toLocaleString("sv-SE")}
+                              </span>
+                            )}
+                            {cancellation?.cancelledBy && (
+                              <span className="flex items-center gap-1 text-muted-foreground">
+                                <User className="h-3 w-3" />
+                                {cancellation.cancelledBy}
+                              </span>
+                            )}
+                          </div>
+                          {cancellation?.reason && (
+                            <p className="mt-1 text-muted-foreground">{cancellation.reason}</p>
+                          )}
+                        </div>
+                      )}
                       {status === "omojlig" && order.impossibleReason && (
                         <div className="mt-2 p-2 bg-destructive/10 dark:bg-destructive/15 rounded-md text-xs" data-testid={`impossible-details-${order.id}`}>
                           <div className="flex items-center gap-2 flex-wrap">
@@ -1062,6 +1127,23 @@ export default function OrderStockPage() {
                     )}
 
                     <div className="flex items-center gap-2">
+                      {isCancelled ? (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => restoreMutation.mutate(order.id)}
+                          disabled={restoreMutation.isPending}
+                          className="gap-1"
+                          title="Återställ ordern"
+                          data-testid={`button-restore-order-${order.id}`}
+                        >
+                          {restoreMutation.isPending
+                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                            : <Undo2 className="h-4 w-4" />}
+                          Återställ
+                        </Button>
+                      ) : (
+                      <>
                       <Button
                         size="sm"
                         variant="ghost"
@@ -1157,6 +1239,8 @@ export default function OrderStockPage() {
                           <PlayCircle className="h-4 w-4" />
                           Aktivera
                         </Button>
+                      )}
+                      </>
                       )}
                     </div>
                   </div>

@@ -313,6 +313,7 @@ export interface IStorage {
   createWorkOrder(workOrder: InsertWorkOrder): Promise<WorkOrder>;
   updateWorkOrder(id: string, workOrder: Partial<InsertWorkOrder>): Promise<WorkOrder | undefined>;
   deleteWorkOrder(id: string, opts?: { reason?: string; userId?: string | null }): Promise<void>;
+  restoreWorkOrder(id: string): Promise<WorkOrder | undefined>;
   getWorkOrderByModusId(tenantId: string, modusId: string): Promise<WorkOrder | undefined>;
   getRecentWorkOrdersForObject(tenantId: string, objectId: string, excludeId: string, limit?: number): Promise<WorkOrder[]>;
   getCustomerCommunicationsByWorkOrder(tenantId: string, workOrderId: string, limit?: number): Promise<CustomerCommunication[]>;
@@ -2748,6 +2749,21 @@ export class DatabaseStorage implements IStorage {
     if (row?.tenantId) invalidateWorkflowCaches(row.tenantId);
   }
 
+  async restoreWorkOrder(id: string): Promise<WorkOrder | undefined> {
+    // Återställer en soft-deleted work order: nollställer deletedAt och tar
+    // bort metadata.cancellation. Idempotent — kör mot redan återställd order
+    // returnerar bara uppdaterad rad utan effekt på cancellation-fältet.
+    const [workOrder] = await db.update(workOrders)
+      .set({
+        deletedAt: null,
+        metadata: sql`COALESCE(${workOrders.metadata}, '{}'::jsonb) - 'cancellation'`,
+      })
+      .where(eq(workOrders.id, id))
+      .returning();
+    if (workOrder?.tenantId) invalidateWorkflowCaches(workOrder.tenantId);
+    return workOrder || undefined;
+  }
+
   async getWorkOrderByModusId(tenantId: string, modusId: string): Promise<WorkOrder | undefined> {
     const [wo] = await db.select().from(workOrders).where(
       and(
@@ -3291,9 +3307,14 @@ export class DatabaseStorage implements IStorage {
     pageSize?: number;
     search?: string;
     metadataFilters?: { metadataName: string; operator: string; value: string }[];
+    includeCancelled?: boolean;
   }): Promise<{ orders: WorkOrder[]; total: number; byStatus: Record<string, number>; aggregates: { totalValue: number; totalCost: number; totalProductionMinutes: number } }> {
     const completedStatuses: OrderStatus[] = ['utford', 'fakturerad', 'avbruten', 'omojlig'];
-    let allStatusBase = and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt));
+    // includeCancelled=true: visa endast soft-deleted ordrar (avbeställda).
+    // Default (false): exkludera soft-deleted som tidigare.
+    let allStatusBase = options?.includeCancelled
+      ? and(eq(workOrders.tenantId, tenantId), isNotNull(workOrders.deletedAt))
+      : and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt));
     
     if (!options?.includeSimulated) {
       allStatusBase = and(allStatusBase, eq(workOrders.isSimulated, false));

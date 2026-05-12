@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Trash2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 
 interface CancelOrderDialogProps {
   open: boolean;
@@ -42,6 +43,33 @@ export function CancelOrderDialog({
     }
   }, [open]);
 
+  const invalidateOrderQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/planner"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/work-orders/unscheduled"] });
+  };
+
+  const handleUndo = async (id: string) => {
+    try {
+      await apiRequest("POST", `/api/work-orders/${id}/restore`);
+      invalidateOrderQueries();
+      toast({
+        title: "Avbeställning ångrad",
+        description: workOrderTitle
+          ? `${workOrderTitle} är återställd i orderlistan.`
+          : "Ordern är återställd i orderlistan.",
+      });
+    } catch (err: any) {
+      const msg = err?.message ? String(err.message).replace(/^\d+:\s*/, "") : "Försök igen senare.";
+      toast({
+        title: "Kunde inte återställa ordern",
+        description: msg,
+        variant: "destructive",
+      });
+    }
+  };
+
   const cancelMutation = useMutation({
     mutationFn: async () => {
       if (!workOrderId) throw new Error("Ingen order vald");
@@ -51,16 +79,24 @@ export function CancelOrderDialog({
       return res;
     },
     onSuccess: () => {
+      const cancelledId = workOrderId;
       toast({
         title: "Ordern avbeställd",
         description: workOrderTitle
           ? `${workOrderTitle} har tagits bort från orderlistan.`
           : "Ordern har tagits bort från orderlistan.",
+        duration: 30000,
+        action: cancelledId ? (
+          <ToastAction
+            altText="Ångra avbeställning"
+            onClick={() => handleUndo(cancelledId)}
+            data-testid="button-undo-cancel-order"
+          >
+            Ångra
+          </ToastAction>
+        ) : undefined,
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/planner"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders/unscheduled"] });
+      invalidateOrderQueries();
       onOpenChange(false);
       onSuccess?.();
     },
