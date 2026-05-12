@@ -14,9 +14,12 @@ import {
 } from "lucide-react";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
 import {
+  FIELD_PHOTO_SIZE_HINT,
+  FIELD_PHOTO_TOO_LARGE_TOAST,
   IMAGE_REJECT_TOAST,
   getEffectiveContentType,
   isAcceptableImage,
+  isWithinFieldPhotoSizeLimit,
 } from "@/lib/file-mime";
 
 function getSessionToken(): string | null {
@@ -229,6 +232,12 @@ export default function PortalFieldPage() {
   async function uploadPhotoFile(file: File) {
     if (!isAcceptableImage(file)) {
       setErrorMessage(IMAGE_REJECT_TOAST.description);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    if (!isWithinFieldPhotoSizeLimit(file)) {
+      setErrorMessage(FIELD_PHOTO_TOO_LARGE_TOAST.description);
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
@@ -679,6 +688,7 @@ export default function PortalFieldPage() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Foton</label>
+              <p className="text-xs text-muted-foreground" data-testid="text-portal-photo-size-hint">{FIELD_PHOTO_SIZE_HINT}</p>
               <div
                 className={`relative flex flex-wrap gap-2 rounded-lg border-2 border-dashed p-2 transition-colors ${
                   photoDragOver

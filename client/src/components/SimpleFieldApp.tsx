@@ -39,9 +39,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  FIELD_PHOTO_SIZE_HINT,
+  FIELD_PHOTO_TOO_LARGE_TOAST,
   IMAGE_REJECT_TOAST,
   getEffectiveContentType,
   isAcceptableImage,
+  isWithinFieldPhotoSizeLimit,
 } from "@/lib/file-mime";
 import { DailyProgressCard } from "@/components/DailyProgressCard";
 import { DayReport } from "@/components/DayReport";
@@ -300,6 +303,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   ) => {
     if (!isAcceptableImage(file)) {
       toast({ ...IMAGE_REJECT_TOAST, variant: "destructive", duration: 6000 });
+      return;
+    }
+    if (!isWithinFieldPhotoSizeLimit(file)) {
+      toast({ ...FIELD_PHOTO_TOO_LARGE_TOAST, variant: "destructive", duration: 6000 });
       return;
     }
     const effectiveContentType = getEffectiveContentType(file);
@@ -2063,6 +2070,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                             {isUploadingChangePhoto ? <Loader2 className="h-3 w-3 animate-spin" /> : <Camera className="h-3 w-3" />}
                             {isUploadingChangePhoto ? "Laddar upp..." : changePhotoDragOver ? "Släpp foto här" : "Ta foto eller dra in bild"}
                           </Button>
+                          <p className="mt-1 text-[10px] text-muted-foreground" data-testid="text-change-photo-size-hint">
+                            {FIELD_PHOTO_SIZE_HINT}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -2193,6 +2203,11 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                         {isUploadingImpossiblePhoto ? "Laddar upp..." : impossiblePhotoDragOver ? "Släpp foto här" : "Ta foto eller dra in bild"}
                       </Button>
                     </div>
+                  )}
+                  {!impossiblePhoto && (
+                    <p className="text-xs text-muted-foreground" data-testid="text-impossible-photo-size-hint">
+                      {FIELD_PHOTO_SIZE_HINT}
+                    </p>
                   )}
                 </div>
               </div>

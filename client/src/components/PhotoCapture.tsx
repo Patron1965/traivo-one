@@ -9,9 +9,12 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
+  FIELD_PHOTO_SIZE_HINT,
+  FIELD_PHOTO_TOO_LARGE_TOAST,
   IMAGE_REJECT_TOAST,
   getEffectiveContentType,
   isAcceptableImage,
+  isWithinFieldPhotoSizeLimit,
 } from "@/lib/file-mime";
 import {
   Dialog,
@@ -82,6 +85,14 @@ export function PhotoCapture({
     if (!isAcceptableImage(file)) {
       toast({
         ...IMAGE_REJECT_TOAST,
+        variant: "destructive",
+        duration: 6000,
+      });
+      return;
+    }
+    if (!isWithinFieldPhotoSizeLimit(file)) {
+      toast({
+        ...FIELD_PHOTO_TOO_LARGE_TOAST,
         variant: "destructive",
         duration: 6000,
       });
@@ -328,6 +339,7 @@ export function PhotoCapture({
               <ImagePlus className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p>Ta foton för att dokumentera arbetet</p>
               <p className="text-xs mt-1">Före, efter och ev. problem</p>
+              <p className="text-xs mt-1 text-muted-foreground/70" data-testid="text-photo-size-hint">{FIELD_PHOTO_SIZE_HINT}</p>
             </div>
           )}
 
