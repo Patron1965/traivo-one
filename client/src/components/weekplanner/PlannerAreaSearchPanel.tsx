@@ -163,6 +163,7 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
   teamNameById,
 }: PlannerAreaSearchPanelProps) {
   const [anchorJobId, setAnchorJobId] = useState<string | null>(null);
+  const [useAnchorRoute, setUseAnchorRoute] = useState<boolean>(true);
   const initial = useMemo(() => readUrlState(), []);
   const [city, setCity] = useState<string>(initial.city || "");
   const [cityInput, setCityInput] = useState<string>(initial.city || "");
@@ -326,25 +327,36 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
     } else {
       return null;
     }
-    // Travel of selected rows from anchor (heuristic: sum of distances anchor → selected).
+    // Travel + selected-job duration from anchor (heuristic: sum of distances + estimated job durations).
     let travelMinutes = 0;
+    let selectedJobsMinutes = 0;
+    let selectedJobsCount = 0;
+    const rowById = new Map(rows.map(r => [r.id, r]));
     if (anchorCoords) {
       for (const id of Array.from(selectedJobIds)) {
         if (id === anchorJobId) continue;
         const d = rowDistances.get(id);
         if (d?.minutes != null) travelMinutes += d.minutes;
+        const r = rowById.get(id);
+        const dur = (r?.estimatedDuration ?? 60);
+        selectedJobsMinutes += dur;
+        selectedJobsCount += 1;
       }
     }
     const travelHours = travelMinutes / 60;
-    const totalHours = plannedHours + travelHours;
+    const selectedJobsHours = selectedJobsMinutes / 60;
+    const totalHours = plannedHours + travelHours + selectedJobsHours;
+    const remainingHours = Math.max(0, HOURS_IN_DAY - totalHours);
     const pct = (totalHours / HOURS_IN_DAY) * 100;
     const tone: "ok" | "warning" | "destructive" =
       pct > 100 ? "destructive" : pct >= 85 ? "warning" : "ok";
+    const wouldOverbook = totalHours > HOURS_IN_DAY;
     return {
       dateStr, assigneeKind, assigneeId, assigneeName,
-      plannedHours, travelMinutes, totalHours, pct, tone,
+      plannedHours, travelMinutes, selectedJobsHours, selectedJobsCount,
+      totalHours, remainingHours, pct, tone, wouldOverbook,
     };
-  }, [anchorRow, anchorCoords, selectedJobIds, anchorJobId, rowDistances, getResourceDayHours, getTeamDayHours, resourceNameById, teamNameById]);
+  }, [anchorRow, anchorCoords, selectedJobIds, anchorJobId, rowDistances, rows, getResourceDayHours, getTeamDayHours, resourceNameById, teamNameById]);
 
   const anchorPrefill: BulkSchedulePrefill | null = useMemo(() => {
     if (!anchorRow || !anchorRow.scheduledDate) return null;
@@ -364,8 +376,8 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
     if (!anchorPrefill) return;
     const ids = Array.from(selectedJobIds).filter(id => id !== anchorJobId);
     if (ids.length === 0) return;
-    onBulkSchedule({ overrideIds: ids, prefill: anchorPrefill });
-  }, [anchorPrefill, selectedJobIds, anchorJobId, onBulkSchedule]);
+    onBulkSchedule({ overrideIds: ids, prefill: useAnchorRoute ? anchorPrefill : undefined });
+  }, [anchorPrefill, selectedJobIds, anchorJobId, onBulkSchedule, useAnchorRoute]);
 
   const handleScheduleAnchorOnly = useCallback(() => {
     if (!anchorJobId) return;
@@ -657,7 +669,7 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
 
                 {routeBudget && (
                   <div
-                    className={`mb-2 rounded-md border px-3 py-2 text-xs flex flex-wrap items-center gap-x-3 gap-y-1 ${
+                    className={`mb-2 rounded-md border px-3 py-2 text-xs flex flex-col gap-1 ${
                       routeBudget.tone === "destructive"
                         ? "border-destructive/40 bg-destructive/10 text-destructive"
                         : routeBudget.tone === "warning"
@@ -666,19 +678,50 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                     }`}
                     data-testid="text-route-budget"
                   >
-                    <Route className="h-3.5 w-3.5 shrink-0" />
-                    <span className="font-medium">
-                      {format(new Date(routeBudget.dateStr), "EEE d MMM", { locale: sv })}
-                    </span>
-                    <span className="text-muted-foreground">·</span>
-                    <span>{routeBudget.assigneeName}</span>
-                    <span className="text-muted-foreground">·</span>
-                    <span>
-                      {routeBudget.totalHours.toFixed(1).replace(".", ",")} / {HOURS_IN_DAY} h
-                    </span>
-                    {routeBudget.travelMinutes > 0 && (
-                      <span className="text-muted-foreground">+{routeBudget.travelMinutes} min restid</span>
-                    )}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <Route className="h-3.5 w-3.5 shrink-0" />
+                      <span className="font-medium">
+                        {format(new Date(routeBudget.dateStr), "EEE d MMM", { locale: sv })}
+                      </span>
+                      <span className="text-muted-foreground">·</span>
+                      <span>{routeBudget.assigneeName}</span>
+                      <span className="text-muted-foreground">·</span>
+                      <span>
+                        {routeBudget.totalHours.toFixed(1).replace(".", ",")} / {HOURS_IN_DAY} h
+                      </span>
+                      <span className="text-muted-foreground" data-testid="text-route-budget-remaining">
+                        ({routeBudget.remainingHours.toFixed(1).replace(".", ",")} h kvar)
+                      </span>
+                      {routeBudget.travelMinutes > 0 && (
+                        <span className="text-muted-foreground">+{routeBudget.travelMinutes} min restid</span>
+                      )}
+                      {routeBudget.selectedJobsCount > 0 && (
+                        <span className="text-muted-foreground">
+                          +{routeBudget.selectedJobsHours.toFixed(1).replace(".", ",")} h valda jobb
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <label className="flex items-center gap-1.5 text-[11px] cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          className="h-3 w-3 accent-current"
+                          checked={useAnchorRoute}
+                          onChange={(e) => setUseAnchorRoute(e.target.checked)}
+                          data-testid="toggle-use-anchor-route"
+                        />
+                        Använd ankarets dag/resurs vid "Lägg till i rutten"
+                      </label>
+                      {routeBudget.wouldOverbook && (
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-destructive"
+                          data-testid="text-route-budget-overbook"
+                        >
+                          <AlertTriangle className="h-3 w-3" />
+                          Dagen blir överbokad om jobben läggs till
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
 
