@@ -719,7 +719,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
         {d.activeDragJob && <DragOverlayContent job={d.activeDragJob} timewindowMap={d.timewindowMap} />}
       </DragOverlay>
 
-      <AssignDialog open={d.assignDialogOpen} onOpenChange={d.setAssignDialogOpen} jobToAssign={d.jobToAssign} assignDate={d.assignDate} setAssignDate={d.setAssignDate} assignResourceId={d.assignResourceId} setAssignResourceId={d.setAssignResourceId} resources={d.resources} onConfirm={d.handleQuickAssign} isPending={d.updateWorkOrderMutation.isPending} />
+      <AssignDialog open={d.assignDialogOpen} onOpenChange={(v) => { d.setAssignDialogOpen(v); if (!v) { d.setAssignResourceId(null); d.setAssignTeamId(null); } }} jobToAssign={d.jobToAssign} assignDate={d.assignDate} setAssignDate={d.setAssignDate} assignResourceId={d.assignResourceId} setAssignResourceId={d.setAssignResourceId} assignTeamId={d.assignTeamId} setAssignTeamId={d.setAssignTeamId} resources={d.resources} teams={d.teamsData} onConfirm={d.handleQuickAssign} isPending={d.updateWorkOrderMutation.isPending || d.assignTeamMutation.isPending} />
       <SendScheduleDialog
         open={d.sendScheduleDialogOpen}
         onOpenChange={d.setSendScheduleDialogOpen}

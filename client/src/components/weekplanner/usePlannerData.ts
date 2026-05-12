@@ -87,6 +87,7 @@ export function usePlannerData() {
   const [jobToAssign, setJobToAssign] = useState<WorkOrderWithObject | null>(null);
   const [assignDate, setAssignDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
   const [assignResourceId, setAssignResourceId] = useState<string | null>(null);
+  const [assignTeamId, setAssignTeamId] = useState<string | null>(null);
   const [sendScheduleDialogOpen, setSendScheduleDialogOpen] = useState(false);
   const [sendScheduleResource, setSendScheduleResource] = useState<Resource | null>(null);
   const [sendScheduleCopied, setSendScheduleCopied] = useState(false);
@@ -845,9 +846,18 @@ export function usePlannerData() {
   }, [toast]);
 
   const handleJobClick = useCallback((jobId: string) => { setSelectedJob(jobId); }, []);
-  const handleOpenAssignDialog = useCallback((job: WorkOrderWithObject, e: React.MouseEvent) => { e.stopPropagation(); setJobToAssign(job); setAssignDate(format(currentDate, "yyyy-MM-dd")); setAssignResourceId(null); setAssignDialogOpen(true); }, [currentDate]);
+  const handleOpenAssignDialog = useCallback((job: WorkOrderWithObject, e: React.MouseEvent) => { e.stopPropagation(); setJobToAssign(job); setAssignDate(format(currentDate, "yyyy-MM-dd")); setAssignResourceId(null); setAssignTeamId(null); setAssignDialogOpen(true); }, [currentDate]);
   const handleQuickAssign = useCallback(() => {
-    if (!jobToAssign || !assignResourceId || !assignDate) return;
+    if (!jobToAssign || !assignDate) return;
+    if (assignTeamId) {
+      executeTeamSchedule(jobToAssign.id, assignTeamId, assignDate);
+      setAssignDialogOpen(false);
+      setJobToAssign(null);
+      setAssignResourceId(null);
+      setAssignTeamId(null);
+      return;
+    }
+    if (!assignResourceId) return;
     setWhatIfPending({
       jobId: jobToAssign.id,
       jobTitle: jobToAssign.title || jobToAssign.id.slice(0, 8),
@@ -859,7 +869,8 @@ export function usePlannerData() {
     setAssignDialogOpen(false);
     setJobToAssign(null);
     setAssignResourceId(null);
-  }, [jobToAssign, assignResourceId, assignDate, fetchWhatIf]);
+    setAssignTeamId(null);
+  }, [jobToAssign, assignResourceId, assignTeamId, assignDate, fetchWhatIf, executeTeamSchedule]);
 
   const handleAcceptConflict = useCallback(() => {
     if (!pendingSchedule) return;
@@ -1158,7 +1169,7 @@ export function usePlannerData() {
     activeResourceId, setActiveResourceId, activeResource, activeResourceJobs, activeResourceJobsByDay,
     undoStack, redoStack,
     routeViewResourceId, setRouteViewResourceId, routeJobOrder, setRouteJobOrder, isOptimizing,
-    assignDialogOpen, setAssignDialogOpen, jobToAssign, assignDate, setAssignDate, assignResourceId, setAssignResourceId,
+    assignDialogOpen, setAssignDialogOpen, jobToAssign, assignDate, setAssignDate, assignResourceId, setAssignResourceId, assignTeamId, setAssignTeamId,
     sendScheduleDialogOpen, setSendScheduleDialogOpen, sendScheduleResource, sendScheduleCopied,
     conflictDialogOpen, setConflictDialogOpen, pendingSchedule, setPendingSchedule,
     autoFillDialogOpen, setAutoFillDialogOpen, autoFillOverbooking, setAutoFillOverbooking,
@@ -1193,7 +1204,7 @@ export function usePlannerData() {
     getJobsForResourceAndDay, getResourceDayHours,
     getCapacityPercentage, getCapacityColor, getCapacityBgColor, getDropFitClass,
     resourceWeekSummary, jobConflicts,
-    updateWorkOrderMutation, unscheduleWorkOrderMutation, sendScheduleMutation,
+    updateWorkOrderMutation, assignTeamMutation, unscheduleWorkOrderMutation, sendScheduleMutation,
     navigate, handleViewModeChange, goToToday, goToDay, getHeaderLabel,
     handleJobClick, handleOpenAssignDialog, handleQuickAssign,
     handleAcceptConflict, handleUnschedule, handleUndo, handleRedo,

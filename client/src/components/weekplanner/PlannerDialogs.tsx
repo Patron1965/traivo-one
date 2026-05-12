@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertTriangle, Loader2, User, Sparkles, Wand2, Mail, Copy, Check, Link2, ArrowRight, Trash2, Send, MapPin, Calendar, ChevronRight, MessageSquare, X } from "lucide-react";
+import { AlertTriangle, Loader2, User, Users, Sparkles, Wand2, Mail, Copy, Check, Link2, ArrowRight, Trash2, Send, MapPin, Calendar, ChevronRight, MessageSquare, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { format, startOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -22,8 +22,11 @@ interface AssignDialogProps {
   assignDate: string;
   setAssignDate: (v: string) => void;
   assignResourceId: string | null;
-  setAssignResourceId: (v: string) => void;
+  setAssignResourceId: (v: string | null) => void;
+  assignTeamId: string | null;
+  setAssignTeamId: (v: string | null) => void;
   resources: Resource[];
+  teams: Array<{ id: string; name: string; color: string | null }>;
   onConfirm: () => void;
   isPending: boolean;
 }
@@ -31,7 +34,7 @@ interface AssignDialogProps {
 type ResourceMatch = { resourceId: string; resourceName: string; score: number; reasons: string[]; clusterMatch: boolean };
 
 export const AssignDialog = memo(function AssignDialog(props: AssignDialogProps) {
-  const { open, onOpenChange, jobToAssign, assignDate, setAssignDate, assignResourceId, setAssignResourceId, resources, onConfirm, isPending } = props;
+  const { open, onOpenChange, jobToAssign, assignDate, setAssignDate, assignResourceId, setAssignResourceId, assignTeamId, setAssignTeamId, resources, teams, onConfirm, isPending } = props;
 
   const objectId = jobToAssign?.objectId;
   const clusterId = jobToAssign?.clusterId;
@@ -87,8 +90,29 @@ export const AssignDialog = memo(function AssignDialog(props: AssignDialogProps)
             </div>
           )}
           <div className="space-y-2">
-            <Label>Resurs</Label>
+            <Label>Resurs eller team</Label>
             <div className="space-y-2 max-h-64 overflow-y-auto">
+              {teams.length > 0 && (
+                <>
+                  {teams.map((team) => (
+                    <div
+                      key={team.id}
+                      className={`p-3 rounded-md border cursor-pointer hover-elevate transition-colors ${assignTeamId === team.id ? "ring-2 ring-primary" : ""}`}
+                      onClick={() => { setAssignTeamId(team.id); setAssignResourceId(null); }}
+                      data-testid={`assign-team-${team.id}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-muted-foreground" style={team.color ? { color: team.color } : undefined} />
+                        <span className="font-medium">{team.name}</span>
+                        <Badge variant="secondary" className="text-xs ml-auto">team</Badge>
+                      </div>
+                    </div>
+                  ))}
+                  {sortedResources.length > 0 && (
+                    <div className="px-1 pt-1 text-[11px] uppercase tracking-wide text-muted-foreground">Personer</div>
+                  )}
+                </>
+              )}
               {sortedResources.map((resource) => {
                 const matchInfo = matchScoreMap.get(resource.id);
                 const isMatch = matchInfo?.clusterMatch;
@@ -96,7 +120,7 @@ export const AssignDialog = memo(function AssignDialog(props: AssignDialogProps)
                   <div
                     key={resource.id}
                     className={`p-3 rounded-md border cursor-pointer hover-elevate transition-colors ${assignResourceId === resource.id ? "ring-2 ring-primary" : ""} ${isMatch ? "border-chart-2/30 dark:border-chart-2/70 bg-chart-2/10 dark:bg-chart-2/15" : ""}`}
-                    onClick={() => setAssignResourceId(resource.id)}
+                    onClick={() => { setAssignResourceId(resource.id); setAssignTeamId(null); }}
                     data-testid={`assign-resource-${resource.id}`}
                   >
                     <div className="flex items-center gap-2">
@@ -124,7 +148,7 @@ export const AssignDialog = memo(function AssignDialog(props: AssignDialogProps)
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Avbryt</Button>
-          <Button onClick={onConfirm} disabled={!assignResourceId || isPending} data-testid="button-confirm-assign">
+          <Button onClick={onConfirm} disabled={(!assignResourceId && !assignTeamId) || isPending} data-testid="button-confirm-assign">
             {isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
             Tilldela
           </Button>
