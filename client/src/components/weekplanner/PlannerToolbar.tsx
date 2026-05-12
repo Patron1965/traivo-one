@@ -722,7 +722,7 @@ export const PlannerFooter = memo(function PlannerFooter({
         <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-chart-2/15 rounded-sm"></span><span>Produktion</span></div>
         <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-chart-3/40 rounded-sm"></span><span>Restid</span></div>
         <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-chart-1/40 rounded-sm"></span><span>Rast</span></div>
-        <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-gray-300 dark:bg-gray-600 rounded-sm"></span><span>Ledig</span></div>
+        <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-muted-foreground/40 rounded-sm"></span><span>Ledig</span></div>
         {jobConflictCount > 0 && (
           <>
             <span className="text-muted-foreground">|</span>

@@ -91,7 +91,7 @@ export const executionStatusLabels: Record<string, string> = {
 };
 
 export const executionStatusColors: Record<string, string> = {
-  not_planned: "bg-gray-400",
+  not_planned: "bg-muted-foreground/60",
   planned_rough: "bg-chart-3/15",
   planned_fine: "bg-chart-1/15",
   on_way: "bg-chart-5/15",
@@ -114,14 +114,14 @@ export const timeBlockColors: Record<TimeBlockCategory, string> = {
   production: "bg-chart-2/15 dark:bg-chart-2/15",
   travel: "bg-chart-3/15 dark:bg-chart-3/15",
   break: "bg-chart-1/15 dark:bg-chart-1/15",
-  free: "bg-gray-50 dark:bg-gray-950/20",
+  free: "bg-muted/40 dark:bg-muted/20",
 };
 
 export const timeBlockBorders: Record<TimeBlockCategory, string> = {
   production: "border-l-chart-2",
   travel: "border-l-chart-3",
   break: "border-l-chart-1",
-  free: "border-l-gray-300",
+  free: "border-l-border",
 };
 
 export const timeBlockLabels: Record<TimeBlockCategory, string> = {

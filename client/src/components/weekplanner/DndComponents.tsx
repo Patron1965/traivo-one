@@ -40,7 +40,7 @@ export function SubStepsExpander({ jobId, isExpanded, onToggle }: { jobId: strin
         <div className="mt-1 space-y-0.5 pl-2 border-l border-muted">
           {subSteps.sort((a, b) => a.stepOrder - b.stepOrder).map(step => (
             <div key={step.id} className="flex items-center gap-1.5 text-[10px]">
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${step.status === "completed" ? "bg-chart-2/15" : step.status === "in_progress" ? "bg-chart-1/15" : "bg-gray-300"}`} />
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${step.status === "completed" ? "bg-chart-2" : step.status === "in_progress" ? "bg-chart-1" : "bg-muted-foreground/40"}`} />
               <span className={step.status === "completed" ? "line-through text-muted-foreground" : ""}>{step.title}</span>
             </div>
           ))}

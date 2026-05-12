@@ -307,10 +307,10 @@ function TeamMemberPanel({
 
 function getWeatherIcon(code: number) {
   if ([0, 1].includes(code)) return <Sun className="h-3 w-3 text-chart-3" />;
-  if ([2, 3].includes(code)) return <Cloud className="h-3 w-3 text-gray-400" />;
+  if ([2, 3].includes(code)) return <Cloud className="h-3 w-3 text-muted-foreground" />;
   if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return <CloudRain className="h-3 w-3 text-chart-1" />;
   if ([71, 73, 75, 77, 85, 86].includes(code)) return <Snowflake className="h-3 w-3 text-chart-1" />;
-  return <Cloud className="h-3 w-3 text-gray-400" />;
+  return <Cloud className="h-3 w-3 text-muted-foreground" />;
 }
 
 function getWeatherMultiplierLabel(multiplier: number) {
@@ -429,7 +429,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                 <span className="h-6 w-6 rounded-full shrink-0 flex items-center justify-center" style={{ backgroundColor: team.color }} data-testid={`avatar-team-color-${team.id}`} />
               ) : !team.isUncategorized ? (
                 <span
-                  className={`h-6 w-6 rounded-full shrink-0 flex items-center justify-center text-[10px] font-semibold ${isFallback ? "bg-warning/15 text-warning dark:bg-warning/15" : "bg-primary/15 text-primary"}`}
+                  className={`h-6 w-6 rounded-full shrink-0 flex items-center justify-center text-[10px] font-semibold ring-1 ${isFallback ? "bg-warning/15 text-warning ring-warning/40 dark:bg-warning/20 dark:ring-warning/60" : "bg-primary/15 text-primary ring-primary/30 dark:bg-primary/20 dark:ring-primary/50"}`}
                   data-testid={`avatar-team-initials-${team.id}`}
                 >
                   {team.name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() || "").join("") || team.name.slice(0, 2).toUpperCase()}
@@ -446,7 +446,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
             </div>
             {summary && (
               <div className="mt-2">
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                <div className="h-1.5 bg-muted-foreground/15 rounded-full overflow-hidden">
                   <div className={`h-full rounded-full ${getCapacityColor(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-1 tabular-nums">{summary.totalHours.toFixed(1)}h / {summary.weeklyCapacity}h</div>
@@ -484,7 +484,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
               >
                 <div className="min-w-0 overflow-hidden" data-testid={isFallback ? `drop-zone-resource-fallback-${team.resourceId}-${dayStr}` : `drop-zone-team-${team.id}-${dayStr}`}>
                   <div className="flex items-center gap-1 mb-2">
-                    <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden">
+                    <div className="h-2 flex-1 bg-muted-foreground/15 rounded-full overflow-hidden">
                       <div className={`h-full rounded-full transition-all ${getCapacityColor(capacityPct)}`} style={{ width: `${Math.min(capacityPct, 100)}%` }} />
                     </div>
                     <span className={`text-[10px] tabular-nums ${isOverbooked ? "text-destructive font-semibold" : capacityPct >= 85 ? "text-warning" : "text-muted-foreground"}`}>
@@ -493,7 +493,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                   </div>
                   <div className={zoomGapClass}>
                     {jobs.length === 0 && (
-                      <div className="flex items-center justify-center py-4 text-muted-foreground/40">
+                      <div className="flex items-center justify-center py-4 text-muted-foreground/70">
                         <Plus className="h-4 w-4" />
                       </div>
                     )}
@@ -532,9 +532,9 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
             const weather = weatherByDate.get(dayStr);
             const multiplierLabel = weather ? getWeatherMultiplierLabel(weather.impact.capacityMultiplier) : null;
             return (
-              <div key={i} className={`p-3 text-center border-r last:border-r-0 ${isToday ? "bg-primary/5" : ""}`}>
-                <div className="text-xs text-muted-foreground uppercase">{format(day, "EEE", { locale: sv })}</div>
-                <div className={`text-lg font-semibold ${isToday ? "text-primary" : ""}`}>{format(day, "d")}</div>
+              <div key={i} className={`p-3 text-center border-r last:border-r-0 ${isToday ? "bg-primary/10 dark:bg-primary/15 border-b-2 border-b-primary" : ""}`}>
+                <div className="text-xs text-muted-foreground uppercase font-medium tracking-wide">{format(day, "EEE", { locale: sv })}</div>
+                <div className={`text-lg font-semibold ${isToday ? "text-primary" : "text-foreground"}`}>{format(day, "d")}</div>
                 {weather && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -729,7 +729,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                   >
                     <div className="min-w-0 overflow-hidden" data-testid={`drop-zone-${resource.id}-${dayStr}`}>
                       <div className="flex items-center gap-1 mb-2">
-                        <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden">
+                        <div className="h-2 flex-1 bg-muted-foreground/15 rounded-full overflow-hidden">
                           <div className={`h-full rounded-full transition-all ${getCapacityColor(capacityPct)}`} style={{ width: `${Math.min(capacityPct, 100)}%` }} />
                         </div>
                         <Tooltip>
@@ -813,7 +813,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                       })()}
                       <div className={zoomGapClass}>
                         {jobs.length === 0 && (
-                          <div className="flex items-center justify-center py-4 text-muted-foreground/40">
+                          <div className="flex items-center justify-center py-4 text-muted-foreground/70">
                             <Plus className="h-4 w-4" />
                           </div>
                         )}

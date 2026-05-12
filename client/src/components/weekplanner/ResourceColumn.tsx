@@ -37,7 +37,7 @@ export const ResourceColumn = memo(function ResourceColumn({ resource, summary, 
 
   return (
     <div
-      className={`p-2 border-r cursor-pointer hover:bg-muted/60 transition-colors group flex flex-col justify-between ${isClusterMatch ? "bg-chart-2/10 dark:bg-chart-2/15 ring-1 ring-chart-2/40 dark:ring-chart-2/50" : "bg-muted/30"}`}
+      className={`p-2 border-r cursor-pointer hover-elevate transition-colors group flex flex-col justify-between ${isClusterMatch ? "bg-chart-2/10 dark:bg-chart-2/15 ring-1 ring-chart-2/40 dark:ring-chart-2/50" : "bg-card"}`}
       onClick={() => onResourceClick(resource.id)}
       data-testid={`resource-cell-${resource.id}`}
     >
@@ -69,8 +69,8 @@ export const ResourceColumn = memo(function ResourceColumn({ resource, summary, 
       {summary && (
         <div className="mt-1">
           <div className="flex items-center gap-1">
-            <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
-              <div className={`h-full rounded-full transition-all ${summary.pct >= 100 ? "bg-destructive/15" : summary.pct >= 80 ? "bg-chart-2/15" : summary.pct >= 50 ? "bg-chart-3/15" : "bg-gray-400"}`} style={{ width: `${Math.min(summary.pct, 100)}%` }} />
+            <div className="h-1.5 flex-1 bg-muted-foreground/15 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full transition-all ${summary.pct >= 100 ? "bg-destructive" : summary.pct >= 80 ? "bg-chart-2" : summary.pct >= 50 ? "bg-chart-3" : "bg-muted-foreground/60"}`} style={{ width: `${Math.min(summary.pct, 100)}%` }} />
             </div>
             <span className={`text-[9px] tabular-nums ${summary.pct >= 100 ? "text-destructive" : summary.pct >= 80 ? "text-chart-2" : "text-muted-foreground"}`}>{summary.pct}%</span>
           </div>

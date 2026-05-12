@@ -76,7 +76,7 @@ export const JobCard = memo(function JobCard({
             <div className="flex items-center gap-1.5">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${executionStatusColors[execStatus] || "bg-gray-400"} ${
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${executionStatusColors[execStatus] || "bg-muted-foreground/60"} ${
                     (execStatus === "on_way" || execStatus === "on_site") ? "animate-pulse" : ""
                   }`} />
                 </TooltipTrigger>
@@ -92,7 +92,7 @@ export const JobCard = memo(function JobCard({
               {job.executionCode && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="text-[10px] shrink-0 bg-slate-100 dark:bg-slate-800 px-1 rounded" data-testid={`exec-code-${job.id}`}>
+                    <span className="text-[10px] shrink-0 bg-muted text-muted-foreground px-1 rounded" data-testid={`exec-code-${job.id}`}>
                       {EXECUTION_CODE_ICONS[job.executionCode] || "KOD"}
                     </span>
                   </TooltipTrigger>
@@ -247,7 +247,7 @@ export const JobCard = memo(function JobCard({
                 <div className="flex items-center gap-1 mt-1">
                   <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
                     <div
-                      className={`h-full ${executionStatusColors[execStatus] || "bg-gray-400"} transition-all`}
+                      className={`h-full ${executionStatusColors[execStatus] || "bg-muted-foreground/60"} transition-all`}
                       style={{ width: `${execProgress}%` }}
                     />
                   </div>

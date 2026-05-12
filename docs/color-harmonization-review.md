@@ -163,6 +163,44 @@ syntes inte. Följande finjusteringar har gjorts utan layoutändring:
   brödtexten klarar AA medan rubriken "SLA-risk: kritisk/varning" och ikonen
   bär färgsignalen. Tydligt synlig i båda lägena utan kontrastregression.
 
+### Kalendervyns finjusteringar (Task #444 — uppföljning)
+
+Användarrapport visade att schemakalendern (`Kalender`-poppoutläget) i mörkt
+läge hade osynliga "+"-slot-markörer, kapacitetsstaplar som drunknade,
+hårdkodade `bg-gray-*`/`bg-slate-*`-färger och en svag idag-markering.
+Följande ändringar gjorts utan layout/funktion:
+
+- `client/src/components/weekplanner/WeekGridView.tsx`
+  - Tom-slot Plus-ikon `text-muted-foreground/40` → `/70` (syns nu i båda lägena).
+  - Idag-kolumn `bg-primary/5` → `bg-primary/10 dark:bg-primary/15` +
+    `border-b-2 border-b-primary` så aktuell dag är omedelbart synlig.
+  - Veckodag-headertext fått `font-medium tracking-wide` för att läsa snabbare.
+  - Kapacitetsstaplarnas spår `bg-muted` → `bg-muted-foreground/15` (synligt i
+    mörkt läge utan att dra uppmärksamheten från fyllningen).
+  - Team-avatar-cirkel fått `ring-1 ring-{warning|primary}/40-50` så cirkeln
+    avgränsas tydligt mot row-bakgrunden.
+  - Vädricon `text-gray-400` → `text-muted-foreground`.
+- `client/src/components/weekplanner/ResourceColumn.tsx`
+  - Resurs-cell `bg-muted/30` → `bg-card` + `hover-elevate` (samma rytm som
+    orderlagrets sidopanel).
+  - Veckokapacitets-stapel: `bg-gray-400` ersatt med `bg-muted-foreground/60`
+    och `/15`-tonade fyllningsfärger byts till solida tema-tokens
+    (`bg-destructive` / `bg-chart-2` / `bg-chart-3`) — barens tillstånd syns nu.
+- `client/src/components/weekplanner/JobCard.tsx`
+  - `bg-gray-400` (status-dot, exec-progressbar) → `bg-muted-foreground/60`.
+  - `bg-slate-100 dark:bg-slate-800` (exec-code-chip) → `bg-muted text-muted-foreground`.
+- `client/src/components/weekplanner/DndComponents.tsx`
+  - SubStep-dot `bg-chart-2/15`/`bg-chart-1/15`/`bg-gray-300` → solida
+    `bg-chart-2`/`bg-chart-1`/`bg-muted-foreground/40` (status syns på avstånd).
+- `client/src/components/weekplanner/types.ts`
+  - `executionStatusColors.not_planned` `bg-gray-400` → `bg-muted-foreground/60`.
+  - `timeBlockColors.free` `bg-gray-50 dark:bg-gray-950/20` →
+    `bg-muted/40 dark:bg-muted/20`.
+  - `timeBlockBorders.free` `border-l-gray-300` → `border-l-border`
+    (semantisk token, harmoniserar med övriga kategori-borders).
+- `client/src/components/weekplanner/PlannerToolbar.tsx`
+  - Legend-chip "Ledig" `bg-gray-300 dark:bg-gray-600` → `bg-muted-foreground/40`.
+
 ### AA-kontrastverifiering (mörkt läge — dimensionerande)
 
 | Mål-element                                  | Bakgrund                              | Förgrundstext        | Uppskattad ratio |
