@@ -212,6 +212,22 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
     if (!open) onResultsChange([]);
   }, [open, onResultsChange]);
 
+  // Prune selection when filter results change so users can't bulk-schedule
+  // jobs that are no longer visible (e.g. status/city filter narrowed the set).
+  useEffect(() => {
+    if (!open) return;
+    if (selectedJobIds.size === 0) return;
+    const visibleIds = new Set(rows.map(r => r.id));
+    let hasStale = false;
+    for (const id of Array.from(selectedJobIds)) {
+      if (!visibleIds.has(id)) { hasStale = true; break; }
+    }
+    if (hasStale) {
+      const keep = rows.filter(r => selectedJobIds.has(r.id)).map(r => r.id);
+      onSelectAll(keep);
+    }
+  }, [rows, open, selectedJobIds, onSelectAll]);
+
   const toggleHierarchy = useCallback((h: string) => {
     setHierarchies(prev => prev.includes(h) ? prev.filter(x => x !== h) : [...prev, h]);
     setPage(1);
