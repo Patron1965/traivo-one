@@ -146,6 +146,17 @@ async function tableExists(qx: Querier, table: string, cacheKey: string): Promis
   return (await getColumns(qx, table, cacheKey)).length > 0;
 }
 
+const tenantIdCache = new Map<string, boolean>();
+/** True om tabellen har en tenant_id-kolumn. Cachat per (cacheKey, table). */
+async function hasTenantId(qx: Querier, table: string, cacheKey: string): Promise<boolean> {
+  const ck = `${cacheKey}:${table}`;
+  if (tenantIdCache.has(ck)) return tenantIdCache.get(ck)!;
+  const cols = await getColumns(qx, table, cacheKey);
+  const has = cols.includes("tenant_id");
+  tenantIdCache.set(ck, has);
+  return has;
+}
+
 /** Hämtar rader från dev och upsert:ar dem i prod via given prod-klient. */
 async function copyTable(
   prod: pg.PoolClient,
@@ -190,8 +201,17 @@ async function copyTable(
   }
 
   const colList = cols.map((c) => `"${c}"`).join(", ");
-  const sel = `SELECT ${colList} FROM ${table} WHERE ${whereSql}`;
-  const rows = await dev.query(sel, params);
+  // Defense-in-depth: om dev-tabellen har tenant_id, injicera ett explicit
+  // `AND tenant_id = $N`-villkor även när whereSql redan filtrerar via
+  // FK-kedjor. Skyddar mot framtida återanvändning för andra tenants.
+  let effectiveWhere = whereSql;
+  let effectiveParams: unknown[] = params;
+  if (devCols.includes("tenant_id")) {
+    effectiveParams = [...params, TENANT];
+    effectiveWhere = `(${whereSql}) AND tenant_id = $${effectiveParams.length}`;
+  }
+  const sel = `SELECT ${colList} FROM ${table} WHERE ${effectiveWhere}`;
+  const rows = await dev.query(sel, effectiveParams);
   t.fetched += rows.rowCount ?? 0;
   if (rows.rowCount === 0) {
     log(`  ${table.padEnd(40)} fetched=0`);
@@ -237,9 +257,16 @@ async function deleteByColumn(
   if (!(await tableExists(prod, table, "prod"))) return 0;
   const cols = await getColumns(prod, table, "prod");
   if (!cols.includes(column)) return 0;
+  // Defense-in-depth: lägg på explicit tenant_id-predikat när kolumnen finns.
+  const params: unknown[] = [ids];
+  let where = `"${column}" = ANY($1::text[])`;
+  if (cols.includes("tenant_id")) {
+    params.push(TENANT);
+    where += ` AND tenant_id = $${params.length}`;
+  }
   const r = await prod.query(
-    `DELETE FROM ${table} WHERE "${column}" = ANY($1::text[])`,
-    [ids],
+    `DELETE FROM ${table} WHERE ${where}`,
+    params,
   );
   const t = track(table);
   t.deleted += r.rowCount ?? 0;
@@ -372,13 +399,13 @@ async function cleanupTestCustomers(prod: pg.PoolClient): Promise<void> {
   log(`  Identifierade ${customerIds.length} kund(er): ${customerIds.join(", ")}`);
 
   const objR = await prod.query<{ id: string }>(
-    `SELECT id FROM objects WHERE customer_id = ANY($1::text[])`,
-    [customerIds],
+    `SELECT id FROM objects WHERE customer_id = ANY($1::text[]) AND tenant_id = $2`,
+    [customerIds, TENANT],
   );
   const objectIds = objR.rows.map((r) => r.id);
   const woR = await prod.query<{ id: string }>(
-    `SELECT id FROM work_orders WHERE customer_id = ANY($1::text[])`,
-    [customerIds],
+    `SELECT id FROM work_orders WHERE customer_id = ANY($1::text[]) AND tenant_id = $2`,
+    [customerIds, TENANT],
   );
   const woIds = woR.rows.map((r) => r.id);
   log(`  → ${objectIds.length} objekt, ${woIds.length} work_orders`);
@@ -394,12 +421,12 @@ async function cleanupTestCustomers(prod: pg.PoolClient): Promise<void> {
 
   if (woIds.length) {
     await prod.query(
-      `UPDATE work_orders SET parent_work_order_id=NULL WHERE parent_work_order_id = ANY($1::text[])`,
-      [woIds],
+      `UPDATE work_orders SET parent_work_order_id=NULL WHERE parent_work_order_id = ANY($1::text[]) AND tenant_id = $2`,
+      [woIds, TENANT],
     );
     const r = await prod.query(
-      `DELETE FROM work_orders WHERE id = ANY($1::text[])`,
-      [woIds],
+      `DELETE FROM work_orders WHERE id = ANY($1::text[]) AND tenant_id = $2`,
+      [woIds, TENANT],
     );
     track("work_orders").deleted += r.rowCount ?? 0;
     log(`  [del] work_orders = ${r.rowCount}`);
@@ -409,8 +436,8 @@ async function cleanupTestCustomers(prod: pg.PoolClient): Promise<void> {
   // (assignments finns i OBJECT_CHILDREN och tas i loopen nedan).
   if (objectIds.length) {
     const asgR = await prod.query<{ id: string }>(
-      `SELECT id FROM assignments WHERE object_id = ANY($1::text[])`,
-      [objectIds],
+      `SELECT id FROM assignments WHERE object_id = ANY($1::text[]) AND tenant_id = $2`,
+      [objectIds, TENANT],
     );
     const asgIds = asgR.rows.map((r) => r.id);
     await deleteByColumn(prod, "assignment_articles", "assignment_id", asgIds);
@@ -426,12 +453,12 @@ async function cleanupTestCustomers(prod: pg.PoolClient): Promise<void> {
 
   if (objectIds.length) {
     await prod.query(
-      `UPDATE objects SET parent_id=NULL WHERE parent_id = ANY($1::text[])`,
-      [objectIds],
+      `UPDATE objects SET parent_id=NULL WHERE parent_id = ANY($1::text[]) AND tenant_id = $2`,
+      [objectIds, TENANT],
     );
     const r = await prod.query(
-      `DELETE FROM objects WHERE id = ANY($1::text[])`,
-      [objectIds],
+      `DELETE FROM objects WHERE id = ANY($1::text[]) AND tenant_id = $2`,
+      [objectIds, TENANT],
     );
     track("objects").deleted += r.rowCount ?? 0;
     log(`  [del] objects = ${r.rowCount}`);
@@ -439,8 +466,8 @@ async function cleanupTestCustomers(prod: pg.PoolClient): Promise<void> {
 
   // Cascade: price_list_articles innan price_lists
   const plR = await prod.query<{ id: string }>(
-    `SELECT id FROM price_lists WHERE customer_id = ANY($1::text[])`,
-    [customerIds],
+    `SELECT id FROM price_lists WHERE customer_id = ANY($1::text[]) AND tenant_id = $2`,
+    [customerIds, TENANT],
   );
   const plIds = plR.rows.map((r) => r.id);
   await deleteByColumn(prod, "price_list_articles", "price_list_id", plIds);
@@ -452,14 +479,14 @@ async function cleanupTestCustomers(prod: pg.PoolClient): Promise<void> {
   // Nollställ root_customer_id på clusters innan kund-radering (FK action 'a')
   if (customerIds.length) {
     await prod.query(
-      `UPDATE clusters SET root_customer_id=NULL WHERE root_customer_id = ANY($1::text[])`,
-      [customerIds],
+      `UPDATE clusters SET root_customer_id=NULL WHERE root_customer_id = ANY($1::text[]) AND tenant_id = $2`,
+      [customerIds, TENANT],
     );
   }
 
   const r = await prod.query(
-    `DELETE FROM customers WHERE id = ANY($1::text[])`,
-    [customerIds],
+    `DELETE FROM customers WHERE id = ANY($1::text[]) AND tenant_id = $2`,
+    [customerIds, TENANT],
   );
   track("customers").deleted += r.rowCount ?? 0;
   log(`  [del] customers = ${r.rowCount}`);
@@ -782,9 +809,9 @@ async function migrateCustomers(prod: pg.PoolClient): Promise<void> {
   await copyTable(
     prod,
     "portal_user_object_scopes",
-    `portal_user_id IN (SELECT id FROM portal_users WHERE customer_id = ANY($1::text[]))
-       AND object_id = ANY($2::text[])`,
-    [customerIds, objectIds],
+    `portal_user_id IN (SELECT id FROM portal_users WHERE tenant_id = $1 AND customer_id = ANY($2::text[]))
+       AND object_id = ANY($3::text[])`,
+    [TENANT, customerIds, objectIds],
   );
 
   if (await tableExists(dev, "metadata_varden", "dev")) {
@@ -866,9 +893,10 @@ async function copyObjectsTopologically(
     await prod.query(
       `UPDATE objects SET parent_id=NULL
          WHERE id = ANY($1::text[])
+           AND tenant_id = $2
            AND parent_id IS NOT NULL
-           AND parent_id NOT IN (SELECT id FROM objects)`,
-      [orphans],
+           AND parent_id NOT IN (SELECT id FROM objects WHERE tenant_id = $2)`,
+      [orphans, TENANT],
     );
     log(`  [warn] Patchade parent_id=NULL för ${orphans.length} orphan-objekt`);
   }
@@ -1008,10 +1036,14 @@ async function main() {
     const validationErrors: string[] = [];
 
     // 1) FK-integritet: alla objects.parent_id måste peka på existerande objekt
+    //    (tenant-scoped — vi vill inte koppla success till andra tenants
+    //    historiska data-kvalitet).
     const orphParents = await prod.query<{ c: number }>(
       `SELECT count(*)::int AS c FROM objects o
-       WHERE o.parent_id IS NOT NULL
-         AND NOT EXISTS (SELECT 1 FROM objects p WHERE p.id = o.parent_id)`,
+       WHERE o.tenant_id = $1
+         AND o.parent_id IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM objects p WHERE p.id = o.parent_id AND p.tenant_id = $1)`,
+      [TENANT],
     );
     if (orphParents.rows[0].c > 0) {
       validationErrors.push(`objects.parent_id: ${orphParents.rows[0].c} orphan(s)`);
@@ -1021,8 +1053,10 @@ async function main() {
     // 2) FK-integritet: clusters.root_customer_id → customers.id
     const orphClust = await prod.query<{ c: number }>(
       `SELECT count(*)::int AS c FROM clusters c
-       WHERE c.root_customer_id IS NOT NULL
-         AND NOT EXISTS (SELECT 1 FROM customers cu WHERE cu.id = c.root_customer_id)`,
+       WHERE c.tenant_id = $1
+         AND c.root_customer_id IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM customers cu WHERE cu.id = c.root_customer_id AND cu.tenant_id = $1)`,
+      [TENANT],
     );
     if (orphClust.rows[0].c > 0) {
       validationErrors.push(`clusters.root_customer_id: ${orphClust.rows[0].c} orphan(s)`);
@@ -1030,9 +1064,13 @@ async function main() {
     log(`  clusters.root_customer_id orphans: ${orphClust.rows[0].c}`);
 
     // 3) FK-integritet: price_list_articles → price_lists
+    //    price_list_articles saknar egen tenant_id, så vi scopar via
+    //    parent-FK till price_lists för aktuell tenant.
     const orphPla = await prod.query<{ c: number }>(
       `SELECT count(*)::int AS c FROM price_list_articles pla
-       WHERE NOT EXISTS (SELECT 1 FROM price_lists pl WHERE pl.id = pla.price_list_id)`,
+       WHERE pla.price_list_id IN (SELECT id FROM price_lists WHERE tenant_id = $1)
+         AND NOT EXISTS (SELECT 1 FROM price_lists pl WHERE pl.id = pla.price_list_id AND pl.tenant_id = $1)`,
+      [TENANT],
     );
     if (orphPla.rows[0].c > 0) {
       validationErrors.push(`price_list_articles: ${orphPla.rows[0].c} orphan(s)`);
@@ -1082,6 +1120,27 @@ async function main() {
       }
     }
     log(`  Tenant-leak check (${leakTables.rowCount} tabeller): ${totalLeak} läckor`);
+
+    // ============ Preflight: rad-räknare per berörd tabell ============
+    // Loggar antal rader per tabell vi rört (inom tenant-scope) innan COMMIT.
+    // Ger operatören en sista chans att se att siffrorna är rimliga.
+    log("\n=== Preflight: per-tabell rad-räknare (tenant-scoped) ===");
+    const touched = Object.keys(counters).sort();
+    for (const tbl of touched) {
+      if (!(await tableExists(prod, tbl, "prod"))) continue;
+      if (await hasTenantId(prod, tbl, "prod")) {
+        const cr = await prod.query<{ c: number }>(
+          `SELECT count(*)::int AS c FROM "${tbl}" WHERE tenant_id = $1`,
+          [TENANT],
+        );
+        log(`  ${tbl.padEnd(40)} rows(tenant=${TENANT})=${cr.rows[0].c}`);
+      } else {
+        const cr = await prod.query<{ c: number }>(
+          `SELECT count(*)::int AS c FROM "${tbl}"`,
+        );
+        log(`  ${tbl.padEnd(40)} rows(total)=${cr.rows[0].c}  [no tenant_id col]`);
+      }
+    }
 
     if (validationErrors.length > 0) {
       throw new Error(

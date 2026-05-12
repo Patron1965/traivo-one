@@ -128,8 +128,22 @@ Vid varje körning innanför transaktionen:
 3. **Tenant-leak**: för varje tabell vi rört som har både `tenant_id` och
    `customer_id`/`object_id`, kontrolleras att rader vars FK pekar på en
    kinab-kund/objekt också har `tenant_id = kinab`.
+4. **Per-tabell rad-räknare** (preflight innan COMMIT): för varje tabell vi
+   rört loggas antalet rader i prod inom tenant-scope (`WHERE tenant_id = $1`)
+   så operatören kan se att siffrorna är rimliga innan persistering. Tabeller
+   utan `tenant_id`-kolumn loggas med totalantal.
 
 Vid fail → tvångs-`ROLLBACK`, ingen ändring persisterad.
+
+## Tenant-scope på alla queries
+
+Som djupförsvar har **varje** SELECT/UPDATE/DELETE/COPY mot tabeller med
+`tenant_id`-kolumn ett explicit `AND tenant_id = $TENANT`-villkor — även när
+filtreringen redan följer av FK-kedjor (`customer_id`/`object_id`). Detta
+sker både via `copyTable` och `deleteByColumn` (som auto-injicerar predikatet
+när kolumnen finns) och via explicita predikat i cleanup-fasen. Skriptet är
+därmed återanvändbart för andra tenants utan kod-ändring — `--tenant=…` styr
+hela scopen.
 
 ## Output
 
