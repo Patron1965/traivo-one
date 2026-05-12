@@ -78,3 +78,9 @@ id = "7shIvAk2ccQx5XnGzqRxe"
 uri = "file://docs/traivo-go-v2-handover.md"
 type = "text"
 title = "Traivo Go — Mobile API v2 handover (F7)"
+
+[[outputs]]
+id = "z_jajx4QbAZ-GZK5-DVD3"
+uri = "file://exports/kinab-pilot-startguide.pdf"
+type = "pdf"
+title = "Kinab pilot — Startguide (PDF)"
