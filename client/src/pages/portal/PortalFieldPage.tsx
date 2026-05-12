@@ -13,6 +13,11 @@ import {
   Clock, Image, X, Building2, FileText, Navigation, ChevronRight
 } from "lucide-react";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
+import {
+  IMAGE_REJECT_TOAST,
+  getEffectiveContentType,
+  isAcceptableImage,
+} from "@/lib/file-mime";
 
 function getSessionToken(): string | null {
   return localStorage.getItem("portal_session");
@@ -224,18 +229,26 @@ export default function PortalFieldPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!isAcceptableImage(file)) {
+      setErrorMessage(IMAGE_REJECT_TOAST.description);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    const effectiveContentType = getEffectiveContentType(file, "image/jpeg");
+
     setUploading(true);
     setErrorMessage(null);
     try {
       const { uploadURL, objectPath } = await portalFetch("/api/portal/field/upload-photo", {
         method: "POST",
-        body: JSON.stringify({ contentType: file.type || "image/jpeg", size: file.size }),
+        body: JSON.stringify({ contentType: effectiveContentType, size: file.size }),
       });
 
       const uploadRes = await fetch(uploadURL, {
         method: "PUT",
         body: file,
-        headers: { "Content-Type": file.type },
+        headers: { "Content-Type": effectiveContentType },
       });
 
       if (!uploadRes.ok) {

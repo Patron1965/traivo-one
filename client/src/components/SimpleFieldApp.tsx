@@ -38,6 +38,11 @@ import { CATEGORY_LABELS, SEVERITY_LABELS, GO_CATEGORIES } from "@shared/changeR
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  IMAGE_REJECT_TOAST,
+  getEffectiveContentType,
+  isAcceptableImage,
+} from "@/lib/file-mime";
 import { DailyProgressCard } from "@/components/DailyProgressCard";
 import { DayReport } from "@/components/DayReport";
 import { FieldTodoList, getUncompletedTodoCount } from "@/components/FieldTodoList";
@@ -1991,11 +1996,17 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                             onChange={async (e) => {
                               const file = e.target.files?.[0];
                               if (file) {
+                                if (!isAcceptableImage(file)) {
+                                  toast({ ...IMAGE_REJECT_TOAST, variant: "destructive", duration: 6000 });
+                                  e.target.value = "";
+                                  return;
+                                }
+                                const effectiveContentType = getEffectiveContentType(file);
                                 setIsUploadingChangePhoto(true);
                                 try {
                                   const uploadRes = await mobileApiCall("POST", "/api/mobile/customer-change-requests/upload-photo", {});
                                   const { uploadURL, objectPath } = await uploadRes.json();
-                                  const putRes = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+                                  const putRes = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": effectiveContentType } });
                                   if (!putRes.ok) throw new Error("Upload failed");
                                   const confirmRes = await mobileApiCall("POST", "/api/mobile/customer-change-requests/confirm-photo", { objectPath });
                                   const { downloadURL } = await confirmRes.json();
@@ -2111,11 +2122,17 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
+                            if (!isAcceptableImage(file)) {
+                              toast({ ...IMAGE_REJECT_TOAST, variant: "destructive", duration: 6000 });
+                              e.target.value = "";
+                              return;
+                            }
+                            const effectiveContentType = getEffectiveContentType(file);
                             setIsUploadingImpossiblePhoto(true);
                             try {
                               const uploadRes = await mobileApiCall("POST", "/api/mobile/customer-change-requests/upload-photo", {});
                               const { uploadURL, objectPath } = await uploadRes.json();
-                              const putRes = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+                              const putRes = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": effectiveContentType } });
                               if (!putRes.ok) throw new Error("Uppladdning misslyckades");
                               const confirmRes = await mobileApiCall("POST", "/api/mobile/customer-change-requests/confirm-photo", { objectPath });
                               const { downloadURL } = await confirmRes.json();

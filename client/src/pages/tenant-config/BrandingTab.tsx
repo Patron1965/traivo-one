@@ -10,6 +10,12 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { TenantBranding } from "@shared/schema";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Building2, Save, Loader2, Palette, Image, Type, Globe, Search, Check, Upload, X, Eye, AlertTriangle } from "lucide-react";
+import {
+  ACCEPTED_IMAGE_FORMATS_LABEL,
+  IMAGE_REJECT_TOAST,
+  getEffectiveContentType,
+  isAcceptableImage,
+} from "@/lib/file-mime";
 
 const isExternallyHostedLogo = (url: string): boolean => {
   if (!url) return false;
@@ -180,29 +186,9 @@ export function BrandingTab() {
   });
 
   const handleLogoUpload = async (file: File) => {
-    const EXT_TO_MIME: Record<string, string> = {
-      png: "image/png",
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      gif: "image/gif",
-      webp: "image/webp",
-      svg: "image/svg+xml",
-      heic: "image/heic",
-      heif: "image/heif",
-      tif: "image/tiff",
-      tiff: "image/tiff",
-      bmp: "image/bmp",
-      ico: "image/x-icon",
-    };
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-    const extMime = EXT_TO_MIME[ext];
-    const isImageByType = file.type.startsWith("image/");
-    const isImageByExt = Boolean(extMime);
-
-    if (!isImageByType && !isImageByExt) {
+    if (!isAcceptableImage(file)) {
       toast({
-        title: "Fel filtyp",
-        description: "Välj en bildfil (PNG, JPG, SVG, WebP, GIF, HEIC, TIFF, BMP eller ICO).",
+        ...IMAGE_REJECT_TOAST,
         variant: "destructive",
         duration: 6000,
       });
@@ -218,7 +204,7 @@ export function BrandingTab() {
       return;
     }
 
-    const effectiveContentType = file.type && file.type.length > 0 ? file.type : (extMime ?? "application/octet-stream");
+    const effectiveContentType = getEffectiveContentType(file);
 
     setLogoUploading(true);
     try {
@@ -510,7 +496,7 @@ export function BrandingTab() {
                         <Upload className="h-8 w-8 text-muted-foreground" />
                         <p className="text-sm text-muted-foreground">Dra och släpp logotyp här</p>
                         <p className="text-xs text-muted-foreground">eller klicka för att välja fil</p>
-                        <p className="text-xs text-muted-foreground/60">PNG, JPG, SVG, WebP — max 5 MB, rekommenderad: 200×80px, transparent bakgrund</p>
+                        <p className="text-xs text-muted-foreground/60">{ACCEPTED_IMAGE_FORMATS_LABEL} — max 5 MB, rekommenderad: 200×80px, transparent bakgrund</p>
                       </div>
                     )}
                   </div>

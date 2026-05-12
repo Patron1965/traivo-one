@@ -9,6 +9,11 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
+  IMAGE_REJECT_TOAST,
+  getEffectiveContentType,
+  isAcceptableImage,
+} from "@/lib/file-mime";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -73,6 +78,15 @@ export function PhotoCapture({
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const uploadFile = useCallback(async (file: File) => {
+    if (!isAcceptableImage(file)) {
+      toast({
+        ...IMAGE_REJECT_TOAST,
+        variant: "destructive",
+        duration: 6000,
+      });
+      return;
+    }
+    const effectiveContentType = getEffectiveContentType(file);
     setIsUploading(true);
     try {
       const response = await fetch("/api/uploads/request-url", {
@@ -81,7 +95,7 @@ export function PhotoCapture({
         body: JSON.stringify({
           name: `workorder-${workOrderId}-${Date.now()}-${file.name}`,
           size: file.size,
-          contentType: file.type,
+          contentType: effectiveContentType,
         }),
       });
 
@@ -92,7 +106,7 @@ export function PhotoCapture({
       const uploadResponse = await fetch(uploadURL, {
         method: "PUT",
         body: file,
-        headers: { "Content-Type": file.type },
+        headers: { "Content-Type": effectiveContentType },
       });
 
       if (!uploadResponse.ok) throw new Error("Uppladdning misslyckades");
