@@ -18,6 +18,7 @@ import {
   getDefaultRecipients,
 } from "../services/missing-coordinates-notifier";
 import { missingCoordinatesNotificationConfigSchema } from "@shared/schema";
+import { invalidateAreaSearchCityCache } from "./plannerRoutes";
 
 type ServiceObject = Awaited<ReturnType<typeof storage.getObjects>>[number];
 
@@ -1113,6 +1114,7 @@ app.post("/api/objects/import-modus", asyncHandler(async (req, res) => {
           importBatchId,
           ...basePayload,
         } as any);
+        if (created?.city) invalidateAreaSearchCityCache(tenantId);
         modusIdToObjectId.set(row.modusId, created.id);
         createdCount++;
       } else {

@@ -5,27 +5,25 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Separator } from "@/components/ui/separator";
 import { QueryState } from "@/components/QueryState";
 import { DraggableJobCard } from "./DndComponents";
 import { JobCard } from "./JobCard";
-import { workOrderStatusBadge } from "@/lib/status-colors";
-import { format } from "date-fns";
+import { format, formatDistanceToNowStrict, addDays } from "date-fns";
 import { sv } from "date-fns/locale";
 import {
   X,
   Search,
   MapPin,
   Filter,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Layers,
   Calendar,
   RotateCw,
+  Repeat,
+  CalendarClock,
 } from "lucide-react";
-import { OBJECT_HIERARCHY_LEVELS, ORDER_STATUSES, type WorkOrderWithObject } from "@shared/schema";
+import { OBJECT_HIERARCHY_LEVELS, type WorkOrderWithObject } from "@shared/schema";
 
 const HIERARCHY_LABELS: Record<string, string> = {
   koncern: "Koncern",
@@ -35,16 +33,14 @@ const HIERARCHY_LABELS: Record<string, string> = {
   karl: "Kärl",
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  skapad: "Skapad",
-  planerad_pre: "Planerad (pre)",
-  planerad_resurs: "Planerad (resurs)",
-  planerad_las: "Låst",
-  utford: "Utförd",
-  fakturerad: "Fakturerad",
-  omojlig: "Omöjlig",
-  avbruten: "Avbruten",
-};
+type PlannerStatusCat = "oschemalagd" | "forsenad" | "schemalagd" | "utford";
+
+const STATUS_CATEGORIES: Array<{ key: PlannerStatusCat; label: string; tone: "muted" | "warning" | "primary" | "success" }> = [
+  { key: "oschemalagd", label: "Oschemalagd", tone: "muted" },
+  { key: "forsenad", label: "Försenad", tone: "warning" },
+  { key: "schemalagd", label: "Schemalagd", tone: "primary" },
+  { key: "utford", label: "Utförd", tone: "success" },
+];
 
 export type AreaSearchRow = WorkOrderWithObject & {
   objectCity: string | null;
@@ -79,7 +75,7 @@ function readUrlState() {
     open: sp.get("areaSearch") === "open",
     city: sp.get("areaCity") || "",
     hierarchies: (sp.get("areaHier") || "").split(",").filter(Boolean),
-    statuses: (sp.get("areaStatus") || "").split(",").filter(Boolean),
+    statuses: (sp.get("areaStatus") || "").split(",").filter(Boolean) as PlannerStatusCat[],
     from: sp.get("areaFrom") || "",
     to: sp.get("areaTo") || "",
     page: Math.max(1, parseInt(sp.get("areaPage") || "1", 10) || 1),
@@ -98,6 +94,20 @@ function writeUrlState(patch: Record<string, string | null>) {
   window.history.replaceState(null, "", url);
 }
 
+function frequencyLabelFromDays(days: number | null | undefined): string | null {
+  if (!days || days <= 0) return null;
+  if (days <= 1) return "Dagligen";
+  if (days <= 4) return "Flera ggr/vecka";
+  if (days <= 8) return "Veckovis";
+  if (days <= 16) return "Varannan vecka";
+  if (days <= 35) return "Månadsvis";
+  if (days <= 70) return "Varannan månad";
+  if (days <= 100) return "Kvartal";
+  if (days <= 200) return "Halvår";
+  if (days <= 380) return "Årlig";
+  return `Var ${Math.round(days / 30)}:e mån`;
+}
+
 export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
   open,
   onClose,
@@ -108,7 +118,7 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
   const [city, setCity] = useState<string>(initial.city || "");
   const [cityInput, setCityInput] = useState<string>(initial.city || "");
   const [hierarchies, setHierarchies] = useState<string[]>(initial.hierarchies || []);
-  const [statuses, setStatuses] = useState<string[]>(initial.statuses || []);
+  const [statusCats, setStatusCats] = useState<PlannerStatusCat[]>(initial.statuses || []);
   const [from, setFrom] = useState<string>(initial.from || "");
   const [to, setTo] = useState<string>(initial.to || "");
   const [page, setPage] = useState<number>(initial.page || 1);
@@ -120,12 +130,12 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
       areaSearch: open ? "open" : null,
       areaCity: city || null,
       areaHier: hierarchies.length ? hierarchies.join(",") : null,
-      areaStatus: statuses.length ? statuses.join(",") : null,
+      areaStatus: statusCats.length ? statusCats.join(",") : null,
       areaFrom: from || null,
       areaTo: to || null,
       areaPage: page > 1 ? String(page) : null,
     });
-  }, [open, city, hierarchies, statuses, from, to, page]);
+  }, [open, city, hierarchies, statusCats, from, to, page]);
 
   // City autocomplete
   const citiesQuery = useQuery<string[]>({
@@ -145,13 +155,13 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
     const sp = new URLSearchParams();
     if (city) sp.set("city", city);
     if (hierarchies.length) sp.set("hierarchyLevels", hierarchies.join(","));
-    if (statuses.length) sp.set("statuses", statuses.join(","));
+    if (statusCats.length) sp.set("statusCategories", statusCats.join(","));
     if (from) sp.set("lastServiceFrom", from);
     if (to) sp.set("lastServiceTo", to);
     sp.set("page", String(page));
     sp.set("pageSize", String(PAGE_SIZE));
     return sp.toString();
-  }, [city, hierarchies, statuses, from, to, page]);
+  }, [city, hierarchies, statusCats, from, to, page]);
 
   const searchQuery = useQuery<AreaSearchResponse>({
     queryKey: ["/api/planner/area-search", searchParams],
@@ -169,7 +179,6 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
     onResultsChange(rows as unknown as WorkOrderWithObject[]);
   }, [rows, onResultsChange]);
 
-  // When panel closes, clear extra dnd jobs
   useEffect(() => {
     if (!open) onResultsChange([]);
   }, [open, onResultsChange]);
@@ -179,8 +188,8 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
     setPage(1);
   }, []);
 
-  const toggleStatus = useCallback((s: string) => {
-    setStatuses(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+  const toggleStatus = useCallback((s: PlannerStatusCat) => {
+    setStatusCats(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
     setPage(1);
   }, []);
 
@@ -195,7 +204,7 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
     setCity("");
     setCityInput("");
     setHierarchies([]);
-    setStatuses([]);
+    setStatusCats([]);
     setFrom("");
     setTo("");
     setPage(1);
@@ -272,16 +281,21 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                   }}
                   placeholder="t.ex. Stockholm"
                   className="h-8 pl-7 text-sm"
-                  data-testid="input-area-search-city"
+                  data-testid="input-area-search"
                 />
               </div>
             </PopoverTrigger>
             <PopoverContent className="w-[330px] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
               <div className="max-h-72 overflow-auto py-1">
                 {citiesQuery.isLoading && (
-                  <div className="px-3 py-2 text-xs text-muted-foreground">Laddar…</div>
+                  <div className="px-3 py-2 text-xs text-muted-foreground" data-testid="text-area-cities-loading">Laddar…</div>
                 )}
-                {!citiesQuery.isLoading && (citiesQuery.data || []).length === 0 && (
+                {citiesQuery.isError && (
+                  <div className="px-3 py-2 text-xs text-destructive" data-testid="text-area-cities-error">
+                    Kunde inte hämta orter. Försök igen.
+                  </div>
+                )}
+                {!citiesQuery.isLoading && !citiesQuery.isError && (citiesQuery.data || []).length === 0 && (
                   <div className="px-3 py-2 text-xs text-muted-foreground">Inga matchande orter</div>
                 )}
                 {(citiesQuery.data || []).map((c) => (
@@ -333,7 +347,7 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                   variant={active ? "default" : "outline"}
                   className="h-6 px-2 text-[11px]"
                   onClick={() => toggleHierarchy(h)}
-                  data-testid={`button-area-hierarchy-${h}`}
+                  data-testid={`chip-hierarchy-${h}`}
                 >
                   {HIERARCHY_LABELS[h] || h}
                 </Button>
@@ -342,27 +356,33 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
           </div>
         </div>
 
-        {/* Status filter */}
+        {/* Status (planner-categories) */}
         <div className="space-y-1.5">
           <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-            <Filter className="h-3 w-3" /> Orderstatus
+            <Filter className="h-3 w-3" /> Status
           </label>
-          <div className="grid grid-cols-2 gap-1">
-            {ORDER_STATUSES.map((s) => (
-              <label
-                key={s}
-                className="flex items-center gap-1.5 text-[11px] cursor-pointer hover-elevate rounded px-1.5 py-0.5"
-                data-testid={`label-area-status-${s}`}
-              >
-                <Checkbox
-                  checked={statuses.includes(s)}
-                  onCheckedChange={() => toggleStatus(s)}
-                  className="h-3 w-3"
-                  data-testid={`checkbox-area-status-${s}`}
-                />
-                <span>{STATUS_LABELS[s] || s}</span>
-              </label>
-            ))}
+          <div className="flex flex-wrap gap-1.5">
+            {STATUS_CATEGORIES.map(({ key, label, tone }) => {
+              const active = statusCats.includes(key);
+              const toneActive =
+                tone === "warning" ? "bg-warning text-warning-foreground border-warning" :
+                tone === "primary" ? "bg-primary text-primary-foreground border-primary" :
+                tone === "success" ? "bg-chart-2 text-background border-chart-2" :
+                "bg-secondary text-secondary-foreground border-border";
+              return (
+                <Button
+                  key={key}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className={`h-6 px-2 text-[11px] ${active ? toneActive : ""}`}
+                  onClick={() => toggleStatus(key)}
+                  data-testid={`chip-status-${key}`}
+                >
+                  {label}
+                </Button>
+              );
+            })}
           </div>
         </div>
 
@@ -421,28 +441,17 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                 <div className="space-y-1.5" data-testid="list-area-search-results">
                   {rows.map((row) => {
                     const job = row as unknown as WorkOrderWithObject;
-                    const lastSvc = row.objectLastServiceDate
-                      ? new Date(row.objectLastServiceDate)
-                      : null;
+                    const lastSvc = row.objectLastServiceDate ? new Date(row.objectLastServiceDate) : null;
                     const interval = row.conceptIntervalDays;
+                    const freqLabel = frequencyLabelFromDays(interval);
+
+                    let nextDate: Date | null = null;
                     let dueState: "ok" | "warning" | "destructive" = "ok";
-                    let dueLabel = "";
                     if (lastSvc && interval && interval > 0) {
-                      const next = new Date(lastSvc);
-                      next.setDate(next.getDate() + interval);
-                      const diffDays = Math.floor((next.getTime() - today.getTime()) / 86400000);
-                      if (diffDays < -30) {
-                        dueState = "destructive";
-                        dueLabel = `${Math.abs(diffDays)}d över`;
-                      } else if (diffDays <= 0) {
-                        dueState = "warning";
-                        dueLabel = diffDays === 0 ? "idag" : `${Math.abs(diffDays)}d sen`;
-                      } else if (diffDays <= 7) {
-                        dueState = "warning";
-                        dueLabel = `om ${diffDays}d`;
-                      } else {
-                        dueLabel = `om ${diffDays}d`;
-                      }
+                      nextDate = addDays(lastSvc, interval);
+                      const diffDays = Math.floor((nextDate.getTime() - today.getTime()) / 86400000);
+                      if (diffDays < -30) dueState = "destructive";
+                      else if (diffDays <= 7) dueState = "warning";
                     }
                     const dueClass =
                       dueState === "destructive"
@@ -450,6 +459,10 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                         : dueState === "warning"
                           ? "bg-warning/15 text-warning border-warning/40"
                           : "bg-muted text-muted-foreground border-border";
+
+                    const lastRelative = lastSvc
+                      ? formatDistanceToNowStrict(lastSvc, { locale: sv, addSuffix: true })
+                      : null;
 
                     return (
                       <div
@@ -475,29 +488,34 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
                         </DraggableJobCard>
                         <div className="px-2 pb-2 pt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
                           {row.objectHierarchyLevel && (
-                            <Badge variant="outline" className="text-[10px] py-0 h-4 chart-4">
+                            <Badge variant="outline" className="text-[10px] py-0 h-4">
                               {HIERARCHY_LABELS[row.objectHierarchyLevel] || row.objectHierarchyLevel}
                             </Badge>
                           )}
-                          {row.orderStatus && (
+                          {freqLabel && (
                             <span
-                              className={`inline-flex items-center px-1.5 py-0 rounded text-[10px] ${workOrderStatusBadge[row.orderStatus] || "bg-muted text-muted-foreground border border-border"}`}
-                              data-testid={`status-area-${row.orderStatus}-${job.id}`}
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded border border-border bg-muted text-muted-foreground text-[10px]"
+                              data-testid={`chip-frequency-${job.id}`}
                             >
-                              {STATUS_LABELS[row.orderStatus] || row.orderStatus}
+                              <Repeat className="h-2.5 w-2.5" /> {freqLabel}
                             </span>
                           )}
-                          {lastSvc && (
-                            <span className="text-muted-foreground" data-testid={`text-last-service-${job.id}`}>
-                              Senast: {format(lastSvc, "d MMM yyyy", { locale: sv })}
+                          {nextDate && (
+                            <span
+                              className={`inline-flex items-center gap-0.5 px-1.5 py-0 rounded border text-[10px] ${dueClass}`}
+                              data-testid={`chip-next-date-${job.id}`}
+                            >
+                              <CalendarClock className="h-2.5 w-2.5" />
+                              Nästa: {format(nextDate, "d MMM", { locale: sv })}
                             </span>
                           )}
-                          {dueLabel && (
+                          {lastRelative && (
                             <span
-                              className={`inline-flex items-center px-1.5 py-0 rounded border text-[10px] ${dueClass}`}
-                              data-testid={`badge-area-due-${job.id}`}
+                              className="text-muted-foreground"
+                              title={lastSvc ? format(lastSvc, "d MMM yyyy", { locale: sv }) : undefined}
+                              data-testid={`text-last-service-${job.id}`}
                             >
-                              {dueLabel}
+                              Senast {lastRelative}
                             </span>
                           )}
                           {row.conceptName && (

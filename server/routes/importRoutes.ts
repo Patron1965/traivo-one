@@ -19,6 +19,7 @@ import { createMetadata, updateMetadata, getAllMetadataTypes, seedKarlMetadataTy
 import { metadataVarden } from "@shared/schema";
 import { ensureClusterForCustomer, updateClusterCache } from "../auto-cluster";
 import { restoreEnrichModusBatch } from "../enrich-modus-restore";
+import { invalidateAreaSearchCityCache } from "./plannerRoutes";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -404,6 +405,7 @@ app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, 
         }
         
         const createdObject = await storage.createObject(objectData);
+        if (createdObject?.city) invalidateAreaSearchCityCache(tenantId);
 
         try {
           const clusterId = await ensureClusterForCustomer(tenantId, customerId);
@@ -1357,6 +1359,7 @@ async function runModusObjectsImportJob(params: {
             ...(clusterId ? { clusterId } : {}),
             importBatchId,
           });
+          if (createdObject?.city) invalidateAreaSearchCityCache(tenantId);
           modusIdMap.set(modusId, createdObject.id);
           created.push(name);
           triggerGeocodeIfMissing(createdObject.id);

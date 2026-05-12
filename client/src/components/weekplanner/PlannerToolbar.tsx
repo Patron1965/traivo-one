@@ -608,7 +608,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                   size="sm"
                   className="h-8 gap-1.5 px-2"
                   onClick={props.onToggleAreaSearch}
-                  data-testid="button-toggle-area-search"
+                  data-testid="button-area-search-open"
                 >
                   <Search className="h-3.5 w-3.5" />
                   <span className="text-xs hidden lg:inline">Sök område</span>

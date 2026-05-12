@@ -15,6 +15,16 @@ import { validateSchedule, type ConstraintContext, type ScheduleMove } from "../
 
 const requirePlannerAccess = requireRole("owner", "admin", "planner");
 
+// Area-search city autocomplete cache (Task #445)
+const areaSearchCityCache = new Map<string, { ts: number; data: string[] }>();
+const AREA_SEARCH_CITY_CACHE_TTL_MS = 60 * 60 * 1000;
+export function invalidateAreaSearchCityCache(tenantId?: string) {
+  if (!tenantId) { areaSearchCityCache.clear(); return; }
+  for (const k of Array.from(areaSearchCityCache.keys())) {
+    if (k.startsWith(`${tenantId}::`)) areaSearchCityCache.delete(k);
+  }
+}
+
 export async function registerPlannerRoutes(app: Express) {
 // ============================================
 // MOBILE WORK SESSION ENDPOINTS (Snöret)
@@ -1881,8 +1891,6 @@ app.delete("/api/planner-search-filters/:id", isAuthenticated, requireTenantWith
 // ============================================
 // PLANNER AREA-SEARCH POPOUT (Task #445)
 // ============================================
-const cityCache = new Map<string, { ts: number; data: string[] }>();
-const CITY_CACHE_TTL_MS = 60 * 60 * 1000;
 let cityIndexEnsured = false;
 async function ensureCityIndex() {
   if (cityIndexEnsured) return;
@@ -1900,8 +1908,8 @@ app.get("/api/planner/area-search/cities", isAuthenticated, requireTenantWithFal
   const q = String(req.query.q || "").trim();
   const cacheKey = `${tenantId}::${q.toLowerCase()}`;
   const now = Date.now();
-  const cached = cityCache.get(cacheKey);
-  if (cached && now - cached.ts < CITY_CACHE_TTL_MS) {
+  const cached = areaSearchCityCache.get(cacheKey);
+  if (cached && now - cached.ts < AREA_SEARCH_CITY_CACHE_TTL_MS) {
     return res.json(cached.data);
   }
   const result = q
@@ -1917,7 +1925,7 @@ app.get("/api/planner/area-search/cities", isAuthenticated, requireTenantWithFal
         ORDER BY city ASC
         LIMIT 20`);
   const cities = (result.rows as Array<{ city: string }>).map(r => r.city).filter(Boolean);
-  cityCache.set(cacheKey, { ts: now, data: cities });
+  areaSearchCityCache.set(cacheKey, { ts: now, data: cities });
   res.json(cities);
 }));
 
@@ -1934,7 +1942,8 @@ app.get("/api/planner/area-search", isAuthenticated, requireTenantWithFallback, 
 
   const hierarchyLevels = String(req.query.hierarchyLevels || "")
     .split(",").map(s => s.trim()).filter(Boolean);
-  const statuses = String(req.query.statuses || "")
+  // Planner-level status categories: oschemalagd | forsenad | schemalagd | utford
+  const statusCategories = String(req.query.statusCategories || req.query.statuses || "")
     .split(",").map(s => s.trim()).filter(Boolean);
   const lastServiceFromRaw = req.query.lastServiceFrom ? String(req.query.lastServiceFrom) : "";
   const lastServiceToRaw = req.query.lastServiceTo ? String(req.query.lastServiceTo) : "";
@@ -1946,7 +1955,26 @@ app.get("/api/planner/area-search", isAuthenticated, requireTenantWithFallback, 
     sql`lower(o.city) = lower(${city})`,
   ];
   if (hierarchyLevels.length) conds.push(sql`o.hierarchy_level = ANY(${hierarchyLevels}::text[])`);
-  if (statuses.length) conds.push(sql`wo.order_status = ANY(${statuses}::text[])`);
+  if (statusCategories.length) {
+    const catConds = [];
+    for (const cat of statusCategories) {
+      switch (cat) {
+        case "oschemalagd":
+          catConds.push(sql`(wo.scheduled_date IS NULL AND wo.order_status NOT IN ('utford','fakturerad','avbruten','omojlig'))`);
+          break;
+        case "forsenad":
+          catConds.push(sql`(wo.scheduled_date IS NOT NULL AND wo.scheduled_date < CURRENT_DATE AND wo.order_status NOT IN ('utford','fakturerad','avbruten','omojlig'))`);
+          break;
+        case "schemalagd":
+          catConds.push(sql`(wo.scheduled_date IS NOT NULL AND wo.scheduled_date >= CURRENT_DATE AND wo.order_status NOT IN ('utford','fakturerad','avbruten','omojlig'))`);
+          break;
+        case "utford":
+          catConds.push(sql`(wo.order_status IN ('utford','fakturerad'))`);
+          break;
+      }
+    }
+    if (catConds.length) conds.push(sql`(${sql.join(catConds, sql` OR `)})`);
+  }
   if (lastServiceFrom && !isNaN(lastServiceFrom.getTime())) conds.push(sql`o.last_service_date >= ${lastServiceFrom}`);
   if (lastServiceTo && !isNaN(lastServiceTo.getTime())) conds.push(sql`o.last_service_date <= ${lastServiceTo}`);
 
