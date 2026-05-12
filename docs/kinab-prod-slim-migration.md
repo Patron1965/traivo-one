@@ -153,11 +153,45 @@ hela scopen.
 
 ## Efter körning
 
-1. Verifiera kund- och objekt-räkningarna i prod.
+1. **Kör verifikationsskriptet (Task #424):** sista grindbeslutet innan
+   parallelldriften startar.
+
+   ```bash
+   # Rekommenderad skarp körning (slim-migrering med ~486 aktiva kunder).
+   # Sätt --expected-objects=N till dev-baselinen för objektantalet.
+   PROD_DATABASE_URL='postgres://...' \
+     npx tsx scripts/verify-kinab-prod.ts \
+       --expected-customers=486 \
+       --expected-objects=1
+   ```
+
+   Producerar `verify-prod-report-YYYYMMDD-HHMM.md` med:
+   - räknesatser per nyckeltabell (customers, objects, price_lists,
+     articles, resources, teams, team_members, portal_users,
+     fortnox_config m.fl.),
+   - dev↔prod-diff på de viktigaste tabellerna (om `DATABASE_URL`
+     pekar på dev),
+   - FK-orphan-checkar (`objects.parent_id`, `objects.customer_id`,
+     `clusters.root_customer_id`, `price_list_articles.price_list_id`,
+     `portal_user_object_scopes`, `team_members`),
+   - tenant-leak-check (rader vars FK pekar på en kinab-kund/objekt
+     men har `tenant_id ≠ kinab`),
+   - närvaro av `tenants[id=kinab]`, owner/admin-roll och
+     `fortnox_config` (varnar om `access_token` saknas).
+
+   Sista raden i rapporten är `VERIFIKATION: PASS|WARN|FAIL`. Skriptet
+   exit-kodar `1` vid `FAIL`. Endast SELECT — kör säkert mot prod.
+
+   Flaggor: `--tenant=kinab` (default), `--expected-customers=486`
+   (default 400), `--no-dev-diff`.
+
 2. Logga in som tenant-admin i prod-appen, kontrollera Customers, Objekt,
-   Resurser, Team, Artiklar, Prislistor, Fortnox-status.
-3. Kinab kör Modus-import skarpt mot prod.
-4. Befintliga work_orders kommer skapas via Modus-importen (eller manuellt).
+   Resurser, Team, Artiklar, Prislistor, Fortnox-status (UI-bekräftelse).
+3. Ta manuell `pg_dump`-snapshot av prod direkt efter verifiering
+   (Replit Publish → Database → Snapshots, eller `pg_dump
+   "$PROD_DATABASE_URL" > kinab-prod-postverify-<stamp>.sql`).
+4. Säg klart till Kinab — Modus-importen kan köras skarpt mot prod.
+5. Befintliga work_orders kommer skapas via Modus-importen (eller manuellt).
 
 ## Rollback
 
