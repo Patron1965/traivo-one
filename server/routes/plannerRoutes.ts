@@ -1878,5 +1878,170 @@ app.delete("/api/planner-search-filters/:id", isAuthenticated, requireTenantWith
   res.status(204).send();
 }));
 
+// ============================================
+// PLANNER AREA-SEARCH POPOUT (Task #445)
+// ============================================
+const cityCache = new Map<string, { ts: number; data: string[] }>();
+const CITY_CACHE_TTL_MS = 60 * 60 * 1000;
+let cityIndexEnsured = false;
+async function ensureCityIndex() {
+  if (cityIndexEnsured) return;
+  cityIndexEnsured = true;
+  try {
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_objects_city_lower ON objects (lower(city))`);
+  } catch (e) {
+    console.warn("[planner-area-search] failed to ensure idx_objects_city_lower", e);
+  }
+}
+ensureCityIndex();
+
+app.get("/api/planner/area-search/cities", isAuthenticated, requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req: any, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const q = String(req.query.q || "").trim();
+  const cacheKey = `${tenantId}::${q.toLowerCase()}`;
+  const now = Date.now();
+  const cached = cityCache.get(cacheKey);
+  if (cached && now - cached.ts < CITY_CACHE_TTL_MS) {
+    return res.json(cached.data);
+  }
+  const result = q
+    ? await db.execute(sql`
+        SELECT DISTINCT city FROM objects
+        WHERE tenant_id = ${tenantId} AND city IS NOT NULL AND city <> ''
+          AND lower(city) LIKE lower(${q + "%"})
+        ORDER BY city ASC
+        LIMIT 20`)
+    : await db.execute(sql`
+        SELECT DISTINCT city FROM objects
+        WHERE tenant_id = ${tenantId} AND city IS NOT NULL AND city <> ''
+        ORDER BY city ASC
+        LIMIT 20`);
+  const cities = (result.rows as Array<{ city: string }>).map(r => r.city).filter(Boolean);
+  cityCache.set(cacheKey, { ts: now, data: cities });
+  res.json(cities);
+}));
+
+app.get("/api/planner/area-search", isAuthenticated, requireTenantWithFallback, requirePlannerAccess, asyncHandler(async (req: any, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const city = String(req.query.city || "").trim();
+  const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
+  const pageSize = Math.min(100, Math.max(10, parseInt(String(req.query.pageSize || "50"), 10) || 50));
+  const offset = (page - 1) * pageSize;
+
+  if (!city) {
+    return res.json({ rows: [], total: 0, page, pageSize });
+  }
+
+  const hierarchyLevels = String(req.query.hierarchyLevels || "")
+    .split(",").map(s => s.trim()).filter(Boolean);
+  const statuses = String(req.query.statuses || "")
+    .split(",").map(s => s.trim()).filter(Boolean);
+  const lastServiceFromRaw = req.query.lastServiceFrom ? String(req.query.lastServiceFrom) : "";
+  const lastServiceToRaw = req.query.lastServiceTo ? String(req.query.lastServiceTo) : "";
+  const lastServiceFrom = lastServiceFromRaw ? new Date(lastServiceFromRaw) : null;
+  const lastServiceTo = lastServiceToRaw ? new Date(lastServiceToRaw) : null;
+
+  const conds = [
+    sql`wo.tenant_id = ${tenantId}`,
+    sql`lower(o.city) = lower(${city})`,
+  ];
+  if (hierarchyLevels.length) conds.push(sql`o.hierarchy_level = ANY(${hierarchyLevels}::text[])`);
+  if (statuses.length) conds.push(sql`wo.order_status = ANY(${statuses}::text[])`);
+  if (lastServiceFrom && !isNaN(lastServiceFrom.getTime())) conds.push(sql`o.last_service_date >= ${lastServiceFrom}`);
+  if (lastServiceTo && !isNaN(lastServiceTo.getTime())) conds.push(sql`o.last_service_date <= ${lastServiceTo}`);
+
+  const whereClause = sql.join(conds, sql` AND `);
+
+  const dataResult = await db.execute(sql`
+    SELECT
+      wo.id, wo.tenant_id, wo.title, wo.description, wo.priority, wo.status, wo.order_status,
+      wo.scheduled_date, wo.scheduled_start_time, wo.estimated_duration, wo.actual_duration,
+      wo.resource_id, wo.team_id, wo.cluster_id, wo.object_id, wo.customer_id,
+      wo.task_category, wo.metadata, wo.execution_code, wo.creation_method,
+      wo.planned_window_start, wo.planned_window_end, wo.desired_delivery_start, wo.desired_delivery_end,
+      wo.order_type, wo.cached_value, wo.cached_cost, wo.cached_production_minutes,
+      wo.is_simulated, wo.completed_at, wo.locked_at, wo.invoiced_at,
+      o.name AS object_name, o.address AS object_address, o.city AS object_city,
+      o.hierarchy_level AS object_hierarchy_level, o.last_service_date AS object_last_service_date,
+      o.access_code AS object_access_code, o.key_number AS object_key_number,
+      o.latitude AS object_latitude, o.longitude AS object_longitude,
+      c.name AS customer_name,
+      (
+        SELECT oc.interval_days FROM order_concept_objects oco
+        JOIN order_concepts oc ON oc.id = oco.order_concept_id
+        WHERE oco.object_id = o.id AND oco.included = true
+        ORDER BY oc.created_at DESC LIMIT 1
+      ) AS concept_interval_days,
+      (
+        SELECT oc.name FROM order_concept_objects oco
+        JOIN order_concepts oc ON oc.id = oco.order_concept_id
+        WHERE oco.object_id = o.id AND oco.included = true
+        ORDER BY oc.created_at DESC LIMIT 1
+      ) AS concept_name
+    FROM work_orders wo
+    INNER JOIN objects o ON o.id = wo.object_id
+    LEFT JOIN customers c ON c.id = wo.customer_id
+    WHERE ${whereClause}
+    ORDER BY (wo.scheduled_date IS NULL) DESC, wo.scheduled_date ASC, wo.priority DESC
+    LIMIT ${pageSize} OFFSET ${offset}
+  `);
+
+  const totalResult = await db.execute(sql`
+    SELECT COUNT(*)::int AS count FROM work_orders wo
+    INNER JOIN objects o ON o.id = wo.object_id
+    WHERE ${whereClause}
+  `);
+  const total = (totalResult.rows[0] as { count: number })?.count ?? 0;
+
+  const rows = (dataResult.rows as any[]).map(r => ({
+    id: r.id,
+    tenantId: r.tenant_id,
+    title: r.title,
+    description: r.description,
+    priority: r.priority,
+    status: r.status,
+    orderStatus: r.order_status,
+    scheduledDate: r.scheduled_date,
+    scheduledStartTime: r.scheduled_start_time,
+    estimatedDuration: r.estimated_duration,
+    actualDuration: r.actual_duration,
+    resourceId: r.resource_id,
+    teamId: r.team_id,
+    clusterId: r.cluster_id,
+    objectId: r.object_id,
+    customerId: r.customer_id,
+    taskCategory: r.task_category,
+    metadata: r.metadata,
+    executionCode: r.execution_code,
+    creationMethod: r.creation_method,
+    plannedWindowStart: r.planned_window_start,
+    plannedWindowEnd: r.planned_window_end,
+    desiredDeliveryStart: r.desired_delivery_start,
+    desiredDeliveryEnd: r.desired_delivery_end,
+    orderType: r.order_type,
+    cachedValue: r.cached_value,
+    cachedCost: r.cached_cost,
+    cachedProductionMinutes: r.cached_production_minutes,
+    isSimulated: r.is_simulated,
+    completedAt: r.completed_at,
+    lockedAt: r.locked_at,
+    invoicedAt: r.invoiced_at,
+    objectName: r.object_name,
+    objectAddress: r.object_address,
+    objectCity: r.object_city,
+    objectHierarchyLevel: r.object_hierarchy_level,
+    objectLastServiceDate: r.object_last_service_date,
+    objectAccessCode: r.object_access_code,
+    objectKeyNumber: r.object_key_number,
+    objectLatitude: r.object_latitude,
+    objectLongitude: r.object_longitude,
+    customerName: r.customer_name,
+    conceptIntervalDays: r.concept_interval_days,
+    conceptName: r.concept_name,
+  }));
+
+  res.json({ rows, total, page, pageSize });
+}));
+
 
 }

@@ -16,6 +16,7 @@ import { JobCard, DragOverlayContent } from "./weekplanner/JobCard";
 import { UnscheduledSidebar } from "./weekplanner/UnscheduledSidebar";
 import { AssignDialog, SendScheduleDialog, BulkSendScheduleDialog, ConflictDialog, ClearDialog, AutoFillDialog, DepChainDialog, ConflictListDialog } from "./weekplanner/PlannerDialogs";
 import { PlannerToolbar, PlannerFooter } from "./weekplanner/PlannerToolbar";
+import { PlannerAreaSearchPanel } from "./weekplanner/PlannerAreaSearchPanel";
 import { DisruptionPanel } from "./weekplanner/DisruptionPanel";
 import { DayTimelineView } from "./weekplanner/DayTimelineView";
 import { WeekGridView } from "./weekplanner/WeekGridView";
@@ -67,6 +68,18 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
   const [urgentDialogOpen, setUrgentDialogOpen] = useState(false);
   const [conflictListOpen, setConflictListOpen] = useState(false);
   const [slaRiskOpen, setSlaRiskOpen] = useState(false);
+  const [areaSearchOpen, setAreaSearchOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("areaSearch") === "open";
+  });
+  const [extraDraggableJobs, setExtraDraggableJobs] = useState<WorkOrderWithObject[]>([]);
+  const dndWorkOrders = useMemo(() => {
+    if (extraDraggableJobs.length === 0) return null;
+    const seen = new Set<string>();
+    const out: WorkOrderWithObject[] = [];
+    for (const j of extraDraggableJobs) { if (!seen.has(j.id)) { seen.add(j.id); out.push(j); } }
+    return out;
+  }, [extraDraggableJobs]);
   const [urgentPreselectedOrder, setUrgentPreselectedOrder] = useState<WorkOrderWithObject | null>(null);
   const [poppedOutViews, setPoppedOutViews] = useState<Set<PopoutView>>(new Set());
   const [crossWindowSlot, setCrossWindowSlot] = useState<AssignSlot | null>(null);
@@ -276,8 +289,15 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     setUrgentDialogOpen(true);
   }, []);
 
+  const combinedWorkOrders = useMemo(() => {
+    if (!dndWorkOrders) return d.workOrders;
+    const ids = new Set(d.workOrders.map(j => j.id));
+    const extras = dndWorkOrders.filter(j => !ids.has(j.id));
+    return extras.length ? [...d.workOrders, ...extras] : d.workOrders;
+  }, [d.workOrders, dndWorkOrders]);
+
   const dnd = usePlannerDnd({
-    workOrders: d.workOrders,
+    workOrders: combinedWorkOrders,
     viewMode: d.viewMode,
     currentDate: d.currentDate,
     routeJobsForView: d.routeJobsForView,
@@ -312,7 +332,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
     if (event.active && !event.over && cur && isFresh) {
       const target = parseDropIdToTarget(cur.dropId);
       const jobId = String(event.active.id);
-      const job = d.workOrders.find(j => String(j.id) === jobId);
+      const job = combinedWorkOrders.find(j => String(j.id) === jobId);
       if (target && job) {
         if (target.kind === "team" && d.executeTeamSchedule) {
           d.executeTeamSchedule(job.id, target.teamId, target.dateStr);
@@ -507,6 +527,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             onCarryOver={d.handleCarryOver}
             onUrgentJob={handleOpenUrgentDialog}
             showAIPanel={showAIPanel} onToggleAIPanel={onToggleAIPanel}
+            areaSearchOpen={areaSearchOpen}
+            onToggleAreaSearch={() => setAreaSearchOpen(o => !o)}
             weekGoals={d.weekGoals} weekTravelTotal={d.weekTravelTotal}
             visibleDates={d.visibleDates} getResourceDayHours={d.getResourceDayHours}
             jobConflictCount={Object.keys(d.jobConflicts).length}
@@ -647,6 +669,15 @@ export function WeekPlanner({ onAddJob, onSelectJob, onSelectedJobIdsChange, sho
             onConflictClick={() => setConflictListOpen(true)}
           />
         </div>
+        )}
+
+        {showCalendar && (
+          <PlannerAreaSearchPanel
+            open={areaSearchOpen}
+            onClose={() => setAreaSearchOpen(false)}
+            onSelectJob={(jobId) => { d.handleJobClick(jobId); onSelectJob?.(jobId); }}
+            onResultsChange={setExtraDraggableJobs}
+          />
         )}
 
         {effectiveDisplayMode === "neither" && (

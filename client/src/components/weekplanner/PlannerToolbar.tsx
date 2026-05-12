@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight, ChevronDown, ChevronUp, Crosshair, ExternalLink, ShieldCheck, Send, Inbox, Target, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight, ChevronDown, ChevronUp, Crosshair, ExternalLink, ShieldCheck, Send, Inbox, Target, X, Search } from "lucide-react";
 import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
 import type { ViewMode, PlannerDisplayMode } from "./types";
 import type { PopoutView, SyncRole, AssignSlot } from "./usePlannerSync";
@@ -44,6 +44,8 @@ interface PlannerToolbarProps {
   onUrgentJob?: () => void;
   showAIPanel?: boolean;
   onToggleAIPanel?: () => void;
+  areaSearchOpen?: boolean;
+  onToggleAreaSearch?: () => void;
   weekGoals: {
     time: { current: number; target: number; pct: number };
     economy: { current: number; target: number; pct: number };
@@ -597,6 +599,24 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
             slot={props.crossWindowSlot ?? null}
             onChange={props.setCrossWindowSlot}
           />
+
+          {props.onToggleAreaSearch && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={props.areaSearchOpen ? "default" : "ghost"}
+                  size="sm"
+                  className="h-8 gap-1.5 px-2"
+                  onClick={props.onToggleAreaSearch}
+                  data-testid="button-toggle-area-search"
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  <span className="text-xs hidden lg:inline">Sök område</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Sök jobb och objekt i ett område (drag direkt till veckan)</TooltipContent>
+            </Tooltip>
+          )}
 
           {onToggleAIPanel && (
             <Tooltip>
