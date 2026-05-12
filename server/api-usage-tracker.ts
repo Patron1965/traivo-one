@@ -64,7 +64,7 @@ export async function trackApiUsage(params: {
       inputTokens: params.inputTokens || null,
       outputTokens: params.outputTokens || null,
       totalTokens: params.totalTokens || null,
-      units: params.units || 1,
+      units: params.units ?? 1,
       estimatedCostUsd,
       model: params.model || null,
       statusCode: params.statusCode || 200,

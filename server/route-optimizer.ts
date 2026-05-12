@@ -7,18 +7,6 @@ import {
   isGeoapifyRoutingAvailable,
 } from "./services/routing";
 
-interface RouteCache {
-  result: { distance: number; duration: number };
-  timestamp: number;
-}
-
-const routeCache = new Map<string, RouteCache>();
-const ROUTE_CACHE_TTL = 60 * 60 * 1000; // 1 hour
-
-function getRouteCacheKey(coordinates: [number, number][]): string {
-  return coordinates.map(c => `${c[0].toFixed(4)},${c[1].toFixed(4)}`).join("|");
-}
-
 export interface RouteStop {
   workOrderId: string;
   objectId: string;
@@ -169,6 +157,9 @@ async function calculateTotalDistance(stops: RouteStop[], startCoord?: Coordinat
   }
 }
 
+// OBS: Tidigare lokal 1h-cache är borttagen — cachen ligger nu i
+// `server/services/routing.ts` så att webb, mobil och optimering delar träffar
+// (Task #457). `getRouteSummary` slår mot den delade cachen.
 async function getRouteFromGeoapify(coordinates: [number, number][]): Promise<{
   distance: number;
   duration: number;
@@ -177,21 +168,12 @@ async function getRouteFromGeoapify(coordinates: [number, number][]): Promise<{
     return null;
   }
 
-  const cacheKey = getRouteCacheKey(coordinates);
-  const cached = routeCache.get(cacheKey);
-
-  if (cached && Date.now() - cached.timestamp < ROUTE_CACHE_TTL) {
-    return cached.result;
-  }
-
   const summary = await getRouteSummary(
     coordinates.map(([lng, lat]) => ({ lat, lng })),
   );
   if (!summary) return null;
 
-  const result = { distance: summary.distanceKm, duration: summary.durationMinutes };
-  routeCache.set(cacheKey, { result, timestamp: Date.now() });
-  return result;
+  return { distance: summary.distanceKm, duration: summary.durationMinutes };
 }
 
 export async function optimizeResourceDayRoute(
