@@ -332,16 +332,15 @@ export const PlannerAreaSearchPanel = memo(function PlannerAreaSearchPanel({
     let selectedJobsMinutes = 0;
     let selectedJobsCount = 0;
     const rowById = new Map(rows.map(r => [r.id, r]));
-    if (anchorCoords) {
-      for (const id of Array.from(selectedJobIds)) {
-        if (id === anchorJobId) continue;
+    for (const id of Array.from(selectedJobIds)) {
+      if (id === anchorJobId) continue;
+      if (anchorCoords) {
         const d = rowDistances.get(id);
         if (d?.minutes != null) travelMinutes += d.minutes;
-        const r = rowById.get(id);
-        const dur = (r?.estimatedDuration ?? 60);
-        selectedJobsMinutes += dur;
-        selectedJobsCount += 1;
       }
+      const r = rowById.get(id);
+      selectedJobsMinutes += (r?.estimatedDuration ?? 60);
+      selectedJobsCount += 1;
     }
     const travelHours = travelMinutes / 60;
     const selectedJobsHours = selectedJobsMinutes / 60;
