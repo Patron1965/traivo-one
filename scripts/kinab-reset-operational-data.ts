@@ -161,10 +161,12 @@ const PHASES: Array<{ name: string; tables: Array<[string, string]> }> = [
       ["work_sessions", `resource_id IN ('res-tomas','res-anna')`],
       ["time_logs", `resource_id IN ('res-tomas','res-anna')`],
       ["self_booking_slots", `resource_id IN ('res-tomas','res-anna')`],
+      // OBS: users.resource_id nollställs separat i main() (UPDATE, inte DELETE)
+      // för att inte råka radera riktiga användarkonton.
       // Själva demo-resurserna.
       ["resources", `tenant_id = '${TENANT}' AND id IN ('res-tomas','res-anna')`],
-      // Demo-kluster (alla seed-genererade kluster har prefix cluster-).
-      ["clusters", `tenant_id = '${TENANT}' AND id LIKE 'cluster-%'`],
+      // Demo-kluster (seed-skapade har prefix cluster-telge-* / cluster-kommun).
+      ["clusters", `tenant_id = '${TENANT}' AND (id LIKE 'cluster-telge-%' OR id = 'cluster-kommun')`],
       // Föräldralösa Fortnox-mappningar — endast för entity-types vi faktiskt
       // mappar mot tenant-tabeller (customer/article/resource). Lämna costcenter/project orörda.
       [
@@ -245,6 +247,23 @@ async function main() {
         totalRows += deleted;
       }
     }
+  }
+
+  // Nolla dingande users.resource_id-pekare till demo-resurserna (UPDATE, inte DELETE).
+  console.log(`\n--- Extra: nolla users.resource_id för demo-resurser ---`);
+  const userMatch: any = await db.execute(
+    sql.raw(`SELECT COUNT(*)::int AS n FROM "users" WHERE resource_id IN ('res-tomas','res-anna')`),
+  );
+  const userN = Number((userMatch.rows ?? userMatch)[0]?.n ?? 0);
+  if (userN === 0) {
+    console.log(`  · users.resource_id                       0`);
+  } else if (DRY_RUN) {
+    console.log(`  · users.resource_id                       ${userN} (skulle nollställas)`);
+  } else {
+    const r: any = await db.execute(
+      sql.raw(`UPDATE "users" SET resource_id = NULL WHERE resource_id IN ('res-tomas','res-anna')`),
+    );
+    console.log(`  ✓ users.resource_id                       ${r.rowCount ?? 0} nollställda`);
   }
 
   if (DRY_RUN) {
