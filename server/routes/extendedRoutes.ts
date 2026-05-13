@@ -1202,12 +1202,47 @@ app.post("/api/invoice-preview/export-to-fortnox", asyncHandler(async (req, res)
     
     for (const invoice of invoices) {
       const lines = invoice.lines || [];
+
+      // Tenant-ägarskapscheck: vägra om kunden inte tillhör aktuell tenant.
+      // Annars kan en inloggad användare exportera fakturarader för vilken
+      // kund-UUID som helst i hela systemet.
+      if (invoice.customerId) {
+        const customer = await storage.getCustomer(invoice.customerId);
+        if (!customer || customer.tenantId !== tenantId) {
+          for (const line of lines) {
+            if (!line.workOrderId) continue;
+            results.push({
+              customerId: invoice.customerId,
+              customerName: invoice.customerName,
+              status: "error",
+              error: "Kunden tillhör inte din organisation",
+            });
+          }
+          continue;
+        }
+      }
+
       for (const line of lines) {
         if (!line.workOrderId) continue;
         try {
           const isManualLine = line.workOrderId.startsWith("manual:");
           const manualLineId = isManualLine ? line.workOrderId.replace("manual:", "") : null;
-          
+
+          // Extra ägarskapscheck för work-order-baserade rader: säkerställ att
+          // den refererade ordern tillhör denna tenant.
+          if (!isManualLine) {
+            const wo = await storage.getWorkOrder(line.workOrderId);
+            if (!wo || wo.tenantId !== tenantId) {
+              results.push({
+                customerId: invoice.customerId,
+                customerName: invoice.customerName,
+                status: "error",
+                error: "Arbetsordern tillhör inte din organisation",
+              });
+              continue;
+            }
+          }
+
           const invoiceExport = await storage.createFortnoxInvoiceExport({
             tenantId,
             workOrderId: isManualLine ? null : line.workOrderId,

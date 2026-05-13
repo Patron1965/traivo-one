@@ -1,7 +1,10 @@
 import { storage } from "./storage";
 import { notificationService } from "./notifications";
 
-const DEFAULT_TENANT_ID = "kinab";
+// Fallback för enskilda metoder som ännu inte tar tenantId. runCheck() loopar
+// över alla aktiva tenants, men vissa interna helpers behåller en default
+// tills de migreras helt. Sätts via env för flexibilitet i pilot/multi-tenant.
+const FALLBACK_TENANT_ID = process.env.ANOMALY_FALLBACK_TENANT || "kinab";
 
 interface AnomalyAlert {
   id: string;
@@ -48,14 +51,25 @@ class AnomalyMonitor {
     try {
       const alerts: AnomalyAlert[] = [];
 
+      // checkStalePositions hämtar globalt och taggar tenant per resurs.
       const stalePositionAlerts = await this.checkStalePositions();
       alerts.push(...stalePositionAlerts);
 
-      const delayAlerts = await this.checkDelayedOrders();
-      alerts.push(...delayAlerts);
+      // checkDelayedOrders och checkSetupTimeAnomalies är tenant-scopade.
+      // Loopa över alla aktiva tenants så att flertenants-pilot inte missar
+      // varningar för andra organisationer än fallback ("kinab").
+      const allTenants = await storage.getPublicTenants();
+      for (const tenant of allTenants) {
+        try {
+          const delayAlerts = await this.checkDelayedOrders(tenant.id);
+          alerts.push(...delayAlerts);
 
-      const setupTimeAlerts = await this.checkSetupTimeAnomalies();
-      alerts.push(...setupTimeAlerts);
+          const setupTimeAlerts = await this.checkSetupTimeAnomalies(tenant.id);
+          alerts.push(...setupTimeAlerts);
+        } catch (err) {
+          console.error(`[anomaly-monitor] Tenant ${tenant.id} check failed:`, err);
+        }
+      }
 
       let newAlertCount = 0;
       for (const alert of alerts) {
@@ -107,7 +121,7 @@ class AnomalyMonitor {
     return alerts;
   }
 
-  private async checkDelayedOrders(tenantId: string = DEFAULT_TENANT_ID): Promise<AnomalyAlert[]> {
+  private async checkDelayedOrders(tenantId: string = FALLBACK_TENANT_ID): Promise<AnomalyAlert[]> {
     const alerts: AnomalyAlert[] = [];
     
     try {
@@ -172,7 +186,7 @@ class AnomalyMonitor {
     return alerts;
   }
 
-  private async checkSetupTimeAnomalies(tenantId: string = DEFAULT_TENANT_ID): Promise<AnomalyAlert[]> {
+  private async checkSetupTimeAnomalies(tenantId: string = FALLBACK_TENANT_ID): Promise<AnomalyAlert[]> {
     const alerts: AnomalyAlert[] = [];
     
     try {

@@ -600,7 +600,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         return scheduled >= todayStart && scheduled <= todayEnd;
       })
       .map(wo => wo.objectId)
-      .filter(Boolean);
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
   }, [workOrders, resourceId]);
 
   const { data: objects = [] } = useObjectsByIds(objectIdsNeeded);
@@ -678,7 +678,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   }).length;
 
   const selectedJob = selectedJobId ? workOrders.find(wo => wo.id === selectedJobId) : null;
-  const selectedObject = selectedJob ? objectMap.get(selectedJob.objectId) : null;
+  const selectedObject = selectedJob?.objectId ? objectMap.get(selectedJob.objectId) : null;
   const selectedCustomer = selectedJob ? customerMap.get(selectedJob.customerId) : null;
   const selectedJobMetadata = (selectedJob?.metadata as Record<string, unknown>) || {};
   const existingSignaturePath = (selectedJobMetadata.signaturePath as string) || null;
@@ -768,7 +768,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             photos,
             signaturePath: finalSignature,
             materials: materials.length > 0 ? materials : (existingMetadata.materials as MaterialItem[]) || [],
-            orderStatus: "utford",
+            status: "utford",
           });
           downloadBlob(pdfBlob, `protokoll-${job.id.slice(0, 8)}.pdf`);
         } catch (pdfErr) {
@@ -1191,9 +1191,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     lastFetchPositionRef.current = { lat: pos.lat, lng: pos.lng };
 
     const destinations = todayJobs
-      .filter(j => j.orderStatus !== "utford")
+      .filter(j => j.status !== "utford")
       .map(j => {
-        const obj = objectMap.get(j.objectId);
+        const obj = objectMap.get(j.objectId ?? "");
         return {
           id: j.id,
           lat: obj?.latitude ?? j.taskLatitude,
@@ -2744,7 +2744,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         {(() => {
           const nextPendingJob = getNextPendingJob();
           if (!nextPendingJob) return null;
-          const obj = objectMap.get(nextPendingJob.objectId);
+          const obj = objectMap.get(nextPendingJob.objectId ?? "");
           const lat = obj?.latitude ?? nextPendingJob.taskLatitude;
           const lng = obj?.longitude ?? nextPendingJob.taskLongitude;
           const dist = travelDistances[nextPendingJob.id];

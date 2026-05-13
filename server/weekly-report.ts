@@ -405,18 +405,26 @@ export function startWeeklyReportScheduler() {
   let lastSentWeek = -1;
 
   setInterval(async () => {
-    const now = new Date();
-    if (now.getDay() !== 5) return;
-    if (now.getHours() < 16 || now.getHours() > 17) return;
+    try {
+      const now = new Date();
+      if (now.getDay() !== 5) return;
+      if (now.getHours() < 16 || now.getHours() > 17) return;
 
-    const weekNum = getISOWeekNumber(now);
-    if (weekNum === lastSentWeek) return;
+      const weekNum = getISOWeekNumber(now);
+      if (weekNum === lastSentWeek) return;
 
-    console.log(`[weekly-report] Triggering weekly report generation (week ${weekNum})`);
-    lastSentWeek = weekNum;
+      console.log(`[weekly-report] Triggering weekly report generation (week ${weekNum})`);
 
-    const result = await generateAndSendWeeklyReports();
-    console.log(`[weekly-report] Done: ${result.sent} sent, ${result.errors.length} errors`);
+      const result = await generateAndSendWeeklyReports();
+      // Markera veckan som skickad först efter lyckat anrop — annars hoppas
+      // hela veckan över om DB hängde sig vid första försöket.
+      lastSentWeek = weekNum;
+      console.log(`[weekly-report] Done: ${result.sent} sent, ${result.errors.length} errors`);
+    } catch (err) {
+      // Schemaläggaren får ALDRIG dö av en oväntad exception — då tappar vi
+      // alla framtida körningar tills processen startas om.
+      console.error("[weekly-report] Scheduler tick failed:", err);
+    }
   }, checkInterval);
 
   console.log("[weekly-report] Scheduler started (runs Fridays 16:00-17:00)");

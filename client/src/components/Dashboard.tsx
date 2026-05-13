@@ -1140,9 +1140,9 @@ export function Dashboard() {
                     }}
                   />
                   <Legend />
-                  <Bar dataKey="planned" name="Planerat" fill="hsl(var(--muted-foreground))" className="cursor-pointer" onClick={(data) => handleBarClick(data)} />
-                  <Bar dataKey="actual" name="Faktiskt" fill="hsl(var(--primary))" className="cursor-pointer" onClick={(data) => handleBarClick(data)} />
-                  <Bar dataKey="setupTime" name="Ställtid" fill="hsl(var(--destructive))" className="cursor-pointer" onClick={(data) => handleBarClick(data)} />
+                  <Bar dataKey="planned" name="Planerat" fill="hsl(var(--muted-foreground))" className="cursor-pointer" onClick={() => handleBarClick()} />
+                  <Bar dataKey="actual" name="Faktiskt" fill="hsl(var(--primary))" className="cursor-pointer" onClick={() => handleBarClick()} />
+                  <Bar dataKey="setupTime" name="Ställtid" fill="hsl(var(--destructive))" className="cursor-pointer" onClick={() => handleBarClick()} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

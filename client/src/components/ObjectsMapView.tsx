@@ -1,4 +1,4 @@
-import { Fragment, memo, useMemo, useState, useCallback, useEffect } from "react";
+import { Fragment, memo, useMemo, useState, useCallback, useEffect, type ReactNode } from "react";
 import { Marker, Popup, Polygon, Polyline, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -598,11 +598,11 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
                     </div>
                   </Popup>
                 </Marker>
-                {obj.polylineData && (() => {
+                {(obj.polylineData ? ((): ReactNode => {
                   const geo = obj.polylineData as GeoJSONFeature | null;
                   if (!geo?.geometry) return null;
-                  const { type, coordinates } = geo.geometry;
-                  if (type === "Polygon" && coordinates?.[0]) {
+                  const { type, coordinates } = geo.geometry as { type: string; coordinates: unknown };
+                  if (type === "Polygon" && Array.isArray(coordinates) && (coordinates as unknown[])[0]) {
                     const polyCoords = coordinates as number[][][];
                     const positions = polyCoords[0].map((c) => [c[1], c[0]] as [number, number]);
                     return <Polygon positions={positions} pathOptions={{ color: "#4A9B9B", fillColor: "#4A9B9B", fillOpacity: 0.15, weight: 2 }} />;
@@ -613,7 +613,7 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
                     return <Polyline positions={positions} pathOptions={{ color: "#4A9B9B", weight: 3 }} />;
                   }
                   return null;
-                })()}
+                })() : null) as ReactNode}
               </Fragment>
             ))}
 

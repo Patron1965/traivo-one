@@ -143,7 +143,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
         return scheduled >= periodStart && scheduled <= periodEnd;
       })
       .map(wo => wo.objectId)
-      .filter(Boolean);
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
   }, [workOrders, activeResource, activeTeam, targetType, periodStart, periodEnd]);
 
   const { data: objects = [] } = useObjectsByIds(displayJobObjectIds);
@@ -168,7 +168,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
   const getJobPositions = (jobs: WorkOrderWithObject[]) => {
     return jobs
       .map(job => {
-        const obj = objectMap.get(job.objectId);
+        const obj = objectMap.get(job.objectId ?? "");
         if (obj?.latitude && obj?.longitude) {
           return [obj.latitude, obj.longitude] as [number, number];
         }
@@ -219,7 +219,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
   const addressCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const job of displayJobs) {
-      const obj = objectMap.get(job.objectId);
+      const obj = objectMap.get(job.objectId ?? "");
       if (obj?.latitude && obj?.longitude) {
         const key = `${obj.latitude.toFixed(4)},${obj.longitude.toFixed(4)}`;
         counts.set(key, (counts.get(key) || 0) + 1);
@@ -266,7 +266,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
   const accessTypeGroups = useMemo(() => {
     const groups: Record<string, number> = {};
     displayJobs.forEach(job => {
-      const obj = objectMap.get(job.objectId);
+      const obj = objectMap.get(job.objectId ?? "");
       const accessType = obj?.accessType || "open";
       groups[accessType] = (groups[accessType] || 0) + 1;
     });
@@ -461,7 +461,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
             ) : (
               <div className="divide-y">
                 {displayJobs.map((job, index) => {
-                  const obj = objectMap.get(job.objectId);
+                  const obj = objectMap.get(job.objectId ?? "");
                   const accessType = obj?.accessType || "open";
                   const hasCoords = obj?.latitude && obj?.longitude;
                   const AccessIcon = accessTypeLabels[accessType]?.icon || DoorOpen;
@@ -486,7 +486,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                           <div className="text-xs text-muted-foreground truncate flex items-center gap-1">
                             {job.objectName || "Okänt objekt"}
                             {(() => {
-                              const o = objectMap.get(job.objectId);
+                              const o = objectMap.get(job.objectId ?? "");
                               if (!o?.latitude || !o?.longitude) return null;
                               const k = `${o.latitude.toFixed(4)},${o.longitude.toFixed(4)}`;
                               const cnt = addressCounts.get(k) || 1;
@@ -570,7 +570,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
             )}
             
             {displayJobs.map((job, index) => {
-              const obj = objectMap.get(job.objectId);
+              const obj = objectMap.get(job.objectId ?? "");
               if (!obj?.latitude || !obj?.longitude) return null;
               
               const accessType = obj?.accessType || "open";
@@ -598,7 +598,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                         {(() => {
                           const colocatedJobs = stackCount > 1
                             ? displayJobs.filter(j => {
-                                const o = objectMap.get(j.objectId);
+                                const o = objectMap.get(j.objectId ?? "");
                                 if (!o?.latitude || !o?.longitude) return false;
                                 return `${o.latitude.toFixed(4)},${o.longitude.toFixed(4)}` === addrKey;
                               })
@@ -614,7 +614,7 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                               )}
 
                               {colocatedJobs.map((cj, ci) => {
-                                const co = objectMap.get(cj.objectId);
+                                const co = objectMap.get(cj.objectId ?? "");
                                 const cSetup = co?.avgSetupTime || 0;
                                 const cAccess = co?.accessType || "open";
                                 const cContainers = (co?.containerCount || 0) +

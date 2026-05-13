@@ -121,6 +121,19 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
     setOrtoolsAvailable(true);
   }, []);
 
+  const fetchJobResult = useCallback(async (jobId: string) => {
+    try {
+      const res = await fetch(`/api/optimization/jobs/${jobId}/result`);
+      if (res.ok) {
+        const result = await res.json();
+        setVrpResult(result);
+        setAsyncJobId(null);
+        setJobStatus("completed");
+        toast({ title: "Optimering klar", description: `${result.summary?.assignedOrders || 0} ordrar tilldelade` });
+      }
+    } catch { /* ignore */ }
+  }, [toast]);
+
   useEffect(() => {
     if (!asyncJobId) return;
 
@@ -136,19 +149,6 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
     window.addEventListener("traivo:optimization_complete", handleOptimizationComplete);
     return () => window.removeEventListener("traivo:optimization_complete", handleOptimizationComplete);
   }, [asyncJobId, fetchJobResult]);
-
-  const fetchJobResult = useCallback(async (jobId: string) => {
-    try {
-      const res = await fetch(`/api/optimization/jobs/${jobId}/result`);
-      if (res.ok) {
-        const result = await res.json();
-        setVrpResult(result);
-        setAsyncJobId(null);
-        setJobStatus("completed");
-        toast({ title: "Optimering klar", description: `${result.summary?.assignedOrders || 0} ordrar tilldelade` });
-      }
-    } catch { /* ignore */ }
-  }, [toast]);
 
   const pollJobStatus = useCallback((jobId: string) => {
     if (pollRef.current) clearInterval(pollRef.current);

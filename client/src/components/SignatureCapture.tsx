@@ -169,7 +169,7 @@ export function SignatureCapture({
       console.error("Signature save error:", error);
       toast({
         title: "Kunde inte spara signaturen",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Okänt fel",
         variant: "destructive",
       });
     } finally {
