@@ -77,6 +77,19 @@ export async function sendEmail(options: {
     statusCode: result.error ? 500 : 200,
     metadata: { to: options.to, subject: options.subject },
   });
-  
+
+  // Resend SDK throw:ar inte vid API-fel; den returnerar { data, error }.
+  // Tidigare loggade vi bara "Email sent" även när Resend avvisade utskicket
+  // (t.ex. ej verifierad avsändardomän) — det maskerade riktiga problem som
+  // utebliven inbjudan. Kasta så att anropande kod kan logga riktigt fel.
+  if (result.error) {
+    const err: any = new Error(
+      `Resend API error: ${result.error.message || result.error.name || "okänt fel"}`
+    );
+    err.resendError = result.error;
+    err.resendFromEmail = fromEmail;
+    throw err;
+  }
+
   return result;
 }

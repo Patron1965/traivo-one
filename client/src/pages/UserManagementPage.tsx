@@ -185,11 +185,24 @@ export default function UserManagementPage() {
   const [inviteForm, setInviteForm] = useState({ email: "", role: "user" });
 
   const createInviteMutation = useMutation({
-    mutationFn: (data: { email: string; role: string }) =>
-      apiRequest("POST", "/api/invitations", data),
-    onSuccess: () => {
+    mutationFn: async (data: { email: string; role: string }) => {
+      const res = await apiRequest("POST", "/api/invitations", data);
+      return res.json() as Promise<{ id: string; email: string; emailDelivered?: boolean; emailError?: string | null }>;
+    },
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["/api/invitations"] });
-      toast({ title: "Inbjudan skickad", description: `Inbjudan skapad för ${inviteForm.email}` });
+      if (result.emailDelivered) {
+        toast({ title: "Inbjudan skickad", description: `E-post levererad till ${inviteForm.email}` });
+      } else {
+        toast({
+          title: "Inbjudan sparad — men e-post kunde inte skickas",
+          description: result.emailError
+            ? `Resend-fel: ${result.emailError}. Kontrollera att avsändardomänen (RESEND_FROM_EMAIL) är verifierad i Resend.`
+            : "Användaren finns i listan men fick inget mejl. Kontrollera Resend-domänen och spam-mappen.",
+          variant: "destructive",
+          duration: 15000,
+        });
+      }
       setInviteDialogOpen(false);
       setInviteForm({ email: "", role: "user" });
     },

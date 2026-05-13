@@ -1937,10 +1937,11 @@ app.post("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
         .returning();
     }
 
+    let emailDelivered = false;
+    let emailError: string | null = null;
     try {
-      const appUrl = process.env.REPLIT_DEV_DOMAIN
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-        : process.env.REPLIT_DEPLOYMENT_URL || "https://traivo.replit.app";
+      const appUrl = process.env.REPLIT_DEPLOYMENT_URL
+        || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "https://traivo.replit.app");
       const roleLabel: Record<string, string> = {
         owner: "Ägare", admin: "Admin", planner: "Planerare",
         technician: "Tekniker", user: "Användare", viewer: "Läsare",
@@ -1958,12 +1959,14 @@ app.post("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
           </div>
         `,
       });
+      emailDelivered = true;
       console.log(`[invitation] Email sent to ${email.toLowerCase()}`);
-    } catch (err) {
-      console.error("[invitation] Failed to send email:", err);
+    } catch (err: any) {
+      emailError = err?.message || String(err);
+      console.error("[invitation] Failed to send email:", err?.resendError || err);
     }
 
-    res.json(invitation);
+    res.json({ ...invitation, emailDelivered, emailError });
 }));
 
 app.delete("/api/invitations/:id", requireAdmin, asyncHandler(async (req, res) => {
