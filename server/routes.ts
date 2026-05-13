@@ -16,6 +16,7 @@ import { slaRiskScheduler } from "./services/sla-risk-scheduler";
 import { registerSlaRiskRoutes } from "./routes/slaRiskRoutes";
 import { geocodeScheduler } from "./services/geocode-scheduler";
 import { notificationCleanupScheduler, getRetentionConfig } from "./services/notification-cleanup-scheduler";
+import { fortnoxMappingCleanupScheduler } from "./services/fortnox-mapping-cleanup-scheduler";
 import { prodHealthCheckScheduler } from "./services/prod-health-check-scheduler";
 import { registerProdHealthCheckRoutes } from "./routes/prodHealthCheckRoutes";
 import { startWeeklyReportScheduler } from "./weekly-report";
@@ -84,6 +85,7 @@ export async function registerRoutes(
   slaRiskScheduler.start();
   geocodeScheduler.start();
   notificationCleanupScheduler.start();
+  fortnoxMappingCleanupScheduler.start();
   capacityForecastScheduler.start();
   prodHealthCheckScheduler.start();
 
@@ -358,6 +360,35 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Failed to run notification cleanup:", error);
       res.status(500).json({ error: "Kunde inte rensa notiser" });
+    }
+  });
+
+  // Manuell trigger för Fortnox-mapping-städning (Task #468). Samma autentiserings-
+  // mönster som notifications/cleanup: cron via FORTNOX_MAPPING_CLEANUP_TOKEN, eller
+  // admin/owner-session.
+  app.post("/api/admin/fortnox-mappings/cleanup", async (req: any, res) => {
+    try {
+      const token = process.env.FORTNOX_MAPPING_CLEANUP_TOKEN;
+      const provided = req.header("x-cleanup-token") || (typeof req.query.token === "string" ? req.query.token : undefined);
+      const tokenOk = !!token && provided === token;
+
+      if (!tokenOk) {
+        const userId = req.user?.claims?.sub;
+        if (!userId) {
+          return res.status(401).json({ error: "Ej autentiserad" });
+        }
+        const dbUser = await storage.getUser(userId);
+        const role = dbUser?.role || "user";
+        if (role !== "admin" && role !== "owner") {
+          return res.status(403).json({ error: "Ej behörig", message: "Administratörsrättigheter krävs." });
+        }
+      }
+
+      const result = await fortnoxMappingCleanupScheduler.runOnce();
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to run fortnox mapping cleanup:", error);
+      res.status(500).json({ error: "Kunde inte rensa Fortnox-mappningar" });
     }
   });
 

@@ -142,6 +142,13 @@ const PHASES: Array<{ name: string; tables: Array<[string, string]> }> = [
     // Föräldralösa Fortnox-mappningar (orphan refs till borttagna kunder/artiklar/resurser)
     // städas också bort. Giltiga entity_types (costcenter/project) lämnas i fred.
     //
+    // OBS (Task #468): Den strukturella lösningen för Fortnox-mapping-orphans är nu
+    // (a) hooks i `storage.deleteCustomer/deleteArticle/deleteResource` som tar bort
+    // mappningen direkt vid UI-radering, och (b) `fortnoxMappingCleanupScheduler` som
+    // kör `storage.cleanupOrphanFortnoxMappings()` dagligen (kan triggas manuellt via
+    // `POST /api/admin/fortnox-mappings/cleanup`). Fortnox-delen av Fas H är därmed
+    // dokumenterad sista-utväg/safety-net för katastrof-reset, inte primär kanal.
+    //
     // Resource-FK-säkerhet: vi rensar konfig-tabeller som refererar res-tomas/res-anna
     // INNAN vi raderar själva resursraderna (operativa tabeller har redan rensats av Fas A-G).
     name: "Fas H: Demo-rester + föräldralösa mappningar",

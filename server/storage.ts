@@ -525,7 +525,20 @@ export interface IStorage {
   createFortnoxMapping(mapping: InsertFortnoxMapping): Promise<FortnoxMapping>;
   updateFortnoxMapping(id: string, tenantId: string, data: Partial<InsertFortnoxMapping>): Promise<FortnoxMapping | undefined>;
   deleteFortnoxMapping(id: string, tenantId: string): Promise<void>;
-  
+  /**
+   * Tar bort alla Fortnox-mappningar som pekar på en specifik unicorn-entitet
+   * (customer/article/resource). Anropas från delete-flöden så att mappningen
+   * inte blir föräldralös när målraden soft/hard-raderas. Idempotent.
+   */
+  deleteFortnoxMappingsForEntity(entityType: "customer" | "article" | "resource", unicornId: string): Promise<number>;
+  /**
+   * Städar bort föräldralösa Fortnox-mappningar för entity_types vi mappar mot
+   * tenant-tabeller (customer/article/resource). Lämnar costcenter/project i fred.
+   * Returnerar antal raderade rader per entitetstyp. Om `tenantId` utelämnas
+   * körs det globalt över alla tenants. Säker att köra periodiskt.
+   */
+  cleanupOrphanFortnoxMappings(tenantId?: string): Promise<{ customer: number; article: number; resource: number; total: number }>;
+
   // Fortnox Invoice Exports
   getFortnoxInvoiceExports(tenantId: string, status?: string): Promise<FortnoxInvoiceExport[]>;
   getFortnoxInvoiceExport(id: string): Promise<FortnoxInvoiceExport | undefined>;
@@ -1314,6 +1327,12 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCustomer(id: string): Promise<void> {
     await db.update(customers).set({ deletedAt: new Date() }).where(eq(customers.id, id));
+    // Städa Fortnox-mappningen så att den inte blir föräldralös (Task #468).
+    try {
+      await this.deleteFortnoxMappingsForEntity("customer", id);
+    } catch (e) {
+      console.warn("[fortnox-mapping] kunde inte rensa mappning för kund", id, e);
+    }
   }
 
   async getObjects(tenantId: string): Promise<ServiceObject[]> {
@@ -1947,6 +1966,12 @@ export class DatabaseStorage implements IStorage {
 
   async deleteResource(id: string): Promise<void> {
     await db.update(resources).set({ deletedAt: new Date() }).where(eq(resources.id, id));
+    // Städa Fortnox-mappningen så att den inte blir föräldralös (Task #468).
+    try {
+      await this.deleteFortnoxMappingsForEntity("resource", id);
+    } catch (e) {
+      console.warn("[fortnox-mapping] kunde inte rensa mappning för resurs", id, e);
+    }
   }
 
   async getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrderWithObject[]> {
@@ -2978,6 +3003,12 @@ export class DatabaseStorage implements IStorage {
 
   async deleteArticle(id: string): Promise<void> {
     await db.update(articles).set({ deletedAt: new Date() }).where(eq(articles.id, id));
+    // Städa Fortnox-mappningen så att den inte blir föräldralös (Task #468).
+    try {
+      await this.deleteFortnoxMappingsForEntity("article", id);
+    } catch (e) {
+      console.warn("[fortnox-mapping] kunde inte rensa mappning för artikel", id, e);
+    }
   }
 
   async getObjectArticles(tenantId: string, objectId: string): Promise<ObjectArticle[]> {
@@ -4832,6 +4863,43 @@ export class DatabaseStorage implements IStorage {
 
   async deleteFortnoxMapping(id: string, tenantId: string): Promise<void> {
     await db.delete(fortnoxMappings).where(and(eq(fortnoxMappings.id, id), eq(fortnoxMappings.tenantId, tenantId)));
+  }
+
+  async deleteFortnoxMappingsForEntity(
+    entityType: "customer" | "article" | "resource",
+    unicornId: string,
+  ): Promise<number> {
+    const result: any = await db
+      .delete(fortnoxMappings)
+      .where(and(eq(fortnoxMappings.entityType, entityType), eq(fortnoxMappings.unicornId, unicornId)))
+      .returning({ id: fortnoxMappings.id });
+    return Array.isArray(result) ? result.length : 0;
+  }
+
+  async cleanupOrphanFortnoxMappings(tenantId?: string): Promise<{ customer: number; article: number; resource: number; total: number }> {
+    const tenantClause = tenantId ? sql`AND tenant_id = ${tenantId}` : sql``;
+    const stats = { customer: 0, article: 0, resource: 0, total: 0 };
+
+    const variants: Array<{ key: "customer" | "article" | "resource"; table: string }> = [
+      { key: "customer", table: "customers" },
+      { key: "article", table: "articles" },
+      { key: "resource", table: "resources" },
+    ];
+
+    for (const v of variants) {
+      const tenantTableClause = tenantId ? sql`AND tenant_id = ${tenantId}` : sql``;
+      const r: any = await db.execute(sql`
+        DELETE FROM fortnox_mappings
+        WHERE entity_type = ${v.key}
+          AND unicorn_id NOT IN (SELECT id FROM ${sql.raw(v.table)} WHERE 1=1 ${tenantTableClause})
+          ${tenantClause}
+      `);
+      const n = Number(r?.rowCount ?? 0);
+      stats[v.key] = n;
+      stats.total += n;
+    }
+
+    return stats;
   }
 
   // Fortnox Invoice Exports
