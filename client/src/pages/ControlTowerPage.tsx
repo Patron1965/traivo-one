@@ -438,15 +438,15 @@ export default function ControlTowerPage() {
                 </thead>
                 <tbody>
                   {filteredRows.map(row => (
-                    <tr key={row.resourceId} className="border-b dark:border-gray-800 hover:bg-muted/30" data-testid={`heatmap-row-${row.resourceId}`}>
+                    <tr key={row.resourceId} className={`border-b dark:border-gray-800 hover:bg-muted/30 ${row.resourceType === "team" ? "bg-muted/20" : ""}`} data-testid={`heatmap-row-${row.resourceId}`}>
                       <td className="sticky left-0 z-10 bg-background p-2">
                         <div className="flex items-center gap-2 min-w-[140px]">
-                          <div className="w-7 h-7 rounded-full bg-[#1B4B6B] dark:bg-[#4A9B9B] flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
-                            {row.resourceName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 ${row.resourceType === "team" ? "bg-[#4A9B9B] dark:bg-[#7DBFB0]" : "bg-[#1B4B6B] dark:bg-[#4A9B9B]"}`}>
+                            {row.resourceType === "team" ? <Users className="h-3.5 w-3.5" /> : row.resourceName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
                           </div>
                           <div className="min-w-0">
                             <p className="text-xs font-medium truncate" data-testid={`text-resource-name-${row.resourceId}`}>{row.resourceName}</p>
-                            <p className="text-[10px] text-muted-foreground">{row.weeklyHours}h/v</p>
+                            <p className="text-[10px] text-muted-foreground">{row.resourceType === "team" ? `Team · ${row.weeklyHours}h/v` : `${row.weeklyHours}h/v`}</p>
                           </div>
                         </div>
                       </td>

@@ -1615,14 +1615,24 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
     const resourceTypeFilter = req.query.resourceType as string | undefined;
 
     const resources = await storage.getResources(tenantId);
+    const allTeams = await storage.getTeams(tenantId);
+    const activeTeams = allTeams.filter(t => t.status === "active" && !t.deletedAt);
+
     let activeResources = resources.filter(r => r.status === "active" && !r.deletedAt);
+    let visibleTeams = activeTeams;
 
     if (resourceTypeFilter) {
-      activeResources = activeResources.filter(r => (r.resourceType || "person") === resourceTypeFilter);
+      if (resourceTypeFilter === "team") {
+        // Visa endast team-rader
+        activeResources = [];
+      } else {
+        activeResources = activeResources.filter(r => (r.resourceType || "person") === resourceTypeFilter);
+        visibleTeams = [];
+      }
     }
 
     if (teamFilter) {
-      const team = (await storage.getTeams(tenantId)).find(t => t.id === teamFilter);
+      const team = activeTeams.find(t => t.id === teamFilter);
       if (!team) {
         res.json({ dates, rows: [], summary: { totalResources: 0, totalOrders: 0, avgCapacity: 0, overloadedCells: 0, slaRiskTotal: 0, slaUnassigned: 0 }, weeks, teamOptions: [], unassignedSlaByDate: {} });
         return;
@@ -1632,6 +1642,7 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
         .where(eq(teamMembers.teamId, teamFilter));
       const memberIds = new Set(members.map(m => m.resourceId));
       activeResources = activeResources.filter(r => memberIds.has(r.id));
+      visibleTeams = visibleTeams.filter(t => t.id === teamFilter);
     }
 
     const allOrders = await storage.getWorkOrders(tenantId, startDate, endDate, false);
@@ -1642,13 +1653,21 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
     };
 
     const orderIndex = new Map<string, typeof allOrders>();
+    const teamOrderIndex = new Map<string, typeof allOrders>();
     const unassignedByDate = new Map<string, typeof allOrders>();
     for (const o of allOrders) {
       if (!o.scheduledDate) continue;
       const dateStr = getDateStr(o.scheduledDate);
+      if (o.teamId) {
+        const tkey = `${o.teamId}|${dateStr}`;
+        if (!teamOrderIndex.has(tkey)) teamOrderIndex.set(tkey, []);
+        teamOrderIndex.get(tkey)!.push(o);
+      }
       if (!o.resourceId) {
-        if (!unassignedByDate.has(dateStr)) unassignedByDate.set(dateStr, []);
-        unassignedByDate.get(dateStr)!.push(o);
+        if (!o.teamId) {
+          if (!unassignedByDate.has(dateStr)) unassignedByDate.set(dateStr, []);
+          unassignedByDate.get(dateStr)!.push(o);
+        }
         continue;
       }
       const key = `${o.resourceId}|${dateStr}`;
@@ -1793,30 +1812,98 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
       });
     }
 
-    const filteredOrderCount = heatmapRows.reduce((sum, r) =>
+    for (const team of visibleTeams) {
+      const weeklyHours = (team as any).totalHoursWeek || (team as any).productionHoursTarget || 40;
+      const dailyCapacityMinutes = (weeklyHours / 5) * 60;
+      const cells: HeatmapCell[] = [];
+
+      for (const dateStr of dates) {
+        const dayOrders = teamOrderIndex.get(`${team.id}|${dateStr}`) || [];
+
+        const totalMinutes = dayOrders.reduce((sum, o) => sum + (o.estimatedDuration || 60), 0);
+        const capacityPercent = dailyCapacityMinutes > 0
+          ? Math.round((totalMinutes / dailyCapacityMinutes) * 100)
+          : 0;
+
+        const completedCount = dayOrders.filter(o =>
+          o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed"
+        ).length;
+
+        const cellOrders: CellOrder[] = dayOrders.map(o => {
+          const isSlaRisk = !!(o.plannedWindowEnd && !o.completedAt && (() => {
+            const windowEnd = new Date(o.plannedWindowEnd);
+            const orderDate = new Date(dateStr);
+            orderDate.setHours(23, 59, 59, 999);
+            return windowEnd <= orderDate;
+          })());
+          return {
+            id: o.id,
+            title: o.title || `WO-${o.id.substring(0, 8)}`,
+            status: o.orderStatus || "ny",
+            estimatedDuration: o.estimatedDuration || 60,
+            plannedWindowEnd: o.plannedWindowEnd ? new Date(o.plannedWindowEnd).toISOString() : null,
+            slaAtRisk: isSlaRisk,
+          };
+        });
+
+        const slaAtRisk = cellOrders.filter(o => o.slaAtRisk).length;
+        const deviationCount = 0;
+
+        let level: "empty" | "low" | "medium" | "high" | "overloaded" = "empty";
+        if (dayOrders.length === 0) level = "empty";
+        else if (capacityPercent <= 50) level = "low";
+        else if (capacityPercent <= 80) level = "medium";
+        else if (capacityPercent <= 100) level = "high";
+        else level = "overloaded";
+
+        cells.push({
+          date: dateStr,
+          orderCount: dayOrders.length,
+          totalMinutes,
+          capacityPercent,
+          slaAtRisk,
+          deviationCount,
+          completedCount,
+          level,
+          orders: cellOrders,
+        });
+      }
+
+      heatmapRows.push({
+        resourceId: `team:${team.id}`,
+        resourceName: team.name,
+        resourceType: "team",
+        weeklyHours,
+        teamId: team.id,
+        cells,
+      });
+    }
+
+    // Räkna summor enbart på resurs-rader för att undvika dubbelräkning av team-rader
+    const resourceRows = heatmapRows.filter(r => r.resourceType !== "team");
+    const filteredOrderCount = resourceRows.reduce((sum, r) =>
       sum + r.cells.reduce((s, c) => s + c.orderCount, 0), 0);
     const totalSlaUnassigned = Array.from(slaUnassignedByDate.values()).reduce((s, v) => s + v, 0);
 
     const summary = {
       totalResources: activeResources.length,
       totalOrders: filteredOrderCount,
-      avgCapacity: heatmapRows.length > 0
+      avgCapacity: resourceRows.length > 0
         ? Math.round(
-            heatmapRows.reduce((sum, r) =>
+            resourceRows.reduce((sum, r) =>
               sum + r.cells.reduce((s, c) => s + c.capacityPercent, 0) / r.cells.length,
               0
-            ) / heatmapRows.length
+            ) / resourceRows.length
           )
         : 0,
-      overloadedCells: heatmapRows.reduce((sum, r) =>
+      overloadedCells: resourceRows.reduce((sum, r) =>
         sum + r.cells.filter(c => c.level === "overloaded").length, 0),
-      slaRiskTotal: heatmapRows.reduce((sum, r) =>
+      slaRiskTotal: resourceRows.reduce((sum, r) =>
         sum + r.cells.reduce((s, c) => s + c.slaAtRisk, 0), 0) + totalSlaUnassigned,
       slaUnassigned: totalSlaUnassigned,
     };
 
-    const teams = await storage.getTeams(tenantId);
-    const teamOptions = teams.filter(t => t.status === "active").map(t => ({ id: t.id, name: t.name }));
+    const teamOptions = activeTeams.map(t => ({ id: t.id, name: t.name }));
 
     const unassignedSlaByDate: Record<string, number> = {};
     for (const [dateStr, count] of slaUnassignedByDate) {
