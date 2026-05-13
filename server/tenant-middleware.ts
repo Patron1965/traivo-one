@@ -219,14 +219,9 @@ export const requireTenantWithFallback: RequestHandler = async (req, res, next) 
   }
 
   if (tenantContext.tenantId === "kinab" && tenantContext.role === "user") {
-    const isProduction = process.env.NODE_ENV === "production";
-    if (isProduction) {
-      return res.status(403).json({
-        error: "Åtkomst nekad",
-        message: "Du har inte behörighet att komma åt denna resurs. En administratör måste bjuda in dig först.",
-      });
-    }
-
+    // Block äldre auto-tilldelade `kinab/user` (assignedBy=NULL) men släpp
+    // igenom användare som faktiskt blivit inbjudna (assignedBy != NULL).
+    // Gäller både prod och dev så reglerna är konsekventa.
     const allRoles = await db
       .select({
         tenantId: userTenantRoles.tenantId,

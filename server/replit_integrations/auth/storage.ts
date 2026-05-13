@@ -5,11 +5,16 @@ import { eq, and } from "drizzle-orm";
 const DEFAULT_TENANT_ID = "kinab";
 
 async function resolveFallbackTenantId(): Promise<string | null> {
-  // Auto-assign new authenticated users only to the legacy demo "kinab"
-  // when it exists. In production single-tenant setups (e.g. Kinab) we never
-  // auto-assign — every member must be invited explicitly via the invitation
-  // flow to avoid broken-access-control where any signed-in Replit user would
-  // gain tenant membership.
+  // I produktion auto-tilldelas INGEN. Varje medlem måste bjudas in
+  // explicit via invitation-flödet. Detta hindrar att vilken Replit-/Google-
+  // användare som helst som klickar "Logga in" på traivo.se får
+  // tenant-medlemskap (broken-access-control).
+  //
+  // I dev/staging behåller vi "kinab"-fallbacken så lokal utveckling och
+  // demo fortsätter funka som tidigare.
+  if (process.env.NODE_ENV === "production" && process.env.AUTO_ASSIGN_TENANT !== "true") {
+    return null;
+  }
   const def = await db.select().from(tenants).where(eq(tenants.id, DEFAULT_TENANT_ID)).limit(1);
   if (def.length > 0) return DEFAULT_TENANT_ID;
   return null;

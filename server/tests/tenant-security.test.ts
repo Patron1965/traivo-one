@@ -67,13 +67,13 @@ async function runTests(): Promise<void> {
   console.log('\n🔐 Running Tenant Security Tests\n');
   console.log(`Testing against: ${BASE_URL}\n`);
 
-  await test('Unauthenticated user can access /api/me/tenant', async () => {
+  await test('Unauthenticated user gets null tenant from /api/me/tenant', async () => {
     const response = await fetch(`${BASE_URL}/api/me/tenant`);
     assertEqual(response.status, 200, 'Expected 200 status');
-    
+
     const data: TenantDiscoveryResponse = await response.json();
-    assertEqual(data.tenantId, 'kinab', 'Unauthenticated user should get kinab');
-    assertEqual(data.role, 'user', 'Unauthenticated user should have user role');
+    assertEqual(data.tenantId as unknown as null, null, 'Unauthenticated user should get null tenantId (no kinab fallback)');
+    assertEqual(data.role as unknown as null, null, 'Unauthenticated user should have null role');
     assert(Array.isArray(data.tenants), 'tenants should be an array');
     assertEqual(data.tenants.length, 0, 'Unauthenticated user should have no tenants');
   });

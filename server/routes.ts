@@ -134,9 +134,19 @@ export async function registerRoutes(
     try {
       const user = req.user;
       if (!user?.claims?.sub) {
-        return res.json({ tenantId: "kinab", role: "user", tenants: [] });
+        // Säkerhet: returnera ingen tenant för oinloggade besökare. Tidigare
+        // returnerade vi `kinab/user` som back-compat-fallback, vilket lät
+        // frontend-flöden tro att besökaren hade access. Frontend hanterar
+        // null-tenant korrekt via useAuth/AccessDeniedPage.
+        return res.json({
+          tenantId: null,
+          role: null,
+          tenantName: null,
+          tenants: [],
+          message: "Du är inte inloggad."
+        });
       }
-      
+
       const tenants = await getUserTenants(user.claims.sub);
       
       if (tenants.length > 0) {
