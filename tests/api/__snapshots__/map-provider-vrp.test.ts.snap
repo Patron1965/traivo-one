@@ -1,0 +1,142 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`mapGeoapifyVRPToDTO > produces a stable snapshot (guards against accidental DTO drift) 1`] = `
+{
+  "agentPlans": [
+    {
+      "actions": [
+        {
+          "durationSeconds": undefined,
+          "jobId": undefined,
+          "jobIndex": undefined,
+          "location": {
+            "lat": 59.3293,
+            "lng": 18.0686,
+          },
+          "startTimeSeconds": 0,
+          "type": "start",
+        },
+        {
+          "durationSeconds": 900,
+          "jobId": "job-0",
+          "jobIndex": 0,
+          "location": {
+            "lat": 59.33,
+            "lng": 18.071,
+          },
+          "startTimeSeconds": 600,
+          "type": "job",
+        },
+        {
+          "durationSeconds": 300,
+          "jobId": undefined,
+          "jobIndex": undefined,
+          "location": undefined,
+          "startTimeSeconds": 1500,
+          "type": "break",
+        },
+        {
+          "durationSeconds": 1200,
+          "jobId": "job-1",
+          "jobIndex": 1,
+          "location": {
+            "lat": 59.335,
+            "lng": 18.075,
+          },
+          "startTimeSeconds": 1800,
+          "type": "job",
+        },
+        {
+          "durationSeconds": undefined,
+          "jobId": undefined,
+          "jobIndex": undefined,
+          "location": {
+            "lat": 59.3293,
+            "lng": 18.0686,
+          },
+          "startTimeSeconds": 2730,
+          "type": "end",
+        },
+      ],
+      "agentId": "agent-A",
+      "agentIndex": 0,
+      "distanceMeters": 18450,
+      "durationSeconds": 2730,
+      "geometry": {
+        "coordinates": [
+          [
+            [
+              18.0686,
+              59.3293,
+            ],
+            [
+              18.071,
+              59.33,
+            ],
+          ],
+        ],
+        "type": "MultiLineString",
+      },
+    },
+    {
+      "actions": [
+        {
+          "durationSeconds": undefined,
+          "jobId": undefined,
+          "jobIndex": undefined,
+          "location": {
+            "lat": 59.3293,
+            "lng": 18.0686,
+          },
+          "startTimeSeconds": 0,
+          "type": "start",
+        },
+        {
+          "durationSeconds": 580,
+          "jobId": "job-3",
+          "jobIndex": 3,
+          "location": {
+            "lat": 59.34,
+            "lng": 18.08,
+          },
+          "startTimeSeconds": 400,
+          "type": "job",
+        },
+        {
+          "durationSeconds": undefined,
+          "jobId": undefined,
+          "jobIndex": undefined,
+          "location": {
+            "lat": 59.3293,
+            "lng": 18.0686,
+          },
+          "startTimeSeconds": 980,
+          "type": "end",
+        },
+      ],
+      "agentId": "agent-B",
+      "agentIndex": 1,
+      "distanceMeters": 5320,
+      "durationSeconds": 980,
+      "geometry": {
+        "coordinates": [
+          [
+            18.0686,
+            59.3293,
+          ],
+          [
+            18.08,
+            59.34,
+          ],
+        ],
+        "type": "LineString",
+      },
+    },
+  ],
+  "ok": true,
+  "unassignedAgentIndices": [],
+  "unassignedJobIndices": [
+    2,
+  ],
+}
+`;

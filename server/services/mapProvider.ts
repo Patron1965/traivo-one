@@ -464,7 +464,7 @@ interface GeoapifyRoutePlannerResponse {
   features: GeoapifyAgentPlan[];
 }
 
-function mapGeoapifyVRPToDTO(raw: RouteFetchResult): ProviderVRPResult {
+export function mapGeoapifyVRPToDTO(raw: RouteFetchResult): ProviderVRPResult {
   if (!raw.ok) {
     return { ok: false, status: raw.status, error: raw.error };
   }
