@@ -976,7 +976,12 @@ app.delete("/api/work-orders/:id", asyncHandler(async (req, res) => {
 // nollställer deletedAt så ordern dyker upp i normala vyer igen.
 app.post("/api/work-orders/:id/restore", requireAdmin, asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
-  const existing = await storage.getWorkOrder(req.params.id);
+  // OBS: storage.getWorkOrder() filtrerar bort soft-deleted (deletedAt IS NOT NULL),
+  // så vi måste läsa direkt här för att kunna återställa avbeställda ordrar.
+  const [existing] = await db
+    .select()
+    .from(workOrders)
+    .where(eq(workOrders.id, req.params.id));
   if (!existing || existing.tenantId !== tenantId) {
     throw new NotFoundError("Arbetsorder");
   }
