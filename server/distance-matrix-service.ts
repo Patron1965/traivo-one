@@ -7,7 +7,7 @@ import { getMapProvider } from "./services/mapProvider";
 export interface DistanceResult {
   distanceKm: number;
   durationMin: number;
-  source: "osrm" | "geoapify" | "haversine";
+  source: "osrm" | "geoapify" | "google" | "haversine";
 }
 
 interface L1CacheEntry {
@@ -107,7 +107,7 @@ async function getL2(key: string): Promise<DistanceResult | null> {
     return {
       distanceKm: row.distanceKm,
       durationMin: row.durationMin,
-      source: row.source as "osrm" | "geoapify" | "haversine",
+      source: row.source as DistanceResult["source"],
     };
   } catch (err) {
     console.warn("[distance-cache] L2 read error:", err instanceof Error ? err.message : err);
@@ -167,7 +167,7 @@ export async function getRoutingDistance(
       const result: DistanceResult = {
         distanceKm: pair.distanceKm,
         durationMin: Math.round(pair.durationMinutes),
-        source: pair.source === "osrm" ? "osrm" : "geoapify",
+        source: pair.source,
       };
       setL1(key, result);
       await setL2(key, lat1, lng1, lat2, lng2, result);
@@ -276,7 +276,7 @@ export async function precomputeDistanceMatrix(
           const rawDur = square.durationSeconds[i][j];
           let distKm: number;
           let durMin: number;
-          let source: DistanceResult["source"] = square.source === "osrm" ? "osrm" : "geoapify";
+          let source: DistanceResult["source"] = square.source;
           if (isNaN(rawDist) || isNaN(rawDur)) {
             nullCount++;
             distKm = haversineDistanceKm(stops[i].lat, stops[i].lng, stops[j].lat, stops[j].lng);
