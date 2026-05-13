@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MapPin, Clock, Car, ArrowRight, Route, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, BarChart3, MapPinned, Package, PackageSearch } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, startOfDay, endOfDay, addDays, startOfWeek, endOfWeek } from "date-fns";
@@ -11,7 +11,7 @@ import { sv } from "date-fns/locale";
 import { Marker, Popup, Polyline } from "react-leaflet";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { BaseMap, MapFitBounds, numberedDivIcon, entranceDivIcon, getAccessColor } from "@/components/ui/map";
-import type { Resource, WorkOrderWithObject, ServiceObject } from "@shared/schema";
+import type { Resource, Team, WorkOrderWithObject, ServiceObject } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -50,7 +50,8 @@ interface RouteData {
 }
 
 export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
-  const [selectedResource, setSelectedResource] = useState<string>("");
+  // Selection format: "resource:<id>" eller "team:<id>"
+  const [selectedTarget, setSelectedTarget] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     if (initialDate) {
       const parts = initialDate.split("-");
@@ -75,7 +76,34 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
     queryKey: ["/api/resources"],
   });
 
-  const activeResource = selectedResource || (resources.length > 0 ? resources[0].id : "");
+  const { data: teams = [] } = useQuery<Team[]>({
+    queryKey: ["/api/teams"],
+  });
+
+  const activeTeams = useMemo(() => teams.filter(t => t.status === "active" && !t.deletedAt), [teams]);
+
+  const targetOptions = useMemo(() => {
+    const opts: string[] = [];
+    for (const t of activeTeams) opts.push(`team:${t.id}`);
+    for (const r of resources) opts.push(`resource:${r.id}`);
+    return opts;
+  }, [activeTeams, resources]);
+
+  // Self-heal: faller tillbaka till första giltiga target om aktuellt val saknas.
+  const effectiveTarget =
+    selectedTarget && targetOptions.includes(selectedTarget)
+      ? selectedTarget
+      : targetOptions[0] ?? "";
+  const targetType: "resource" | "team" | "" = effectiveTarget.startsWith("team:") ? "team" : effectiveTarget.startsWith("resource:") ? "resource" : "";
+  const targetId = effectiveTarget.includes(":") ? effectiveTarget.split(":")[1] : "";
+  const activeResource = targetType === "resource" ? targetId : "";
+  const activeTeam = targetType === "team" ? targetId : "";
+
+  const matchesTarget = (wo: WorkOrderWithObject) => {
+    if (targetType === "team") return wo.teamId === activeTeam;
+    if (targetType === "resource") return wo.resourceId === activeResource;
+    return false;
+  };
 
   const getDateRange = () => {
     if (viewMode === "week") {
@@ -110,20 +138,20 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
   const displayJobObjectIds = useMemo(() => {
     return workOrders
       .filter(wo => {
-        if (!wo.scheduledDate || wo.resourceId !== activeResource) return false;
+        if (!wo.scheduledDate || !matchesTarget(wo)) return false;
         const scheduled = new Date(wo.scheduledDate);
         return scheduled >= periodStart && scheduled <= periodEnd;
       })
       .map(wo => wo.objectId)
       .filter(Boolean);
-  }, [workOrders, activeResource, periodStart, periodEnd]);
+  }, [workOrders, activeResource, activeTeam, targetType, periodStart, periodEnd]);
 
   const { data: objects = [] } = useObjectsByIds(displayJobObjectIds);
   
   const objectMap = useMemo(() => new Map(objects.map(o => [o.id, o])), [objects]);
 
   const displayJobs = workOrders.filter(wo => {
-    if (!wo.scheduledDate || wo.resourceId !== activeResource) return false;
+    if (!wo.scheduledDate || !matchesTarget(wo)) return false;
     const scheduled = new Date(wo.scheduledDate);
     return scheduled >= periodStart && scheduled <= periodEnd;
   }).sort((a, b) => {
@@ -272,14 +300,31 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                 <BarChart3 className="h-4 w-4" />
                 Ruttstatistik
               </CardTitle>
-              <Select value={activeResource} onValueChange={setSelectedResource}>
-                <SelectTrigger className="w-[160px]" data-testid="select-resource">
-                  <SelectValue placeholder="Välj tekniker" />
+              <Select value={effectiveTarget} onValueChange={setSelectedTarget}>
+                <SelectTrigger className="w-[180px]" data-testid="select-resource">
+                  <SelectValue placeholder="Välj team eller tekniker" />
                 </SelectTrigger>
                 <SelectContent>
-                  {resources.map(r => (
-                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                  ))}
+                  {activeTeams.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel className="flex items-center gap-1.5">
+                        <Users className="h-3 w-3" /> Team
+                      </SelectLabel>
+                      {activeTeams.map(t => (
+                        <SelectItem key={`team-${t.id}`} value={`team:${t.id}`} data-testid={`select-team-${t.id}`}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  <SelectGroup>
+                    <SelectLabel>Tekniker</SelectLabel>
+                    {resources.map(r => (
+                      <SelectItem key={`resource-${r.id}`} value={`resource:${r.id}`} data-testid={`select-resource-${r.id}`}>
+                        {r.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
