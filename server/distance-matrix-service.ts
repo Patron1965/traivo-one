@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { distanceCache } from "@shared/schema";
 import { eq, lt } from "drizzle-orm";
-import { isOSRMAvailable, osrmRoute, osrmTable, getOSRMStatus } from "./osrm-client";
+import { getOSRMStatus } from "./osrm-client";
 import { getMapProvider } from "./services/mapProvider";
 
 export interface DistanceResult {
@@ -157,58 +157,29 @@ export async function getRoutingDistance(
     return l2Hit;
   }
 
-  const osrmAvailable = await isOSRMAvailable();
-  if (osrmAvailable) {
-    try {
-      const osrmResult = await osrmRoute({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });
-      if (osrmResult) {
-        const result: DistanceResult = {
-          distanceKm: osrmResult.distanceMeters / 1000,
-          durationMin: Math.round(osrmResult.durationSeconds / 60),
-          source: "osrm",
-        };
-        setL1(key, result);
-        await setL2(key, lat1, lng1, lat2, lng2, result);
-        return result;
-      }
-    } catch (err) {
-      console.warn("[distance-matrix] OSRM failed, trying Geoapify:", err instanceof Error ? err.message : err);
-    }
-  }
-
+  // Provider-abstrakterad pair (OSRM-först, Geoapify-fallback). Shadow-jämförelse
+  // sker inne i provider.routePair när MAP_SHADOW_SAMPLE_RATE > 0.
   const provider = getMapProvider();
-  if (!provider.isRoutingAvailable()) {
-    const fb = haversineFallback(lat1, lng1, lat2, lng2);
-    setL1(key, fb);
-    return fb;
-  }
 
   try {
-    const summary = await provider.routeSummary([
-      { lat: lat1, lng: lng1 },
-      { lat: lat2, lng: lng2 },
-    ]);
-
-    if (summary) {
+    const pair = await provider.routePair({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });
+    if (pair) {
       const result: DistanceResult = {
-        distanceKm: summary.distanceKm,
-        durationMin: Math.round(summary.durationMinutes),
-        source: "geoapify",
+        distanceKm: pair.distanceKm,
+        durationMin: Math.round(pair.durationMinutes),
+        source: pair.source === "osrm" ? "osrm" : "geoapify",
       };
       setL1(key, result);
       await setL2(key, lat1, lng1, lat2, lng2, result);
       return result;
     }
-
-    const fb = haversineFallback(lat1, lng1, lat2, lng2);
-    setL1(key, fb);
-    return fb;
   } catch (error) {
-    console.warn("[distance-matrix] Provider routing failed, falling back to haversine:", error);
-    const fb = haversineFallback(lat1, lng1, lat2, lng2);
-    setL1(key, fb);
-    return fb;
+    console.warn("[distance-matrix] Provider routePair failed, falling back to haversine:", error);
   }
+
+  const fb = haversineFallback(lat1, lng1, lat2, lng2);
+  setL1(key, fb);
+  return fb;
 }
 
 export interface BatchPair {
@@ -291,20 +262,21 @@ export async function precomputeDistanceMatrix(
     matrix.push({ fromId: stop.id, toId: stop.id, distanceKm: 0, durationMin: 0 });
   }
 
-  if (stops.length >= 2 && await isOSRMAvailable()) {
-    const tableResult = await osrmTable(stops.map(s => ({ lat: s.lat, lng: s.lng })));
-    if (tableResult && tableResult.distances.length === stops.length) {
-      console.log(`[distance-matrix] OSRM table API: ${stops.length}×${stops.length} matrix computed`);
+  if (stops.length >= 2) {
+    const provider = getMapProvider();
+    const square = await provider.routeMatrixSquare(stops.map(s => ({ lat: s.lat, lng: s.lng })));
+    if (square) {
+      console.log(`[distance-matrix] ${square.source} table: ${stops.length}×${stops.length} matrix computed`);
       const l2Promises: Promise<void>[] = [];
       let nullCount = 0;
       for (let i = 0; i < stops.length; i++) {
         for (let j = 0; j < stops.length; j++) {
           if (i === j) continue;
-          const rawDist = tableResult.distances[i][j];
-          const rawDur = tableResult.durations[i][j];
+          const rawDist = square.distanceMeters[i][j];
+          const rawDur = square.durationSeconds[i][j];
           let distKm: number;
           let durMin: number;
-          let source: DistanceResult["source"] = "osrm";
+          let source: DistanceResult["source"] = square.source === "osrm" ? "osrm" : "geoapify";
           if (isNaN(rawDist) || isNaN(rawDur)) {
             nullCount++;
             distKm = haversineDistanceKm(stops[i].lat, stops[i].lng, stops[j].lat, stops[j].lng);
@@ -327,7 +299,7 @@ export async function precomputeDistanceMatrix(
         }
       }
       if (nullCount > 0) {
-        console.warn(`[distance-matrix] OSRM returned ${nullCount} unreachable pairs, filled with Haversine`);
+        console.warn(`[distance-matrix] ${square.source} returned ${nullCount} unreachable pairs, filled with Haversine`);
       }
       await Promise.all(l2Promises);
       return matrix;
@@ -371,42 +343,40 @@ export async function computeORToolsMatrix(
   if (locations.length < 2) return null;
 
   try {
-    const osrmAvail = await isOSRMAvailable();
-    if (osrmAvail) {
-      const tableResult = await osrmTable(locations);
-      if (tableResult && tableResult.distances.length === locations.length) {
-        const entries: PrecomputedDistanceEntry[] = [];
-        let nullCount = 0;
-        for (let i = 0; i < locations.length; i++) {
-          for (let j = 0; j < locations.length; j++) {
-            if (i === j) continue;
-            const rawDist = tableResult.distances[i][j];
-            const rawDur = tableResult.durations[i][j];
-            if (isNaN(rawDist) || isNaN(rawDur)) {
-              nullCount++;
-              const distKm = haversineDistanceKm(locations[i].lat, locations[i].lng, locations[j].lat, locations[j].lng);
-              entries.push({
-                from_idx: i,
-                to_idx: j,
-                distance_m: Math.round(distKm * 1000),
-                duration_s: Math.round((distKm / 40) * 3600),
-              });
-            } else {
-              entries.push({
-                from_idx: i,
-                to_idx: j,
-                distance_m: Math.round(rawDist),
-                duration_s: Math.round(rawDur),
-              });
-            }
+    const provider = getMapProvider();
+    const square = await provider.routeMatrixSquare(locations);
+    if (square) {
+      const entries: PrecomputedDistanceEntry[] = [];
+      let nullCount = 0;
+      for (let i = 0; i < locations.length; i++) {
+        for (let j = 0; j < locations.length; j++) {
+          if (i === j) continue;
+          const rawDist = square.distanceMeters[i][j];
+          const rawDur = square.durationSeconds[i][j];
+          if (isNaN(rawDist) || isNaN(rawDur)) {
+            nullCount++;
+            const distKm = haversineDistanceKm(locations[i].lat, locations[i].lng, locations[j].lat, locations[j].lng);
+            entries.push({
+              from_idx: i,
+              to_idx: j,
+              distance_m: Math.round(distKm * 1000),
+              duration_s: Math.round((distKm / 40) * 3600),
+            });
+          } else {
+            entries.push({
+              from_idx: i,
+              to_idx: j,
+              distance_m: Math.round(rawDist),
+              duration_s: Math.round(rawDur),
+            });
           }
         }
-        if (nullCount > 0) {
-          console.warn(`[distance-matrix] OSRM matrix: ${nullCount} unreachable pairs filled with Haversine`);
-        }
-        console.log(`[distance-matrix] OSRM OR-Tools matrix: ${locations.length}×${locations.length} (${entries.length} entries)`);
-        return entries;
       }
+      if (nullCount > 0) {
+        console.warn(`[distance-matrix] ${square.source} matrix: ${nullCount} unreachable pairs filled with Haversine`);
+      }
+      console.log(`[distance-matrix] ${square.source} OR-Tools matrix: ${locations.length}×${locations.length} (${entries.length} entries)`);
+      return entries;
     }
 
     const entries: PrecomputedDistanceEntry[] = [];

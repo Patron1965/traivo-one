@@ -5180,6 +5180,39 @@ export const distanceCache = pgTable("distance_cache", {
 
 export type DistanceCacheEntry = typeof distanceCache.$inferSelect;
 
+// Task #472 (Google Maps Fas 1) — shadow-jämförelse mellan primär och
+// alternativ map-provider. En rad per loggad jämförelse (sample-rate-styrt).
+// Skrivning sker fail-safe via setImmediate så att shadow-anrop aldrig
+// blockerar primär-pathen. Aggregeras av `scripts/shadow-comparison-report.ts`.
+export const mapShadowComparisons = pgTable("map_shadow_comparisons", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id"),
+  // 'geocode' | 'route' | 'matrix' | 'vrp'
+  operation: varchar("operation", { length: 20 }).notNull(),
+  primaryProvider: varchar("primary_provider", { length: 20 }).notNull(),
+  shadowProvider: varchar("shadow_provider", { length: 20 }).notNull(),
+  requestHash: varchar("request_hash", { length: 64 }).notNull(),
+  request: jsonb("request"),
+  primaryResult: jsonb("primary_result"),
+  shadowResult: jsonb("shadow_result"),
+  // Beräknade absoluta + relativa deltan: { distanceKmDelta, durationMinDelta, distanceKmRelPct, durationMinRelPct, ... }
+  deltas: jsonb("deltas"),
+  primaryDurationMs: integer("primary_duration_ms"),
+  shadowDurationMs: integer("shadow_duration_ms"),
+  primaryOk: boolean("primary_ok"),
+  shadowOk: boolean("shadow_ok"),
+  shadowError: text("shadow_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_map_shadow_op").on(table.operation),
+  index("idx_map_shadow_created").on(table.createdAt),
+  index("idx_map_shadow_tenant").on(table.tenantId),
+]);
+
+export type MapShadowComparison = typeof mapShadowComparisons.$inferSelect;
+export const insertMapShadowComparisonSchema = createInsertSchema(mapShadowComparisons).omit({ id: true, createdAt: true });
+export type InsertMapShadowComparison = z.infer<typeof insertMapShadowComparisonSchema>;
+
 export const optimizationJobs = pgTable("optimization_jobs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),

@@ -313,50 +313,6 @@ interface GeoapifyJob {
   description?: string;
 }
 
-interface GeoapifyAction {
-  type: "start" | "end" | "job" | "break";
-  start_time?: number;
-  duration?: number;
-  job_index?: number;
-  job_id?: string;
-  waypoint_index?: number;
-}
-
-interface GeoapifyWaypoint {
-  original_location: [number, number];
-  location: [number, number];
-  start_time?: number;
-  duration?: number;
-  actions?: GeoapifyAction[];
-}
-
-interface GeoapifyAgentPlan {
-  type: "Feature";
-  properties: {
-    agent_index: number;
-    distance: number;
-    time: number;
-    total_time: number;
-    start_time: number;
-    mode: string;
-    actions: GeoapifyAction[];
-    waypoints: GeoapifyWaypoint[];
-  };
-  geometry: any;
-}
-
-interface GeoapifyRoutePlannerResponse {
-  type: "FeatureCollection";
-  properties: {
-    mode: string;
-    issues?: {
-      unassignedAgents?: number[];
-      unassignedJobs?: number[];
-    };
-  };
-  features: GeoapifyAgentPlan[];
-}
-
 export interface VRPRouteStop {
   orderId: string;
   orderTitle: string;
@@ -377,7 +333,7 @@ interface VRPRoute {
   totalDistanceKm: number;
   totalServiceMinutes: number;
   efficiency: number;
-  geometry?: string;
+  geometry?: unknown;
   breakConfig?: BreakConfig;
 }
 
@@ -672,13 +628,11 @@ export async function optimizeRoutesVRP(
             continue;
           }
 
-          const data: GeoapifyRoutePlannerResponse = plannerResult.data;
           const clJobIndexToOrderId = new Map(clusterJobs.map((j, idx) => [idx, j.id || ""]));
 
-          for (const feature of data.features) {
-            const props = feature.properties;
-            const resource = clusterResources[props.agent_index];
-            const relevantActions = props.actions.filter(a => a.type === "job" || a.type === "break");
+          for (const plan of plannerResult.agentPlans) {
+            const resource = clusterResources[plan.agentIndex];
+            const relevantActions = plan.actions.filter(a => a.type === "job" || a.type === "break");
             const stops: VRPRouteStop[] = [];
             let seq = 1;
 
@@ -686,41 +640,38 @@ export async function optimizeRoutesVRP(
               if (action.type === "break") {
                 const prevStop = stops.length > 0 ? stops[stops.length - 1] : null;
                 stops.push({
-                  orderId: `break-${resource?.id || props.agent_index}`,
+                  orderId: `break-${resource?.id || plan.agentIndex}`,
                   orderTitle: "Rast",
                   sequence: seq++,
-                  arrivalSeconds: action.start_time || 0,
-                  serviceMinutes: Math.round((action.duration || 0) / 60),
+                  arrivalSeconds: action.startTimeSeconds || 0,
+                  serviceMinutes: Math.round((action.durationSeconds || 0) / 60),
                   waitingMinutes: 0,
                   location: prevStop?.location || { lat: 0, lng: 0 },
                   isBreak: true,
-                  breakDurationMinutes: Math.round((action.duration || 0) / 60),
+                  breakDurationMinutes: Math.round((action.durationSeconds || 0) / 60),
                 });
               } else {
-                const orderId = action.job_id || (action.job_index !== undefined ? clJobIndexToOrderId.get(action.job_index) : "") || "";
+                const orderId = action.jobId || (action.jobIndex !== undefined ? clJobIndexToOrderId.get(action.jobIndex) : "") || "";
                 const order = orderMap.get(orderId);
-                const waypoint = action.waypoint_index !== undefined ? props.waypoints[action.waypoint_index] : null;
                 stops.push({
                   orderId,
                   orderTitle: order?.title || `Order ${orderId.slice(0, 8)}`,
                   sequence: seq++,
-                  arrivalSeconds: action.start_time || 0,
-                  serviceMinutes: Math.round((action.duration || 0) / 60),
+                  arrivalSeconds: action.startTimeSeconds || 0,
+                  serviceMinutes: Math.round((action.durationSeconds || 0) / 60),
                   waitingMinutes: 0,
-                  location: waypoint?.location
-                    ? { lat: waypoint.location[1], lng: waypoint.location[0] }
-                    : { lat: 0, lng: 0 },
+                  location: action.location || { lat: 0, lng: 0 },
                 });
               }
             }
 
             const jobStops = stops.filter(s => !s.isBreak);
             totalAssigned += jobStops.length;
-            const totalDur = Math.round(props.time / 60);
+            const totalDur = Math.round(plan.durationSeconds / 60);
             const totalSvc = jobStops.reduce((s, st) => s + st.serviceMinutes, 0);
-            const distKm = Math.round(props.distance / 100) / 10;
-            totalDistance += props.distance;
-            totalTime += props.time;
+            const distKm = Math.round(plan.distanceMeters / 100) / 10;
+            totalDistance += plan.distanceMeters;
+            totalTime += plan.durationSeconds;
 
             allRoutes.push({
               resourceId: resource?.id || "",
@@ -730,13 +681,12 @@ export async function optimizeRoutesVRP(
               totalDistanceKm: distKm,
               totalServiceMinutes: totalSvc,
               efficiency: totalDur > 0 ? Math.round((totalSvc / totalDur) * 100) : 0,
-              geometry: feature.geometry,
+              geometry: plan.geometry,
               breakConfig: effectiveBreak || undefined,
             });
           }
 
-          const unassignedIndices = data.properties?.issues?.unassignedJobs || [];
-          for (const idx of unassignedIndices) {
+          for (const idx of plannerResult.unassignedJobIndices) {
             allUnassigned.push({
               orderId: clJobIndexToOrderId.get(idx) || "",
               reason: "Kunde inte tilldelas i kluster"
@@ -802,8 +752,6 @@ export async function optimizeRoutesVRP(
       throw new Error(`Geoapify Route Planner API error: ${plannerResult.status} - ${plannerResult.error}`);
     }
 
-    const data: GeoapifyRoutePlannerResponse = plannerResult.data;
-
     const orderMap = new Map(workOrders.map(o => [o.id, o]));
     const jobIndexToOrderId = new Map(validJobs.map(j => [j.index, j.order.id]));
 
@@ -811,11 +759,10 @@ export async function optimizeRoutesVRP(
     let totalDistance = 0;
     let totalTime = 0;
 
-    const routes = data.features.map(feature => {
-      const props = feature.properties;
-      const resource = resources[props.agent_index];
+    const routes = plannerResult.agentPlans.map(plan => {
+      const resource = resources[plan.agentIndex];
 
-      const relevantActions = props.actions.filter(a => a.type === "job" || a.type === "break");
+      const relevantActions = plan.actions.filter(a => a.type === "job" || a.type === "break");
       const stops: VRPRouteStop[] = [];
       let seq = 1;
 
@@ -823,31 +770,28 @@ export async function optimizeRoutesVRP(
         if (action.type === "break") {
           const prevStop = stops.length > 0 ? stops[stops.length - 1] : null;
           stops.push({
-            orderId: `break-${resource?.id || props.agent_index}`,
+            orderId: `break-${resource?.id || plan.agentIndex}`,
             orderTitle: "Rast",
             sequence: seq++,
-            arrivalSeconds: action.start_time || 0,
-            serviceMinutes: Math.round((action.duration || 0) / 60),
+            arrivalSeconds: action.startTimeSeconds || 0,
+            serviceMinutes: Math.round((action.durationSeconds || 0) / 60),
             waitingMinutes: 0,
             location: prevStop?.location || { lat: 0, lng: 0 },
             isBreak: true,
-            breakDurationMinutes: Math.round((action.duration || 0) / 60),
+            breakDurationMinutes: Math.round((action.durationSeconds || 0) / 60),
           });
         } else {
-          const orderId = action.job_id || (action.job_index !== undefined ? jobIndexToOrderId.get(action.job_index) : "") || "";
+          const orderId = action.jobId || (action.jobIndex !== undefined ? jobIndexToOrderId.get(action.jobIndex) : "") || "";
           const order = orderMap.get(orderId);
-          const waypoint = action.waypoint_index !== undefined ? props.waypoints[action.waypoint_index] : null;
 
           stops.push({
             orderId,
             orderTitle: order?.title || `Order ${orderId.slice(0, 8)}`,
             sequence: seq++,
-            arrivalSeconds: action.start_time || 0,
-            serviceMinutes: Math.round((action.duration || 0) / 60),
+            arrivalSeconds: action.startTimeSeconds || 0,
+            serviceMinutes: Math.round((action.durationSeconds || 0) / 60),
             waitingMinutes: 0,
-            location: waypoint?.location 
-              ? { lat: waypoint.location[1], lng: waypoint.location[0] }
-              : { lat: 0, lng: 0 },
+            location: action.location || { lat: 0, lng: 0 },
           });
         }
       }
@@ -855,28 +799,27 @@ export async function optimizeRoutesVRP(
       const jobStops = stops.filter(s => !s.isBreak);
       totalAssigned += jobStops.length;
 
-      const totalDur = Math.round(props.time / 60);
+      const totalDur = Math.round(plan.durationSeconds / 60);
       const totalSvc = jobStops.reduce((s, st) => s + st.serviceMinutes, 0);
-      const distKm = Math.round(props.distance / 100) / 10;
+      const distKm = Math.round(plan.distanceMeters / 100) / 10;
 
-      totalDistance += props.distance;
-      totalTime += props.time;
+      totalDistance += plan.distanceMeters;
+      totalTime += plan.durationSeconds;
 
       return {
         resourceId: resource?.id || "",
-        resourceName: resource?.name || `Resurs ${props.agent_index + 1}`,
+        resourceName: resource?.name || `Resurs ${plan.agentIndex + 1}`,
         stops,
         totalDurationMinutes: totalDur,
         totalDistanceKm: distKm,
         totalServiceMinutes: totalSvc,
         efficiency: totalDur > 0 ? Math.round((totalSvc / totalDur) * 100) : 0,
-        geometry: feature.geometry,
+        geometry: plan.geometry,
         breakConfig: effectiveBreak || undefined,
       };
     });
 
-    const unassignedJobIndices = data.properties?.issues?.unassignedJobs || [];
-    const unassignedOrders = unassignedJobIndices.map(idx => ({
+    const unassignedOrders = plannerResult.unassignedJobIndices.map(idx => ({
       orderId: jobIndexToOrderId.get(idx) || "",
       reason: "Kunde inte tilldelas"
     }));
