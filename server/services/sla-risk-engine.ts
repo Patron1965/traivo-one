@@ -95,6 +95,9 @@ export async function computeTenantSlaRisk(tenantId: string): Promise<{
 
   const openIds = openOrders.map(o => o.id).filter(Boolean);
   if (openIds.length === 0) {
+    // Inga öppna ordrar — rensa gamla snapshots så att stale-varningar
+    // inte ligger kvar för evigt (t.ex. när alla ordrar avbeställts).
+    await db.delete(slaRiskSnapshots).where(eq(slaRiskSnapshots.tenantId, tenantId));
     return { snapshots: [], transitions: [] };
   }
 
