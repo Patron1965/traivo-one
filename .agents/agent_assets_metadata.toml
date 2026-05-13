@@ -84,3 +84,9 @@ id = "z_jajx4QbAZ-GZK5-DVD3"
 uri = "file://exports/kinab-pilot-startguide.pdf"
 type = "pdf"
 title = "Kinab pilot — Startguide (PDF)"
+
+[[outputs]]
+id = "F0B9EJYm6jhIFunKHOuGg"
+uri = "file://exports/Traivo-Marknad-Forslag-Kinab.pdf"
+type = "pdf"
+title = "Traivo för Marknad – Förslag till Kinab"
