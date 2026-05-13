@@ -901,6 +901,7 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
     .from(workOrders)
     .where(and(
       eq(workOrders.tenantId, tenantId),
+      isNull(workOrders.deletedAt),
       gte(workOrders.scheduledDate, new Date(targetYear, 0, 1)),
       lte(workOrders.scheduledDate, new Date(targetYear, 11, 31, 23, 59, 59)),
     ));
@@ -1017,6 +1018,7 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
       .from(workOrders)
       .where(and(
         eq(workOrders.tenantId, tenantId),
+        isNull(workOrders.deletedAt),
         inArray(workOrders.objectId, targetObjectIds),
         gte(workOrders.scheduledDate, new Date(targetYear, 0, 1)),
         lte(workOrders.scheduledDate, new Date(targetYear, 11, 31, 23, 59, 59)),

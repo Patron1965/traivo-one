@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { db } from "../db";
-import { eq, and, gte, lte, sql, count, sum, avg, desc, inArray, or } from "drizzle-orm";
+import { eq, and, gte, lte, sql, count, sum, avg, desc, inArray, or, isNull } from "drizzle-orm";
 import { getTenantIdWithFallback, requireRole } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { ValidationError } from "../errors";
@@ -59,6 +59,7 @@ export async function registerRoiRoutes(app: Express) {
       .where(and(
         eq(workOrders.tenantId, tenantId),
         eq(workOrders.customerId, customerId),
+        isNull(workOrders.deletedAt),
         gte(workOrders.scheduledDate, cutoff),
       ));
 
@@ -340,6 +341,7 @@ export async function registerRoiRoutes(app: Express) {
       .where(and(
         eq(workOrders.tenantId, tenantId),
         eq(workOrders.customerId, customerId),
+        isNull(workOrders.deletedAt),
         gte(workOrders.scheduledDate, cutoff),
       ));
 

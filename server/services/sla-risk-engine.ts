@@ -141,6 +141,7 @@ export async function computeTenantSlaRisk(tenantId: string): Promise<{
     .where(
       and(
         eq(workOrders.tenantId, tenantId),
+        isNull(workOrders.deletedAt),
         isNotNull(workOrders.completedAt),
         gte(workOrders.completedAt, ninetyDaysAgo),
         isNotNull(workOrders.actualDuration),

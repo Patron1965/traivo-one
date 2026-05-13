@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import type { Response } from "express";
-import { lt, or } from "drizzle-orm";
+import { lt, or, isNull } from "drizzle-orm";
 import {
   MobileAuthenticatedRequest,
   storage, db, eq, and, gte, sql,
@@ -115,11 +115,13 @@ export function registerAppConfigRoutes(app: Express) {
     const [todayOrders, weekOrders, todaySessions, weekSessions, envData] = await Promise.all([
       db.select().from(workOrders).where(and(
         eq(workOrders.resourceId, resourceId),
+        isNull(workOrders.deletedAt),
         gte(workOrders.scheduledDate, todayStart),
         lt(workOrders.scheduledDate, tomorrowStart),
       )),
       db.select().from(workOrders).where(and(
         eq(workOrders.resourceId, resourceId),
+        isNull(workOrders.deletedAt),
         gte(workOrders.scheduledDate, weekStart),
         lt(workOrders.scheduledDate, tomorrowStart),
       )),
@@ -197,6 +199,7 @@ async function calculateStreak(resourceId: string): Promise<number> {
     scheduledDate: workOrders.scheduledDate,
   }).from(workOrders).where(and(
     eq(workOrders.resourceId, resourceId),
+    isNull(workOrders.deletedAt),
     gte(workOrders.scheduledDate, sixtyDaysAgo),
     or(eq(workOrders.orderStatus, "utford"), eq(workOrders.status, "completed")),
   ));
