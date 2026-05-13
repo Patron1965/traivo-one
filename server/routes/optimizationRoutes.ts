@@ -54,15 +54,16 @@ async function buildOptimizationPayload(
   constraintOptions?: VRPConstraintOptions,
 ): Promise<{ stops: OptimizationStop[]; vehicles: OptimizationVehicle[]; constraintsApplied: string[] }> {
   const { buildTeamVehicles, buildTeamMemberMap } = await import("../team-vehicles");
-  const [workOrders, resources, objects, teams, teamMembersAll] = await Promise.all([
+  const [workOrders, resources, objects, teams, teamMembersAll, clusters] = await Promise.all([
     storage.getWorkOrders(tenantId),
     storage.getResources(tenantId),
     storage.getObjects(tenantId),
     storage.getTeams(tenantId),
     storage.getAllTeamMembers(tenantId),
+    storage.getClusters(tenantId),
   ]);
 
-  const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources);
+  const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources, clusters);
   const teamMemberMap = buildTeamMemberMap(teams, teamMembersAll);
 
   const objectMap = new Map(objects.map(o => [o.id, o]));
@@ -241,10 +242,10 @@ export async function registerOptimizationRoutes(app: Express) {
       storage.getAllTeamMembers(tenantId),
     ]);
 
-    const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources);
+    const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources, clusters);
     const teamMemberMap = buildTeamMemberMap(teams, teamMembersAll);
     if (teamVehicles.length === 0) {
-      throw new ValidationError("Inga aktiva team med medlemmar hittades. Skapa ett team med minst en medlem för att köra ruttoptimering.");
+      throw new ValidationError("Inga ruttbara team hittades. Varje aktivt team behöver minst en medlem, en team-leader, eller koppling till ett kluster med koordinater för att kunna ruttas.");
     }
 
     let filteredOrders = workOrders;

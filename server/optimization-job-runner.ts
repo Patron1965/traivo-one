@@ -146,7 +146,7 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
   const tenantId = input.tenantId;
   await updateProgress(jobId, 10);
 
-  const [workOrders, resources, objects, _clusters, teams, teamMembersAll] = await Promise.all([
+  const [workOrders, resources, objects, clusters, teams, teamMembersAll] = await Promise.all([
     storage.getWorkOrders(tenantId),
     storage.getResources(tenantId),
     storage.getObjects(tenantId),
@@ -155,7 +155,7 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
     storage.getAllTeamMembers(tenantId),
   ]);
 
-  const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources);
+  const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources, clusters);
   const teamMemberMap = buildTeamMemberMap(teams, teamMembersAll);
 
   await updateProgress(jobId, 20);
@@ -409,10 +409,10 @@ async function executeVRPJob(jobId: string, input: VRPJobInput): Promise<VRPOpti
     storage.getAllTeamMembers(tenantId),
   ]);
 
-  const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources);
+  const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources, clusters);
   const teamMemberMap = buildTeamMemberMap(teams, teamMembersAll);
   if (teamVehicles.length === 0) {
-    throw new Error("Inga aktiva team med medlemmar hittades. Skapa ett team med minst en medlem för att köra ruttoptimering.");
+    throw new Error("Inga ruttbara team hittades. Varje aktivt team behöver minst en medlem, en team-leader, eller koppling till ett kluster med koordinater för att kunna ruttas.");
   }
 
   await updateProgress(jobId, 25);

@@ -33,7 +33,7 @@ _Populate as you build_
 - **Offline-First Mobile:** The mobile application is designed to function offline, syncing data when connectivity is restored to support field workers.
 - **Externalized Optimization & Data Cleaning:** Complex route optimization and data validation are offloaded to dedicated external microservices to maintain core system focus and scalability.
 - **Expand-Contract Strategy for DB Changes:** New database columns are introduced as nullable/default to ensure backward compatibility and avoid breaking existing integrations (e.g., Mobile, VRP, Fortnox).
-- **Synthetic Team Resources for VRP:** For route optimization, teams are treated as single vehicles with synthetic resources, aggregating individual team member capacities and locations.
+- **Synthetic Team Resources for VRP:** For route optimization, teams are treated as single vehicles with synthetic resources, aggregating individual team member capacities and locations. `buildTeamVehicles()` (`server/team-vehicles.ts`) bygger fordon i prioriteringsordning: team-leader → första aktiva medlem → fallback till `team.lastPositionLat/Lng` eller `cluster.centerLatitude/Longitude` (via `team.cluster_id`). Team utan någon av dessa data hoppas över. Alla 4 callers (`server/routes/optimizationRoutes.ts` × 2, `server/optimization-job-runner.ts` × 2) skickar nu in `clusters` så fallback fungerar. Felmeddelande vid 0 ruttbara team: "Inga ruttbara team hittades. Varje aktivt team behöver minst en medlem, en team-leader, eller koppling till ett kluster med koordinater för att kunna ruttas."
 
 ## Product
 - **AI-Driven Field Service Optimization:** Route planning, resource allocation, and predictive analytics for waste management.
