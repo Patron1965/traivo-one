@@ -4,6 +4,18 @@ import { sql, eq, and } from "drizzle-orm";
 
 const DEFAULT_TENANT_ID = "kinab";
 
+/**
+ * Demo-seeden (demo-kunder, demo-objekt, demo-resurser, demo-work-orders)
+ * är AV i produktion by default. Sätt ENABLE_DEMO_SEED=true för att slå på.
+ *
+ * Systemmetadata (`seedSystemMetadataLabels`) och tenant-migrationen
+ * (`migrateDefaultTenantToKinab`) körs alltid — de är prod-säkra och
+ * behövs för att appen ska fungera.
+ */
+const DEMO_SEED_ENABLED =
+  process.env.NODE_ENV !== "production" ||
+  process.env.ENABLE_DEMO_SEED === "true";
+
 function getCurrentWeekDates() {
   const now = new Date();
   const day = now.getDay();
@@ -20,7 +32,9 @@ function getCurrentWeekDates() {
 }
 
 export async function seedDatabase() {
-  console.log("Starting database seed...");
+  console.log(
+    `Starting database seed... (demo-seed: ${DEMO_SEED_ENABLED ? "ON" : "OFF"}, NODE_ENV=${process.env.NODE_ENV ?? "unset"})`,
+  );
 
   // Rename legacy "default-tenant" → "kinab" if applicable (production migration).
   await migrateDefaultTenantToKinab();
@@ -33,14 +47,30 @@ export async function seedDatabase() {
     .where(sql`id = ${DEFAULT_TENANT_ID}`)
     .limit(1);
   if (defaultRows.length > 0) {
-    console.log("Default demo tenant present, refreshing demo dates...");
-    await refreshDemoWorkOrderDates();
+    if (DEMO_SEED_ENABLED) {
+      console.log("Default tenant present, refreshing demo dates...");
+      await refreshDemoWorkOrderDates();
+    } else {
+      console.log(
+        "Default tenant present, demo-seed disabled (production). Skipping demo refresh.",
+      );
+    }
+    // Systemmetadata är prod-säker och behövs alltid.
     await seedSystemMetadataLabels();
     return;
   }
   const anyTenant = await db.select({ id: tenants.id }).from(tenants).limit(1);
   if (anyTenant.length > 0) {
     console.log("Tenant(s) already exist, skipping demo seed.");
+    // Systemmetadata är knuten till DEFAULT_TENANT_ID; kör endast om kinab finns.
+    // (Om kinab saknas men annan tenant finns: hoppa — metadata är opt-in per tenant.)
+    return;
+  }
+
+  if (!DEMO_SEED_ENABLED) {
+    console.log(
+      "Demo-seed disabled in production and no tenant exists. Skipping full demo bootstrap — create the tenant manually.",
+    );
     return;
   }
 

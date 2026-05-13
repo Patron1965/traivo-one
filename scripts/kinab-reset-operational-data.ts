@@ -136,6 +136,47 @@ const PHASES: Array<{ name: string; tables: Array<[string, string]> }> = [
       ["notifications", `tenant_id = '${TENANT}'`],
     ],
   },
+  {
+    // Demo-resurser och demo-kluster som annars återskapas av seedDatabase()
+    // när NODE_ENV != production eller ENABLE_DEMO_SEED=true.
+    // Föräldralösa Fortnox-mappningar (orphan refs till borttagna kunder/artiklar/resurser)
+    // städas också bort. Giltiga entity_types (costcenter/project) lämnas i fred.
+    //
+    // Resource-FK-säkerhet: vi rensar konfig-tabeller som refererar res-tomas/res-anna
+    // INNAN vi raderar själva resursraderna (operativa tabeller har redan rensats av Fas A-G).
+    name: "Fas H: Demo-rester + föräldralösa mappningar",
+    tables: [
+      // FK-cleanup: alla tabeller som refererar resources(id) och inte redan rensats av Fas A-G.
+      ["team_members", `resource_id IN ('res-tomas','res-anna')`],
+      ["resource_articles", `resource_id IN ('res-tomas','res-anna')`],
+      ["resource_vehicles", `resource_id IN ('res-tomas','res-anna')`],
+      ["resource_equipment", `resource_id IN ('res-tomas','res-anna')`],
+      ["resource_availability", `resource_id IN ('res-tomas','res-anna')`],
+      ["resource_positions", `resource_id IN ('res-tomas','res-anna')`],
+      ["resource_profile_assignments", `resource_id IN ('res-tomas','res-anna')`],
+      ["push_tokens", `resource_id IN ('res-tomas','res-anna')`],
+      ["mobile_user_preferences", `resource_id IN ('res-tomas','res-anna')`],
+      ["recurring_slot_patterns", `resource_id IN ('res-tomas','res-anna')`],
+      ["equipment_bookings", `resource_id IN ('res-tomas','res-anna')`],
+      ["work_sessions", `resource_id IN ('res-tomas','res-anna')`],
+      ["time_logs", `resource_id IN ('res-tomas','res-anna')`],
+      ["self_booking_slots", `resource_id IN ('res-tomas','res-anna')`],
+      // Själva demo-resurserna.
+      ["resources", `tenant_id = '${TENANT}' AND id IN ('res-tomas','res-anna')`],
+      // Demo-kluster (alla seed-genererade kluster har prefix cluster-).
+      ["clusters", `tenant_id = '${TENANT}' AND id LIKE 'cluster-%'`],
+      // Föräldralösa Fortnox-mappningar — endast för entity-types vi faktiskt
+      // mappar mot tenant-tabeller (customer/article/resource). Lämna costcenter/project orörda.
+      [
+        "fortnox_mappings",
+        `tenant_id = '${TENANT}' AND (
+          (entity_type = 'customer' AND unicorn_id NOT IN (SELECT id FROM customers WHERE tenant_id = '${TENANT}')) OR
+          (entity_type = 'article'  AND unicorn_id NOT IN (SELECT id FROM articles  WHERE tenant_id = '${TENANT}')) OR
+          (entity_type = 'resource' AND unicorn_id NOT IN (SELECT id FROM resources WHERE tenant_id = '${TENANT}'))
+        )`,
+      ],
+    ],
+  },
 ];
 
 async function tableExists(name: string): Promise<boolean> {
