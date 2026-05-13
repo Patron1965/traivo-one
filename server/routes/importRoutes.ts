@@ -12,7 +12,8 @@ import multer from "multer";
 import Papa from "papaparse";
 import ExcelJS from "exceljs";
 import { importJobs, notifyImportProgress } from "./helpers";
-import { geocodeAddress, reverseGeocode, triggerGeocodeIfMissing } from "../services/geocoding";
+import { triggerGeocodeIfMissing } from "../services/geocoding";
+import { getMapProvider } from "../services/mapProvider";
 import { objects, workOrders, customers, objectMetadata, workOrderLines, metadataKatalog, fortnoxMappings, customerServiceContracts, importBatches, auditLogs, type InsertFortnoxContractSuggestion, type InsertWorkOrder } from "@shared/schema";
 import { createMetadata, updateMetadata, getAllMetadataTypes, seedKarlMetadataTypes, KARL_METADATA_DEFINITIONS } from "../metadata-queries";
 import { metadataVarden } from "@shared/schema";
@@ -910,7 +911,7 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
     for (const item of rowsNeedingGeocode) {
       try {
         const fullAddress = item.city ? `${item.address}, ${item.city}, Sverige` : `${item.address}, Sverige`;
-        const geoResult = await geocodeAddress(fullAddress, tenantId);
+        const geoResult = await getMapProvider().geocode(fullAddress, tenantId);
         if (geoResult && geoResult.latitude && geoResult.longitude) {
           geocodedCount++;
           addressRows[item.index].geocodeStatus = "geocoded";
@@ -4585,7 +4586,7 @@ app.post("/api/import/repair/geocode", requireAdmin, asyncHandler(async (req, re
           ? `${obj.address}, ${obj.city}, Sverige`
           : `${obj.address}, Sverige`;
 
-        const geoResult = await geocodeAddress(fullAddress, tenantId);
+        const geoResult = await getMapProvider().geocode(fullAddress, tenantId);
         if (geoResult && geoResult.latitude && geoResult.longitude) {
           await db.update(objects).set({
             latitude: geoResult.latitude,
@@ -5143,7 +5144,7 @@ app.get("/api/import/cleanup/address/preview", requireAdmin, asyncHandler(async 
       });
     } else if (m.latitude && m.longitude && reverseGeocoded < 25) {
       // Begränsa omvänd-geokod till max 25 per preview för att skona API:t
-      const result = await reverseGeocode(m.latitude, m.longitude, tenantId);
+      const result = await getMapProvider().reverseGeocode(m.latitude, m.longitude, tenantId);
       reverseGeocoded++;
       if (result?.city) {
         proposals.push({
