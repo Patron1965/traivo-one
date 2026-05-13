@@ -1296,19 +1296,6 @@ export default function PortalDashboardPage() {
                         <MapPin className="h-3 w-3 shrink-0" />
                         <span className="line-clamp-1">{obj.address}</span>
                       </div>
-                      {obj.what3words && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Grid3X3 className="h-3 w-3 text-destructive shrink-0" />
-                          <a 
-                            href={`https://what3words.com/${obj.what3words}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-destructive hover:underline font-mono text-xs"
-                          >
-                            ///{obj.what3words}
-                          </a>
-                        </div>
-                      )}
                       
                       <div className="pt-2 border-t space-y-1">
                         {lastVisit ? (

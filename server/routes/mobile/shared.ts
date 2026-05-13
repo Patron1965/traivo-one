@@ -159,7 +159,6 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
     wasteType: object?.objectType || "",
     containerType: object?.name || "",
     containerCount: object?.containerCount || 0,
-    what3words: order.what3words || "",
     executionCodes,
     dependencies: depDetails,
     timeRestrictions: restrictions,

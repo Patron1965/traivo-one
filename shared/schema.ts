@@ -314,8 +314,6 @@ export const workOrders = pgTable("work_orders", {
   creationMethod: text("creation_method").default("manual"),
   // Strukturartikel-ID om uppgiften skapades av en strukturartikel
   structuralArticleId: varchar("structural_article_id"),
-  // What3Words-position (3x3m precision)
-  what3words: text("what3words"),
   // GPS-koordinater för uppgiftsspecifik position (om annan än objektets)
   taskLatitude: real("task_latitude"),
   taskLongitude: real("task_longitude"),
@@ -2336,7 +2334,6 @@ export const assignments = pgTable("assignments", {
   address: text("address"),
   latitude: real("latitude"),
   longitude: real("longitude"),
-  what3words: text("what3words"),
   // Korsbefruktning: antal (t.ex. antal kärl)
   quantity: integer("quantity").default(1),
   // Beräknade värden
@@ -3541,8 +3538,8 @@ export interface ObjectWithAllMetadataEAV {
 
 // Geografisk position med prioriteringsordning
 export interface GeographicPosition {
-  typ: 'GPS' | 'What3words' | 'Adress';
-  precision: 'exakt' | 'medel' | 'grov';
+  typ: 'GPS' | 'Adress';
+  precision: 'exakt' | 'grov';
   varde: string;
   fromObject?: {
     id: string;

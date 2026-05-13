@@ -2036,7 +2036,7 @@ export class DatabaseStorage implements IStorage {
       executionStatus: workOrders.executionStatus,
       creationMethod: workOrders.creationMethod,
       structuralArticleId: workOrders.structuralArticleId,
-      what3words: workOrders.what3words,
+
       taskLatitude: workOrders.taskLatitude,
       taskLongitude: workOrders.taskLongitude,
       externalReference: workOrders.externalReference,
@@ -2117,7 +2117,7 @@ export class DatabaseStorage implements IStorage {
       executionStatus: workOrders.executionStatus,
       creationMethod: workOrders.creationMethod,
       structuralArticleId: workOrders.structuralArticleId,
-      what3words: workOrders.what3words,
+
       taskLatitude: workOrders.taskLatitude,
       taskLongitude: workOrders.taskLongitude,
       externalReference: workOrders.externalReference,
@@ -2260,7 +2260,7 @@ export class DatabaseStorage implements IStorage {
       executionStatus: workOrders.executionStatus,
       creationMethod: workOrders.creationMethod,
       structuralArticleId: workOrders.structuralArticleId,
-      what3words: workOrders.what3words,
+
       taskLatitude: workOrders.taskLatitude,
       taskLongitude: workOrders.taskLongitude,
       externalReference: workOrders.externalReference,
@@ -2358,7 +2358,7 @@ export class DatabaseStorage implements IStorage {
       executionStatus: workOrders.executionStatus,
       creationMethod: workOrders.creationMethod,
       structuralArticleId: workOrders.structuralArticleId,
-      what3words: workOrders.what3words,
+
       taskLatitude: workOrders.taskLatitude,
       taskLongitude: workOrders.taskLongitude,
       externalReference: workOrders.externalReference,
@@ -2491,7 +2491,7 @@ export class DatabaseStorage implements IStorage {
       executionStatus: workOrders.executionStatus,
       creationMethod: workOrders.creationMethod,
       structuralArticleId: workOrders.structuralArticleId,
-      what3words: workOrders.what3words,
+
       taskLatitude: workOrders.taskLatitude,
       taskLongitude: workOrders.taskLongitude,
       externalReference: workOrders.externalReference,

@@ -1276,8 +1276,6 @@ async function runModusObjectsImportJob(params: {
         
         const objectNumber = `MODUS-${modusId}`;
 
-        const what3words = (row["What3words"] || row["What3Words"] || row["what3words"] || row["W3W"] || "").trim() || null;
-        
         const hierarchyLevelMap: Record<number, string> = { 1: "omrade", 2: "fastighet", 3: "serviceenhet" };
         const objectFields = {
           customerId,
@@ -1297,7 +1295,6 @@ async function runModusObjectsImportJob(params: {
           keyNumber,
           accessInfo,
           containerCount,
-          ...(what3words ? { notes: `W3W: ${what3words}` } : {}),
         };
         
         const existingObject = await storage.getObjectByObjectNumber(tenantId, objectNumber);

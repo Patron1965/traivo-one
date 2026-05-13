@@ -320,7 +320,6 @@ export default function ArchitecturePage() {
               <ArchitectureBox title="Kartjänster" icon={MapPin} color="bg-chart-1/10 dark:bg-chart-1/15" borderColor="border-chart-1/20 dark:border-chart-1/80">
                 <FeatureItem>Geoapify (rutter)</FeatureItem>
                 <FeatureItem>Nominatim (geocoding)</FeatureItem>
-                <FeatureItem>What3Words</FeatureItem>
                 <FeatureItem>Leaflet-kartor</FeatureItem>
               </ArchitectureBox>
               

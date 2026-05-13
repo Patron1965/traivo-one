@@ -1024,7 +1024,7 @@ export async function getCrossFertilizedMetadata(
 
 // ============================================================================
 // GEOGRAFISK UPPLÖSNINGSORDNING
-// GPS (exakt) > What3words (medel) > Adress (grov)
+// GPS (exakt) > Adress (grov)
 // ============================================================================
 
 export async function getGeographicPosition(
@@ -1042,16 +1042,6 @@ export async function getGeographicPosition(
       precision: 'exakt',
       varde: gpsMetadata.vardeString,
       fromObject: gpsMetadata.fromObject,
-    };
-  }
-
-  const w3wMetadata = objectWithMetadata.metadata.find(m => m.katalog.namn === 'What3words');
-  if (w3wMetadata && w3wMetadata.vardeString) {
-    return {
-      typ: 'What3words',
-      precision: 'medel',
-      varde: w3wMetadata.vardeString,
-      fromObject: w3wMetadata.fromObject,
     };
   }
 
@@ -1222,8 +1212,7 @@ export async function seedDefaultMetadataTypes(tenantId: string): Promise<void> 
   const defaultTypes = [
     { namn: 'Adress', datatyp: 'string', arLogisk: true, standardArvs: true, kategori: 'geografi', beskrivning: 'Postadress (grov position)', sortOrder: 1, icon: 'MapPin' },
     { namn: 'GPS', datatyp: 'string', arLogisk: true, standardArvs: true, kategori: 'geografi', beskrivning: 'GPS-koordinater (longitud, latitud)', sortOrder: 2, icon: 'Navigation' },
-    { namn: 'What3words', datatyp: 'string', arLogisk: true, standardArvs: true, kategori: 'geografi', beskrivning: 'What3words adress (3x3 meter precision)', sortOrder: 3, icon: 'Grid3x3' },
-    
+
     { namn: 'Antal', datatyp: 'integer', arLogisk: true, standardArvs: false, kategori: 'kvantitet', beskrivning: 'Antal av objektet', sortOrder: 10, icon: 'Hash' },
     { namn: 'Area', datatyp: 'decimal', arLogisk: true, standardArvs: false, kategori: 'kvantitet', beskrivning: 'Storlek i kvadratmeter', sortOrder: 11, icon: 'Square' },
     { namn: 'Volym', datatyp: 'integer', arLogisk: true, standardArvs: false, kategori: 'kvantitet', beskrivning: 'Volym i liter', sortOrder: 12, icon: 'Box' },
