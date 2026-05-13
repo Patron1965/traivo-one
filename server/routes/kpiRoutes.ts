@@ -1940,8 +1940,16 @@ app.post("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
     let emailDelivered = false;
     let emailError: string | null = null;
     try {
-      const appUrl = process.env.REPLIT_DEPLOYMENT_URL
-        || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "https://traivo.replit.app");
+      // Använd hosten där admin skapade inbjudan — då hamnar Lucas alltid på
+      // samma deployment (t.ex. kinab-core-concepts--tomas155.replit.app),
+      // inte på en intern dev-URL eller tom fallback.
+      const forwardedProto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0]?.trim();
+      const forwardedHost = (req.headers["x-forwarded-host"] as string)?.split(",")[0]?.trim();
+      const host = forwardedHost || req.get("host");
+      const proto = forwardedProto || (host && host.includes("localhost") ? "http" : "https");
+      const appUrl = host
+        ? `${proto}://${host}`
+        : process.env.PUBLIC_APP_URL || "https://traivo.replit.app";
       const roleLabel: Record<string, string> = {
         owner: "Ägare", admin: "Admin", planner: "Planerare",
         technician: "Tekniker", user: "Användare", viewer: "Läsare",
