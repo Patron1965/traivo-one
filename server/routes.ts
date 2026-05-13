@@ -232,12 +232,14 @@ export async function registerRoutes(
       const unassignedRows = await db.execute(sql`
         SELECT COUNT(*) AS count FROM work_orders
         WHERE tenant_id = ${tenantId}
+        AND deleted_at IS NULL
         AND resource_id IS NULL
         AND order_status NOT IN ('utford', 'fakturerad', 'omojlig', 'avbruten')
       `);
       const unplannedRows = await db.execute(sql`
         SELECT COUNT(*) AS count FROM work_orders
         WHERE tenant_id = ${tenantId}
+        AND deleted_at IS NULL
         AND scheduled_date IS NULL
         AND order_status NOT IN ('utford', 'fakturerad', 'omojlig', 'avbruten')
       `);
