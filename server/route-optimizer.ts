@@ -1,11 +1,7 @@
 import type { WorkOrder, Resource, ServiceObject, Cluster } from "@shared/schema";
 import { getBatchDistances } from "./distance-matrix-service";
 import type { VRPConstraintOptions } from "./vrp-constraints";
-import {
-  callRoutePlanner,
-  getRouteSummary,
-  isGeoapifyRoutingAvailable,
-} from "./services/routing";
+import { getMapProvider } from "./services/mapProvider";
 
 export interface RouteStop {
   workOrderId: string;
@@ -164,11 +160,12 @@ async function getRouteFromGeoapify(coordinates: [number, number][]): Promise<{
   distance: number;
   duration: number;
 } | null> {
-  if (!isGeoapifyRoutingAvailable() || coordinates.length < 2) {
+  const provider = getMapProvider();
+  if (!provider.isRoutingAvailable() || coordinates.length < 2) {
     return null;
   }
 
-  const summary = await getRouteSummary(
+  const summary = await provider.routeSummary(
     coordinates.map(([lng, lat]) => ({ lat, lng })),
   );
   if (!summary) return null;
@@ -435,7 +432,7 @@ export async function optimizeRoutesVRP(
   breakConfig?: BreakConfig,
   constraintOptions?: VRPConstraintOptions,
 ): Promise<VRPOptimizationResult> {
-  if (!isGeoapifyRoutingAvailable()) {
+  if (!getMapProvider().isRoutingAvailable()) {
     return {
       success: false,
       routes: [],
@@ -662,7 +659,7 @@ export async function optimizeRoutesVRP(
         if (clusterJobs.length === 0) continue;
 
         try {
-          const plannerResult = await callRoutePlanner({
+          const plannerResult = await getMapProvider().optimizeRoutes({
             agents: clusterAgents,
             jobs: clusterJobs,
           });
@@ -796,7 +793,7 @@ export async function optimizeRoutesVRP(
   }
 
   try {
-    const plannerResult = await callRoutePlanner({
+    const plannerResult = await getMapProvider().optimizeRoutes({
       agents: enrichedAgents,
       jobs: enrichedJobs,
     });

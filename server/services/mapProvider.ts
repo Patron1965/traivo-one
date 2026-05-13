@@ -64,6 +64,11 @@ export interface ProviderRouteGeometry {
   coordinates: [number, number][];
 }
 
+export interface ProviderMatrixCell {
+  distanceKm: number;
+  durationMinutes: number;
+}
+
 export interface ProviderVRPRequest {
   jobs: unknown;
   agents: unknown;
@@ -92,6 +97,17 @@ export interface MapProvider {
     waypoints: Waypoint[],
     options?: ProviderRoutingOptions,
   ): Promise<ProviderRouteFetchResult>;
+  /**
+   * Beräknar en N×M distans/tid-matris mellan origins och destinations.
+   * Returnerar `null` på celler där ruttning misslyckades. För Geoapify
+   * implementeras detta som en loop över `routeSummary` (det finns ingen
+   * native batch-matrix-endpoint). Google Routes API har en native
+   * `computeRouteMatrix` som kommer användas i GoogleMapProvider.
+   */
+  routeMatrix(
+    origins: Waypoint[],
+    destinations: Waypoint[],
+  ): Promise<Array<Array<ProviderMatrixCell | null>>>;
 
   // ---- VRP / Route Planner ----
   optimizeRoutes(req: ProviderVRPRequest): Promise<ProviderVRPResult>;
@@ -154,6 +170,32 @@ class GeoapifyMapProvider implements MapProvider {
     options?: ProviderRoutingOptions,
   ): Promise<ProviderRouteFetchResult> {
     return fetchGeoapifyRouteWithStatus(waypoints, options);
+  }
+
+  async routeMatrix(
+    origins: Waypoint[],
+    destinations: Waypoint[],
+  ): Promise<Array<Array<ProviderMatrixCell | null>>> {
+    // Geoapify saknar native matrix-endpoint — loopa routeSummary parallellt
+    // i mindre batchar för att undvika rate-limit. GoogleMapProvider får
+    // använda computeRouteMatrix istället.
+    const BATCH = 5;
+    const matrix: Array<Array<ProviderMatrixCell | null>> = [];
+    for (let i = 0; i < origins.length; i++) {
+      const row: Array<ProviderMatrixCell | null> = new Array(destinations.length).fill(null);
+      for (let j = 0; j < destinations.length; j += BATCH) {
+        const slice = destinations.slice(j, j + BATCH);
+        const results = await Promise.all(
+          slice.map(async (dst) => {
+            const s = await getRouteSummary([origins[i], dst]);
+            return s ? { distanceKm: s.distanceKm, durationMinutes: s.durationMinutes } : null;
+          }),
+        );
+        for (let k = 0; k < results.length; k++) row[j + k] = results[k];
+      }
+      matrix.push(row);
+    }
+    return matrix;
   }
 
   async optimizeRoutes(req: ProviderVRPRequest): Promise<ProviderVRPResult> {

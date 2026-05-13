@@ -1,11 +1,8 @@
-import { trackApiUsage } from "./api-usage-tracker";
 import { db } from "./db";
 import { distanceCache } from "@shared/schema";
 import { eq, lt } from "drizzle-orm";
 import { isOSRMAvailable, osrmRoute, osrmTable, getOSRMStatus } from "./osrm-client";
-
-const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
-const ROUTING_URL = "https://api.geoapify.com/v1/routing";
+import { getMapProvider } from "./services/mapProvider";
 
 export interface DistanceResult {
   distanceKm: number;
@@ -179,42 +176,23 @@ export async function getRoutingDistance(
     }
   }
 
-  if (!GEOAPIFY_API_KEY) {
+  const provider = getMapProvider();
+  if (!provider.isRoutingAvailable()) {
     const fb = haversineFallback(lat1, lng1, lat2, lng2);
     setL1(key, fb);
     return fb;
   }
 
   try {
-    const waypoints = `${lat1},${lng1}|${lat2},${lng2}`;
-    const startTime = Date.now();
-    const response = await fetch(
-      `${ROUTING_URL}?waypoints=${waypoints}&mode=drive&apiKey=${GEOAPIFY_API_KEY}`
-    );
+    const summary = await provider.routeSummary([
+      { lat: lat1, lng: lng1 },
+      { lat: lat2, lng: lng2 },
+    ]);
 
-    trackApiUsage({
-      service: "geoapify",
-      method: "routing",
-      endpoint: "/v1/routing",
-      units: 1,
-      statusCode: response.status,
-      durationMs: Date.now() - startTime,
-    });
-
-    if (!response.ok) {
-      console.warn(`[distance-matrix] Geoapify error ${response.status}, falling back to haversine`);
-      const fb = haversineFallback(lat1, lng1, lat2, lng2);
-      setL1(key, fb);
-      return fb;
-    }
-
-    const data = await response.json();
-    const props = data.features?.[0]?.properties;
-
-    if (props && props.distance !== undefined && props.time !== undefined) {
+    if (summary) {
       const result: DistanceResult = {
-        distanceKm: props.distance / 1000,
-        durationMin: Math.round(props.time / 60),
+        distanceKm: summary.distanceKm,
+        durationMin: Math.round(summary.durationMinutes),
         source: "geoapify",
       };
       setL1(key, result);
@@ -226,7 +204,7 @@ export async function getRoutingDistance(
     setL1(key, fb);
     return fb;
   } catch (error) {
-    console.warn("[distance-matrix] Geoapify fetch failed, falling back to haversine:", error);
+    console.warn("[distance-matrix] Provider routing failed, falling back to haversine:", error);
     const fb = haversineFallback(lat1, lng1, lat2, lng2);
     setL1(key, fb);
     return fb;

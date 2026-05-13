@@ -170,18 +170,43 @@ async function main() {
   console.log("─".repeat(120));
 
   // Migrationsspecifik sammanfattning
-  const geoapifyTotal = perService.get("geoapify")?.calls ?? 0;
+  // OBS: service-namn varierar i api_usage_logs — nuvarande tracking använder
+  // bl.a. "geoapify" (routing), "geoapify-geocoding" (geocode/search,
+  // /geocode/reverse, autocomplete), "geocode-scheduler" (batch-jobb mot
+  // Geoapify), "nominatim" (fallback) och "osrm" (matrix). Alla aggregeras
+  // som "kartrelaterat" eftersom de alla flyttar till Google i Task #471.
+  const sumServices = (names: string[]): number =>
+    names.reduce((acc, n) => acc + (perService.get(n)?.calls ?? 0), 0);
+
+  const geoapifyRoutingTotal = perService.get("geoapify")?.calls ?? 0;
+  const geoapifyGeocodingTotal = sumServices(["geoapify-geocoding", "geocode-scheduler"]);
   const nominatimTotal = perService.get("nominatim")?.calls ?? 0;
   const googleTotal = perService.get("google-geocoding")?.calls ?? 0;
   const osrmTotal = perService.get("osrm")?.calls ?? 0;
-  const totalMapCalls = geoapifyTotal + nominatimTotal + googleTotal + osrmTotal;
+  const totalMapCalls = geoapifyRoutingTotal + geoapifyGeocodingTotal + nominatimTotal + googleTotal + osrmTotal;
 
   console.log(`\n=== Migrationsbaseline (Task #471) ===`);
-  console.log(`  Geoapify:        ${geoapifyTotal.toString().padStart(8)} anrop  (att flytta till Google Routes/Geocoding/Maps)`);
-  console.log(`  Nominatim:       ${nominatimTotal.toString().padStart(8)} anrop  (fallback — ersätts av Google Geocoding)`);
-  console.log(`  google-geocoding:${googleTotal.toString().padStart(8)} anrop  (befintliga — granska om de redan är Google)`);
-  console.log(`  OSRM:            ${osrmTotal.toString().padStart(8)} anrop  (att flytta till Google Distance Matrix/Routes)`);
-  console.log(`  TOTALT karta:    ${totalMapCalls.toString().padStart(8)} anrop\n`);
+  console.log(`  Geoapify routing:    ${geoapifyRoutingTotal.toString().padStart(8)} anrop  (→ Google Routes API)`);
+  console.log(`  Geoapify geocoding:  ${geoapifyGeocodingTotal.toString().padStart(8)} anrop  (geoapify-geocoding + geocode-scheduler → Google Geocoding API)`);
+  console.log(`  Nominatim fallback:  ${nominatimTotal.toString().padStart(8)} anrop  (→ Google Geocoding API)`);
+  console.log(`  google-geocoding:    ${googleTotal.toString().padStart(8)} anrop  (legacy label — granska)`);
+  console.log(`  OSRM matrix:         ${osrmTotal.toString().padStart(8)} anrop  (→ Google Distance Matrix/Routes)`);
+  console.log(`  TOTALT karta:        ${totalMapCalls.toString().padStart(8)} anrop\n`);
+
+  // Varna om okända map-relaterade service-labels för att fånga framtida drift.
+  const knownMapServices = new Set([
+    "geoapify", "geoapify-geocoding", "geocode-scheduler",
+    "nominatim", "google-geocoding", "osrm",
+  ]);
+  const unknownMapLike = Array.from(perService.keys())
+    .filter((s) => !knownMapServices.has(s) && /geo|map|route|osrm|nominatim/i.test(s));
+  if (unknownMapLike.length > 0) {
+    console.log(`⚠️  Okända kart-liknande service-labels (lägg till i baselinen om relevanta):`);
+    for (const s of unknownMapLike) {
+      console.log(`     - ${s}: ${perService.get(s)?.calls ?? 0} anrop`);
+    }
+    console.log("");
+  }
 
   if (totalMapCalls === 0) {
     console.log("⚠️  Inga karta/rutt-anrop loggade i fönstret. Bekräfta att trackApiUsage() faktiskt kallas i hot path.");
