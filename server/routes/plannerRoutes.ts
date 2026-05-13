@@ -1634,7 +1634,7 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
     if (teamFilter) {
       const team = activeTeams.find(t => t.id === teamFilter);
       if (!team) {
-        res.json({ dates, rows: [], summary: { totalResources: 0, totalOrders: 0, avgCapacity: 0, overloadedCells: 0, slaRiskTotal: 0, slaUnassigned: 0 }, weeks, teamOptions: [], unassignedSlaByDate: {} });
+        res.json({ dates, rows: [], summary: { totalResources: 0, totalOrders: 0, avgCapacity: 0, overloadedCells: 0, slaRiskTotal: 0, slaUnassigned: 0 }, weeks, teamOptions: [], teamRoutingStatus: [], unassignedSlaByDate: {} });
         return;
       }
       const members = await db.select({ resourceId: teamMembers.resourceId })
@@ -1905,12 +1905,56 @@ app.get("/api/planning/heatmap", requireTenantWithFallback, asyncHandler(async (
 
     const teamOptions = activeTeams.map(t => ({ id: t.id, name: t.name }));
 
+    // Beräkna ruttbarhet per team för admin-diagnostik
+    const teamMembersAll = await storage.getAllTeamMembers(tenantId);
+    const clustersForReadiness = await storage.getClusters(tenantId);
+    const clusterMap = new Map(clustersForReadiness.map(c => [c.id, c]));
+    const memberCountByTeam = new Map<string, number>();
+    for (const m of teamMembersAll) {
+      memberCountByTeam.set(m.teamId, (memberCountByTeam.get(m.teamId) || 0) + 1);
+    }
+    const resourceById = new Map(resources.map(r => [r.id, r]));
+    const teamRoutingStatus = activeTeams.map(team => {
+      const memberCount = memberCountByTeam.get(team.id) || 0;
+      const hasMembers = memberCount > 0;
+      const leader = team.leaderId ? resourceById.get(team.leaderId) : undefined;
+      const hasLeader = !!leader;
+      const leaderHasCoords = !!(leader && leader.homeLatitude != null && leader.homeLongitude != null);
+      const teamAny = team as any;
+      const hasLastPosition = typeof teamAny.lastPositionLat === "number" && typeof teamAny.lastPositionLng === "number";
+      const cluster = team.clusterId ? clusterMap.get(team.clusterId) : undefined;
+      const geo = (cluster?.geoData as any) || {};
+      const clusterLat = cluster?.centerLatitude ?? geo.centerLat ?? null;
+      const clusterLng = (cluster as any)?.centerLongitude ?? geo.centerLng ?? null;
+      const hasClusterCoords = typeof clusterLat === "number" && typeof clusterLng === "number";
+
+      const routable = hasMembers || leaderHasCoords || hasLastPosition || hasClusterCoords;
+      const missing: string[] = [];
+      if (!hasMembers) missing.push("medlemmar");
+      if (!hasLeader) missing.push("team-leader");
+      if (!hasClusterCoords) missing.push("kluster-koordinater");
+      if (!hasLastPosition) missing.push("senaste position");
+
+      return {
+        id: team.id,
+        name: team.name,
+        memberCount,
+        hasMembers,
+        hasLeader,
+        leaderHasCoords,
+        hasClusterCoords,
+        hasLastPosition,
+        routable,
+        missing,
+      };
+    });
+
     const unassignedSlaByDate: Record<string, number> = {};
     for (const [dateStr, count] of slaUnassignedByDate) {
       unassignedSlaByDate[dateStr] = count;
     }
 
-    res.json({ dates, rows: heatmapRows, summary, weeks, teamOptions, unassignedSlaByDate });
+    res.json({ dates, rows: heatmapRows, summary, weeks, teamOptions, teamRoutingStatus, unassignedSlaByDate });
 }));
 
 // ============================================

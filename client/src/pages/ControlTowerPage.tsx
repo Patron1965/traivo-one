@@ -43,6 +43,19 @@ type HeatmapRow = {
 
 type TeamOption = { id: string; name: string };
 
+type TeamRoutingStatus = {
+  id: string;
+  name: string;
+  memberCount: number;
+  hasMembers: boolean;
+  hasLeader: boolean;
+  leaderHasCoords: boolean;
+  hasClusterCoords: boolean;
+  hasLastPosition: boolean;
+  routable: boolean;
+  missing: string[];
+};
+
 type HeatmapData = {
   dates: string[];
   rows: HeatmapRow[];
@@ -56,6 +69,7 @@ type HeatmapData = {
   };
   weeks: number;
   teamOptions: TeamOption[];
+  teamRoutingStatus?: TeamRoutingStatus[];
   unassignedSlaByDate: Record<string, number>;
 };
 
@@ -466,6 +480,45 @@ export default function ControlTowerPage() {
           )}
         </CardContent>
       </Card>
+
+      {data?.teamRoutingStatus && data.teamRoutingStatus.some(t => !t.routable) && (
+        <Card data-testid="card-team-routing-issues">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning" />
+              <h3 className="text-sm font-semibold">Team utan ruttdata</h3>
+              <span className="text-xs text-muted-foreground">
+                {data.teamRoutingStatus.filter(t => !t.routable).length} av {data.teamRoutingStatus.length} team kan inte ruttoptimeras
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Varje team behöver minst en av: medlem, team-leader med hem-koordinater, kluster med center-koordinater, eller senast rapporterad position.
+            </p>
+            <div className="space-y-1.5">
+              {data.teamRoutingStatus.filter(t => !t.routable).map(t => (
+                <div
+                  key={t.id}
+                  className="flex items-center justify-between rounded border border-warning/30 dark:border-warning/70 bg-warning/10 dark:bg-warning/15 px-3 py-2 text-xs"
+                  data-testid={`team-routing-issue-${t.id}`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Users className="h-3.5 w-3.5 text-warning flex-shrink-0" />
+                    <span className="font-medium truncate">{t.name}</span>
+                  </div>
+                  <span className="text-[11px] text-muted-foreground ml-2 flex-shrink-0">
+                    Saknar: {t.missing.join(", ")}
+                  </span>
+                </div>
+              ))}
+            </div>
+            {data.teamRoutingStatus.some(t => t.routable) && (
+              <p className="text-[11px] text-muted-foreground" data-testid="team-routing-ok-count">
+                {data.teamRoutingStatus.filter(t => t.routable).length} team är ruttbara.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {showRiskLayer && (
         <div className="space-y-3" data-testid="sla-risk-layer">
