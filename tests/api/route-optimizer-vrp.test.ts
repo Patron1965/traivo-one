@@ -306,6 +306,130 @@ describe("optimizeRoutesVRP — pre-clustering path (>50 orders, >1 resource)", 
     expect(maxInFlight).toBe(1); // Strikt seriellt — aldrig fler än 1 i flight
   });
 
+  it("ger identiska resultat parallellt vs seriellt för 200 orders (Task #491)", async () => {
+    // Deterministiskt 200-orderstest: samma indata, två körningar
+    // (VRP_PARALLEL_CLUSTERS=true respektive =false) ska producera
+    // bit-identiska VRPOptimizationResult.
+    const ORDER_COUNT = 200;
+    const REGIONS = [
+      { lat: 59.33, lng: 18.07 }, // Stockholm
+      { lat: 57.71, lng: 11.97 }, // Göteborg
+      { lat: 63.82, lng: 20.26 }, // Umeå
+      { lat: 55.60, lng: 13.00 }, // Malmö
+    ];
+    const orders: WorkOrder[] = [];
+    const objects: ServiceObject[] = [];
+    for (let i = 0; i < ORDER_COUNT; i++) {
+      const region = REGIONS[i % REGIONS.length];
+      // Deterministisk pseudo-spridning utan slumptal
+      const dLat = ((i * 37) % 50) * 0.0002;
+      const dLng = ((i * 53) % 50) * 0.0002;
+      orders.push(makeOrder(`o${i.toString().padStart(3, "0")}`, `obj${i}`));
+      objects.push(makeObject(`obj${i}`, region.lat + dLat, region.lng + dLng));
+    }
+    const resources: Resource[] = [];
+    for (let r = 0; r < 8; r++) {
+      const region = REGIONS[r % REGIONS.length];
+      resources.push(makeResource(`r${r}`, region.lat, region.lng));
+    }
+
+    // Helt deterministisk mock: samma request → samma response, oavsett
+    // anropsordning eller timing. Distribuerar jobben round-robin över
+    // requestens agenter baserat på jobbets stabila id-sortering.
+    const buildDeterministicResponse = (req: ProviderVRPRequest): ProviderVRPResult => {
+      const jobs = (req.jobs as Array<{ id: string }>).slice().sort((a, b) =>
+        a.id.localeCompare(b.id),
+      );
+      const agentCount = (req.agents as unknown[]).length;
+      const perAgentJobs: string[][] = Array.from({ length: agentCount }, () => []);
+      jobs.forEach((j, idx) => {
+        perAgentJobs[idx % agentCount].push(j.id);
+      });
+      const agentPlans = perAgentJobs.map((jobIds, agentIndex) =>
+        buildAgentPlan(agentIndex, jobIds, {
+          distanceMeters: 1000 * (jobIds.length + 1),
+          durationSeconds: 600 * (jobIds.length + 1),
+        }),
+      );
+      return {
+        ok: true,
+        agentPlans,
+        unassignedJobIndices: [],
+        unassignedAgentIndices: [],
+      };
+    };
+
+    // Deterministisk pseudo-jitter (0–4 ms) baserad på första job-id:t —
+    // varierar schemaläggningen mellan kluster för att avslöja race
+    // conditions, utan att introducera Math.random()-baserad flakiness.
+    let jitterCallIdx = 0;
+    optimizeRoutesMock.mockImplementation(async (req: ProviderVRPRequest) => {
+      const delay = (jitterCallIdx++ * 7) % 5;
+      await new Promise((r) => setTimeout(r, delay));
+      return buildDeterministicResponse(req);
+    });
+
+    process.env.VRP_PARALLEL_CLUSTERS = "true";
+    process.env.VRP_PARALLEL_CONCURRENCY = "4";
+    const parallelResult = await optimizeRoutesVRP(orders, resources, objects, []);
+
+    optimizeRoutesMock.mockReset();
+    optimizeRoutesMock.mockImplementation(async (req: ProviderVRPRequest) => {
+      return buildDeterministicResponse(req);
+    });
+    process.env.VRP_PARALLEL_CLUSTERS = "false";
+    const serialResult = await optimizeRoutesVRP(orders, resources, objects, []);
+    delete process.env.VRP_PARALLEL_CLUSTERS;
+    delete process.env.VRP_PARALLEL_CONCURRENCY;
+
+    expect(parallelResult.success).toBe(true);
+    expect(serialResult.success).toBe(true);
+
+    // Sammanfattning ska vara bit-identisk
+    expect(parallelResult.summary).toEqual(serialResult.summary);
+    expect(parallelResult.summary.totalOrders).toBe(ORDER_COUNT);
+
+    // Unassigned ska matcha (sortera för stabil jämförelse — bägge sidor
+    // härstammar från samma deterministiska körning så ordningen ska
+    // egentligen redan vara identisk).
+    const sortUnassigned = (xs: Array<{ orderId: string; reason: string }>) =>
+      [...xs].sort((a, b) => a.orderId.localeCompare(b.orderId));
+    expect(sortUnassigned(parallelResult.unassignedOrders)).toEqual(
+      sortUnassigned(serialResult.unassignedOrders),
+    );
+
+    // Per-resurs stop-ordning, distans och tid ska vara identisk.
+    const indexRoutes = (rs: typeof parallelResult.routes) => {
+      const map = new Map<string, (typeof rs)[number]>();
+      for (const r of rs) map.set(r.resourceId, r);
+      return map;
+    };
+    const pMap = indexRoutes(parallelResult.routes);
+    const sMap = indexRoutes(serialResult.routes);
+    expect([...pMap.keys()].sort()).toEqual([...sMap.keys()].sort());
+
+    // Tilldelade order-ID:n ska vara identisk mängd mellan körningarna.
+    const collectAssigned = (rs: typeof parallelResult.routes) =>
+      new Set(rs.flatMap((r) => r.stops.filter((s) => !s.isBreak).map((s) => s.orderId)));
+    const pAssigned = collectAssigned(parallelResult.routes);
+    const sAssigned = collectAssigned(serialResult.routes);
+    expect([...pAssigned].sort()).toEqual([...sAssigned].sort());
+
+    for (const [resourceId, pRoute] of pMap) {
+      const sRoute = sMap.get(resourceId)!;
+      expect(sRoute, `route saknas i seriell körning för ${resourceId}`).toBeDefined();
+      expect(pRoute.totalDistanceKm).toBe(sRoute.totalDistanceKm);
+      expect(pRoute.totalDurationMinutes).toBe(sRoute.totalDurationMinutes);
+      expect(pRoute.totalServiceMinutes).toBe(sRoute.totalServiceMinutes);
+      expect(pRoute.stops.map((s) => s.orderId)).toEqual(
+        sRoute.stops.map((s) => s.orderId),
+      );
+      expect(pRoute.stops.map((s) => s.sequence)).toEqual(
+        sRoute.stops.map((s) => s.sequence),
+      );
+    }
+  }, 10000);
+
   it("records per-cluster provider errors as unassigned orders without throwing", async () => {
     const ORDER_COUNT = 55;
     const orders: WorkOrder[] = [];
