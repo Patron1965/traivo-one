@@ -12,6 +12,7 @@ import { objects, workOrders, objectMetadata, apiUsageLogs, apiBudgets, invitati
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { sendEmail } from "../replit_integrations/resend";
 import { dashboardCache, DASHBOARD_CACHE_TTL } from "../services/dashboardCache";
+import { mapTileLimiter, TILE_HOURLY_ALERT_THRESHOLD } from "../middleware/rate-limit";
 
 export async function registerKPIRoutes(app: Express) {
 // ============================================
@@ -271,7 +272,66 @@ app.get("/api/system/map-config", async (_req, res) => {
 // Leaflet kan inte göra Googles createSession-flöde själv, så vi proxar
 // tile-anropen genom servern. Session-token cachas/förnyas i
 // `googleTileSession.ts`. API-nyckeln läcker aldrig till klienten.
-app.get("/api/system/map-tiles/:z/:x/:y", async (req, res) => {
+// Tile-volym/timme för enkel anomaly-alarmning. Återställs varje hel timme.
+const tileVolumeWindow = { startedAt: Date.now(), count: 0, alerted: false };
+function trackTileVolumeAndMaybeAlert() {
+  const now = Date.now();
+  if (now - tileVolumeWindow.startedAt >= 60 * 60 * 1000) {
+    tileVolumeWindow.startedAt = now;
+    tileVolumeWindow.count = 0;
+    tileVolumeWindow.alerted = false;
+  }
+  tileVolumeWindow.count += 1;
+  if (!tileVolumeWindow.alerted && tileVolumeWindow.count >= TILE_HOURLY_ALERT_THRESHOLD) {
+    tileVolumeWindow.alerted = true;
+    console.warn(
+      `[map-tiles-proxy] HÖG VOLYM: ${tileVolumeWindow.count} tile-anrop senaste timmen ` +
+      `(tröskel ${TILE_HOURLY_ALERT_THRESHOLD}). Möjligt missbruk eller bot-trafik.`,
+    );
+  }
+}
+
+function getAllowedTileHosts(): string[] {
+  // Vi litar inte på Host-headern (klient-kontrollerbar). Allowlistan måste
+  // konfigureras explicit via env. Replit sätter ofta REPLIT_DOMAINS för
+  // den publicerade domänen, så vi använder den som ytterligare källa.
+  const fromEnv = (process.env.MAP_TILE_ALLOWED_HOSTS ?? "")
+    .split(",")
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean);
+  const fromReplit = (process.env.REPLIT_DOMAINS ?? "")
+    .split(",")
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean);
+  return Array.from(new Set([...fromEnv, ...fromReplit]));
+}
+
+function isAllowedTileOrigin(req: import("express").Request): boolean {
+  // I dev/test släpps allt igenom (inkl. curl utan Origin/Referer).
+  if (process.env.NODE_ENV !== "production") return true;
+  const allowed = getAllowedTileHosts();
+  // Om ingen allowlist är konfigurerad faller vi tillbaka till att enbart
+  // skydda via rate-limit (origin-check är "fail-open" här, eftersom annars
+  // skulle alla tiles 403:a vid felkonfig).
+  if (allowed.length === 0) return true;
+  const candidates = [req.get("origin") ?? "", req.get("referer") ?? ""].filter(Boolean);
+  if (candidates.length === 0) return false;
+  for (const candidate of candidates) {
+    try {
+      const host = new URL(candidate).host.toLowerCase();
+      if (allowed.some(a => host === a || host.endsWith("." + a))) return true;
+    } catch {
+      // Ignorera ogiltiga headers.
+    }
+  }
+  return false;
+}
+
+app.get("/api/system/map-tiles/:z/:x/:y", mapTileLimiter, async (req, res) => {
+  if (!isAllowedTileOrigin(req)) {
+    return res.status(403).json({ error: "Tile-proxyn serverar bara våra egna domäner" });
+  }
+  trackTileVolumeAndMaybeAlert();
   const z = Number.parseInt(req.params.z, 10);
   const x = Number.parseInt(req.params.x, 10);
   const y = Number.parseInt(req.params.y, 10);
