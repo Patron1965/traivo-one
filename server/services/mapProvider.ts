@@ -592,6 +592,16 @@ export function _resetMapProviderForTests(): void {
 }
 
 /**
+ * Test/benchmark-helper: injicera en explicit MapProvider-instans (t.ex. en
+ * deterministisk mock) som getMapProvider() ska returnera. Används av
+ * `scripts/benchmark-route-optimizer.ts` för att kunna driva hela
+ * `optimizeRoutesVRP`-pipelinen utan riktiga Geoapify-anrop.
+ */
+export function _setMapProviderForTests(provider: MapProvider | null): void {
+  _provider = provider;
+}
+
+/**
  * Internal helper för shadowComparison.ts att instansiera Geoapify-providern
  * när Google är primär. Exponeras enbart för att undvika circular import vid
  * modulladdning.
