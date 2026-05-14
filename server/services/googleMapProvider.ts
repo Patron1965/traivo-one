@@ -1193,7 +1193,8 @@ export class GoogleMapProvider implements MapProvider {
       return {
         tileUrl: "/api/system/map-tiles/{z}/{x}/{y}",
         attribution:
-          '&copy; <a href="https://www.google.com/intl/en_us/help/legalnotices_maps/">Google</a>',
+          '&copy; <a href="https://www.google.com/intl/en_us/help/legalnotices_maps/" target="_blank" rel="noopener noreferrer">Google</a>',
+        maxZoom: 22,
       };
     }
     return getMapTileConfig();

@@ -370,6 +370,7 @@ export async function callRoutePlanner(body: {
 export interface MapTileConfig {
   tileUrl: string;
   attribution: string;
+  maxZoom: number;
 }
 
 /**
@@ -384,10 +385,12 @@ export function getMapTileConfig(): MapTileConfig {
       tileUrl: `https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${GEOAPIFY_API_KEY}`,
       attribution:
         '&copy; <a href="https://www.geoapify.com/">Geoapify</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 20,
     };
   }
   return {
     tileUrl: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
   };
 }
