@@ -1,0 +1,67 @@
+{
+  "generatedAt": "2026-05-14T16:40:15.333Z",
+  "nodeVersion": "v20.20.0",
+  "dbscan": [
+    {
+      "n": 100,
+      "matrixMs": 7,
+      "gridMs": 4,
+      "speedup": 1.75,
+      "clusters": 4
+    },
+    {
+      "n": 250,
+      "matrixMs": 33,
+      "gridMs": 16,
+      "speedup": 2.0625,
+      "clusters": 4
+    },
+    {
+      "n": 500,
+      "matrixMs": 22,
+      "gridMs": 18,
+      "speedup": 1.2222222222222223,
+      "clusters": 4
+    },
+    {
+      "n": 1000,
+      "matrixMs": 103,
+      "gridMs": 81,
+      "speedup": 1.271604938271605,
+      "clusters": 4
+    },
+    {
+      "n": 2000,
+      "matrixMs": 457,
+      "gridMs": 278,
+      "speedup": 1.643884892086331,
+      "clusters": 4
+    }
+  ],
+  "vrpFanout": [
+    {
+      "numClusters": 4,
+      "perCallLatencyMs": 1500,
+      "serialMs": 6005,
+      "parallelMs": 1501,
+      "concurrency": 4,
+      "speedup": 4.000666222518321
+    },
+    {
+      "numClusters": 6,
+      "perCallLatencyMs": 1500,
+      "serialMs": 9007,
+      "parallelMs": 3004,
+      "concurrency": 4,
+      "speedup": 2.998335552596538
+    },
+    {
+      "numClusters": 10,
+      "perCallLatencyMs": 1500,
+      "serialMs": 15014,
+      "parallelMs": 4508,
+      "concurrency": 4,
+      "speedup": 3.3305235137533273
+    }
+  ]
+}

@@ -213,6 +213,99 @@ describe("optimizeRoutesVRP — pre-clustering path (>50 orders, >1 resource)", 
     expect(result.routes.length).toBeLessThanOrEqual(resources.length);
   });
 
+  it("kör cluster-VRP-anrop parallellt (Task #490)", async () => {
+    // Verifierar att flera kluster startar i overlap snarare än seriellt.
+    // Mockar varje provider-anrop med 80 ms sleep — om körningen är seriell
+    // tar 4 kluster ~320 ms; parallell (concurrency=4) ska klara <200 ms.
+    const ORDER_COUNT = 80;
+    const orders: WorkOrder[] = [];
+    const objects: ServiceObject[] = [];
+    for (let i = 0; i < ORDER_COUNT; i++) {
+      const region = i % 4;
+      const lat = [59.33, 57.71, 63.82, 55.60][region] + (i % 5) * 0.001;
+      const lng = [18.07, 11.97, 20.26, 13.00][region] + (i % 5) * 0.001;
+      orders.push(makeOrder(`o${i}`, `obj${i}`));
+      objects.push(makeObject(`obj${i}`, lat, lng));
+    }
+    const resources = [
+      makeResource("r1", 59.33, 18.07),
+      makeResource("r2", 57.71, 11.97),
+      makeResource("r3", 63.82, 20.26),
+      makeResource("r4", 55.60, 13.00),
+    ];
+
+    const callTimestamps: number[] = [];
+    optimizeRoutesMock.mockImplementation(async (req: ProviderVRPRequest) => {
+      callTimestamps.push(Date.now());
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      const jobs = req.jobs as Array<{ id: string }>;
+      return {
+        ok: true,
+        agentPlans: [
+          buildAgentPlan(0, jobs.map((j) => j.id), { distanceMeters: 5000, durationSeconds: 3600 }),
+        ],
+        unassignedJobIndices: [],
+        unassignedAgentIndices: [],
+      };
+    });
+
+    process.env.VRP_PARALLEL_CLUSTERS = "true";
+    process.env.VRP_PARALLEL_CONCURRENCY = "4";
+
+    const t0 = Date.now();
+    const result = await optimizeRoutesVRP(orders, resources, objects, []);
+    const elapsed = Date.now() - t0;
+
+    expect(result.success).toBe(true);
+    expect(callTimestamps.length).toBeGreaterThan(1);
+    // Spridning mellan första och sista call-start ska vara liten (parallellt
+    // start), och total wall-time klart under en seriell körning hade gett.
+    const startSpread = callTimestamps[callTimestamps.length - 1] - callTimestamps[0];
+    expect(startSpread).toBeLessThan(50);
+    expect(elapsed).toBeLessThan(callTimestamps.length * 80);
+  });
+
+  it("respekterar VRP_PARALLEL_CLUSTERS=false (backout till serial)", async () => {
+    const ORDER_COUNT = 60;
+    const orders: WorkOrder[] = [];
+    const objects: ServiceObject[] = [];
+    for (let i = 0; i < ORDER_COUNT; i++) {
+      const region = i < ORDER_COUNT / 2 ? 0 : 1;
+      const lat = region === 0 ? 59.33 + (i % 5) * 0.001 : 63.82 + (i % 5) * 0.001;
+      const lng = region === 0 ? 18.07 + (i % 5) * 0.001 : 20.26 + (i % 5) * 0.001;
+      orders.push(makeOrder(`o${i}`, `obj${i}`));
+      objects.push(makeObject(`obj${i}`, lat, lng));
+    }
+    const resources = [makeResource("r1", 59.33, 18.07), makeResource("r2", 63.82, 20.26)];
+
+    const callOrder: number[] = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    optimizeRoutesMock.mockImplementation(async (req: ProviderVRPRequest) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      callOrder.push(Date.now());
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const jobs = req.jobs as Array<{ id: string }>;
+      inFlight--;
+      return {
+        ok: true,
+        agentPlans: [
+          buildAgentPlan(0, jobs.map((j) => j.id), { distanceMeters: 5000, durationSeconds: 3600 }),
+        ],
+        unassignedJobIndices: [],
+        unassignedAgentIndices: [],
+      };
+    });
+
+    process.env.VRP_PARALLEL_CLUSTERS = "false";
+    const result = await optimizeRoutesVRP(orders, resources, objects, []);
+    delete process.env.VRP_PARALLEL_CLUSTERS;
+
+    expect(result.success).toBe(true);
+    expect(maxInFlight).toBe(1); // Strikt seriellt — aldrig fler än 1 i flight
+  });
+
   it("records per-cluster provider errors as unassigned orders without throwing", async () => {
     const ORDER_COUNT = 55;
     const orders: WorkOrder[] = [];

@@ -605,14 +605,35 @@ export async function optimizeRoutesVRP(
       let totalTime = 0;
       const orderMap = new Map(workOrders.map(o => [o.id, o]));
 
-      for (let ci = 0; ci < geoClusters.length; ci++) {
+      // Task #490 — parallellisera cluster-VRP-anrop med bounded concurrency.
+      // Tidigare seriell loop blockerade på varje Geoapify-anrop (~2-5 s) ×
+      // antal kluster, vilket dominerade total VRP-tid för stora indata.
+      // Backout: VRP_PARALLEL_CLUSTERS=false → serial som tidigare.
+      // Concurrency styrs av VRP_PARALLEL_CONCURRENCY (default 4) — håll
+      // konservativt så vi inte triggar Geoapify rate-limit.
+      const parallelEnabled = (process.env.VRP_PARALLEL_CLUSTERS ?? "true").toLowerCase() !== "false";
+      const concurrency = Math.max(1, parseInt(process.env.VRP_PARALLEL_CONCURRENCY || "4", 10) || 4);
+
+      interface ClusterOutcome {
+        ci: number;
+        routes: VRPRoute[];
+        unassigned: Array<{ orderId: string; reason: string }>;
+        assignedCount: number;
+        distance: number;
+        time: number;
+      }
+
+      const runCluster = async (ci: number): Promise<ClusterOutcome> => {
         const gc = geoClusters[ci];
         const clusterJobs = gc.stops.map(s => jobMap.get(s.id)).filter(Boolean) as GeoapifyJob[];
         const clusterAgentIndices = clusterAgentAssignment[ci];
         const clusterAgents = clusterAgentIndices.map(idx => enrichedAgents[idx]);
         const clusterResources = clusterAgentIndices.map(idx => resources[idx]);
 
-        if (clusterJobs.length === 0) continue;
+        const outcome: ClusterOutcome = {
+          ci, routes: [], unassigned: [], assignedCount: 0, distance: 0, time: 0,
+        };
+        if (clusterJobs.length === 0) return outcome;
 
         try {
           const plannerResult = await getMapProvider().optimizeRoutes({
@@ -623,9 +644,9 @@ export async function optimizeRoutesVRP(
           if (!plannerResult.ok) {
             console.warn(`[VRP] Cluster ${ci} API error ${plannerResult.status}`);
             for (const job of clusterJobs) {
-              allUnassigned.push({ orderId: job.id || "", reason: "Kluster-optimering misslyckades" });
+              outcome.unassigned.push({ orderId: job.id || "", reason: "Kluster-optimering misslyckades" });
             }
-            continue;
+            return outcome;
           }
 
           const clJobIndexToOrderId = new Map(clusterJobs.map((j, idx) => [idx, j.id || ""]));
@@ -666,14 +687,14 @@ export async function optimizeRoutesVRP(
             }
 
             const jobStops = stops.filter(s => !s.isBreak);
-            totalAssigned += jobStops.length;
+            outcome.assignedCount += jobStops.length;
             const totalDur = Math.round(plan.durationSeconds / 60);
             const totalSvc = jobStops.reduce((s, st) => s + st.serviceMinutes, 0);
             const distKm = Math.round(plan.distanceMeters / 100) / 10;
-            totalDistance += plan.distanceMeters;
-            totalTime += plan.durationSeconds;
+            outcome.distance += plan.distanceMeters;
+            outcome.time += plan.durationSeconds;
 
-            allRoutes.push({
+            outcome.routes.push({
               resourceId: resource?.id || "",
               resourceName: resource?.name || `Resurs`,
               stops,
@@ -687,17 +708,59 @@ export async function optimizeRoutesVRP(
           }
 
           for (const idx of plannerResult.unassignedJobIndices) {
-            allUnassigned.push({
+            outcome.unassigned.push({
               orderId: clJobIndexToOrderId.get(idx) || "",
-              reason: "Kunde inte tilldelas i kluster"
+              reason: "Kunde inte tilldelas i kluster",
             });
           }
         } catch (clusterErr) {
           console.warn(`[VRP] Cluster ${ci} optimization failed:`, clusterErr);
           for (const job of clusterJobs) {
-            allUnassigned.push({ orderId: job.id || "", reason: "Kluster-optimering kraschade" });
+            outcome.unassigned.push({ orderId: job.id || "", reason: "Kluster-optimering kraschade" });
           }
         }
+        return outcome;
+      };
+
+      const tClusterStart = Date.now();
+      let outcomes: ClusterOutcome[];
+      if (parallelEnabled && geoClusters.length > 1) {
+        const { default: pLimit } = await import("p-limit");
+        const limit = pLimit(concurrency);
+        const settled = await Promise.allSettled(
+          geoClusters.map((_, ci) => limit(() => runCluster(ci))),
+        );
+        outcomes = settled.map((r, ci) =>
+          r.status === "fulfilled"
+            ? r.value
+            : {
+                ci,
+                routes: [],
+                unassigned: (geoClusters[ci].stops.map(s => jobMap.get(s.id)).filter(Boolean) as GeoapifyJob[])
+                  .map(j => ({ orderId: j.id || "", reason: "Kluster-optimering kraschade" })),
+                assignedCount: 0,
+                distance: 0,
+                time: 0,
+              },
+        );
+        console.log(`[VRP] Parallel cluster optimization (${geoClusters.length} clusters, concurrency=${concurrency}) klart på ${Date.now() - tClusterStart} ms`);
+      } else {
+        outcomes = [];
+        for (let ci = 0; ci < geoClusters.length; ci++) {
+          outcomes.push(await runCluster(ci));
+        }
+        console.log(`[VRP] Serial cluster optimization (${geoClusters.length} clusters) klart på ${Date.now() - tClusterStart} ms`);
+      }
+
+      // Bevara deterministisk merge-ordning (sortera efter ci) så att
+      // route-ID-tilldelning är reproducerbar mellan körningar.
+      outcomes.sort((a, b) => a.ci - b.ci);
+      for (const o of outcomes) {
+        allRoutes.push(...o.routes);
+        allUnassigned.push(...o.unassigned);
+        totalAssigned += o.assignedCount;
+        totalDistance += o.distance;
+        totalTime += o.time;
       }
 
       const mergedRoutes: Map<string, VRPRoute> = new Map();

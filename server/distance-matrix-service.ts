@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { distanceCache } from "@shared/schema";
-import { eq, lt } from "drizzle-orm";
+import { eq, lt, inArray, gte, and } from "drizzle-orm";
 import { getOSRMStatus } from "./osrm-client";
 import { getMapProvider } from "./services/mapProvider";
 
@@ -115,6 +115,40 @@ async function getL2(key: string): Promise<DistanceResult | null> {
   }
 }
 
+/**
+ * Batchad L2-läsning (Task #490). Tidigare körde `getBatchDistances` en
+ * separat `SELECT ... WHERE id = $1 LIMIT 1` per uncached pair, vilket gav
+ * O(N) round-trips per VRP-jobb (typiskt 100-tals för 200 ordrar). Nu görs
+ * en enda `WHERE id IN (...)`-fråga med chunkning för att hålla SQL-payloaden
+ * under PG:s parameter-tak.
+ */
+async function getL2Batch(keys: string[]): Promise<Map<string, DistanceResult>> {
+  const out = new Map<string, DistanceResult>();
+  if (keys.length === 0) return out;
+  try {
+    const cutoff = new Date(Date.now() - L2_TTL_HOURS * 60 * 60 * 1000);
+    const CHUNK = 1000;
+    const dedup = Array.from(new Set(keys));
+    for (let i = 0; i < dedup.length; i += CHUNK) {
+      const chunk = dedup.slice(i, i + CHUNK);
+      const rows = await db
+        .select()
+        .from(distanceCache)
+        .where(and(inArray(distanceCache.id, chunk), gte(distanceCache.createdAt, cutoff)));
+      for (const row of rows) {
+        out.set(row.id, {
+          distanceKm: row.distanceKm,
+          durationMin: row.durationMin,
+          source: row.source as DistanceResult["source"],
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("[distance-cache] L2 batch read error:", err instanceof Error ? err.message : err);
+  }
+  return out;
+}
+
 async function setL2(key: string, lat1: number, lng1: number, lat2: number, lng2: number, result: DistanceResult): Promise<void> {
   try {
     await db.insert(distanceCache).values({
@@ -208,10 +242,17 @@ export async function getBatchDistances(
 
   if (uncached.length === 0) return results;
 
+  // Batched L2-lookup (Task #490) — en SQL-fråga i stället för N round-trips.
+  const uncachedKeys = uncached.map((pair) =>
+    coordKey(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng),
+  );
+  const l2Map = await getL2Batch(uncachedKeys);
+
   const l2Misses: BatchPair[] = [];
-  for (const pair of uncached) {
-    const key = coordKey(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng);
-    const l2Hit = await getL2(key);
+  for (let i = 0; i < uncached.length; i++) {
+    const pair = uncached[i];
+    const key = uncachedKeys[i];
+    const l2Hit = l2Map.get(key);
     if (l2Hit) {
       results.set(pair.id, l2Hit);
       setL1(key, l2Hit);

@@ -80,19 +80,145 @@ function combinedDistance(
   return (geoWeight * normalizedGeo + temporalWeight * tempDist) * maxGeoDistKm;
 }
 
-function regionQuery(
-  stops: TemporalStop[],
+// =============================================================================
+// Spatial grid index (Task #490)
+//
+// Tidigare körde DBSCAN en O(N²) full distansmatris och en O(N) regionQuery per
+// punkt — vilket totalt blev O(N²) i tid och minne. För 1000 stopp ≈ 1 M
+// haversine-anrop + 8 MB allokering. Vi byter den fasen mot en lokal
+// equirectangular-projektion + uniform grid-hash. Då blir radius-queries
+// förväntat O(k) per punkt (k = grannar i 3x3-cell), totalt O(N+E) där E är
+// antalet faktiska grannskap.
+//
+// Säkerhetsmarginal: combined_distance(a,b) = (1-tw)*geoDist + tw*tempDist*maxGeo.
+// Eftersom tempDist >= 0 gäller alltid (1-tw)*geoDist <= combined. Punkter med
+// combined <= eps måste därför ha geoDist <= eps/(1-tw) → trygg radie för
+// kandidatfiltret. Exakt combinedDistance beräknas sedan på kandidaterna,
+// så grid-versionen ger bit-identiska kluster som matrix-versionen (kontrolleras
+// av `tests/api/dbscan-clustering.test.ts`).
+//
+// Backout-flagga: sätt `DBSCAN_USE_KDTREE=false` för att tvinga gamla matrisen.
+// =============================================================================
+
+const KM_PER_DEG_LAT = 111.0;
+
+interface SpatialIndex {
+  /**
+   * Returnerar index för alla stopp vars geografiska avstånd från `stops[idx]`
+   * är <= `radiusKm` (med en liten cell-marginal — false positives är OK,
+   * caller filtrerar exakt). Inkluderar alltid `idx` själv.
+   */
+  query(idx: number, radiusKm: number): number[];
+}
+
+function buildSpatialIndex(stops: TemporalStop[]): SpatialIndex {
+  const n = stops.length;
+  // Equirectangular projektion runt medel-latitud för Sverige-skalig data.
+  // För globala dataset blir det skevt, men kandidat-filtret är konservativt
+  // (vi söker större radie än nödvändigt) och den exakta haversine-checken
+  // i regionQuery säkerställer korrekthet ändå.
+  let sumLat = 0;
+  for (let i = 0; i < n; i++) sumLat += stops[i].lat;
+  const refLat = n > 0 ? sumLat / n : 0;
+  const cosLat = Math.max(0.01, Math.cos((refLat * Math.PI) / 180));
+  const kmPerDegLng = KM_PER_DEG_LAT * cosLat;
+
+  const xs = new Float64Array(n);
+  const ys = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    xs[i] = stops[i].lng * kmPerDegLng;
+    ys[i] = stops[i].lat * KM_PER_DEG_LAT;
+  }
+
+  // Cell-storlek: för stora dataset → större celler så att 3x3-grannar rymmer
+  // typisk eps-radie. Default 5 km matchar typiska eps på 15-25 km bra.
+  const CELL_KM = 5;
+  const cells = new Map<number, number[]>();
+  // Pack (cx, cy) into a single int32-key. cx/cy ryms i ±32k för Sveriges yta.
+  const keyOf = (cx: number, cy: number) => ((cx + 0x8000) << 17) | (cy + 0x8000);
+
+  for (let i = 0; i < n; i++) {
+    const cx = Math.floor(xs[i] / CELL_KM);
+    const cy = Math.floor(ys[i] / CELL_KM);
+    const key = keyOf(cx, cy);
+    let bucket = cells.get(key);
+    if (!bucket) {
+      bucket = [];
+      cells.set(key, bucket);
+    }
+    bucket.push(i);
+  }
+
+  return {
+    query(idx: number, radiusKm: number): number[] {
+      if (!Number.isFinite(radiusKm) || radiusKm <= 0) {
+        // Degenerate: tw=1 (helt temporal). Returnera alla → exakt-checken
+        // i caller hanterar resten. Sällsynt; default tw=0.3.
+        const all: number[] = new Array(n);
+        for (let i = 0; i < n; i++) all[i] = i;
+        return all;
+      }
+      const cx = Math.floor(xs[idx] / CELL_KM);
+      const cy = Math.floor(ys[idx] / CELL_KM);
+      const r = Math.ceil(radiusKm / CELL_KM);
+      const out: number[] = [];
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dy = -r; dy <= r; dy++) {
+          const bucket = cells.get(keyOf(cx + dx, cy + dy));
+          if (bucket) {
+            for (let k = 0; k < bucket.length; k++) out.push(bucket[k]);
+          }
+        }
+      }
+      return out;
+    },
+  };
+}
+
+function regionQueryMatrix(
+  n: number,
   pointIdx: number,
   epsilon: number,
   distMatrix: number[][],
 ): number[] {
   const neighbors: number[] = [];
-  for (let i = 0; i < stops.length; i++) {
-    if (distMatrix[pointIdx][i] <= epsilon) {
-      neighbors.push(i);
-    }
+  const row = distMatrix[pointIdx];
+  for (let i = 0; i < n; i++) {
+    if (row[i] <= epsilon) neighbors.push(i);
   }
   return neighbors;
+}
+
+function regionQueryIndexed(
+  stops: TemporalStop[],
+  pointIdx: number,
+  epsilon: number,
+  maxGeoDist: number,
+  temporalWeight: number,
+  index: SpatialIndex,
+): number[] {
+  // Säker över-skattning: combined_distance >= (1-tw)*geoDist (eftersom
+  // tempDist >= 0). Punkter med combined <= eps måste ha geoDist <= eps/(1-tw).
+  const tw = temporalWeight;
+  const geoRadius = tw < 1 ? epsilon / (1 - tw) : Infinity;
+
+  const candidates = index.query(pointIdx, geoRadius);
+  const out: number[] = [];
+  const a = stops[pointIdx];
+  for (let k = 0; k < candidates.length; k++) {
+    const j = candidates[k];
+    if (j === pointIdx) {
+      out.push(j);
+      continue;
+    }
+    const d = combinedDistance(a, stops[j], maxGeoDist, temporalWeight);
+    if (d <= epsilon) out.push(j);
+  }
+  return out;
+}
+
+function shouldUseSpatialIndex(): boolean {
+  return (process.env.DBSCAN_USE_KDTREE ?? "true").toLowerCase() !== "false";
 }
 
 export function dbscanCluster(
@@ -115,22 +241,40 @@ export function dbscanCluster(
     };
   }
 
+  const tStart = Date.now();
+  const useIndex = shouldUseSpatialIndex();
+  const n = stops.length;
+
+  // maxGeoDist behåller exakt O(N²) skalär-loop — billig (ingen allokering)
+  // och krävs för att normalisera tempDist mot geo-skalan. Att approximera
+  // med bbox-diagonalen ändrar kluster-kanter, vilket bryter behavior-parity.
   let maxGeoDist = 1;
-  for (let i = 0; i < stops.length; i++) {
-    for (let j = i + 1; j < stops.length; j++) {
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
       const d = haversineDistanceKm(stops[i].lat, stops[i].lng, stops[j].lat, stops[j].lng);
       if (d > maxGeoDist) maxGeoDist = d;
     }
   }
 
-  const n = stops.length;
-  const distMatrix: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      const d = combinedDistance(stops[i], stops[j], maxGeoDist, temporalWeight);
-      distMatrix[i][j] = d;
-      distMatrix[j][i] = d;
+  let regionQuery: (idx: number) => number[];
+  let indexBuildMs = 0;
+
+  if (useIndex) {
+    const tIdx = Date.now();
+    const spatial = buildSpatialIndex(stops);
+    indexBuildMs = Date.now() - tIdx;
+    regionQuery = (idx: number) =>
+      regionQueryIndexed(stops, idx, epsilonKm, maxGeoDist, temporalWeight, spatial);
+  } else {
+    const distMatrix: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const d = combinedDistance(stops[i], stops[j], maxGeoDist, temporalWeight);
+        distMatrix[i][j] = d;
+        distMatrix[j][i] = d;
+      }
     }
+    regionQuery = (idx: number) => regionQueryMatrix(n, idx, epsilonKm, distMatrix);
   }
 
   const UNVISITED = -2;
@@ -141,7 +285,7 @@ export function dbscanCluster(
   for (let i = 0; i < n; i++) {
     if (labels[i] !== UNVISITED) continue;
 
-    const neighbors = regionQuery(stops, i, epsilonKm, distMatrix);
+    const neighbors = regionQuery(i);
     if (neighbors.length < minSamples) {
       labels[i] = NOISE;
       continue;
@@ -149,6 +293,7 @@ export function dbscanCluster(
 
     labels[i] = clusterId;
     const seedSet = neighbors.filter(idx => idx !== i);
+    const inSeed = new Set<number>(seedSet);
     let seedIdx = 0;
 
     while (seedIdx < seedSet.length) {
@@ -161,11 +306,12 @@ export function dbscanCluster(
         continue;
       }
       labels[q] = clusterId;
-      const qNeighbors = regionQuery(stops, q, epsilonKm, distMatrix);
+      const qNeighbors = regionQuery(q);
       if (qNeighbors.length >= minSamples) {
         for (const nb of qNeighbors) {
-          if (!seedSet.includes(nb)) {
+          if (!inSeed.has(nb)) {
             seedSet.push(nb);
+            inSeed.add(nb);
           }
         }
       }
@@ -206,9 +352,10 @@ export function dbscanCluster(
   }
 
   const avgIntraClusterDistKm = intraPairs > 0 ? totalIntraDist / intraPairs : 0;
+  const totalMs = Date.now() - tStart;
 
   console.log(
-    `[dbscan] ${stops.length} stops → ${clusters.length} clusters, ${noiseStops.length} noise points, avg intra-cluster dist: ${avgIntraClusterDistKm.toFixed(1)} km`,
+    `[dbscan] ${stops.length} stops → ${clusters.length} clusters, ${noiseStops.length} noise points, avg intra-cluster dist: ${avgIntraClusterDistKm.toFixed(1)} km (mode=${useIndex ? "grid" : "matrix"}, ${totalMs} ms${useIndex ? `, index=${indexBuildMs} ms` : ""})`,
   );
 
   return {
