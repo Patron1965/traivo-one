@@ -258,8 +258,74 @@ app.get("/api/system/branding-templates/slug/:slug", asyncHandler(async (req, re
 
 // Tenant Branding - Get current tenant branding
 app.get("/api/system/map-config", async (_req, res) => {
-  const { getMapTileConfig } = await import("../services/routing");
-  res.json(getMapTileConfig());
+  // Använd aktiv MapProvider så att MAP_PROVIDER=google ger Google-tiles
+  // (via server-proxy nedan), annars Geoapify/OSM via routing.ts.
+  const { getMapProvider } = await import("../services/mapProvider");
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.json(getMapProvider().getTileConfig());
+});
+
+// =============================================================================
+// Google Map Tiles proxy (Task #478)
+// =============================================================================
+// Leaflet kan inte göra Googles createSession-flöde själv, så vi proxar
+// tile-anropen genom servern. Session-token cachas/förnyas i
+// `googleTileSession.ts`. API-nyckeln läcker aldrig till klienten.
+app.get("/api/system/map-tiles/:z/:x/:y", async (req, res) => {
+  const z = Number.parseInt(req.params.z, 10);
+  const x = Number.parseInt(req.params.x, 10);
+  const y = Number.parseInt(req.params.y, 10);
+  if (!Number.isFinite(z) || !Number.isFinite(x) || !Number.isFinite(y)) {
+    return res.status(400).json({ error: "Ogiltiga tile-koordinater" });
+  }
+  // Begränsa zoom-spannet (Google stödjer 0–22).
+  if (z < 0 || z > 22 || x < 0 || y < 0) {
+    return res.status(400).json({ error: "Tile-koordinater utanför intervall" });
+  }
+
+  const { getActiveTileSession, buildGoogleTileUrl, isGoogleTileSessionAvailable } =
+    await import("../services/googleTileSession");
+
+  if (!isGoogleTileSessionAvailable()) {
+    return res.status(503).json({ error: "Google Map Tiles ej konfigurerat" });
+  }
+
+  const session = await getActiveTileSession();
+  if (!session) {
+    return res.status(502).json({ error: "Kunde inte skapa Google tile-session" });
+  }
+
+  const url = buildGoogleTileUrl(session.session, z, x, y);
+  if (!url) {
+    return res.status(503).json({ error: "Google Map Tiles ej konfigurerat" });
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8_000);
+  let upstream: Response;
+  try {
+    upstream = await fetch(url, { signal: controller.signal });
+  } catch (err) {
+    console.warn(
+      "[map-tiles-proxy] tile fetch failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return res.status(502).json({ error: "Tile-fetch misslyckades" });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!upstream.ok) {
+    return res.status(upstream.status).end();
+  }
+
+  const contentType = upstream.headers.get("content-type") ?? `image/${session.imageFormat}`;
+  res.setHeader("Content-Type", contentType);
+  // Cache i klient/CDN — tiles är statiska under sessionens livstid.
+  res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+
+  const buf = Buffer.from(await upstream.arrayBuffer());
+  return res.status(200).send(buf);
 });
 
 app.get("/api/system/tenant-branding", asyncHandler(async (req, res) => {

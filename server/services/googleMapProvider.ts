@@ -926,9 +926,18 @@ export class GoogleMapProvider implements MapProvider {
   }
 
   getTileConfig(): MapTileConfig {
-    // Google Map Tiles API kräver session-tokens och passar inte Leaflets
-    // XYZ-mönster utan extra plumbing. Tills tile-leverantör byts separat
-    // återanvänder vi Geoapify/OSM-tiles via routing.ts (samma som primär).
+    // Google Map Tiles API kräver session-tokens och kan inte hämtas direkt
+    // från klienten utan att läcka API-nyckeln. När GOOGLE_MAPS_API_KEY finns
+    // returnerar vi en server-proxy-URL som handhar både createSession och
+    // signering av tile-anrop (se `server/routes/kpiRoutes.ts` →
+    // `/api/system/map-tiles/{z}/{x}/{y}` och `server/services/googleTileSession.ts`).
+    if (isGoogleConfigured()) {
+      return {
+        tileUrl: "/api/system/map-tiles/{z}/{x}/{y}",
+        attribution:
+          '&copy; <a href="https://www.google.com/intl/en_us/help/legalnotices_maps/">Google</a>',
+      };
+    }
     return getMapTileConfig();
   }
 }
