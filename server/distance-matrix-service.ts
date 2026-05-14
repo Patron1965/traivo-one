@@ -174,6 +174,38 @@ async function setL2(key: string, lat1: number, lng1: number, lat2: number, lng2
   }
 }
 
+/**
+ * Intern helper (Task #490) — anropar provider/haversine direkt utan att läsa
+ * L1/L2. Används av både `getRoutingDistance` (efter L1+L2-miss) och
+ * `getBatchDistances` (efter batchad L2-miss) så att batch-vägen INTE gör
+ * en extra `getL2(key)` per pair, vilket skulle återinföra N²-DB-trycket.
+ */
+async function fetchAndStoreUncached(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number,
+  key: string,
+): Promise<DistanceResult> {
+  const provider = getMapProvider();
+  try {
+    const pair = await provider.routePair({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });
+    if (pair) {
+      const result: DistanceResult = {
+        distanceKm: pair.distanceKm,
+        durationMin: Math.round(pair.durationMinutes),
+        source: pair.source,
+      };
+      setL1(key, result);
+      await setL2(key, lat1, lng1, lat2, lng2, result);
+      return result;
+    }
+  } catch (error) {
+    console.warn("[distance-matrix] Provider routePair failed, falling back to haversine:", error);
+  }
+  const fb = haversineFallback(lat1, lng1, lat2, lng2);
+  setL1(key, fb);
+  return fb;
+}
+
 export async function getRoutingDistance(
   lat1: number, lng1: number,
   lat2: number, lng2: number,
@@ -191,29 +223,7 @@ export async function getRoutingDistance(
     return l2Hit;
   }
 
-  // Provider-abstrakterad pair (OSRM-först, Geoapify-fallback). Shadow-jämförelse
-  // sker inne i provider.routePair när MAP_SHADOW_SAMPLE_RATE > 0.
-  const provider = getMapProvider();
-
-  try {
-    const pair = await provider.routePair({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });
-    if (pair) {
-      const result: DistanceResult = {
-        distanceKm: pair.distanceKm,
-        durationMin: Math.round(pair.durationMinutes),
-        source: pair.source,
-      };
-      setL1(key, result);
-      await setL2(key, lat1, lng1, lat2, lng2, result);
-      return result;
-    }
-  } catch (error) {
-    console.warn("[distance-matrix] Provider routePair failed, falling back to haversine:", error);
-  }
-
-  const fb = haversineFallback(lat1, lng1, lat2, lng2);
-  setL1(key, fb);
-  return fb;
+  return fetchAndStoreUncached(lat1, lng1, lat2, lng2, key);
 }
 
 export interface BatchPair {
@@ -267,8 +277,12 @@ export async function getBatchDistances(
   for (let i = 0; i < l2Misses.length; i += BATCH_SIZE) {
     const batch = l2Misses.slice(i, i + BATCH_SIZE);
     const batchPromises = batch.map(async (pair) => {
+      // Task #490 — använd direkt provider-vägen (fetchAndStoreUncached) i
+      // stället för getRoutingDistance så att vi INTE gör en extra L2-läsning
+      // per pair. Pairsen är redan bekräftade som L2-misses via getL2Batch.
+      const key = coordKey(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng);
       try {
-        const result = await getRoutingDistance(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng);
+        const result = await fetchAndStoreUncached(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng, key);
         results.set(pair.id, result);
       } catch {
         const fb = haversineFallback(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng);
