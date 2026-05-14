@@ -51,6 +51,7 @@ import {
   deltasForGeocode,
   type ShadowOperation,
 } from "./shadowComparison";
+import { GoogleMapProvider, isGoogleMapProviderAvailable } from "./googleMapProvider";
 
 // =============================================================================
 // Public types — provider-agnostiska. Får INTE läcka Geoapify/Google-specifika
@@ -569,12 +570,14 @@ export function getMapProvider(): MapProvider {
       _provider = new GeoapifyMapProvider();
       break;
     case "google":
-      // Steg 3 av Task #472: ersätt med `new GoogleMapProvider()` när
-      // implementationen finns och Google-nycklarna är på plats.
-      console.warn(
-        "[map-provider] MAP_PROVIDER=google men GoogleMapProvider är ej implementerad — faller tillbaka till Geoapify.",
-      );
-      _provider = new GeoapifyMapProvider();
+      if (isGoogleMapProviderAvailable()) {
+        _provider = new GoogleMapProvider();
+      } else {
+        console.warn(
+          "[map-provider] MAP_PROVIDER=google men GOOGLE_MAPS_API_KEY saknas — faller tillbaka till Geoapify.",
+        );
+        _provider = new GeoapifyMapProvider();
+      }
       break;
     default:
       console.warn(`[map-provider] Okänt MAP_PROVIDER="${choice}" — använder Geoapify.`);
@@ -586,4 +589,13 @@ export function getMapProvider(): MapProvider {
 /** Test-helper: tvinga om-instansiering (t.ex. efter env-ändring i tester). */
 export function _resetMapProviderForTests(): void {
   _provider = null;
+}
+
+/**
+ * Internal helper för shadowComparison.ts att instansiera Geoapify-providern
+ * när Google är primär. Exponeras enbart för att undvika circular import vid
+ * modulladdning.
+ */
+export function _instantiateGeoapifyForShadow(): MapProvider {
+  return new GeoapifyMapProvider();
 }

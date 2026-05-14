@@ -19,6 +19,10 @@ import { createHash } from "crypto";
 import { db } from "../db";
 import { mapShadowComparisons } from "@shared/schema";
 import type { MapProvider } from "./mapProvider";
+// Statiska imports — ESM hanterar cykeln eftersom funktionerna inte
+// utvärderas vid modul-load (de kallas först vid första request).
+import { GoogleMapProvider, isGoogleMapProviderAvailable } from "./googleMapProvider";
+import { _instantiateGeoapifyForShadow } from "./mapProvider";
 
 const SAMPLE_RATE = (() => {
   const raw = process.env.MAP_SHADOW_SAMPLE_RATE;
@@ -69,10 +73,20 @@ let _shadowProvider: MapProvider | null | undefined;
  */
 export function getShadowProvider(): MapProvider | null {
   if (_shadowProvider !== undefined) return _shadowProvider;
-  // GoogleMapProvider implementeras i Fas 1, steg 3 (Task #472). Tills dess
-  // är shadow-mekanismen alltid no-op — schema, helper och rapportskript
-  // finns redo så fort providern är på plats.
-  _shadowProvider = null;
+  // Konvention: shadow = "den andra" providern relativt MAP_PROVIDER. Idag är
+  // primär Geoapify och shadow Google så fort GOOGLE_MAPS_API_KEY finns.
+  const primary = (process.env.MAP_PROVIDER || "geoapify").toLowerCase();
+  if (primary === "google") {
+    _shadowProvider = _instantiateGeoapifyForShadow();
+    return _shadowProvider;
+  }
+
+  if (!isGoogleMapProviderAvailable()) {
+    _shadowProvider = null;
+    return _shadowProvider;
+  }
+
+  _shadowProvider = new GoogleMapProvider();
   return _shadowProvider;
 }
 
@@ -157,10 +171,13 @@ async function runShadow(
   }
 
   try {
+    // primary = "den andra" relativt shadow. Håller telemetri korrekt även när
+    // MAP_PROVIDER=google blir aktivt (då blir shadow=geoapify och primary=google).
+    const primaryProvider: "geoapify" | "google" = shadow.name === "google" ? "geoapify" : "google";
     await db.insert(mapShadowComparisons).values({
       tenantId: ctx.tenantId ?? null,
       operation: ctx.operation,
-      primaryProvider: "geoapify",
+      primaryProvider,
       shadowProvider: shadow.name,
       requestHash: hashRequest(ctx.request),
       request: safeJson(ctx.request),
