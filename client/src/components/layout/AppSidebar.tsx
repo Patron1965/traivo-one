@@ -293,15 +293,19 @@ export function AppSidebar() {
 
   const startItems = useMemo(() => getSidebarStartItems(tl), [tl]);
 
+  const isPlatformOwner = user?.tenantId === "kinab";
   const navGroups = useMemo(() => {
     return getNavGroups(t, tl, language)
       .filter((g) => canAccessMenu(userRole, g.group as NavMenuGroup))
       .map((g) => ({
         ...g,
-        items: g.items.filter((item) => isNavItemEnabled(item.url)),
+        items: g.items.filter(
+          (item) =>
+            isNavItemEnabled(item.url) && (!item.platformOwnerOnly || isPlatformOwner),
+        ),
       }))
       .filter((g) => g.items.length > 0);
-  }, [t, tl, language, isNavItemEnabled, userRole]);
+  }, [t, tl, language, isNavItemEnabled, userRole, isPlatformOwner]);
 
   const allItems = useMemo(() => {
     const items = [...startItems];

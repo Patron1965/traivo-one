@@ -42,15 +42,19 @@ export function MobileNav() {
       groups.push({ title: tl("mobile.start"), items: startItems });
     }
 
+    const isPlatformOwner = user?.tenantId === "kinab";
     getNavGroups(t, tl, language).forEach((group) => {
       if (!canAccessMenu(userRole, group.group as NavMenuGroup)) return;
-      const items = group.items.filter((item) => isNavItemEnabled(item.url));
+      const items = group.items.filter(
+        (item) =>
+          isNavItemEnabled(item.url) && (!item.platformOwnerOnly || isPlatformOwner),
+      );
       if (items.length === 0) return;
       groups.push({ title: group.label, items });
     });
 
     return groups;
-  }, [userRole, tl, t, language, isNavItemEnabled]);
+  }, [userRole, tl, t, language, isNavItemEnabled, user?.tenantId]);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>

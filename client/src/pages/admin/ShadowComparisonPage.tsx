@@ -1,0 +1,381 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AlertTriangle, Download, Loader2, RefreshCw } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+
+interface DeltaStats {
+  median: number | null;
+  p95: number | null;
+  absMedian: number | null;
+  absP95: number | null;
+  count: number;
+}
+
+interface OperationSummary {
+  operation: string;
+  total: number;
+  shadowOk: number;
+  shadowFailed: number;
+  failureRatePct: number;
+  primaryLatency: { medianMs: number | null; p95Ms: number | null };
+  shadowLatency: { medianMs: number | null; p95Ms: number | null };
+  deltas: Record<string, DeltaStats>;
+  cost: {
+    pricePer1k: number | null;
+    sampleCount: number;
+    projected30d: number;
+    fullVolume30d: number;
+    estimatedCostUsd30d: number | null;
+    sampleRate: number | null;
+  };
+}
+
+interface ShadowReportSummary {
+  windowDays: number;
+  since: string;
+  totalRows: number;
+  primaryProviders: string[];
+  shadowProviders: string[];
+  sampleRate: number | null;
+  thresholds: { failureRatePct: number; distanceP95Km: number };
+  alerts: Array<{
+    severity: "warning" | "critical";
+    operation: string;
+    metric: string;
+    value: number;
+    threshold: number;
+    message: string;
+  }>;
+  operations: OperationSummary[];
+}
+
+function fmt(n: number | null | undefined, digits = 2): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return n.toFixed(digits);
+}
+
+function fmtInt(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return Math.round(n).toLocaleString("sv-SE");
+}
+
+export default function ShadowComparisonPage() {
+  const { toast } = useToast();
+  const [days, setDays] = useState<7 | 30>(7);
+
+  const summaryQuery = useQuery<ShadowReportSummary>({
+    queryKey: ["/api/admin/shadow-comparison/summary", { days }],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/admin/shadow-comparison/summary?days=${days}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+      return (await res.json()) as ShadowReportSummary;
+    },
+  });
+
+  const handleExport = async () => {
+    try {
+      const res = await fetch(
+        `/api/admin/shadow-comparison/export.csv?days=${days}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `shadow-comparison-${days}d.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "CSV-export misslyckades",
+        description: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  const summary = summaryQuery.data;
+
+  return (
+    <div className="container mx-auto p-6 space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold" data-testid="text-page-title">
+            Kart-leverantör — Shadow-jämförelse
+          </h1>
+          <p className="text-muted-foreground mt-1 max-w-2xl">
+            Löpande jämförelse av Google-shadow mot Geoapify-primär. Visar
+            median/p95-avvikelser, shadow-volym och grov kostnadsprojektion
+            innan vi byter primär leverantör. Endast platform-owner ser denna
+            vy.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Tabs value={String(days)} onValueChange={(v) => setDays(v === "30" ? 30 : 7)}>
+            <TabsList>
+              <TabsTrigger value="7" data-testid="tab-window-7d">7 dagar</TabsTrigger>
+              <TabsTrigger value="30" data-testid="tab-window-30d">30 dagar</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => summaryQuery.refetch()}
+            disabled={summaryQuery.isFetching}
+            data-testid="button-refresh"
+            title="Uppdatera"
+          >
+            {summaryQuery.isFetching ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+          </Button>
+          <Button onClick={handleExport} data-testid="button-export-csv">
+            <Download className="h-4 w-4 mr-2" />
+            Exportera CSV
+          </Button>
+        </div>
+      </div>
+
+      {summaryQuery.isLoading && (
+        <Card>
+          <CardContent className="py-8 flex items-center justify-center text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin mr-2" />
+            Laddar shadow-data…
+          </CardContent>
+        </Card>
+      )}
+
+      {summaryQuery.error && (
+        <Alert variant="destructive" data-testid="alert-load-error">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Kunde inte ladda shadow-rapporten</AlertTitle>
+          <AlertDescription>
+            {summaryQuery.error instanceof Error
+              ? summaryQuery.error.message
+              : String(summaryQuery.error)}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {summary && (
+        <>
+          {summary.alerts.length > 0 && (
+            <div className="space-y-2" data-testid="alerts-list">
+              {summary.alerts.map((a, i) => (
+                <Alert
+                  key={`${a.operation}-${a.metric}-${i}`}
+                  variant={a.severity === "critical" ? "destructive" : "default"}
+                  data-testid={`alert-${a.operation}-${a.metric}`}
+                >
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>
+                    {a.severity === "critical" ? "Kritisk avvikelse" : "Varning"}
+                    {" — "}
+                    {a.operation}
+                  </AlertTitle>
+                  <AlertDescription>{a.message}</AlertDescription>
+                </Alert>
+              ))}
+            </div>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Översikt</CardTitle>
+              <CardDescription>
+                Fönster: senaste {summary.windowDays} dagar · sedan{" "}
+                {new Date(summary.since).toLocaleString("sv-SE")}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-4">
+              <Stat label="Totalt rader" value={summary.totalRows.toLocaleString("sv-SE")} testId="stat-total" />
+              <Stat
+                label="Sample-rate"
+                value={
+                  summary.sampleRate != null
+                    ? `${(summary.sampleRate * 100).toFixed(1)}%`
+                    : "ej satt"
+                }
+                testId="stat-sample-rate"
+              />
+              <Stat
+                label="Primär"
+                value={summary.primaryProviders.join(", ") || "—"}
+                testId="stat-primary"
+              />
+              <Stat
+                label="Shadow"
+                value={summary.shadowProviders.join(", ") || "—"}
+                testId="stat-shadow"
+              />
+            </CardContent>
+            <CardContent className="text-xs text-muted-foreground">
+              Tröskelvärden: shadow-fel &gt; {summary.thresholds.failureRatePct}% ·
+              |Δ distans| p95 &gt; {summary.thresholds.distanceP95Km} km. Konfigurera via
+              env <code>MAP_SHADOW_ERROR_THRESHOLD_PCT</code> /{" "}
+              <code>MAP_SHADOW_DISTANCE_P95_KM</code>.
+            </CardContent>
+          </Card>
+
+          {summary.totalRows === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                Inga shadow-rader i fönstret. Säkerställ att{" "}
+                <code>MAP_SHADOW_SAMPLE_RATE</code> &gt; 0 och att en
+                shadow-provider är konfigurerad.
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {summary.operations.map((op) => (
+                <OperationCard
+                  key={op.operation}
+                  op={op}
+                  failureThresholdPct={summary.thresholds.failureRatePct}
+                />
+              ))}
+              <p className="text-xs text-muted-foreground">
+                Notera: fel-andels-larm utlöses först när en operation har
+                minst 20 shadow-rader i fönstret — annars är urvalet för litet
+                för att vara meningsfullt och larmen undertrycks.
+              </p>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value, testId }: { label: string; value: string; testId: string }) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-xl font-semibold mt-1" data-testid={testId}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function OperationCard({
+  op,
+  failureThresholdPct,
+}: {
+  op: OperationSummary;
+  failureThresholdPct: number;
+}) {
+  const deltaKeys = Object.keys(op.deltas);
+  const cost = op.cost;
+  const overThreshold = op.failureRatePct > failureThresholdPct;
+  return (
+    <Card data-testid={`card-operation-${op.operation}`}>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <CardTitle className="capitalize">{op.operation}</CardTitle>
+            <CardDescription>
+              {op.total.toLocaleString("sv-SE")} rader · {op.shadowOk} ok ·{" "}
+              {op.shadowFailed} fel
+            </CardDescription>
+          </div>
+          <Badge
+            variant={overThreshold ? "destructive" : "secondary"}
+            data-testid={`badge-failure-${op.operation}`}
+            title={`Tröskel: ${failureThresholdPct}%`}
+          >
+            Fel-andel {fmt(op.failureRatePct, 1)}%
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="text-sm">
+            <p className="font-medium mb-1">Primär latens</p>
+            <p className="text-muted-foreground">
+              median {fmtInt(op.primaryLatency.medianMs)} ms · p95{" "}
+              {fmtInt(op.primaryLatency.p95Ms)} ms
+            </p>
+          </div>
+          <div className="text-sm">
+            <p className="font-medium mb-1">Shadow latens</p>
+            <p className="text-muted-foreground">
+              median {fmtInt(op.shadowLatency.medianMs)} ms · p95{" "}
+              {fmtInt(op.shadowLatency.p95Ms)} ms
+            </p>
+          </div>
+        </div>
+
+        {deltaKeys.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b text-left text-muted-foreground">
+                <tr>
+                  <th className="py-2 pr-4">Delta</th>
+                  <th className="py-2 pr-4 text-right">median</th>
+                  <th className="py-2 pr-4 text-right">p95</th>
+                  <th className="py-2 pr-4 text-right">|Δ| median</th>
+                  <th className="py-2 pr-4 text-right">|Δ| p95</th>
+                  <th className="py-2 pr-4 text-right">n</th>
+                </tr>
+              </thead>
+              <tbody>
+                {deltaKeys.map((k) => {
+                  const d = op.deltas[k];
+                  return (
+                    <tr key={k} className="border-b" data-testid={`row-delta-${op.operation}-${k}`}>
+                      <td className="py-2 pr-4 font-mono text-xs">{k}</td>
+                      <td className="py-2 pr-4 text-right">{fmt(d.median)}</td>
+                      <td className="py-2 pr-4 text-right">{fmt(d.p95)}</td>
+                      <td className="py-2 pr-4 text-right">{fmt(d.absMedian)}</td>
+                      <td className="py-2 pr-4 text-right">{fmt(d.absP95)}</td>
+                      <td className="py-2 pr-4 text-right">{d.count}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="rounded border p-3 text-sm bg-muted/30">
+          <p className="font-medium mb-1">Kostnadsprojektion (grov)</p>
+          {cost.pricePer1k == null || cost.pricePer1k === 0 ? (
+            <p className="text-muted-foreground">
+              Pris ej modellerad för {op.operation}.
+            </p>
+          ) : (
+            <p className="text-muted-foreground">
+              Sample: {cost.sampleCount.toLocaleString("sv-SE")} → projicerat{" "}
+              {fmtInt(cost.projected30d)} sample/30d → full volym{" "}
+              {fmtInt(cost.fullVolume30d)} →{" "}
+              <strong data-testid={`text-cost-${op.operation}`}>
+                ~${fmt(cost.estimatedCostUsd30d, 2)}/månad
+              </strong>{" "}
+              @ ${cost.pricePer1k}/1k
+            </p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

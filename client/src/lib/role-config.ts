@@ -25,6 +25,7 @@ const ADMIN_ONLY_ROUTES = new Set([
   "/data-requirements",
   "/metadata-settings",
   "/restore-dormant-customers",
+  "/shadow-comparison",
 ]);
 
 const PLANNER_ROUTES = new Set([
