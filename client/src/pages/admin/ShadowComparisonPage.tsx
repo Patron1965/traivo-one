@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Card,
@@ -13,6 +13,16 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertTriangle, Download, Loader2, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  CartesianGrid,
+} from "recharts";
 
 interface DeltaStats {
   median: number | null;
@@ -39,6 +49,25 @@ interface OperationSummary {
     estimatedCostUsd30d: number | null;
     sampleRate: number | null;
   };
+}
+
+interface ShadowTrendBucket {
+  bucketStart: string;
+  operation: string;
+  total: number;
+  shadowOk: number;
+  shadowFailed: number;
+  failureRatePct: number;
+  distanceKmAbsP95: number | null;
+  estimatedCostUsd: number | null;
+}
+
+interface ShadowTrendResult {
+  windowDays: number;
+  bucket: "day" | "week";
+  sampleRate: number | null;
+  operations: string[];
+  buckets: ShadowTrendBucket[];
 }
 
 interface ShadowReportSummary {
@@ -83,6 +112,18 @@ export default function ShadowComparisonPage() {
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
       return (await res.json()) as ShadowReportSummary;
+    },
+  });
+
+  const trendQuery = useQuery<ShadowTrendResult>({
+    queryKey: ["/api/admin/shadow-comparison/trend", { days }],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/admin/shadow-comparison/trend?days=${days}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+      return (await res.json()) as ShadowTrendResult;
     },
   });
 
@@ -137,8 +178,11 @@ export default function ShadowComparisonPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => summaryQuery.refetch()}
-            disabled={summaryQuery.isFetching}
+            onClick={() => {
+              summaryQuery.refetch();
+              trendQuery.refetch();
+            }}
+            disabled={summaryQuery.isFetching || trendQuery.isFetching}
             data-testid="button-refresh"
             title="Uppdatera"
           >
@@ -235,6 +279,12 @@ export default function ShadowComparisonPage() {
               <code>MAP_SHADOW_DISTANCE_P95_KM</code>.
             </CardContent>
           </Card>
+
+          <ShadowTrendCharts
+            trend={trendQuery.data}
+            loading={trendQuery.isLoading}
+            error={trendQuery.error}
+          />
 
           {summary.totalRows === 0 ? (
             <Card>
@@ -375,6 +425,238 @@ function OperationCard({
             </p>
           )}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+const TREND_COLORS = ["#1B4B6B", "#4A9B9B", "#7DBFB0", "#6B7C8C", "#2C3E50"];
+
+type TrendMetric = "shadowOk" | "failureRatePct" | "distanceKmAbsP95" | "estimatedCostUsd";
+
+interface ChartSpec {
+  metric: TrendMetric;
+  title: string;
+  description: string;
+  unit: string;
+  digits: number;
+  testId: string;
+}
+
+const CHART_SPECS: ChartSpec[] = [
+  {
+    metric: "estimatedCostUsd",
+    title: "Projicerad Google-kostnad",
+    description: "Skattat USD per period (full volym, sample-rate-justerad)",
+    unit: "$",
+    digits: 2,
+    testId: "chart-trend-cost",
+  },
+  {
+    metric: "shadowOk",
+    title: "Shadow-volym (lyckade)",
+    description: "Antal lyckade shadow-anrop per period",
+    unit: "",
+    digits: 0,
+    testId: "chart-trend-volume",
+  },
+  {
+    metric: "failureRatePct",
+    title: "Fel-andel",
+    description: "Andel shadow-anrop som misslyckades (%)",
+    unit: "%",
+    digits: 1,
+    testId: "chart-trend-failure",
+  },
+  {
+    metric: "distanceKmAbsP95",
+    title: "|Δ distans| p95",
+    description: "Avvikelse mot primär leverantör i km (p95)",
+    unit: " km",
+    digits: 2,
+    testId: "chart-trend-distance",
+  },
+];
+
+function formatBucketLabel(iso: string, granularity: "day" | "week"): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  if (granularity === "day") {
+    return d.toLocaleDateString("sv-SE", { month: "2-digit", day: "2-digit" });
+  }
+  // ISO week number (UTC)
+  const target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const dayNr = (target.getUTCDay() + 6) % 7;
+  target.setUTCDate(target.getUTCDate() - dayNr + 3);
+  const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
+  const week =
+    1 +
+    Math.round(
+      ((target.getTime() - firstThursday.getTime()) / 86400000 -
+        3 +
+        ((firstThursday.getUTCDay() + 6) % 7)) /
+        7,
+    );
+  return `v.${week}`;
+}
+
+function ShadowTrendCharts({
+  trend,
+  loading,
+  error,
+}: {
+  trend: ShadowTrendResult | undefined;
+  loading: boolean;
+  error: unknown;
+}) {
+  const granularity = trend?.bucket ?? "day";
+
+  const { periods, ops, totalsByMetric } = useMemo(() => {
+    if (!trend) {
+      return {
+        periods: [] as string[],
+        ops: [] as string[],
+        totalsByMetric: {} as Record<TrendMetric, number>,
+      };
+    }
+    const periodSet = new Set<string>();
+    for (const b of trend.buckets) periodSet.add(b.bucketStart);
+    const periods = Array.from(periodSet).sort();
+    const ops = trend.operations;
+    const totals: Record<TrendMetric, number> = {
+      shadowOk: 0,
+      failureRatePct: 0,
+      distanceKmAbsP95: 0,
+      estimatedCostUsd: 0,
+    };
+    for (const b of trend.buckets) {
+      totals.shadowOk += b.shadowOk;
+      if (b.estimatedCostUsd != null) totals.estimatedCostUsd += b.estimatedCostUsd;
+      if (b.distanceKmAbsP95 != null) totals.distanceKmAbsP95 += b.distanceKmAbsP95;
+      totals.failureRatePct += b.failureRatePct;
+    }
+    return { periods, ops, totalsByMetric: totals };
+  }, [trend]);
+
+  if (loading) {
+    return (
+      <Card data-testid="card-trend-loading">
+        <CardContent className="py-8 flex items-center justify-center text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin mr-2" />
+          Laddar trend…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive" data-testid="alert-trend-error">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle>Kunde inte ladda trend</AlertTitle>
+        <AlertDescription>
+          {error instanceof Error ? error.message : String(error)}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (!trend || trend.buckets.length === 0) {
+    return null;
+  }
+
+  const buildSeries = (metric: TrendMetric) =>
+    periods.map((p) => {
+      const row: Record<string, string | number | null> = {
+        period: formatBucketLabel(p, granularity),
+        bucketStart: p,
+      };
+      for (const op of ops) {
+        const bucket = trend.buckets.find(
+          (b) => b.bucketStart === p && b.operation === op,
+        );
+        const v = bucket ? (bucket[metric] as number | null) : null;
+        row[op] = v == null || !Number.isFinite(v) ? null : v;
+      }
+      return row;
+    });
+
+  return (
+    <Card data-testid="card-trend">
+      <CardHeader>
+        <CardTitle>Kostnads- och kvalitetstrend</CardTitle>
+        <CardDescription>
+          Per {granularity === "day" ? "dag" : "vecka"} över valt fönster (
+          {trend.windowDays} dagar). Linjerna visar respektive operation.
+          {trend.sampleRate == null && (
+            <>
+              {" "}Sample-rate är inte satt — kostnad antar 100% trafik.
+            </>
+          )}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-6 md:grid-cols-2">
+        {CHART_SPECS.map((spec) => {
+          const data = buildSeries(spec.metric);
+          const showChart = totalsByMetric[spec.metric] > 0 || spec.metric === "failureRatePct";
+          return (
+            <div key={spec.metric} data-testid={spec.testId}>
+              <p className="font-medium text-sm">{spec.title}</p>
+              <p className="text-xs text-muted-foreground mb-2">{spec.description}</p>
+              <div className="h-56 w-full">
+                {showChart ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis
+                        dataKey="period"
+                        tick={{ fontSize: 11 }}
+                        className="fill-muted-foreground"
+                      />
+                      <YAxis
+                        tick={{ fontSize: 11 }}
+                        className="fill-muted-foreground"
+                        tickFormatter={(v) =>
+                          typeof v === "number"
+                            ? `${spec.unit === "$" ? "$" : ""}${v.toFixed(spec.digits === 0 ? 0 : Math.min(spec.digits, 1))}${spec.unit !== "$" ? spec.unit : ""}`
+                            : String(v)
+                        }
+                        width={56}
+                      />
+                      <Tooltip
+                        formatter={(value: number | string) => {
+                          if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+                          return spec.unit === "$"
+                            ? `$${value.toFixed(spec.digits)}`
+                            : `${value.toFixed(spec.digits)}${spec.unit}`;
+                        }}
+                        labelFormatter={(label) => String(label)}
+                        contentStyle={{ fontSize: 12 }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      {ops.map((op, i) => (
+                        <Line
+                          key={op}
+                          type="monotone"
+                          dataKey={op}
+                          stroke={TREND_COLORS[i % TREND_COLORS.length]}
+                          strokeWidth={2}
+                          dot={false}
+                          connectNulls
+                          isAnimationActive={false}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
+                    Ingen data för denna mätetal i fönstret.
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </CardContent>
     </Card>
   );

@@ -250,6 +250,115 @@ export async function getShadowSummary(days: number): Promise<ShadowReportSummar
   return buildShadowSummary(rows, days);
 }
 
+export type TrendBucketGranularity = "day" | "week";
+
+export interface ShadowTrendBucket {
+  bucketStart: string;
+  operation: string;
+  total: number;
+  shadowOk: number;
+  shadowFailed: number;
+  failureRatePct: number;
+  distanceKmAbsP95: number | null;
+  estimatedCostUsd: number | null;
+}
+
+export interface ShadowTrendResult {
+  windowDays: number;
+  bucket: TrendBucketGranularity;
+  sampleRate: number | null;
+  operations: string[];
+  buckets: ShadowTrendBucket[];
+}
+
+function bucketKey(date: Date, mode: TrendBucketGranularity): string {
+  const d = new Date(date.getTime());
+  if (mode === "day") {
+    d.setUTCHours(0, 0, 0, 0);
+    return d.toISOString();
+  }
+  const day = d.getUTCDay();
+  const diff = (day + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - diff);
+  d.setUTCHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+export function buildShadowTrend(
+  rows: MapShadowComparison[],
+  days: number,
+): ShadowTrendResult {
+  const granularity: TrendBucketGranularity = days <= 14 ? "day" : "week";
+  const sampleRate = readSampleRate();
+
+  const grouped = new Map<string, Map<string, MapShadowComparison[]>>();
+  const opSet = new Set<string>();
+  for (const r of rows) {
+    if (!r.createdAt) continue;
+    const created = r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt as unknown as string);
+    if (Number.isNaN(created.getTime())) continue;
+    const key = bucketKey(created, granularity);
+    let opMap = grouped.get(key);
+    if (!opMap) {
+      opMap = new Map();
+      grouped.set(key, opMap);
+    }
+    const arr = opMap.get(r.operation) ?? [];
+    arr.push(r);
+    opMap.set(r.operation, arr);
+    opSet.add(r.operation);
+  }
+
+  const buckets: ShadowTrendBucket[] = [];
+  for (const [bucketStart, opMap] of Array.from(grouped.entries())) {
+    for (const [op, opRows] of Array.from(opMap.entries())) {
+      const ok = opRows.filter((r) => r.shadowOk);
+      const failed = opRows.length - ok.length;
+      const failureRatePct = opRows.length > 0 ? (failed / opRows.length) * 100 : 0;
+      const distVals: number[] = [];
+      for (const r of ok) {
+        const d = r.deltas as Record<string, unknown> | null;
+        const v = d?.distanceKmDelta;
+        if (typeof v === "number" && Number.isFinite(v)) distVals.push(Math.abs(v));
+      }
+      distVals.sort((a, b) => a - b);
+      const distP95 = quantile(distVals, 0.95);
+      const price = GOOGLE_PRICE_PER_1K[op] ?? null;
+      const fullVolume = sampleRate && sampleRate > 0 ? ok.length / sampleRate : ok.length;
+      const cost =
+        price !== null && price > 0 ? (fullVolume / 1000) * price : price === 0 ? 0 : null;
+      buckets.push({
+        bucketStart,
+        operation: op,
+        total: opRows.length,
+        shadowOk: ok.length,
+        shadowFailed: failed,
+        failureRatePct,
+        distanceKmAbsP95: distP95,
+        estimatedCostUsd: cost,
+      });
+    }
+  }
+
+  buckets.sort(
+    (a, b) =>
+      a.bucketStart.localeCompare(b.bucketStart) || a.operation.localeCompare(b.operation),
+  );
+
+  return {
+    windowDays: days,
+    bucket: granularity,
+    sampleRate,
+    operations: Array.from(opSet).sort(),
+    buckets,
+  };
+}
+
+export async function getShadowTrend(days: number): Promise<ShadowTrendResult> {
+  const rows = await fetchShadowRows(days);
+  return buildShadowTrend(rows, days);
+}
+
 export async function buildShadowComparisonCsv(days: number): Promise<string> {
   const rows = await fetchShadowRows(days);
   const header = [

@@ -16,6 +16,7 @@ import {
 } from "../tenant-middleware";
 import {
   getShadowSummary,
+  getShadowTrend,
   buildShadowComparisonCsv,
 } from "../services/shadowComparisonReport";
 
@@ -53,6 +54,30 @@ export function registerShadowComparisonRoutes(app: Express): void {
       const days = parsed.data.days ?? 7;
       const summary = await getShadowSummary(days);
       res.json(summary);
+    }),
+  );
+
+  // GET /api/admin/shadow-comparison/trend?days=7
+  app.get(
+    "/api/admin/shadow-comparison/trend",
+    isAuthenticated,
+    requireTenantWithFallback,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      if (!ensurePlatformOwner(req)) {
+        return res
+          .status(403)
+          .json({ error: "Endast platform-owner kan se shadow-jämförelse" });
+      }
+      const parsed = querySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res
+          .status(400)
+          .json({ error: "ogiltig query", issues: parsed.error.issues });
+      }
+      const days = parsed.data.days ?? 7;
+      const trend = await getShadowTrend(days);
+      res.json(trend);
     }),
   );
 
