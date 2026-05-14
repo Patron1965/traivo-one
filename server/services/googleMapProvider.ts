@@ -516,9 +516,9 @@ async function googleSearchDestinations(
 // =============================================================================
 
 // Geoapify-formade input-typer för VRP-requesten. Speglar `GeoapifyAgent` /
-// `GeoapifyJob` i `server/route-optimizer.ts` (de enda call-sites som idag
-// bygger VRP-requests). Vi typar input strikt så att mappningen inte använder
-// `any`-casts och kan validera shape vid runtime.
+// `GeoapifyJob` + `EnrichedGeoapifyJob`/`EnrichedGeoapifyAgent` (vrp-constraints)
+// — de enda call-sites som idag bygger VRP-requests. Vi typar input strikt så
+// att mappningen inte använder `any`-casts och kan validera shape vid runtime.
 interface GeoapifyVRPJob {
   location: [number, number];
   duration?: number;
@@ -526,6 +526,9 @@ interface GeoapifyVRPJob {
   time_windows?: [number, number][];
   id?: string;
   description?: string;
+  required_skills?: number[];
+  pickup?: number[];
+  delivery?: number[];
 }
 
 interface GeoapifyVRPAgent {
@@ -535,10 +538,16 @@ interface GeoapifyVRPAgent {
   breaks?: Array<{ duration: number; time_windows?: [number, number][] }>;
   id?: string;
   description?: string;
+  skills?: number[];
+  capacity?: number[];
 }
 
 function isLngLatTuple(v: unknown): v is [number, number] {
   return Array.isArray(v) && v.length >= 2 && typeof v[0] === "number" && typeof v[1] === "number";
+}
+
+function isNumberArray(v: unknown): v is number[] {
+  return Array.isArray(v) && v.every((x) => typeof x === "number");
 }
 
 function isGeoapifyJob(v: unknown): v is GeoapifyVRPJob {
@@ -554,17 +563,147 @@ function isGeoapifyAgent(v: unknown): v is GeoapifyVRPAgent {
 }
 
 /**
- * Försök översätta en Geoapify-formad VRP-request till Googles
- * `optimizeTours`-format. Detta är en best-effort-mappning som täcker det vi
- * faktiskt skickar in från `route-optimizer.ts`. Saknad/felformad data leder
- * till fail-soft `null` så att shadow-jämförelsen rapporterar fel istället
- * för att krascha primär-pathen.
- *
- * OBS: Denna mappning täcker grundläggande shipments/vehicles men ej ännu
- * tidsfönster, raster, kapaciteter eller skills (separat follow-up). Använd
- * därför primärt för shadow-jämförelse, inte som produktions-VRP.
+ * Anchor som Geoapifys day-relativa sekund-fält (time_windows, break.time_windows)
+ * konverteras emot. Default: idag 00:00 i UTC. Tester (och framtida call-sites
+ * som vill köra VRP för en specifik dag) kan injicera epok-sekunder via
+ * `req.globalStartTimeSeconds` så att absoluta timestamps blir deterministiska.
  */
-function tryMapVRPRequestToGoogle(req: ProviderVRPRequest): Record<string, unknown> | null {
+function resolveDayAnchorSeconds(req: ProviderVRPRequest): number {
+  const raw = (req as Record<string, unknown>).globalStartTimeSeconds;
+  if (typeof raw === "number" && Number.isFinite(raw)) return Math.floor(raw);
+  const now = new Date();
+  return Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 1000);
+}
+
+function toIsoFromAnchor(anchorSec: number, daySec: number): string {
+  return new Date((anchorSec + daySec) * 1000).toISOString();
+}
+
+/**
+ * Mappa Geoapifys priority (0–100, högre = viktigare) till Googles
+ * `penaltyCost` som är kostnaden solver betalar om shipment hoppas över.
+ * Vi använder en linjär skala 0→0, 100→100000 så att solver alltid föredrar
+ * att schemalägga högprio-jobb framför lågprio-jobb när det krockar.
+ */
+function priorityToPenaltyCost(priority: number | undefined): number {
+  if (typeof priority !== "number" || !Number.isFinite(priority)) return 1000;
+  const clamped = Math.max(0, Math.min(100, priority));
+  return Math.round(clamped * 1000);
+}
+
+function mapCapacityVectorToLoadLimits(capacity: number[]): Record<string, { maxLoad: string }> {
+  const out: Record<string, { maxLoad: string }> = {};
+  for (let i = 0; i < capacity.length; i++) {
+    const v = capacity[i];
+    if (!Number.isFinite(v) || v <= 0) continue;
+    out[`dim${i}`] = { maxLoad: String(Math.round(v)) };
+  }
+  return out;
+}
+
+function mapDemandVectorToLoadDemands(demand: number[]): Record<string, { amount: string }> {
+  const out: Record<string, { amount: string }> = {};
+  for (let i = 0; i < demand.length; i++) {
+    const v = demand[i];
+    if (!Number.isFinite(v) || v <= 0) continue;
+    out[`dim${i}`] = { amount: String(Math.round(v)) };
+  }
+  return out;
+}
+
+/**
+ * Geoapifys skills är ints — agent.skills och job.required_skills indexeras
+ * mot samma int-rymd. Google har inget motsvarande "skill"-koncept; istället
+ * begränsar man kompatibilitet via `Shipment.allowedVehicleIndices`. Vi
+ * pre-beräknar tillåtna fordon för varje shipment baserat på subset-test.
+ */
+function computeAllowedVehicleIndices(
+  required: number[] | undefined,
+  agents: GeoapifyVRPAgent[],
+): number[] | undefined {
+  if (!required || required.length === 0) return undefined;
+  const allowed: number[] = [];
+  for (let i = 0; i < agents.length; i++) {
+    const skills = agents[i].skills ?? [];
+    if (required.every((r) => skills.includes(r))) allowed.push(i);
+  }
+  return allowed;
+}
+
+interface MappedBreakRequest {
+  earliestStartTime: string;
+  latestStartTime: string;
+  minDuration: string;
+}
+
+function mapBreaks(
+  breaks: GeoapifyVRPAgent["breaks"],
+  anchorSec: number,
+): MappedBreakRequest[] | undefined {
+  if (!breaks || breaks.length === 0) return undefined;
+  const out: MappedBreakRequest[] = [];
+  for (const b of breaks) {
+    if (!Number.isFinite(b.duration) || b.duration <= 0) continue;
+    const win = b.time_windows?.[0];
+    if (!win) continue;
+    const [earliestSec, latestSec] = win;
+    // latestStartTime måste lämna utrymme för pausen själv inom fönstret.
+    const latestStartSec = Math.max(earliestSec, latestSec - b.duration);
+    out.push({
+      earliestStartTime: toIsoFromAnchor(anchorSec, earliestSec),
+      latestStartTime: toIsoFromAnchor(anchorSec, latestStartSec),
+      minDuration: `${b.duration}s`,
+    });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function mapTimeWindowsToInterval(
+  windows: [number, number][] | undefined,
+  anchorSec: number,
+): Array<{ startTime: string; endTime: string }> | undefined {
+  if (!windows || windows.length === 0) return undefined;
+  const out: Array<{ startTime: string; endTime: string }> = [];
+  for (const [s, e] of windows) {
+    if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) continue;
+    out.push({
+      startTime: toIsoFromAnchor(anchorSec, s),
+      endTime: toIsoFromAnchor(anchorSec, e),
+    });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+/**
+ * Översätt en Geoapify-formad VRP-request (möjligen berikad av
+ * `vrp-constraints.ts` med tidsfönster, raster, kapacitet, skills och
+ * prioritet) till Googles `optimizeTours`-format.
+ *
+ * Täckta fält:
+ *   - jobs.location                → shipments[].deliveries[0].arrivalLocation
+ *   - jobs.duration                → shipments[].deliveries[0].duration
+ *   - jobs.time_windows            → shipments[].deliveries[0].timeWindows
+ *   - jobs.priority                → shipments[].penaltyCost
+ *   - jobs.required_skills         → shipments[].allowedVehicleIndices (subset-test)
+ *   - jobs.delivery (capacity vec) → shipments[].deliveries[0].loadDemands
+ *   - jobs.pickup   (capacity vec) → shipments[].pickups[0].loadDemands
+ *   - agents.start/end_location    → vehicles[].start/endLocation
+ *   - agents.time_windows          → vehicles[].startTimeWindows + endTimeWindows
+ *   - agents.breaks                → vehicles[].breakRule.breakRequests
+ *   - agents.capacity              → vehicles[].loadLimits
+ *
+ * Saknad/felformad data leder till fail-soft `null` så att shadow-jämförelsen
+ * rapporterar fel istället för att krascha primär-pathen.
+ *
+ * Begränsningar (se `docs/google-vrp-mapping.md`):
+ *   - Geoapifys per-agent `skills` har ingen direkt motsvarighet i Google;
+ *     vi simulerar via `allowedVehicleIndices` (pre-filter, ej sant skill-set).
+ *   - Geoapifys priority modelleras som penaltyCost (0..100 → 0..100000); det
+ *     ger rätt prioritetsordning men inte identisk straffabsolut nivå.
+ *   - Soft-prefer time windows finns inte i denna mappning; Geoapify-pathen
+ *     löser det med priority-boost upstream, vilket bevaras via penaltyCost.
+ */
+export function tryMapVRPRequestToGoogle(req: ProviderVRPRequest): Record<string, unknown> | null {
   const rawJobs = req.jobs;
   const rawAgents = req.agents;
   if (!Array.isArray(rawJobs) || !Array.isArray(rawAgents)) return null;
@@ -573,36 +712,102 @@ function tryMapVRPRequestToGoogle(req: ProviderVRPRequest): Record<string, unkno
   const jobs: GeoapifyVRPJob[] = rawJobs;
   const agents: GeoapifyVRPAgent[] = rawAgents;
 
+  const anchorSec = resolveDayAnchorSeconds(req);
+  // Hämta hela dagens slut från sista time_window vi ser. Om inga
+  // tidsfönster finns faller vi tillbaka till 24h.
+  let dayEndSec: number | null = null;
+  for (const a of agents) {
+    for (const w of a.time_windows ?? []) {
+      if (Number.isFinite(w[1])) {
+        dayEndSec = dayEndSec === null ? w[1] : Math.max(dayEndSec, w[1]);
+      }
+    }
+  }
+  for (const j of jobs) {
+    for (const w of j.time_windows ?? []) {
+      if (Number.isFinite(w[1])) {
+        dayEndSec = dayEndSec === null ? w[1] : Math.max(dayEndSec, w[1]);
+      }
+    }
+  }
+  if (dayEndSec === null) dayEndSec = 24 * 3600;
+
   const shipments = jobs.map((j, idx) => {
     const [lng, lat] = j.location;
-    return {
+    const deliveryDemands = isNumberArray(j.delivery)
+      ? mapDemandVectorToLoadDemands(j.delivery)
+      : undefined;
+    const pickupDemands = isNumberArray(j.pickup)
+      ? mapDemandVectorToLoadDemands(j.pickup)
+      : undefined;
+    const timeWindows = mapTimeWindowsToInterval(j.time_windows, anchorSec);
+
+    const delivery: Record<string, unknown> = {
+      arrivalLocation: { latitude: lat, longitude: lng },
+      duration: typeof j.duration === "number" ? `${j.duration}s` : "0s",
+    };
+    if (timeWindows) delivery.timeWindows = timeWindows;
+    if (deliveryDemands && Object.keys(deliveryDemands).length > 0) {
+      delivery.loadDemands = deliveryDemands;
+    }
+
+    const shipment: Record<string, unknown> = {
       label: j.id ?? `job-${idx}`,
-      deliveries: [
+      deliveries: [delivery],
+      penaltyCost: priorityToPenaltyCost(j.priority),
+    };
+
+    if (pickupDemands && Object.keys(pickupDemands).length > 0) {
+      shipment.pickups = [
         {
           arrivalLocation: { latitude: lat, longitude: lng },
-          duration: typeof j.duration === "number" ? `${j.duration}s` : "0s",
+          duration: "0s",
+          loadDemands: pickupDemands,
         },
-      ],
-    };
+      ];
+    }
+
+    const allowed = computeAllowedVehicleIndices(j.required_skills, agents);
+    if (allowed) shipment.allowedVehicleIndices = allowed;
+
+    return shipment;
   });
 
   const vehicles = agents.map((a, idx) => {
     const start = a.start_location;
     const end = a.end_location ?? a.start_location;
-    return {
+    const vehicle: Record<string, unknown> = {
       label: a.id ?? `agent-${idx}`,
       startLocation: { latitude: start[1], longitude: start[0] },
       endLocation: { latitude: end[1], longitude: end[0] },
       travelMode: "DRIVING",
     };
+
+    const startEndWindows = mapTimeWindowsToInterval(a.time_windows, anchorSec);
+    if (startEndWindows) {
+      vehicle.startTimeWindows = startEndWindows;
+      vehicle.endTimeWindows = startEndWindows;
+    }
+
+    const breakRequests = mapBreaks(a.breaks, anchorSec);
+    if (breakRequests) {
+      vehicle.breakRule = { breakRequests };
+    }
+
+    if (isNumberArray(a.capacity)) {
+      const loadLimits = mapCapacityVectorToLoadLimits(a.capacity);
+      if (Object.keys(loadLimits).length > 0) vehicle.loadLimits = loadLimits;
+    }
+
+    return vehicle;
   });
 
   return {
     model: {
       shipments,
       vehicles,
-      globalStartTime: new Date().toISOString(),
-      globalEndTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      globalStartTime: toIsoFromAnchor(anchorSec, 0),
+      globalEndTime: toIsoFromAnchor(anchorSec, dayEndSec),
     },
   };
 }
@@ -703,6 +908,12 @@ interface GoogleOptimizeToursResponse {
       shipmentLabel?: string;
       startTime?: string;
       detour?: string;
+      isPickup?: boolean;
+      arrivalLocation?: { latitude?: number; longitude?: number };
+    }>;
+    breaks?: Array<{
+      startTime?: string;
+      duration?: string;
     }>;
     metrics?: {
       travelDistanceMeters?: number;
@@ -711,7 +922,11 @@ interface GoogleOptimizeToursResponse {
     };
     routePolyline?: { points?: string };
   }>;
-  skippedShipments?: Array<{ index?: number; label?: string }>;
+  skippedShipments?: Array<{
+    index?: number;
+    label?: string;
+    reasons?: Array<{ code?: string; exampleVehicleIndex?: number; exampleExceededCapacityType?: string }>;
+  }>;
 }
 
 function isoToSeconds(iso: string | undefined): number | undefined {
@@ -720,21 +935,49 @@ function isoToSeconds(iso: string | undefined): number | undefined {
   return Number.isFinite(t) ? Math.floor(t / 1000) : undefined;
 }
 
-function mapGoogleOptimizeToursResult(data: GoogleOptimizeToursResponse): ProviderVRPResult {
+export function mapGoogleOptimizeToursResult(data: GoogleOptimizeToursResponse): ProviderVRPResult {
   const routes = Array.isArray(data.routes) ? data.routes : [];
   const agentPlans: ProviderVRPAgentPlan[] = routes.map((r, idx) => {
     const startSec = isoToSeconds(r.vehicleStartTime) ?? 0;
     const visits = r.visits ?? [];
-    const actions: ProviderVRPAction[] = [];
-    actions.push({ type: "start", startTimeSeconds: startSec });
+    const breaks = r.breaks ?? [];
+
+    // Slå ihop visits + breaks i kronologisk ordning så att VRP-konsumenter
+    // (route-optimizer) kan bygga rätt action-sekvens.
+    type Timed = { sec: number; build: () => ProviderVRPAction };
+    const timed: Timed[] = [];
     for (const v of visits) {
-      actions.push({
-        type: "job",
-        startTimeSeconds: isoToSeconds(v.startTime),
-        jobIndex: v.shipmentIndex,
-        jobId: v.shipmentLabel,
+      const sec = isoToSeconds(v.startTime) ?? 0;
+      timed.push({
+        sec,
+        build: () => ({
+          type: "job",
+          startTimeSeconds: isoToSeconds(v.startTime),
+          jobIndex: v.shipmentIndex,
+          jobId: v.shipmentLabel,
+          location:
+            typeof v.arrivalLocation?.latitude === "number" &&
+            typeof v.arrivalLocation?.longitude === "number"
+              ? { lat: v.arrivalLocation.latitude, lng: v.arrivalLocation.longitude }
+              : undefined,
+        }),
       });
     }
+    for (const b of breaks) {
+      const sec = isoToSeconds(b.startTime) ?? 0;
+      timed.push({
+        sec,
+        build: () => ({
+          type: "break",
+          startTimeSeconds: isoToSeconds(b.startTime),
+          durationSeconds: parseDurationSeconds(b.duration) ?? undefined,
+        }),
+      });
+    }
+    timed.sort((a, b) => a.sec - b.sec);
+
+    const actions: ProviderVRPAction[] = [{ type: "start", startTimeSeconds: startSec }];
+    for (const t of timed) actions.push(t.build());
     actions.push({ type: "end", startTimeSeconds: isoToSeconds(r.vehicleEndTime) });
 
     return {
@@ -753,11 +996,26 @@ function mapGoogleOptimizeToursResult(data: GoogleOptimizeToursResponse): Provid
     .map((s) => s.index)
     .filter((i): i is number => typeof i === "number");
 
+  // Vehicles utan visits räknas som unassigned agents (matchar Geoapifys
+  // `unassignedAgents`-semantik).
+  const seenVehicleIndices = new Set<number>();
+  for (const r of routes) {
+    if (typeof r.vehicleIndex === "number" && (r.visits?.length ?? 0) > 0) {
+      seenVehicleIndices.add(r.vehicleIndex);
+    }
+  }
+  const unassignedAgentIndices: number[] = [];
+  for (const r of routes) {
+    if (typeof r.vehicleIndex === "number" && !seenVehicleIndices.has(r.vehicleIndex)) {
+      unassignedAgentIndices.push(r.vehicleIndex);
+    }
+  }
+
   return {
     ok: true,
     agentPlans,
     unassignedJobIndices,
-    unassignedAgentIndices: [],
+    unassignedAgentIndices,
   };
 }
 
