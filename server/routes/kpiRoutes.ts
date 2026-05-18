@@ -2121,7 +2121,7 @@ async function sendInvitationEmail(req: any, invitation: any): Promise<{ invitat
         `,
       });
       emailDelivered = true;
-      messageId = (sendOutput as any)?.messageId ?? null;
+      messageId = sendOutput.messageId;
       console.log(`[invitation] Email accepted by Resend for ${invitation.email} (messageId=${messageId})`);
     } catch (err: any) {
       emailError = err?.message || String(err);

@@ -50,6 +50,15 @@ export async function getUncachableResendClient() {
   };
 }
 
+export interface SendEmailResult {
+  data: { id: string } | null;
+  error: unknown;
+  /** Resend message-id eller null om okänt. Används för att korrelera webhooks. */
+  messageId: string | null;
+  /** Avsändaradressen som faktiskt användes (för loggning/diagnostik). */
+  fromEmail: string;
+}
+
 export async function sendEmail(options: {
   to: string;
   subject: string;
@@ -58,7 +67,7 @@ export async function sendEmail(options: {
     filename: string;
     content: Buffer | string;
   }>;
-}) {
+}): Promise<SendEmailResult> {
   const { client, fromEmail } = await getUncachableResendClient();
   
   const result = await client.emails.send({
@@ -92,7 +101,8 @@ export async function sendEmail(options: {
   }
 
   return {
-    ...result,
+    data: result.data ?? null,
+    error: result.error,
     messageId: result.data?.id ?? null,
     fromEmail,
   };

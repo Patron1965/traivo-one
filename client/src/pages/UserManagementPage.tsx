@@ -196,7 +196,10 @@ export default function UserManagementPage() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["/api/invitations"] });
       if (result.emailDelivered) {
-        toast({ title: "Inbjudan skickad", description: `E-post levererad till ${inviteForm.email}` });
+        toast({
+          title: "Inbjudan skickad",
+          description: `Mejlet skickades till ${inviteForm.email}. Slutgiltig leveransbekräftelse kommer från Resend när mottagaren får det (status "Levererad" i listan).`,
+        });
       } else {
         toast({
           title: "Inbjudan sparad — men e-post kunde inte skickas",

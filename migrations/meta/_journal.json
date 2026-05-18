@@ -246,6 +246,13 @@
       "when": 1778565924977,
       "tag": "0034_gorgeous_gwen_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1779109112421,
+      "tag": "0035_woozy_steve_rogers",
+      "breakpoints": true
     }
   ]
 }
