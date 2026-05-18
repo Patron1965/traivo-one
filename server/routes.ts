@@ -51,6 +51,7 @@ import { registerFeatureRoutes } from "./routes/featureRoutes";
 import { registerUrgentJobRoutes } from "./routes/urgentJobRoutes";
 import { registerCapacityForecastRoutes, capacityForecastScheduler } from "./routes/capacityForecastRoutes";
 import { registerRealtimeTestRoutes } from "./routes/realtime-test";
+import { registerResendWebhookRoutes } from "./routes/resendWebhookRoutes";
 
 async function ensureDefaultTenant() {
   // Only auto-create the legacy demo tenant if the database has no tenants at all.
@@ -174,7 +175,7 @@ export async function registerRoutes(
   });
 
   app.use("/api", (req, res, next) => {
-    if (req.path.startsWith("/portal") || req.path.startsWith("/mobile") || req.path.startsWith("/admin") || req.path.startsWith("/auth") || (req.path === "/iot/signals" && req.method === "POST")) {
+    if (req.path.startsWith("/portal") || req.path.startsWith("/mobile") || req.path.startsWith("/admin") || req.path.startsWith("/auth") || req.path.startsWith("/webhooks/") || (req.path === "/iot/signals" && req.method === "POST")) {
       return next();
     }
     return requireTenantWithFallback(req, res, next);
@@ -654,6 +655,7 @@ export async function registerRoutes(
   registerRealtimeTestRoutes(app);
   registerPlannerRoutes(app);
   registerKPIRoutes(app);
+  registerResendWebhookRoutes(app);
   await registerFortnoxRoutes(app);
   registerOrderConceptRoutes(app);
   registerPortalRoutes(app);

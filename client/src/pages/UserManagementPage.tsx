@@ -63,6 +63,10 @@ import {
   Clock,
   Building2,
   MessageSquare,
+  Send,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -219,6 +223,31 @@ export default function UserManagementPage() {
     },
     onError: (error: Error) => {
       toast({ title: "Kunde inte ta bort inbjudan", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const resendInviteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/invitations/${id}/resend`, {});
+      return res.json() as Promise<{ email: string; emailDelivered?: boolean; emailError?: string | null }>;
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations"] });
+      if (result.emailDelivered) {
+        toast({ title: "Inbjudan skickad igen", description: `Mejlet accepterades av Resend för ${result.email}. Leveransstatus uppdateras när Resend rapporterar tillbaka.` });
+      } else {
+        toast({
+          title: "Kunde inte skicka om",
+          description: result.emailError
+            ? `Resend-fel: ${result.emailError}. Verifiera avsändardomänen i Resend Dashboard.`
+            : "Okänt fel — kontrollera Resend-domänen.",
+          variant: "destructive",
+          duration: 15000,
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skicka om inbjudan", description: error.message, variant: "destructive" });
     },
   });
 
@@ -1007,53 +1036,115 @@ export default function UserManagementPage() {
                   <p className="text-xs mt-1">Klicka "Bjud in" för att bjuda in en ny användare</p>
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>E-post</TableHead>
-                      <TableHead>Roll</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Skapad</TableHead>
-                      <TableHead className="w-16"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {invitationsList.map((inv) => (
-                      <TableRow key={inv.id} data-testid={`row-invitation-${inv.id}`}>
-                        <TableCell className="font-medium">{inv.email}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs">
-                            {ROLE_CONFIG[inv.role]?.label || inv.role}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={inv.status === "pending" ? "default" : inv.status === "used" ? "secondary" : "outline"}
-                            className="text-xs"
-                          >
-                            {inv.status === "pending" ? "Väntande" : inv.status === "used" ? "Använd" : inv.status === "expired" ? "Utgången" : inv.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString("sv-SE") : "-"}
-                        </TableCell>
-                        <TableCell>
-                          {inv.status === "pending" && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              data-testid={`button-delete-invitation-${inv.id}`}
-                              onClick={() => deleteInviteMutation.mutate(inv.id)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                            </Button>
-                          )}
-                        </TableCell>
+                <>
+                  {invitationsList.some((i) => i.deliveryStatus === "bounced" || i.deliveryStatus === "failed" || i.deliveryStatus === "complained") && (
+                    <div
+                      className="mb-4 flex items-start gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm"
+                      data-testid="banner-invitation-delivery-warning"
+                    >
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                      <div>
+                        <p className="font-medium text-destructive">Vissa inbjudningar levererades inte</p>
+                        <p className="text-muted-foreground text-xs mt-1">
+                          Verifiera avsändardomänen för Traivos mejlavsändare i Resend Dashboard
+                          (Domains → Verify) och kontrollera att DNS-posterna för SPF/DKIM/DMARC är publicerade.
+                          Mejl från en obekräftad domän stoppas tyst av Gmail/Outlook även om Resend rapporterar OK.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>E-post</TableHead>
+                        <TableHead>Roll</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Leverans</TableHead>
+                        <TableHead>Skapad</TableHead>
+                        <TableHead className="w-24"></TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {invitationsList.map((inv) => {
+                        const ds = inv.deliveryStatus;
+                        const deliveryMeta: { label: string; cls: string; Icon: typeof CheckCircle2; title?: string } =
+                          ds === "delivered"
+                            ? { label: "Levererad", cls: "bg-chart-2/10 text-chart-2 border-chart-2/20", Icon: CheckCircle2 }
+                            : ds === "bounced"
+                              ? { label: "Bouncade", cls: "bg-destructive/10 text-destructive border-destructive/20", Icon: XCircle, title: inv.deliveryError ?? undefined }
+                              : ds === "complained"
+                                ? { label: "Spam-anmäld", cls: "bg-destructive/10 text-destructive border-destructive/20", Icon: XCircle }
+                                : ds === "failed"
+                                  ? { label: "Fel", cls: "bg-destructive/10 text-destructive border-destructive/20", Icon: XCircle, title: inv.deliveryError ?? undefined }
+                                  : ds === "delayed"
+                                    ? { label: "Fördröjd", cls: "bg-warning/10 text-warning border-warning/20", Icon: Clock }
+                                    : ds === "sent"
+                                      ? { label: "Skickad", cls: "bg-muted text-muted-foreground border-border", Icon: Send, title: "Resend tog emot mejlet — väntar på leveransbekräftelse via webhook" }
+                                      : { label: "Ej skickad", cls: "bg-muted text-muted-foreground border-border", Icon: Clock };
+                        const DeliveryIcon = deliveryMeta.Icon;
+                        return (
+                          <TableRow key={inv.id} data-testid={`row-invitation-${inv.id}`}>
+                            <TableCell className="font-medium">{inv.email}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-xs">
+                                {ROLE_CONFIG[inv.role]?.label || inv.role}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={inv.status === "pending" ? "default" : inv.status === "used" ? "secondary" : "outline"}
+                                className="text-xs"
+                              >
+                                {inv.status === "pending" ? "Väntande" : inv.status === "used" ? "Använd" : inv.status === "expired" ? "Utgången" : inv.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className={`text-xs gap-1 ${deliveryMeta.cls}`}
+                                title={deliveryMeta.title}
+                                data-testid={`badge-delivery-${inv.id}`}
+                              >
+                                <DeliveryIcon className="h-3 w-3" />
+                                {deliveryMeta.label}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString("sv-SE") : "-"}
+                            </TableCell>
+                            <TableCell>
+                              {inv.status === "pending" && (
+                                <div className="flex items-center justify-end gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    title="Skicka om inbjudan"
+                                    data-testid={`button-resend-invitation-${inv.id}`}
+                                    disabled={resendInviteMutation.isPending}
+                                    onClick={() => resendInviteMutation.mutate(inv.id)}
+                                  >
+                                    <Send className="h-3.5 w-3.5 text-muted-foreground" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    title="Ta bort inbjudan"
+                                    data-testid={`button-delete-invitation-${inv.id}`}
+                                    onClick={() => deleteInviteMutation.mutate(inv.id)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                                  </Button>
+                                </div>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </>
               )}
             </CardContent>
           </Card>

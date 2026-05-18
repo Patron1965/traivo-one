@@ -1485,11 +1485,21 @@ export const invitations = pgTable("invitations", {
   usedBy: varchar("used_by").references(() => users.id, { onDelete: 'set null' }),
   usedAt: timestamp("used_at"),
   expiresAt: timestamp("expires_at"),
+  // Resend message-id (sätts vid lyckad sendEmail). Används för att korrelera
+  // webhook-events (email.delivered/bounced/complained) tillbaka till denna rad.
+  resendMessageId: varchar("resend_message_id", { length: 128 }),
+  // Leveransstatus från Resend: null (ej skickat), "sent" (200 OK från API),
+  // "delivered" (webhook), "bounced", "complained", "failed".
+  deliveryStatus: varchar("delivery_status", { length: 20 }),
+  deliveryStatusAt: timestamp("delivery_status_at"),
+  // Fritext-felmeddelande från Resend (t.ex. "The traivo.se domain is not verified").
+  deliveryError: text("delivery_error"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_invitations_email").on(table.email),
   index("idx_invitations_tenant").on(table.tenantId),
   index("idx_invitations_status").on(table.status),
+  index("idx_invitations_resend_message").on(table.resendMessageId),
 ]);
 
 export const invitationsRelations = relations(invitations, ({ one }) => ({

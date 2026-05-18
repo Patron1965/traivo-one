@@ -91,5 +91,9 @@ export async function sendEmail(options: {
     throw err;
   }
 
-  return result;
+  return {
+    ...result,
+    messageId: result.data?.id ?? null,
+    fromEmail,
+  };
 }

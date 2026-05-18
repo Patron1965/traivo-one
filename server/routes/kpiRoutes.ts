@@ -2063,10 +2063,37 @@ app.post("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
         .returning();
     }
 
+    const sendResult = await sendInvitationEmail(req, invitation);
+    res.json({ ...sendResult.invitation, emailDelivered: sendResult.emailDelivered, emailError: sendResult.emailError });
+}));
+
+app.post("/api/invitations/:id/resend", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { id } = req.params;
+
+    const [existing] = await db
+      .select()
+      .from(invitations)
+      .where(eq(invitations.id, id));
+
+    if (!existing || existing.tenantId !== tenantId) {
+      throw new NotFoundError("Inbjudan hittades inte");
+    }
+    if (existing.status !== "pending") {
+      throw new ValidationError("Kan bara skicka om väntande inbjudningar");
+    }
+
+    console.log(`[invitation] Manual resend triggered for ${existing.email}`);
+    const sendResult = await sendInvitationEmail(req, existing);
+    res.json({ ...sendResult.invitation, emailDelivered: sendResult.emailDelivered, emailError: sendResult.emailError });
+}));
+
+async function sendInvitationEmail(req: any, invitation: any): Promise<{ invitation: any; emailDelivered: boolean; emailError: string | null }> {
     let emailDelivered = false;
     let emailError: string | null = null;
+    let messageId: string | null = null;
     try {
-      // Använd hosten där admin skapade inbjudan — då hamnar Lucas alltid på
+      // Använd hosten där admin skapade inbjudan — då hamnar mottagaren alltid på
       // samma deployment (t.ex. kinab-core-concepts--tomas155.replit.app),
       // inte på en intern dev-URL eller tom fallback.
       const forwardedProto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0]?.trim();
@@ -2080,13 +2107,13 @@ app.post("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
         owner: "Ägare", admin: "Admin", planner: "Planerare",
         technician: "Tekniker", user: "Användare", viewer: "Läsare",
       };
-      await sendEmail({
-        to: email.toLowerCase(),
+      const sendOutput = await sendEmail({
+        to: invitation.email,
         subject: "Du har bjudits in till Traivo",
         html: `
           <div style="font-family: Inter, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px;">
             <h2 style="color: #1B4B6B;">Välkommen till Traivo!</h2>
-            <p>Du har bjudits in med rollen <strong>${roleLabel[role] || role || "Användare"}</strong>.</p>
+            <p>Du har bjudits in med rollen <strong>${roleLabel[invitation.role] || invitation.role || "Användare"}</strong>.</p>
             <p>Klicka på knappen nedan för att komma igång:</p>
             <a href="${appUrl}" style="display: inline-block; padding: 12px 24px; background: #1B4B6B; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 16px 0;">Logga in på Traivo</a>
             <p style="color: #6B7C8C; font-size: 13px; margin-top: 24px;">Om du inte förväntat dig denna inbjudan kan du ignorera detta meddelande.</p>
@@ -2094,14 +2121,26 @@ app.post("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
         `,
       });
       emailDelivered = true;
-      console.log(`[invitation] Email sent to ${email.toLowerCase()}`);
+      messageId = (sendOutput as any)?.messageId ?? null;
+      console.log(`[invitation] Email accepted by Resend for ${invitation.email} (messageId=${messageId})`);
     } catch (err: any) {
       emailError = err?.message || String(err);
       console.error("[invitation] Failed to send email:", err?.resendError || err);
     }
 
-    res.json({ ...invitation, emailDelivered, emailError });
-}));
+    const [updated] = await db
+      .update(invitations)
+      .set({
+        resendMessageId: messageId,
+        deliveryStatus: emailDelivered ? "sent" : "failed",
+        deliveryStatusAt: new Date(),
+        deliveryError: emailError,
+      })
+      .where(eq(invitations.id, invitation.id))
+      .returning();
+
+    return { invitation: updated ?? invitation, emailDelivered, emailError };
+}
 
 app.delete("/api/invitations/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
