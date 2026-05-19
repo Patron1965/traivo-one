@@ -491,6 +491,7 @@ export interface IStorage {
   // System Dashboard - Audit Logs
   getAuditLogs(tenantId: string, options?: { limit?: number; offset?: number; action?: string; userId?: string }): Promise<AuditLog[]>;
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  deleteOldAuditLogs(opts: { loginOlderThanDays: number; otherOlderThanDays: number }): Promise<{ loginDeleted: number; otherDeleted: number }>;
   
   // Industry Packages
   getIndustryPackages(): Promise<IndustryPackage[]>;
@@ -4622,6 +4623,29 @@ export class DatabaseStorage implements IStorage {
   async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
     const [result] = await db.insert(auditLogs).values(log).returning();
     return result;
+  }
+
+  // Task #511: GDPR-retention för audit_logs. Login-händelser (action LIKE 'auth.login%')
+  // rensas vid sin egen tröskel; övriga audit-rader rensas vid en (oftast längre) tröskel.
+  async deleteOldAuditLogs(opts: { loginOlderThanDays: number; otherOlderThanDays: number }): Promise<{ loginDeleted: number; otherDeleted: number }> {
+    const loginDays = Math.max(1, Math.floor(opts.loginOlderThanDays));
+    const otherDays = Math.max(1, Math.floor(opts.otherOlderThanDays));
+
+    const loginRes = await db.execute(sql`
+      DELETE FROM audit_logs
+      WHERE action LIKE 'auth.login%'
+        AND created_at < NOW() - (${loginDays} || ' days')::interval
+    `);
+    const otherRes = await db.execute(sql`
+      DELETE FROM audit_logs
+      WHERE action NOT LIKE 'auth.login%'
+        AND created_at < NOW() - (${otherDays} || ' days')::interval
+    `);
+
+    return {
+      loginDeleted: (loginRes as any)?.rowCount ?? 0,
+      otherDeleted: (otherRes as any)?.rowCount ?? 0,
+    };
   }
 
   // Industry Packages

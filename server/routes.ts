@@ -17,6 +17,7 @@ import { registerSlaRiskRoutes } from "./routes/slaRiskRoutes";
 import { geocodeScheduler } from "./services/geocode-scheduler";
 import { notificationCleanupScheduler, getRetentionConfig } from "./services/notification-cleanup-scheduler";
 import { fortnoxMappingCleanupScheduler } from "./services/fortnox-mapping-cleanup-scheduler";
+import { auditCleanupScheduler } from "./services/audit-cleanup-scheduler";
 import { prodHealthCheckScheduler } from "./services/prod-health-check-scheduler";
 import { registerProdHealthCheckRoutes } from "./routes/prodHealthCheckRoutes";
 import { startWeeklyReportScheduler } from "./weekly-report";
@@ -87,6 +88,7 @@ export async function registerRoutes(
   geocodeScheduler.start();
   notificationCleanupScheduler.start();
   fortnoxMappingCleanupScheduler.start();
+  auditCleanupScheduler.start();
   capacityForecastScheduler.start();
   prodHealthCheckScheduler.start();
 
@@ -392,6 +394,35 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Failed to run fortnox mapping cleanup:", error);
       res.status(500).json({ error: "Kunde inte rensa Fortnox-mappningar" });
+    }
+  });
+
+  // Manuell trigger för audit-logg-städning (Task #511). Samma autentiserings-
+  // mönster som notifications/cleanup: cron via AUDIT_LOG_CLEANUP_TOKEN, eller
+  // admin/owner-session.
+  app.post("/api/admin/audit-logs/cleanup", async (req: any, res) => {
+    try {
+      const token = process.env.AUDIT_LOG_CLEANUP_TOKEN;
+      const provided = req.header("x-cleanup-token") || (typeof req.query.token === "string" ? req.query.token : undefined);
+      const tokenOk = !!token && provided === token;
+
+      if (!tokenOk) {
+        const userId = req.user?.claims?.sub;
+        if (!userId) {
+          return res.status(401).json({ error: "Ej autentiserad" });
+        }
+        const dbUser = await storage.getUser(userId);
+        const role = dbUser?.role || "user";
+        if (role !== "admin" && role !== "owner") {
+          return res.status(403).json({ error: "Ej behörig", message: "Administratörsrättigheter krävs." });
+        }
+      }
+
+      const result = await auditCleanupScheduler.runOnce();
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to run audit log cleanup:", error);
+      res.status(500).json({ error: "Kunde inte rensa audit-loggar" });
     }
   });
 
