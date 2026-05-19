@@ -162,8 +162,8 @@ export default function PlatformAdminPage() {
       toast({ title: "Användaren har raderats", description: "Hård radering klar." });
       closeDialog();
     },
-    onError: (err: any) => {
-      const msg = err?.message || "Okänt fel";
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Okänt fel";
       toast({ title: "Kunde inte radera", description: msg, variant: "destructive" });
     },
   });
@@ -182,8 +182,8 @@ export default function PlatformAdminPage() {
       toast({ title: "Användaren har anonymiserats" });
       closeDialog();
     },
-    onError: (err: any) => {
-      const msg = err?.message || "Okänt fel";
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Okänt fel";
       toast({ title: "Kunde inte anonymisera", description: msg, variant: "destructive" });
     },
   });
@@ -473,8 +473,13 @@ export default function PlatformAdminPage() {
                           <TableCell className="text-xs">
                             <div>{row.resourceId || "—"}</div>
                             {(() => {
-                              const c: any = row.changes || {};
-                              const r = c.deleted?.emailRedacted || c.before?.emailRedacted;
+                              type RedactedPii = { hash: string; length: number };
+                              type ChangesShape = {
+                                deleted?: { emailRedacted?: RedactedPii | null };
+                                before?: { emailRedacted?: RedactedPii | null };
+                              };
+                              const c = (row.changes ?? {}) as ChangesShape;
+                              const r = c.deleted?.emailRedacted ?? c.before?.emailRedacted;
                               if (!r) return null;
                               return (
                                 <div className="text-muted-foreground" title={`SHA-256 prefix • längd ${r.length}`}>
