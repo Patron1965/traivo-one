@@ -353,7 +353,13 @@ export function registerPlatformAdminRoutes(app: Express): void {
     requirePlatformOwner,
     asyncHandler(async (req, res) => {
       const limit = Math.min(parseInt((req.query.limit as string) || "200", 10), 500);
-      const actionFilter = (req.query.action as string) || "platform.";
+      // Endpointen är strikt låst till `platform.`-prefixet. Caller får
+      // skicka in en understräng (t.ex. `user.delete`) men prefixet
+      // tvingas alltid på server-side så endpointen aldrig kan användas
+      // för att läsa tenant-audit-rader.
+      const rawAction = (req.query.action as string) || "";
+      const sanitized = rawAction.replace(/^platform\.?/, "").replace(/[^a-zA-Z0-9._-]/g, "");
+      const actionFilter = `platform.${sanitized}`;
       const rows = await db
         .select()
         .from(auditLogs)
