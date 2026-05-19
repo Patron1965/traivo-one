@@ -1534,6 +1534,16 @@ export const auditLogs = pgTable("audit_logs", {
   index("idx_audit_logs_action").on(table.action),
   index("idx_audit_logs_created").on(table.createdAt),
   index("idx_audit_logs_tenant_created").on(table.tenantId, table.createdAt),
+  // Task #510: snabbare filtrering av platform-logins-vyn (action IN auth.login*)
+  index("idx_audit_logs_login_created")
+    .on(table.action, table.createdAt.desc())
+    .where(sql`action LIKE 'auth.login%'`),
+  index("idx_audit_logs_login_method")
+    .on(sql`(metadata->>'method')`)
+    .where(sql`action LIKE 'auth.login%'`),
+  index("idx_audit_logs_login_email")
+    .on(sql`(metadata->>'email')`)
+    .where(sql`action LIKE 'auth.login%'`),
 ]);
 
 // Relations
