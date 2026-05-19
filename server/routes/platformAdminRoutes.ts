@@ -3,7 +3,7 @@ import { createHash } from "crypto";
 import { and, desc, eq, like, or, sql } from "drizzle-orm";
 import { storage } from "../storage";
 import { db } from "../db";
-import { auditLogs, userTenantRoles, tenants } from "@shared/schema";
+import { auditLogs, userTenantRoles, tenants, users } from "@shared/schema";
 import { requirePlatformOwner } from "../platform-owner-middleware";
 
 /**
@@ -756,6 +756,214 @@ export function registerPlatformAdminRoutes(app: Express): void {
         .limit(limit);
       await logPlatformAccess(req, "platform.audit-log.list", null, { limit, actionFilter });
       res.json(rows);
+    }),
+  );
+
+  // GET /api/platform/logins — cross-user, filterbar inloggningshistorik.
+  // Läser auth.login* från audit_logs och joinar med users så vi kan visa
+  // e-post/namn även för borttagna/anonymiserade konton (då är user-raden
+  // borta men metadata.email finns kvar fram tills audit-rensning).
+  //
+  // Stödjer filter: outcome (success|failed), method (replit|password|
+  // portal|mobile), tenantId, ip (exakt eller substring), q (fri-text mot
+  // metadata.email, users.email, ip), from/to (ISO-tidsstämpel),
+  // limit/offset, format=csv för export.
+  app.get(
+    "/api/platform/logins",
+    requirePlatformOwner,
+    asyncHandler(async (req, res) => {
+      const outcome = (req.query.outcome as string) || "";
+      const method = (req.query.method as string) || "";
+      const tenantId = (req.query.tenantId as string) || "";
+      const ip = (req.query.ip as string) || "";
+      const q = ((req.query.q as string) || "").trim();
+      const from = (req.query.from as string) || "";
+      const to = (req.query.to as string) || "";
+      const format = ((req.query.format as string) || "json").toLowerCase();
+      const CSV_MAX = 50000;
+      const JSON_MAX = 1000;
+      // CSV-läget ignorerar ALLTID caller-angiven `limit`/`offset` och
+      // exporterar hela det filtrerade datasetet upp till CSV_MAX. Det
+      // stänger fönstret där en API-konsument kan trigga tyst
+      // trunkering genom att glömma höja limit — direkt farligt för
+      // GDPR/incident-utredningar. JSON-läget defaultar till 200 och
+      // tar emot caller-limit upp till JSON_MAX.
+      const parsedLimit = Number.parseInt((req.query.limit as string) || "200", 10);
+      const parsedOffset = Number.parseInt((req.query.offset as string) || "0", 10);
+      const limit =
+        format === "csv"
+          ? CSV_MAX
+          : Math.min(Math.max(Number.isFinite(parsedLimit) ? parsedLimit : 200, 1), JSON_MAX);
+      const offset =
+        format === "csv" ? 0 : Math.max(Number.isFinite(parsedOffset) ? parsedOffset : 0, 0);
+
+      const conditions = [
+        or(eq(auditLogs.action, "auth.login"), eq(auditLogs.action, "auth.login.failed")),
+      ];
+
+      if (outcome === "success") {
+        conditions.push(eq(auditLogs.action, "auth.login"));
+      } else if (outcome === "failed") {
+        conditions.push(eq(auditLogs.action, "auth.login.failed"));
+      }
+
+      const validMethods = new Set(["replit", "password", "portal", "mobile"]);
+      if (method && validMethods.has(method)) {
+        conditions.push(sql`${auditLogs.metadata}->>'method' = ${method}`);
+      }
+
+      if (tenantId) {
+        conditions.push(eq(auditLogs.tenantId, tenantId));
+      }
+
+      if (ip) {
+        conditions.push(sql`${auditLogs.ipAddress} ILIKE ${"%" + ip + "%"}`);
+      }
+
+      if (q) {
+        const like = `%${q}%`;
+        conditions.push(
+          sql`(${auditLogs.metadata}->>'email' ILIKE ${like}
+               OR ${users.email} ILIKE ${like}
+               OR ${auditLogs.ipAddress} ILIKE ${like})`,
+        );
+      }
+
+      if (from) {
+        const d = new Date(from);
+        if (!Number.isNaN(d.getTime())) {
+          conditions.push(sql`${auditLogs.createdAt} >= ${d.toISOString()}`);
+        }
+      }
+      if (to) {
+        const d = new Date(to);
+        if (!Number.isNaN(d.getTime())) {
+          conditions.push(sql`${auditLogs.createdAt} <= ${d.toISOString()}`);
+        }
+      }
+
+      const whereExpr = and(...conditions);
+
+      const rowsQuery = db
+        .select({
+          id: auditLogs.id,
+          createdAt: auditLogs.createdAt,
+          userId: auditLogs.userId,
+          tenantId: auditLogs.tenantId,
+          action: auditLogs.action,
+          ipAddress: auditLogs.ipAddress,
+          userAgent: auditLogs.userAgent,
+          metadata: auditLogs.metadata,
+          userEmail: users.email,
+          userFirstName: users.firstName,
+          userLastName: users.lastName,
+        })
+        .from(auditLogs)
+        .leftJoin(users, eq(users.id, auditLogs.userId))
+        .where(whereExpr)
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(limit)
+        .offset(offset);
+
+      if (format === "csv") {
+        const rows = await rowsQuery;
+        await logPlatformAccess(req, "platform.logins.export", null, {
+          format: "csv",
+          returned: rows.length,
+          filters: { outcome, method, tenantId, ip, q, from, to },
+        });
+        const csvEscape = (value: unknown): string => {
+          if (value == null) return "";
+          const s = typeof value === "object" ? JSON.stringify(value) : String(value);
+          if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+          return s;
+        };
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="traivo-logins-${new Date().toISOString().slice(0, 10)}.csv"`,
+        );
+        res.write(
+          [
+            "createdAt",
+            "outcome",
+            "method",
+            "tenantId",
+            "userId",
+            "userEmail",
+            "metadataEmail",
+            "firstName",
+            "lastName",
+            "ipAddress",
+            "userAgent",
+            "reason",
+          ].join(",") + "\n",
+        );
+        for (const r of rows) {
+          const meta = (r.metadata ?? {}) as Record<string, unknown>;
+          const outcomeVal = r.action === "auth.login" ? "success" : "failed";
+          res.write(
+            [
+              r.createdAt,
+              outcomeVal,
+              meta.method ?? "",
+              r.tenantId ?? "",
+              r.userId ?? "",
+              r.userEmail ?? "",
+              meta.email ?? "",
+              r.userFirstName ?? "",
+              r.userLastName ?? "",
+              r.ipAddress ?? "",
+              r.userAgent ?? "",
+              meta.reason ?? "",
+            ]
+              .map(csvEscape)
+              .join(",") + "\n",
+          );
+        }
+        res.end();
+        return;
+      }
+
+      const [rows, totalRow] = await Promise.all([
+        rowsQuery,
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(auditLogs)
+          .leftJoin(users, eq(users.id, auditLogs.userId))
+          .where(whereExpr),
+      ]);
+      const total = totalRow[0]?.count ?? 0;
+
+      const shaped = rows.map((r) => {
+        const meta = (r.metadata ?? {}) as Record<string, unknown>;
+        return {
+          id: r.id,
+          createdAt: r.createdAt,
+          outcome: r.action === "auth.login" ? "success" : "failed",
+          action: r.action,
+          method: (meta.method as string | undefined) ?? null,
+          reason: (meta.reason as string | undefined) ?? null,
+          metadataEmail: (meta.email as string | undefined) ?? null,
+          tenantId: r.tenantId,
+          userId: r.userId,
+          userEmail: r.userEmail,
+          userFirstName: r.userFirstName,
+          userLastName: r.userLastName,
+          ipAddress: r.ipAddress,
+          userAgent: r.userAgent,
+        };
+      });
+
+      await logPlatformAccess(req, "platform.logins.list", null, {
+        returned: shaped.length,
+        total,
+        limit,
+        offset,
+        filters: { outcome, method, tenantId, ip, q, from, to },
+      });
+
+      res.json({ logins: shaped, total, limit, offset });
     }),
   );
 }

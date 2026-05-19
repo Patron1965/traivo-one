@@ -34,7 +34,15 @@ import {
   Users as UsersIcon,
   Eye,
   Download,
+  KeyRound,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -103,6 +111,30 @@ interface UsersPage {
   offset: number;
 }
 
+interface LoginRow {
+  id: string;
+  createdAt: string | null;
+  outcome: "success" | "failed";
+  action: string;
+  method: string | null;
+  reason: string | null;
+  metadataEmail: string | null;
+  tenantId: string | null;
+  userId: string | null;
+  userEmail: string | null;
+  userFirstName: string | null;
+  userLastName: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+}
+
+interface LoginsPage {
+  logins: LoginRow[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 type DialogMode = "delete" | "anonymize" | "detail";
 
 function fullName(u: Pick<PlatformUser, "firstName" | "lastName">): string {
@@ -154,6 +186,81 @@ export default function PlatformAdminPage() {
     queryKey: ["/api/platform/audit-log"],
     enabled: isPlatformOwner,
   });
+
+  // ---- Inloggningshistorik (Säkerhet → Logins) ----
+  const [loginOutcome, setLoginOutcome] = useState<"all" | "success" | "failed">("all");
+  const [loginMethod, setLoginMethod] = useState<"all" | "replit" | "password" | "portal" | "mobile">("all");
+  const [loginTenantId, setLoginTenantId] = useState("");
+  const [loginIp, setLoginIp] = useState("");
+  const [loginQ, setLoginQ] = useState("");
+  const [loginFrom, setLoginFrom] = useState("");
+  const [loginTo, setLoginTo] = useState("");
+  const [loginOffset, setLoginOffset] = useState(0);
+  const loginLimit = 100;
+
+  const loginsParams = new URLSearchParams();
+  if (loginOutcome !== "all") loginsParams.set("outcome", loginOutcome);
+  if (loginMethod !== "all") loginsParams.set("method", loginMethod);
+  if (loginTenantId) loginsParams.set("tenantId", loginTenantId);
+  if (loginIp) loginsParams.set("ip", loginIp);
+  if (loginQ) loginsParams.set("q", loginQ);
+  if (loginFrom) {
+    const d = new Date(loginFrom);
+    if (!Number.isNaN(d.getTime())) loginsParams.set("from", d.toISOString());
+  }
+  if (loginTo) {
+    const d = new Date(loginTo);
+    if (!Number.isNaN(d.getTime())) loginsParams.set("to", d.toISOString());
+  }
+  loginsParams.set("limit", String(loginLimit));
+  loginsParams.set("offset", String(loginOffset));
+  const loginsQs = loginsParams.toString();
+
+  const loginsQuery = useQuery<LoginsPage>({
+    queryKey: ["/api/platform/logins", loginsQs],
+    enabled: isPlatformOwner,
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/platform/logins?${loginsQs}`);
+      return (await res.json()) as LoginsPage;
+    },
+  });
+
+  async function exportLoginsCsv() {
+    try {
+      const params = new URLSearchParams(loginsParams);
+      params.set("format", "csv");
+      params.delete("limit");
+      params.delete("offset");
+      const res = await apiRequest("GET", `/api/platform/logins?${params.toString()}`);
+      const blob = await res.blob();
+      const cd = res.headers.get("content-disposition") || "";
+      const match = cd.match(/filename="?([^"]+)"?/i);
+      const filename = match?.[1] || `traivo-logins-${new Date().toISOString().slice(0, 10)}.csv`;
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(href);
+      toast({ title: "Export klar", description: filename });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Okänt fel";
+      toast({ title: "Export misslyckades", description: msg, variant: "destructive" });
+    }
+  }
+
+  function resetLoginFilters() {
+    setLoginOutcome("all");
+    setLoginMethod("all");
+    setLoginTenantId("");
+    setLoginIp("");
+    setLoginQ("");
+    setLoginFrom("");
+    setLoginTo("");
+    setLoginOffset(0);
+  }
 
   // Hämta detalj (inkl. resourceImpact) både för detalj-fliken OCH för
   // destruktiva dialoger — så att användaren ser exakt vilka FK-rader
@@ -354,6 +461,10 @@ export default function PlatformAdminPage() {
           <TabsTrigger value="audit" data-testid="tab-audit">
             <ClipboardList className="h-4 w-4 mr-2" />
             Audit-logg
+          </TabsTrigger>
+          <TabsTrigger value="logins" data-testid="tab-logins">
+            <KeyRound className="h-4 w-4 mr-2" />
+            Inloggningshistorik
           </TabsTrigger>
         </TabsList>
 
@@ -588,6 +699,240 @@ export default function PlatformAdminPage() {
                     })}
                   </TableBody>
                 </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="logins" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <CardTitle data-testid="text-logins-total">
+                  Inloggningshistorik
+                  {loginsQuery.data && (
+                    <span className="text-muted-foreground font-normal text-sm ml-2">
+                      ({loginsQuery.data.total} totalt, visar {loginsQuery.data.logins.length} fr.o.m. {loginOffset + 1})
+                    </span>
+                  )}
+                </CardTitle>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={resetLoginFilters}
+                    data-testid="button-logins-reset"
+                  >
+                    Återställ filter
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={exportLoginsCsv}
+                    data-testid="button-logins-export-csv"
+                  >
+                    <Download className="h-4 w-4 mr-2" /> Exportera CSV
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <Label className="text-xs">Sök (e-post / IP)</Label>
+                  <Input
+                    value={loginQ}
+                    onChange={(e) => {
+                      setLoginQ(e.target.value);
+                      setLoginOffset(0);
+                    }}
+                    placeholder="t.ex. anna@ eller 192.168."
+                    data-testid="input-logins-q"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Utfall</Label>
+                  <Select
+                    value={loginOutcome}
+                    onValueChange={(v) => {
+                      setLoginOutcome(v as typeof loginOutcome);
+                      setLoginOffset(0);
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-logins-outcome">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Alla</SelectItem>
+                      <SelectItem value="success">Lyckade</SelectItem>
+                      <SelectItem value="failed">Misslyckade</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Metod</Label>
+                  <Select
+                    value={loginMethod}
+                    onValueChange={(v) => {
+                      setLoginMethod(v as typeof loginMethod);
+                      setLoginOffset(0);
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-logins-method">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Alla</SelectItem>
+                      <SelectItem value="replit">Replit (web)</SelectItem>
+                      <SelectItem value="password">Lösenord</SelectItem>
+                      <SelectItem value="portal">Kundportal</SelectItem>
+                      <SelectItem value="mobile">Mobil</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Tenant ID</Label>
+                  <Input
+                    value={loginTenantId}
+                    onChange={(e) => {
+                      setLoginTenantId(e.target.value);
+                      setLoginOffset(0);
+                    }}
+                    placeholder="t.ex. kinab"
+                    data-testid="input-logins-tenant"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">IP-adress (substring)</Label>
+                  <Input
+                    value={loginIp}
+                    onChange={(e) => {
+                      setLoginIp(e.target.value);
+                      setLoginOffset(0);
+                    }}
+                    placeholder="t.ex. 10.0."
+                    data-testid="input-logins-ip"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Från (datum/tid)</Label>
+                  <Input
+                    type="datetime-local"
+                    value={loginFrom}
+                    onChange={(e) => {
+                      setLoginFrom(e.target.value);
+                      setLoginOffset(0);
+                    }}
+                    data-testid="input-logins-from"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Till (datum/tid)</Label>
+                  <Input
+                    type="datetime-local"
+                    value={loginTo}
+                    onChange={(e) => {
+                      setLoginTo(e.target.value);
+                      setLoginOffset(0);
+                    }}
+                    data-testid="input-logins-to"
+                  />
+                </div>
+              </div>
+
+              {loginsQuery.isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : (loginsQuery.data?.logins ?? []).length === 0 ? (
+                <div className="text-center text-muted-foreground py-8" data-testid="text-logins-empty">
+                  Inga inloggningar matchar filtren.
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>När</TableHead>
+                      <TableHead>Användare / E-post</TableHead>
+                      <TableHead>Metod</TableHead>
+                      <TableHead>Utfall</TableHead>
+                      <TableHead>Tenant</TableHead>
+                      <TableHead>IP</TableHead>
+                      <TableHead>User-Agent</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loginsQuery.data!.logins.map((row) => {
+                      const displayName =
+                        [row.userFirstName, row.userLastName].filter(Boolean).join(" ") || null;
+                      const displayEmail = row.userEmail || row.metadataEmail || "—";
+                      return (
+                        <TableRow key={row.id} data-testid={`row-login-${row.id}`}>
+                          <TableCell className="text-xs whitespace-nowrap">
+                            {formatDate(row.createdAt)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm" data-testid={`text-login-email-${row.id}`}>
+                              {displayEmail}
+                            </div>
+                            {displayName && (
+                              <div className="text-xs text-muted-foreground">{displayName}</div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{row.method ?? "—"}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {row.outcome === "success" ? (
+                              <Badge>Lyckad</Badge>
+                            ) : (
+                              <Badge variant="destructive" title={row.reason ?? undefined}>
+                                Misslyckad
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs">{row.tenantId ?? "—"}</TableCell>
+                          <TableCell className="text-xs font-mono">{row.ipAddress ?? "—"}</TableCell>
+                          <TableCell
+                            className="text-xs max-w-xs truncate"
+                            title={row.userAgent ?? ""}
+                          >
+                            {row.userAgent ?? "—"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+
+              {loginsQuery.data && loginsQuery.data.total > loginLimit && (
+                <div className="flex items-center justify-between pt-2 text-sm">
+                  <span className="text-muted-foreground">
+                    Sida {Math.floor(loginOffset / loginLimit) + 1} av{" "}
+                    {Math.max(1, Math.ceil(loginsQuery.data.total / loginLimit))}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={loginOffset === 0}
+                      onClick={() => setLoginOffset(Math.max(0, loginOffset - loginLimit))}
+                      data-testid="button-logins-prev"
+                    >
+                      Föregående
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={loginOffset + loginLimit >= loginsQuery.data.total}
+                      onClick={() => setLoginOffset(loginOffset + loginLimit)}
+                      data-testid="button-logins-next"
+                    >
+                      Nästa
+                    </Button>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>

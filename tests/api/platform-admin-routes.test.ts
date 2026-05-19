@@ -222,6 +222,54 @@ describe("/api/platform/users/:id DELETE — confirm + last-owner-skydd", () => 
     expect(audit.length).toBeGreaterThanOrEqual(1);
   });
 
+  it("GET /api/platform/logins?format=csv returnerar HELA filtrerade datasetet (ingen tyst trunkering vid 200)", async () => {
+    // Task #507 — incident/GDPR-export får inte tyst kapas till 200 rader
+    // bara för att callern glömt skicka `limit`. Vi seedar 250 auth.login-
+    // events för en unik user-id och verifierar att default-CSV returnerar
+    // alla 250.
+    const LOGIN_TEST_UID = `${NS}-login-csv`;
+    await db.insert(users).values({ id: LOGIN_TEST_UID, email: `${LOGIN_TEST_UID}@test.local` }).onConflictDoNothing();
+    const rows: (typeof auditLogs.$inferInsert)[] = Array.from({ length: 250 }, (_, i) => ({
+      tenantId: null,
+      userId: LOGIN_TEST_UID,
+      action: "auth.login",
+      resourceType: "auth",
+      resourceId: LOGIN_TEST_UID,
+      changes: null,
+      ipAddress: `10.0.0.${i % 255}`,
+      userAgent: "vitest",
+      metadata: { method: "password", email: `${LOGIN_TEST_UID}@test.local` },
+    }));
+    await db.insert(auditLogs).values(rows);
+
+    try {
+      // 1) Default JSON utan limit → kapad till 200 (sane default)
+      const jsonRes = await fetch(
+        `${baseUrl}/api/platform/logins?q=${encodeURIComponent(LOGIN_TEST_UID)}`,
+        { headers: { "x-test-user-id": KINAB_OWNER_UID } },
+      );
+      expect(jsonRes.status).toBe(200);
+      const jsonBody = await jsonRes.json();
+      expect(jsonBody.total).toBeGreaterThanOrEqual(250);
+      expect(jsonBody.logins.length).toBe(200);
+
+      // 2) CSV utan limit → ska INTE kapa till 200, ska returnera alla 250
+      const csvRes = await fetch(
+        `${baseUrl}/api/platform/logins?format=csv&q=${encodeURIComponent(LOGIN_TEST_UID)}`,
+        { headers: { "x-test-user-id": KINAB_OWNER_UID } },
+      );
+      expect(csvRes.status).toBe(200);
+      expect(csvRes.headers.get("content-type")).toMatch(/text\/csv/);
+      const csv = await csvRes.text();
+      const lines = csv.trim().split("\n");
+      // Header + 250 datarader
+      expect(lines.length).toBe(251);
+    } finally {
+      await db.delete(auditLogs).where(eq(auditLogs.userId, LOGIN_TEST_UID));
+      await db.delete(users).where(eq(users.id, LOGIN_TEST_UID));
+    }
+  });
+
   it("två samtidiga DELETE mot samma user serialiseras (advisory-lås) — båda klarar sig utan race-fel", async () => {
     // Båda anropen skickas parallellt. Med pg_advisory_xact_lock i
     // withUserLock körs den andra DELETE först när den första committat.
