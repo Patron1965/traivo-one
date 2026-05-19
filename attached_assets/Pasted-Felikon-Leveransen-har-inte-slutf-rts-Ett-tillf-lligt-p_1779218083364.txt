@@ -1,0 +1,79 @@
+Felikon
+Leveransen har inte slutförts
+Ett tillfälligt problem uppstod när meddelandet skulle levereras till noreply@traivo.se. Gmail försöker igen i 47 timmar till innan försöket avbryts. Vi meddelar dig om meddelandet inte går att leverera.
+LÄS MER
+Svaret var:
+The recipient server did not accept our requests to connect. For more information, go to https://support.google.com/mail/answer/7720 [traivo.se 185.158.133.1: timed out]
+
+Reporting-MTA: dns; googlemail.com
+Arrival-Date: Mon, 18 May 2026 11:06:41 -0700 (PDT)
+X-Original-Message-ID: <CADm38bd5x51S2CtKdKp-FsGN2bi2A_9uGMufBMMDsku8Oko4qg@mail.gmail.com>
+
+Final-Recipient: rfc822; noreply@traivo.se
+Action: delayed
+Status: 4.4.1
+Diagnostic-Code: smtp; The recipient server did not accept our requests to connect. For more information, go to https://support.google.com/mail/answer/7720
+[traivo.se 185.158.133.1: timed out]
+Last-Attempt-Date: Tue, 19 May 2026 11:41:21 -0700 (PDT)
+Will-Retry-Until: Thu, 21 May 2026 11:06:41 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1779216021; cv=none;
+       d=google.com; s=arc-20240605;
+       b=aYC07cpiT5GkCsWv5pofAsN3TyLnOGeqHVBe8ZFP/18O9Ti6LIe3Xa/qx0vkODSDWf
+        uCsO3GINPcDvt0K2oXYMoTHYSvKTVbohqFXEC1pc+Yz1Hgc+VIap+CN6FYo6oh8hbXMd
+        RKX7uJ7GpUwPJePDJlzB/Wach6pk5oSRkKBKupudVaUSzID45itF+wVCmSQjxW6D0OYx
+        hZ0G5jfTrXK+6NhsNrSYe1Kjpj6bXAeKsjjjY972I6BM4DYQsURLiYdyAzmlWs9ragL8
+        R+L3dwItR+r4aMPPWW4jMWrBFS7JmC0nAB77oQFCNIs0Ccclp5bvKJUEuxwS4BV31nbN
+        uaHg==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+       h=to:subject:message-id:date:from:mime-version:dkim-signature;
+       bh=DXupw4LbBkZrfPCNhjTP5PMtJPJIUcvlhB8d4GO/Nds=;
+       fh=0fAGgbWFXprwNZ+xPpea/bYJoM97MxdlG/1d2cdX/B0=;
+       b=h9bWUyXyqhrWILyjhgUQvRCSiqY4euPG3KdaYn588+EW5lHlHYiymOsyv8vS7FKyhN
+        SLyMP7vvEXhDgg02BNXu8ydj7CZ3EXK7zOGciRpIO4wvEG9pO2czAQTFB3N5FsONkZIW
+        egEZdMeSz540OelEYftfwE8d19rucvU4EH3dIht8RuN2wPydQ2LIHfsfDGFawFkRhill
+        TX6kQZrmc9EJgJyyfjB25O9tYYVTzgD9Vf63ZgTkwiIXIka6qGsOxCu8ddxXzxZ6w6Uf
+        fu/RAwgyiREtbjHE5ntL8+3xGIS62rFFMxnwo98yc8v7pvEnmPApSLtg4PO0hpVd2ndb
+        dQ7g==;
+       darn=traivo.se
+ARC-Authentication-Results: i=1; mx.google.com; arc=none
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+       d=nordicrouting-se.20251104.gappssmtp.com; s=20251104; t=1779216021; x=1779820821; darn=traivo.se;
+       h=to:subject:message-id:date:from:mime-version:from:to:cc:subject
+        :date:message-id:reply-to;
+       bh=DXupw4LbBkZrfPCNhjTP5PMtJPJIUcvlhB8d4GO/Nds=;
+       b=DieVUTXTTChNn5Lulw74f5o1HzHscTP23uYIl1vUnjPqZT+Gks+qqdLQmkvmKXV4kp
+        +VB64iypspod9HZkL5aknPiKXKalHtyzI4pADFsdBC2qTGO4eYdgPWrew8TAJv8HQqgx
+        t9Pl2zV0vbhRQpn+KquMeA5D7i81HOAe+z9vCVhKu+/08IQufjmN0yqZ+dICsZjZrTBf
+        D6RSDsNklnlvm/zw1jtx/AHbQ6/OWSE9MhW9fsEDwOgMu4AEEay8XiaaO5a6qFeybXMt
+        6pXkOg+O1BnAWsfMlc5ayvs3MIJLUeGjJpUs2EW5Gi4uHatLrsSgMqya4Ow/eEvXV3iB
+        2CUw==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+       d=1e100.net; s=20251104; t=1779216021; x=1779820821;
+       h=to:subject:message-id:date:from:mime-version:x-gm-gg
+        :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
+       bh=DXupw4LbBkZrfPCNhjTP5PMtJPJIUcvlhB8d4GO/Nds=;
+       b=dKrIj+wVmRdxhlED5X8Zlz2YWUMfrQMVbMofM34Etce6gAPf5R4T5lUG3Dyb3IZKgP
+        AutFdaRlKLpy2SxWpjYRqtxqfO1/XZC27A6f9OM6ctEgyj7HiM4h6ITkwMSAXLt/qV2J
+        xTa2KGB3aJPufzM413Bgs/vGCpLYFHYG+kEoU1OCl/k/+fcpxFBD8MRTjeA9PyvxXcdf
+        tehd2TVbpQ9bTI4s/G1XPg2p+nEiCsAMxL8UWQoo5rwAK8UT1E0qR0c3FDjlL6Qm8cgZ
+        VRR/da2tjpAg1brPBmal61aGD+LE6zWpykLqx45LPKqh8ehcmSs910JFEbhmsDXFXEQl
+        C5cg==
+X-Gm-Message-State: AOJu0YxJs1rXQc94JyS3OyGO+gQjZ7KsgZNg/Xi0ReiUT4HwOSAFog1N
+	hjuyuiuOAZCSgMrI5hFf2iowrHCbuhObC6c56Rl5iC/fL1vMFevAv772WjbapxsPbapXv+4T3+E
+	39mc9ZchkUemaV5jP2vbhCmJgl/oU9J20GDz37uVL8TPh31eAv7vz
+X-Gm-Gg: Acq92OFqkama+nnMwmREjmcV91Vnp4EdgL1Hwojhk5q1UtEM8PsTmXTOB6Hv1Y2XmaD
+	1DZFl3Zu1X2Yh/gBXyFbTRyCbAHvlo+xRS7LlQDvPQ8D7LaOsB8TztenJVWj358BQSz/YiklL62
+	wTHo4fLymG/CRqsIR2nhYlTqWez2U8VjD7PpO1N2CL0mQFQz57Tr376LktwP/q46LlCm9RKQuYB
+	Likqc6uYps3PDSyaLU/kOfnQnBeWRgC8qjCYYdkKr1ICfHhuRPu3FqUrhlSl4Ukpnqs9Th6VzyM
+	BejxKelg
+X-Received: by 2002:a05:6122:2881:b0:575:634a:a604 with SMTP id
+71dfb90a1353d-5760c00211bmr9370370e0c.6.1779127601922; Mon, 18 May 2026
+11:06:41 -0700 (PDT)
+MIME-Version: 1.0
+From: =?UTF-8?Q?Tomas_Bj=C3=B6rnberg?= <tomas@nordicrouting.se>
+Date: Mon, 18 May 2026 20:06:25 +0200
+X-Gm-Features: AVHnY4Jr8McfPfJBBlmnRCOMIZZaTJpJm-zVV_3k6M8eU0knDQ7Rehwx8S2q7CQ
+Message-ID: <CADm38bd5x51S2CtKdKp-FsGN2bi2A_9uGMufBMMDsku8Oko4qg@mail.gmail.com>
+Subject: test
+To: "noreply@traivo.se" <noreply@traivo.se>
+Content-Type: multipart/alternative; boundary="000000000000b913bf06521b6c30"
