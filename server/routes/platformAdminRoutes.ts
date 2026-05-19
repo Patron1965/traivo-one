@@ -1,6 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createHash } from "crypto";
-import { and, desc, eq, like, sql } from "drizzle-orm";
+import { and, desc, eq, like, or, sql } from "drizzle-orm";
 import { storage } from "../storage";
 import { db } from "../db";
 import { auditLogs, userTenantRoles, tenants } from "@shared/schema";
@@ -343,6 +343,106 @@ export function registerPlatformAdminRoutes(app: Express): void {
         success: true,
         fkImpact: result.impact.fkImpact,
         lostInviterInvitations: result.impact.lostInviterInvitations,
+      });
+    }),
+  );
+
+  // GET /api/platform/users/:id/history — full historik per användare
+  // (komplett audit-tidslinje + alla medlemskap + senaste inloggningar).
+  // Avsedd för incident-utredningar och GDPR-förfrågningar.
+  app.get(
+    "/api/platform/users/:id/history",
+    requirePlatformOwner,
+    asyncHandler(async (req, res) => {
+      const targetId = req.params.id;
+      const user = await storage.getUser(targetId);
+      if (!user) {
+        await logPlatformAccess(req, "platform.user.history.notfound", targetId, { status: 404 });
+        return res.status(404).json({ error: "Användaren hittades inte." });
+      }
+
+      const parsedLimit = Number.parseInt((req.query.limit as string) || "100", 10);
+      const parsedOffset = Number.parseInt((req.query.offset as string) || "0", 10);
+      const limit = Math.min(Math.max(Number.isFinite(parsedLimit) ? parsedLimit : 100, 1), 500);
+      const offset = Math.max(Number.isFinite(parsedOffset) ? parsedOffset : 0, 0);
+
+      // Hela tidslinjen: rader där användaren är aktör (userId) ELLER mål
+      // (resourceId) — vi taggar varje rad så frontend kan visa rollen.
+      const timelineRows = await db
+        .select()
+        .from(auditLogs)
+        .where(or(eq(auditLogs.userId, targetId), eq(auditLogs.resourceId, targetId)))
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(limit)
+        .offset(offset);
+
+      const timeline = timelineRows.map((row) => {
+        const isActor = row.userId === targetId;
+        const isTarget = row.resourceId === targetId;
+        const role: "actor" | "target" | "both" =
+          isActor && isTarget ? "both" : isActor ? "actor" : "target";
+        return { ...row, role };
+      });
+
+      const [{ count: totalCount }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(auditLogs)
+        .where(or(eq(auditLogs.userId, targetId), eq(auditLogs.resourceId, targetId)));
+
+      // Alla medlemskap (aktiva + inaktiva), nyaste först.
+      const memberships = await db
+        .select({
+          tenantId: userTenantRoles.tenantId,
+          tenantName: tenants.name,
+          role: userTenantRoles.role,
+          isActive: userTenantRoles.isActive,
+          assignedBy: userTenantRoles.assignedBy,
+          createdAt: userTenantRoles.createdAt,
+        })
+        .from(userTenantRoles)
+        .leftJoin(tenants, eq(tenants.id, userTenantRoles.tenantId))
+        .where(eq(userTenantRoles.userId, targetId))
+        .orderBy(desc(userTenantRoles.createdAt));
+
+      // Senaste inloggningar: i dag loggas inte explicita login-events i
+      // audit_logs (vi har `users.lastLoginAt` istället). Vi tar med
+      // eventuella framtida login-actions ("login", "auth.login*",
+      // "*.login") så endpointen redan är förberedd, plus fallback med
+      // senaste kända login-tidsstämpel från user-raden.
+      const recentLogins = await db
+        .select()
+        .from(auditLogs)
+        .where(
+          and(
+            eq(auditLogs.userId, targetId),
+            or(
+              eq(auditLogs.action, "login"),
+              like(auditLogs.action, "auth.login%"),
+              like(auditLogs.action, "%.login"),
+            ),
+          ),
+        )
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(20);
+
+      await logPlatformAccess(req, "platform.user.history.read", targetId, {
+        limit,
+        offset,
+        timelineReturned: timeline.length,
+        timelineTotal: totalCount,
+        membershipCount: memberships.length,
+        recentLoginsCount: recentLogins.length,
+      });
+
+      res.json({
+        userId: targetId,
+        lastLoginAt: user.lastLoginAt,
+        timeline,
+        timelineTotal: totalCount,
+        limit,
+        offset,
+        memberships,
+        recentLogins,
       });
     }),
   );

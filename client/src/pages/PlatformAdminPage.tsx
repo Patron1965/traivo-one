@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -80,6 +80,21 @@ interface UserDetail {
   recentAuditAsTarget: AuditLogRow[];
 }
 
+interface TimelineRow extends AuditLogRow {
+  role: "actor" | "target" | "both";
+}
+
+interface UserHistory {
+  userId: string;
+  lastLoginAt: string | null;
+  timeline: TimelineRow[];
+  timelineTotal: number;
+  limit: number;
+  offset: number;
+  memberships: Membership[];
+  recentLogins: AuditLogRow[];
+}
+
 interface UsersPage {
   users: PlatformUser[];
   total: number;
@@ -115,6 +130,9 @@ export default function PlatformAdminPage() {
   const [confirmText, setConfirmText] = useState("");
   const [reason, setReason] = useState("");
   const [force, setForce] = useState(false);
+  const HISTORY_PAGE_SIZE = 100;
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [historyTimeline, setHistoryTimeline] = useState<TimelineRow[]>([]);
 
   // Server-side gate (källan till sanning) — visar bara sidan om backend bekräftar.
   const meQuery = useQuery<{ isPlatformOwner: boolean; userId: string } | null>({
@@ -143,6 +161,41 @@ export default function PlatformAdminPage() {
     queryKey: ["/api/platform/users", target?.id],
     enabled: !!target?.id,
   });
+
+  // Full historik laddas bara när detalj-dialogen är öppen (sparar
+  // bandbredd om plattformsägaren bara använder snabb-åtgärderna).
+  // Explicit queryFn — default-fetchern bygger URL via queryKey.join("/")
+  // vilket inte kan uttrycka query-parametrar.
+  const historyQuery = useQuery<UserHistory>({
+    queryKey: [
+      "/api/platform/users",
+      target?.id,
+      "history",
+      { limit: HISTORY_PAGE_SIZE, offset: historyOffset },
+    ],
+    enabled: !!target?.id && mode === "detail",
+    queryFn: async () => {
+      const url = `/api/platform/users/${target!.id}/history?limit=${HISTORY_PAGE_SIZE}&offset=${historyOffset}`;
+      const res = await apiRequest("GET", url);
+      return (await res.json()) as UserHistory;
+    },
+  });
+
+  // Ackumulera sidor när användaren klickar "Visa fler" — håller den
+  // fullständiga listan i state så det går att bläddra bakåt i tiden
+  // utan en hård 500-rad-tak. Reset när dialog/target byter.
+  useEffect(() => {
+    if (!historyQuery.data) return;
+    setHistoryTimeline((prev) => {
+      if (historyQuery.data!.offset === 0) return historyQuery.data!.timeline;
+      const seen = new Set(prev.map((r) => r.id));
+      const merged = [...prev];
+      for (const row of historyQuery.data!.timeline) {
+        if (!seen.has(row.id)) merged.push(row);
+      }
+      return merged;
+    });
+  }, [historyQuery.data]);
 
   // Server gör nu filtreringen — vi visar bara responsen direkt.
   const filtered = users;
@@ -194,6 +247,8 @@ export default function PlatformAdminPage() {
     setConfirmText("");
     setReason("");
     setForce(false);
+    setHistoryOffset(0);
+    setHistoryTimeline([]);
   };
 
   const closeDialog = () => {
@@ -314,7 +369,12 @@ export default function PlatformAdminPage() {
                   </TableHeader>
                   <TableBody>
                     {filtered.map((u) => (
-                      <TableRow key={u.id} data-testid={`row-user-${u.id}`}>
+                      <TableRow
+                        key={u.id}
+                        data-testid={`row-user-${u.id}`}
+                        className="cursor-pointer hover-elevate"
+                        onClick={() => openDialog(u, "detail")}
+                      >
                         <TableCell>
                           <div className="font-medium" data-testid={`text-name-${u.id}`}>{fullName(u)}</div>
                           <div className="text-xs text-muted-foreground">{u.id.slice(0, 8)}…</div>
@@ -348,7 +408,7 @@ export default function PlatformAdminPage() {
                         </TableCell>
                         <TableCell className="text-xs">{formatDate(u.createdAt)}</TableCell>
                         <TableCell className="text-xs">{formatDate(u.lastLoginAt)}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex justify-end gap-2">
                             <Button
                               size="sm"
@@ -589,41 +649,112 @@ export default function PlatformAdminPage() {
                 </p>
               </div>
 
-              <div>
+              <div data-testid="section-recent-logins">
                 <h4 className="text-sm font-semibold mb-2">
-                  Senaste audit-händelser där användaren är mål ({detailQuery.data.recentAuditAsTarget.length})
+                  Senaste inloggningar
                 </h4>
-                {detailQuery.data.recentAuditAsTarget.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Inga händelser.</p>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Senast känd inloggning:{" "}
+                  <span data-testid="text-last-login">
+                    {formatDate(historyQuery.data?.lastLoginAt ?? target?.lastLoginAt ?? null)}
+                  </span>
+                </p>
+                {historyQuery.isLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Hämtar historik…
+                  </div>
+                ) : (historyQuery.data?.recentLogins ?? []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Inga login-events i audit-loggen ännu (login-events loggas inte separat
+                    idag — endast tidsstämpeln ovan finns).
+                  </p>
                 ) : (
-                  <ul className="text-xs space-y-1 max-h-48 overflow-y-auto">
-                    {detailQuery.data.recentAuditAsTarget.map((row) => (
-                      <li key={row.id} className="flex gap-2">
-                        <span className="text-muted-foreground whitespace-nowrap">{formatDate(row.createdAt)}</span>
+                  <ul className="text-xs space-y-1 max-h-40 overflow-y-auto">
+                    {historyQuery.data!.recentLogins.map((row) => (
+                      <li key={row.id} className="flex gap-2" data-testid={`row-login-${row.id}`}>
+                        <span className="text-muted-foreground whitespace-nowrap">
+                          {formatDate(row.createdAt)}
+                        </span>
                         <Badge variant="outline" className="h-4 text-[10px]">{row.action}</Badge>
-                        <span className="text-muted-foreground truncate">{row.userId ?? "—"}</span>
+                        <span className="text-muted-foreground truncate">{row.ipAddress ?? "—"}</span>
                       </li>
                     ))}
                   </ul>
                 )}
               </div>
 
-              <div>
-                <h4 className="text-sm font-semibold mb-2">
-                  Senaste audit-händelser där användaren är aktör ({detailQuery.data.recentAuditAsActor.length})
-                </h4>
-                {detailQuery.data.recentAuditAsActor.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Inga händelser.</p>
+              <div data-testid="section-timeline">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-semibold">
+                    Full historik ({historyTimeline.length} av {historyQuery.data?.timelineTotal ?? 0})
+                  </h4>
+                </div>
+                {historyQuery.isLoading && historyTimeline.length === 0 ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  </div>
+                ) : historyTimeline.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Inga händelser i audit-loggen där användaren är aktör eller mål.
+                  </p>
                 ) : (
-                  <ul className="text-xs space-y-1 max-h-48 overflow-y-auto">
-                    {detailQuery.data.recentAuditAsActor.map((row) => (
-                      <li key={row.id} className="flex gap-2">
-                        <span className="text-muted-foreground whitespace-nowrap">{formatDate(row.createdAt)}</span>
-                        <Badge variant="outline" className="h-4 text-[10px]">{row.action}</Badge>
-                        <span className="text-muted-foreground truncate">{row.resourceId ?? "—"}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <>
+                    <ul className="text-xs space-y-1 max-h-80 overflow-y-auto border rounded p-2">
+                      {historyTimeline.map((row) => (
+                        <li
+                          key={row.id}
+                          className="flex flex-wrap items-center gap-2 py-0.5 border-b last:border-0"
+                          data-testid={`row-timeline-${row.id}`}
+                        >
+                          <span className="text-muted-foreground whitespace-nowrap">
+                            {formatDate(row.createdAt)}
+                          </span>
+                          <Badge
+                            variant={row.role === "target" ? "outline" : "secondary"}
+                            className="h-4 text-[10px]"
+                            title={
+                              row.role === "actor"
+                                ? "Användaren utförde åtgärden"
+                                : row.role === "target"
+                                  ? "Användaren var målet för åtgärden"
+                                  : "Användaren var både aktör och mål"
+                            }
+                          >
+                            {row.role === "actor" ? "aktör" : row.role === "target" ? "mål" : "både"}
+                          </Badge>
+                          <Badge variant="outline" className="h-4 text-[10px]">{row.action}</Badge>
+                          {row.resourceType && (
+                            <span className="text-muted-foreground">
+                              {row.resourceType}
+                              {row.resourceId ? `:${row.resourceId.slice(0, 8)}` : ""}
+                            </span>
+                          )}
+                          {row.ipAddress && (
+                            <span className="text-muted-foreground">{row.ipAddress}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    {historyTimeline.length < (historyQuery.data?.timelineTotal ?? 0) && (
+                      <div className="pt-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setHistoryOffset(historyTimeline.length)}
+                          disabled={historyQuery.isFetching}
+                          data-testid="button-load-more-history"
+                        >
+                          {historyQuery.isFetching ? (
+                            <>
+                              <Loader2 className="h-3 w-3 mr-2 animate-spin" /> Hämtar…
+                            </>
+                          ) : (
+                            <>Visa fler (+{HISTORY_PAGE_SIZE})</>
+                          )}
+                        </Button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
