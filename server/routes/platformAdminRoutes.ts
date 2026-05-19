@@ -1,14 +1,13 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createHash } from "crypto";
-import { sql } from "drizzle-orm";
+import { and, desc, eq, like, sql } from "drizzle-orm";
 import { storage } from "../storage";
 import { db } from "../db";
-import { auditLogs, userTenantRoles } from "@shared/schema";
-import { and, desc, eq, like } from "drizzle-orm";
+import { auditLogs, userTenantRoles, tenants } from "@shared/schema";
 import { requirePlatformOwner } from "../platform-owner-middleware";
 
 /**
- * Redaktera PII för audit-loggar: lagrar SHA-256-hash + längd så att
+ * Redaktera PII för audit-loggar: lagrar SHA-256-prefix + längd så att
  * "samma e-post"-jämförelser kan göras vid utredning utan att klartext
  * sparas (krävs av GDPR right-to-erasure).
  */
@@ -28,7 +27,6 @@ function redactPii(value: string | null | undefined): { hash: string; length: nu
  * mutationen.
  */
 async function withUserLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
-  // pg_advisory_xact_lock släpps automatiskt vid transaktionsslut.
   return await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${userId}))`);
     return await fn();
@@ -48,8 +46,31 @@ function getClientMeta(req: Request) {
   return { ip, userAgent: typeof userAgent === "string" ? userAgent : null };
 }
 
+async function logPlatformAccess(
+  req: Request,
+  action: string,
+  resourceId: string | null,
+  extra: Record<string, unknown> = {},
+): Promise<void> {
+  try {
+    const { ip, userAgent } = getClientMeta(req);
+    await storage.createAuditLog({
+      tenantId: null,
+      userId: req.platformOwnerUserId ?? null,
+      action,
+      resourceType: "platform",
+      resourceId,
+      changes: null,
+      ipAddress: ip,
+      userAgent,
+      metadata: { path: req.path, method: req.method, ...extra },
+    });
+  } catch (err) {
+    console.error("[platform-admin] audit log failed", err);
+  }
+}
+
 async function isLastActiveOwnerOf(userId: string): Promise<string[]> {
-  // Returnera tenant-IDs där användaren är ENDA aktiva owner.
   const ownerRows = await db
     .select({ tenantId: userTenantRoles.tenantId })
     .from(userTenantRoles)
@@ -73,13 +94,23 @@ async function isLastActiveOwnerOf(userId: string): Promise<string[]> {
           eq(userTenantRoles.isActive, true),
         ),
       );
-    const hasOtherActiveOwner = otherOwners.some((r) => r.id) && otherOwners.length > 1;
-    if (!hasOtherActiveOwner) blocking.push(tenantId);
+    if (otherOwners.length <= 1) blocking.push(tenantId);
   }
   return blocking;
 }
 
 export function registerPlatformAdminRoutes(app: Express): void {
+  // GET /api/platform/me — låter frontend gate:a UI på rollen utan att
+  // läcka information (en icke-owner får 403 från middleware).
+  app.get(
+    "/api/platform/me",
+    requirePlatformOwner,
+    asyncHandler(async (req, res) => {
+      await logPlatformAccess(req, "platform.me.read", req.platformOwnerUserId ?? null);
+      res.json({ isPlatformOwner: true, userId: req.platformOwnerUserId });
+    }),
+  );
+
   // GET /api/platform/users — alla användare cross-tenant + medlemskap
   app.get(
     "/api/platform/users",
@@ -102,7 +133,59 @@ export function registerPlatformAdminRoutes(app: Express): void {
           })
         : rows;
       const safe = filtered.map(({ passwordHash, ...u }) => u);
+      await logPlatformAccess(req, "platform.users.list", null, {
+        count: safe.length,
+        query: search || null,
+      });
       res.json(safe);
+    }),
+  );
+
+  // GET /api/platform/users/:id — detaljerad användarvy (medlemskap + senaste audit)
+  app.get(
+    "/api/platform/users/:id",
+    requirePlatformOwner,
+    asyncHandler(async (req, res) => {
+      const targetId = req.params.id;
+      const user = await storage.getUser(targetId);
+      if (!user) {
+        return res.status(404).json({ error: "Användaren hittades inte." });
+      }
+      const memberships = await db
+        .select({
+          tenantId: userTenantRoles.tenantId,
+          tenantName: tenants.name,
+          role: userTenantRoles.role,
+          isActive: userTenantRoles.isActive,
+          assignedBy: userTenantRoles.assignedBy,
+          createdAt: userTenantRoles.createdAt,
+        })
+        .from(userTenantRoles)
+        .leftJoin(tenants, eq(tenants.id, userTenantRoles.tenantId))
+        .where(eq(userTenantRoles.userId, targetId));
+
+      const recentAudit = await db
+        .select()
+        .from(auditLogs)
+        .where(eq(auditLogs.userId, targetId))
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(25);
+
+      const recentTargeted = await db
+        .select()
+        .from(auditLogs)
+        .where(eq(auditLogs.resourceId, targetId))
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(25);
+
+      const { passwordHash, ...safeUser } = user as typeof user & { passwordHash?: string };
+      await logPlatformAccess(req, "platform.user.read", targetId);
+      res.json({
+        user: safeUser,
+        memberships,
+        recentAuditAsActor: recentAudit,
+        recentAuditAsTarget: recentTargeted,
+      });
     }),
   );
 
@@ -139,7 +222,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
       }
       const { ip, userAgent } = getClientMeta(req);
       await storage.createAuditLog({
-        tenantId: null as any,
+        tenantId: null,
         userId: actorId,
         action: "platform.user.anonymize",
         resourceType: "user",
@@ -169,7 +252,6 @@ export function registerPlatformAdminRoutes(app: Express): void {
       if (targetId === actorId) {
         return res.status(400).json({ error: "Du kan inte radera ditt eget konto." });
       }
-      // Klient måste skicka { "confirm": "RADERA" } för att förhindra misstag
       if (req.body?.confirm !== "RADERA") {
         return res.status(400).json({
           error: "Bekräftelse saknas",
@@ -188,10 +270,8 @@ export function registerPlatformAdminRoutes(app: Express): void {
         if (blocking.length > 0 && !force) {
           return { kind: "blocked" as const, blocking };
         }
-        // Logga FÖRE radering så att resourceId bevaras även om users-raden tas bort.
-        // PII redakteras (hash + längd) för GDPR right-to-erasure-kompatibilitet.
         await storage.createAuditLog({
-          tenantId: null as any,
+          tenantId: null,
           userId: actorId,
           action: "platform.user.delete",
           resourceType: "user",
@@ -222,12 +302,12 @@ export function registerPlatformAdminRoutes(app: Express): void {
     }),
   );
 
-  // GET /api/platform/audit-logs — plattformsåtgärder (cross-tenant)
+  // GET /api/platform/audit-log — plattformsåtgärder (cross-tenant)
   app.get(
-    "/api/platform/audit-logs",
+    "/api/platform/audit-log",
     requirePlatformOwner,
     asyncHandler(async (req, res) => {
-      const limit = Math.min(parseInt((req.query.limit as string) || "100", 10), 500);
+      const limit = Math.min(parseInt((req.query.limit as string) || "200", 10), 500);
       const actionFilter = (req.query.action as string) || "platform.";
       const rows = await db
         .select()
@@ -235,6 +315,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
         .where(like(auditLogs.action, `${actionFilter}%`))
         .orderBy(desc(auditLogs.createdAt))
         .limit(limit);
+      await logPlatformAccess(req, "platform.audit-log.list", null, { limit, actionFilter });
       res.json(rows);
     }),
   );

@@ -32,6 +32,7 @@ import {
   UserX,
   ClipboardList,
   Users as UsersIcon,
+  Eye,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -40,10 +41,11 @@ import { PageHeader } from "@/components/layout/PageHeader";
 
 interface Membership {
   tenantId: string;
-  tenantName: string;
+  tenantName: string | null;
   role: string;
   isActive: boolean | null;
   assignedBy: string | null;
+  createdAt?: string | null;
 }
 
 interface PlatformUser {
@@ -70,15 +72,22 @@ interface AuditLogRow {
   createdAt: string | null;
 }
 
-type DialogMode = "delete" | "anonymize";
+interface UserDetail {
+  user: PlatformUser;
+  memberships: Membership[];
+  recentAuditAsActor: AuditLogRow[];
+  recentAuditAsTarget: AuditLogRow[];
+}
 
-function fullName(u: PlatformUser): string {
+type DialogMode = "delete" | "anonymize" | "detail";
+
+function fullName(u: Pick<PlatformUser, "firstName" | "lastName">): string {
   const f = (u.firstName || "").trim();
   const l = (u.lastName || "").trim();
   return [f, l].filter(Boolean).join(" ") || "—";
 }
 
-function formatDate(s: string | null): string {
+function formatDate(s: string | null | undefined): string {
   if (!s) return "—";
   try {
     return new Date(s).toLocaleString("sv-SE");
@@ -97,12 +106,27 @@ export default function PlatformAdminPage() {
   const [reason, setReason] = useState("");
   const [force, setForce] = useState(false);
 
+  // Server-side gate (källan till sanning) — visar bara sidan om backend bekräftar.
+  const meQuery = useQuery<{ isPlatformOwner: boolean; userId: string } | null>({
+    queryKey: ["/api/platform/me"],
+    retry: false,
+  });
+
+  const isPlatformOwner = meQuery.data?.isPlatformOwner === true;
+
   const { data: users = [], isLoading } = useQuery<PlatformUser[]>({
     queryKey: ["/api/platform/users"],
+    enabled: isPlatformOwner,
   });
 
   const { data: audit = [], isLoading: auditLoading } = useQuery<AuditLogRow[]>({
-    queryKey: ["/api/platform/audit-logs"],
+    queryKey: ["/api/platform/audit-log"],
+    enabled: isPlatformOwner,
+  });
+
+  const detailQuery = useQuery<UserDetail>({
+    queryKey: ["/api/platform/users", target?.id],
+    enabled: mode === "detail" && !!target?.id,
   });
 
   const filtered = useMemo(() => {
@@ -114,7 +138,7 @@ export default function PlatformAdminPage() {
         u.firstName ?? "",
         u.lastName ?? "",
         u.id,
-        ...u.memberships.map((m) => `${m.tenantId} ${m.tenantName} ${m.role}`),
+        ...u.memberships.map((m) => `${m.tenantId} ${m.tenantName ?? ""} ${m.role}`),
       ]
         .join(" ")
         .toLowerCase();
@@ -133,7 +157,7 @@ export default function PlatformAdminPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/platform/users"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/platform/audit-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/platform/audit-log"] });
       toast({ title: "Användaren har raderats", description: "Hård radering klar." });
       closeDialog();
     },
@@ -153,7 +177,7 @@ export default function PlatformAdminPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/platform/users"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/platform/audit-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/platform/audit-log"] });
       toast({ title: "Användaren har anonymiserats" });
       closeDialog();
     },
@@ -186,13 +210,35 @@ export default function PlatformAdminPage() {
         return;
       }
       deleteMutation.mutate({ id: target.id, reason, force });
-    } else {
+    } else if (mode === "anonymize") {
       anonymizeMutation.mutate({ id: target.id, reason, force });
     }
   };
 
   const isSelf = target?.id === currentUser?.id;
   const isPending = deleteMutation.isPending || anonymizeMutation.isPending;
+
+  if (meQuery.isLoading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isPlatformOwner) {
+    return (
+      <div className="p-6 max-w-2xl">
+        <Alert variant="destructive">
+          <ShieldAlert className="h-4 w-4" />
+          <AlertTitle>Åtkomst nekad</AlertTitle>
+          <AlertDescription>
+            Denna sida är förbehållen plattformsägare (kinab + owner).
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -256,8 +302,9 @@ export default function PlatformAdminPage() {
                     <TableRow>
                       <TableHead>Namn</TableHead>
                       <TableHead>E-post</TableHead>
-                      <TableHead>Organisationer</TableHead>
+                      <TableHead>Org-medlemskap</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Skapad</TableHead>
                       <TableHead>Senast inloggad</TableHead>
                       <TableHead className="text-right">Åtgärder</TableHead>
                     </TableRow>
@@ -271,19 +318,22 @@ export default function PlatformAdminPage() {
                         </TableCell>
                         <TableCell data-testid={`text-email-${u.id}`}>{u.email || "—"}</TableCell>
                         <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {u.memberships.length === 0 && (
-                              <Badge variant="outline">Ingen org</Badge>
-                            )}
-                            {u.memberships.map((m) => (
+                          <div className="flex flex-wrap items-center gap-1">
+                            <Badge variant="outline" data-testid={`badge-membership-count-${u.id}`}>
+                              {u.memberships.length} st
+                            </Badge>
+                            {u.memberships.slice(0, 3).map((m) => (
                               <Badge
                                 key={`${u.id}-${m.tenantId}`}
                                 variant={m.isActive === false ? "outline" : "secondary"}
-                                title={`${m.tenantName} (${m.role})${m.isActive === false ? " — inaktiv" : ""}`}
+                                title={`${m.tenantName ?? m.tenantId} (${m.role})${m.isActive === false ? " — inaktiv" : ""}`}
                               >
                                 {m.tenantId}/{m.role}
                               </Badge>
                             ))}
+                            {u.memberships.length > 3 && (
+                              <Badge variant="outline">+{u.memberships.length - 3}</Badge>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -293,9 +343,19 @@ export default function PlatformAdminPage() {
                             <Badge>Aktiv</Badge>
                           )}
                         </TableCell>
+                        <TableCell className="text-xs">{formatDate(u.createdAt)}</TableCell>
                         <TableCell className="text-xs">{formatDate(u.lastLoginAt)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => openDialog(u, "detail")}
+                              data-testid={`button-detail-${u.id}`}
+                            >
+                              <Eye className="h-3.5 w-3.5 mr-1" />
+                              Visa detaljer
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline"
@@ -322,7 +382,7 @@ export default function PlatformAdminPage() {
                     ))}
                     {filtered.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                           Inga användare matchar sökningen.
                         </TableCell>
                       </TableRow>
@@ -367,7 +427,15 @@ export default function PlatformAdminPage() {
                         <TableRow key={row.id} data-testid={`row-audit-${row.id}`}>
                           <TableCell className="text-xs whitespace-nowrap">{formatDate(row.createdAt)}</TableCell>
                           <TableCell>
-                            <Badge variant={row.action === "platform.user.delete" ? "destructive" : "secondary"}>
+                            <Badge
+                              variant={
+                                row.action === "platform.user.delete"
+                                  ? "destructive"
+                                  : row.action === "platform.access.denied"
+                                    ? "outline"
+                                    : "secondary"
+                              }
+                            >
                               {row.action}
                             </Badge>
                           </TableCell>
@@ -387,7 +455,7 @@ export default function PlatformAdminPage() {
                           </TableCell>
                           <TableCell className="text-xs">{row.ipAddress || "—"}</TableCell>
                           <TableCell className="text-xs max-w-xs truncate" title={meta.reason || ""}>
-                            {meta.reason || "—"}
+                            {meta.reason || meta.path || "—"}
                             {meta.force ? <Badge variant="outline" className="ml-2">force</Badge> : null}
                           </TableCell>
                         </TableRow>
@@ -401,7 +469,118 @@ export default function PlatformAdminPage() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={target !== null} onOpenChange={(o) => !o && closeDialog()}>
+      {/* Detalj-dialog */}
+      <Dialog open={target !== null && mode === "detail"} onOpenChange={(o) => !o && closeDialog()}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto" data-testid="dialog-detail">
+          <DialogHeader>
+            <DialogTitle>{target ? fullName(target) : "—"}</DialogTitle>
+            <DialogDescription>
+              {target && (
+                <span className="text-xs">
+                  {target.email || "ingen e-post"} · ID: {target.id}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {detailQuery.isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : detailQuery.data ? (
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-sm font-semibold mb-2">Organisationer ({detailQuery.data.memberships.length})</h4>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tenant</TableHead>
+                      <TableHead>Roll</TableHead>
+                      <TableHead>Aktiv</TableHead>
+                      <TableHead>Tillsatt av</TableHead>
+                      <TableHead>Skapad</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {detailQuery.data.memberships.map((m, i) => (
+                      <TableRow key={`${m.tenantId}-${i}`}>
+                        <TableCell>
+                          <div>{m.tenantName ?? "—"}</div>
+                          <div className="text-xs text-muted-foreground">{m.tenantId}</div>
+                        </TableCell>
+                        <TableCell>{m.role}</TableCell>
+                        <TableCell>
+                          {m.isActive === false ? (
+                            <Badge variant="outline">Inaktiv</Badge>
+                          ) : (
+                            <Badge>Aktiv</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs">{m.assignedBy ?? "—"}</TableCell>
+                        <TableCell className="text-xs">{formatDate(m.createdAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                    {detailQuery.data.memberships.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
+                          Inga organisationsmedlemskap.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-semibold mb-2">
+                  Senaste audit-händelser där användaren är mål ({detailQuery.data.recentAuditAsTarget.length})
+                </h4>
+                {detailQuery.data.recentAuditAsTarget.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Inga händelser.</p>
+                ) : (
+                  <ul className="text-xs space-y-1 max-h-48 overflow-y-auto">
+                    {detailQuery.data.recentAuditAsTarget.map((row) => (
+                      <li key={row.id} className="flex gap-2">
+                        <span className="text-muted-foreground whitespace-nowrap">{formatDate(row.createdAt)}</span>
+                        <Badge variant="outline" className="h-4 text-[10px]">{row.action}</Badge>
+                        <span className="text-muted-foreground truncate">{row.userId ?? "—"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div>
+                <h4 className="text-sm font-semibold mb-2">
+                  Senaste audit-händelser där användaren är aktör ({detailQuery.data.recentAuditAsActor.length})
+                </h4>
+                {detailQuery.data.recentAuditAsActor.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Inga händelser.</p>
+                ) : (
+                  <ul className="text-xs space-y-1 max-h-48 overflow-y-auto">
+                    {detailQuery.data.recentAuditAsActor.map((row) => (
+                      <li key={row.id} className="flex gap-2">
+                        <span className="text-muted-foreground whitespace-nowrap">{formatDate(row.createdAt)}</span>
+                        <Badge variant="outline" className="h-4 text-[10px]">{row.action}</Badge>
+                        <span className="text-muted-foreground truncate">{row.resourceId ?? "—"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          ) : (
+            <Alert variant="destructive">
+              <AlertDescription>Kunde inte ladda detaljer.</AlertDescription>
+            </Alert>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog}>Stäng</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Anonymisera/radera-dialog */}
+      <Dialog open={target !== null && mode !== "detail"} onOpenChange={(o) => !o && closeDialog()}>
         <DialogContent data-testid="dialog-confirm">
           <DialogHeader>
             <DialogTitle>
