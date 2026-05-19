@@ -78,6 +78,7 @@ const ApiCostsDashboardPage = lazy(() => import("@/pages/ApiCostsDashboardPage")
 const MLDataQualityPage = lazy(() => import("@/pages/MLDataQualityPage"));
 const RestoreDormantCustomersPage = lazy(() => import("@/pages/admin/RestoreDormantCustomersPage"));
 const ShadowComparisonPage = lazy(() => import("@/pages/admin/ShadowComparisonPage"));
+const PlatformAdminPage = lazy(() => import("@/pages/PlatformAdminPage"));
 const PortalLoginPage = lazy(() => import("@/pages/portal/PortalLoginPage"));
 const PortalVerifyPage = lazy(() => import("@/pages/portal/PortalVerifyPage"));
 const PortalDashboardPage = lazy(() => import("@/pages/portal/PortalDashboardPage"));
@@ -219,6 +220,7 @@ function Router() {
         <Route path="/ml-data-quality">{() => <ProtectedRoute component={MLDataQualityPage} path="/ml-data-quality" />}</Route>
         <Route path="/restore-dormant-customers">{() => <ProtectedRoute component={RestoreDormantCustomersPage} path="/restore-dormant-customers" />}</Route>
         <Route path="/shadow-comparison">{() => <ProtectedRoute component={ShadowComparisonPage} path="/shadow-comparison" />}</Route>
+        <Route path="/platform-admin">{() => <ProtectedRoute component={PlatformAdminPage} path="/platform-admin" />}</Route>
         <Route component={NotFound} />
       </Switch>
     </Suspense>

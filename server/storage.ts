@@ -210,9 +210,11 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
   getUsersByTenant(tenantId: string): Promise<User[]>;
+  listAllUsersWithTenants(): Promise<Array<User & { memberships: Array<{ tenantId: string; tenantName: string; role: string; isActive: boolean | null; assignedBy: string | null }> }>>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: string): Promise<void>;
+  anonymizeUser(id: string): Promise<User | undefined>;
   upsertUser(user: Partial<UpsertUser> & { id: string; email: string }): Promise<User>;
   
   getTenant(id: string): Promise<Tenant | undefined>;
@@ -1017,8 +1019,79 @@ export class DatabaseStorage implements IStorage {
       await tx.update(environmentalData).set({ createdBy: null }).where(eq(environmentalData.createdBy, id));
       await tx.update(selfBookingSlots).set({ createdBy: null }).where(eq(selfBookingSlots.createdBy, id));
       await tx.update(recurringSlotPatterns).set({ createdBy: null }).where(eq(recurringSlotPatterns.createdBy, id));
+      await tx.update(plannerSearchFilters).set({ createdBy: null as any }).where(eq(plannerSearchFilters.createdBy, id));
+      await tx.update(invoiceRecalculationLog).set({ triggeredBy: null }).where(eq(invoiceRecalculationLog.triggeredBy, id));
+      // NO ACTION-FK — måste nullas explicit innan DELETE
+      await tx.update(fortnoxContractSuggestions).set({ reviewedBy: null }).where(eq(fortnoxContractSuggestions.reviewedBy, id));
+
+      // Töm aktiva sessioner (connect-pg-simple, ingen FK till users)
+      await tx.execute(sql`
+        DELETE FROM sessions
+        WHERE sess->>'userId' = ${id}
+           OR sess->'passport'->'user'->'claims'->>'sub' = ${id}
+      `);
 
       await tx.delete(users).where(eq(users.id, id));
+    });
+  }
+
+  async listAllUsersWithTenants(): Promise<Array<User & { memberships: Array<{ tenantId: string; tenantName: string; role: string; isActive: boolean | null; assignedBy: string | null }> }>> {
+    const allUsers = await db.select().from(users).orderBy(desc(users.createdAt));
+    if (allUsers.length === 0) return [];
+    const memberships = await db
+      .select({
+        userId: userTenantRoles.userId,
+        tenantId: userTenantRoles.tenantId,
+        tenantName: tenants.name,
+        role: userTenantRoles.role,
+        isActive: userTenantRoles.isActive,
+        assignedBy: userTenantRoles.assignedBy,
+      })
+      .from(userTenantRoles)
+      .innerJoin(tenants, eq(userTenantRoles.tenantId, tenants.id));
+    const byUser = new Map<string, Array<{ tenantId: string; tenantName: string; role: string; isActive: boolean | null; assignedBy: string | null }>>();
+    for (const m of memberships) {
+      const list = byUser.get(m.userId) ?? [];
+      list.push({
+        tenantId: m.tenantId,
+        tenantName: m.tenantName,
+        role: m.role,
+        isActive: m.isActive,
+        assignedBy: m.assignedBy,
+      });
+      byUser.set(m.userId, list);
+    }
+    return allUsers.map((u) => ({ ...u, memberships: byUser.get(u.id) ?? [] }));
+  }
+
+  async anonymizeUser(id: string): Promise<User | undefined> {
+    return db.transaction(async (tx) => {
+      const existing = await tx.select().from(users).where(eq(users.id, id)).limit(1);
+      if (existing.length === 0) return undefined;
+      const placeholder = `anonymized-${id.slice(0, 8)}@anonymized.invalid`;
+      const [updated] = await tx
+        .update(users)
+        .set({
+          email: placeholder,
+          firstName: "Anonymiserad",
+          lastName: "Användare",
+          profileImageUrl: null,
+          passwordHash: null,
+          isActive: false,
+          updatedAt: new Date(),
+        } as any)
+        .where(eq(users.id, id))
+        .returning();
+      await tx
+        .update(userTenantRoles)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(userTenantRoles.userId, id));
+      await tx.execute(sql`
+        DELETE FROM sessions
+        WHERE sess->>'userId' = ${id}
+           OR sess->'passport'->'user'->'claims'->>'sub' = ${id}
+      `);
+      return updated;
     });
   }
 
