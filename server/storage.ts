@@ -211,6 +211,7 @@ export interface IStorage {
   getAllUsers(): Promise<User[]>;
   getUsersByTenant(tenantId: string): Promise<User[]>;
   listAllUsersWithTenants(): Promise<Array<User & { memberships: Array<{ tenantId: string; tenantName: string; role: string; isActive: boolean | null; assignedBy: string | null }> }>>;
+  listAllUsersWithTenantsPaged(opts: { search?: string; limit: number; offset: number }): Promise<{ users: Array<User & { memberships: Array<{ tenantId: string; tenantName: string; role: string; isActive: boolean | null; assignedBy: string | null }> }>; total: number }>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: string): Promise<{ fkImpact: Record<string, number>; lostInviterInvitations: number }>;
@@ -1121,6 +1122,74 @@ export class DatabaseStorage implements IStorage {
       byUser.set(m.userId, list);
     }
     return allUsers.map((u) => ({ ...u, memberships: byUser.get(u.id) ?? [] }));
+  }
+
+  /**
+   * SQL-paginerad cross-tenant användarlista för plattformsadmin.
+   * Filtreringen sker via ILIKE i Postgres (idx_users_email finns), så vi
+   * scannar inte hela users-tabellen vid varje sidladdning.
+   */
+  async listAllUsersWithTenantsPaged(opts: { search?: string; limit: number; offset: number }): Promise<{ users: Array<User & { memberships: Array<{ tenantId: string; tenantName: string; role: string; isActive: boolean | null; assignedBy: string | null }> }>; total: number }> {
+    const q = (opts.search ?? "").trim();
+    const like = q ? `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
+
+    const baseWhere = like
+      ? sql`WHERE u.email ILIKE ${like} OR u.first_name ILIKE ${like} OR u.last_name ILIKE ${like} OR u.id ILIKE ${like}`
+      : sql``;
+
+    const totalRow = await db.execute<{ total: number }>(
+      sql`SELECT COUNT(*)::int AS total FROM users u ${baseWhere}`,
+    );
+    const total = Number(((totalRow as any).rows ?? totalRow)?.[0]?.total ?? 0);
+
+    const pageRows = await db.execute<any>(
+      sql`SELECT u.* FROM users u ${baseWhere} ORDER BY u.created_at DESC NULLS LAST, u.id ASC LIMIT ${opts.limit} OFFSET ${opts.offset}`,
+    );
+    const page = ((pageRows as any).rows ?? pageRows) as any[];
+    if (page.length === 0) return { users: [], total };
+
+    const ids = page.map((u) => u.id);
+    const memberships = await db
+      .select({
+        userId: userTenantRoles.userId,
+        tenantId: userTenantRoles.tenantId,
+        tenantName: tenants.name,
+        role: userTenantRoles.role,
+        isActive: userTenantRoles.isActive,
+        assignedBy: userTenantRoles.assignedBy,
+      })
+      .from(userTenantRoles)
+      .innerJoin(tenants, eq(userTenantRoles.tenantId, tenants.id))
+      .where(inArray(userTenantRoles.userId, ids));
+
+    const byUser = new Map<string, Array<{ tenantId: string; tenantName: string; role: string; isActive: boolean | null; assignedBy: string | null }>>();
+    for (const m of memberships) {
+      const list = byUser.get(m.userId) ?? [];
+      list.push({
+        tenantId: m.tenantId,
+        tenantName: m.tenantName,
+        role: m.role,
+        isActive: m.isActive,
+        assignedBy: m.assignedBy,
+      });
+      byUser.set(m.userId, list);
+    }
+    const users = page.map((u) => ({
+      id: u.id,
+      email: u.email,
+      firstName: u.first_name,
+      lastName: u.last_name,
+      profileImageUrl: u.profile_image_url,
+      passwordHash: u.password_hash,
+      role: u.role,
+      resourceId: u.resource_id,
+      isActive: u.is_active,
+      lastLoginAt: u.last_login_at,
+      createdAt: u.created_at,
+      updatedAt: u.updated_at,
+      memberships: byUser.get(u.id) ?? [],
+    })) as Array<User & { memberships: Array<{ tenantId: string; tenantName: string; role: string; isActive: boolean | null; assignedBy: string | null }> }>;
+    return { users, total };
   }
 
   async anonymizeUser(id: string): Promise<User | undefined> {

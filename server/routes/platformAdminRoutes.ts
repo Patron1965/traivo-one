@@ -122,23 +122,11 @@ export function registerPlatformAdminRoutes(app: Express): void {
       const limit = Math.min(Math.max(Number.isFinite(parsedLimit) ? parsedLimit : 50, 1), 200);
       const offset = Math.max(Number.isFinite(parsedOffset) ? parsedOffset : 0, 0);
 
-      const rows = await storage.listAllUsersWithTenants();
-      const filtered = search
-        ? rows.filter((u) => {
-            const hay = [
-              u.email ?? "",
-              u.firstName ?? "",
-              u.lastName ?? "",
-              u.id,
-              ...u.memberships.map((m) => `${m.tenantId} ${m.tenantName} ${m.role}`),
-            ]
-              .join(" ")
-              .toLowerCase();
-            return hay.includes(search);
-          })
-        : rows;
-      const total = filtered.length;
-      const page = filtered.slice(offset, offset + limit);
+      const { users: page, total } = await storage.listAllUsersWithTenantsPaged({
+        search: search || undefined,
+        limit,
+        offset,
+      });
       const safe = page.map(({ passwordHash, ...u }) => u);
       await logPlatformAccess(req, "platform.users.list", null, {
         total,
