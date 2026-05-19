@@ -1007,9 +1007,9 @@ export class DatabaseStorage implements IStorage {
   async deleteUser(id: string): Promise<{ fkImpact: Record<string, number>; lostInviterInvitations: number }> {
     return await db.transaction(async (tx) => {
       const fkImpact: Record<string, number> = {};
-      const bump = async <T extends { rowCount?: number | null }>(name: string, p: Promise<T>) => {
+      const bump = async (name: string, p: Promise<unknown>) => {
         const r = await p;
-        const n = (r as any)?.rowCount ?? 0;
+        const n = rowCountOf(r);
         if (n) fkImpact[name] = n;
         return n;
       };
