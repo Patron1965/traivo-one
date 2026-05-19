@@ -21,6 +21,52 @@ function redactPii(value: string | null | undefined): { hash: string; length: nu
 }
 
 /**
+ * Nyckelnamn vars värden ska redakteras när vi skickar ut audit-log-
+ * objekt (changes/metadata) i GDPR-exporter. Vi matchar case-insensitivt
+ * på substring så både "email", "Email", "userEmail", "firstName",
+ * "last_name", "fullName" osv fångas. Samma princip som
+ * subject-redakteringen ovan — vi behåller hash+längd så incident-
+ * jämförelser fortsatt fungerar utan att klartext lämnar systemet.
+ */
+const PII_KEY_PATTERNS = [/email/i, /firstname/i, /lastname/i, /fullname/i, /(^|_)name($|_)/i];
+
+function isPiiKey(key: string): boolean {
+  return PII_KEY_PATTERNS.some((re) => re.test(key));
+}
+
+function redactPiiInJson(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map(redactPiiInJson);
+  if (typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (isPiiKey(k) && (typeof v === "string" || v === null)) {
+        out[k] = redactPii(v);
+      } else {
+        out[k] = redactPiiInJson(v);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
+/**
+ * Redakterar en hel audit-rad för export — `changes`/`metadata` rensas
+ * från klartext-e-post/namn medan tekniska fält (id, action, ipAddress,
+ * userAgent, tidsstämplar) lämnas orörda. Mobile-/portal-tokens i klar-
+ * text bör inte ligga i audit_logs, men säkerhetsmarginalen i
+ * `redactPiiInJson` ovan plockar bort namnsatta nyckelfält ändå.
+ */
+function redactAuditRowForExport<T extends { changes: unknown; metadata: unknown }>(row: T): T {
+  return {
+    ...row,
+    changes: redactPiiInJson(row.changes),
+    metadata: redactPiiInJson(row.metadata),
+  };
+}
+
+/**
  * Kör en plattforms-mutation under Postgres advisory-lås. Vi låser både
  * target-user OCH alla tenants där hen är aktiv owner — det stänger
  * TOCTOU-fönstret mellan "sista aktiva owner"-kontrollen och själva
@@ -443,6 +489,248 @@ export function registerPlatformAdminRoutes(app: Express): void {
         offset,
         memberships,
         recentLogins,
+      });
+    }),
+  );
+
+  // GET /api/platform/users/:id/history/export?format=csv|json
+  // GDPR-export (art. 15 right of access). Streamar HELA tidslinjen
+  // (alla audit-rader där användaren är aktör eller mål) + medlemskap +
+  // inloggningar i ett paket. PII redakteras enligt samma princip som
+  // resten av plattforms-loggen (SHA-256-prefix + längd för e-post/namn).
+  // Själva exporten loggas som `platform.user.history.export`.
+  app.get(
+    "/api/platform/users/:id/history/export",
+    requirePlatformOwner,
+    asyncHandler(async (req, res) => {
+      const targetId = req.params.id;
+      const format = ((req.query.format as string) || "json").toLowerCase();
+      if (format !== "csv" && format !== "json") {
+        return res.status(400).json({ error: "format måste vara 'csv' eller 'json'" });
+      }
+      const user = await storage.getUser(targetId);
+      if (!user) {
+        await logPlatformAccess(req, "platform.user.history.export.notfound", targetId, {
+          status: 404,
+          format,
+        });
+        return res.status(404).json({ error: "Användaren hittades inte." });
+      }
+
+      // Hämta medlemskap (komplett, inkl. inaktiva).
+      const memberships = await db
+        .select({
+          tenantId: userTenantRoles.tenantId,
+          tenantName: tenants.name,
+          role: userTenantRoles.role,
+          isActive: userTenantRoles.isActive,
+          assignedBy: userTenantRoles.assignedBy,
+          createdAt: userTenantRoles.createdAt,
+        })
+        .from(userTenantRoles)
+        .leftJoin(tenants, eq(tenants.id, userTenantRoles.tenantId))
+        .where(eq(userTenantRoles.userId, targetId))
+        .orderBy(desc(userTenantRoles.createdAt));
+
+      // Inloggningar (samma filter som /history-endpointen).
+      const recentLoginsRaw = await db
+        .select()
+        .from(auditLogs)
+        .where(
+          and(
+            eq(auditLogs.userId, targetId),
+            or(
+              eq(auditLogs.action, "login"),
+              like(auditLogs.action, "auth.login%"),
+              like(auditLogs.action, "%.login"),
+            ),
+          ),
+        )
+        .orderBy(desc(auditLogs.createdAt));
+      const recentLogins = recentLoginsRaw.map(redactAuditRowForExport);
+
+      // Räkna timeline-storleken upp front så vi kan logga den.
+      const [{ count: timelineTotal }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(auditLogs)
+        .where(or(eq(auditLogs.userId, targetId), eq(auditLogs.resourceId, targetId)));
+
+      const generatedAt = new Date().toISOString();
+      const safeFilename = `traivo-user-history-${targetId}-${generatedAt.slice(0, 10)}`;
+      const subject = {
+        userId: targetId,
+        emailRedacted: redactPii(user.email),
+        firstNameRedacted: redactPii(user.firstName),
+        lastNameRedacted: redactPii(user.lastName),
+        isActive: user.isActive,
+        lastLoginAt: user.lastLoginAt,
+        createdAt: user.createdAt,
+      };
+
+      // Chunkad iteration över hela tidslinjen — undviker att läsa
+      // hundratusentals rader i minnet på en gång. 1000/chunk är en bra
+      // kompromiss mellan round-trips och RAM. Vi streamar direkt till
+      // klienten så svaret kan börja flöda omedelbart.
+      const CHUNK = 1000;
+      const tagRole = (row: { userId: string | null; resourceId: string | null }) => {
+        const isActor = row.userId === targetId;
+        const isTarget = row.resourceId === targetId;
+        return isActor && isTarget ? "both" : isActor ? "actor" : "target";
+      };
+
+      if (format === "json") {
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}.json"`);
+        res.write(
+          `{"generatedAt":${JSON.stringify(generatedAt)},` +
+            `"subject":${JSON.stringify(subject)},` +
+            `"memberships":${JSON.stringify(memberships)},` +
+            `"recentLogins":${JSON.stringify(recentLogins)},` +
+            `"timelineTotal":${timelineTotal},` +
+            `"timeline":[`,
+        );
+        let offset = 0;
+        let written = 0;
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const chunk = await db
+            .select()
+            .from(auditLogs)
+            .where(or(eq(auditLogs.userId, targetId), eq(auditLogs.resourceId, targetId)))
+            .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
+            .limit(CHUNK)
+            .offset(offset);
+          for (const row of chunk) {
+            const tagged = { ...redactAuditRowForExport(row), role: tagRole(row) };
+            res.write((written === 0 ? "" : ",") + JSON.stringify(tagged));
+            written += 1;
+          }
+          if (chunk.length < CHUNK) break;
+          offset += CHUNK;
+        }
+        res.write("]}");
+        res.end();
+        await logPlatformAccess(req, "platform.user.history.export", targetId, {
+          format,
+          timelineExported: written,
+          timelineTotal,
+          membershipCount: memberships.length,
+          recentLoginsCount: recentLogins.length,
+        });
+        return;
+      }
+
+      // CSV: header med metadata-kommentarer + tre sektioner (subject,
+      // memberships, recent_logins, timeline). En enda fil med tydliga
+      // section-headers så Excel/LibreOffice fortfarande kan öppna den.
+      const csvEscape = (value: unknown): string => {
+        if (value == null) return "";
+        const s = typeof value === "object" ? JSON.stringify(value) : String(value);
+        if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+        return s;
+      };
+      const writeRow = (cells: unknown[]) => res.write(cells.map(csvEscape).join(",") + "\n");
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}.csv"`);
+      res.write(`# Traivo user history export\n`);
+      res.write(`# generatedAt,${generatedAt}\n`);
+      res.write(`# userId,${targetId}\n`);
+      res.write(`# timelineTotal,${timelineTotal}\n\n`);
+
+      res.write(`## subject\n`);
+      writeRow([
+        "userId",
+        "emailHash",
+        "emailLength",
+        "firstNameHash",
+        "firstNameLength",
+        "lastNameHash",
+        "lastNameLength",
+        "isActive",
+        "lastLoginAt",
+        "createdAt",
+      ]);
+      writeRow([
+        subject.userId,
+        subject.emailRedacted?.hash ?? "",
+        subject.emailRedacted?.length ?? "",
+        subject.firstNameRedacted?.hash ?? "",
+        subject.firstNameRedacted?.length ?? "",
+        subject.lastNameRedacted?.hash ?? "",
+        subject.lastNameRedacted?.length ?? "",
+        subject.isActive,
+        subject.lastLoginAt,
+        subject.createdAt,
+      ]);
+      res.write("\n");
+
+      res.write(`## memberships\n`);
+      writeRow(["tenantId", "tenantName", "role", "isActive", "assignedBy", "createdAt"]);
+      for (const m of memberships) {
+        writeRow([m.tenantId, m.tenantName, m.role, m.isActive, m.assignedBy, m.createdAt]);
+      }
+      res.write("\n");
+
+      res.write(`## recent_logins\n`);
+      writeRow(["id", "action", "createdAt", "ipAddress", "userAgent", "changes", "metadata"]);
+      for (const r of recentLogins) {
+        writeRow([r.id, r.action, r.createdAt, r.ipAddress, r.userAgent, r.changes, r.metadata]);
+      }
+      res.write("\n");
+
+      res.write(`## timeline\n`);
+      writeRow([
+        "id",
+        "createdAt",
+        "role",
+        "action",
+        "resourceType",
+        "resourceId",
+        "userId",
+        "ipAddress",
+        "userAgent",
+        "changes",
+        "metadata",
+      ]);
+      let offset = 0;
+      let written = 0;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const chunk = await db
+          .select()
+          .from(auditLogs)
+          .where(or(eq(auditLogs.userId, targetId), eq(auditLogs.resourceId, targetId)))
+          .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
+          .limit(CHUNK)
+          .offset(offset);
+        for (const rawRow of chunk) {
+          const row = redactAuditRowForExport(rawRow);
+          writeRow([
+            row.id,
+            row.createdAt,
+            tagRole(rawRow),
+            row.action,
+            row.resourceType,
+            row.resourceId,
+            row.userId,
+            row.ipAddress,
+            row.userAgent,
+            row.changes,
+            row.metadata,
+          ]);
+          written += 1;
+        }
+        if (chunk.length < CHUNK) break;
+        offset += CHUNK;
+      }
+      res.end();
+      await logPlatformAccess(req, "platform.user.history.export", targetId, {
+        format,
+        timelineExported: written,
+        timelineTotal,
+        membershipCount: memberships.length,
+        recentLoginsCount: recentLogins.length,
       });
     }),
   );

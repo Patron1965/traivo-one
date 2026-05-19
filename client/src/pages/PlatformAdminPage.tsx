@@ -33,6 +33,7 @@ import {
   ClipboardList,
   Users as UsersIcon,
   Eye,
+  Download,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -199,6 +200,35 @@ export default function PlatformAdminPage() {
 
   // Server gör nu filtreringen — vi visar bara responsen direkt.
   const filtered = users;
+
+  // GDPR-export: streamar hela tidslinjen (CSV eller JSON) som
+  // attachment. apiRequest hanterar cookies/credentials åt oss så vi
+  // återanvänder den för att få samma 401/403-beteende som övriga anrop.
+  async function exportHistory(userId: string, format: "csv" | "json") {
+    try {
+      const res = await apiRequest(
+        "GET",
+        `/api/platform/users/${userId}/history/export?format=${format}`,
+      );
+      const blob = await res.blob();
+      const cd = res.headers.get("content-disposition") || "";
+      const match = cd.match(/filename="?([^"]+)"?/i);
+      const filename =
+        match?.[1] || `traivo-user-history-${userId}.${format}`;
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(href);
+      toast({ title: "Export klar", description: filename });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Okänt fel";
+      toast({ title: "Export misslyckades", description: msg, variant: "destructive" });
+    }
+  }
 
   const deleteMutation = useMutation({
     mutationFn: async (vars: { id: string; reason: string; force: boolean }) => {
@@ -763,7 +793,23 @@ export default function PlatformAdminPage() {
               <AlertDescription>Kunde inte ladda detaljer.</AlertDescription>
             </Alert>
           )}
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={() => target && exportHistory(target.id, "json")}
+              disabled={!target}
+              data-testid="button-export-history-json"
+            >
+              <Download className="h-4 w-4 mr-2" /> Exportera JSON
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => target && exportHistory(target.id, "csv")}
+              disabled={!target}
+              data-testid="button-export-history-csv"
+            >
+              <Download className="h-4 w-4 mr-2" /> Exportera CSV
+            </Button>
             <Button variant="outline" onClick={closeDialog}>Stäng</Button>
           </DialogFooter>
         </DialogContent>
