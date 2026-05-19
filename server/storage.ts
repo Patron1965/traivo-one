@@ -1133,8 +1133,20 @@ export class DatabaseStorage implements IStorage {
     const q = (opts.search ?? "").trim();
     const like = q ? `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
 
+    // Sökning matchar både user-fält OCH tenant-id/namn — om söksträngen
+    // träffar tenant_id eller tenant_name så är användaren med via en
+    // EXISTS-subquery mot user_tenant_roles + tenants.
     const baseWhere = like
-      ? sql`WHERE u.email ILIKE ${like} OR u.first_name ILIKE ${like} OR u.last_name ILIKE ${like} OR u.id ILIKE ${like}`
+      ? sql`WHERE u.email ILIKE ${like}
+              OR u.first_name ILIKE ${like}
+              OR u.last_name ILIKE ${like}
+              OR u.id ILIKE ${like}
+              OR EXISTS (
+                SELECT 1 FROM user_tenant_roles utr
+                LEFT JOIN tenants t ON t.id = utr.tenant_id
+                WHERE utr.user_id = u.id
+                  AND (utr.tenant_id ILIKE ${like} OR t.name ILIKE ${like})
+              )`
       : sql``;
 
     const totalRow = await db.execute<{ total: number }>(

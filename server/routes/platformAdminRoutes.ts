@@ -147,6 +147,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
       const targetId = req.params.id;
       const user = await storage.getUser(targetId);
       if (!user) {
+        await logPlatformAccess(req, "platform.user.read.notfound", targetId, { status: 404 });
         return res.status(404).json({ error: "Användaren hittades inte." });
       }
       const memberships = await db
@@ -199,10 +200,12 @@ export function registerPlatformAdminRoutes(app: Express): void {
       const targetId = req.params.id;
       const actorId = req.platformOwnerUserId!;
       if (targetId === actorId) {
+        await logPlatformAccess(req, "platform.user.anonymize.rejected", targetId, { status: 400, reason: "self" });
         return res.status(400).json({ error: "Du kan inte anonymisera dig själv." });
       }
       const existing = await storage.getUser(targetId);
       if (!existing) {
+        await logPlatformAccess(req, "platform.user.anonymize.notfound", targetId, { status: 404 });
         return res.status(404).json({ error: "Användaren hittades inte." });
       }
 
@@ -216,6 +219,11 @@ export function registerPlatformAdminRoutes(app: Express): void {
         return { kind: "ok" as const, updated, blocking };
       });
       if (result.kind === "blocked") {
+        await logPlatformAccess(req, "platform.user.anonymize.blocked", targetId, {
+          status: 409,
+          blockingTenants: result.blocking,
+          force: false,
+        });
         return res.status(409).json({
           error: "Sista aktiva owner",
           message: `Användaren är enda aktiva owner i ${result.blocking.length} organisation(er): ${result.blocking.join(", ")}. Skicka { "force": true } för att gå vidare.`,
@@ -252,9 +260,11 @@ export function registerPlatformAdminRoutes(app: Express): void {
       const targetId = req.params.id;
       const actorId = req.platformOwnerUserId!;
       if (targetId === actorId) {
+        await logPlatformAccess(req, "platform.user.delete.rejected", targetId, { status: 400, reason: "self" });
         return res.status(400).json({ error: "Du kan inte radera ditt eget konto." });
       }
       if (req.body?.confirm !== "RADERA") {
+        await logPlatformAccess(req, "platform.user.delete.rejected", targetId, { status: 400, reason: "missing_confirm" });
         return res.status(400).json({
           error: "Bekräftelse saknas",
           message: 'Skicka { "confirm": "RADERA" } i body för att bekräfta hård radering.',
@@ -262,6 +272,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
       }
       const existing = await storage.getUser(targetId);
       if (!existing) {
+        await logPlatformAccess(req, "platform.user.delete.notfound", targetId, { status: 404 });
         return res.status(404).json({ error: "Användaren hittades inte." });
       }
 
@@ -300,6 +311,11 @@ export function registerPlatformAdminRoutes(app: Express): void {
         return { kind: "ok" as const, blocking, impact };
       });
       if (result.kind === "blocked") {
+        await logPlatformAccess(req, "platform.user.delete.blocked", targetId, {
+          status: 409,
+          blockingTenants: result.blocking,
+          force: false,
+        });
         return res.status(409).json({
           error: "Sista aktiva owner",
           message: `Användaren är enda aktiva owner i ${result.blocking.length} organisation(er): ${result.blocking.join(", ")}. Skicka { "force": true } tillsammans med confirm för att gå vidare.`,
