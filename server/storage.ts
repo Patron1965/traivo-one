@@ -1127,7 +1127,7 @@ export class DatabaseStorage implements IStorage {
     return db.transaction(async (tx) => {
       const existing = await tx.select().from(users).where(eq(users.id, id)).limit(1);
       if (existing.length === 0) return undefined;
-      const placeholder = `anonymized-${id.slice(0, 8)}@anonymized.invalid`;
+      const placeholder = `anonymized-${id}@deleted.local`;
       const [updated] = await tx
         .update(users)
         .set({

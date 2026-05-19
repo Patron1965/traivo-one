@@ -136,9 +136,12 @@ export default function PlatformAdminPage() {
     enabled: isPlatformOwner,
   });
 
+  // Hämta detalj (inkl. resourceImpact) både för detalj-fliken OCH för
+  // destruktiva dialoger — så att användaren ser exakt vilka FK-rader
+  // som påverkas innan hen bekräftar.
   const detailQuery = useQuery<UserDetail>({
     queryKey: ["/api/platform/users", target?.id],
-    enabled: mode === "detail" && !!target?.id,
+    enabled: !!target?.id,
   });
 
   // Server gör nu filtreringen — vi visar bara responsen direkt.
@@ -671,6 +674,41 @@ export default function PlatformAdminPage() {
                 bevaras kopplad till det anonymiserade ID:t.
               </AlertDescription>
             </Alert>
+          )}
+
+          {target && (
+            <div className="rounded border p-3 space-y-2" data-testid="block-confirm-impact">
+              <div className="text-sm font-medium">Kopplade resurser som påverkas</div>
+              {detailQuery.isLoading ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Räknar referenser…
+                </div>
+              ) : detailQuery.data ? (
+                Object.keys(detailQuery.data.resourceImpact ?? {}).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Inga kopplade rader hittades i kritiska tabeller. Endast användarraden
+                    {mode === "delete" ? " och eventuella medlemskap/sessioner" : ", medlemskap och sessioner"} berörs.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1 text-xs max-h-40 overflow-y-auto">
+                    {Object.entries(detailQuery.data.resourceImpact)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([table, n]) => (
+                        <div
+                          key={table}
+                          className="flex items-center justify-between bg-muted/40 rounded px-2 py-0.5"
+                          data-testid={`impact-${table}`}
+                        >
+                          <code className="text-muted-foreground truncate" title={table}>{table}</code>
+                          <Badge variant="outline">{n}</Badge>
+                        </div>
+                      ))}
+                  </div>
+                )
+              ) : (
+                <p className="text-xs text-muted-foreground">Kunde inte räkna referenser.</p>
+              )}
+            </div>
           )}
 
           <div className="space-y-3">
