@@ -196,12 +196,31 @@ app.post("/api/portal/auth/verify", authLimiter, asyncHandler(async (req, res) =
     }
 
     const { verifyMagicLink } = await import("../portal-auth");
+    const { logLoginEvent } = await import("../login-audit");
     const ip = req.ip || req.socket.remoteAddress;
     const result = await verifyMagicLink(token, ip, req.headers["user-agent"]);
 
     if (!result.success) {
+      await logLoginEvent({
+        req,
+        method: "portal",
+        outcome: "failed",
+        reason: result.error || "invalid_token",
+      });
       return res.status(400).json({ error: result.error });
     }
+
+    await logLoginEvent({
+      req,
+      method: "portal",
+      outcome: "success",
+      tenantId: result.session?.tenant?.id ?? null,
+      email: result.session?.customer?.email ?? null,
+      extra: {
+        customerId: result.session?.customer?.id ?? null,
+        customerName: result.session?.customer?.name ?? null,
+      },
+    });
 
     res.json({
       success: true,

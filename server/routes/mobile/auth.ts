@@ -11,6 +11,7 @@ import { mobileLoginLimiter } from "../../middleware/rate-limit";
   import type { Resource } from "./shared";
   import type { Response } from "express";
   import { USER_ROLES, type UserRole } from "@shared/schema";
+import { logLoginEvent } from "../../login-audit";
 
   const VALID_RBAC_ROLES = new Set<string>(USER_ROLES);
   function normalizeRbacRole(value: unknown): UserRole | null {
@@ -27,16 +28,23 @@ app.post("/api/mobile/login", mobileLoginLimiter, asyncHandler(async (req, res) 
     const clientIp = req.ip || req.socket.remoteAddress || "unknown";
     const now = Date.now();
     const attempt = loginAttempts.get(clientIp);
+    const { email, pin, username, password } = req.body;
     if (attempt) {
       if (now > attempt.resetAt) {
         loginAttempts.delete(clientIp);
       } else if (attempt.count >= 10) {
+        await logLoginEvent({
+          req,
+          method: "mobile",
+          outcome: "failed",
+          email: email || username || null,
+          reason: "rate_limited",
+          extra: { clientIp },
+        });
         return res.status(429).json({ error: "För många inloggningsförsök. Försök igen om 15 minuter." });
       }
     }
 
-    const { email, pin, username, password } = req.body;
-    
     const tenantId = getTenantIdWithFallback(req);
     const resources = await storage.getResources(tenantId);
     let resource: Resource | undefined;
@@ -64,6 +72,14 @@ app.post("/api/mobile/login", mobileLoginLimiter, asyncHandler(async (req, res) 
         }
       }
     } else {
+      await logLoginEvent({
+        req,
+        method: "mobile",
+        outcome: "failed",
+        tenantId,
+        email: email || username || null,
+        reason: "missing_credentials",
+      });
       throw new ValidationError("PIN or username/password required");
     }
 
@@ -74,6 +90,15 @@ app.post("/api/mobile/login", mobileLoginLimiter, asyncHandler(async (req, res) 
       } else {
         loginAttempts.set(clientIp, { count: 1, resetAt: Date.now() + 15 * 60 * 1000 });
       }
+      await logLoginEvent({
+        req,
+        method: "mobile",
+        outcome: "failed",
+        tenantId,
+        email: email || username || null,
+        reason: "invalid_credentials",
+        extra: { hasPin: !!pin, hasPassword: !!password },
+      });
       return res.status(401).json({ error: "Ogiltiga inloggningsuppgifter" });
     }
     
@@ -84,6 +109,15 @@ app.post("/api/mobile/login", mobileLoginLimiter, asyncHandler(async (req, res) 
     mobileTokens.set(token, { resourceId: resource.id, tenantId: resource.tenantId, expiresAt });
     
     console.log(`[mobile] Login successful for resource ${resource.name} (${resource.id})`);
+    await logLoginEvent({
+      req,
+      method: "mobile",
+      outcome: "success",
+      tenantId: resource.tenantId,
+      userId: resource.userId ?? null,
+      email: resource.email ?? null,
+      extra: { resourceId: resource.id, resourceName: resource.name },
+    });
 
     // Map RBAC role from linked users-row when available; fall back to "technician"
     // for resources without a user (typical field workers logged in via PIN).

@@ -7,6 +7,7 @@ import type { Express, RequestHandler } from "express";
 import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { authStorage } from "./storage";
+import { logLoginEvent } from "../../login-audit";
 
 const getOidcConfig = memoize(
   async () => {
@@ -123,9 +124,40 @@ export async function setupAuth(app: Express) {
 
   app.get("/api/callback", (req, res, next) => {
     ensureStrategy(req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`, {
-      successReturnToOrRedirect: "/?login=1",
-      failureRedirect: "/api/login",
+    passport.authenticate(`replitauth:${req.hostname}`, (err: any, user: any) => {
+      if (err || !user) {
+        void logLoginEvent({
+          req,
+          method: "replit",
+          outcome: "failed",
+          reason: err ? "callback_error" : "no_user",
+          extra: err ? { error: String(err?.message ?? err) } : undefined,
+        });
+        return res.redirect("/api/login");
+      }
+      req.logIn(user, (loginErr) => {
+        if (loginErr) {
+          void logLoginEvent({
+            req,
+            method: "replit",
+            outcome: "failed",
+            reason: "session_login_error",
+            extra: { error: String(loginErr?.message ?? loginErr) },
+          });
+          return next(loginErr);
+        }
+        const claims = (user as any)?.claims ?? {};
+        void logLoginEvent({
+          req,
+          method: "replit",
+          outcome: "success",
+          userId: claims.sub ?? null,
+          email: claims.email ?? null,
+        });
+        const returnTo = (req.session as any)?.returnTo || "/?login=1";
+        delete (req.session as any)?.returnTo;
+        return res.redirect(returnTo);
+      });
     })(req, res, next);
   });
 

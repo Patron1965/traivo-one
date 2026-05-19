@@ -1752,21 +1752,26 @@ app.delete("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, re
 // Login with email + password (returns session)
 app.post("/api/auth/login", asyncHandler(async (req, res) => {
     const { email, password } = req.body;
+    const { logLoginEvent } = await import("../login-audit");
     if (!email || !password) {
+      await logLoginEvent({ req, method: "password", outcome: "failed", email: email || null, reason: "missing_credentials" });
       throw new ValidationError("E-post och lösenord krävs");
     }
 
     const { verifyPassword } = await import("../password");
     const user = await storage.getUserByUsername(email);
     if (!user || !user.passwordHash) {
+      await logLoginEvent({ req, method: "password", outcome: "failed", email, reason: "unknown_user_or_no_password" });
       return res.status(401).json({ error: "Felaktig e-post eller lösenord" });
     }
     if (user.isActive === false) {
+      await logLoginEvent({ req, method: "password", outcome: "failed", email, userId: user.id, reason: "inactive_account" });
       throw new ForbiddenError("Kontot är inaktiverat");
     }
 
     const valid = verifyPassword(password, user.passwordHash);
     if (!valid) {
+      await logLoginEvent({ req, method: "password", outcome: "failed", email, userId: user.id, reason: "bad_password" });
       return res.status(401).json({ error: "Felaktig e-post eller lösenord" });
     }
 
@@ -1775,6 +1780,7 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
     (req.session as any).userRole = user.role;
 
     await storage.updateUser(user.id, { lastLoginAt: new Date() });
+    await logLoginEvent({ req, method: "password", outcome: "success", email, userId: user.id });
 
     const { passwordHash: _, ...safeUser } = user;
     console.log(`[auth] User "${email}" logged in successfully`);
