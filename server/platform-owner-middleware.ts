@@ -1,7 +1,10 @@
-import type { RequestHandler } from "express";
+import type { Request, RequestHandler } from "express";
 import { db } from "./db";
 import { auditLogs, userTenantRoles } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
+
+type ReplitSessionClaims = { claims?: { sub?: string } };
+type ReplitSessionData = { userId?: string };
 
 const PLATFORM_OWNER_TENANT = "kinab";
 const PLATFORM_OWNER_ROLE = "owner";
@@ -15,7 +18,7 @@ declare global {
 }
 
 async function logDeniedAccess(
-  req: any,
+  req: Request,
   reason: string,
   userId: string | null,
 ): Promise<void> {
@@ -50,8 +53,8 @@ async function logDeniedAccess(
  * `platform.access.denied` för säkerhetsspårning.
  */
 export const requirePlatformOwner: RequestHandler = async (req, res, next) => {
-  const replitUser: any = (req as any).user;
-  const sessionUserId = (req.session as any)?.userId as string | undefined;
+  const replitUser = (req as Request & { user?: ReplitSessionClaims }).user;
+  const sessionUserId = (req.session as ReplitSessionData | undefined)?.userId;
   const userId: string | undefined = replitUser?.claims?.sub || sessionUserId;
 
   if (!userId) {

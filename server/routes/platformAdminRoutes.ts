@@ -21,14 +21,31 @@ function redactPii(value: string | null | undefined): { hash: string; length: nu
 }
 
 /**
- * Kör en plattforms-mutation under ett Postgres advisory-lås per target-user.
- * Detta serialiserar samtidiga plattforms-admin-anrop mot samma användare och
- * stänger TOCTOU-fönstret mellan "sista aktiva owner"-kontrollen och själva
- * mutationen.
+ * Kör en plattforms-mutation under Postgres advisory-lås. Vi låser både
+ * target-user OCH alla tenants där hen är aktiv owner — det stänger
+ * TOCTOU-fönstret mellan "sista aktiva owner"-kontrollen och själva
+ * mutationen, även för samtidiga raderings-/anonymiserings-anrop mot
+ * *olika* owners i samma tenant. Tenant-låsen tas i sorterad ordning
+ * för att undvika deadlocks när två admin-flöden träffar samma par av
+ * tenants.
  */
 async function withUserLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
   return await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${userId}))`);
+    const ownerTenantRows = await tx
+      .select({ tenantId: userTenantRoles.tenantId })
+      .from(userTenantRoles)
+      .where(
+        and(
+          eq(userTenantRoles.userId, userId),
+          eq(userTenantRoles.role, "owner"),
+          eq(userTenantRoles.isActive, true),
+        ),
+      );
+    const tenantIds = Array.from(new Set(ownerTenantRows.map((r) => r.tenantId))).sort();
+    for (const tid of tenantIds) {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`tenant:owners:${tid}`}))`);
+    }
     return await fn();
   });
 }
@@ -177,7 +194,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
         .orderBy(desc(auditLogs.createdAt))
         .limit(25);
 
-      const { passwordHash, ...safeUser } = user as typeof user & { passwordHash?: string };
+      const { passwordHash: _omit, ...safeUser } = user;
       const resourceImpact = await storage.computeUserResourceImpact(targetId);
       await logPlatformAccess(req, "platform.user.read", targetId, {
         resourceImpactKeys: Object.keys(resourceImpact).length,

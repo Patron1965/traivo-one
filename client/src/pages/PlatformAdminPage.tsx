@@ -452,7 +452,7 @@ export default function PlatformAdminPage() {
                   </TableHeader>
                   <TableBody>
                     {audit.map((row) => {
-                      const meta = (row.metadata as any) || {};
+                      const meta = (row.metadata ?? {}) as Record<string, unknown>;
                       return (
                         <TableRow key={row.id} data-testid={`row-audit-${row.id}`}>
                           <TableCell className="text-xs whitespace-nowrap">{formatDate(row.createdAt)}</TableCell>
@@ -484,8 +484,8 @@ export default function PlatformAdminPage() {
                             })()}
                           </TableCell>
                           <TableCell className="text-xs">{row.ipAddress || "—"}</TableCell>
-                          <TableCell className="text-xs max-w-xs truncate" title={meta.reason || ""}>
-                            {meta.reason || meta.path || "—"}
+                          <TableCell className="text-xs max-w-xs truncate" title={String(meta.reason ?? "")}>
+                            {String(meta.reason ?? meta.path ?? "—")}
                             {meta.force ? <Badge variant="outline" className="ml-2">force</Badge> : null}
                           </TableCell>
                         </TableRow>
