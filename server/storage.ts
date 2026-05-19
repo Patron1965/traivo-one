@@ -140,7 +140,21 @@ import {
   deliveryPreferencesSchema,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray } from "drizzle-orm";
+import { eq, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray, type SQL } from "drizzle-orm";
+
+// Smala typade helpers för neon/drizzle-execute-resultat — driver-formerna
+// skiljer sig (neon-http returnerar `rows`, andra returnerar arrayen direkt
+// och bär `rowCount` på objektet). Helpers ersätter `as any`-castar i
+// plattformsadmin- och GDPR-flödena.
+function rowsOf<T>(result: unknown): T[] {
+  if (Array.isArray(result)) return result as T[];
+  const maybe = result as { rows?: unknown };
+  return Array.isArray(maybe?.rows) ? (maybe.rows as T[]) : [];
+}
+function rowCountOf(result: unknown): number {
+  const maybe = result as { rowCount?: number | null };
+  return Number(maybe?.rowCount ?? 0);
+}
 import { invalidateWorkflowCaches } from "./services/dashboardCache";
 import { inferTeamIdForResource, invalidateTeamInferenceCache } from "./utils/teamInference";
 
@@ -1017,7 +1031,7 @@ export class DatabaseStorage implements IStorage {
         .update(invitations)
         .set({ invitedBy: null, deliveryError: lostMarker })
         .where(and(eq(invitations.invitedBy, id), eq(invitations.status, "pending")));
-      const lostInviterInvitations = (lostInviterRes as any)?.rowCount ?? 0;
+      const lostInviterInvitations = rowCountOf(lostInviterRes);
       if (lostInviterInvitations) fkImpact["invitations.invited_by (lost_inviter)"] = lostInviterInvitations;
 
       // Resterande (icke-pending) invitations: bara nulla invited_by
@@ -1055,7 +1069,7 @@ export class DatabaseStorage implements IStorage {
         WHERE sess->>'userId' = ${id}
            OR sess->'passport'->'user'->'claims'->>'sub' = ${id}
       `);
-      const sessDeleted = (sessRes as any)?.rowCount ?? 0;
+      const sessDeleted = rowCountOf(sessRes);
       if (sessDeleted) fkImpact["sessions"] = sessDeleted;
 
       await tx.delete(users).where(eq(users.id, id));
@@ -1070,10 +1084,9 @@ export class DatabaseStorage implements IStorage {
    * "kopplade resurser" innan radering/anonymisering.
    */
   async computeUserResourceImpact(id: string): Promise<Record<string, number>> {
-    const countOne = async (label: string, sqlFragment: any) => {
-      const result = await db.execute(sqlFragment);
-      const rows = (result as any).rows ?? result;
-      const n = Number(rows?.[0]?.count ?? 0);
+    const countOne = async (label: string, sqlFragment: SQL) => {
+      const rows = rowsOf<{ count: number | string }>(await db.execute(sqlFragment));
+      const n = Number(rows[0]?.count ?? 0);
       if (n > 0) impact[label] = n;
     };
     const impact: Record<string, number> = {};
@@ -1149,15 +1162,22 @@ export class DatabaseStorage implements IStorage {
               )`
       : sql``;
 
-    const totalRow = await db.execute<{ total: number }>(
-      sql`SELECT COUNT(*)::int AS total FROM users u ${baseWhere}`,
+    const totalRows = rowsOf<{ total: number | string }>(
+      await db.execute(sql`SELECT COUNT(*)::int AS total FROM users u ${baseWhere}`),
     );
-    const total = Number(((totalRow as any).rows ?? totalRow)?.[0]?.total ?? 0);
+    const total = Number(totalRows[0]?.total ?? 0);
 
-    const pageRows = await db.execute<any>(
-      sql`SELECT u.* FROM users u ${baseWhere} ORDER BY u.created_at DESC NULLS LAST, u.id ASC LIMIT ${opts.limit} OFFSET ${opts.offset}`,
+    type UserRow = {
+      id: string; email: string | null; first_name: string | null; last_name: string | null;
+      profile_image_url: string | null; password_hash: string | null; role: string | null;
+      resource_id: string | null; is_active: boolean | null; last_login_at: Date | null;
+      created_at: Date | null; updated_at: Date | null;
+    };
+    const page = rowsOf<UserRow>(
+      await db.execute(
+        sql`SELECT u.* FROM users u ${baseWhere} ORDER BY u.created_at DESC NULLS LAST, u.id ASC LIMIT ${opts.limit} OFFSET ${opts.offset}`,
+      ),
     );
-    const page = ((pageRows as any).rows ?? pageRows) as any[];
     if (page.length === 0) return { users: [], total };
 
     const ids = page.map((u) => u.id);
