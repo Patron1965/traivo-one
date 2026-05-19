@@ -111,12 +111,17 @@ export function registerPlatformAdminRoutes(app: Express): void {
     }),
   );
 
-  // GET /api/platform/users — alla användare cross-tenant + medlemskap
+  // GET /api/platform/users — alla användare cross-tenant + medlemskap (paginerad)
   app.get(
     "/api/platform/users",
     requirePlatformOwner,
     asyncHandler(async (req, res) => {
       const search = ((req.query.q as string) || "").trim().toLowerCase();
+      const parsedLimit = Number.parseInt((req.query.limit as string) || "50", 10);
+      const parsedOffset = Number.parseInt((req.query.offset as string) || "0", 10);
+      const limit = Math.min(Math.max(Number.isFinite(parsedLimit) ? parsedLimit : 50, 1), 200);
+      const offset = Math.max(Number.isFinite(parsedOffset) ? parsedOffset : 0, 0);
+
       const rows = await storage.listAllUsersWithTenants();
       const filtered = search
         ? rows.filter((u) => {
@@ -132,12 +137,17 @@ export function registerPlatformAdminRoutes(app: Express): void {
             return hay.includes(search);
           })
         : rows;
-      const safe = filtered.map(({ passwordHash, ...u }) => u);
+      const total = filtered.length;
+      const page = filtered.slice(offset, offset + limit);
+      const safe = page.map(({ passwordHash, ...u }) => u);
       await logPlatformAccess(req, "platform.users.list", null, {
-        count: safe.length,
+        total,
+        returned: safe.length,
+        limit,
+        offset,
         query: search || null,
       });
-      res.json(safe);
+      res.json({ users: safe, total, limit, offset });
     }),
   );
 
@@ -179,10 +189,14 @@ export function registerPlatformAdminRoutes(app: Express): void {
         .limit(25);
 
       const { passwordHash, ...safeUser } = user as typeof user & { passwordHash?: string };
-      await logPlatformAccess(req, "platform.user.read", targetId);
+      const resourceImpact = await storage.computeUserResourceImpact(targetId);
+      await logPlatformAccess(req, "platform.user.read", targetId, {
+        resourceImpactKeys: Object.keys(resourceImpact).length,
+      });
       res.json({
         user: safeUser,
         memberships,
+        resourceImpact,
         recentAuditAsActor: recentAudit,
         recentAuditAsTarget: recentTargeted,
       });
@@ -270,6 +284,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
         if (blocking.length > 0 && !force) {
           return { kind: "blocked" as const, blocking };
         }
+        const impact = await storage.deleteUser(targetId);
         await storage.createAuditLog({
           tenantId: null,
           userId: actorId,
@@ -286,10 +301,15 @@ export function registerPlatformAdminRoutes(app: Express): void {
           },
           ipAddress: ip,
           userAgent,
-          metadata: { reason: req.body?.reason ?? null, force, blockingTenants: blocking },
+          metadata: {
+            reason: req.body?.reason ?? null,
+            force,
+            blockingTenants: blocking,
+            fkImpact: impact.fkImpact,
+            lostInviterInvitations: impact.lostInviterInvitations,
+          },
         });
-        await storage.deleteUser(targetId);
-        return { kind: "ok" as const, blocking };
+        return { kind: "ok" as const, blocking, impact };
       });
       if (result.kind === "blocked") {
         return res.status(409).json({
@@ -298,7 +318,11 @@ export function registerPlatformAdminRoutes(app: Express): void {
           blockingTenants: result.blocking,
         });
       }
-      res.json({ success: true });
+      res.json({
+        success: true,
+        fkImpact: result.impact.fkImpact,
+        lostInviterInvitations: result.impact.lostInviterInvitations,
+      });
     }),
   );
 

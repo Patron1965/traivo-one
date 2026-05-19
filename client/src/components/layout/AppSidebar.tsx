@@ -293,7 +293,7 @@ export function AppSidebar() {
 
   const startItems = useMemo(() => getSidebarStartItems(tl), [tl]);
 
-  const isPlatformOwner = user?.tenantId === "kinab" && (user as any)?.role === "owner";
+  const isPlatformOwner = user?.tenantId === "kinab" && user?.role === "owner";
   const navGroups = useMemo(() => {
     return getNavGroups(t, tl, language)
       .filter((g) => canAccessMenu(userRole, g.group as NavMenuGroup))

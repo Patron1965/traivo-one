@@ -42,7 +42,7 @@ export function MobileNav() {
       groups.push({ title: tl("mobile.start"), items: startItems });
     }
 
-    const isPlatformOwner = user?.tenantId === "kinab" && (user as any)?.role === "owner";
+    const isPlatformOwner = user?.tenantId === "kinab" && user?.role === "owner";
     getNavGroups(t, tl, language).forEach((group) => {
       if (!canAccessMenu(userRole, group.group as NavMenuGroup)) return;
       const items = group.items.filter(

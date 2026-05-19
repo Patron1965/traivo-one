@@ -213,8 +213,9 @@ export interface IStorage {
   listAllUsersWithTenants(): Promise<Array<User & { memberships: Array<{ tenantId: string; tenantName: string; role: string; isActive: boolean | null; assignedBy: string | null }> }>>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
-  deleteUser(id: string): Promise<void>;
+  deleteUser(id: string): Promise<{ fkImpact: Record<string, number>; lostInviterInvitations: number }>;
   anonymizeUser(id: string): Promise<User | undefined>;
+  computeUserResourceImpact(id: string): Promise<Record<string, number>>;
   upsertUser(user: Partial<UpsertUser> & { id: string; email: string }): Promise<User>;
   
   getTenant(id: string): Promise<Tenant | undefined>;
@@ -988,51 +989,109 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
-  async deleteUser(id: string): Promise<void> {
-    await db.transaction(async (tx) => {
-      await tx.delete(userTenantRoles).where(eq(userTenantRoles.userId, id));
+  async deleteUser(id: string): Promise<{ fkImpact: Record<string, number>; lostInviterInvitations: number }> {
+    return await db.transaction(async (tx) => {
+      const fkImpact: Record<string, number> = {};
+      const bump = async <T extends { rowCount?: number | null }>(name: string, p: Promise<T>) => {
+        const r = await p;
+        const n = (r as any)?.rowCount ?? 0;
+        if (n) fkImpact[name] = n;
+        return n;
+      };
 
-      await tx.update(resources).set({ userId: null }).where(eq(resources.userId, id));
-      await tx.update(tenantBranding).set({ createdBy: null }).where(eq(tenantBranding.createdBy, id));
-      await tx.update(tenantBranding).set({ updatedBy: null }).where(eq(tenantBranding.updatedBy, id));
-      await tx.update(userTenantRoles).set({ assignedBy: null }).where(eq(userTenantRoles.assignedBy, id));
-      await tx.update(invitations).set({ invitedBy: null }).where(eq(invitations.invitedBy, id));
-      await tx.update(invitations).set({ usedBy: null }).where(eq(invitations.usedBy, id));
-      await tx.update(auditLogs).set({ userId: null }).where(eq(auditLogs.userId, id));
-      await tx.update(tenantPackageInstallations).set({ installedBy: null }).where(eq(tenantPackageInstallations.installedBy, id));
-      await tx.update(objectImages).set({ uploadedBy: null }).where(eq(objectImages.uploadedBy, id));
-      await tx.update(taskInformation).set({ createdBy: null }).where(eq(taskInformation.createdBy, id));
-      await tx.update(orderConcepts).set({ createdBy: null }).where(eq(orderConcepts.createdBy, id));
-      await tx.update(assignments).set({ createdBy: null }).where(eq(assignments.createdBy, id));
-      await tx.update(subscriptionChanges).set({ approvedBy: null }).where(eq(subscriptionChanges.approvedBy, id));
-      await tx.update(orderConceptRunLogs).set({ runBy: null }).where(eq(orderConceptRunLogs.runBy, id));
-      await tx.update(customerBookingRequests).set({ handledBy: null }).where(eq(customerBookingRequests.handledBy, id));
-      await tx.update(customerPortalMessages).set({ senderUserId: null }).where(eq(customerPortalMessages.senderUserId, id));
-      await tx.update(customerIssueReports).set({ assignedTo: null }).where(eq(customerIssueReports.assignedTo, id));
-      await tx.update(customerIssueReports).set({ resolvedBy: null }).where(eq(customerIssueReports.resolvedBy, id));
-      await tx.update(protocols).set({ executedBy: null }).where(eq(protocols.executedBy, id));
-      await tx.update(deviationReports).set({ reportedBy: null }).where(eq(deviationReports.reportedBy, id));
-      await tx.update(deviationReports).set({ resolvedBy: null }).where(eq(deviationReports.resolvedBy, id));
-      await tx.update(qrCodeLinks).set({ createdBy: null }).where(eq(qrCodeLinks.createdBy, id));
-      await tx.update(customerChangeRequests).set({ reviewedBy: null }).where(eq(customerChangeRequests.reviewedBy, id));
-      await tx.update(publicIssueReports).set({ reviewedBy: null }).where(eq(publicIssueReports.reviewedBy, id));
-      await tx.update(environmentalData).set({ createdBy: null }).where(eq(environmentalData.createdBy, id));
-      await tx.update(selfBookingSlots).set({ createdBy: null }).where(eq(selfBookingSlots.createdBy, id));
-      await tx.update(recurringSlotPatterns).set({ createdBy: null }).where(eq(recurringSlotPatterns.createdBy, id));
-      await tx.update(plannerSearchFilters).set({ createdBy: null as any }).where(eq(plannerSearchFilters.createdBy, id));
-      await tx.update(invoiceRecalculationLog).set({ triggeredBy: null }).where(eq(invoiceRecalculationLog.triggeredBy, id));
+      // user_tenant_roles tas bort helt (inte SET NULL)
+      const utrDeleted = await bump("user_tenant_roles", tx.delete(userTenantRoles).where(eq(userTenantRoles.userId, id)));
+
+      await bump("resources.user_id", tx.update(resources).set({ userId: null }).where(eq(resources.userId, id)));
+      await bump("tenant_branding.created_by", tx.update(tenantBranding).set({ createdBy: null }).where(eq(tenantBranding.createdBy, id)));
+      await bump("tenant_branding.updated_by", tx.update(tenantBranding).set({ updatedBy: null }).where(eq(tenantBranding.updatedBy, id)));
+      await bump("user_tenant_roles.assigned_by", tx.update(userTenantRoles).set({ assignedBy: null }).where(eq(userTenantRoles.assignedBy, id)));
+
+      // "Förlorad inbjudare"-markör: pending invitations som hen skapade får
+      // en deterministisk sentinel i delivery_error så att UI/audit kan visa
+      // varför invited_by är NULL. Status lämnas orörd (pending → kan fortfarande
+      // användas av mottagaren) men spårbarheten bevaras.
+      const lostMarker = `[INVITER_DELETED:${id}@${new Date().toISOString()}]`;
+      const lostInviterRes = await tx
+        .update(invitations)
+        .set({ invitedBy: null, deliveryError: lostMarker })
+        .where(and(eq(invitations.invitedBy, id), eq(invitations.status, "pending")));
+      const lostInviterInvitations = (lostInviterRes as any)?.rowCount ?? 0;
+      if (lostInviterInvitations) fkImpact["invitations.invited_by (lost_inviter)"] = lostInviterInvitations;
+
+      // Resterande (icke-pending) invitations: bara nulla invited_by
+      await bump("invitations.invited_by", tx.update(invitations).set({ invitedBy: null }).where(eq(invitations.invitedBy, id)));
+      await bump("invitations.used_by", tx.update(invitations).set({ usedBy: null }).where(eq(invitations.usedBy, id)));
+      await bump("audit_logs.user_id", tx.update(auditLogs).set({ userId: null }).where(eq(auditLogs.userId, id)));
+      await bump("tenant_package_installations.installed_by", tx.update(tenantPackageInstallations).set({ installedBy: null }).where(eq(tenantPackageInstallations.installedBy, id)));
+      await bump("object_images.uploaded_by", tx.update(objectImages).set({ uploadedBy: null }).where(eq(objectImages.uploadedBy, id)));
+      await bump("task_information.created_by", tx.update(taskInformation).set({ createdBy: null }).where(eq(taskInformation.createdBy, id)));
+      await bump("order_concepts.created_by", tx.update(orderConcepts).set({ createdBy: null }).where(eq(orderConcepts.createdBy, id)));
+      await bump("assignments.created_by", tx.update(assignments).set({ createdBy: null }).where(eq(assignments.createdBy, id)));
+      await bump("subscription_changes.approved_by", tx.update(subscriptionChanges).set({ approvedBy: null }).where(eq(subscriptionChanges.approvedBy, id)));
+      await bump("order_concept_run_logs.run_by", tx.update(orderConceptRunLogs).set({ runBy: null }).where(eq(orderConceptRunLogs.runBy, id)));
+      await bump("customer_booking_requests.handled_by", tx.update(customerBookingRequests).set({ handledBy: null }).where(eq(customerBookingRequests.handledBy, id)));
+      await bump("customer_portal_messages.sender_user_id", tx.update(customerPortalMessages).set({ senderUserId: null }).where(eq(customerPortalMessages.senderUserId, id)));
+      await bump("customer_issue_reports.assigned_to", tx.update(customerIssueReports).set({ assignedTo: null }).where(eq(customerIssueReports.assignedTo, id)));
+      await bump("customer_issue_reports.resolved_by", tx.update(customerIssueReports).set({ resolvedBy: null }).where(eq(customerIssueReports.resolvedBy, id)));
+      await bump("protocols.executed_by", tx.update(protocols).set({ executedBy: null }).where(eq(protocols.executedBy, id)));
+      await bump("deviation_reports.reported_by", tx.update(deviationReports).set({ reportedBy: null }).where(eq(deviationReports.reportedBy, id)));
+      await bump("deviation_reports.resolved_by", tx.update(deviationReports).set({ resolvedBy: null }).where(eq(deviationReports.resolvedBy, id)));
+      await bump("qr_code_links.created_by", tx.update(qrCodeLinks).set({ createdBy: null }).where(eq(qrCodeLinks.createdBy, id)));
+      await bump("customer_change_requests.reviewed_by", tx.update(customerChangeRequests).set({ reviewedBy: null }).where(eq(customerChangeRequests.reviewedBy, id)));
+      await bump("public_issue_reports.reviewed_by", tx.update(publicIssueReports).set({ reviewedBy: null }).where(eq(publicIssueReports.reviewedBy, id)));
+      await bump("environmental_data.created_by", tx.update(environmentalData).set({ createdBy: null }).where(eq(environmentalData.createdBy, id)));
+      await bump("self_booking_slots.created_by", tx.update(selfBookingSlots).set({ createdBy: null }).where(eq(selfBookingSlots.createdBy, id)));
+      await bump("recurring_slot_patterns.created_by", tx.update(recurringSlotPatterns).set({ createdBy: null }).where(eq(recurringSlotPatterns.createdBy, id)));
+      await bump("planner_search_filters.created_by", tx.update(plannerSearchFilters).set({ createdBy: null }).where(eq(plannerSearchFilters.createdBy, id)));
+      await bump("invoice_recalculation_log.triggered_by", tx.update(invoiceRecalculationLog).set({ triggeredBy: null }).where(eq(invoiceRecalculationLog.triggeredBy, id)));
       // NO ACTION-FK — måste nullas explicit innan DELETE
-      await tx.update(fortnoxContractSuggestions).set({ reviewedBy: null }).where(eq(fortnoxContractSuggestions.reviewedBy, id));
+      await bump("fortnox_contract_suggestions.reviewed_by", tx.update(fortnoxContractSuggestions).set({ reviewedBy: null }).where(eq(fortnoxContractSuggestions.reviewedBy, id)));
 
       // Töm aktiva sessioner (connect-pg-simple, ingen FK till users)
-      await tx.execute(sql`
+      const sessRes = await tx.execute(sql`
         DELETE FROM sessions
         WHERE sess->>'userId' = ${id}
            OR sess->'passport'->'user'->'claims'->>'sub' = ${id}
       `);
+      const sessDeleted = (sessRes as any)?.rowCount ?? 0;
+      if (sessDeleted) fkImpact["sessions"] = sessDeleted;
 
       await tx.delete(users).where(eq(users.id, id));
+      void utrDeleted;
+      return { fkImpact, lostInviterInvitations };
     });
+  }
+
+  /**
+   * Räknar (utan att modifiera) hur många rader i kritiska tabeller som
+   * pekar på en given user. Används av plattformsadmin för att visa
+   * "kopplade resurser" innan radering/anonymisering.
+   */
+  async computeUserResourceImpact(id: string): Promise<Record<string, number>> {
+    const countOne = async (label: string, sqlFragment: any) => {
+      const result = await db.execute(sqlFragment);
+      const rows = (result as any).rows ?? result;
+      const n = Number(rows?.[0]?.count ?? 0);
+      if (n > 0) impact[label] = n;
+    };
+    const impact: Record<string, number> = {};
+    await Promise.all([
+      countOne("user_tenant_roles", sql`SELECT COUNT(*)::int AS count FROM user_tenant_roles WHERE user_id = ${id}`),
+      countOne("resources.user_id", sql`SELECT COUNT(*)::int AS count FROM resources WHERE user_id = ${id}`),
+      countOne("audit_logs.user_id", sql`SELECT COUNT(*)::int AS count FROM audit_logs WHERE user_id = ${id}`),
+      countOne("audit_logs.resource_id", sql`SELECT COUNT(*)::int AS count FROM audit_logs WHERE resource_id = ${id}`),
+      countOne("invitations.invited_by (pending)", sql`SELECT COUNT(*)::int AS count FROM invitations WHERE invited_by = ${id} AND status = 'pending'`),
+      countOne("invitations.invited_by (other)", sql`SELECT COUNT(*)::int AS count FROM invitations WHERE invited_by = ${id} AND status <> 'pending'`),
+      countOne("invitations.used_by", sql`SELECT COUNT(*)::int AS count FROM invitations WHERE used_by = ${id}`),
+      countOne("protocols.executed_by", sql`SELECT COUNT(*)::int AS count FROM protocols WHERE executed_by = ${id}`),
+      countOne("customer_portal_messages.sender_user_id", sql`SELECT COUNT(*)::int AS count FROM customer_portal_messages WHERE sender_user_id = ${id}`),
+      countOne("deviation_reports.reported_by", sql`SELECT COUNT(*)::int AS count FROM deviation_reports WHERE reported_by = ${id}`),
+      countOne("qr_code_links.created_by", sql`SELECT COUNT(*)::int AS count FROM qr_code_links WHERE created_by = ${id}`),
+      countOne("object_images.uploaded_by", sql`SELECT COUNT(*)::int AS count FROM object_images WHERE uploaded_by = ${id}`),
+      countOne("fortnox_contract_suggestions.reviewed_by", sql`SELECT COUNT(*)::int AS count FROM fortnox_contract_suggestions WHERE reviewed_by = ${id}`),
+    ]);
+    return impact;
   }
 
   async listAllUsersWithTenants(): Promise<Array<User & { memberships: Array<{ tenantId: string; tenantName: string; role: string; isActive: boolean | null; assignedBy: string | null }> }>> {
@@ -1079,7 +1138,7 @@ export class DatabaseStorage implements IStorage {
           passwordHash: null,
           isActive: false,
           updatedAt: new Date(),
-        } as any)
+        })
         .where(eq(users.id, id))
         .returning();
       await tx

@@ -617,7 +617,7 @@ export function TopNav() {
     unreadMessages: 0,
   };
 
-  const isPlatformOwner = user?.tenantId === "kinab" && (user as any)?.role === "owner";
+  const isPlatformOwner = user?.tenantId === "kinab" && user?.role === "owner";
   const menuGroups = useMemo(() => {
     const groups = getNavGroups(t, tl, language);
     return groups.map(g => ({

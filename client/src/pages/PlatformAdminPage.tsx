@@ -75,8 +75,16 @@ interface AuditLogRow {
 interface UserDetail {
   user: PlatformUser;
   memberships: Membership[];
+  resourceImpact: Record<string, number>;
   recentAuditAsActor: AuditLogRow[];
   recentAuditAsTarget: AuditLogRow[];
+}
+
+interface UsersPage {
+  users: PlatformUser[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 type DialogMode = "delete" | "anonymize" | "detail";
@@ -100,6 +108,8 @@ export default function PlatformAdminPage() {
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
   const [search, setSearch] = useState("");
+  const [offset, setOffset] = useState(0);
+  const limit = 50;
   const [target, setTarget] = useState<PlatformUser | null>(null);
   const [mode, setMode] = useState<DialogMode>("delete");
   const [confirmText, setConfirmText] = useState("");
@@ -114,10 +124,12 @@ export default function PlatformAdminPage() {
 
   const isPlatformOwner = meQuery.data?.isPlatformOwner === true;
 
-  const { data: users = [], isLoading } = useQuery<PlatformUser[]>({
-    queryKey: ["/api/platform/users"],
+  const { data: usersPage, isLoading } = useQuery<UsersPage>({
+    queryKey: ["/api/platform/users", { q: search, limit, offset }],
     enabled: isPlatformOwner,
   });
+  const users = usersPage?.users ?? [];
+  const total = usersPage?.total ?? 0;
 
   const { data: audit = [], isLoading: auditLoading } = useQuery<AuditLogRow[]>({
     queryKey: ["/api/platform/audit-log"],
@@ -129,22 +141,8 @@ export default function PlatformAdminPage() {
     enabled: mode === "detail" && !!target?.id,
   });
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter((u) => {
-      const hay = [
-        u.email ?? "",
-        u.firstName ?? "",
-        u.lastName ?? "",
-        u.id,
-        ...u.memberships.map((m) => `${m.tenantId} ${m.tenantName ?? ""} ${m.role}`),
-      ]
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
-    });
-  }, [users, search]);
+  // Server gör nu filtreringen — vi visar bara responsen direkt.
+  const filtered = users;
 
   const deleteMutation = useMutation({
     mutationFn: async (vars: { id: string; reason: string; force: boolean }) => {
@@ -275,15 +273,17 @@ export default function PlatformAdminPage() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between gap-4">
-                <CardTitle>
-                  Alla användare ({filtered.length}
-                  {filtered.length !== users.length ? ` / ${users.length}` : ""})
+                <CardTitle data-testid="text-users-total">
+                  Alla användare ({total} totalt, visar {users.length} fr.o.m. {offset + 1})
                 </CardTitle>
                 <div className="relative w-72">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setOffset(0);
+                    }}
                     placeholder="Sök e-post, namn, tenant…"
                     className="pl-8"
                     data-testid="input-search-users"
@@ -389,6 +389,33 @@ export default function PlatformAdminPage() {
                     )}
                   </TableBody>
                 </Table>
+              )}
+              {total > limit && (
+                <div className="flex items-center justify-between pt-4 text-sm">
+                  <span className="text-muted-foreground">
+                    Sida {Math.floor(offset / limit) + 1} av {Math.max(1, Math.ceil(total / limit))}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={offset === 0}
+                      onClick={() => setOffset(Math.max(0, offset - limit))}
+                      data-testid="button-prev-page"
+                    >
+                      Föregående
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={offset + limit >= total}
+                      onClick={() => setOffset(offset + limit)}
+                      data-testid="button-next-page"
+                    >
+                      Nästa
+                    </Button>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -528,6 +555,30 @@ export default function PlatformAdminPage() {
                     )}
                   </TableBody>
                 </Table>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-semibold mb-2" data-testid="text-resource-impact-title">
+                  Kopplade resurser ({Object.keys(detailQuery.data.resourceImpact ?? {}).length} tabeller)
+                </h4>
+                {Object.keys(detailQuery.data.resourceImpact ?? {}).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Inga kopplade rader i kritiska tabeller.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 text-xs" data-testid="grid-resource-impact">
+                    {Object.entries(detailQuery.data.resourceImpact)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([table, n]) => (
+                        <div key={table} className="flex items-center justify-between bg-muted/40 rounded px-2 py-1">
+                          <code className="text-muted-foreground">{table}</code>
+                          <Badge variant="outline">{n}</Badge>
+                        </div>
+                      ))}
+                  </div>
+                )}
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Vid hård radering nollas dessa referenser (SET NULL) eller raderas (user_tenant_roles, sessions).
+                  Pending invitations som hen skapade markeras med "förlorad inbjudare".
+                </p>
               </div>
 
               <div>
