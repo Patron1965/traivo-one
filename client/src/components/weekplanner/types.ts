@@ -153,7 +153,7 @@ export interface ConstraintData {
 
 export const constraintCategoryLabels: Record<string, string> = {
   resource_availability: "Tillgänglighet",
-  vehicle_schedule: "Fordon",
+  vehicle_schedule: "Team",
   capacity: "Kapacitet",
   competency: "Kompetens",
   team_membership: "Team",
