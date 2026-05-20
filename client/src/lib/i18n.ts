@@ -131,8 +131,6 @@ const translations: Record<string, Record<Language, string>> = {
   "nav.system-overview.desc": { sv: "Read-only feature-katalog över hela plattformen — exporterbar som PDF för demo/säljmaterial", en: "Read-only feature catalog of the entire platform — exportable as PDF for demos/sales material" },
   "nav.platform-admin": { sv: "Plattform: Admin", en: "Platform: Admin" },
   "nav.platform-admin.desc": { sv: "Plattform-administration: branding, roller, audit och avancerade åtgärder (kräver admin/owner)", en: "Platform administration: branding, roles, audit and advanced actions (admin/owner only)" },
-  "nav.investor-pitch": { sv: "Demo: Investor pitch", en: "Demo: Investor Pitch" },
-  "nav.investor-pitch.desc": { sv: "Interaktiv slide-deck för investerare och försäljningsdemo", en: "Interactive slide deck for investors and sales demos" },
   "nav.settings": { sv: "Inställningar", en: "Settings" },
   "nav.settings.desc": { sv: "Systeminställningar", en: "System settings" },
 

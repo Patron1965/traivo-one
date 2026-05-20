@@ -53,7 +53,6 @@ import {
   Loader2,
   Globe,
   ExternalLink,
-  Presentation,
 } from "lucide-react";
 
 interface NavItemConfig {
@@ -101,7 +100,6 @@ const allNavItems: NavItemConfig[] = [
   { title: "Tenant: Företagsinställningar", url: "/tenant-config", icon: Settings2, category: "Plattform", keywords: ["tenant", "företag", "branding", "moduler", "metadata", "etiketter", "prislistor", "iot", "konfiguration"], adminOnly: true },
   { title: "Plattform: Admin", url: "/system-dashboard", icon: Palette, category: "Plattform", keywords: ["admin", "branding", "roller", "användare", "audit", "platform", "owner"], adminOnly: true },
   { title: "System: Funktionskatalog", url: "/system-overview", icon: Database, category: "Plattform", keywords: ["systemöversikt", "data", "statistik", "feature", "katalog", "pdf", "dokumentation", "demo"], adminOnly: true },
-  { title: "Demo: Investor pitch", url: "/investor-pitch", icon: Presentation, category: "Analys", keywords: ["pitch", "investor", "investerare", "slide", "presentation", "demo", "ekonomi"] },
   { title: "Kundportal extern", url: "/portal", icon: Globe, category: "Plattform", keywords: ["extern", "kund", "portal", "ny flik"], external: true, adminOnly: true },
 ];
 

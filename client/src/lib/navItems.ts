@@ -38,7 +38,6 @@ import {
   Gauge,
   Globe,
   Palette,
-  Presentation,
   type LucideIcon,
 } from "lucide-react";
 import { translate } from "./i18n";
@@ -141,7 +140,6 @@ export function getEkonomiItems(tl?: (key: string) => string): NavItem[] {
     { title: l("nav.reporting"), url: "/reporting", icon: BarChart3, description: l("nav.reporting.desc") },
     { title: l("nav.roi-report"), url: "/roi-report", icon: TrendingUp, description: l("nav.roi-report.desc") },
     { title: l("nav.proactive-sales"), url: "/proactive-sales", icon: TrendingUp, description: l("nav.proactive-sales.desc") },
-    { title: l("nav.investor-pitch"), url: "/investor-pitch", icon: Presentation, description: l("nav.investor-pitch.desc") },
   ];
 }
 

@@ -73,7 +73,6 @@ const AIAssistantPage = lazy(() => import("@/pages/AIAssistantPage"));
 const ReportingDashboardPage = lazy(() => import("@/pages/ReportingDashboardPage"));
 const WorkflowGuidePage = lazy(() => import("@/pages/WorkflowGuidePage"));
 const DataRequirementsPage = lazy(() => import("@/pages/DataRequirementsPage"));
-const InvestorPitchPage = lazy(() => import("@/pages/InvestorPitchPage"));
 const ApiCostsDashboardPage = lazy(() => import("@/pages/ApiCostsDashboardPage"));
 const MLDataQualityPage = lazy(() => import("@/pages/MLDataQualityPage"));
 const RestoreDormantCustomersPage = lazy(() => import("@/pages/admin/RestoreDormantCustomersPage"));
@@ -191,13 +190,11 @@ function Router() {
         <Route path="/order-concepts/new">{() => <ProtectedRoute component={OrderConceptWizardPage} path="/order-concepts" />}</Route>
         <Route path="/order-concepts/:id/edit">{() => <ProtectedRoute component={OrderConceptWizardPage} path="/order-concepts" />}</Route>
         <Route path="/assignments">{() => <ProtectedRoute component={AssignmentsPage} path="/assignments" />}</Route>
-        <Route path="/pitch">{() => <Redirect to="/investor-pitch" />}</Route>
         <Route path="/ai-assistant">{() => <ProtectedRoute component={AIAssistantPage} path="/ai-assistant" />}</Route>
         <Route path="/reporting">{() => <ProtectedRoute component={ReportingDashboardPage} path="/reporting" />}</Route>
         <Route path="/proactive-sales">{() => <ProtectedRoute component={ProactiveSalesPage} path="/proactive-sales" />}</Route>
         <Route path="/workflow-guide">{() => <ProtectedRoute component={WorkflowGuidePage} path="/workflow-guide" />}</Route>
         <Route path="/data-requirements">{() => <ProtectedRoute component={DataRequirementsPage} path="/data-requirements" />}</Route>
-        <Route path="/investor-pitch">{() => <ProtectedRoute component={InvestorPitchPage} path="/investor-pitch" />}</Route>
         <Route path="/ai-planning">{() => <ProtectedRoute component={AIPlanningPage} path="/ai-planning" />}</Route>
         <Route path="/ai-command-center">{() => <ProtectedRoute component={AICommandCenterPage} path="/ai-command-center" />}</Route>
         <Route path="/lundstams-roi">{() => <ProtectedRoute component={LundstamsROIPage} path="/lundstams-roi" />}</Route>
