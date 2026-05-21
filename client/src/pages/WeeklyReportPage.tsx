@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -133,11 +133,12 @@ export default function WeeklyReportPage() {
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [dirty, setDirty] = useState(false);
 
-  useMemo(() => {
+  useEffect(() => {
     if (data?.notes && !dirty) {
       setDecisions(data.notes.decisions || "");
       setActionItems(data.notes.actionItems || []);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.notes?.updatedAt, data?.isoWeek, data?.isoYear]);
 
   const saveNotes = useMutation({

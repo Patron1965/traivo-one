@@ -68,6 +68,7 @@ const PLANNER_ROUTES = new Set([
   "/assignments",
   "/ai-assistant",
   "/reporting",
+  "/weekly-report",
   "/workflow-guide",
   "/ai-planning",
   "/ai-command-center",
