@@ -54,8 +54,20 @@ function savePlannerFilters(filters: Record<string, unknown>) {
 export function usePlannerData() {
   const saved = useMemo(() => loadSavedFilters(), []);
   const [viewMode, setViewMode] = useState<ViewMode>(saved?.viewMode ?? "week");
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  // Task #521: stöd carry-over-notiser och andra deep-links via `?day=YYYY-MM-DD`.
+  const initialDate = useMemo(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get("day");
+      if (raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        const parsed = new Date(`${raw}T00:00:00`);
+        if (!isNaN(parsed.getTime())) return parsed;
+      }
+    } catch {}
+    return new Date();
+  }, []);
+  const [currentDate, setCurrentDate] = useState(initialDate);
+  const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(initialDate, { weekStartsOn: 1 }));
   const [selectedJob, setSelectedJob] = useState<string | null>(null);
   const [showUnscheduled, setShowUnscheduled] = useState(saved?.showUnscheduled ?? true);
   const [filterCustomer, setFilterCustomer] = useState<string>(saved?.filterCustomer ?? "all");

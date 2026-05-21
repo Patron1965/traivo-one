@@ -926,9 +926,34 @@ export const planningParameters = pgTable("planning_parameters", {
   // Nullable: fallback till resources.weeklyHours * stopsPerHour.
   dailyStopTarget: integer("daily_stop_target"),
   stopsPerHour: real("stops_per_hour"),
+  // Task #521: Carry-over-tröskel (procent) för röd-status i daglig notis.
+  // Nullable → default 110% i applikationen (gul >100, röd >110).
+  carryOverThresholdPercent: real("carry_over_threshold_percent"),
+  // Tenant-lokal timme (0–23) då carry-over-notisen ska skickas. Nullable →
+  // default 16. Tidszon: Europe/Stockholm (CARRY_OVER_TIMEZONE-env överstyr).
+  carryOverNotificationHour: integer("carry_over_notification_hour"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Task #521: Per-användar opt-out för in-app-notistyper (default ON; en rad =
+// explicit val). Generaliserbart men införs först för `carry_over_warning`.
+export const userNotificationPreferences = pgTable("user_notification_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  userId: varchar("user_id").notNull(),
+  type: text("type").notNull(),
+  enabled: boolean("enabled").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uniq_user_notif_pref_tenant_user_type").on(table.tenantId, table.userId, table.type),
+  index("idx_user_notif_pref_tenant").on(table.tenantId),
+]);
+
+export const insertUserNotificationPreferenceSchema = createInsertSchema(userNotificationPreferences).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertUserNotificationPreference = z.infer<typeof insertUserNotificationPreferenceSchema>;
+export type UserNotificationPreference = typeof userNotificationPreferences.$inferSelect;
 
 // Resurskompetenser - vilka artiklar en utförare kan utföra
 export const resourceArticles = pgTable("resource_articles", {

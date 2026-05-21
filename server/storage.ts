@@ -92,6 +92,7 @@ import {
   type ChecklistTemplate, type InsertChecklistTemplate,
   type DriverNotification, type InsertDriverNotification,
   userNotifications, type UserNotification, type InsertUserNotification,
+  userNotificationPreferences, type UserNotificationPreference,
   type OfflineSyncLog, type InsertOfflineSyncLog,
   type FuelLog, type InsertFuelLog,
   type MaintenanceLog, type InsertMaintenanceLog,
@@ -886,6 +887,11 @@ export interface IStorage {
   markAllUserNotificationsRead(userId: string, tenantId: string): Promise<number>;
   getUnreadUserNotificationCount(userId: string, tenantId: string): Promise<number>;
   deleteOldUserNotifications(opts: { readOlderThanDays?: number; unreadOlderThanDays?: number; tenantId?: string }): Promise<{ readDeleted: number; unreadDeleted: number }>;
+
+  // User notification preferences (per-type opt-out; default ON when row saknas)
+  getUserNotificationPreference(tenantId: string, userId: string, type: string): Promise<UserNotificationPreference | undefined>;
+  getUserNotificationPreferences(userId: string, tenantId: string): Promise<UserNotificationPreference[]>;
+  setUserNotificationPreference(tenantId: string, userId: string, type: string, enabled: boolean): Promise<UserNotificationPreference>;
 
   // Offline Sync Log
   createOfflineSyncLog(log: InsertOfflineSyncLog): Promise<OfflineSyncLog>;
@@ -7340,6 +7346,33 @@ export class DatabaseStorage implements IStorage {
       unreadDeleted = result.length;
     }
     return { readDeleted, unreadDeleted };
+  }
+
+  async getUserNotificationPreference(tenantId: string, userId: string, type: string): Promise<UserNotificationPreference | undefined> {
+    const [row] = await db.select().from(userNotificationPreferences)
+      .where(and(
+        eq(userNotificationPreferences.tenantId, tenantId),
+        eq(userNotificationPreferences.userId, userId),
+        eq(userNotificationPreferences.type, type),
+      ))
+      .limit(1);
+    return row;
+  }
+
+  async getUserNotificationPreferences(userId: string, tenantId: string): Promise<UserNotificationPreference[]> {
+    return db.select().from(userNotificationPreferences)
+      .where(and(eq(userNotificationPreferences.userId, userId), eq(userNotificationPreferences.tenantId, tenantId)));
+  }
+
+  async setUserNotificationPreference(tenantId: string, userId: string, type: string, enabled: boolean): Promise<UserNotificationPreference> {
+    const [row] = await db.insert(userNotificationPreferences)
+      .values({ tenantId, userId, type, enabled })
+      .onConflictDoUpdate({
+        target: [userNotificationPreferences.tenantId, userNotificationPreferences.userId, userNotificationPreferences.type],
+        set: { enabled, updatedAt: new Date() },
+      })
+      .returning();
+    return row;
   }
 
   async createOfflineSyncLog(log: InsertOfflineSyncLog): Promise<OfflineSyncLog> {

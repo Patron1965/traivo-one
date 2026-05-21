@@ -7,7 +7,7 @@ import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerMagicLinkRoutes } from "./replit_integrations/auth/magicLinkAuth";
 import { registerInvitationsRoutes } from "./routes/invitationsRoutes";
-import { requireTenantWithFallback, getTenantIdWithFallback, getUserTenants } from "./tenant-middleware";
+import { requireTenantWithFallback, getTenantIdWithFallback, getUserTenants, requireAdmin } from "./tenant-middleware";
 import { moduleGuardMiddleware } from "./feature-flags";
 import { notificationService } from "./notifications";
 import { handleMcpSse, handleMcpMessage } from "./mcp";
@@ -20,6 +20,7 @@ import { geocodeScheduler } from "./services/geocode-scheduler";
 import { notificationCleanupScheduler, getRetentionConfig } from "./services/notification-cleanup-scheduler";
 import { fortnoxMappingCleanupScheduler } from "./services/fortnox-mapping-cleanup-scheduler";
 import { auditCleanupScheduler } from "./services/audit-cleanup-scheduler";
+import { carryOverNotificationScheduler } from "./services/carry-over-notification-scheduler";
 import { prodHealthCheckScheduler } from "./services/prod-health-check-scheduler";
 import { registerProdHealthCheckRoutes } from "./routes/prodHealthCheckRoutes";
 import { startWeeklyReportScheduler } from "./weekly-report";
@@ -92,6 +93,7 @@ export async function registerRoutes(
   notificationCleanupScheduler.start();
   fortnoxMappingCleanupScheduler.start();
   auditCleanupScheduler.start();
+  carryOverNotificationScheduler.start();
   capacityForecastScheduler.start();
   prodHealthCheckScheduler.start();
 
@@ -428,6 +430,55 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Failed to run audit log cleanup:", error);
       res.status(500).json({ error: "Kunde inte rensa audit-loggar" });
+    }
+  });
+
+  // Task #521: Per-användar opt-in/opt-out för in-app-notistyper. Default ON
+  // (notisen levereras om ingen rad finns). Endast inloggad användare läser/sätter
+  // sitt eget preference.
+  app.get("/api/notifications/preferences", async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
+      const tenantId = getTenantIdWithFallback(req);
+      const prefs = await storage.getUserNotificationPreferences(userId, tenantId);
+      res.json({ preferences: prefs });
+    } catch (error) {
+      console.error("Failed to fetch notification preferences:", error);
+      res.status(500).json({ error: "Kunde inte hämta notisinställningar" });
+    }
+  });
+
+  app.put("/api/notifications/preferences/:type", async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      if (!userId) return res.status(401).json({ error: "Ej autentiserad" });
+      const tenantId = getTenantIdWithFallback(req);
+      const type = String(req.params.type || "").trim();
+      if (!type) return res.status(400).json({ error: "type krävs" });
+      const enabled = req.body?.enabled !== false; // default true om saknas
+      const row = await storage.setUserNotificationPreference(tenantId, userId, type, enabled);
+      res.json(row);
+    } catch (error) {
+      console.error("Failed to set notification preference:", error);
+      res.status(500).json({ error: "Kunde inte spara notisinställning" });
+    }
+  });
+
+  // Task #521: Manuell trigger för carry-over-notis. Tenant-scoped path så
+  // `requireTenantWithFallback` (/api-middleware ovan) resolverar tenant från
+  // session, och `requireAdmin` kollar tenant-rollen via user_tenant_roles
+  // (inte legacy globala users.role). Default dryRun=true så produktion inte
+  // spammar i misstag — sätt body.dryRun=false för att faktiskt skicka.
+  app.post("/api/carry-over/run", requireAdmin, async (req: any, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const dryRun = req.body?.dryRun !== false;
+      const summary = await carryOverNotificationScheduler.runManual(tenantId, { dryRun });
+      res.json({ dryRun, summary });
+    } catch (error) {
+      console.error("Failed to run carry-over notification:", error);
+      res.status(500).json({ error: "Kunde inte köra carry-over-notis" });
     }
   });
 
