@@ -983,13 +983,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUsersByTenant(tenantId: string): Promise<User[]> {
+    // OBS: rollen som returneras är tenant-rollen från user_tenant_roles
+    // (per-tenant), inte den globala users.role-kolumnen — det är den
+    // som invitations/admin-UI sätter och som spelar roll för access.
     const rows = await db
-      .select({ user: users })
+      .select({ user: users, tenantRole: userTenantRoles.role })
       .from(userTenantRoles)
       .innerJoin(users, eq(userTenantRoles.userId, users.id))
       .where(eq(userTenantRoles.tenantId, tenantId))
       .orderBy(desc(users.createdAt));
-    return rows.map(r => r.user);
+    return rows.map(r => ({ ...r.user, role: r.tenantRole ?? r.user.role }));
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {

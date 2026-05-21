@@ -1727,12 +1727,14 @@ app.patch("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, res
       if (updated) user = updated;
     }
 
+    let effectiveRole: string | null = membership.role ?? user.role ?? "user";
     if (role !== undefined) {
       await assignUserToTenant(req.params.id, tenantId, role as UserRole, (req as any).userId);
+      effectiveRole = role;
     }
 
     const { passwordHash: _, ...safeUser } = user;
-    res.json(safeUser);
+    res.json({ ...safeUser, role: effectiveRole });
 }));
 
 app.delete("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, res) => {
