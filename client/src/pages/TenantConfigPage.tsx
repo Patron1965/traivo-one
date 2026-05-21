@@ -2,7 +2,9 @@
 // branding, moduler, metadata-etiketter). Distinkt ansvar från SystemDashboardPage
 // (plattform-admin) och SystemOverviewPage (feature-katalog).
 // Se docs/admin-page-overlap-review.md.
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -45,6 +47,22 @@ export default function TenantConfigPage() {
   const { data: resources = [] } = useQuery<Resource[]>({ queryKey: ["/api/resources"] });
   const { data: priceLists = [] } = useQuery<PriceList[]>({ queryKey: ["/api/price-lists"] });
 
+  const [location] = useLocation();
+  const validTabs = [
+    "onboarding","company","branding","terminology","articles","price-lists",
+    "resources","resource-profiles","teams","iot","modules","metadata-labels",
+  ];
+  const initialTab = (() => {
+    const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tab") : null;
+    return q && validTabs.includes(q) ? q : "onboarding";
+  })();
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("tab");
+    if (q && validTabs.includes(q) && q !== activeTab) setActiveTab(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location]);
+
   const activeArticles = articles.filter(a => a.status === "active");
   const articlesWithCode = activeArticles.filter(a => a.executionCode);
   const activeResources = resources.filter(r => r.status === "active");
@@ -86,7 +104,7 @@ export default function TenantConfigPage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="onboarding" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-12">
           <TabsTrigger value="onboarding" data-testid="tab-onboarding" className="flex items-center gap-2">
             <Rocket className="h-4 w-4" />
