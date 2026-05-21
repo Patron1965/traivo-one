@@ -1,0 +1,307 @@
+# Feedback-begäran: Traivo One — Arkitektur, Implementation och Produktionsmognad
+
+## Kontext
+Vi har byggt **Traivo One**, en enterprise-fälttjänstplattform för planering och optimering av kärltvättar (avfallshantering). Systemet är nu i pilotfas med Kinab som pilotkund och vi behöver feedback på om vi tänkt rätt arkitekturmässigt och vad vi eventuellt har missat.
+
+**Kodbas:** ~221 000 rader TypeScript/TSX, 148 databastabeller, 108 sidor/vyer
+**Teknisk stack:** React 18 + Express.js + PostgreSQL/Drizzle + OR-Tools ruttoptimering + OpenAI-integration
+
+---
+
+## VÅR AFFÄRSIDÉ (enligt presentation till kund)
+
+Presentationen vi gjort till Kinab beskriver följande operativa modell:
+
+### Daglig planering
+- **Produktionsmål:** 100 kärl/dag per resurs
+- **Lönsamhetslogik:** Fasta kostnader gör att vinst först uppstår efter ~90 kärl
+- **Break-even-visualisering:** 85 kärl = förlust, 90 = nollresultat, 100+ = vinst
+- **Carry-over-effekt:** Missade kärl idag → extrabelastning imorgon → stress/risk
+
+### Veckoplanering (40-timmarsmodellen)
+- 28h planerad produktion & restid
+- 12h reserverad tid (rast 45 min, tankning 30 min, buffert 30 min, service 15 min, admin 15 min)
+- Övertidsvarning vid >40h
+
+### Daglig planeringspussel (5 delar)
+1. Jobb byggs av uppgifter (kärl × tid + rum-tvätt = total produktionstid)
+2. Flera jobb under dagen på olika adresser
+3. Restid mellan jobb (15–25 min)
+4. Tidsfönster hos kund
+5. Optimering baserat på tid, rutter, arbetsbelastning
+
+### Enhetsansvarig-rollen
+- Ansvar för: Team, Fordon, Uppdrag
+- Uppföljning plan vs utfall (kärl, stopp, km, avvikelser, produktions-/restid)
+- 4-stegs avvikelseprocess: Identifiera → Analysera → Prioritera → Åtgärda
+- Veckoplaneringsmöte med: resultat, trender, planering, kvalitetsmål, beslut
+
+---
+
+## VAD VI HAR IMPLEMENTERAT
+
+### Kärnfunktioner (matchar presentationen)
+✅ **Daglig produktionsmåluppföljning:**
+   - `DailyProgressCard.tsx` — progress mot dagsmål med celebration-animation
+   - `DayTimelineView` — tidslinjevy för dagens jobb
+   - `DayReport.tsx` — daglig sammanställning
+
+✅ **Veckoplanering:**
+   - `WeekPlanner.tsx` + 15 underkomponenter
+   - Drag-and-drop med WeekGridView, DayTimelineView, MonthView, RouteMapView
+   - UnscheduledSidebar för icke-schemalagda ordrar
+   - WhatIfPreview för konsekvensanalys
+   - DisruptionPanel för störningshantering
+   - Constraint-overlays och conflict detection
+
+✅ **Ruttoptimering:**
+   - Python FastAPI-tjänst med OR-Tools CVRPTW (`optimization-service/main.py`)
+   - ALNS (Adaptive Large Neighborhood Search) postoptimering (`optimization-service/alns.py`)
+   - VRP-begränsningsmodellering: tidsfönster, kompetens, kapacitet, beroenden (`server/vrp-constraints.ts` - 673 rader)
+   - Asynkron jobbkö för stora optimeringar >30 stopp (`server/optimization-job-runner.ts`)
+   - Distansmatriser med caching (`server/distance-matrix-service.ts`)
+
+✅ **KPI:er & Uppföljning:**
+   - `server/routes/kpiRoutes.ts` (2429 rader) — omfattande KPI-endpoints
+   - Interaktiva dashboards med Recharts (Line/Bar/Pie/Composed)
+   - Automatisk veckorapportgenerering (`server/weekly-report.ts`)
+   - `DataQualityDashboard.tsx`, `CapacityForecastTab.tsx`
+
+✅ **Avvikelsehantering:**
+   - `server/anomaly-monitor.ts` — automatisk anomalidetektering
+   - `server/disruption-service.ts` (538 rader) — störningshantering
+   - `server/services/sla-risk-engine.ts` — SLA-riskberäkning
+   - `AnomalyAlerts.tsx` och `SlaRiskPanel.tsx` i UI
+
+✅ **Tidsfönster och kundpreferenser:**
+   - Tabeller: `task_desired_timewindows`, `object_time_restrictions`
+   - `deliveryPreferences` JSON-fält med slottider och blockerade tider
+   - UI-editorer: `TaskTimewindowsEditor.tsx`, `DeliveryPreferencesEditor.tsx`
+
+✅ **Resurshantering:**
+   - `resources` tabell med kompetens, hemposition, GPS, mobilapp-PIN
+   - `teams` + `team_members` för teamorganisering
+   - `resource_availability` för tillgänglighetsplanering
+   - `work_sessions` + `work_entries` för arbetstidsregistrering
+
+### Funktioner BORTOM presentationen
+❗ **Systemet har vuxit långt utöver vad presentationen beskriver:**
+- AI-driven planering (OpenAI-integration, AI-suggestions, AI Field Assistant)
+- Multi-tenant SaaS med fullständig tenant-isolering
+- Kundportal (12+ sidor: dashboard, fakturor, kontrakt, self-booking)
+- Fortnox-integration för fakturering
+- Mobilapp "Traivo Go" (offline-first, fokusläge, signatur, QR, GPS)
+- Orderkoncept-wizard (9-stegs för ordermallar)
+- Import/Datakvalitet med kolumnmapping och batch-watchdog
+- Auto-clustering (DBSCAN) för geografisk objektgrupperring
+- Prediktiv analys (ML med LightGBM, shadow/canary/active-cykel)
+- IoT-integration för signalmottagning
+- Telefoni/SMS (Twilio), checklistor, fleet management, miljöcertifikat
+
+---
+
+## IDENTIFIERADE GAPS (presentation vs. implementation)
+
+### 1. Operativ UX matchar inte affärsmodellen helt
+⚠️ **Break-even-visualisering saknas**
+   - Presentationen visar tydlig lönsamhetskurva (85/90/100 kärl)
+   - Vi har KPI:er och ROI-rapporter, men inte den specifika break-even-widgeten
+   - **Fråga:** Är detta viktigare än vi trodde för den dagliga användningen?
+
+⚠️ **Ingen dedikerad "Enhetsansvarig-vy"**
+   - Rollsystemet har `platform-owner`, `admin`, `planner`, `user`
+   - Men ingen roll eller dashboard som matchar slide 5:s "Enhetsansvarig"-koncept
+   - Data finns i KPI-endpoints, men inte som en samlad vy
+   - **Fråga:** Behöver vi en rollspecifik dashboard för detta, eller räcker planner-rollen?
+
+⚠️ **28h+12h-veckomodellen inte explicit visualiserad**
+   - Veckoplaneraren visar arbetsbelastning men inte uppdelningen produktionstid vs reservtid
+   - `planning_parameters` har kapacitet, men inte denna granularitet
+   - **Fråga:** Hur viktigt är det att visa exakt denna uppdelning vs generell kapacitetsplanering?
+
+⚠️ **Carry-over-varning saknas som explicit UX**
+   - WeekPlanner hanterar icke-schemalagda ordrar via `UnscheduledSidebar`
+   - Men ingen proaktiv varning "Du missade 10 kärl idag, imorgon blir 110 kärl = stressrisk"
+   - **Fråga:** Bör detta vara en dedikerad notis/alert-typ?
+
+⚠️ **Veckomöte-agenda inte explicit**
+   - All data för mötet finns (KPI:er, trender, avvikelser), men ingen "veckomötes-vy"
+   - **Fråga:** Behövs en dedikerad rapport-generator för detta, eller räcker nuvarande dashboards?
+
+### 2. Teknisk skuld från snabb iteration
+🔴 **Monolitisk storage:**
+   - `server/storage.ts` är 7 464 rader — en "god object" som hanterar allt
+   - **Fråga:** Hur ska vi dela upp detta utan att introducera buggar? Domain-driven design per modul?
+
+🔴 **Jättelik schema-fil:**
+   - `shared/schema.ts` är 5 557 rader
+   - **Fråga:** Dela per domän (core, planning, billing, portal, iot)?
+
+🟡 **TypeScript `any` ännu inte eliminerat:**
+   - Task #20 har status "PROPOSED" men inte åtgärdat
+   - **Fråga:** Vilka delar är mest kritiska att fixa först? (auth, tenant, optimering?)
+
+🟡 **Kodduplicering:**
+   - Dokumenterat i "avduplicering rensningslogg"
+   - **Fråga:** Är detta normalt i detta skede, eller indikator på strukturproblem?
+
+### 3. Arkitektur och deployment
+⚠️ **Replit-beroende:**
+   - Auth-systemet baserat på Replit-integration (`replit_integrations/`)
+   - **Fråga:** Hur stor omskrivning krävs för att köra på annan hosting (AWS/Azure/GCP)?
+
+⚠️ **Ingen containerisering (utom optimering):**
+   - OR-Tools-tjänsten har Dockerfile, men huvudappen saknar det
+   - **Fråga:** Bör vi dockerisera hela stacken nu, eller vänta tills efter pilot?
+
+⚠️ **Singel Express-process:**
+   - Inga kluster/workers dokumenterade
+   - Alla schedulers körs in-process (anomaly monitor, predictive, SLA-risk, geocode)
+   - **Fråga:** Vid vilken skala blir detta ett problem? Piloten är ~5-10 resurser.
+
+⚠️ **Externa tjänsteberoenden:**
+   - OpenAI, Geoapify, Fortnox, Twilio, Google Cloud Storage
+   - **Fråga:** Har vi fallbacks för varje kritisk tjänst? Vad händer om Geoapify går ner?
+
+### 4. ML och optimering
+🟡 **ML i fas 0–1:**
+   - `mlPredictionClient.predictDurations()` returnerar alltid `null` tills modell finns
+   - Feature snapshots skrivs, träningsskript finns (`train_duration_model.py`)
+   - **Fråga:** Ska vi fokusera på OR-Tools först och lägga ML som phase 2, eller parallellt?
+
+🟡 **OR-Tools som separat tjänst:**
+   - Python FastAPI körs separat från Express
+   - Fallback till Geoapify VRP om tjänsten inte svarar
+   - **Fråga:** Är denna hybrid-approach (egen optimering + kommersiell fallback) rätt strategi?
+
+### 5. Säkerhet och multi-tenancy
+✅ **Tenant-isolering verkar robust:**
+   - Middleware med tester, alla queries filtrerade på `tenantId`
+   - Dedikerade säkerhetstester
+   - **Fråga:** Finns det säkerhetshål vi missat? (vi har threat_model.md dokumenterad)
+
+⚠️ **Intern admin-token från fil:**
+   - `.local/.import_token` läses för import-API
+   - **Fråga:** Är detta OK för produktion, eller bör vi flytta till miljövariabler/secrets manager?
+
+---
+
+## SPECIFIKA FRÅGOR TILL ER
+
+### Arkitektur
+1. **Är monolitisk Express + PostgreSQL rätt arkitektur för multi-tenant SaaS** med 148 tabeller och 108 sidor, eller bör vi börja tänka microservices redan nu?
+
+2. **Storage-lagret (7 464 rader)** — Hur skulle ni dela upp detta? Repository pattern per domän, eller CQRS-approach?
+
+3. **Schedulers in-process** — Alla cron-jobb (anomaly, SLA, geocode, reports) körs i samma process. Vid vilken skala är detta ett problem?
+
+4. **OR-Tools som separat Python-tjänst** — Är det rätt att ha detta separat, eller borde det vara integrerat? Kommunikation sker via HTTP just nu.
+
+### Datamodell
+5. **148 tabeller, 79 migrationer** — Är detta rimligt för ett 6-månadersskede, eller tecken på överdesign?
+
+6. **Hierarkisk objektmodell** (koncern→brf→fastighet→rum→kärl med ärvning av leveransadresser) — Har vi missat något kritiskt i denna modellering?
+
+7. **Soft deletes överallt** (`deletedAt`) — Rätt strategi, eller borde vissa tabeller ha hard deletes?
+
+### UX och affärslogik
+8. **Break-even-visualisering** — Hur kritiskt är det att ha detta från dag 1 i piloten?
+
+9. **Enhetsansvarig-rollen** — Räcker det med planner-rollen + filtrering på team, eller behöver vi en dedikerad roll?
+
+10. **Carry-over-varning** — Automatisk eller manuell? Daglig notis, veckorapport, eller realtidsvarning?
+
+### Optimering och ML
+11. **OR-Tools CVRPTW + ALNS** — Är vår implementation (se `optimization-service/alns.py`) korrekt, eller finns det uppenbara förbättringar?
+
+12. **ML-pipeline** — Vi skriver feature snapshots men har ingen aktiv modell än. Ska vi vänta med detta tills vi har 3-6 månaders verklig data?
+
+13. **Hybrid-optimering** (OR-Tools primärt, Geoapify VRP som fallback) — Rätt strategi, eller skapar det inkonsistent användarupplevelse?
+
+### Säkerhet och produktion
+14. **Tenant-isolering** — Vilka ytterligare tester borde vi köra för att vara säkra på att det är vattentätt?
+
+15. **Rate limiting** — Just nu `express-rate-limit` på API-nivå. Behöver vi mer granulär kontroll (per tenant, per feature)?
+
+16. **Secrets management** — Många miljövariabler (OpenAI, Geoapify, Fortnox, Twilio). Bör vi flytta till AWS Secrets Manager eller liknande innan produktion?
+
+### Deployment och DevOps
+17. **Replit-beroende** — Hur stor är risken att köra pilot på Replit vs att migrera till AWS/Azure först?
+
+18. **Containerisering** — När är rätt tidpunkt att dockerisera hela stacken?
+
+19. **Backup och disaster recovery** — Vi har PostgreSQL-backup via Replit, men ingen dokumenterad disaster recovery-plan. Vad behöver vi?
+
+20. **Monitoring och observability** — Just nu loggar vi till konsol. Behöver vi strukturerad loggning (Winston/Pino) + metrics (Prometheus) redan i pilot?
+
+### Kodkvalitet
+21. **TypeScript `any` (Task #20)** — Vilka delar är mest kritiska att fixa? Auth, tenant, optimering?
+
+22. **Kod-duplicering** — Vi har dokumenterad avduplicering pågående. Är detta normalt, eller indikator på arkitekturproblem?
+
+23. **Testning** — 41 testfiler finns, men coverage okänd. Vad är rimlig coverage för produktion?
+
+---
+
+## VÅRA STÖRSTA TVIVEL
+
+### 1. Scope creep
+**Symptom:** Systemet har 10× fler funktioner än presentationen beskriver
+**Fråga:** Har vi byggt för mycket för tidigt? Borde vi "feature freeze" och fokusera på polish av kärnfunktioner?
+
+### 2. UX-gap mot affärsmodell
+**Symptom:** Data finns, men visualisering matchar inte presentationens operativa språk
+**Fråga:** Hur mycket arbete är det att bygga "Enhetsansvarig Dashboard" som matchar slide 5, vs att träna användarna på det generiska dashboardet?
+
+### 3. Teknisk skuld vs nya features
+**Symptom:** `storage.ts` 7 464 rader, `schema.ts` 5 557 rader, dokumenterad duplicering
+**Fråga:** Bör vi pausa ny utveckling och göra en konsolideringsfas, eller är detta normalt och vi fortsätter bygga?
+
+### 4. Optimering: egen vs köpt
+**Symptom:** Vi har både OR-Tools CVRPTW+ALNS (egen) och Geoapify VRP (kommersiell fallback)
+**Fråga:** Är det värt komplexiteten att underhålla båda, eller borde vi välja en och optimera den?
+
+### 5. ML: nu eller senare?
+**Symptom:** Infrastruktur finns (feature snapshots, träningsskript) men ingen aktiv modell
+**Fråga:** Vänta 6 månader på verklig data, eller börja med syntetisk data och iterera?
+
+---
+
+## VAD VI FRÄMST VILL HA FEEDBACK PÅ
+
+### Hög prioritet
+🔴 **Är arkitekturen production-ready för multi-tenant SaaS?**
+🔴 **Vilka säkerhetsrisker har vi missat?**
+🔴 **Bör vi refaktorera storage.ts innan piloten, eller kan det vänta?**
+🔴 **Är OR-Tools-implementationen korrekt och effektiv?**
+
+### Medel prioritet
+🟡 **Hur viktig är break-even-visualiseringen för daglig användning?**
+🟡 **Borde vi dockerisera innan pilot, eller kan det vänta?**
+🟡 **Rätt tid att aktivera ML-pipeline?**
+🟡 **Hur hanterar vi external service failures (Geoapify, OpenAI ner)?**
+
+### Låg prioritet
+🟢 **Kod-duplicering: fixa nu eller senare?**
+🟢 **Enhetsansvarig som separat roll eller bara planner med filtrering?**
+🟢 **Veckomötes-vy: dedikerad eller adhoc från dashboard?**
+
+---
+
+## SAMMANFATTNING
+
+Vi har byggt ett omfattande system som **tekniskt överstiger** vad presentationen beskriver, men **UX-mässigt inte fullt ut speglar** den operativa modell vi sålt in till kunden.
+
+**Vår största oro:**
+1. Har vi överbyggt systemet i förhållande till faktiskt behov?
+2. Kommer teknisk skuld (monolitisk storage, jätteschema) att hämma oss om 6 månader?
+3. Är vi production-ready för multi-tenant SaaS, eller har vi missat kritiska säkerhetshål?
+4. Bör vi pausa nya features och fokusera på att polera kärnfunktionerna för piloten?
+
+**Vad vi främst behöver från er:**
+- **Arkitekturell validering** — Är grundläggande design sund, eller finns det fundamentala brister?
+- **Säkerhetsgranskning** — Vilka hot har vi missat i multi-tenant-modellen?
+- **Prioriteringsråd** — Refaktorera nu eller efter pilot? Fokusera på UX-gap eller nya features?
+- **Tekniska förbättringar** — Konkreta förslag på vad som borde ändras i storage, schema, optimering
+
+**Tack för er tid!** Vi uppskattar all feedback — både vad vi gjort rätt och vad vi helt har missat.
