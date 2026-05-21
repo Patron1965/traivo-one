@@ -1131,16 +1131,18 @@ async function rebrandPlannixToKinab() {
 }
 
 /**
- * Realigna enabled_modules för tenants på system-managed tiers (basic/standard)
- * så att modul-omstruktureringen i Task #526 (kpi_analytics + customer_mgmt
- * adderade, core slimmad) inte tappar bort dashboard/economics/reporting för
- * existerande tenants. Tenants på custom/premium/pilot lämnas orörda.
+ * Realigna enabled_modules för alla system-definierade tiers
+ * (basic/standard/premium/pilot) mot PACKAGE_DEFINITIONS så att
+ * modul-omstruktureringar (t.ex. Task #526 som adderade kpi_analytics +
+ * customer_mgmt och slimmade core) inte tappar bort sidor i existerande
+ * tenants. `custom` lämnas orörd eftersom det är där admin handplockar moduler.
  */
+const SYSTEM_TIERS = new Set(["basic", "standard", "premium", "pilot"]);
 async function backfillSystemTierModules() {
   try {
     const rows = await db.select().from(tenantFeatures);
     for (const row of rows) {
-      if (row.packageTier !== "basic" && row.packageTier !== "standard") continue;
+      if (!SYSTEM_TIERS.has(row.packageTier)) continue;
       const expected = getModulesForPackage(row.packageTier as any);
       const current = (row.enabledModules || []) as string[];
       const currentSet = new Set(current);
