@@ -97,7 +97,7 @@ const allNavItems: NavItemConfig[] = [
   { title: "Metadata", url: "/metadata-settings", icon: FileText, category: "Avancerat", keywords: ["fält", "anpassning"] },
   { title: "Upphandlingar", url: "/procurements", icon: Briefcase, category: "Avancerat", keywords: ["avtal", "kontrakt"] },
   { title: "Kundportal", url: "/customer-portal", icon: Building, category: "Avancerat", keywords: ["extern", "kund"] },
-  { title: "Tenant: Företagsinställningar", url: "/tenant-config", icon: Settings2, category: "Plattform", keywords: ["tenant", "företag", "branding", "moduler", "metadata", "etiketter", "prislistor", "iot", "konfiguration"], adminOnly: true },
+  { title: "Företagsinställningar", url: "/tenant-config", icon: Settings2, category: "Plattform", keywords: ["tenant", "företag", "branding", "moduler", "metadata", "etiketter", "prislistor", "iot", "konfiguration"], adminOnly: true },
   { title: "Plattform: Admin", url: "/system-dashboard", icon: Palette, category: "Plattform", keywords: ["admin", "branding", "roller", "användare", "audit", "platform", "owner"], adminOnly: true },
   { title: "System: Funktionskatalog", url: "/system-overview", icon: Database, category: "Plattform", keywords: ["systemöversikt", "data", "statistik", "feature", "katalog", "pdf", "dokumentation", "demo"], adminOnly: true },
   { title: "Kundportal extern", url: "/portal", icon: Globe, category: "Plattform", keywords: ["extern", "kund", "portal", "ny flik"], external: true, adminOnly: true },

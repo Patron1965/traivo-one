@@ -108,7 +108,7 @@ export default function TenantConfigPage() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-13">
+        <TabsList className="flex w-full flex-wrap h-auto justify-start gap-1">
           <TabsTrigger value="onboarding" data-testid="tab-onboarding" className="flex items-center gap-2">
             <Rocket className="h-4 w-4" />
             <span className="hidden sm:inline">Kom igång</span>
