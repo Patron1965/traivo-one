@@ -20,11 +20,13 @@ import {
   ToggleLeft,
   Zap,
   Tag,
+  Rocket,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Building } from "lucide-react";
 import {
   CompanyInfoTab,
+  OnboardingTab,
   ArticlesExecutionTab,
   PriceListsTab,
   ResourcesExecutionTab,
@@ -84,8 +86,12 @@ export default function TenantConfigPage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="company" className="w-full">
-        <TabsList className="grid w-full grid-cols-11">
+      <Tabs defaultValue="onboarding" className="w-full">
+        <TabsList className="grid w-full grid-cols-12">
+          <TabsTrigger value="onboarding" data-testid="tab-onboarding" className="flex items-center gap-2">
+            <Rocket className="h-4 w-4" />
+            <span className="hidden sm:inline">Kom igång</span>
+          </TabsTrigger>
           <TabsTrigger value="company" data-testid="tab-company" className="flex items-center gap-2">
             <Building2 className="h-4 w-4" />
             <span className="hidden sm:inline">Företagsinfo</span>
@@ -132,6 +138,9 @@ export default function TenantConfigPage() {
           </TabsTrigger>
         </TabsList>
 
+        <TabsContent value="onboarding">
+          <OnboardingTab />
+        </TabsContent>
         <TabsContent value="company">
           <CompanyInfoTab />
         </TabsContent>

@@ -1,4 +1,5 @@
 export { CompanyInfoTab } from "./CompanyInfoTab";
+export { OnboardingTab } from "./OnboardingTab";
 export { ArticlesExecutionTab } from "./ArticlesExecutionTab";
 export { PriceListsTab } from "./PriceListsTab";
 export { ResourcesExecutionTab } from "./ResourcesExecutionTab";

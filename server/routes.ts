@@ -30,6 +30,7 @@ import { registerObjectRoutes } from "./routes/objectRoutes";
 import { registerResourceRoutes } from "./routes/resourceRoutes";
 import { registerWorkOrderRoutes } from "./routes/workOrderRoutes";
 import { registerImportRoutes } from "./routes/importRoutes";
+import { registerOnboardingRoutes } from "./routes/onboardingRoutes";
 import { registerConfigRoutes } from "./routes/configRoutes";
 import { registerClusterRoutes } from "./routes/clusterRoutes";
 import { registerAIRoutes } from "./routes/aiRoutes";
@@ -671,6 +672,7 @@ export async function registerRoutes(
   registerResourceRoutes(app);
   registerWorkOrderRoutes(app);
   registerImportRoutes(app);
+  await registerOnboardingRoutes(app);
   registerConfigRoutes(app);
   registerClusterRoutes(app);
   registerAIRoutes(app);
