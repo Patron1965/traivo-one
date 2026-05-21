@@ -6287,13 +6287,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCustomerByEmail(email: string, tenantId: string): Promise<Customer | undefined> {
+    const normalized = email.trim().toLowerCase();
     const [customer] = await db.select().from(customers)
       .where(and(
-        eq(customers.email, email),
+        sql`LOWER(${customers.email}) = ${normalized}`,
         eq(customers.tenantId, tenantId),
         isNull(customers.deletedAt)
       ));
-    return customer || undefined;
+    if (customer) return customer;
+
+    // Fallback: portal_users kan ha registrerats för en kontakt-e-post som
+    // skiljer sig från customers.email (t.ex. kund-administratör inbjuden
+    // separat). Slå upp via portal_users → customer.
+    const [portalUser] = await db.select().from(portalUsers).where(and(
+      eq(portalUsers.tenantId, tenantId),
+      eq(portalUsers.email, normalized),
+    ));
+    if (!portalUser) return undefined;
+
+    const [linked] = await db.select().from(customers).where(and(
+      eq(customers.id, portalUser.customerId),
+      eq(customers.tenantId, tenantId),
+      isNull(customers.deletedAt),
+    ));
+    return linked || undefined;
   }
 
   // ============================================
