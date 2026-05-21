@@ -116,6 +116,7 @@ const TelephonyPage = lazy(() => import("@/pages/TelephonyPage"));
 const MonitorPopoutPage = lazy(() => import("@/pages/MonitorPopoutPage"));
 const PlannerPopoutPage = lazy(() => import("@/pages/PlannerPopoutPage"));
 const ControlTowerPage = lazy(() => import("@/pages/ControlTowerPage"));
+const UnitManagerPage = lazy(() => import("@/pages/UnitManagerPage"));
 const NotificationsPage = lazy(() => import("@/pages/NotificationsPage"));
 const CustomersPage = lazy(() => import("@/pages/CustomersPage"));
 const CustomerDetailPage = lazy(() => import("@/pages/CustomerDetailPage"));
@@ -208,6 +209,7 @@ function Router() {
         <Route path="/predictive-maintenance">{() => <ProtectedRoute component={PredictiveMaintenancePage} path="/predictive-maintenance" />}</Route>
         <Route path="/telephony">{() => <ProtectedRoute component={TelephonyPage} path="/telephony" />}</Route>
         <Route path="/control-tower">{() => <ProtectedRoute component={ControlTowerPage} path="/control-tower" />}</Route>
+        <Route path="/enhetsansvarig">{() => <ProtectedRoute component={UnitManagerPage} path="/enhetsansvarig" />}</Route>
         <Route path="/my-reports">{() => <ProtectedRoute component={MyReportsPage} path="/my-reports" />}</Route>
         <Route path="/tenant-config">{() => <ProtectedRoute component={TenantConfigPage} path="/tenant-config" />}</Route>
         <Route path="/onboarding">{() => <ProtectedRoute component={OnboardingWizardPage} path="/onboarding" />}</Route>
