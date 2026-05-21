@@ -90,3 +90,9 @@ id = "F0B9EJYm6jhIFunKHOuGg"
 uri = "file://exports/Traivo-Marknad-Forslag-Kinab.pdf"
 type = "pdf"
 title = "Traivo för Marknad – Förslag till Kinab (PDF)"
+
+[[outputs]]
+id = "jtxk0HOzZpM8pcKKcN9sZ"
+uri = "file://attached_assets/traivo-go-traivo-one-kompatibilitet.md"
+type = "text"
+title = "Traivo Go ↔ Traivo One kompatibilitet (plan)"
