@@ -45,6 +45,7 @@ import { registerFortnoxRoutes } from "./routes/fortnoxRoutes";
 import { registerOrderConceptRoutes } from "./routes/orderConceptRoutes";
 import { registerPortalRoutes } from "./routes/portalRoutes";
 import { registerExtendedRoutes } from "./routes/extendedRoutes";
+import { registerIntegrationsHealthRoutes } from "./routes/integrationsHealthRoutes";
 import { registerIoTRoutes } from "./routes/iotRoutes";
 import { registerAnnualGoalRoutes } from "./routes/annualGoalRoutes";
 import { registerPredictiveRoutes } from "./routes/predictiveRoutes";
@@ -750,6 +751,7 @@ export async function registerRoutes(
   registerOrderConceptRoutes(app);
   registerPortalRoutes(app);
   registerExtendedRoutes(app);
+  registerIntegrationsHealthRoutes(app);
   registerIoTRoutes(app);
   registerAnnualGoalRoutes(app);
   registerPredictiveRoutes(app);

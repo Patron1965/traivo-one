@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { TopNav } from "@/components/layout/TopNav";
+import { DegradedModeBanner } from "@/components/layout/DegradedModeBanner";
 import { FloatingActionButton } from "@/components/layout/FloatingActionButton";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -474,6 +475,7 @@ function AuthenticatedApp() {
     <TourProvider>
       <div className="flex flex-col min-h-screen bg-background pb-16 md:pb-0">
         <TechnicianRedirect />
+        <DegradedModeBanner />
         <TopNav />
         <main className="flex-1">
           <ErrorBoundary>
