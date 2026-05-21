@@ -35,7 +35,6 @@ import type { Invitation } from "@shared/schema";
 const ROLE_OPTIONS = [
   { value: "user", label: "Användare" },
   { value: "admin", label: "Admin" },
-  { value: "owner", label: "Ägare" },
 ];
 
 function statusBadge(status: string) {

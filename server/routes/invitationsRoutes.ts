@@ -11,7 +11,9 @@ import { isAuthenticated } from "../replit_integrations/auth";
 import { requireTenant, requireAdmin } from "../tenant-middleware";
 import { issueMagicLink } from "../replit_integrations/auth/magicLinkAuth";
 
-const ROLE_OPTIONS = ["owner", "admin", "user"] as const;
+// Owner-rollen får inte mintras via admin-inbjudningsflödet — owner ska
+// tilldelas explicit av en befintlig owner (eller via tenant-bootstrap).
+const ROLE_OPTIONS = ["admin", "user"] as const;
 
 const createInvitationSchema = z.object({
   email: z.string().trim().toLowerCase().email("Ogiltig e-postadress"),

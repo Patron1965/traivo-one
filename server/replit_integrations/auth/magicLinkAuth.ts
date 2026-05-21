@@ -46,12 +46,26 @@ function getUserAgent(req: Request): string | null {
   return typeof ua === "string" ? ua : null;
 }
 
+function getAllowedHosts(): string[] {
+  return (process.env.REPLIT_DOMAINS ?? "")
+    .split(",")
+    .map(d => d.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isHostAllowed(req: Request): boolean {
+  // Dev/test: tillåt alltid (ingen REPLIT_DOMAINS-config förväntas lokalt).
+  if (process.env.NODE_ENV !== "production") return true;
+  const allowed = getAllowedHosts();
+  if (allowed.length === 0) return true; // fail-open om ingen lista konfigurerad
+  const host = (req.hostname || "").toLowerCase();
+  return allowed.some(a => host === a || host.endsWith("." + a));
+}
+
 function getBaseUrl(req: Request): string {
   // Föredra konfigurerad host (REPLIT_DOMAINS) i prod så vi inte tar med
   // arbitrary Host-header. Faller tillbaka på req.hostname i dev.
-  const configured = process.env.REPLIT_DOMAINS?.split(",")
-    .map(d => d.trim())
-    .filter(Boolean)[0];
+  const configured = getAllowedHosts()[0];
   const host = configured || req.hostname;
   const proto = req.headers["x-forwarded-proto"]?.toString().split(",")[0]
     || (process.env.NODE_ENV === "production" ? "https" : req.protocol);
@@ -309,6 +323,21 @@ export function registerMagicLinkRoutes(app: Express): void {
   });
 
   app.get("/api/auth/magic-link/consume", async (req, res) => {
+    // Host-allowlist: i prod måste request-värden matcha en konfigurerad
+    // REPLIT_DOMAINS-host (eller subdomän av den). Skyddar mot att en
+    // angripare lurar någon att klicka en länk som pekar mot en
+    // angripar-kontrollerad domän som proxyar mot vår backend.
+    if (!isHostAllowed(req)) {
+      console.warn("[magic-link] consume blocked — host not allowed", req.hostname);
+      void logLoginEvent({
+        req,
+        method: "magic_link",
+        outcome: "failed",
+        reason: "host_not_allowed",
+        extra: { host: req.hostname },
+      });
+      return res.redirect("/login?magic_error=server");
+    }
     const rawToken = typeof req.query?.token === "string" ? req.query.token : "";
     if (!rawToken) {
       return res.redirect("/login?magic_error=missing");
