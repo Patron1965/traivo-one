@@ -228,6 +228,9 @@ export function OnboardingTab() {
                 fortnox={fortnox}
                 refetchFortnox={refetchFortnox}
                 fortnoxSyncMutation={fortnoxSyncMutation}
+                isFortnoxError={isFortnoxError}
+                isFortnoxLoading={isFortnoxLoading}
+                fortnoxError={fortnoxError}
               />
             </CardContent>
           </Card>
@@ -242,11 +245,17 @@ function StepContent({
   fortnox,
   refetchFortnox,
   fortnoxSyncMutation,
+  isFortnoxError,
+  isFortnoxLoading,
+  fortnoxError,
 }: {
   stepKey: string;
   fortnox?: FortnoxPreview;
   refetchFortnox: () => void;
   fortnoxSyncMutation: any;
+  isFortnoxError: boolean;
+  isFortnoxLoading: boolean;
+  fortnoxError: unknown;
 }) {
   switch (stepKey) {
     case "company":

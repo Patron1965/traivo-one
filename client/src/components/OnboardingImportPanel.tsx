@@ -17,8 +17,13 @@ export interface OnboardingImportPanelProps {
 }
 
 interface ImportResult {
-  imported: number;
+  batchId?: string;
+  created?: number;
+  updated?: number;
+  skipped?: number;
+  imported?: number;
   total: number;
+  rolledBack?: boolean;
   errors: { row: number; message: string }[];
 }
 
@@ -67,10 +72,21 @@ export function OnboardingImportPanel({
       }
       queryClient.invalidateQueries({ queryKey: ["/api/onboarding/status"] });
       const errCount = data.errors?.length ?? 0;
+      const created = data.created ?? data.imported ?? 0;
+      const updated = data.updated ?? 0;
+      const skipped = data.skipped ?? 0;
+      const processed = created + updated;
+      const parts = [`${created} nya`, `${updated} uppdaterade`];
+      if (skipped) parts.push(`${skipped} hoppade över`);
+      if (errCount) parts.push(`${errCount} fel`);
       toast({
-        title: errCount === 0 ? "Import klar" : "Import klar (med varningar)",
-        description: `${data.imported} av ${data.total} rader importerade${errCount ? `, ${errCount} fel` : ""}`,
-        variant: errCount === 0 ? "default" : "destructive",
+        title: data.rolledBack
+          ? "Import avbruten — inget sparades"
+          : errCount === 0
+            ? "Import klar"
+            : "Import klar (med varningar)",
+        description: `${processed} av ${data.total} rader: ${parts.join(", ")}`,
+        variant: data.rolledBack || errCount > 0 ? "destructive" : "default",
       });
     } catch (err: any) {
       toast({ title: "Importen misslyckades", description: err?.message || "Okänt fel", variant: "destructive" });
@@ -149,10 +165,17 @@ export function OnboardingImportPanel({
 
         {result && (
           <div className="rounded-md bg-muted/50 p-3 space-y-2" data-testid={`result-${testId}`}>
-            <div className="flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-2 text-sm flex-wrap">
               <CheckCircle2 className="h-4 w-4 text-chart-2" />
-              <span className="font-medium">{result.imported}</span>
-              <span className="text-muted-foreground">av {result.total} rader importerade</span>
+              <span className="font-medium">{(result.created ?? result.imported ?? 0) + (result.updated ?? 0)}</span>
+              <span className="text-muted-foreground">av {result.total} rader behandlade</span>
+              <span className="text-xs text-muted-foreground">
+                ({result.created ?? 0} nya, {result.updated ?? 0} uppdaterade
+                {result.skipped ? `, ${result.skipped} hoppade över` : ""})
+              </span>
+              {result.rolledBack && (
+                <span className="text-xs text-destructive font-medium">— rullades tillbaka</span>
+              )}
             </div>
             {result.errors && result.errors.length > 0 && (
               <div className="space-y-1">
