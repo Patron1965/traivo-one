@@ -68,6 +68,8 @@ interface ResourceKpi {
   plannedContainers?: number;
   completedContainers?: number;
   deviationCount?: number;
+  plannedMinutes?: number;
+  actualMinutes?: number;
   weeklyHours?: number | null;
   efficiencyFactor?: number | null;
 }
@@ -83,6 +85,10 @@ interface DailyKpis {
   totalDeviations?: number;
   totalContainersPlanned?: number;
   totalContainersCompleted?: number;
+  tenantDefaults?: {
+    dailyStopTarget: number | null;
+    stopsPerHour: number | null;
+  } | null;
   resourceKpis: ResourceKpi[];
 }
 
@@ -184,10 +190,14 @@ function computeResourceTarget(
   efficiencyFactor: number | null | undefined,
   stopsPerHour: number,
   pct: ZonePercents,
+  dailyTargetOverride?: number | null,
 ): ResourceTarget {
   const hours = weeklyHours && weeklyHours > 0 ? weeklyHours : 40;
   const eff = efficiencyFactor && efficiencyFactor > 0 ? efficiencyFactor : 1.0;
-  const dailyTarget = Math.max(1, Math.round((hours / 5) * stopsPerHour * eff));
+  const dailyTarget =
+    dailyTargetOverride && dailyTargetOverride > 0
+      ? dailyTargetOverride
+      : Math.max(1, Math.round((hours / 5) * stopsPerHour * eff));
   return {
     dailyTarget,
     lossThreshold: Math.round((pct.lossPct / 100) * dailyTarget),
@@ -261,6 +271,8 @@ interface PlanningParameter {
   objectId?: string | null;
   slaLevel?: string | null;
   maxDaysToComplete?: number | null;
+  dailyStopTarget?: number | null;
+  stopsPerHour?: number | null;
 }
 
 export default function UnitManagerPage() {
@@ -309,6 +321,27 @@ export default function UnitManagerPage() {
     return map;
   }, [resources]);
 
+  const tenantPlanningParam = useMemo<PlanningParameter | null>(() => {
+    const list = planningParams ?? [];
+    return list.find((pp) => !pp.customerId && !pp.objectId) ?? null;
+  }, [planningParams]);
+
+  const effectiveStopsPerHour = useMemo(() => {
+    const fromParam = tenantPlanningParam?.stopsPerHour;
+    if (typeof fromParam === "number" && fromParam > 0) return fromParam;
+    const fromKpi = daily?.tenantDefaults?.stopsPerHour;
+    if (typeof fromKpi === "number" && fromKpi > 0) return fromKpi;
+    return stopsPerHour;
+  }, [tenantPlanningParam, daily?.tenantDefaults, stopsPerHour]);
+
+  const tenantDailyTargetOverride = useMemo<number | null>(() => {
+    const fromParam = tenantPlanningParam?.dailyStopTarget;
+    if (typeof fromParam === "number" && fromParam > 0) return fromParam;
+    const fromKpi = daily?.tenantDefaults?.dailyStopTarget;
+    if (typeof fromKpi === "number" && fromKpi > 0) return fromKpi;
+    return null;
+  }, [tenantPlanningParam, daily?.tenantDefaults]);
+
   const resourceKpis = useMemo<ResourceKpi[]>(() => {
     const list = daily?.resourceKpis ?? [];
     return [...list]
@@ -324,10 +357,13 @@ export default function UnitManagerPage() {
       // från KPI-svaret (också från DB) → sista utvägen: defaults.
       const hours = cfg?.weeklyHours ?? r.weeklyHours ?? null;
       const eff = cfg?.efficiencyFactor ?? r.efficiencyFactor ?? null;
-      map.set(r.resourceId, computeResourceTarget(hours, eff, stopsPerHour, pct));
+      map.set(
+        r.resourceId,
+        computeResourceTarget(hours, eff, effectiveStopsPerHour, pct, tenantDailyTargetOverride),
+      );
     }
     return map;
-  }, [resourceKpis, resourceConfigById, stopsPerHour, pct]);
+  }, [resourceKpis, resourceConfigById, effectiveStopsPerHour, pct, tenantDailyTargetOverride]);
 
   const breakEvenData = useMemo(
     () =>
@@ -413,14 +449,18 @@ export default function UnitManagerPage() {
         onStopsPerHourChange={updateStopsPerHour}
         planningParamCount={planningParams?.length ?? 0}
         resourceConfigsKnown={(resources?.length ?? 0) > 0}
+        tenantParamActive={tenantPlanningParam !== null && ((tenantPlanningParam.dailyStopTarget ?? null) !== null || (tenantPlanningParam.stopsPerHour ?? null) !== null)}
+        effectiveStopsPerHour={effectiveStopsPerHour}
+        tenantDailyTargetOverride={tenantDailyTargetOverride}
       />
 
       <WeeklyBreakEvenPanel
         loading={weeklyLoading}
         weekly={weekly}
         resources={resources ?? []}
-        stopsPerHour={stopsPerHour}
+        stopsPerHour={effectiveStopsPerHour}
         pct={pct}
+        dailyTargetOverride={tenantDailyTargetOverride}
       />
 
       <PlanVsOutcomePanel
@@ -579,6 +619,9 @@ function BreakEvenPanel({
   onStopsPerHourChange,
   planningParamCount,
   resourceConfigsKnown,
+  tenantParamActive,
+  effectiveStopsPerHour,
+  tenantDailyTargetOverride,
 }: {
   loading: boolean;
   data: BreakEvenDatum[];
@@ -588,6 +631,9 @@ function BreakEvenPanel({
   onStopsPerHourChange: (value: number) => void;
   planningParamCount: number;
   resourceConfigsKnown: boolean;
+  tenantParamActive: boolean;
+  effectiveStopsPerHour: number;
+  tenantDailyTargetOverride: number | null;
 }) {
   const totals = useMemo(() => {
     const completed = data.reduce((s, d) => s + d.completed, 0);
@@ -608,9 +654,7 @@ function BreakEvenPanel({
             </CardTitle>
             <CardDescription>
               Tröskelzoner: {pct.lossPct}% = förlust · {pct.breakEvenPct}% = nollresultat ·
-              {" "}{pct.targetPct}%+ = vinst. Per-resurs-mål härleds från
-              {" "}<span className="font-medium">resources.weeklyHours</span> (DB) ×
-              {" "}stopp/timme.
+              {" "}{pct.targetPct}%+ = vinst. Per-resurs-mål härleds från {tenantParamActive ? (<><span className="font-medium">planning_parameters</span> (tenant-default){tenantDailyTargetOverride ? ` — dagsmål: ${tenantDailyTargetOverride} stopp/resurs.` : ` — ${effectiveStopsPerHour} stopp/timme.`}</>) : (<><span className="font-medium">resources.weeklyHours</span> (DB) × stopp/timme. Konfigurera <span className="font-medium">planning_parameters</span> (tenant-nivå) för att överstyra centralt.</>)}
               {!resourceConfigsKnown && " Resurskonfiguration ej laddad — använder defaultvärden tills /api/resources svarar."}
               {planningParamCount > 0
                 ? ` ${planningParamCount} planeringsparametrar finns för objekt-specifika undantag.`
@@ -785,23 +829,25 @@ function WeeklyBreakEvenPanel({
   resources,
   stopsPerHour,
   pct,
+  dailyTargetOverride,
 }: {
   loading: boolean;
   weekly: WeeklyKpis | undefined;
   resources: ResourceConfig[];
   stopsPerHour: number;
   pct: ZonePercents;
+  dailyTargetOverride: number | null;
 }) {
   const aggregate = useMemo(() => {
     let weeklyBreakEven = 0;
     let weeklyTarget = 0;
     for (const r of resources) {
-      const t = computeResourceTarget(r.weeklyHours, r.efficiencyFactor, stopsPerHour, pct);
+      const t = computeResourceTarget(r.weeklyHours, r.efficiencyFactor, stopsPerHour, pct, dailyTargetOverride);
       weeklyBreakEven += t.breakEvenThreshold * 5;
       weeklyTarget += t.dailyTarget * 5;
     }
     return { weeklyBreakEven, weeklyTarget };
-  }, [resources, stopsPerHour, pct]);
+  }, [resources, stopsPerHour, pct, dailyTargetOverride]);
 
   const completed = weekly?.current.completedTasks ?? 0;
   const pctOfBreakEven = aggregate.weeklyBreakEven > 0
@@ -923,6 +969,8 @@ function PlanVsOutcomePanel({
                       Avvikelser
                     </span>
                   </TableHead>
+                  <TableHead className="text-right">Prod.tid plan</TableHead>
+                  <TableHead className="text-right">Prod.tid utfört</TableHead>
                   <TableHead className="text-right">Snittid</TableHead>
                 </TableRow>
               </TableHeader>
@@ -953,6 +1001,8 @@ function PlanVsOutcomePanel({
                           <span className="text-muted-foreground">0</span>
                         )}
                       </TableCell>
+                      <TableCell className="text-right text-muted-foreground">{Math.round(((r.plannedMinutes ?? 0) / 60) * 10) / 10} h</TableCell>
+                      <TableCell className="text-right">{Math.round(((r.actualMinutes ?? 0) / 60) * 10) / 10} h</TableCell>
                       <TableCell className="text-right">{r.avgTimeMinutes} min</TableCell>
                     </TableRow>
                   );
@@ -1050,15 +1100,6 @@ const ANOMALY_STEPS = [
 ] as const;
 
 function AnomalyProcessPanel() {
-  const { data: liveCheck, isLoading } = useQuery<{
-    timestamp: string;
-    alertCount: number;
-  }>({
-    queryKey: ["/api/system/anomalies/check"],
-    staleTime: 60_000,
-    retry: false,
-  });
-
   return (
     <Card data-testid="card-anomaly-process">
       <CardHeader className="pb-3">
@@ -1070,9 +1111,7 @@ function AnomalyProcessPanel() {
             </CardTitle>
             <CardDescription>
               Fyra steg: identifiera, analysera, prioritera, åtgärda.
-              {liveCheck
-                ? ` ${liveCheck.alertCount} öppna avvikelser från senaste körning.`
-                : ""}
+              Aktuella avvikelser från anomaly-monitor listas nedan.
             </CardDescription>
           </div>
           <Link href="/setup-analysis">
@@ -1107,13 +1146,6 @@ function AnomalyProcessPanel() {
             );
           })}
         </ol>
-
-        {isLoading && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            Hämtar senaste avvikelser…
-          </div>
-        )}
 
         <AnomalyAlerts />
 

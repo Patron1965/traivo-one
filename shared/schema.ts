@@ -922,6 +922,10 @@ export const planningParameters = pgTable("planning_parameters", {
   requiresConfirmation: boolean("requires_confirmation").default(false),
   // Prioritetsfaktor (1.0 = normal, högre = högre prio)
   priorityFactor: real("priority_factor").default(1.0),
+  // Per-tenant dagsmal (stopp per resurs/dag) for Enhetsansvarig break-even.
+  // Nullable: fallback till resources.weeklyHours * stopsPerHour.
+  dailyStopTarget: integer("daily_stop_target"),
+  stopsPerHour: real("stops_per_hour"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

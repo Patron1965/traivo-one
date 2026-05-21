@@ -38,6 +38,15 @@ app.get("/api/kpis/daily", asyncHandler(async (req, res) => {
         const orders = await storage.getWorkOrdersByDate(tenantId, date);
           const resources = await storage.getResources(tenantId);
 
+          // Tenant-default planning parameter (customerId=null, objectId=null) —
+          // ger dagsmål/stopp-per-timme för break-even-beräkning i Enhetsansvarig.
+          const allParams = await storage.getPlanningParameters(tenantId);
+          const tenantParam = allParams.find(p => !p.customerId && !p.objectId) ?? null;
+          const tenantDefaults = tenantParam ? {
+            dailyStopTarget: tenantParam.dailyStopTarget ?? null,
+            stopsPerHour: tenantParam.stopsPerHour ?? null,
+          } : null;
+
           const objectIds = Array.from(new Set(orders.map(o => o.objectId).filter(Boolean) as string[]));
           const containerByObject = new Map<string, number>();
           if (objectIds.length > 0) {
@@ -86,7 +95,17 @@ app.get("/api/kpis/daily", asyncHandler(async (req, res) => {
               0,
             );
             const deviationCount = resourceOrders.filter(isDeviation).length;
+            const plannedMinutes = resourceOrders.reduce(
+              (s, o) => s + (o.estimatedDuration || 0),
+              0,
+            );
+            const actualMinutes = resourceCompleted.reduce(
+              (s, o) => s + (o.actualDuration || o.estimatedDuration || 0),
+              0,
+            );
             return {
+              plannedMinutes,
+              actualMinutes,
               resourceId: r.id,
               resourceName: r.name,
               totalTasks: resourceOrders.length,
@@ -120,6 +139,7 @@ app.get("/api/kpis/daily", asyncHandler(async (req, res) => {
               (s, o) => s + (o.objectId ? (containerByObject.get(o.objectId) || 0) : 0),
               0,
             ),
+            tenantDefaults,
             resourceKpis,
           };
       },
