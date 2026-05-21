@@ -715,6 +715,35 @@ export default function UserManagementPage() {
                   {bulkUpdateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 </div>
               )}
+              {(() => {
+                const pendingCount = invitationsList.filter(i => i.status === "pending").length;
+                if (pendingCount === 0) return null;
+                return (
+                  <div
+                    className="flex items-start gap-3 mb-4 p-3 rounded-md border bg-muted/40"
+                    data-testid="pending-invitations-banner"
+                  >
+                    <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                    <div className="text-sm">
+                      <p className="font-medium">
+                        {pendingCount} {pendingCount === 1 ? "väntande inbjudan" : "väntande inbjudningar"}
+                      </p>
+                      <p className="text-muted-foreground">
+                        Inbjudna användare visas här först när de loggat in via sin magic-link.
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="ml-auto h-7"
+                      onClick={() => setActiveTab("invitations")}
+                      data-testid="button-view-invitations"
+                    >
+                      Visa inbjudningar
+                    </Button>
+                  </div>
+                );
+              })()}
               {isLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-6 w-6 animate-spin" />

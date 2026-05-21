@@ -11,6 +11,7 @@ import { requireAdmin } from "../tenant-middleware";
 import { objects, workOrders, objectMetadata, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { sendEmail } from "../replit_integrations/resend";
+import { issueMagicLink } from "../replit_integrations/auth/magicLinkAuth";
 import { dashboardCache, DASHBOARD_CACHE_TTL } from "../services/dashboardCache";
 import { mapTileLimiter, TILE_HOURLY_ALERT_THRESHOLD } from "../middleware/rate-limit";
 
@@ -2027,6 +2028,8 @@ app.post("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
       throw new ValidationError("Ogiltig roll");
     }
 
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
     const existing = await db
       .select()
       .from(invitations)
@@ -2046,6 +2049,7 @@ app.post("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
           role: role || existing[0].role || "user",
           invitedBy: userId,
           createdAt: new Date(),
+          expiresAt,
         })
         .where(eq(invitations.id, existing[0].id))
         .returning();
@@ -2059,6 +2063,7 @@ app.post("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
           role: role || "user",
           invitedBy: userId,
           status: "pending",
+          expiresAt,
         })
         .returning();
     }
@@ -2083,63 +2088,56 @@ app.post("/api/invitations/:id/resend", requireAdmin, asyncHandler(async (req, r
       throw new ValidationError("Kan bara skicka om väntande inbjudningar");
     }
 
+    // Förläng giltighetstiden så magic-link-flödet ser raden som "eligible".
+    const newExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const [refreshed] = await db
+      .update(invitations)
+      .set({ expiresAt: newExpiry })
+      .where(eq(invitations.id, existing.id))
+      .returning();
+
     console.log(`[invitation] Manual resend triggered for ${existing.email}`);
-    const sendResult = await sendInvitationEmail(req, existing);
+    const sendResult = await sendInvitationEmail(req, refreshed ?? existing);
     res.json({ ...sendResult.invitation, emailDelivered: sendResult.emailDelivered, emailError: sendResult.emailError });
 }));
 
+/**
+ * Skickar inbjudningsmejl via magic-link-flödet (Task #515) — så att
+ * mottagaren kan logga in direkt utan att behöva ett Replit-konto.
+ * Tidigare skickades bara en ren app-URL vilket gjorde att inbjudna
+ * användare fastnade på Replits samtyckesskärm.
+ */
 async function sendInvitationEmail(req: any, invitation: any): Promise<{ invitation: any; emailDelivered: boolean; emailError: string | null }> {
-    let emailDelivered = false;
-    let emailError: string | null = null;
-    let messageId: string | null = null;
-    try {
-      // Använd hosten där admin skapade inbjudan — då hamnar mottagaren alltid på
-      // samma deployment (t.ex. kinab-core-concepts--tomas155.replit.app),
-      // inte på en intern dev-URL eller tom fallback.
-      const forwardedProto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0]?.trim();
-      const forwardedHost = (req.headers["x-forwarded-host"] as string)?.split(",")[0]?.trim();
-      const host = forwardedHost || req.get("host");
-      const proto = forwardedProto || (host && host.includes("localhost") ? "http" : "https");
-      const appUrl = host
-        ? `${proto}://${host}`
-        : process.env.PUBLIC_APP_URL || "https://traivo.replit.app";
-      const roleLabel: Record<string, string> = {
-        owner: "Ägare", admin: "Admin", planner: "Planerare",
-        technician: "Tekniker", user: "Användare", viewer: "Läsare",
-      };
-      const sendOutput = await sendEmail({
-        to: invitation.email,
-        subject: "Du har bjudits in till Traivo",
-        html: `
-          <div style="font-family: Inter, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px;">
-            <h2 style="color: #1B4B6B;">Välkommen till Traivo!</h2>
-            <p>Du har bjudits in med rollen <strong>${roleLabel[invitation.role] || invitation.role || "Användare"}</strong>.</p>
-            <p>Klicka på knappen nedan för att komma igång:</p>
-            <a href="${appUrl}" style="display: inline-block; padding: 12px 24px; background: #1B4B6B; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 16px 0;">Logga in på Traivo</a>
-            <p style="color: #6B7C8C; font-size: 13px; margin-top: 24px;">Om du inte förväntat dig denna inbjudan kan du ignorera detta meddelande.</p>
-          </div>
-        `,
-      });
-      emailDelivered = true;
-      messageId = sendOutput.messageId;
-      console.log(`[invitation] Email accepted by Resend for ${invitation.email} (messageId=${messageId})`);
-    } catch (err: any) {
-      emailError = err?.message || String(err);
-      console.error("[invitation] Failed to send email:", err?.resendError || err);
+    const forwardedProto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0]?.trim();
+    const forwardedHost = (req.headers["x-forwarded-host"] as string)?.split(",")[0]?.trim();
+    const host = forwardedHost || req.get("host");
+    const proto = forwardedProto || (host && host.includes("localhost") ? "http" : "https");
+    const baseUrl = host
+      ? `${proto}://${host}`
+      : process.env.PUBLIC_APP_URL || "https://traivo.replit.app";
+
+    const result = await issueMagicLink({
+      invitationId: invitation.id,
+      baseUrl,
+      req,
+    });
+
+    // issueMagicLink uppdaterar redan invitations.deliveryStatus/resendMessageId.
+    const [updated] = await db
+      .select()
+      .from(invitations)
+      .where(eq(invitations.id, invitation.id));
+
+    if (result.ok) {
+      console.log(`[invitation] Magic-link sent for ${invitation.email}`);
+      return { invitation: updated ?? invitation, emailDelivered: true, emailError: null };
     }
 
-    const [updated] = await db
-      .update(invitations)
-      .set({
-        resendMessageId: messageId,
-        deliveryStatus: emailDelivered ? "sent" : "failed",
-        deliveryStatusAt: new Date(),
-        deliveryError: emailError,
-      })
-      .where(eq(invitations.id, invitation.id))
-      .returning();
-
-    return { invitation: updated ?? invitation, emailDelivered, emailError };
+    const reason = result.reason === "send_failed"
+      ? "E-postleverans misslyckades (kontrollera Resend-domänen)"
+      : "Inbjudan är inte längre giltig (utgången eller redan använd)";
+    console.error(`[invitation] Magic-link send failed for ${invitation.email}: ${result.reason}`);
+    return { invitation: updated ?? invitation, emailDelivered: false, emailError: reason };
 }
 
 app.delete("/api/invitations/:id", requireAdmin, asyncHandler(async (req, res) => {
