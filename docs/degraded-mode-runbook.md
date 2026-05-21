@@ -18,7 +18,9 @@ En central health-service (`server/services/external-service-health.ts`) kontrol
 
 Status exponeras via `GET /api/system/integrations/health` och frontend pollar var 60:e sekund. När en `critical` eller `important` integration är `down`/`degraded`/`not_configured` visas en gul banner överst i appen med detaljer och dokumenterad fallback.
 
-Health-check är medvetet "billig" — den verifierar att credentials är konfigurerade och (för Twilio/OSRM) att klienten kan instansieras. Den gör inte dyra live-anrop till varje API på varje request (cachas 60s) eftersom det skulle skapa onödig kostnad och rate-limit-press.
+En in-process-scheduler (`startIntegrationsHealthScheduler`, default 2 min, justeras med `INTEGRATIONS_HEALTH_INTERVAL_MS`) uppdaterar globala checks proaktivt. Per-tenant-integrationer (Fortnox) körs on-demand i endpoint med `req.tenantId`.
+
+Geoapify-checken gör en riktig liveness-ping mot `geocode/autocomplete?text=stockholm&limit=1` med 3 s timeout — så provider-outage upptäcks även när nyckeln finns. Övriga checks är billiga (env-/config-baserade eller lokala klient-instansieringar) för att inte själv bli en kostnadsdrivare eller rate-limit-vektor.
 
 ## Fallback per tjänst
 

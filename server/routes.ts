@@ -46,6 +46,7 @@ import { registerOrderConceptRoutes } from "./routes/orderConceptRoutes";
 import { registerPortalRoutes } from "./routes/portalRoutes";
 import { registerExtendedRoutes } from "./routes/extendedRoutes";
 import { registerIntegrationsHealthRoutes } from "./routes/integrationsHealthRoutes";
+import { startIntegrationsHealthScheduler } from "./services/external-service-health";
 import { registerIoTRoutes } from "./routes/iotRoutes";
 import { registerAnnualGoalRoutes } from "./routes/annualGoalRoutes";
 import { registerPredictiveRoutes } from "./routes/predictiveRoutes";
@@ -752,6 +753,7 @@ export async function registerRoutes(
   registerPortalRoutes(app);
   registerExtendedRoutes(app);
   registerIntegrationsHealthRoutes(app);
+  startIntegrationsHealthScheduler();
   registerIoTRoutes(app);
   registerAnnualGoalRoutes(app);
   registerPredictiveRoutes(app);

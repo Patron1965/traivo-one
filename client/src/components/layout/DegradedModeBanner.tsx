@@ -55,7 +55,10 @@ export function DegradedModeBanner() {
     );
   }, [data]);
 
-  if (!data || data.overall === "ok" || degradedItems.length === 0 || dismissed) {
+  // Driv banner direkt från degradedItems (inte från overall), så att även
+  // important-degraderingar (OpenAI/Twilio/Resend/Fortnox) och `not_configured`
+  // syns för operatören — inte bara hard-down på critical.
+  if (!data || degradedItems.length === 0 || dismissed) {
     return null;
   }
 
