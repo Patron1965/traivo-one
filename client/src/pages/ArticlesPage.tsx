@@ -1144,25 +1144,33 @@ export default function ArticlesPage() {
                 </div>
                 {isAdmin && (
                   <div className="space-y-2">
-                    <Label htmlFor="cost">Kostnad (öre)</Label>
+                    <Label htmlFor="cost">Kostnad (kr)</Label>
                     <Input
                       id="cost"
                       type="number"
                       min="0"
-                      value={formData.cost}
-                      onChange={(e) => setFormData({ ...formData, cost: parseInt(e.target.value) || 0 })}
+                      step="0.01"
+                      value={formData.cost ? (formData.cost / 100).toString() : ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setFormData({ ...formData, cost: v === "" ? 0 : Math.round(parseFloat(v) * 100) || 0 });
+                      }}
                       data-testid="input-cost"
                     />
                   </div>
                 )}
                 <div className="space-y-2">
-                  <Label htmlFor="listPrice">Listpris (öre)</Label>
+                  <Label htmlFor="listPrice">Listpris (kr)</Label>
                   <Input
                     id="listPrice"
                     type="number"
                     min="0"
-                    value={formData.listPrice}
-                    onChange={(e) => setFormData({ ...formData, listPrice: parseInt(e.target.value) || 0 })}
+                    step="0.01"
+                    value={formData.listPrice ? (formData.listPrice / 100).toString() : ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setFormData({ ...formData, listPrice: v === "" ? 0 : Math.round(parseFloat(v) * 100) || 0 });
+                    }}
                     data-testid="input-list-price"
                   />
                 </div>
