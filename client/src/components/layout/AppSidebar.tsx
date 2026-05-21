@@ -23,7 +23,7 @@ import { useFeatures } from "@/lib/feature-context";
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
-import { canAccessMenu, type NavMenuGroup } from "@/lib/role-config";
+import { canAccessMenu, isAdminRole, type NavMenuGroup } from "@/lib/role-config";
 
 // Karta: URL → primärnyckel(ar) som sidan hämtar vid render.
 // Vid hover triggas prefetchQuery så datan finns i cache när användaren klickar.
@@ -301,7 +301,9 @@ export function AppSidebar() {
         ...g,
         items: g.items.filter(
           (item) =>
-            isNavItemEnabled(item.url) && (!item.platformOwnerOnly || isPlatformOwner),
+            isNavItemEnabled(item.url) &&
+            (!item.platformOwnerOnly || isPlatformOwner) &&
+            (!item.adminOnly || isAdminRole(userRole)),
         ),
       }))
       .filter((g) => g.items.length > 0);

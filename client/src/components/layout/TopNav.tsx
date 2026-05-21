@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useTerminology } from "@/hooks/use-terminology";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
 import traivoLogo from "@assets/traivo_logo_transparent.png";
-import { canAccessMenu, getRoleLabel, type NavMenuGroup } from "@/lib/role-config";
+import { canAccessMenu, getRoleLabel, isAdminRole, type NavMenuGroup } from "@/lib/role-config";
 import { useFeatures } from "@/lib/feature-context";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -623,10 +623,10 @@ export function TopNav() {
     return groups.map(g => ({
       ...g,
       items: g.items.filter(
-        item => isNavItemEnabled(item.url) && (!item.platformOwnerOnly || isPlatformOwner),
+        item => isNavItemEnabled(item.url) && (!item.platformOwnerOnly || isPlatformOwner) && (!item.adminOnly || isAdminRole(userRole)),
       ),
     }));
-  }, [t, tl, language, isNavItemEnabled, isPlatformOwner]);
+  }, [t, tl, language, isNavItemEnabled, isPlatformOwner, userRole]);
 
   const roleFilteredItems = useMemo(() => {
     const items: NavItem[] = [];

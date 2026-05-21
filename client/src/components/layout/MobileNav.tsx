@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { canAccessMenu, type NavMenuGroup } from "@/lib/role-config";
+import { canAccessMenu, isAdminRole, type NavMenuGroup } from "@/lib/role-config";
 import { useLanguage } from "@/hooks/use-language";
 import { useTerminology } from "@/hooks/use-terminology";
 import { useFeatures } from "@/lib/feature-context";
@@ -47,7 +47,7 @@ export function MobileNav() {
       if (!canAccessMenu(userRole, group.group as NavMenuGroup)) return;
       const items = group.items.filter(
         (item) =>
-          isNavItemEnabled(item.url) && (!item.platformOwnerOnly || isPlatformOwner),
+          isNavItemEnabled(item.url) && (!item.platformOwnerOnly || isPlatformOwner) && (!item.adminOnly || isAdminRole(userRole)),
       );
       if (items.length === 0) return;
       groups.push({ title: group.label, items });
