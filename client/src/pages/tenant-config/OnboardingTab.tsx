@@ -91,9 +91,16 @@ export function OnboardingTab() {
     queryKey: ["/api/onboarding/status"],
   });
 
-  const { data: fortnox, refetch: refetchFortnox } = useQuery<FortnoxPreview>({
+  const {
+    data: fortnox,
+    refetch: refetchFortnox,
+    isLoading: isFortnoxLoading,
+    isError: isFortnoxError,
+    error: fortnoxError,
+  } = useQuery<FortnoxPreview>({
     queryKey: ["/api/onboarding/fortnox/articles/preview"],
     staleTime: 60_000,
+    retry: false,
   });
 
   const fortnoxSyncMutation = useMutation({
@@ -275,11 +282,30 @@ function StepContent({
                   artiklar automatiskt.
                 </AlertDescription>
               </Alert>
+            ) : isFortnoxError ? (
+              <Alert variant="destructive">
+                <AlertTitle>Kunde inte nå Fortnox</AlertTitle>
+                <AlertDescription className="flex items-center justify-between gap-3">
+                  <span>{(fortnoxError as any)?.message || "Okänt fel — försök igen om en stund."}</span>
+                  <Button variant="outline" size="sm" onClick={() => refetchFortnox()} data-testid="button-retry-fortnox">
+                    <RefreshCw className="h-3.5 w-3.5 mr-1" /> Försök igen
+                  </Button>
+                </AlertDescription>
+              </Alert>
             ) : fortnox?.error ? (
               <Alert variant="destructive">
                 <AlertTitle>Kunde inte läsa Fortnox</AlertTitle>
-                <AlertDescription>{fortnox.error}</AlertDescription>
+                <AlertDescription className="flex items-center justify-between gap-3">
+                  <span>{fortnox.error}</span>
+                  <Button variant="outline" size="sm" onClick={() => refetchFortnox()} data-testid="button-retry-fortnox-inline">
+                    <RefreshCw className="h-3.5 w-3.5 mr-1" /> Försök igen
+                  </Button>
+                </AlertDescription>
               </Alert>
+            ) : isFortnoxLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Hämtar från Fortnox…
+              </div>
             ) : fortnox ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
@@ -341,9 +367,7 @@ function StepContent({
                   </div>
                 )}
               </div>
-            ) : (
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            )}
+            ) : null}
           </TabsContent>
           <TabsContent value="csv" className="pt-4">
             <OnboardingImportPanel

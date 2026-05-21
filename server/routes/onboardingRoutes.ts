@@ -600,7 +600,9 @@ export async function registerOnboardingRoutes(app: Express) {
           })),
         });
       } catch (err: any) {
-        return res.status(502).json({ connected: true, count: 0, sample: [], error: err?.message || "Fortnox-fel" });
+        // Returnera 200 så att klientens useQuery inte triggar isError-tillstånd
+        // och kan visa felmeddelandet inline ("Fortnox svarar inte just nu").
+        return res.json({ connected: true, count: 0, sample: [], error: err?.message || "Fortnox-fel" });
       }
     }),
   );
