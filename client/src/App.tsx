@@ -456,6 +456,12 @@ function TechnicianRedirect() {
     }
   }, [user, location, setLocation]);
 
+  useEffect(() => {
+    import("@/lib/sentry").then(({ setSentryTenant }) => {
+      setSentryTenant(user?.tenantId ?? null);
+    });
+  }, [user?.tenantId]);
+
   return null;
 }
 

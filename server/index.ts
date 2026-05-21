@@ -7,9 +7,14 @@ import { seedDatabase } from "./seed";
 import { fixInitialOwnerRole } from "./startup-fixes";
 import { startImportBatchWatchdog } from "./import-batch-watchdog";
 import { AppError } from "./errors";
+import { logger } from "./logger";
+import { requestIdMiddleware } from "./middleware/request-id";
+import { registerHealthRoutes } from "./routes/healthRoutes";
 
 const app = express();
 const httpServer = createServer(app);
+
+app.use(requestIdMiddleware);
 
 app.use(
   compression({
@@ -74,15 +79,10 @@ app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
 });
 
-export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
+registerHealthRoutes(app);
 
-  console.log(`${formattedTime} [${source}] ${message}`);
+export function log(message: string, source = "express") {
+  logger.info({ source }, message);
 }
 
 // Fields whose values must never appear in logs because they are reusable bearer
@@ -127,18 +127,28 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+      const reqLog = req.log ?? logger;
+      let preview: string | undefined;
       if (capturedJsonResponse) {
         if (Array.isArray(capturedJsonResponse)) {
-          logLine += ` :: [Array(${capturedJsonResponse.length} items)]`;
+          preview = `[Array(${capturedJsonResponse.length} items)]`;
         } else {
           const safe = redactSensitiveFields(capturedJsonResponse);
           const jsonStr = JSON.stringify(safe);
-          logLine += ` :: ${jsonStr.length > 200 ? jsonStr.slice(0, 200) + "..." : jsonStr}`;
+          preview = jsonStr.length > 200 ? jsonStr.slice(0, 200) + "..." : jsonStr;
         }
       }
-
-      log(logLine);
+      reqLog.info(
+        {
+          method: req.method,
+          route: path,
+          status: res.statusCode,
+          durationMs: duration,
+          tenantId: req.tenantId,
+          response: preview,
+        },
+        `${req.method} ${path} ${res.statusCode} in ${duration}ms`,
+      );
     }
   });
 
@@ -224,12 +234,22 @@ process.on('exit', (code) => {
     await registerRoutes(httpServer, app);
     console.log('[startup] Routes registered');
 
-    app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
       if (res.headersSent) return;
       const status = err instanceof AppError ? err.statusCode : (err as Record<string, number>)?.status || (err as Record<string, number>)?.statusCode || 500;
       const message = err instanceof Error ? err.message : "Ett oväntat serverfel uppstod";
-      console.error(`[error] ${status} ${message}`, err instanceof Error ? err.stack : '');
-      res.status(status).json({ error: message });
+      const reqLog = req.log ?? logger;
+      reqLog.error(
+        {
+          status,
+          err: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+          route: req.path,
+          method: req.method,
+          tenantId: req.tenantId,
+        },
+        `request error ${status}`,
+      );
+      res.status(status).json({ error: message, requestId: req.requestId });
     });
 
     // importantly only setup vite in development and after

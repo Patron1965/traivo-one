@@ -2,6 +2,7 @@ import { Component, type ReactNode } from "react";
 import { AlertTriangle, RefreshCw, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { captureClientError } from "@/lib/sentry";
 
 interface Props {
   children: ReactNode;
@@ -90,7 +91,9 @@ export class ErrorBoundary extends Component<Props, State> {
     if (isStaleAssetError(error?.message)) {
       console.warn("[chunk-reload] ErrorBoundary caught stale asset, reloading");
       tryAutoReload();
+      return;
     }
+    captureClientError(error, { componentStack: errorInfo.componentStack });
   }
 
   handleRetry = () => {
