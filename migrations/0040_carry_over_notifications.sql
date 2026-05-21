@@ -13,6 +13,11 @@ ALTER TABLE "planning_parameters"
 ALTER TABLE "planning_parameters"
   ADD COLUMN IF NOT EXISTS "carry_over_notification_hour" integer;--> statement-breakpoint
 
+-- Per-tenant tidszon (IANA, t.ex. "Europe/Stockholm"). Nullable → applikationen
+-- faller tillbaka till CARRY_OVER_TIMEZONE/Europe/Stockholm.
+ALTER TABLE "tenants"
+  ADD COLUMN IF NOT EXISTS "timezone" text;--> statement-breakpoint
+
 CREATE TABLE IF NOT EXISTS "user_notification_preferences" (
   "id" varchar PRIMARY KEY DEFAULT gen_random_uuid(),
   "tenant_id" varchar NOT NULL REFERENCES "tenants"("id"),

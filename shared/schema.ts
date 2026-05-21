@@ -15,6 +15,9 @@ export const tenants = pgTable("tenants", {
   smsEnabled: boolean("sms_enabled").default(false),
   smsProvider: varchar("sms_provider", { length: 50 }),
   smsFromName: varchar("sms_from_name", { length: 100 }),
+  // IANA-tidszon (t.ex. "Europe/Stockholm"). Nullable → applikationen
+  // använder default Europe/Stockholm för scheduler-tidpunkter.
+  timezone: text("timezone"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 });

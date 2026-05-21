@@ -1,6 +1,6 @@
 import { and, eq, gte } from "drizzle-orm";
 import { db } from "../db";
-import { userNotifications } from "@shared/schema";
+import { userNotifications, tenants } from "@shared/schema";
 import { storage } from "../storage";
 import { notificationService } from "../notifications";
 import { computeTenantCarryOver, carryOverNotificationCopy, type CarryOverSummary } from "./carry-over";
@@ -11,6 +11,8 @@ const DEFAULT_HOUR = 16;
 const DEFAULT_TIMEZONE = process.env.CARRY_OVER_TIMEZONE || "Europe/Stockholm";
 const TICK_INTERVAL_MS = 15 * 60 * 1000; // var 15:e min — räcker för en-timmas-precision
 const NOTIFICATION_TYPE = "carry_over_warning" as const;
+// Carry-over är en arbetsdags-funktion: gå inte ut på lördag (6) eller söndag (0).
+const WORKDAYS = new Set([1, 2, 3, 4, 5]);
 
 function isEnabled(): boolean {
   const flag = process.env.CARRY_OVER_NOTIFICATIONS_ENABLED;
@@ -23,6 +25,7 @@ interface TenantLocalDate {
   month: number;
   day: number;
   hour: number;
+  weekday: number; // 0 = söndag … 6 = lördag (matchar Date.getDay())
   isoDate: string; // YYYY-MM-DD i tenant-lokal tidszon
 }
 
@@ -34,6 +37,7 @@ function getTenantLocalParts(now: Date, timeZone: string): TenantLocalDate {
     day: "2-digit",
     hour: "2-digit",
     hour12: false,
+    weekday: "short",
   });
   const parts = fmt.formatToParts(now);
   const get = (t: string) => parts.find(p => p.type === t)?.value ?? "0";
@@ -42,8 +46,20 @@ function getTenantLocalParts(now: Date, timeZone: string): TenantLocalDate {
   const day = parseInt(get("day"), 10);
   let hour = parseInt(get("hour"), 10);
   if (hour === 24) hour = 0; // Intl kan returnera "24" beroende på locale
+  const weekdayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const weekday = weekdayMap[get("weekday")] ?? new Date(Date.UTC(year, month - 1, day)).getUTCDay();
   const isoDate = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-  return { year, month, day, hour, isoDate };
+  return { year, month, day, hour, weekday, isoDate };
+}
+
+async function getTenantTimezone(tenantId: string): Promise<string> {
+  try {
+    const [row] = await db.select({ tz: tenants.timezone }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+    if (row?.tz && typeof row.tz === "string" && row.tz.trim().length > 0) return row.tz;
+  } catch (err) {
+    console.error(`[carry-over] kunde inte hämta tidszon för tenant ${tenantId}:`, err);
+  }
+  return DEFAULT_TIMEZONE;
 }
 
 function buildLocalDate(year: number, month: number, day: number): Date {
@@ -114,7 +130,10 @@ class CarryOverNotificationScheduler {
   }
 
   private async maybeRunForTenant(tenantId: string, now: Date): Promise<void> {
-    const local = getTenantLocalParts(now, DEFAULT_TIMEZONE);
+    const timezone = await getTenantTimezone(tenantId);
+    const local = getTenantLocalParts(now, timezone);
+    // Skicka aldrig på helger (lör/sön) — carry-over är en arbetsdagsfunktion.
+    if (!WORKDAYS.has(local.weekday)) return;
     // Slå inte upp planning_parameters förrän vi vet att vi *kanske* ska köra
     // (timmen kan matcha default eller en konfigurerad timme).
     const params = await storage.getPlanningParameters(tenantId);
@@ -225,7 +244,8 @@ class CarryOverNotificationScheduler {
 
   /** Manuell trigger för admin-endpoint och tester. */
   async runManual(tenantId: string, opts: { dryRun?: boolean } = {}): Promise<CarryOverSummary> {
-    const local = getTenantLocalParts(new Date(), DEFAULT_TIMEZONE);
+    const timezone = await getTenantTimezone(tenantId);
+    const local = getTenantLocalParts(new Date(), timezone);
     const tomorrow = addDays(local, 1);
     const today = buildLocalDate(local.year, local.month, local.day);
     const tomorrowDate = buildLocalDate(tomorrow.year, tomorrow.month, tomorrow.day);

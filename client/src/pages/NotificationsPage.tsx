@@ -14,7 +14,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bell, ChevronLeft, ChevronRight, ExternalLink, Inbox, CheckCheck } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Bell, ChevronLeft, ChevronRight, ExternalLink, Inbox, CheckCheck, Settings } from "lucide-react";
 
 interface UserNotificationItem {
   id: string;
@@ -36,6 +38,26 @@ interface NotificationsResponse {
 interface TypesResponse {
   types: string[];
 }
+
+interface PreferenceRow {
+  id: string;
+  type: string;
+  enabled: boolean;
+}
+
+interface PreferencesResponse {
+  preferences: PreferenceRow[];
+}
+
+// Task #521: typer som användaren kan stänga av i UI. Default = på när rad
+// saknas (samma kontrakt som backend). Lägg till nya togglbara typer här.
+const TOGGLEABLE_TYPES: Array<{ type: string; label: string; description: string }> = [
+  {
+    type: "carry_over_warning",
+    label: "Daglig carry-over-varning",
+    description: "Skickas på arbetsdagar (default 16:00) när kärl kvar idag + planerat imorgon överskrider kapaciteten.",
+  },
+];
 
 const PAGE_SIZE = 25;
 
@@ -99,6 +121,25 @@ export default function NotificationsPage() {
   const { data: typesData } = useQuery<TypesResponse>({
     queryKey: ["/api/notifications/types"],
   });
+
+  const { data: prefsData } = useQuery<PreferencesResponse>({
+    queryKey: ["/api/notifications/preferences"],
+  });
+
+  const setPreference = useMutation({
+    mutationFn: async ({ type, enabled }: { type: string; enabled: boolean }) => {
+      await apiRequest("PUT", `/api/notifications/preferences/${encodeURIComponent(type)}`, { enabled });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/preferences"] });
+    },
+  });
+
+  const prefByType = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const p of prefsData?.preferences ?? []) map.set(p.type, p.enabled);
+    return map;
+  }, [prefsData]);
 
   const markRead = useMutation({
     mutationFn: async (id: string) => {
@@ -166,6 +207,36 @@ export default function NotificationsPage() {
           Markera alla som lästa
         </Button>
       </div>
+
+      <Card data-testid="card-notification-preferences">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            Notisinställningar
+          </CardTitle>
+          <CardDescription>Stäng av notistyper du inte vill få. Påverkar endast dina egna notiser.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {TOGGLEABLE_TYPES.map((t) => {
+            const enabled = prefByType.get(t.type) ?? true;
+            return (
+              <div key={t.type} className="flex items-start justify-between gap-4">
+                <div className="space-y-0.5">
+                  <Label htmlFor={`pref-${t.type}`} className="text-sm font-medium">{t.label}</Label>
+                  <p className="text-xs text-muted-foreground">{t.description}</p>
+                </div>
+                <Switch
+                  id={`pref-${t.type}`}
+                  checked={enabled}
+                  disabled={setPreference.isPending}
+                  onCheckedChange={(next) => setPreference.mutate({ type: t.type, enabled: next })}
+                  data-testid={`switch-pref-${t.type}`}
+                />
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-3">
