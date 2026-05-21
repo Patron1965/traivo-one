@@ -936,7 +936,7 @@ function PlanVsOutcomePanel({
           Plan vs utfall
         </CardTitle>
         <CardDescription>
-          Per resurs idag — stopp, kärl och avvikelser — samt veckotrend mot föregående vecka.
+          Per resurs idag — stopp, kärl, avvikelser och produktionstid — samt veckotrend mot föregående vecka. Km och restid kräver att rutt-faktisk-data loggas per WO (planerat i kommande iteration).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">

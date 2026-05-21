@@ -50,8 +50,9 @@ app.get("/api/kpis/daily", asyncHandler(async (req, res) => {
           const objectIds = Array.from(new Set(orders.map(o => o.objectId).filter(Boolean) as string[]));
           const containerByObject = new Map<string, number>();
           if (objectIds.length > 0) {
-            const allObjects = await storage.getObjects(tenantId);
-            for (const obj of allObjects) {
+            // Hämta endast relevanta objekt — undvik full tenant-load på hot-path
+            const relevantObjects = await storage.getObjectsByIds(tenantId, objectIds);
+            for (const obj of relevantObjects) {
               const total = (obj.containerCount || 0) + (obj.containerCountK2 || 0)
                 + (obj.containerCountK3 || 0) + (obj.containerCountK4 || 0);
               containerByObject.set(obj.id, total);
