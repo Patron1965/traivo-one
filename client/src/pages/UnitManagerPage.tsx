@@ -13,6 +13,7 @@ import {
   Gauge,
   ListChecks,
   Loader2,
+  Package,
   Search,
   Sparkles,
   Target,
@@ -64,6 +65,11 @@ interface ResourceKpi {
   completedTasks: number;
   remainingTasks: number;
   avgTimeMinutes: number;
+  plannedContainers?: number;
+  completedContainers?: number;
+  deviationCount?: number;
+  weeklyHours?: number | null;
+  efficiencyFactor?: number | null;
 }
 
 interface DailyKpis {
@@ -74,6 +80,9 @@ interface DailyKpis {
   completionRate: number;
   avgTimePerTaskMinutes: number;
   activeResources: number;
+  totalDeviations?: number;
+  totalContainersPlanned?: number;
+  totalContainersCompleted?: number;
   resourceKpis: ResourceKpi[];
 }
 
@@ -99,49 +108,104 @@ interface WeeklyKpis {
   };
 }
 
-interface ZoneBreakpoints {
-  loss: number;
-  breakEven: number;
-  target: number;
+interface ResourceConfig {
+  id: string;
+  name: string;
+  weeklyHours: number | null;
+  efficiencyFactor: number | null;
 }
 
-const DEFAULT_ZONES: ZoneBreakpoints = { loss: 85, breakEven: 90, target: 100 };
-const ZONE_STORAGE_KEY = "traivo_unit_manager_zones";
+interface ZonePercents {
+  lossPct: number;
+  breakEvenPct: number;
+  targetPct: number;
+}
 
-function loadStoredZones(): ZoneBreakpoints {
+const DEFAULT_PCT: ZonePercents = { lossPct: 85, breakEvenPct: 90, targetPct: 100 };
+const DEFAULT_STOPS_PER_HOUR = 12.5; // 40h/v → 8h/dag → 100 stopp/dag (matchar "100 kärl")
+const PCT_STORAGE_KEY = "traivo_unit_manager_zone_pct";
+const STOPS_PER_HOUR_KEY = "traivo_unit_manager_stops_per_hour";
+
+function loadStoredPct(): ZonePercents {
   try {
-    const raw = localStorage.getItem(ZONE_STORAGE_KEY);
-    if (!raw) return DEFAULT_ZONES;
+    const raw = localStorage.getItem(PCT_STORAGE_KEY);
+    if (!raw) return DEFAULT_PCT;
     const parsed = JSON.parse(raw);
     if (
-      typeof parsed?.loss === "number" &&
-      typeof parsed?.breakEven === "number" &&
-      typeof parsed?.target === "number"
+      typeof parsed?.lossPct === "number" &&
+      typeof parsed?.breakEvenPct === "number" &&
+      typeof parsed?.targetPct === "number"
     ) {
       return parsed;
     }
   } catch {
     // ignore
   }
-  return DEFAULT_ZONES;
+  return DEFAULT_PCT;
 }
 
-function persistZones(zones: ZoneBreakpoints) {
+function loadStoredStopsPerHour(): number {
   try {
-    localStorage.setItem(ZONE_STORAGE_KEY, JSON.stringify(zones));
+    const raw = localStorage.getItem(STOPS_PER_HOUR_KEY);
+    if (!raw) return DEFAULT_STOPS_PER_HOUR;
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) return n;
+  } catch {
+    // ignore
+  }
+  return DEFAULT_STOPS_PER_HOUR;
+}
+
+function persistPct(pct: ZonePercents) {
+  try {
+    localStorage.setItem(PCT_STORAGE_KEY, JSON.stringify(pct));
   } catch {
     // ignore
   }
 }
 
-function classifyZone(value: number, zones: ZoneBreakpoints) {
-  if (value < zones.loss) return "loss" as const;
-  if (value < zones.breakEven) return "warning" as const;
-  if (value < zones.target) return "breakEven" as const;
-  return "profit" as const;
+function persistStopsPerHour(n: number) {
+  try {
+    localStorage.setItem(STOPS_PER_HOUR_KEY, String(n));
+  } catch {
+    // ignore
+  }
 }
 
-function zoneLabel(zone: ReturnType<typeof classifyZone>): string {
+interface ResourceTarget {
+  dailyTarget: number;
+  lossThreshold: number;
+  breakEvenThreshold: number;
+  targetThreshold: number;
+}
+
+function computeResourceTarget(
+  weeklyHours: number | null | undefined,
+  efficiencyFactor: number | null | undefined,
+  stopsPerHour: number,
+  pct: ZonePercents,
+): ResourceTarget {
+  const hours = weeklyHours && weeklyHours > 0 ? weeklyHours : 40;
+  const eff = efficiencyFactor && efficiencyFactor > 0 ? efficiencyFactor : 1.0;
+  const dailyTarget = Math.max(1, Math.round((hours / 5) * stopsPerHour * eff));
+  return {
+    dailyTarget,
+    lossThreshold: Math.round((pct.lossPct / 100) * dailyTarget),
+    breakEvenThreshold: Math.round((pct.breakEvenPct / 100) * dailyTarget),
+    targetThreshold: Math.round((pct.targetPct / 100) * dailyTarget),
+  };
+}
+
+type ZoneKind = "loss" | "warning" | "breakEven" | "profit";
+
+function classifyZone(value: number, t: ResourceTarget): ZoneKind {
+  if (value < t.lossThreshold) return "loss";
+  if (value < t.breakEvenThreshold) return "warning";
+  if (value < t.targetThreshold) return "breakEven";
+  return "profit";
+}
+
+function zoneLabel(zone: ZoneKind): string {
   switch (zone) {
     case "loss":
       return "Förlust";
@@ -154,7 +218,7 @@ function zoneLabel(zone: ReturnType<typeof classifyZone>): string {
   }
 }
 
-function zoneBarClass(zone: ReturnType<typeof classifyZone>): string {
+function zoneBarClass(zone: ZoneKind): string {
   switch (zone) {
     case "loss":
       return "hsl(var(--destructive))";
@@ -168,7 +232,7 @@ function zoneBarClass(zone: ReturnType<typeof classifyZone>): string {
 }
 
 function zoneBadgeVariant(
-  zone: ReturnType<typeof classifyZone>,
+  zone: ZoneKind,
 ): { variant: "destructive" | "secondary" | "default" | "outline"; className?: string } {
   switch (zone) {
     case "loss":
@@ -205,12 +269,18 @@ export default function UnitManagerPage() {
   const today = useMemo(() => new Date(), []);
   const dateStr = format(today, "yyyy-MM-dd");
 
-  const [zones, setZones] = useState<ZoneBreakpoints>(() => loadStoredZones());
+  const [pct, setPct] = useState<ZonePercents>(() => loadStoredPct());
+  const [stopsPerHour, setStopsPerHour] = useState<number>(() => loadStoredStopsPerHour());
 
-  const updateZone = (field: keyof ZoneBreakpoints, value: number) => {
-    const next = { ...zones, [field]: value };
-    setZones(next);
-    persistZones(next);
+  const updatePct = (field: keyof ZonePercents, value: number) => {
+    const next = { ...pct, [field]: value };
+    setPct(next);
+    persistPct(next);
+  };
+
+  const updateStopsPerHour = (value: number) => {
+    setStopsPerHour(value);
+    persistStopsPerHour(value);
   };
 
   const { data: daily, isLoading: dailyLoading } = useQuery<DailyKpis>({
@@ -228,6 +298,17 @@ export default function UnitManagerPage() {
     staleTime: 5 * 60_000,
   });
 
+  const { data: resources } = useQuery<ResourceConfig[]>({
+    queryKey: ["/api/resources"],
+    staleTime: 5 * 60_000,
+  });
+
+  const resourceConfigById = useMemo(() => {
+    const map = new Map<string, ResourceConfig>();
+    (resources ?? []).forEach((r) => map.set(r.id, r));
+    return map;
+  }, [resources]);
+
   const resourceKpis = useMemo<ResourceKpi[]>(() => {
     const list = daily?.resourceKpis ?? [];
     return [...list]
@@ -235,14 +316,39 @@ export default function UnitManagerPage() {
       .sort((a, b) => b.totalTasks - a.totalTasks);
   }, [daily]);
 
+  const targetByResource = useMemo(() => {
+    const map = new Map<string, ResourceTarget>();
+    for (const r of resourceKpis) {
+      const cfg = resourceConfigById.get(r.resourceId);
+      // Föredra resurs-konfig (DB) → faller tillbaka på inlämnad weeklyHours
+      // från KPI-svaret (också från DB) → sista utvägen: defaults.
+      const hours = cfg?.weeklyHours ?? r.weeklyHours ?? null;
+      const eff = cfg?.efficiencyFactor ?? r.efficiencyFactor ?? null;
+      map.set(r.resourceId, computeResourceTarget(hours, eff, stopsPerHour, pct));
+    }
+    return map;
+  }, [resourceKpis, resourceConfigById, stopsPerHour, pct]);
+
   const breakEvenData = useMemo(
     () =>
-      resourceKpis.map((r) => ({
-        name: r.resourceName,
-        completed: r.completedTasks,
-        planned: r.totalTasks,
-      })),
-    [resourceKpis],
+      resourceKpis.map((r) => {
+        const t = targetByResource.get(r.resourceId)!;
+        return {
+          resourceId: r.resourceId,
+          name: r.resourceName,
+          completed: r.completedTasks,
+          planned: r.totalTasks,
+          dailyTarget: t.dailyTarget,
+          loss: t.lossThreshold,
+          breakEven: t.breakEvenThreshold,
+          target: t.targetThreshold,
+          pctOfTarget:
+            t.dailyTarget > 0
+              ? Math.round((r.completedTasks / t.dailyTarget) * 100)
+              : 0,
+        };
+      }),
+    [resourceKpis, targetByResource],
   );
 
   const isPlanner = isPlannerRole(role);
@@ -295,22 +401,33 @@ export default function UnitManagerPage() {
       <ProductionGoalsPanel
         loading={dailyLoading}
         resourceKpis={resourceKpis}
-        zones={zones}
+        targetByResource={targetByResource}
       />
 
       <BreakEvenPanel
         loading={dailyLoading}
         data={breakEvenData}
-        zones={zones}
-        onZoneChange={updateZone}
+        pct={pct}
+        onPctChange={updatePct}
+        stopsPerHour={stopsPerHour}
+        onStopsPerHourChange={updateStopsPerHour}
         planningParamCount={planningParams?.length ?? 0}
+        resourceConfigsKnown={(resources?.length ?? 0) > 0}
+      />
+
+      <WeeklyBreakEvenPanel
+        loading={weeklyLoading}
+        weekly={weekly}
+        resources={resources ?? []}
+        stopsPerHour={stopsPerHour}
+        pct={pct}
       />
 
       <PlanVsOutcomePanel
         loading={dailyLoading || weeklyLoading}
         resourceKpis={resourceKpis}
         weekly={weekly}
-        zones={zones}
+        targetByResource={targetByResource}
       />
 
       <AnomalyProcessPanel />
@@ -321,11 +438,11 @@ export default function UnitManagerPage() {
 function ProductionGoalsPanel({
   loading,
   resourceKpis,
-  zones,
+  targetByResource,
 }: {
   loading: boolean;
   resourceKpis: ResourceKpi[];
-  zones: ZoneBreakpoints;
+  targetByResource: Map<string, ResourceTarget>;
 }) {
   if (loading) {
     return (
@@ -366,7 +483,8 @@ function ProductionGoalsPanel({
               Dagens produktion mot mål
             </CardTitle>
             <CardDescription>
-              Per resurs. Mål = {zones.target} stopp, break-even = {zones.breakEven}, kritiskt = {zones.loss}.
+              Per resurs. Dagsmål härleds från resursens veckotimmar (DB) ×
+              stopp/timme. Tröskelzoner från konfigurerade procentnivåer.
             </CardDescription>
           </div>
         </div>
@@ -374,11 +492,12 @@ function ProductionGoalsPanel({
       <CardContent>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {resourceKpis.map((r) => {
-            const stopsProgress =
-              zones.target > 0
-                ? Math.min(100, Math.round((r.completedTasks / zones.target) * 100))
-                : 0;
-            const zone = classifyZone(r.completedTasks, zones);
+            const t = targetByResource.get(r.resourceId)!;
+            const stopsProgress = Math.min(
+              100,
+              Math.round((r.completedTasks / t.dailyTarget) * 100),
+            );
+            const zone = classifyZone(r.completedTasks, t);
             const planPct =
               r.totalTasks > 0
                 ? Math.round((r.completedTasks / r.totalTasks) * 100)
@@ -409,7 +528,7 @@ function ProductionGoalsPanel({
                     <span className="text-muted-foreground">Stopp idag</span>
                     <span className="font-semibold">
                       {r.completedTasks}
-                      <span className="text-muted-foreground"> / {zones.target}</span>
+                      <span className="text-muted-foreground"> / {t.dailyTarget}</span>
                     </span>
                   </div>
                   <Progress value={stopsProgress} className="h-2 mt-1.5" />
@@ -420,6 +539,16 @@ function ProductionGoalsPanel({
                   </span>
                   <span>Snittid: {r.avgTimeMinutes} min</span>
                 </div>
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>
+                    Tröskel: {t.lossThreshold}/{t.breakEvenThreshold}/{t.targetThreshold}
+                  </span>
+                  {typeof r.deviationCount === "number" && r.deviationCount > 0 && (
+                    <span className="text-warning-foreground">
+                      {r.deviationCount} avvikelse{r.deviationCount === 1 ? "" : "r"}
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -429,25 +558,44 @@ function ProductionGoalsPanel({
   );
 }
 
+interface BreakEvenDatum {
+  resourceId: string;
+  name: string;
+  completed: number;
+  planned: number;
+  dailyTarget: number;
+  loss: number;
+  breakEven: number;
+  target: number;
+  pctOfTarget: number;
+}
+
 function BreakEvenPanel({
   loading,
   data,
-  zones,
-  onZoneChange,
+  pct,
+  onPctChange,
+  stopsPerHour,
+  onStopsPerHourChange,
   planningParamCount,
+  resourceConfigsKnown,
 }: {
   loading: boolean;
-  data: { name: string; completed: number; planned: number }[];
-  zones: ZoneBreakpoints;
-  onZoneChange: (field: keyof ZoneBreakpoints, value: number) => void;
+  data: BreakEvenDatum[];
+  pct: ZonePercents;
+  onPctChange: (field: keyof ZonePercents, value: number) => void;
+  stopsPerHour: number;
+  onStopsPerHourChange: (value: number) => void;
   planningParamCount: number;
+  resourceConfigsKnown: boolean;
 }) {
   const totals = useMemo(() => {
     const completed = data.reduce((s, d) => s + d.completed, 0);
     const planned = data.reduce((s, d) => s + d.planned, 0);
-    const breakEvenTotal = zones.breakEven * data.length;
-    return { completed, planned, breakEvenTotal };
-  }, [data, zones]);
+    const breakEvenTotal = data.reduce((s, d) => s + d.breakEven, 0);
+    const targetTotal = data.reduce((s, d) => s + d.target, 0);
+    return { completed, planned, breakEvenTotal, targetTotal };
+  }, [data]);
 
   return (
     <Card data-testid="card-break-even">
@@ -459,53 +607,66 @@ function BreakEvenPanel({
               Break-even per resurs
             </CardTitle>
             <CardDescription>
-              {zones.loss} stopp = förlust · {zones.breakEven} = nollresultat ·{" "}
-              {zones.target}+ = vinst. Trösklarna sparas lokalt per användare.
+              Tröskelzoner: {pct.lossPct}% = förlust · {pct.breakEvenPct}% = nollresultat ·
+              {" "}{pct.targetPct}%+ = vinst. Per-resurs-mål härleds från
+              {" "}<span className="font-medium">resources.weeklyHours</span> (DB) ×
+              {" "}stopp/timme.
+              {!resourceConfigsKnown && " Resurskonfiguration ej laddad — använder defaultvärden tills /api/resources svarar."}
               {planningParamCount > 0
                 ? ` ${planningParamCount} planeringsparametrar finns för objekt-specifika undantag.`
                 : ""}
             </CardDescription>
           </div>
-          <div className="grid grid-cols-3 gap-2 text-sm">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+            <div>
+              <Label htmlFor="stops-per-hour" className="text-xs">
+                Stopp/timme
+              </Label>
+              <Input
+                id="stops-per-hour"
+                type="number"
+                step="0.5"
+                value={stopsPerHour}
+                onChange={(e) => onStopsPerHourChange(Number(e.target.value) || 0)}
+                className="h-8 w-20"
+                data-testid="input-stops-per-hour"
+              />
+            </div>
             <div>
               <Label htmlFor="zone-loss" className="text-xs">
-                Förlust &lt;
+                Förlust %
               </Label>
               <Input
                 id="zone-loss"
                 type="number"
-                value={zones.loss}
-                onChange={(e) => onZoneChange("loss", Number(e.target.value) || 0)}
+                value={pct.lossPct}
+                onChange={(e) => onPctChange("lossPct", Number(e.target.value) || 0)}
                 className="h-8 w-20"
                 data-testid="input-zone-loss"
               />
             </div>
             <div>
               <Label htmlFor="zone-break" className="text-xs">
-                Break-even
+                Break-even %
               </Label>
               <Input
                 id="zone-break"
                 type="number"
-                value={zones.breakEven}
-                onChange={(e) =>
-                  onZoneChange("breakEven", Number(e.target.value) || 0)
-                }
+                value={pct.breakEvenPct}
+                onChange={(e) => onPctChange("breakEvenPct", Number(e.target.value) || 0)}
                 className="h-8 w-20"
                 data-testid="input-zone-break"
               />
             </div>
             <div>
               <Label htmlFor="zone-target" className="text-xs">
-                Mål
+                Mål %
               </Label>
               <Input
                 id="zone-target"
                 type="number"
-                value={zones.target}
-                onChange={(e) =>
-                  onZoneChange("target", Number(e.target.value) || 0)
-                }
+                value={pct.targetPct}
+                onChange={(e) => onPctChange("targetPct", Number(e.target.value) || 0)}
                 className="h-8 w-20"
                 data-testid="input-zone-target"
               />
@@ -535,39 +696,63 @@ function BreakEvenPanel({
                   />
                   <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip
-                    formatter={(value: number, key: string) =>
-                      key === "completed"
-                        ? [`${value} stopp`, "Utfört"]
-                        : [`${value} stopp`, "Planerat"]
-                    }
+                    formatter={(value: number, key: string, item: any) => {
+                      const d = item?.payload as BreakEvenDatum | undefined;
+                      if (key === "completed") {
+                        return [
+                          `${value} stopp (${d?.pctOfTarget ?? 0}% av mål ${d?.dailyTarget ?? "?"})`,
+                          "Utfört",
+                        ];
+                      }
+                      return [`${value} stopp`, "Planerat"];
+                    }}
                   />
+                  <Bar dataKey="target" fill="hsl(var(--chart-2) / 0.15)" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="completed" radius={[4, 4, 0, 0]}>
+                    {data.map((d, i) => {
+                      const t: ResourceTarget = {
+                        dailyTarget: d.dailyTarget,
+                        lossThreshold: d.loss,
+                        breakEvenThreshold: d.breakEven,
+                        targetThreshold: d.target,
+                      };
+                      return <Cell key={i} fill={zoneBarClass(classifyZone(d.completed, t))} />;
+                    })}
+                  </Bar>
                   <ReferenceLine
-                    y={zones.loss}
+                    y={
+                      data.length > 0
+                        ? Math.round(data.reduce((s, d) => s + d.loss, 0) / data.length)
+                        : 0
+                    }
                     stroke="hsl(var(--destructive))"
                     strokeDasharray="4 4"
-                    label={{ value: `Förlust ${zones.loss}`, fontSize: 11, fill: "hsl(var(--destructive))", position: "insideTopLeft" }}
+                    label={{ value: `Snitt förlust ${pct.lossPct}%`, fontSize: 11, fill: "hsl(var(--destructive))", position: "insideTopLeft" }}
                   />
                   <ReferenceLine
-                    y={zones.breakEven}
+                    y={
+                      data.length > 0
+                        ? Math.round(data.reduce((s, d) => s + d.breakEven, 0) / data.length)
+                        : 0
+                    }
                     stroke="hsl(var(--warning))"
                     strokeDasharray="4 4"
-                    label={{ value: `Break-even ${zones.breakEven}`, fontSize: 11, fill: "hsl(var(--warning))", position: "insideTopLeft" }}
+                    label={{ value: `Snitt break-even ${pct.breakEvenPct}%`, fontSize: 11, fill: "hsl(var(--warning))", position: "insideTopLeft" }}
                   />
                   <ReferenceLine
-                    y={zones.target}
+                    y={
+                      data.length > 0
+                        ? Math.round(data.reduce((s, d) => s + d.target, 0) / data.length)
+                        : 0
+                    }
                     stroke="hsl(var(--chart-2))"
                     strokeDasharray="4 4"
-                    label={{ value: `Mål ${zones.target}`, fontSize: 11, fill: "hsl(var(--chart-2))", position: "insideTopLeft" }}
+                    label={{ value: `Snitt mål ${pct.targetPct}%`, fontSize: 11, fill: "hsl(var(--chart-2))", position: "insideTopLeft" }}
                   />
-                  <Bar dataKey="completed" radius={[4, 4, 0, 0]}>
-                    {data.map((d, i) => (
-                      <Cell key={i} fill={zoneBarClass(classifyZone(d.completed, zones))} />
-                    ))}
-                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="grid grid-cols-3 gap-3 text-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
               <div className="rounded-md border p-3" data-testid="stat-total-completed">
                 <p className="text-xs text-muted-foreground">Utfört totalt</p>
                 <p className="text-xl font-semibold">{totals.completed}</p>
@@ -578,10 +763,106 @@ function BreakEvenPanel({
               </div>
               <div className="rounded-md border p-3" data-testid="stat-break-even-total">
                 <p className="text-xs text-muted-foreground">
-                  Break-even ({data.length} resurser)
+                  Break-even-summa ({data.length} resurser)
                 </p>
                 <p className="text-xl font-semibold">{totals.breakEvenTotal}</p>
               </div>
+              <div className="rounded-md border p-3" data-testid="stat-target-total">
+                <p className="text-xs text-muted-foreground">Målsumma idag</p>
+                <p className="text-xl font-semibold">{totals.targetTotal}</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function WeeklyBreakEvenPanel({
+  loading,
+  weekly,
+  resources,
+  stopsPerHour,
+  pct,
+}: {
+  loading: boolean;
+  weekly: WeeklyKpis | undefined;
+  resources: ResourceConfig[];
+  stopsPerHour: number;
+  pct: ZonePercents;
+}) {
+  const aggregate = useMemo(() => {
+    let weeklyBreakEven = 0;
+    let weeklyTarget = 0;
+    for (const r of resources) {
+      const t = computeResourceTarget(r.weeklyHours, r.efficiencyFactor, stopsPerHour, pct);
+      weeklyBreakEven += t.breakEvenThreshold * 5;
+      weeklyTarget += t.dailyTarget * 5;
+    }
+    return { weeklyBreakEven, weeklyTarget };
+  }, [resources, stopsPerHour, pct]);
+
+  const completed = weekly?.current.completedTasks ?? 0;
+  const pctOfBreakEven = aggregate.weeklyBreakEven > 0
+    ? Math.round((completed / aggregate.weeklyBreakEven) * 100)
+    : 0;
+  const pctOfTarget = aggregate.weeklyTarget > 0
+    ? Math.round((completed / aggregate.weeklyTarget) * 100)
+    : 0;
+
+  const zoneKind: ZoneKind = (() => {
+    if (aggregate.weeklyBreakEven <= 0) return "warning";
+    if (completed < aggregate.weeklyBreakEven * (pct.lossPct / pct.breakEvenPct)) return "loss";
+    if (completed < aggregate.weeklyBreakEven) return "warning";
+    if (completed < aggregate.weeklyTarget) return "breakEven";
+    return "profit";
+  })();
+  const badge = zoneBadgeVariant(zoneKind);
+
+  return (
+    <Card data-testid="card-weekly-break-even">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-chart-2" />
+          Veckans break-even
+        </CardTitle>
+        <CardDescription>
+          Aggregat över hela enheten. Vecko-break-even = summa(break-even-tröskel × 5) per resurs. Veckomål = summa(dagsmål × 5).
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-4 items-start">
+            <div className="rounded-md border p-3" data-testid="stat-weekly-completed">
+              <p className="text-xs text-muted-foreground">Utfört (denna vecka)</p>
+              <p className="text-2xl font-semibold">{completed}</p>
+              <Badge
+                variant={badge.variant}
+                className={`mt-1 ${badge.className ?? ""}`}
+                data-testid="badge-weekly-zone"
+              >
+                {zoneLabel(zoneKind)}
+              </Badge>
+            </div>
+            <div className="rounded-md border p-3" data-testid="stat-weekly-break-even">
+              <p className="text-xs text-muted-foreground">Break-even (vecka)</p>
+              <p className="text-2xl font-semibold">{aggregate.weeklyBreakEven}</p>
+              <p className="text-xs text-muted-foreground mt-1">{pctOfBreakEven}% uppnått</p>
+            </div>
+            <div className="rounded-md border p-3" data-testid="stat-weekly-target">
+              <p className="text-xs text-muted-foreground">Mål (vecka)</p>
+              <p className="text-2xl font-semibold">{aggregate.weeklyTarget}</p>
+              <p className="text-xs text-muted-foreground mt-1">{pctOfTarget}% uppnått</p>
+            </div>
+            <div className="rounded-md border p-3" data-testid="stat-weekly-progress">
+              <p className="text-xs text-muted-foreground">Veckoprogress mot break-even</p>
+              <Progress value={Math.min(100, pctOfBreakEven)} className="h-2 mt-2" />
+              <p className="text-xs text-muted-foreground mt-1">
+                {Math.max(0, aggregate.weeklyBreakEven - completed)} stopp kvar
+              </p>
             </div>
           </div>
         )}
@@ -594,12 +875,12 @@ function PlanVsOutcomePanel({
   loading,
   resourceKpis,
   weekly,
-  zones,
+  targetByResource,
 }: {
   loading: boolean;
   resourceKpis: ResourceKpi[];
   weekly: WeeklyKpis | undefined;
-  zones: ZoneBreakpoints;
+  targetByResource: Map<string, ResourceTarget>;
 }) {
   return (
     <Card data-testid="card-plan-vs-outcome">
@@ -609,7 +890,7 @@ function PlanVsOutcomePanel({
           Plan vs utfall
         </CardTitle>
         <CardDescription>
-          Per resurs idag, samt veckotrend mot föregående vecka.
+          Per resurs idag — stopp, kärl och avvikelser — samt veckotrend mot föregående vecka.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -625,17 +906,31 @@ function PlanVsOutcomePanel({
               <TableHeader>
                 <TableRow>
                   <TableHead>Resurs</TableHead>
-                  <TableHead className="text-right">Plan</TableHead>
-                  <TableHead className="text-right">Utfört</TableHead>
+                  <TableHead className="text-right">Stopp plan</TableHead>
+                  <TableHead className="text-right">Stopp utfört</TableHead>
                   <TableHead className="text-right">Diff</TableHead>
                   <TableHead className="text-right">Mot mål</TableHead>
+                  <TableHead className="text-right">
+                    <span className="inline-flex items-center gap-1">
+                      <Package className="h-3 w-3" />
+                      Kärl plan
+                    </span>
+                  </TableHead>
+                  <TableHead className="text-right">Kärl utfört</TableHead>
+                  <TableHead className="text-right">
+                    <span className="inline-flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      Avvikelser
+                    </span>
+                  </TableHead>
                   <TableHead className="text-right">Snittid</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {resourceKpis.map((r) => {
+                  const t = targetByResource.get(r.resourceId)!;
                   const diff = r.completedTasks - r.totalTasks;
-                  const goalDiff = r.completedTasks - zones.target;
+                  const goalDiff = r.completedTasks - t.dailyTarget;
                   return (
                     <TableRow key={r.resourceId} data-testid={`row-plan-vs-outcome-${r.resourceId}`}>
                       <TableCell className="font-medium">{r.resourceName}</TableCell>
@@ -646,6 +941,17 @@ function PlanVsOutcomePanel({
                       </TableCell>
                       <TableCell className={`text-right font-medium ${deltaColor(goalDiff)}`}>
                         {goalDiff > 0 ? `+${goalDiff}` : goalDiff}
+                      </TableCell>
+                      <TableCell className="text-right">{r.plannedContainers ?? 0}</TableCell>
+                      <TableCell className="text-right">{r.completedContainers ?? 0}</TableCell>
+                      <TableCell className="text-right">
+                        {r.deviationCount && r.deviationCount > 0 ? (
+                          <span className="text-warning-foreground font-medium">
+                            {r.deviationCount}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">0</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">{r.avgTimeMinutes} min</TableCell>
                     </TableRow>
@@ -733,7 +1039,7 @@ const ANOMALY_STEPS = [
     key: "prioritize",
     label: "Prioritera",
     icon: AlertTriangle,
-    description: "Hög allvarsgrad och förseningar &gt; 2h hanteras först.",
+    description: "Hög allvarsgrad och förseningar > 2h hanteras först.",
   },
   {
     key: "act",

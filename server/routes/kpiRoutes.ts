@@ -36,56 +36,92 @@ app.get("/api/kpis/daily", asyncHandler(async (req, res) => {
       ttl,
       async () => {
         const orders = await storage.getWorkOrdersByDate(tenantId, date);
-        const resources = await storage.getResources(tenantId);
+          const resources = await storage.getResources(tenantId);
 
-        const completed = orders.filter(o =>
-          o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed"
-        );
-        const remaining = orders.filter(o =>
-          !o.completedAt && o.orderStatus !== "utford" && o.executionStatus !== "completed"
-        );
+          const objectIds = Array.from(new Set(orders.map(o => o.objectId).filter(Boolean) as string[]));
+          const containerByObject = new Map<string, number>();
+          if (objectIds.length > 0) {
+            const allObjects = await storage.getObjects(tenantId);
+            for (const obj of allObjects) {
+              const total = (obj.containerCount || 0) + (obj.containerCountK2 || 0)
+                + (obj.containerCountK3 || 0) + (obj.containerCountK4 || 0);
+              containerByObject.set(obj.id, total);
+            }
+          }
+          const isDeviation = (o: typeof orders[number]) =>
+            o.orderStatus === "omojlig" || o.orderStatus === "avbruten";
 
-        const durationsMinutes = completed
-          .map(o => o.actualDuration || o.estimatedDuration || 0)
-          .filter(d => d > 0);
-        const avgTimePerTask = durationsMinutes.length > 0
-          ? Math.round(durationsMinutes.reduce((a, b) => a + b, 0) / durationsMinutes.length)
-          : 0;
-
-        const activeResources = resources.filter(r =>
-          orders.some(o => o.resourceId === r.id)
-        );
-
-        const resourceKpis = activeResources.map(r => {
-          const resourceOrders = orders.filter(o => o.resourceId === r.id);
-          const resourceCompleted = resourceOrders.filter(o =>
+          const completed = orders.filter(o =>
             o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed"
           );
-          const resourceDurations = resourceCompleted
+          const remaining = orders.filter(o =>
+            !o.completedAt && o.orderStatus !== "utford" && o.executionStatus !== "completed"
+          );
+
+          const durationsMinutes = completed
             .map(o => o.actualDuration || o.estimatedDuration || 0)
             .filter(d => d > 0);
-          return {
-            resourceId: r.id,
-            resourceName: r.name,
-            totalTasks: resourceOrders.length,
-            completedTasks: resourceCompleted.length,
-            remainingTasks: resourceOrders.length - resourceCompleted.length,
-            avgTimeMinutes: resourceDurations.length > 0
-              ? Math.round(resourceDurations.reduce((a, b) => a + b, 0) / resourceDurations.length)
-              : 0,
-          };
-        });
+          const avgTimePerTask = durationsMinutes.length > 0
+            ? Math.round(durationsMinutes.reduce((a, b) => a + b, 0) / durationsMinutes.length)
+            : 0;
 
-        return {
-          date: dateKey,
-          totalTasks: orders.length,
-          completedTasks: completed.length,
-          remainingTasks: remaining.length,
-          completionRate: orders.length > 0 ? Math.round((completed.length / orders.length) * 100) : 0,
-          avgTimePerTaskMinutes: avgTimePerTask,
-          activeResources: activeResources.length,
-          resourceKpis,
-        };
+          const activeResources = resources.filter(r =>
+            orders.some(o => o.resourceId === r.id)
+          );
+
+          const resourceKpis = activeResources.map(r => {
+            const resourceOrders = orders.filter(o => o.resourceId === r.id);
+            const resourceCompleted = resourceOrders.filter(o =>
+              o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed"
+            );
+            const resourceDurations = resourceCompleted
+              .map(o => o.actualDuration || o.estimatedDuration || 0)
+              .filter(d => d > 0);
+            const plannedContainers = resourceOrders.reduce(
+              (s, o) => s + (o.objectId ? (containerByObject.get(o.objectId) || 0) : 0),
+              0,
+            );
+            const completedContainers = resourceCompleted.reduce(
+              (s, o) => s + (o.objectId ? (containerByObject.get(o.objectId) || 0) : 0),
+              0,
+            );
+            const deviationCount = resourceOrders.filter(isDeviation).length;
+            return {
+              resourceId: r.id,
+              resourceName: r.name,
+              totalTasks: resourceOrders.length,
+              completedTasks: resourceCompleted.length,
+              remainingTasks: resourceOrders.length - resourceCompleted.length,
+              avgTimeMinutes: resourceDurations.length > 0
+                ? Math.round(resourceDurations.reduce((a, b) => a + b, 0) / resourceDurations.length)
+                : 0,
+              plannedContainers,
+              completedContainers,
+              deviationCount,
+              weeklyHours: r.weeklyHours ?? null,
+              efficiencyFactor: r.efficiencyFactor ?? null,
+            };
+          });
+
+          return {
+            date: dateKey,
+            totalTasks: orders.length,
+            completedTasks: completed.length,
+            remainingTasks: remaining.length,
+            completionRate: orders.length > 0 ? Math.round((completed.length / orders.length) * 100) : 0,
+            avgTimePerTaskMinutes: avgTimePerTask,
+            activeResources: activeResources.length,
+            totalDeviations: orders.filter(isDeviation).length,
+            totalContainersPlanned: orders.reduce(
+              (s, o) => s + (o.objectId ? (containerByObject.get(o.objectId) || 0) : 0),
+              0,
+            ),
+            totalContainersCompleted: completed.reduce(
+              (s, o) => s + (o.objectId ? (containerByObject.get(o.objectId) || 0) : 0),
+              0,
+            ),
+            resourceKpis,
+          };
       },
     );
     res.json(payload);
