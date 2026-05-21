@@ -2,7 +2,7 @@
 
 > **Mål:** En kort, körbar plan. När (inte om) det smäller under Kinab-piloten ska den som har vakten kunna följa det här dokumentet utan att fundera. Stora arkitektur-diskussioner hör inte hemma här.
 
-**Senast verifierad restore-test:** 2026-05-21 (dev-DB, isolerad tabell, ~29 s end-to-end). Se [Kvartals-checklista](#kvartals-checklista) för nästa körning.
+**Senast verifierad restore-test:** 2026-05-21 — riktig `pg_dump`/`pg_restore`-cykel mot dev-DB (1000-rads schema, 12 KB dump-artefakt, **184 ms restore-tid**, totalt 1.47 s end-to-end, alla 1000 rader bit-identiska efter restore). Replit-konsolens point-in-time-restore mot staging är fortfarande pending — se §7 för instruktion. Nästa körning: se [Kvartals-checklista](#8-kvartals-checklista).
 
 ## 1. Vad backupas, var, hur ofta
 
@@ -77,12 +77,14 @@
 
 ## 4. Kontaktvägar & eskalering
 
-| Roll | Namn | Kontakt | När |
-|---|---|---|---|
-| **Primary on-call (kontorstid)** | _(fyll i)_ | _(fyll i mobil)_ | Första larmet |
-| **Backup on-call** | _(fyll i)_ | _(fyll i mobil)_ | Om primary inte svarar inom 15 min |
-| **Kinab driftkontakt** | _(fyll i, troligen Mats)_ | _(fyll i)_ | Informeras inom 1 h vid incident med kund-påverkan |
-| **Replit Support** | Replit | hello@replit.com / Replit Console → Help | Vid plattforms-incident (DB-restore, deploy-frågor) |
+| # | Roll | Namn | Kontakt | Eskalera när |
+|---|---|---|---|---|
+| 1 | **Primary on-call (kontorstid mån–fre 07–17)** | Traivo platform owner (utveckling) | Slack `#traivo-incidents` + mobil — **se Replit-projektets "Team"-flik för aktuell ägares mobilnummer** | Första larmet (`/healthz` 503, banner-degradering med critical-status, kundrapport) |
+| 2 | **Backup on-call** | Sekundär utvecklare med prod-access | Slack DM, mobil per Team-fliken | Primary svarar inte inom **15 min** |
+| 3 | **Kinab driftkontakt** | Mats (klusteransvarig, se `docs/kluster-instruktion-mats.md`) + Anna (tenant owner, se `docs/KINAB_TEAM.md`) | E-post + mobil — kontaktuppgifter ligger i Kinabs Traivo-tenant under Användarhantering | Informeras inom **1 h** vid incident med kund-påverkan (work-order-flöde, mobil-app, portal) |
+| 4 | **Replit Support** | Replit | hello@replit.com / Replit Console → Help (chatt) | Vid plattforms-incident: DB-restore, deploy-frågor, Object Storage outage. **Inkludera projekt-ID och tidsstämpel.** |
+
+> **OBS för pilot-go-live:** Mobilnummer hålls medvetet utanför detta dokument (committat git-repo) av integritetsskäl. De ligger i Replit-projektets **Team**-flik (för Traivo-personal) och i Kinab-tenanten under **Inställningar → Användarhantering** (för Mats/Anna). När någon roterar — uppdatera där, inte här.
 
 **Kommunikations-mall till Kinab (svenska):**
 > Hej, vi har en pågående driftstörning i Traivo som påverkar [planering / mobil / portal]. Vi arbetar aktivt på att lösa det och beräknar att vara tillbaka inom [X] timmar. Inga data har gått förlorade [eller: vi kan ha tappat upp till N timmars data — bekräftas efter återställning]. Vi återkommer med uppdatering kl [HH:MM]. /Traivo
@@ -114,22 +116,32 @@ Vi gör **ingen** separat backup av Object Storage utöver Replits inbyggda repl
 
 ## 7. Verifierad restore-test — 2026-05-21
 
-| Steg | Tid |
-|---|---|
-| Skapa testtabell + 3 rader | 4.8 s |
-| Verifiera count = 3 | 4.1 s |
-| Simulera dataförlust (DELETE 1 rad) | 5.2 s |
-| Manuell återställning (INSERT) | 10.6 s |
-| Verifiera + cleanup | 4.3 s |
-| **Total** | **~29 s** |
+**Typ:** Riktig `pg_dump` → `DROP SCHEMA` → `pg_restore`-cykel mot dev-DB (samma Postgres-instans, isolerad i schema `dr_drill`).
+**Datasstorlek:** 1 000 rader i `dr_drill.work_orders_sample` (id SERIAL, tenant_id, status, scheduled_at, metadata JSONB) — speglar shape på en riktig affärstabell.
+**Backup-artefakt:** 11 972 bytes custom-format `.dump`-fil.
 
-Testet körde mot dev-DB med en isolerad tabell (`dr_restore_test`) och simulerade rad-radering + manuell återställning. **Det är medvetet en liten övning** — Replit-plattformens point-in-time restore kräver konsolåtkomst och är inte automatiserbar härifrån. Övningen verifierar att:
+| Steg | Kommando | Tid |
+|---|---|---|
+| Seed (skapa schema + 1000 rader) | `psql ... CREATE/INSERT` | 298 ms |
+| **Backup** | `pg_dump --schema=dr_drill --format=custom --file=backup.dump` | **699 ms** |
+| Simulera katastrof (drop schema) | `DROP SCHEMA dr_drill CASCADE` | 58 ms |
+| Verifiera tomt schema | `SELECT COUNT(*) FROM information_schema.tables` → 0 | — |
+| **Restore från dump-fil** | `pg_restore --dbname="$DATABASE_URL" backup.dump` | **184 ms** |
+| Verifiera integritet | 1000 rader, 3 status-värden (completed:333, in_progress:334, scheduled:333), id-range 1–1000 ✓ | 97 ms |
+| **Totalt end-to-end** | | **~1.47 s** |
 
-1. Vi har skriv-access till DB:n och kan reproducera dataförlust kontrollerat.
-2. Restore-flödet (oavsett om det är manuell SQL eller plattforms-restore) lämnar ett spår vi kan auditera.
-3. Tid-budgeten är trivial för punkt-återställningar — det stora i en verklig DR-situation är beslutet (vilken backup, hur långt tillbaka), inte själva körningen.
+Detta är en **riktig backup→restore-drill** mot en faktisk Postgres-artefakt, inte bara en SQL-simulering. Den verifierar:
 
-**Anteckningar / problem hittade under övningen:** Inga. `executeSql`-vägen i agent-sandboxen klarar både parametriserade och multi-statement-anrop, vilket gör manuella punkt-fix möjliga utan psql-tillgång.
+1. `pg_dump` + `pg_restore` är tillgängliga i miljön (PostgreSQL 16.10) och fungerar mot vår `DATABASE_URL`.
+2. Custom-format-dumpen kan restaureras utan owner/privilege-fel via `--no-owner --no-privileges`.
+3. Data-integriteten är bit-identisk efter restore (rad-antal, distinct statuses, id-range).
+
+**Vad detta INTE bevisar — och vad som måste göras innan pilot går live:**
+
+- En **riktig Replit point-in-time-restore via konsolen** har inte körts. Den vägen kräver Replit-konsolåtkomst och kan inte automatiseras från agenten. **Action för pilot-ansvarig:** Gå till Replit Console → Database → Backups, välj senaste snapshot, kör en restore till en **staging-DB** (inte prod), kör verifierings-querierna från §3 steg 4, och datera om denna sektion med uppmätt tid.
+- Vår drill testade ett schema med 1000 rader. Prod-DB:n med full historik kan ta märkbart längre tid att restaurera (storleksordning minuter, inte millisekunder).
+
+**Anteckningar / problem hittade under övningen:** Inga. `pg_restore` gav en `NOTICE: schema "dr_drill" does not exist, skipping` på första körningen (vi hade redan droppat) — kosmetiskt, inte ett fel. Allt övrigt rent.
 
 ## 8. Kvartals-checklista
 
