@@ -69,6 +69,7 @@ export function getGrunddataItems(t: (key: string, fallback: string) => string, 
   const useI18n = lang === "en";
   return [
     { title: "Kunder", url: "/customers", icon: Building, description: "Översikt av kunder, kluster och objekt" },
+    { title: l("nav.new-customer"), url: "/onboarding", icon: Building2, description: l("nav.new-customer.desc") },
     { title: useI18n ? l("nav.objects") : t("object_plural", l("nav.objects")), url: "/objects", icon: Building2, description: l("nav.objects.desc") },
     { title: "Objekt utan koordinater", url: "/objects/missing-coordinates", icon: Building2, description: "Lista över objekt som saknar lat/lng och kan geokodas på nytt" },
     { title: useI18n ? l("nav.clusters") : t("cluster_plural", l("nav.clusters")), url: "/clusters", icon: Target, description: l("nav.clusters.desc") },
@@ -155,7 +156,6 @@ export function getAIItems(tl?: (key: string) => string): NavItem[] {
 export function getAdminItems(tl?: (key: string) => string): NavItem[] {
   const l = tl || svFallback;
   return [
-    { title: l("nav.new-customer"), url: "/onboarding", icon: Building2, description: l("nav.new-customer.desc") },
     { title: l("nav.company-settings"), url: "/tenant-config", icon: Settings2, description: l("nav.company-settings.desc") },
     { title: l("nav.metadata-settings"), url: "/metadata-settings", icon: Database, description: l("nav.metadata-settings.desc") },
     { title: l("nav.user-management"), url: "/user-management", icon: Users, description: l("nav.user-management.desc") },

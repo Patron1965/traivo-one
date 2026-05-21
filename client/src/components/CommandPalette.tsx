@@ -68,6 +68,7 @@ interface NavItemConfig {
 const allNavItems: NavItemConfig[] = [
   { title: "Start", url: "/", icon: Home, category: "Navigation", keywords: ["hem", "dashboard", "översikt"] },
   { title: "Mina uppgifter", url: "/home", icon: Home, category: "Navigation", keywords: ["tasks", "uppgifter", "todo"] },
+  { title: "Ny kund", url: "/onboarding", icon: Building2, category: "Grunddata", keywords: ["skapa", "kund", "företag", "onboarding", "ny"] },
   { title: "Objekt", url: "/objects", icon: Building2, category: "Grunddata", keywords: ["fastighet", "plats", "kund", "adress"] },
   { title: "Objekt utan koordinater", url: "/objects/missing-coordinates", icon: MapPin, category: "Grunddata", keywords: ["objekt", "koordinater", "geokodning", "lat", "lng", "saknar"] },
   { title: "Resurser", url: "/resources", icon: Users, category: "Grunddata", keywords: ["personal", "tekniker", "medarbetare"] },
