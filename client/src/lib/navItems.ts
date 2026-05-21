@@ -144,6 +144,7 @@ export function getEkonomiItems(tl?: (key: string) => string): NavItem[] {
     { title: l("nav.invoice-recalculation-log"), url: "/invoice-recalculation-log", icon: Receipt, description: l("nav.invoice-recalculation-log.desc") },
     { title: l("nav.economics"), url: "/economics", icon: DollarSign, description: l("nav.economics.desc") },
     { title: l("nav.reporting"), url: "/reporting", icon: BarChart3, description: l("nav.reporting.desc") },
+    { title: "Veckomötes-rapport", url: "/weekly-report", icon: FileText, description: "Sammanställd rapport för planeringsmötet (utfall, trender, plan, kvalitet) – PDF via utskrift" },
     { title: l("nav.roi-report"), url: "/roi-report", icon: TrendingUp, description: l("nav.roi-report.desc") },
     { title: l("nav.proactive-sales"), url: "/proactive-sales", icon: TrendingUp, description: l("nav.proactive-sales.desc") },
   ];

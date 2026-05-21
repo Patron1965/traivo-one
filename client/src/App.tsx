@@ -71,6 +71,7 @@ const OrderConceptWizardPage = lazy(() => import("@/pages/OrderConceptWizardPage
 const AssignmentsPage = lazy(() => import("@/pages/AssignmentsPage"));
 const AIAssistantPage = lazy(() => import("@/pages/AIAssistantPage"));
 const ReportingDashboardPage = lazy(() => import("@/pages/ReportingDashboardPage"));
+const WeeklyReportPage = lazy(() => import("@/pages/WeeklyReportPage"));
 const WorkflowGuidePage = lazy(() => import("@/pages/WorkflowGuidePage"));
 const DataRequirementsPage = lazy(() => import("@/pages/DataRequirementsPage"));
 const ApiCostsDashboardPage = lazy(() => import("@/pages/ApiCostsDashboardPage"));
@@ -193,6 +194,7 @@ function Router() {
         <Route path="/assignments">{() => <ProtectedRoute component={AssignmentsPage} path="/assignments" />}</Route>
         <Route path="/ai-assistant">{() => <ProtectedRoute component={AIAssistantPage} path="/ai-assistant" />}</Route>
         <Route path="/reporting">{() => <ProtectedRoute component={ReportingDashboardPage} path="/reporting" />}</Route>
+        <Route path="/weekly-report">{() => <ProtectedRoute component={WeeklyReportPage} path="/weekly-report" />}</Route>
         <Route path="/proactive-sales">{() => <ProtectedRoute component={ProactiveSalesPage} path="/proactive-sales" />}</Route>
         <Route path="/workflow-guide">{() => <ProtectedRoute component={WorkflowGuidePage} path="/workflow-guide" />}</Route>
         <Route path="/data-requirements">{() => <ProtectedRoute component={DataRequirementsPage} path="/data-requirements" />}</Route>

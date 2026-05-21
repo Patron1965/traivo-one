@@ -7,8 +7,8 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
-import { requireAdmin } from "../tenant-middleware";
-import { objects, workOrders, objectMetadata, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles } from "@shared/schema";
+import { requireAdmin, requirePlanner } from "../tenant-middleware";
+import { objects, workOrders, objectMetadata, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles, weeklyReportNotes, weeklyReportActionItemSchema, type WeeklyReportActionItem } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { sendEmail } from "../replit_integrations/resend";
 import { issueMagicLink } from "../replit_integrations/auth/magicLinkAuth";
@@ -274,6 +274,270 @@ app.get("/api/kpis/article-margins", requireAdmin, asyncHandler(async (req, res)
 app.post("/api/system/weekly-report/trigger", requireAdmin, asyncHandler(async (req, res) => {
     const result = await generateAndSendWeeklyReports();
     res.json(result);
+}));
+
+// ============================================
+// TASK #522: VECKOMÖTES-RAPPORT
+// ============================================
+
+// Hjälpare: ISO-vecka + start (måndag 00:00 lokal)
+function isoWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+function isoYearFor(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  return d.getUTCFullYear();
+}
+function startOfMondayWeek(input?: string | Date): Date {
+  const base = input ? new Date(input) : new Date();
+  const day = base.getDay();
+  const diff = base.getDate() - day + (day === 0 ? -6 : 1);
+  const start = new Date(base);
+  start.setDate(diff);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+app.get("/api/reports/weekly", requirePlanner, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const weekStart = startOfMondayWeek(req.query.week as string | undefined);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+
+  const teamFilter = (req.query.teamId as string | undefined) || null;
+  const clusterFilter = (req.query.clusterId as string | undefined) || null;
+
+  const isoYear = isoYearFor(weekStart);
+  const isoWeek = isoWeekNumber(weekStart);
+
+  // 4-veckorshistorik (denna vecka + 3 föregående)
+  const fourWeekRanges: { start: Date; end: Date; isoWeek: number; isoYear: number }[] = [];
+  for (let i = 3; i >= 0; i--) {
+    const s = new Date(weekStart);
+    s.setDate(s.getDate() - i * 7);
+    const e = new Date(s);
+    e.setDate(e.getDate() + 6);
+    e.setHours(23, 59, 59, 999);
+    fourWeekRanges.push({ start: s, end: e, isoWeek: isoWeekNumber(s), isoYear: isoYearFor(s) });
+  }
+  const trendFetchStart = fourWeekRanges[0].start;
+  const nextWeekStart = new Date(weekStart);
+  nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+  const nextWeekEnd = new Date(nextWeekStart);
+  nextWeekEnd.setDate(nextWeekEnd.getDate() + 6);
+  nextWeekEnd.setHours(23, 59, 59, 999);
+
+  const [allTrendOrders, nextWeekOrders, resources, deviationsAll, clusters, teams, notesRow, feedbackSummary] = await Promise.all([
+    storage.getWorkOrders(tenantId, trendFetchStart, weekEnd, true),
+    storage.getWorkOrders(tenantId, nextWeekStart, nextWeekEnd, true),
+    storage.getResources(tenantId),
+    storage.getDeviationReports(tenantId, {}),
+    storage.getClusters(tenantId),
+    storage.getTeams(tenantId),
+    db.select().from(weeklyReportNotes).where(and(
+      eq(weeklyReportNotes.tenantId, tenantId),
+      eq(weeklyReportNotes.isoYear, isoYear),
+      eq(weeklyReportNotes.isoWeek, isoWeek),
+    )).limit(1),
+    storage.getRouteFeedbackSummary(tenantId, {
+      startDate: weekStart.toISOString().split("T")[0],
+      endDate: weekEnd.toISOString().split("T")[0],
+    }).catch(() => null),
+  ]);
+
+  const matchesFilter = (wo: any) => {
+    if (teamFilter && wo.teamId !== teamFilter) return false;
+    if (clusterFilter && wo.clusterId !== clusterFilter) return false;
+    return true;
+  };
+  const filteredTrend = allTrendOrders.filter(matchesFilter);
+  const filteredNext = nextWeekOrders.filter(matchesFilter);
+
+  // Bygg per-vecka KPI:er
+  function periodStats(orders: any[]) {
+    const completed = orders.filter(o => o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed");
+    const containers = completed.reduce((s, o) => {
+      const obj = o.object;
+      const c = obj ? (obj.containerCount || 0) + (obj.containerCountK2 || 0) + (obj.containerCountK3 || 0) + (obj.containerCountK4 || 0) : 0;
+      return s + c;
+    }, 0);
+    const revenue = completed.reduce((s, o) => s + (o.cachedValue || 0), 0);
+    const durations = completed.map(o => o.actualDuration || o.estimatedDuration || 0).filter(d => d > 0);
+    const avgLeadMinutes = durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
+    const totalEstimated = orders.reduce((s, o) => s + (o.estimatedDuration || 0), 0);
+    const slaCandidates = orders.filter(o => o.plannedWindowStart || o.desiredDeliveryStart);
+    const slaBreaches = slaCandidates.filter(o => o.outsidePreferredWindow === true).length;
+    const slaRate = slaCandidates.length > 0
+      ? Math.round(((slaCandidates.length - slaBreaches) / slaCandidates.length) * 100)
+      : (orders.length > 0 ? 100 : 0);
+    return {
+      totalOrders: orders.length,
+      completedOrders: completed.length,
+      completionRate: orders.length > 0 ? Math.round((completed.length / orders.length) * 100) : 0,
+      containers,
+      revenue,
+      avgLeadMinutes,
+      totalEstimatedMinutes: totalEstimated,
+      slaRate,
+      slaBreaches,
+    };
+  }
+
+  const trendByWeek = fourWeekRanges.map((range) => {
+    const ordersInWeek = filteredTrend.filter(o => {
+      const d = o.scheduledDate ? new Date(o.scheduledDate) : null;
+      return d && d >= range.start && d <= range.end;
+    });
+    return {
+      isoYear: range.isoYear,
+      isoWeek: range.isoWeek,
+      weekStart: range.start.toISOString().split("T")[0],
+      ...periodStats(ordersInWeek),
+    };
+  });
+  const currentWeekStats = trendByWeek[trendByWeek.length - 1];
+  const previousWeekStats = trendByWeek[trendByWeek.length - 2];
+
+  // Resursproduktivitet (denna vecka)
+  const currentOrders = filteredTrend.filter(o => {
+    const d = o.scheduledDate ? new Date(o.scheduledDate) : null;
+    return d && d >= weekStart && d <= weekEnd;
+  });
+  const resourceById = new Map(resources.map(r => [r.id, r]));
+  const perResource = new Map<string, { name: string; total: number; completed: number; minutes: number }>();
+  for (const o of currentOrders) {
+    if (!o.resourceId) continue;
+    const r = resourceById.get(o.resourceId);
+    const key = o.resourceId;
+    if (!perResource.has(key)) perResource.set(key, { name: r?.name || "Okänd", total: 0, completed: 0, minutes: 0 });
+    const entry = perResource.get(key)!;
+    entry.total++;
+    if (o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed") {
+      entry.completed++;
+      entry.minutes += o.actualDuration || o.estimatedDuration || 0;
+    }
+  }
+  const resourcePerformance = Array.from(perResource.entries())
+    .map(([resourceId, v]) => ({ resourceId, ...v, efficiency: v.total > 0 ? Math.round((v.completed / v.total) * 100) : 0 }))
+    .sort((a, b) => b.completed - a.completed);
+
+  // Avvikelser denna vecka
+  const weekDeviations = deviationsAll.filter((d: any) => {
+    const created = d.reportedAt ? new Date(d.reportedAt) : d.createdAt ? new Date(d.createdAt) : null;
+    return created && created >= weekStart && created <= weekEnd;
+  });
+  const openDeviations = deviationsAll.filter((d: any) => d.status === "open" || d.status === "pending");
+  const categoryMap = new Map<string, number>();
+  const rootCauseMap = new Map<string, number>();
+  for (const d of weekDeviations) {
+    const cat = d.category || "ovrigt";
+    categoryMap.set(cat, (categoryMap.get(cat) || 0) + 1);
+    const root = d.rootCause || d.cause || d.reason || null;
+    if (root) rootCauseMap.set(String(root), (rootCauseMap.get(String(root)) || 0) + 1);
+  }
+  const deviationSummary = {
+    weekTotal: weekDeviations.length,
+    openTotal: openDeviations.length,
+    critical: weekDeviations.filter((d: any) => d.severityLevel === "critical" || d.requiresImmediateAction).length,
+    resolved: weekDeviations.filter((d: any) => d.status === "resolved" || d.status === "closed").length,
+    byCategory: Array.from(categoryMap.entries()).map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count),
+    rootCauses: Array.from(rootCauseMap.entries()).map(([cause, count]) => ({ cause, count })).sort((a, b) => b.count - a.count).slice(0, 5),
+    topOpen: openDeviations.slice(0, 10).map((d: any) => ({
+      id: d.id,
+      title: d.description || d.title || "Avvikelse",
+      category: d.category || null,
+      severity: d.severityLevel || null,
+      reportedAt: d.reportedAt || d.createdAt || null,
+    })),
+  };
+
+  // Nästa vecka — plan + kapacitet
+  const nextPlannedMinutes = filteredNext.reduce((s, o) => s + (o.estimatedDuration || 0), 0);
+  const activeResources = resources.filter(r => r.status === "active" || !r.status);
+  const capacityMinutes = activeResources.reduce((s, r) => s + ((r.weeklyHours ?? 40) * 60), 0);
+  const nextPlan = {
+    totalOrders: filteredNext.length,
+    plannedMinutes: nextPlannedMinutes,
+    capacityMinutes,
+    utilizationRate: capacityMinutes > 0 ? Math.round((nextPlannedMinutes / capacityMinutes) * 100) : 0,
+    activeResourceCount: activeResources.length,
+    perPriority: ["urgent", "high", "normal", "low"].map(p => ({
+      priority: p,
+      count: filteredNext.filter(o => (o.priority || "normal") === p).length,
+    })).filter(x => x.count > 0),
+  };
+
+  // Kvalitet
+  const quality = {
+    routeFeedback: feedbackSummary ? {
+      avgRating: feedbackSummary.avgRating || 0,
+      totalCount: feedbackSummary.totalCount || 0,
+      ratingDistribution: feedbackSummary.ratingDistribution || {},
+    } : null,
+    anomalies: {
+      impossibleOrders: currentOrders.filter(o => o.orderStatus === "omojlig").length,
+      cancelledOrders: currentOrders.filter(o => o.orderStatus === "avbruten").length,
+    },
+  };
+
+  // Manuella bestämpunkter
+  const notes = notesRow[0] ?? null;
+  const decisionsPayload = {
+    decisions: notes?.decisions ?? "",
+    actionItems: (notes?.actionItems as WeeklyReportActionItem[] | null) ?? [],
+    updatedAt: notes?.updatedAt ?? null,
+    updatedBy: notes?.updatedBy ?? null,
+  };
+
+  res.json({
+    isoYear,
+    isoWeek,
+    weekStart: weekStart.toISOString().split("T")[0],
+    weekEnd: weekEnd.toISOString().split("T")[0],
+    filters: { teamId: teamFilter, clusterId: clusterFilter },
+    teams: teams.map(t => ({ id: t.id, name: t.name })),
+    clusters: clusters.map(c => ({ id: c.id, name: c.name })),
+    current: currentWeekStats,
+    previous: previousWeekStats,
+    trend: trendByWeek,
+    resourcePerformance,
+    deviations: deviationSummary,
+    nextPlan,
+    quality,
+    notes: decisionsPayload,
+  });
+}));
+
+const upsertNotesSchema = z.object({
+  isoYear: z.number().int().min(2020).max(2100),
+  isoWeek: z.number().int().min(1).max(53),
+  decisions: z.string().default(""),
+  actionItems: z.array(weeklyReportActionItemSchema).default([]),
+});
+
+app.put("/api/reports/weekly/notes", requirePlanner, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const parsed = upsertNotesSchema.safeParse(req.body);
+  if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+  const { isoYear, isoWeek, decisions, actionItems } = parsed.data;
+  const userId = (req as any).user?.claims?.sub || (req as any).user?.id || null;
+
+  const [row] = await db
+    .insert(weeklyReportNotes)
+    .values({ tenantId, isoYear, isoWeek, decisions, actionItems, updatedBy: userId })
+    .onConflictDoUpdate({
+      target: [weeklyReportNotes.tenantId, weeklyReportNotes.isoYear, weeklyReportNotes.isoWeek],
+      set: { decisions, actionItems, updatedBy: userId, updatedAt: sql`now()` },
+    })
+    .returning();
+  res.json(row);
 }));
 
 // ============================================

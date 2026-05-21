@@ -958,6 +958,35 @@ export const insertUserNotificationPreferenceSchema = createInsertSchema(userNot
 export type InsertUserNotificationPreference = z.infer<typeof insertUserNotificationPreferenceSchema>;
 export type UserNotificationPreference = typeof userNotificationPreferences.$inferSelect;
 
+// Task #522: Manuella bestämpunkter/anteckningar för veckomötesrapporten.
+// En rad per (tenant, iso_year, iso_week) — uppdateras (upsert) av planner/admin.
+export const weeklyReportNotes = pgTable("weekly_report_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  isoYear: integer("iso_year").notNull(),
+  isoWeek: integer("iso_week").notNull(),
+  decisions: text("decisions").default("").notNull(),
+  actionItems: jsonb("action_items").default([]).notNull(),
+  updatedBy: varchar("updated_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uniq_weekly_report_notes_tenant_year_week").on(table.tenantId, table.isoYear, table.isoWeek),
+  index("idx_weekly_report_notes_tenant").on(table.tenantId),
+]);
+
+export const weeklyReportActionItemSchema = z.object({
+  text: z.string().min(1),
+  owner: z.string().optional().nullable(),
+  due: z.string().optional().nullable(),
+  done: z.boolean().optional(),
+});
+export type WeeklyReportActionItem = z.infer<typeof weeklyReportActionItemSchema>;
+
+export const insertWeeklyReportNotesSchema = createInsertSchema(weeklyReportNotes).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWeeklyReportNotes = z.infer<typeof insertWeeklyReportNotesSchema>;
+export type WeeklyReportNotes = typeof weeklyReportNotes.$inferSelect;
+
 // Resurskompetenser - vilka artiklar en utförare kan utföra
 export const resourceArticles = pgTable("resource_articles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
