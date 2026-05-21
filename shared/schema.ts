@@ -1511,6 +1511,34 @@ export const insertInvitationSchema = createInsertSchema(invitations).omit({ id:
 export type Invitation = typeof invitations.$inferSelect;
 export type InsertInvitation = z.infer<typeof insertInvitationSchema>;
 
+// Magic Link Tokens — engångs-tokens för e-postbaserad inloggning.
+// Token-värdet lagras som SHA-256-hash; råtoken finns bara i e-postlänken.
+// Konsumeras en gång inom expiresAt-fönstret (default 15 min).
+export const magicLinkTokens = pgTable("magic_link_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+  email: varchar("email", { length: 255 }).notNull(),
+  // Frivillig koppling till en invitation-rad. Sätts när tokenen utfärdas i samband
+  // med en invitation; null för retur-inloggningar av redan medlem.
+  invitationId: varchar("invitation_id").references(() => invitations.id, { onDelete: 'set null' }),
+  // Frivillig hint om vilken tenant länken hör till (loggning).
+  tenantId: varchar("tenant_id").references(() => tenants.id),
+  requestedIp: varchar("requested_ip", { length: 45 }),
+  requestedUserAgent: text("requested_user_agent"),
+  consumedAt: timestamp("consumed_at"),
+  consumedIp: varchar("consumed_ip", { length: 45 }),
+  consumedUserAgent: text("consumed_user_agent"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_magic_link_tokens_email").on(table.email),
+  index("idx_magic_link_tokens_expires").on(table.expiresAt),
+]);
+
+export const insertMagicLinkTokenSchema = createInsertSchema(magicLinkTokens).omit({ id: true, createdAt: true });
+export type MagicLinkToken = typeof magicLinkTokens.$inferSelect;
+export type InsertMagicLinkToken = z.infer<typeof insertMagicLinkTokenSchema>;
+
 // Audit Logs - Track all changes in the system
 export const auditLogs = pgTable("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

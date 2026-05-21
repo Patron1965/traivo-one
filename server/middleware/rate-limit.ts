@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -16,6 +16,27 @@ export const mobileLoginLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "För många inloggningsförsök. Försök igen om 15 minuter." },
   skip: () => process.env.NODE_ENV === "test",
+});
+
+// Magic-link request: 5 försök per 15 min per IP+e-post för att hindra
+// e-post-enumeration och bulk-utskick. Endpointen returnerar alltid 204
+// så rate-limit-meddelandet visas aldrig för slutanvändaren — det är ett
+// rent skydd mot missbruk.
+export const magicLinkLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "För många länkförfrågningar. Försök igen om 15 minuter." },
+  skip: () => process.env.NODE_ENV === "test",
+  keyGenerator: (req, res) => {
+    const email = typeof req.body?.email === "string"
+      ? req.body.email.toLowerCase().trim()
+      : "";
+    // ipKeyGenerator hanterar IPv6 korrekt (normaliserar till /64-prefix).
+    const ipKey = ipKeyGenerator(req.ip ?? "unknown");
+    return `${ipKey}::${email}`;
+  },
 });
 
 // Tile-proxy: per-IP-tröskel för att skydda Google-fakturan.

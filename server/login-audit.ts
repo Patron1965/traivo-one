@@ -1,7 +1,7 @@
 import type { Request } from "express";
 import { storage } from "./storage";
 
-export type LoginMethod = "replit" | "password" | "portal" | "mobile";
+export type LoginMethod = "replit" | "password" | "portal" | "mobile" | "magic_link";
 export type LoginOutcome = "success" | "failed";
 
 interface LogLoginOptions {

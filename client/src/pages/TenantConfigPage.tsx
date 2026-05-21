@@ -23,6 +23,7 @@ import {
   Zap,
   Tag,
   Rocket,
+  Mail,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Building } from "lucide-react";
@@ -39,6 +40,7 @@ import {
   BrandingTab,
   ModulesTab,
   MetadataLabelsTab,
+  InvitationsTab,
 } from "./tenant-config";
 
 export default function TenantConfigPage() {
@@ -51,6 +53,7 @@ export default function TenantConfigPage() {
   const validTabs = [
     "onboarding","company","branding","terminology","articles","price-lists",
     "resources","resource-profiles","teams","iot","modules","metadata-labels",
+    "invitations",
   ];
   const initialTab = (() => {
     const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tab") : null;
@@ -105,7 +108,7 @@ export default function TenantConfigPage() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-12">
+        <TabsList className="grid w-full grid-cols-13">
           <TabsTrigger value="onboarding" data-testid="tab-onboarding" className="flex items-center gap-2">
             <Rocket className="h-4 w-4" />
             <span className="hidden sm:inline">Kom igång</span>
@@ -154,6 +157,10 @@ export default function TenantConfigPage() {
             <ToggleLeft className="h-4 w-4" />
             <span className="hidden sm:inline">Moduler</span>
           </TabsTrigger>
+          <TabsTrigger value="invitations" data-testid="tab-invitations" className="flex items-center gap-2">
+            <Mail className="h-4 w-4" />
+            <span className="hidden sm:inline">Inbjudningar</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="onboarding">
@@ -191,6 +198,9 @@ export default function TenantConfigPage() {
         </TabsContent>
         <TabsContent value="modules">
           <ModulesTab />
+        </TabsContent>
+        <TabsContent value="invitations">
+          <InvitationsTab />
         </TabsContent>
       </Tabs>
     </div>

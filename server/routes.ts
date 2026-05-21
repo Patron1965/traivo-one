@@ -5,6 +5,8 @@ import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { registerMagicLinkRoutes } from "./replit_integrations/auth/magicLinkAuth";
+import { registerInvitationsRoutes } from "./routes/invitationsRoutes";
 import { requireTenantWithFallback, getTenantIdWithFallback, getUserTenants } from "./tenant-middleware";
 import { moduleGuardMiddleware } from "./feature-flags";
 import { notificationService } from "./notifications";
@@ -133,6 +135,8 @@ export async function registerRoutes(
 
   await setupAuth(app);
   registerAuthRoutes(app);
+  registerMagicLinkRoutes(app);
+  registerInvitationsRoutes(app);
   
   await ensureDefaultTenant();
 
