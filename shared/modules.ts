@@ -1,5 +1,8 @@
 export const MODULE_KEYS = [
   "core",
+  "customer_mgmt",
+  "kpi_analytics",
+  "procurements",
   "iot",
   "annual_planning",
   "ai_planning",
@@ -33,8 +36,29 @@ export const MODULE_DEFINITIONS: Record<ModuleKey, Omit<ModuleDefinition, "key">
     label: "Grundplattform",
     description: "Objekt, resurser, kluster, ordrar, veckoplanering, ruttplanering, artiklar, prislistor",
     icon: "LayoutDashboard",
-    routes: ["/", "/home", "/clusters", "/auto-cluster", "/objects", "/resources", "/articles", "/price-lists", "/planner", "/routes", "/order-stock", "/assignments", "/settings", "/dashboard", "/weather", "/reporting", "/economics", "/planner-map", "/historical-map", "/metadata", "/subscriptions"],
+    routes: ["/", "/home", "/clusters", "/auto-cluster", "/objects", "/resources", "/articles", "/article-components", "/price-lists", "/planner", "/routes", "/order-stock", "/assignments", "/settings", "/weather", "/planner-map", "/historical-map", "/metadata", "/metadata-settings", "/subscriptions", "/optimization", "/notifications", "/control-tower", "/enhetsansvarig", "/planning-parameters", "/planner-search-filters"],
     navItems: [],
+  },
+  customer_mgmt: {
+    label: "Kundregister",
+    description: "Kundlista, kunddetalj, ny-kund-wizard och dataimport",
+    icon: "Building",
+    routes: ["/customers", "/onboarding", "/import"],
+    navItems: ["/customers", "/onboarding", "/import"],
+  },
+  kpi_analytics: {
+    label: "Dashboards & Rapporter",
+    description: "KPI-dashboard, ekonomi, veckomötesrapport, produktionsrapporter",
+    icon: "BarChart3",
+    routes: ["/dashboard", "/economics", "/reporting", "/weekly-report", "/setup-analysis", "/proactive-sales"],
+    navItems: ["/dashboard", "/economics", "/reporting", "/weekly-report", "/proactive-sales"],
+  },
+  procurements: {
+    label: "Upphandlingar",
+    description: "Avtals- och upphandlingshantering",
+    icon: "Briefcase",
+    routes: ["/procurements"],
+    navItems: ["/procurements"],
   },
   iot: {
     label: "IoT & Sensorer",
@@ -52,10 +76,10 @@ export const MODULE_DEFINITIONS: Record<ModuleKey, Omit<ModuleDefinition, "key">
   },
   ai_planning: {
     label: "AI-planering",
-    description: "AI-assistent, AI-kommandocentral, prediktiv planering",
+    description: "AI-assistent, AI-kommandocentral, prediktiv planering, ML-datakvalitet",
     icon: "Brain",
-    routes: ["/ai-assistant", "/ai-command-center", "/ai-planning", "/predictive-planning"],
-    navItems: ["/ai-assistant", "/predictive-planning"],
+    routes: ["/ai-assistant", "/ai-command-center", "/ai-planning", "/predictive-planning", "/ml-data-quality"],
+    navItems: ["/ai-assistant", "/predictive-planning", "/ml-data-quality"],
   },
   fleet: {
     label: "Fleethantering",
@@ -73,10 +97,10 @@ export const MODULE_DEFINITIONS: Record<ModuleKey, Omit<ModuleDefinition, "key">
   },
   customer_portal: {
     label: "Kundportal",
-    description: "Extern kundvy med bokningar, besök och meddelanden",
+    description: "Extern kundvy med bokningar, besök, meddelanden och kundrapporter",
     icon: "Building",
-    routes: ["/customer-portal", "/portal-messages"],
-    navItems: ["/customer-portal"],
+    routes: ["/customer-portal", "/portal-messages", "/booking-slots", "/customer-reports"],
+    navItems: ["/customer-portal", "/portal-messages", "/booking-slots", "/customer-reports"],
   },
   invoicing: {
     label: "Fakturering",
@@ -143,7 +167,7 @@ export const MODULE_DEFINITIONS: Record<ModuleKey, Omit<ModuleDefinition, "key">
   },
 };
 
-export type PackageTier = "basic" | "standard" | "premium" | "custom";
+export type PackageTier = "basic" | "pilot" | "standard" | "premium" | "custom";
 
 export interface PackageDefinition {
   tier: PackageTier;
@@ -158,14 +182,21 @@ export const PACKAGE_DEFINITIONS: Record<PackageTier, PackageDefinition> = {
     tier: "basic",
     label: "Bas",
     description: "Grundläggande fältservicehantering",
-    modules: ["core", "work_sessions"],
+    modules: ["core", "customer_mgmt", "kpi_analytics", "work_sessions"],
+    price: "Kontakta oss",
+  },
+  pilot: {
+    tier: "pilot",
+    label: "Pilot",
+    description: "Kurerat pilot-set: kärnflöden + KPI-dashboard + tidrapportering + besiktningar + SMS",
+    modules: ["core", "customer_mgmt", "kpi_analytics", "work_sessions", "inspections", "sms"],
     price: "Kontakta oss",
   },
   standard: {
     tier: "standard",
     label: "Standard",
     description: "Komplett fältservice med AI och kundportal",
-    modules: ["core", "work_sessions", "ai_planning", "customer_portal", "invoicing", "inspections", "fleet", "order_concepts", "environmental"],
+    modules: ["core", "customer_mgmt", "kpi_analytics", "work_sessions", "ai_planning", "customer_portal", "invoicing", "inspections", "fleet", "order_concepts", "environmental", "sms"],
     price: "Kontakta oss",
   },
   premium: {

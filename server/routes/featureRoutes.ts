@@ -9,7 +9,7 @@ import { getTenantFeatures, invalidateFeatureCache } from "../feature-flags";
 import { PACKAGE_DEFINITIONS, MODULE_DEFINITIONS, MODULE_KEYS, getModulesForPackage } from "@shared/modules";
 import type { ModuleKey, PackageTier } from "@shared/modules";
 
-const VALID_TIERS: PackageTier[] = ["basic", "standard", "premium", "custom"];
+const VALID_TIERS: PackageTier[] = ["basic", "pilot", "standard", "premium", "custom"];
 
 function isValidTier(v: unknown): v is PackageTier {
   return typeof v === "string" && VALID_TIERS.includes(v as PackageTier);

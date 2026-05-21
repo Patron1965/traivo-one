@@ -1,6 +1,7 @@
 import { db } from "./db";
-import { tenants, customers, objects, resources, workOrders, brandingTemplates, tenantBranding, userTenantRoles, users, metadataKatalog, clusters, teams } from "@shared/schema";
+import { tenants, customers, objects, resources, workOrders, brandingTemplates, tenantBranding, userTenantRoles, users, metadataKatalog, clusters, teams, tenantFeatures, featureAuditLog } from "@shared/schema";
 import { sql, eq, and } from "drizzle-orm";
+import { getModulesForPackage } from "@shared/modules";
 
 const DEFAULT_TENANT_ID = "kinab";
 
@@ -38,6 +39,12 @@ export async function seedDatabase() {
 
   // Rename legacy "default-tenant" → "kinab" if applicable (production migration).
   await migrateDefaultTenantToKinab();
+
+  // Säkerställ pilot-paket för Kinab (Task #526). Kör endast om kinab är på
+  // en system-default-tier (basic/standard) — admins som manuellt valt
+  // custom/premium/pilot ska inte revertas.
+  await backfillSystemTierModules();
+  await ensureKinabPilotFeatures();
 
   // Skip seed entirely if any tenant already exists (production / customer setup).
   // Demo seed only runs against a completely empty tenants table.
@@ -1120,5 +1127,128 @@ async function rebrandPlannixToKinab() {
     }
   } catch (err) {
     console.warn(`[migration] rebrandPlannixToKinab skipped:`, err);
+  }
+}
+
+/**
+ * Realigna enabled_modules för tenants på system-managed tiers (basic/standard)
+ * så att modul-omstruktureringen i Task #526 (kpi_analytics + customer_mgmt
+ * adderade, core slimmad) inte tappar bort dashboard/economics/reporting för
+ * existerande tenants. Tenants på custom/premium/pilot lämnas orörda.
+ */
+async function backfillSystemTierModules() {
+  try {
+    const rows = await db.select().from(tenantFeatures);
+    for (const row of rows) {
+      if (row.packageTier !== "basic" && row.packageTier !== "standard") continue;
+      const expected = getModulesForPackage(row.packageTier as any);
+      const current = (row.enabledModules || []) as string[];
+      const currentSet = new Set(current);
+      const expectedSet = new Set(expected);
+      const same =
+        current.length === expected.length &&
+        expected.every((m) => currentSet.has(m));
+      if (same) continue;
+
+      const added = expected.filter((m) => !currentSet.has(m));
+      const removed = current.filter((m) => !expectedSet.has(m));
+
+      await db.update(tenantFeatures)
+        .set({
+          enabledModules: expected,
+          updatedAt: new Date(),
+          updatedBy: "system",
+        })
+        .where(eq(tenantFeatures.tenantId, row.tenantId));
+      await db.insert(featureAuditLog).values({
+        tenantId: row.tenantId,
+        action: "update",
+        previousTier: row.packageTier,
+        newTier: row.packageTier,
+        previousModules: current,
+        newModules: expected,
+        changedBy: "system",
+      });
+      console.log(
+        `[seed] tenantFeatures backfill ${row.tenantId} (${row.packageTier}): +[${added.join(",")}] -[${removed.join(",")}]`,
+      );
+    }
+  } catch (err) {
+    console.warn("[seed] backfillSystemTierModules hoppades över:", err);
+  }
+}
+
+/**
+ * Säkerställ Kinab-pilot-paket (Task #526). Idempotent: kör endast om
+ * tenantFeatures-raden för kinab saknas, eller om den är på en
+ * system-default-tier (basic/standard). Custom/premium/pilot-tenants
+ * lämnas i fred — admins som manuellt valt en annan nivå ska inte revertas.
+ */
+async function ensureKinabPilotFeatures() {
+  const TENANT_ID = "kinab";
+  try {
+    const tenantRow = await db
+      .select({ id: tenants.id })
+      .from(tenants)
+      .where(eq(tenants.id, TENANT_ID))
+      .limit(1);
+    if (tenantRow.length === 0) return; // ingen kinab-tenant — inget att göra
+
+    const pilotModules = getModulesForPackage("pilot");
+    const [existing] = await db
+      .select()
+      .from(tenantFeatures)
+      .where(eq(tenantFeatures.tenantId, TENANT_ID));
+
+    if (!existing) {
+      await db.insert(tenantFeatures).values({
+        tenantId: TENANT_ID,
+        packageTier: "pilot",
+        enabledModules: pilotModules,
+        updatedBy: "system",
+      }).onConflictDoNothing();
+      await db.insert(featureAuditLog).values({
+        tenantId: TENANT_ID,
+        action: "create",
+        previousTier: null,
+        newTier: "pilot",
+        previousModules: null,
+        newModules: pilotModules,
+        changedBy: "system",
+      });
+      console.log("[seed] Kinab tenantFeatures: skapade pilot-paket");
+      return;
+    }
+
+    const systemDefaults = new Set(["basic", "standard"]);
+    if (!systemDefaults.has(existing.packageTier)) {
+      console.log(
+        `[seed] Kinab tenantFeatures: bevarar manuellt valt paket "${existing.packageTier}" (ingen revert)`,
+      );
+      return;
+    }
+
+    await db.update(tenantFeatures)
+      .set({
+        packageTier: "pilot",
+        enabledModules: pilotModules,
+        updatedAt: new Date(),
+        updatedBy: "system",
+      })
+      .where(eq(tenantFeatures.tenantId, TENANT_ID));
+    await db.insert(featureAuditLog).values({
+      tenantId: TENANT_ID,
+      action: "update",
+      previousTier: existing.packageTier,
+      newTier: "pilot",
+      previousModules: existing.enabledModules ?? null,
+      newModules: pilotModules,
+      changedBy: "system",
+    });
+    console.log(
+      `[seed] Kinab tenantFeatures: uppgraderade ${existing.packageTier} → pilot`,
+    );
+  } catch (err) {
+    console.warn("[seed] ensureKinabPilotFeatures hoppades över:", err);
   }
 }

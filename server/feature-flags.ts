@@ -46,6 +46,7 @@ const API_MODULE_PREFIXES: [string, ModuleKey][] = [
   ["/api/annual-planning", "annual_planning"],
   ["/api/annual-goals", "annual_planning"],
   ["/api/ai", "ai_planning"],
+  ["/api/ml/", "ai_planning"],
   ["/api/fleet", "fleet"],
   ["/api/vehicles", "fleet"],
   ["/api/environmental", "environmental"],
@@ -61,8 +62,19 @@ const API_MODULE_PREFIXES: [string, ModuleKey][] = [
   ["/api/sms", "sms"],
   ["/api/route-feedback", "route_feedback"],
   ["/api/equipment", "equipment_sharing"],
+  ["/api/procurements", "procurements"],
   ["/api/reports/roi", "roi_reports"],
 ];
+
+/**
+ * Moduler där vi vill dölja existensen för icke-aktiverade tenants (404 i
+ * stället för 403). Används för känsliga icke-pilot-moduler enligt Task #526.
+ */
+const HIDE_AS_404_MODULES: Set<ModuleKey> = new Set([
+  "invoicing",
+  "predictive",
+  "ai_planning",
+]);
 
 function getModuleForApiPath(path: string): ModuleKey | null {
   for (const [prefix, mod] of API_MODULE_PREFIXES) {
@@ -77,6 +89,9 @@ export function requireModule(moduleKey: ModuleKey) {
       const tenantId = getTenantIdWithFallback(req);
       const enabled = await isModuleEnabled(tenantId, moduleKey);
       if (!enabled) {
+        if (HIDE_AS_404_MODULES.has(moduleKey)) {
+          return res.status(404).json({ error: "Not Found" });
+        }
         return res.status(403).json({
           error: "Modulen är inte aktiverad",
           module: moduleKey,
@@ -110,6 +125,9 @@ export async function moduleGuardMiddleware(req: Request, res: Response, next: N
     const tenantId = getTenantIdWithFallback(req);
     const enabled = await isModuleEnabled(tenantId, moduleKey);
     if (!enabled) {
+      if (HIDE_AS_404_MODULES.has(moduleKey)) {
+        return res.status(404).json({ error: "Not Found" });
+      }
       return res.status(403).json({
         error: "Modulen är inte aktiverad",
         module: moduleKey,

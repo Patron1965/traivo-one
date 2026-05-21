@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { isAdminRole } from "@/lib/role-config";
+import { useFeatures } from "@/lib/feature-context";
 import {
   CommandDialog,
   CommandEmpty,
@@ -128,6 +129,7 @@ export function CommandPalette({ onThemeToggle, currentTheme }: CommandPalettePr
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const userIsAdmin = isAdminRole(user?.role);
+  const { isNavItemEnabled } = useFeatures();
   const [recentItems, setRecentItems] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -264,7 +266,9 @@ export function CommandPalette({ onThemeToggle, currentTheme }: CommandPalettePr
     }
   };
 
-  const visibleNavItems = allNavItems.filter((item) => !item.adminOnly || userIsAdmin);
+  const visibleNavItems = allNavItems.filter(
+    (item) => (!item.adminOnly || userIsAdmin) && isNavItemEnabled(item.url),
+  );
 
   const recentNavItems = recentItems
     .map((url) => visibleNavItems.find((item) => item.url === url))
