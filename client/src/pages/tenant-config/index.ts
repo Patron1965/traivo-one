@@ -1,0 +1,13 @@
+export { CompanyInfoTab } from "./CompanyInfoTab";
+export { OnboardingTab } from "./OnboardingTab";
+export { ArticlesExecutionTab } from "./ArticlesExecutionTab";
+export { PriceListsTab } from "./PriceListsTab";
+export { ResourcesExecutionTab } from "./ResourcesExecutionTab";
+export { ResourceProfilesTab } from "./ResourceProfilesTab";
+export { TeamMembersTab } from "./TeamMembersTab";
+export { IoTTab } from "./IoTTab";
+export { TerminologyTab } from "./TerminologyTab";
+export { BrandingTab } from "./BrandingTab";
+export { ModulesTab } from "./ModulesTab";
+export { MetadataLabelsTab } from "./MetadataLabelsTab";
+export { InvitationsTab } from "./InvitationsTab";

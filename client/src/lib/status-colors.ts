@@ -1,0 +1,118 @@
+export const objectStatusBadge: Record<string, string> = {
+  active: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+  inactive: "bg-muted text-muted-foreground border border-border",
+  pending: "bg-chart-3/15 text-chart-3 border border-chart-3/30",
+};
+
+export const workOrderStatusBadge: Record<string, string> = {
+  unassigned: "bg-muted text-muted-foreground border border-border",
+  scheduled: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
+  in_progress: "bg-chart-3/15 text-chart-3 border border-chart-3/30",
+  completed: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+  cancelled: "bg-destructive/15 text-destructive border border-destructive/30",
+};
+
+export const customerStatusBadge: Record<string, string> = {
+  active: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+  inactive: "bg-muted text-muted-foreground border border-border",
+  prospect: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
+  archived: "bg-muted text-muted-foreground border border-border",
+};
+
+export const deliveryStatusBadge: Record<string, string> = {
+  pending: "bg-chart-3/15 text-chart-3 border border-chart-3/30",
+  in_transit: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
+  delivered: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+  failed: "bg-destructive/15 text-destructive border border-destructive/30",
+  cancelled: "bg-muted text-muted-foreground border border-border",
+};
+
+export const invoiceStatusBadge: Record<string, string> = {
+  pending: "bg-chart-3/15 text-chart-3 border border-chart-3/30",
+  processing: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
+  exported: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+  failed: "bg-destructive/15 text-destructive border border-destructive/30",
+  credited: "bg-chart-5/15 text-chart-5 border border-chart-5/30",
+};
+
+export const priorityBadgeClasses: Record<string, string> = {
+  urgent: "bg-background text-destructive border border-destructive/60 dark:border-destructive/70",
+  high: "bg-background text-warning border border-warning/60 dark:border-warning/70",
+  normal: "bg-background text-chart-1 border border-chart-1/50 dark:border-chart-1/70",
+  low: "bg-muted text-muted-foreground border border-border",
+};
+
+export const priorityDotColors: Record<string, string> = {
+  urgent: "bg-destructive",
+  high: "bg-warning",
+  normal: "bg-chart-1",
+  low: "bg-muted-foreground/60",
+};
+
+export const priorityLabels: Record<string, string> = {
+  urgent: "Akut",
+  high: "Hög",
+  normal: "Normal",
+  low: "Låg",
+};
+
+export const hierarchyLevelBadge: Record<string, string> = {
+  koncern: "bg-chart-5/15 text-chart-5 border border-chart-5/30",
+  brf: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
+  fastighet: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+  rum: "bg-chart-3/15 text-chart-3 border border-chart-3/30",
+  karl: "bg-chart-4/15 text-chart-4 border border-chart-4/30",
+  objekt: "bg-muted text-muted-foreground border border-border",
+};
+
+export function getObjectStatusBadge(status: string | null | undefined): string {
+  if (!status) return objectStatusBadge.inactive;
+  return objectStatusBadge[status] ?? objectStatusBadge.inactive;
+}
+
+export function getWorkOrderStatusBadge(status: string | null | undefined): string {
+  if (!status) return workOrderStatusBadge.unassigned;
+  return workOrderStatusBadge[status] ?? workOrderStatusBadge.unassigned;
+}
+
+// Execution-status (orderns utförande-tillstånd) — används bl.a. på AssignmentsPage.
+export const executionStatusBadge: Record<string, string> = {
+  not_planned: "bg-muted text-muted-foreground border border-border",
+  planned_rough: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
+  planned_fine: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
+  dispatched: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
+  on_way: "bg-chart-3/15 text-chart-3 border border-chart-3/30",
+  on_site: "bg-chart-4/15 text-chart-4 border border-chart-4/30",
+  completed: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+  inspected: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+  impossible: "bg-destructive/15 text-destructive border border-destructive/30",
+};
+
+export function getExecutionStatusBadge(status: string | null | undefined): string {
+  if (!status) return executionStatusBadge.not_planned;
+  return executionStatusBadge[status] ?? executionStatusBadge.not_planned;
+}
+
+// Kund-rapport-status (issue reports/portal field reports).
+export const customerReportStatusBadge: Record<string, { className: string; label: string }> = {
+  new: { className: "bg-chart-1 text-white", label: "Ny" },
+  reviewed: { className: "bg-chart-4 text-white", label: "Granskas" },
+  resolved: { className: "bg-chart-2 text-white", label: "Löst" },
+  rejected: { className: "bg-muted text-muted-foreground", label: "Avvisad" },
+};
+
+export function getCustomerReportStatusBadge(status: string): { className: string; label: string } {
+  return customerReportStatusBadge[status] ?? { className: "bg-muted text-muted-foreground", label: status };
+}
+
+// Inspection-status (data-quality / verification).
+export const inspectionStatusBadge: Record<string, string> = {
+  ok: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+  warning: "bg-warning/15 text-warning border border-warning/30",
+  error: "bg-destructive/15 text-destructive border border-destructive/30",
+};
+
+export function getInspectionStatusBadge(status: string | null | undefined): string {
+  if (!status) return inspectionStatusBadge.ok;
+  return inspectionStatusBadge[status] ?? inspectionStatusBadge.ok;
+}

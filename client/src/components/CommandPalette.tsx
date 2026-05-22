@@ -1,0 +1,422 @@
+import { useEffect, useState, useCallback } from "react";
+import { useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { isAdminRole } from "@/lib/role-config";
+import { useFeatures } from "@/lib/feature-context";
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+  CommandShortcut,
+} from "@/components/ui/command";
+import {
+  Calendar,
+  Map,
+  Building2,
+  LayoutDashboard,
+  Users,
+  Settings,
+  Upload,
+  FileText,
+  Sparkles,
+  Package,
+  Receipt,
+  ClipboardList,
+  Truck,
+  RefreshCw,
+  Settings2,
+  Sliders,
+  Target,
+  DollarSign,
+  Timer,
+  TrendingUp,
+  Smartphone,
+  Layers,
+  Building,
+  Database,
+  BarChart3,
+  Briefcase,
+  Palette,
+  Home,
+  Network,
+  Wrench,
+  Plus,
+  Search,
+  Moon,
+  Sun,
+  History,
+  MapPin,
+  User,
+  Loader2,
+  Globe,
+  ExternalLink,
+} from "lucide-react";
+
+interface NavItemConfig {
+  title: string;
+  url: string;
+  icon: typeof Home;
+  category: string;
+  keywords: string[];
+  external?: boolean;
+  adminOnly?: boolean;
+}
+
+const allNavItems: NavItemConfig[] = [
+  { title: "Start", url: "/", icon: Home, category: "Navigation", keywords: ["hem", "dashboard", "översikt"] },
+  { title: "Mina uppgifter", url: "/home", icon: Home, category: "Navigation", keywords: ["tasks", "uppgifter", "todo"] },
+  { title: "Ny kund", url: "/onboarding", icon: Building2, category: "Grunddata", keywords: ["skapa", "kund", "företag", "onboarding", "ny"], adminOnly: true },
+  { title: "Objekt", url: "/objects", icon: Building2, category: "Grunddata", keywords: ["fastighet", "plats", "kund", "adress"] },
+  { title: "Objekt utan koordinater", url: "/objects/missing-coordinates", icon: MapPin, category: "Grunddata", keywords: ["objekt", "koordinater", "geokodning", "lat", "lng", "saknar"] },
+  { title: "Resurser", url: "/resources", icon: Users, category: "Grunddata", keywords: ["personal", "tekniker", "medarbetare"] },
+  { title: "Fordon", url: "/vehicles", icon: Truck, category: "Grunddata", keywords: ["bil", "lastbil", "transport"] },
+  { title: "Artiklar", url: "/articles", icon: Package, category: "Grunddata", keywords: ["produkt", "tjänst", "material"] },
+  { title: "Kluster", url: "/clusters", icon: Target, category: "Grunddata", keywords: ["område", "zon", "geografisk"] },
+  { title: "Veckoplanering", url: "/planner", icon: Calendar, category: "Planering", keywords: ["schema", "vecka", "planera"] },
+  { title: "Orderstock", url: "/order-stock", icon: ClipboardList, category: "Planering", keywords: ["order", "beställning", "jobb"] },
+  { title: "Mobilapp", url: "/mobile", icon: Smartphone, category: "Planering", keywords: ["fält", "tekniker", "app"] },
+  { title: "Rutter", url: "/routes", icon: Map, category: "Planering", keywords: ["köra", "väg", "navigering"] },
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, category: "Analys", keywords: ["översikt", "statistik", "kpi"] },
+  { title: "Ekonomi", url: "/economics", icon: DollarSign, category: "Analys", keywords: ["intäkter", "kostnader", "resultat"] },
+  { title: "Prislistor", url: "/price-lists", icon: Receipt, category: "System", keywords: ["pris", "kostnad", "taxa"] },
+  { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw, category: "System", keywords: ["prenumeration", "återkommande"] },
+  { title: "Fortnox", url: "/fortnox", icon: Receipt, category: "System", keywords: ["faktura", "bokföring", "export"] },
+  { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2, category: "Planering", keywords: ["sla", "tid", "parameter"] },
+  { title: "Sparade sökmönster", url: "/planner-search-filters", icon: Sliders, category: "Planering", keywords: ["filter", "sök", "planerare", "sparat"] },
+  { title: "Artikelkomponenter (BOM)", url: "/article-components", icon: Package, category: "Grunddata", keywords: ["bom", "struktur", "komponent", "tilg"] },
+  { title: "Omräkningslogg (faktura)", url: "/invoice-recalculation-log", icon: Receipt, category: "Analys", keywords: ["faktura", "omräkning", "frozen", "spårbarhet", "bokföring", "ekonomi"] },
+  { title: "Importera data", url: "/import", icon: Upload, category: "Grunddata", keywords: ["csv", "fil", "ladda upp"] },
+  { title: "Arkitektur", url: "/architecture", icon: Network, category: "System", keywords: ["system", "teknisk", "dokumentation"] },
+  { title: "Inställningar", url: "/settings", icon: Settings, category: "System", keywords: ["konfiguration", "preferens"] },
+  { title: "AI-optimering", url: "/optimization", icon: Sparkles, category: "Avancerat", keywords: ["automatisk", "smart", "maskinlärning"] },
+  { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, category: "Avancerat", keywords: ["automatisk", "områdesindelning"] },
+  { title: "Prediktiv planering", url: "/predictive-planning", icon: TrendingUp, category: "Avancerat", keywords: ["prognos", "ai"] },
+  { title: "Ställtidsanalys", url: "/setup-analysis", icon: Timer, category: "Avancerat", keywords: ["tid", "effektivitet"] },
+  { title: "Metadata", url: "/metadata-settings", icon: FileText, category: "Avancerat", keywords: ["fält", "anpassning"] },
+  { title: "Upphandlingar", url: "/procurements", icon: Briefcase, category: "Avancerat", keywords: ["avtal", "kontrakt"] },
+  { title: "Kundportal", url: "/customer-portal", icon: Building, category: "Avancerat", keywords: ["extern", "kund"] },
+  { title: "Företagsinställningar", url: "/tenant-config", icon: Settings2, category: "Plattform", keywords: ["tenant", "företag", "branding", "moduler", "metadata", "etiketter", "prislistor", "iot", "konfiguration"], adminOnly: true },
+  { title: "Plattform: Admin", url: "/system-dashboard", icon: Palette, category: "Plattform", keywords: ["admin", "branding", "roller", "användare", "audit", "platform", "owner"], adminOnly: true },
+  { title: "System: Funktionskatalog", url: "/system-overview", icon: Database, category: "Plattform", keywords: ["systemöversikt", "data", "statistik", "feature", "katalog", "pdf", "dokumentation", "demo"], adminOnly: true },
+  { title: "Kundportal extern", url: "/portal", icon: Globe, category: "Plattform", keywords: ["extern", "kund", "portal", "ny flik"], external: true, adminOnly: true },
+];
+
+const quickActions = [
+  { title: "Skapa ny order", icon: Plus, action: "create-order", keywords: ["ny", "order", "beställning"] },
+  { title: "Lägg till objekt", icon: Building2, action: "add-object", keywords: ["ny", "fastighet", "plats"] },
+  { title: "Ny resurs", icon: Users, action: "add-resource", keywords: ["ny", "personal", "tekniker"] },
+  { title: "Importera data", icon: Upload, action: "import", keywords: ["csv", "fil", "ladda"] },
+];
+
+interface SearchResult {
+  type: "object" | "customer" | "workOrder";
+  id: string;
+  title: string;
+  subtitle?: string;
+}
+
+interface CommandPaletteProps {
+  onThemeToggle?: () => void;
+  currentTheme?: string;
+}
+
+export function CommandPalette({ onThemeToggle, currentTheme }: CommandPaletteProps) {
+  const [open, setOpen] = useState(false);
+  const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const userIsAdmin = isAdminRole(user?.role);
+  const { isNavItemEnabled } = useFeatures();
+  const [recentItems, setRecentItems] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("traivo-recent-pages");
+    if (stored) {
+      try {
+        setRecentItems(JSON.parse(stored));
+      } catch {
+        setRecentItems([]);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery("");
+      setSearchResults([]);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (searchQuery.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    const abortController = new AbortController();
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const q = encodeURIComponent(searchQuery);
+        const [objRes, custRes] = await Promise.all([
+          fetch(`/api/objects?search=${q}&limit=5`, { credentials: "include", signal: abortController.signal }).then(r => r.ok ? r.json() : []).catch(() => []),
+          fetch(`/api/customers?search=${q}&limit=5`, { credentials: "include", signal: abortController.signal }).then(r => r.ok ? r.json() : []).catch(() => []),
+        ]);
+        const results: SearchResult[] = [];
+        const objects = Array.isArray(objRes) ? objRes : (objRes?.objects || objRes?.data || []);
+        objects.slice(0, 5).forEach((o: any) => {
+          results.push({
+            type: "object",
+            id: o.id,
+            title: o.name || o.objectNumber || "Objekt",
+            subtitle: o.address || o.objectNumber || "",
+          });
+        });
+        const customers = Array.isArray(custRes) ? custRes : (custRes?.customers || custRes?.data || []);
+        customers.slice(0, 5).forEach((c: any) => {
+          results.push({
+            type: "customer",
+            id: c.id,
+            title: c.name || "Kund",
+            subtitle: c.contactPerson || c.email || "",
+          });
+        });
+        if (!abortController.signal.aborted) {
+          setSearchResults(results);
+        }
+      } catch {
+      } finally {
+        if (!abortController.signal.aborted) {
+          setIsSearching(false);
+        }
+      }
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      abortController.abort();
+    };
+  }, [searchQuery]);
+
+  const addToRecent = useCallback((url: string) => {
+    setRecentItems((prev) => {
+      const filtered = prev.filter((item) => item !== url);
+      const updated = [url, ...filtered].slice(0, 5);
+      localStorage.setItem("traivo-recent-pages", JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setOpen((open) => !open);
+      }
+      if (e.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("keydown", down);
+    return () => document.removeEventListener("keydown", down);
+  }, []);
+
+  const handleNavigate = (url: string, external?: boolean) => {
+    if (external) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      setOpen(false);
+      return;
+    }
+    addToRecent(url);
+    setLocation(url);
+    setOpen(false);
+  };
+
+  const handleAction = (action: string) => {
+    switch (action) {
+      case "create-order":
+        setLocation("/order-stock");
+        break;
+      case "add-object":
+        setLocation("/objects");
+        break;
+      case "add-resource":
+        setLocation("/resources");
+        break;
+      case "import":
+        setLocation("/import");
+        break;
+      case "toggle-theme":
+        onThemeToggle?.();
+        break;
+    }
+    setOpen(false);
+  };
+
+  const handleSearchResultClick = (result: SearchResult) => {
+    if (result.type === "object") {
+      handleNavigate(`/objects/${result.id}`);
+    } else if (result.type === "customer") {
+      handleNavigate(`/objects?customer=${result.id}`);
+    }
+  };
+
+  const visibleNavItems = allNavItems.filter(
+    (item) => (!item.adminOnly || userIsAdmin) && isNavItemEnabled(item.url),
+  );
+
+  const recentNavItems = recentItems
+    .map((url) => visibleNavItems.find((item) => item.url === url))
+    .filter(Boolean);
+
+  const groupedItems = visibleNavItems.reduce((acc, item) => {
+    if (!acc[item.category]) {
+      acc[item.category] = [];
+    }
+    acc[item.category].push(item);
+    return acc;
+  }, {} as Record<string, typeof allNavItems>);
+
+  const showDataResults = searchQuery.length >= 2;
+
+  return (
+    <CommandDialog open={open} onOpenChange={setOpen}>
+      <CommandInput
+        placeholder="Sök sidor, objekt, kunder..."
+        data-testid="input-command-palette"
+        value={searchQuery}
+        onValueChange={setSearchQuery}
+      />
+      <CommandList>
+        <CommandEmpty>Inga resultat hittades.</CommandEmpty>
+
+        {showDataResults && (searchResults.length > 0 || isSearching) && (
+          <CommandGroup heading={isSearching ? "Söker..." : "Sökresultat"}>
+            {isSearching && searchResults.length === 0 && (
+              <CommandItem disabled className="gap-3 opacity-60">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Söker i databasen...</span>
+              </CommandItem>
+            )}
+            {searchResults.map((result) => (
+              <CommandItem
+                key={`search-${result.type}-${result.id}`}
+                value={`search-${result.type}-${result.title}-${result.subtitle}`}
+                onSelect={() => handleSearchResultClick(result)}
+                className="gap-3"
+                data-testid={`command-search-${result.type}-${result.id}`}
+              >
+                {result.type === "object" ? (
+                  <MapPin className="h-4 w-4 text-chart-1" />
+                ) : (
+                  <User className="h-4 w-4 text-chart-2" />
+                )}
+                <div className="flex flex-col">
+                  <span className="text-sm">{result.title}</span>
+                  {result.subtitle && (
+                    <span className="text-xs text-muted-foreground">{result.subtitle}</span>
+                  )}
+                </div>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {result.type === "object" ? "Objekt" : "Kund"}
+                </span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {showDataResults && searchResults.length > 0 && <CommandSeparator />}
+
+        {recentNavItems.length > 0 && (
+          <CommandGroup heading="Senaste">
+            {recentNavItems.map((item) => item && (
+              <CommandItem
+                key={`recent-${item.url}`}
+                value={`recent-${item.title}`}
+                onSelect={() => handleNavigate(item.url)}
+                className="gap-3"
+                data-testid={`command-recent-${item.url.replace("/", "") || "home"}`}
+              >
+                <History className="h-4 w-4 text-muted-foreground" />
+                <item.icon className="h-4 w-4" />
+                <span>{item.title}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        <CommandGroup heading="Snabbåtgärder">
+          {quickActions.map((action) => (
+            <CommandItem
+              key={action.action}
+              value={`action-${action.title} ${action.keywords.join(" ")}`}
+              onSelect={() => handleAction(action.action)}
+              className="gap-3"
+              data-testid={`command-action-${action.action}`}
+            >
+              <action.icon className="h-4 w-4 text-primary" />
+              <span>{action.title}</span>
+            </CommandItem>
+          ))}
+          <CommandItem
+            value="action-toggle-theme växla tema mörkt ljust"
+            onSelect={() => handleAction("toggle-theme")}
+            className="gap-3"
+            data-testid="command-action-toggle-theme"
+          >
+            {currentTheme === "dark" ? (
+              <Sun className="h-4 w-4 text-chart-3" />
+            ) : (
+              <Moon className="h-4 w-4 text-chart-1" />
+            )}
+            <span>Växla tema</span>
+            <CommandShortcut>⌘T</CommandShortcut>
+          </CommandItem>
+        </CommandGroup>
+
+        <CommandSeparator />
+
+        {Object.entries(groupedItems).map(([category, items]) => (
+          <CommandGroup key={category} heading={category}>
+            {items.map((item) => {
+              const external = item.external;
+              return (
+                <CommandItem
+                  key={item.url}
+                  value={`${item.title} ${item.keywords.join(" ")}`}
+                  onSelect={() => handleNavigate(item.url, external)}
+                  className="gap-3"
+                  data-testid={`command-nav-${item.url.replace("/", "") || "home"}`}
+                >
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.title}</span>
+                  {external && (
+                    <ExternalLink className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
+                  )}
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+        ))}
+      </CommandList>
+    </CommandDialog>
+  );
+}
+
+export function useCommandPalette() {
+  const openCommandPalette = useCallback(() => {
+    const event = new KeyboardEvent("keydown", {
+      key: "k",
+      metaKey: true,
+      bubbles: true,
+    });
+    document.dispatchEvent(event);
+  }, []);
+
+  return { openCommandPalette };
+}

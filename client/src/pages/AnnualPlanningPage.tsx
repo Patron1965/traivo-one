@@ -1,0 +1,1185 @@
+import { useState, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Target,
+  Plus,
+  Search,
+  Loader2,
+  Pencil,
+  Trash2,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  TrendingUp,
+  RefreshCw,
+  Download,
+  Filter,
+  ArrowUpDown,
+  Sparkles,
+  CalendarDays,
+  Check,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { CustomerCombobox } from "@/components/CustomerCombobox";
+import { ObjectCombobox, ClusterCombobox } from "@/components/AnnualPlanningCombos";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { CapacityForecastTab } from "@/components/dashboard/CapacityForecastTab";
+
+type AnnualGoalWithProgress = {
+  id: string;
+  tenantId: string;
+  customerId: string | null;
+  objectId: string | null;
+  clusterId: string | null;
+  articleType: string;
+  targetCount: number;
+  year: number;
+  notes: string | null;
+  sourceType: string | null;
+  sourceId: string | null;
+  status: string;
+  createdAt: string;
+  customerName: string | null;
+  objectName: string | null;
+  objectAddress: string | null;
+  clusterName: string | null;
+  completedCount: number;
+  plannedCount: number;
+  progressPercent: number;
+  expectedAtThisPoint: number;
+  delta: number;
+  projectedCompletion: number;
+  forecast: "on_track" | "at_risk" | "behind";
+};
+
+const goalFormSchema = z.object({
+  customerId: z.string().optional(),
+  objectId: z.string().optional(),
+  clusterId: z.string().optional(),
+  articleType: z.string().min(1, "Artikeltyp krävs"),
+  targetCount: z.coerce.number().min(1, "Målantal måste vara minst 1"),
+  year: z.coerce.number().min(2020).max(2050),
+  notes: z.string().optional(),
+});
+
+type GoalFormValues = z.infer<typeof goalFormSchema>;
+
+const ARTICLE_TYPE_LABELS: Record<string, string> = {
+  tjanst: "Tjänst",
+  kontroll: "Kontroll",
+  felanmalan: "Felanmälan",
+  vara: "Vara",
+  beroende: "Beroende",
+};
+
+interface MonthlyDistribution {
+  month: number;
+  count: number;
+}
+
+interface AIProposal {
+  goalId: string;
+  customerName: string | null;
+  objectName: string | null;
+  clusterName: string | null;
+  articleType: string;
+  targetCount: number;
+  completedCount: number;
+  remainingCount: number;
+  currentDistribution: MonthlyDistribution[];
+  proposedDistribution: MonthlyDistribution[];
+  seasonRestriction: string | null;
+  reasoning: string;
+}
+
+function ForecastIcon({ forecast }: { forecast: string }) {
+  if (forecast === "on_track") return <CheckCircle2 className="h-5 w-5 text-chart-2" data-testid="icon-forecast-on-track" />;
+  if (forecast === "at_risk") return <AlertTriangle className="h-5 w-5 text-chart-4" data-testid="icon-forecast-at-risk" />;
+  return <XCircle className="h-5 w-5 text-destructive" data-testid="icon-forecast-behind" />;
+}
+
+function ForecastBadge({ forecast }: { forecast: string }) {
+  if (forecast === "on_track") return <Badge variant="default" className="bg-chart-2/15 text-chart-2 dark:bg-chart-2/15">På plan</Badge>;
+  if (forecast === "at_risk") return <Badge variant="default" className="bg-chart-3/15 text-chart-3 dark:bg-chart-3/15">Risk</Badge>;
+  return <Badge variant="destructive">Kritisk</Badge>;
+}
+
+export default function AnnualPlanningPage() {
+  const { toast } = useToast();
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<AnnualGoalWithProgress | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [articleTypeFilter, setArticleTypeFilter] = useState<string>("all");
+  const [customerFilter, setCustomerFilter] = useState<string>("all");
+  const [sortField, setSortField] = useState<string>("forecast");
+  const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
+  const [aiDistributeDialogOpen, setAiDistributeDialogOpen] = useState(false);
+  const [aiScope, setAiScope] = useState<string>("all");
+  const [aiStartMonth, setAiStartMonth] = useState(1);
+  const [aiEndMonth, setAiEndMonth] = useState(12);
+  const [aiProposals, setAiProposals] = useState<AIProposal[] | null>(null);
+  const [aiSummary, setAiSummary] = useState("");
+  const [aiApplyDialogOpen, setAiApplyDialogOpen] = useState(false);
+  const [selectedProposalIndex, setSelectedProposalIndex] = useState(0);
+
+  const form = useForm<GoalFormValues>({
+    resolver: zodResolver(goalFormSchema),
+    defaultValues: {
+      customerId: "",
+      objectId: "",
+      clusterId: "",
+      articleType: "tjanst",
+      targetCount: 12,
+      year: currentYear,
+      notes: "",
+    },
+  });
+
+  const { data: goals = [], isLoading } = useQuery<AnnualGoalWithProgress[]>({
+    queryKey: ["/api/annual-goals", selectedYear],
+    queryFn: async () => {
+      const res = await fetch(`/api/annual-goals?year=${selectedYear}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch goals");
+      return res.json();
+    },
+  });
+
+  const uniqueArticleTypes = useMemo(() => {
+    const types = new Set<string>(Object.keys(ARTICLE_TYPE_LABELS));
+    goals.forEach(g => types.add(g.articleType));
+    return Array.from(types);
+  }, [goals]);
+
+  const filteredGoals = useMemo(() => {
+    let result = goals;
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(g =>
+        (g.customerName && g.customerName.toLowerCase().includes(q)) ||
+        (g.objectName && g.objectName.toLowerCase().includes(q)) ||
+        (g.objectAddress && g.objectAddress.toLowerCase().includes(q))
+      );
+    }
+
+    if (statusFilter !== "all") {
+      result = result.filter(g => g.forecast === statusFilter);
+    }
+
+    if (articleTypeFilter !== "all") {
+      result = result.filter(g => g.articleType === articleTypeFilter);
+    }
+
+    if (customerFilter !== "all") {
+      result = result.filter(g => g.customerId === customerFilter);
+    }
+
+    if (sortField === "forecast") {
+      const order = { behind: 0, at_risk: 1, on_track: 2 };
+      result = [...result].sort((a, b) => (order[a.forecast] ?? 2) - (order[b.forecast] ?? 2));
+    } else if (sortField === "progress") {
+      result = [...result].sort((a, b) => a.progressPercent - b.progressPercent);
+    } else if (sortField === "target") {
+      result = [...result].sort((a, b) => b.targetCount - a.targetCount);
+    }
+
+    return result;
+  }, [goals, searchQuery, statusFilter, articleTypeFilter, customerFilter, sortField]);
+
+  const behindGoals = useMemo(() => goals.filter(g => g.forecast === "behind"), [goals]);
+  const atRiskGoals = useMemo(() => goals.filter(g => g.forecast === "at_risk"), [goals]);
+  const onTrackGoals = useMemo(() => goals.filter(g => g.forecast === "on_track"), [goals]);
+
+  const summary = useMemo(() => ({
+    total: goals.length,
+    onTrack: onTrackGoals.length,
+    atRisk: atRiskGoals.length,
+    behind: behindGoals.length,
+    avgProgress: goals.length > 0 ? Math.round(goals.reduce((sum, g) => sum + g.progressPercent, 0) / goals.length) : 0,
+  }), [goals, onTrackGoals, atRiskGoals, behindGoals]);
+
+  type GoalSubmitPayload = Omit<GoalFormValues, "customerId" | "objectId" | "clusterId"> & {
+    customerId: string | null;
+    objectId: string | null;
+    clusterId: string | null;
+  };
+
+  const createMutation = useMutation({
+    mutationFn: (data: GoalSubmitPayload) =>
+      apiRequest("POST", "/api/annual-goals", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/annual-goals"] });
+      setDialogOpen(false);
+      form.reset();
+      toast({ title: "Årsmål skapat" });
+    },
+    onError: (error: Error) => toast({ title: "Kunde inte skapa årsmål", description: error.message, variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: GoalSubmitPayload }) =>
+      apiRequest("PUT", `/api/annual-goals/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/annual-goals"] });
+      setDialogOpen(false);
+      setEditing(null);
+      form.reset();
+      toast({ title: "Årsmål uppdaterat" });
+    },
+    onError: (error: Error) => toast({ title: "Kunde inte uppdatera årsmål", description: error.message, variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/annual-goals/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/annual-goals"] });
+      setDeleteDialogOpen(false);
+      setItemToDelete(null);
+      toast({ title: "Årsmål borttaget" });
+    },
+    onError: (error: Error) => toast({ title: "Kunde inte ta bort årsmål", description: error.message, variant: "destructive" }),
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/annual-goals/generate-from-subscriptions", { year: selectedYear });
+      return res.json();
+    },
+    onSuccess: (data: { created: number; skipped: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/annual-goals"] });
+      setGenerateDialogOpen(false);
+      toast({
+        title: "Mål genererade",
+        description: `${data.created} nya mål skapade, ${data.skipped} hoppades över (finns redan).`,
+      });
+    },
+    onError: (error: Error) => toast({ title: "Kunde inte generera mål", description: error.message, variant: "destructive" }),
+  });
+
+  const aiDistributeMutation = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, unknown> = { year: selectedYear, startMonth: aiStartMonth, endMonth: aiEndMonth };
+      if (aiScope !== "all" && aiScope.startsWith("customer:")) body.customerId = aiScope.replace("customer:", "");
+      if (aiScope !== "all" && aiScope.startsWith("cluster:")) body.clusterId = aiScope.replace("cluster:", "");
+      const res = await apiRequest("POST", "/api/annual-planning/ai-distribute", body);
+      return res.json();
+    },
+    onSuccess: (data: { proposals: AIProposal[]; summary: string; year: number }) => {
+      setAiProposals(data.proposals);
+      setAiSummary(data.summary);
+      setAiProposalYear(data.year || selectedYear);
+      setSelectedProposalIndex(0);
+      setAiDistributeDialogOpen(false);
+      toast({ title: "AI-fördelning klar", description: `${data.proposals.length} mål analyserade` });
+    },
+    onError: (error: Error) => toast({ title: "Kunde inte analysera fördelning", description: error.message, variant: "destructive" }),
+  });
+
+  const [aiProposalYear, setAiProposalYear] = useState(currentYear);
+
+  const aiApplyMutation = useMutation({
+    mutationFn: async () => {
+      if (!aiProposals) throw new Error("Inga förslag");
+      const res = await apiRequest("POST", "/api/annual-planning/apply-distribution", {
+        proposals: aiProposals.map((p) => ({
+          goalId: p.goalId,
+          proposedDistribution: p.proposedDistribution,
+        })),
+        year: aiProposalYear,
+      });
+      return res.json();
+    },
+    onSuccess: (data: { created: number; moved: number; deficit: number; goalsProcessed: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/annual-goals"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      setAiApplyDialogOpen(false);
+      setAiProposals(null);
+      const parts = [`${data.created} skapade`];
+      if (data.moved > 0) parts.push(`${data.moved} flyttade`);
+      if (data.deficit > 0) parts.push(`${data.deficit} kunde ej schemaläggas (tidsrestriktioner)`);
+      toast({ title: "Fördelning tillämpad", description: `${parts.join(", ")} arbetsordrar för ${data.goalsProcessed} mål.` });
+    },
+    onError: (error: Error) => toast({ title: "Kunde inte tillämpa fördelning", description: error.message, variant: "destructive" }),
+  });
+
+  const handleEdit = (goal: AnnualGoalWithProgress) => {
+    setEditing(goal);
+    form.reset({
+      customerId: goal.customerId || "",
+      objectId: goal.objectId || "",
+      clusterId: goal.clusterId || "",
+      articleType: goal.articleType,
+      targetCount: goal.targetCount,
+      year: goal.year,
+      notes: goal.notes || "",
+    });
+    setDialogOpen(true);
+  };
+
+  const onSubmit = (data: GoalFormValues) => {
+    const normalized = {
+      ...data,
+      customerId: data.customerId || null,
+      objectId: data.objectId || null,
+      clusterId: data.clusterId || null,
+    };
+    if (!normalized.customerId && !normalized.objectId && !normalized.clusterId) {
+      toast({ title: "Välj mål", description: "Välj exakt en av kund, objekt eller kluster.", variant: "destructive" });
+      return;
+    }
+    if (editing) {
+      updateMutation.mutate({ id: editing.id, data: normalized });
+    } else {
+      createMutation.mutate(normalized);
+    }
+  };
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-annual-planning-title">
+            <Target className="h-6 w-6 text-primary" />
+            Årsplanering — Årsmål
+          </h1>
+          <p className="text-muted-foreground">
+            Definiera och följ upp årsmål per kund och objekt
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={String(selectedYear)} onValueChange={(v) => setSelectedYear(parseInt(v))}>
+            <SelectTrigger className="w-[120px]" data-testid="select-year">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[currentYear - 1, currentYear, currentYear + 1].map(y => (
+                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={() => setGenerateDialogOpen(true)} data-testid="button-generate-goals">
+            <Download className="h-4 w-4 mr-2" />
+            Generera från abonnemang
+          </Button>
+          <Button onClick={() => { setEditing(null); form.reset({ customerId: "", objectId: "", clusterId: "", articleType: "tjanst", targetCount: 12, year: selectedYear, notes: "" }); setDialogOpen(true); }} data-testid="button-add-goal">
+            <Plus className="h-4 w-4 mr-2" />
+            Nytt årsmål
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <Card>
+          <CardContent className="pt-4 pb-3 text-center">
+            <div className="text-2xl font-bold" data-testid="text-total-goals">{summary.total}</div>
+            <div className="text-xs text-muted-foreground">Totalt</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 text-center">
+            <div className="text-2xl font-bold text-chart-2" data-testid="text-on-track-count">{summary.onTrack}</div>
+            <div className="text-xs text-muted-foreground">På plan <HelpTooltip content="Målet ligger i fas — tillräckligt många ordrar har utförts i förhållande till årets gång." /></div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 text-center">
+            <div className="text-2xl font-bold text-chart-3" data-testid="text-at-risk-count">{summary.atRisk}</div>
+            <div className="text-xs text-muted-foreground">Risk <HelpTooltip content="Målet ligger efter — framstegen är lägre än förväntat för denna tidpunkt på året." /></div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 text-center">
+            <div className="text-2xl font-bold text-destructive" data-testid="text-behind-count">{summary.behind}</div>
+            <div className="text-xs text-muted-foreground">Kritisk <HelpTooltip content="Målet är kraftigt efter — det krävs omedelbara åtgärder för att hinna ikapp under året." /></div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 text-center">
+            <div className="text-2xl font-bold" data-testid="text-avg-progress">{summary.avgProgress}%</div>
+            <div className="text-xs text-muted-foreground">Snittframsteg</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs defaultValue="goals">
+        <TabsList>
+          <TabsTrigger value="goals" data-testid="tab-goals">
+            <Target className="h-4 w-4 mr-2" />
+            Alla mål ({goals.length})
+          </TabsTrigger>
+          <TabsTrigger value="warnings" data-testid="tab-warnings">
+            <AlertTriangle className="h-4 w-4 mr-2 text-chart-4" />
+            Varningar ({behindGoals.length})
+          </TabsTrigger>
+          <TabsTrigger value="ai-distribute" data-testid="tab-ai-distribute">
+            <Sparkles className="h-4 w-4 mr-2" />
+            AI-fördelning
+          </TabsTrigger>
+          <TabsTrigger value="capacity-forecast" data-testid="tab-capacity-forecast">
+            <TrendingUp className="h-4 w-4 mr-2" />
+            Kapacitetsprognos
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="goals" className="space-y-4 mt-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Sök kund, objekt..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" data-testid="input-search-goals" />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[140px]" data-testid="select-status-filter">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alla</SelectItem>
+                <SelectItem value="on_track">På plan</SelectItem>
+                <SelectItem value="at_risk">Risk</SelectItem>
+                <SelectItem value="behind">Kritisk</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={articleTypeFilter} onValueChange={setArticleTypeFilter}>
+              <SelectTrigger className="w-[150px]" data-testid="select-article-type-filter">
+                <SelectValue placeholder="Artikeltyp" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alla typer</SelectItem>
+                {uniqueArticleTypes.map(t => (
+                  <SelectItem key={t} value={t}>{ARTICLE_TYPE_LABELS[t] || t}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <CustomerCombobox
+              value={customerFilter === "all" ? null : customerFilter}
+              onChange={(id) => setCustomerFilter(id || "all")}
+              placeholder="Alla kunder"
+              emptyOptionLabel="Alla kunder"
+              className="w-[180px]"
+              testId="select-customer-filter"
+            />
+            <Select value={sortField} onValueChange={setSortField}>
+              <SelectTrigger className="w-[150px]" data-testid="select-sort">
+                <ArrowUpDown className="h-4 w-4 mr-2" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="forecast">Prognos</SelectItem>
+                <SelectItem value="progress">Framsteg</SelectItem>
+                <SelectItem value="target">Målantal</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredGoals.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <Target className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="mb-2">Inga årsmål</p>
+                <p className="text-sm">Skapa mål manuellt eller generera från abonnemang</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[50px]">Status</TableHead>
+                    <TableHead>Kund / Objekt</TableHead>
+                    <TableHead>Artikeltyp</TableHead>
+                    <TableHead className="text-center">Mål</TableHead>
+                    <TableHead className="text-center">Utfört</TableHead>
+                    <TableHead className="text-center">Planerat</TableHead>
+                    <TableHead className="min-w-[200px]">Framsteg</TableHead>
+                    <TableHead>Källa</TableHead>
+                    <TableHead className="w-[100px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredGoals.map((goal) => (
+                    <TableRow key={goal.id} data-testid={`row-goal-${goal.id}`}>
+                      <TableCell>
+                        <ForecastIcon forecast={goal.forecast} />
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{goal.customerName || "—"}</div>
+                          {goal.objectName && (
+                            <div className="text-sm text-muted-foreground">{goal.objectName}</div>
+                          )}
+                          {goal.clusterName && (
+                            <div className="text-sm text-muted-foreground">Kluster: {goal.clusterName}</div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{ARTICLE_TYPE_LABELS[goal.articleType] || goal.articleType}</Badge>
+                      </TableCell>
+                      <TableCell className="text-center font-medium">{goal.targetCount}</TableCell>
+                      <TableCell className="text-center">{goal.completedCount}</TableCell>
+                      <TableCell className="text-center">{goal.plannedCount}</TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-sm">
+                            <span>{goal.progressPercent}%</span>
+                            <span className={`text-xs ${goal.delta >= 0 ? 'text-chart-2' : 'text-destructive'}`}>
+                              {goal.delta >= 0 ? '+' : ''}{goal.delta} vs förväntat
+                            </span>
+                          </div>
+                          <Progress value={Math.min(goal.progressPercent, 100)} className="h-2" />
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-muted-foreground">
+                          {goal.sourceType === "subscription" ? "Abonnemang" : goal.sourceType === "order_concept" ? "Orderkoncept" : "Manuellt"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(goal)} data-testid={`button-edit-goal-${goal.id}`}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setItemToDelete({ id: goal.id, name: `${goal.customerName || ''} - ${goal.objectName || ''}` }); setDeleteDialogOpen(true); }} data-testid={`button-delete-goal-${goal.id}`}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="warnings" className="space-y-4 mt-4">
+          {behindGoals.length === 0 && atRiskGoals.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-chart-2 opacity-50" />
+                <p className="font-medium">Inga varningar</p>
+                <p className="text-sm">Alla mål ligger på plan!</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {behindGoals.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold flex items-center gap-2 text-destructive">
+                    <XCircle className="h-5 w-5" />
+                    Kritiska — &gt;20% efter förväntat ({behindGoals.length})
+                  </h3>
+                  <div className="grid gap-3">
+                    {behindGoals.map(goal => (
+                      <Card key={goal.id} className="border-destructive/20 dark:border-destructive/90" data-testid={`card-warning-critical-${goal.id}`}>
+                        <CardContent className="pt-4 pb-3">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <ForecastIcon forecast={goal.forecast} />
+                                <span className="font-medium">{goal.customerName || "—"}</span>
+                                {goal.objectName && <span className="text-muted-foreground">/ {goal.objectName}</span>}
+                              </div>
+                              <div className="flex items-center gap-3 mt-2 text-sm">
+                                <Badge variant="outline">{ARTICLE_TYPE_LABELS[goal.articleType] || goal.articleType}</Badge>
+                                <span>{goal.completedCount} / {goal.targetCount} ({goal.progressPercent}%)</span>
+                                <span className="text-destructive">{goal.delta} vs förväntat</span>
+                              </div>
+                            </div>
+                            <div className="w-32">
+                              <Progress value={Math.min(goal.progressPercent, 100)} className="h-2" />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {atRiskGoals.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold flex items-center gap-2 text-chart-3">
+                    <AlertTriangle className="h-5 w-5 text-chart-4" />
+                    Risk — takten räcker knappt ({atRiskGoals.length})
+                  </h3>
+                  <div className="grid gap-3">
+                    {atRiskGoals.map(goal => (
+                      <Card key={goal.id} className="border-chart-3/20 dark:border-chart-3/90" data-testid={`card-warning-risk-${goal.id}`}>
+                        <CardContent className="pt-4 pb-3">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <ForecastIcon forecast={goal.forecast} />
+                                <span className="font-medium">{goal.customerName || "—"}</span>
+                                {goal.objectName && <span className="text-muted-foreground">/ {goal.objectName}</span>}
+                              </div>
+                              <div className="flex items-center gap-3 mt-2 text-sm">
+                                <Badge variant="outline">{ARTICLE_TYPE_LABELS[goal.articleType] || goal.articleType}</Badge>
+                                <span>{goal.completedCount} / {goal.targetCount} ({goal.progressPercent}%)</span>
+                                <span className="text-chart-3">{goal.delta} vs förväntat</span>
+                              </div>
+                            </div>
+                            <div className="w-32">
+                              <Progress value={Math.min(goal.progressPercent, 100)} className="h-2" />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="ai-distribute" className="space-y-4 mt-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h3 className="font-semibold flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                AI-driven besöksfördelning
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Låt AI fördela besök jämnt över året baserat på frekvens, säsong och kapacitet
+              </p>
+            </div>
+            <Button onClick={() => setAiDistributeDialogOpen(true)} data-testid="button-ai-distribute">
+              <Sparkles className="h-4 w-4 mr-2" />
+              Fördela besök
+            </Button>
+          </div>
+
+          {aiDistributeMutation.isPending && (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+                <p className="font-medium">AI analyserar fördelning...</p>
+                <p className="text-sm text-muted-foreground">Beräknar optimal besöksfördelning baserat på era mål</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {aiProposals && aiProposals.length > 0 && !aiDistributeMutation.isPending && (
+            <>
+              {aiSummary && (
+                <Card className="border-primary/20 bg-primary/5">
+                  <CardContent className="pt-4 pb-3">
+                    <div className="flex items-start gap-3">
+                      <Sparkles className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                      <div>
+                        <p className="font-medium text-sm">AI-analys</p>
+                        <p className="text-sm text-muted-foreground mt-1">{aiSummary}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">{aiProposals.length} mål analyserade</span>
+                  {aiProposals.length > 1 && (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedProposalIndex(Math.max(0, selectedProposalIndex - 1))}
+                        disabled={selectedProposalIndex === 0}
+                        data-testid="button-prev-proposal"
+                      >
+                        ←
+                      </Button>
+                      <span className="text-sm px-2">{selectedProposalIndex + 1} / {aiProposals.length}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedProposalIndex(Math.min(aiProposals.length - 1, selectedProposalIndex + 1))}
+                        disabled={selectedProposalIndex === aiProposals.length - 1}
+                        data-testid="button-next-proposal"
+                      >
+                        →
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => { setAiProposals(null); setAiSummary(""); }} data-testid="button-clear-proposals">
+                    Rensa
+                  </Button>
+                  <Button onClick={() => setAiApplyDialogOpen(true)} data-testid="button-apply-distribution">
+                    <Check className="h-4 w-4 mr-2" />
+                    Godkänn och skapa ordrar
+                  </Button>
+                </div>
+              </div>
+
+              {(() => {
+                const proposal = aiProposals[selectedProposalIndex];
+                if (!proposal) return null;
+
+                const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "Maj", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"];
+                const chartData = MONTH_LABELS.map((label, i) => ({
+                  name: label,
+                  Nuvarande: proposal.currentDistribution[i]?.count || 0,
+                  Föreslagen: proposal.proposedDistribution[i]?.count || 0,
+                }));
+
+                const totalProposed = proposal.proposedDistribution.reduce((s: number, d: { count: number }) => s + d.count, 0);
+
+                return (
+                  <Card data-testid={`card-proposal-${proposal.goalId}`}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base">
+                          {proposal.customerName || proposal.clusterName || "—"}
+                          {proposal.objectName && <span className="text-muted-foreground font-normal ml-2">/ {proposal.objectName}</span>}
+                        </CardTitle>
+                        <Badge variant="outline">{ARTICLE_TYPE_LABELS[proposal.articleType] || proposal.articleType}</Badge>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
+                        <span>Mål: {proposal.targetCount}</span>
+                        <span>Utfört: {proposal.completedCount}</span>
+                        <span>Kvar: {proposal.remainingCount}</span>
+                        <span>Föreslagen total: {totalProposed}</span>
+                        {proposal.seasonRestriction && proposal.seasonRestriction !== "all_year" && (
+                          <Badge variant="secondary" className="text-xs">
+                            <CalendarDays className="h-3 w-3 mr-1" />
+                            Säsong: {proposal.seasonRestriction}
+                          </Badge>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {proposal.reasoning && (
+                        <p className="text-sm text-muted-foreground mb-4 italic">
+                          AI: {proposal.reasoning}
+                        </p>
+                      )}
+                      <div className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={chartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis dataKey="name" className="text-xs" />
+                            <YAxis allowDecimals={false} className="text-xs" />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: "hsl(var(--card))",
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: "8px",
+                              }}
+                            />
+                            <Legend />
+                            <Bar dataKey="Nuvarande" fill="#6B7C8C" radius={[2, 2, 0, 0]} />
+                            <Bar dataKey="Föreslagen" fill="#4A9B9B" radius={[2, 2, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+            </>
+          )}
+
+          {!aiProposals && !aiDistributeMutation.isPending && (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <Sparkles className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="font-medium mb-2">Inga förslag genererade</p>
+                <p className="text-sm">Klicka "Fördela besök" för att låta AI analysera era årsmål och föreslå en optimal besöksfördelning</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {aiProposals && aiProposals.length === 0 && !aiDistributeMutation.isPending && (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <Target className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="font-medium mb-2">Inga mål hittades</p>
+                <p className="text-sm">Skapa årsmål först under fliken "Alla mål"</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="capacity-forecast" className="space-y-4 mt-4">
+          <CapacityForecastTab />
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={aiDistributeDialogOpen} onOpenChange={setAiDistributeDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              AI-fördelning av besök
+            </DialogTitle>
+            <DialogDescription>
+              Välj scope och period för att generera en fördelningsplan
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Omfattning</label>
+              <Select
+                value={aiScope.startsWith("customer:") ? "customer" : aiScope.startsWith("cluster:") ? "cluster" : "all"}
+                onValueChange={(v) => {
+                  if (v === "all") setAiScope("all");
+                  else if (v === "customer") setAiScope("customer:");
+                  else if (v === "cluster") setAiScope("cluster:");
+                }}
+              >
+                <SelectTrigger data-testid="select-ai-scope-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla mål</SelectItem>
+                  <SelectItem value="customer">Specifik kund</SelectItem>
+                  <SelectItem value="cluster">Specifikt kluster</SelectItem>
+                </SelectContent>
+              </Select>
+              {aiScope.startsWith("customer:") && (
+                <CustomerCombobox
+                  value={aiScope.slice("customer:".length) || null}
+                  onChange={(id) => setAiScope(id ? `customer:${id}` : "customer:")}
+                  placeholder="Välj kund"
+                  className="w-full"
+                  testId="select-ai-scope-customer"
+                />
+              )}
+              {aiScope.startsWith("cluster:") && (
+                <ClusterCombobox
+                  value={aiScope.slice("cluster:".length) || null}
+                  onChange={(id) => setAiScope(id ? `cluster:${id}` : "cluster:")}
+                  placeholder="Välj kluster"
+                  className="w-full"
+                  testId="select-ai-scope-cluster"
+                />
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Från månad</label>
+                <Select value={String(aiStartMonth)} onValueChange={(v) => setAiStartMonth(parseInt(v))}>
+                  <SelectTrigger data-testid="select-ai-start-month">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <SelectItem key={i + 1} value={String(i + 1)}>
+                        {["Januari", "Februari", "Mars", "April", "Maj", "Juni", "Juli", "Augusti", "September", "Oktober", "November", "December"][i]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Till månad</label>
+                <Select value={String(aiEndMonth)} onValueChange={(v) => setAiEndMonth(parseInt(v))}>
+                  <SelectTrigger data-testid="select-ai-end-month">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <SelectItem key={i + 1} value={String(i + 1)}>
+                        {["Januari", "Februari", "Mars", "April", "Maj", "Juni", "Juli", "Augusti", "September", "Oktober", "November", "December"][i]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAiDistributeDialogOpen(false)}>Avbryt</Button>
+            <Button
+              onClick={() => aiDistributeMutation.mutate()}
+              disabled={
+                aiDistributeMutation.isPending ||
+                aiScope === "customer:" ||
+                aiScope === "cluster:"
+              }
+              data-testid="button-run-ai-distribute"
+            >
+              {aiDistributeMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              <Sparkles className="h-4 w-4 mr-2" />
+              Analysera
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={aiApplyDialogOpen} onOpenChange={setAiApplyDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Godkänn AI-fördelning?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Nya arbetsordrar skapas och befintliga ej-slutförda ordrar kan flyttas mellan månader för att matcha fördelningen. Slutförda ordrar påverkas aldrig.
+              {aiProposals && (
+                <span className="block mt-2 font-medium">
+                  {aiProposals.length} mål berörs, nya ordrar skapas för resterande besök.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => aiApplyMutation.mutate()}
+              disabled={aiApplyMutation.isPending}
+              data-testid="button-confirm-apply-distribution"
+            >
+              {aiApplyMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Godkänn
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editing ? "Redigera årsmål" : "Nytt årsmål"}</DialogTitle>
+            <DialogDescription>
+              {editing ? "Uppdatera målets inställningar" : "Definiera ett nytt årsmål per kund eller objekt"}
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField control={form.control} name="customerId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Kund</FormLabel>
+                  <FormControl>
+                    <CustomerCombobox
+                      value={field.value || null}
+                      onChange={(id) => {
+                        const val = id || "";
+                        field.onChange(val);
+                        if (val) { form.setValue("objectId", ""); form.setValue("clusterId", ""); }
+                      }}
+                      placeholder="Välj kund"
+                      emptyOptionLabel="Ingen"
+                      className="w-full"
+                      testId="select-goal-customer"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="objectId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Objekt</FormLabel>
+                  <FormControl>
+                    <ObjectCombobox
+                      value={field.value || null}
+                      onChange={(id) => {
+                        const val = id || "";
+                        field.onChange(val);
+                        if (val) { form.setValue("customerId", ""); form.setValue("clusterId", ""); }
+                      }}
+                      customerId={form.watch("customerId") || null}
+                      placeholder="Välj objekt"
+                      emptyOptionLabel="Inget"
+                      className="w-full"
+                      testId="select-goal-object"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="clusterId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Kluster / Objektgrupp</FormLabel>
+                  <FormControl>
+                    <ClusterCombobox
+                      value={field.value || null}
+                      onChange={(id) => {
+                        const val = id || "";
+                        field.onChange(val);
+                        if (val) { form.setValue("customerId", ""); form.setValue("objectId", ""); }
+                      }}
+                      placeholder="Välj kluster"
+                      emptyOptionLabel="Inget"
+                      className="w-full"
+                      testId="select-goal-cluster"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="articleType" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Artikeltyp</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-goal-article-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {Object.entries(ARTICLE_TYPE_LABELS).map(([v, l]) => (
+                        <SelectItem key={v} value={v}>{l}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="targetCount" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Målantal per år</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={1} {...field} data-testid="input-target-count" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="year" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>År</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={2020} max={2050} {...field} data-testid="input-year" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+
+              <FormField control={form.control} name="notes" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Anteckningar</FormLabel>
+                  <FormControl>
+                    <Textarea {...field} placeholder="Fritext..." data-testid="input-notes" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Avbryt</Button>
+                <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} data-testid="button-submit-goal">
+                  {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {editing ? "Uppdatera" : "Skapa"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ta bort årsmål?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Är du säker på att du vill ta bort målet "{itemToDelete?.name}"?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => itemToDelete && deleteMutation.mutate(itemToDelete.id)}
+              className="bg-destructive/15 text-destructive-foreground"
+              data-testid="button-confirm-delete-goal"
+            >
+              Ta bort
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={generateDialogOpen} onOpenChange={setGenerateDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Generera mål från abonnemang</AlertDialogTitle>
+            <AlertDialogDescription>
+              Systemet läser aktiva prenumerationer och orderkoncept och skapar årsmål automatiskt för {selectedYear}.
+              Befintliga mål hoppas över.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => generateMutation.mutate()}
+              disabled={generateMutation.isPending}
+              data-testid="button-confirm-generate-goals"
+            >
+              {generateMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Generera
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

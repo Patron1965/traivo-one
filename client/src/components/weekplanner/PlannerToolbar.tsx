@@ -1,0 +1,765 @@
+import { memo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+import { Separator } from "@/components/ui/separator";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight, ChevronDown, ChevronUp, Crosshair, ExternalLink, ShieldCheck, Send, Inbox, Target, X, Search } from "lucide-react";
+import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
+import type { ViewMode, PlannerDisplayMode } from "./types";
+import type { PopoutView, SyncRole, AssignSlot } from "./usePlannerSync";
+import { zoomLevels } from "./types";
+import { format, addDays } from "date-fns";
+import { sv } from "date-fns/locale";
+
+interface PlannerToolbarProps {
+  viewMode: ViewMode;
+  headerLabel: string;
+  onNavigate: (dir: "prev" | "next") => void;
+  onGoToday: () => void;
+  onViewModeChange: (mode: ViewMode) => void;
+  undoCount: number;
+  redoCount: number;
+  onUndo: () => void;
+  onRedo: () => void;
+  zoomLevel: number;
+  setZoomLevel: (v: number) => void;
+  resources: Resource[];
+  visibleResources: Resource[];
+  hiddenResourceIds: Set<string>;
+  setHiddenResourceIds: (v: Set<string>) => void;
+  weekRowMode?: "team" | "resource";
+  teamsData?: Array<{ id: string; name: string; color: string | null }>;
+  selectedTeamIds?: string[];
+  setSelectedTeamIds?: (ids: string[]) => void;
+  onAddJob?: () => void;
+  onAutoFill: () => void;
+  onClearAll: () => void;
+  onCarryOver?: () => void;
+  onUrgentJob?: () => void;
+  showAIPanel?: boolean;
+  onToggleAIPanel?: () => void;
+  areaSearchOpen?: boolean;
+  onToggleAreaSearch?: () => void;
+  weekGoals: {
+    time: { current: number; target: number; pct: number };
+    economy: { current: number; target: number; pct: number };
+    count: { current: number; target: number; pct: number };
+  };
+  weekTravelTotal: { minutes: number; km: number; hours: number };
+  resourceCapacities?: Array<{ resource: Resource; utilization: number }>;
+  visibleDates: Date[];
+  getResourceDayHours: (resourceId: string, day: Date) => number;
+  jobConflictCount: number;
+  filteredScheduledCount: number;
+  unscheduledCount: number;
+  showConstraintLayer?: boolean;
+  onToggleConstraintLayer?: () => void;
+  onPublishWeek?: () => void;
+  popoutRole?: SyncRole;
+  displayMode?: PlannerDisplayMode;
+  poppedOutViews?: Set<PopoutView>;
+  onOpenPopout?: (view: PopoutView) => void;
+  crossWindowSlot?: AssignSlot | null;
+  setCrossWindowSlot?: (slot: AssignSlot | null) => void;
+}
+
+const getGoalColor = (pct: number) => {
+  if (pct >= 80) return "bg-chart-2/15";
+  if (pct >= 50) return "bg-chart-3/15";
+  return "bg-destructive/15";
+};
+
+const getGoalTextColor = (pct: number) => {
+  if (pct >= 80) return "text-chart-2";
+  if (pct >= 50) return "text-chart-3";
+  return "text-destructive";
+};
+
+function CrossWindowSlotPicker({ resources, slot, onChange }: { resources: Resource[]; slot: AssignSlot | null; onChange?: (slot: AssignSlot | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const [resourceId, setResourceId] = useState<string>(slot?.resourceId ?? "");
+  const [date, setDate] = useState<string>(slot?.date ?? format(new Date(), "yyyy-MM-dd"));
+  const [time, setTime] = useState<string>(slot?.startTime ?? "");
+
+  if (!onChange) return null;
+
+  const slotLabel = slot
+    ? `${slot.resourceName} · ${format(new Date(slot.date + "T12:00:00"), "d MMM", { locale: sv })}${slot.startTime ? ` ${slot.startTime}` : ""}`
+    : null;
+
+  const handleApply = () => {
+    if (!resourceId || !date) return;
+    const r = resources.find(x => x.id === resourceId);
+    onChange({
+      resourceId,
+      resourceName: r?.name || "Resurs",
+      date,
+      startTime: time || null,
+    });
+    setOpen(false);
+  };
+
+  const handleClear = () => {
+    onChange(null);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button
+              variant={slot ? "default" : "ghost"}
+              size="sm"
+              className="h-8 gap-1.5 px-2"
+              data-testid="button-cross-window-slot-picker"
+            >
+              <Target className="h-3.5 w-3.5" />
+              {slotLabel ? (
+                <span className="text-xs max-w-[180px] truncate">{slotLabel}</span>
+              ) : (
+                <span className="text-xs hidden xl:inline">Markera slot</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="top">Markera mål-slot för uppdrag i andra fönstret</TooltipContent>
+      </Tooltip>
+      <PopoverContent className="w-72 p-3 space-y-2" align="end">
+        <div className="space-y-1">
+          <p className="text-xs font-medium">Mottagar-slot</p>
+          <p className="text-[10px] text-muted-foreground">Uppgifter i orderlagret kan tilldelas direkt hit utan att ha kalendern öppen.</p>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground" htmlFor="slot-resource">Resurs</label>
+          <select
+            id="slot-resource"
+            className="w-full h-8 text-xs border border-input bg-background rounded-md px-2"
+            value={resourceId}
+            onChange={(e) => setResourceId(e.target.value)}
+            data-testid="select-cross-window-resource"
+          >
+            <option value="">Välj resurs…</option>
+            {resources.map(r => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground" htmlFor="slot-date">Datum</label>
+            <input
+              id="slot-date"
+              type="date"
+              className="w-full h-8 text-xs border border-input bg-background rounded-md px-2"
+              value={date}
+              min={format(addDays(new Date(), -7), "yyyy-MM-dd")}
+              onChange={(e) => setDate(e.target.value)}
+              data-testid="input-cross-window-date"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground" htmlFor="slot-time">Tid (valfri)</label>
+            <input
+              id="slot-time"
+              type="time"
+              className="w-full h-8 text-xs border border-input bg-background rounded-md px-2"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              data-testid="input-cross-window-time"
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-2 pt-1">
+          {slot ? (
+            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={handleClear} data-testid="button-cross-window-clear">
+              <X className="h-3 w-3" />
+              Avmarkera
+            </Button>
+          ) : <span />}
+          <Button size="sm" className="h-7 text-xs ml-auto" onClick={handleApply} disabled={!resourceId || !date} data-testid="button-cross-window-apply">
+            Spara slot
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbarProps) {
+  const {
+    viewMode, headerLabel, onNavigate, onGoToday, onViewModeChange,
+    undoCount, redoCount, onUndo, onRedo,
+    zoomLevel, setZoomLevel,
+    resources, visibleResources, hiddenResourceIds, setHiddenResourceIds,
+    weekRowMode, teamsData = [], selectedTeamIds = [], setSelectedTeamIds,
+    onAddJob, onAutoFill, onClearAll, onCarryOver, onUrgentJob, showAIPanel, onToggleAIPanel,
+    weekGoals, weekTravelTotal,
+    visibleDates, getResourceDayHours,
+    jobConflictCount, filteredScheduledCount, unscheduledCount,
+    showConstraintLayer, onToggleConstraintLayer,
+    onPublishWeek,
+  } = props;
+
+  const [showCapacity, setShowCapacity] = useState(false);
+  const [showGoals, setShowGoals] = useState(false);
+
+  const { data: profiles = [] } = useQuery<ResourceProfile[]>({ queryKey: ["/api/resource-profiles"] });
+  const { data: profileAssignments = [] } = useQuery<ResourceProfileAssignment[]>({
+    queryKey: ["/api/resource-profiles", "all-assignments"],
+    queryFn: async () => {
+      if (!profiles.length) return [];
+      const results = await Promise.all(profiles.map(p => fetch(`/api/resource-profiles/${p.id}/resources`).then(r => r.json())));
+      return results.flat();
+    },
+    enabled: profiles.length > 0,
+  });
+
+  const filterByProfile = (profileId: string) => {
+    const assignedResourceIds = profileAssignments.filter(a => a.profileId === profileId).map(a => a.resourceId);
+    const newHidden = new Set<string>();
+    resources.forEach(r => { if (!assignedResourceIds.includes(r.id)) newHidden.add(r.id); });
+    setHiddenResourceIds(newHidden);
+  };
+
+  const isTeamFilterMode = viewMode === "week" && weekRowMode === "team" && teamsData.length > 0 && !!setSelectedTeamIds;
+  const allTeamIds = teamsData.map(t => t.id);
+  const teamIsVisible = (id: string) => selectedTeamIds.length === 0 || selectedTeamIds.includes(id);
+  const visibleTeamCount = teamsData.filter(t => teamIsVisible(t.id)).length;
+  const teamFilterActive = selectedTeamIds.length > 0 && selectedTeamIds.length < teamsData.length;
+
+  const toggleTeamVisibility = (teamId: string, checked: boolean) => {
+    if (!setSelectedTeamIds) return;
+    const effective = selectedTeamIds.length === 0 ? allTeamIds : selectedTeamIds;
+    let next = checked
+      ? Array.from(new Set([...effective, teamId]))
+      : effective.filter(id => id !== teamId);
+    if (next.length === allTeamIds.length) next = [];
+    setSelectedTeamIds(next);
+  };
+
+  const showAllTeams = () => setSelectedTeamIds && setSelectedTeamIds([]);
+
+  const zoom = zoomLevels[zoomLevel];
+
+  return (
+    <>
+      <div className="flex items-center gap-1.5 px-2 py-1 border-b h-12" data-testid="planner-toolbar">
+        <div className="flex items-center gap-0.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onNavigate("prev")} data-testid="button-nav-prev">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Föregående</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onGoToday} data-testid="button-today">
+                <Crosshair className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Idag</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onNavigate("next")} data-testid="button-nav-next">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Nästa</TooltipContent>
+          </Tooltip>
+        </div>
+
+        <h2 className="text-sm font-semibold truncate min-w-0" data-testid="text-header-label">{headerLabel}</h2>
+
+        <div className="flex items-center gap-0.5 ml-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onUndo} disabled={undoCount === 0} data-testid="button-undo">
+                <Undo2 className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Ångra (Ctrl+Z)</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onRedo} disabled={redoCount === 0} data-testid="button-redo">
+                <Redo2 className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Gör om (Ctrl+Y)</TooltipContent>
+          </Tooltip>
+        </div>
+
+        <Separator orientation="vertical" className="h-6 mx-1" />
+
+        <div className="flex items-center gap-1 shrink-0">
+          {viewMode !== "route" && (
+            <div className="flex items-center gap-0.5 border rounded px-0.5" data-testid="zoom-controls">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="ghost" className="h-6 w-6" disabled={zoomLevel === 0} onClick={() => setZoomLevel(Math.max(0, zoomLevel - 1))} data-testid="button-zoom-out">
+                    <ZoomOut className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Zooma ut</TooltipContent>
+              </Tooltip>
+              <span className="text-[10px] text-muted-foreground w-10 text-center cursor-pointer select-none" onClick={() => setZoomLevel(1)} data-testid="text-zoom-level">
+                {zoom.label}
+              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="ghost" className="h-6 w-6" disabled={zoomLevel === zoomLevels.length - 1} onClick={() => setZoomLevel(Math.min(zoomLevels.length - 1, zoomLevel + 1))} data-testid="button-zoom-in">
+                    <ZoomIn className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Zooma in</TooltipContent>
+              </Tooltip>
+            </div>
+          )}
+
+          <Popover>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 relative" data-testid="button-resource-filter">
+                    <UsersRound className="h-4 w-4" />
+                    {isTeamFilterMode
+                      ? teamFilterActive && (
+                          <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 rounded-full bg-primary text-[9px] text-primary-foreground flex items-center justify-center px-0.5">{visibleTeamCount}/{teamsData.length}</span>
+                        )
+                      : hiddenResourceIds.size > 0 && (
+                          <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 rounded-full bg-primary text-[9px] text-primary-foreground flex items-center justify-center px-0.5">{visibleResources.length}/{resources.length}</span>
+                        )}
+                  </Button>
+                </PopoverTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="top">{isTeamFilterMode ? "Filtrera team" : "Filtrera resurser"}</TooltipContent>
+            </Tooltip>
+            <PopoverContent className="w-64 p-3" align="end" data-testid="popover-resource-filter">
+              {isTeamFilterMode ? (
+                <>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">Filtrera team</span>
+                    {teamFilterActive && (
+                      <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={showAllTeams} data-testid="button-show-all-teams">
+                        Visa alla
+                      </Button>
+                    )}
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    <div className="space-y-1">
+                      {teamsData.map((team) => (
+                        <label key={team.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer" data-testid={`team-filter-${team.id}`}>
+                          <Checkbox
+                            checked={teamIsVisible(team.id)}
+                            onCheckedChange={(checked) => toggleTeamVisibility(team.id, !!checked)}
+                          />
+                          {team.color && <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: team.color }} />}
+                          <span className="text-xs truncate">{team.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">Filtrera resurser</span>
+                    {hiddenResourceIds.size > 0 && (
+                      <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => setHiddenResourceIds(new Set())} data-testid="button-show-all-resources">
+                        Visa alla
+                      </Button>
+                    )}
+                  </div>
+                  {profiles.length > 0 && (
+                    <>
+                      <div className="text-xs text-muted-foreground mb-1">Filtrera per profil</div>
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {profiles.map(p => (
+                          <Badge key={p.id} variant="outline" className="cursor-pointer text-[10px] px-1.5 py-0.5 hover:bg-accent" style={{ borderColor: p.color || undefined }} onClick={() => filterByProfile(p.id)} data-testid={`button-filter-profile-${p.id}`}>
+                            <span className="w-2 h-2 rounded-full mr-1 inline-block" style={{ backgroundColor: p.color || "#3B82F6" }} />
+                            {p.name}
+                          </Badge>
+                        ))}
+                      </div>
+                      <Separator className="mb-2" />
+                    </>
+                  )}
+                  <div className="max-h-64 overflow-y-auto">
+                    <div className="space-y-1">
+                      {resources.map((resource) => (
+                        <label key={resource.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer" data-testid={`resource-filter-${resource.id}`}>
+                          <Checkbox
+                            checked={!hiddenResourceIds.has(resource.id)}
+                            onCheckedChange={(checked) => {
+                              setHiddenResourceIds((() => {
+                                const next = new Set(hiddenResourceIds);
+                                if (checked) { next.delete(resource.id); } else { next.add(resource.id); }
+                                return next;
+                              })());
+                            }}
+                          />
+                          <Avatar className="h-5 w-5 shrink-0">
+                            <AvatarFallback className="text-[10px]">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                          </Avatar>
+                          <span className="text-xs truncate">{resource.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </PopoverContent>
+          </Popover>
+
+          <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && onViewModeChange(v as ViewMode)} className="h-8" data-testid="toggle-view-mode">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ToggleGroupItem value="day" aria-label="Dagvy (1)" className="h-7 w-7 p-0" data-testid="toggle-day">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                </ToggleGroupItem>
+              </TooltipTrigger>
+              <TooltipContent side="top">Dagvy (1)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ToggleGroupItem value="week" aria-label="Veckovy (2)" className="h-7 w-7 p-0" data-testid="toggle-week">
+                  <CalendarRange className="h-3.5 w-3.5" />
+                </ToggleGroupItem>
+              </TooltipTrigger>
+              <TooltipContent side="top">Veckovy (2)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ToggleGroupItem value="month" aria-label="Månadsvy (3)" className="h-7 w-7 p-0" data-testid="toggle-month">
+                  <Calendar className="h-3.5 w-3.5" />
+                </ToggleGroupItem>
+              </TooltipTrigger>
+              <TooltipContent side="top">Månadsvy (3)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ToggleGroupItem value="route" aria-label="Ruttvy" className="h-7 w-7 p-0" data-testid="toggle-route">
+                  <MapPin className="h-3.5 w-3.5" />
+                </ToggleGroupItem>
+              </TooltipTrigger>
+              <TooltipContent side="top">Ruttvy</TooltipContent>
+            </Tooltip>
+          </ToggleGroup>
+
+          <Separator orientation="vertical" className="h-6 mx-0.5" />
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="default" size="icon" className="h-8 w-8" onClick={() => onAddJob?.()} data-testid="button-add-job">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Nytt jobb (N)</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={onAutoFill} data-testid="button-auto-fill-week">
+                <Wand2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Fyll veckan (F)</TooltipContent>
+          </Tooltip>
+          {onCarryOver && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="icon" className="h-8 w-8" onClick={onCarryOver} data-testid="button-carry-over">
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Flytta oavslutade</TooltipContent>
+            </Tooltip>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={onClearAll} data-testid="button-clear-all-scheduled">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Rensa all planering</TooltipContent>
+          </Tooltip>
+          {onUrgentJob && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/15 dark:hover:bg-destructive/15" onClick={onUrgentJob} data-testid="button-urgent-job">
+                  <AlertTriangle className="h-4 w-4 text-warning" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Akut jobb</TooltipContent>
+            </Tooltip>
+          )}
+
+          <Separator orientation="vertical" className="h-6 mx-0.5" />
+
+          {(viewMode === "week" || viewMode === "day") && onToggleConstraintLayer && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className={`h-7 w-7 ${showConstraintLayer ? "bg-accent text-primary" : ""}`} onClick={onToggleConstraintLayer} data-testid="button-toggle-constraints">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Visa/dölj begränsningar</TooltipContent>
+            </Tooltip>
+          )}
+          {viewMode === "week" && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className={`h-7 w-7 ${showCapacity ? "bg-accent" : ""}`} onClick={() => setShowCapacity(!showCapacity)} data-testid="button-toggle-capacity">
+                    <Activity className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Visa/dölj kapacitet</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className={`h-7 w-7 ${showGoals ? "bg-accent" : ""}`} onClick={() => setShowGoals(!showGoals)} data-testid="button-toggle-goals">
+                    <TrendingUp className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Visa/dölj veckomål</TooltipContent>
+              </Tooltip>
+            </>
+          )}
+
+          {onPublishWeek && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  onClick={onPublishWeek}
+                  data-testid="button-publish-week"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  Publicera schema
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Skicka veckans schema till tekniker (e-post + SMS)</TooltipContent>
+            </Tooltip>
+          )}
+
+          {(props.popoutRole ?? "main") === "main" && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={props.poppedOutViews?.has("calendar") ? "default" : "ghost"}
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => props.onOpenPopout?.("calendar")}
+                    disabled={props.poppedOutViews?.has("calendar")}
+                    data-testid="button-popout-calendar"
+                  >
+                    <Calendar className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {props.poppedOutViews?.has("calendar") ? "Kalender är redan poppad ut" : "Pop ut kalender"}
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={props.poppedOutViews?.has("orderlager") ? "default" : "ghost"}
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => props.onOpenPopout?.("orderlager")}
+                    disabled={props.poppedOutViews?.has("orderlager")}
+                    data-testid="button-popout-orderlager"
+                  >
+                    <Inbox className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {props.poppedOutViews?.has("orderlager") ? "Orderlager är redan poppad ut" : "Pop ut orderlager"}
+                </TooltipContent>
+              </Tooltip>
+            </>
+          )}
+
+          <CrossWindowSlotPicker
+            resources={visibleResources}
+            slot={props.crossWindowSlot ?? null}
+            onChange={props.setCrossWindowSlot}
+          />
+
+          {props.onToggleAreaSearch && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={props.areaSearchOpen ? "default" : "ghost"}
+                  size="sm"
+                  className="h-8 gap-1.5 px-2"
+                  onClick={props.onToggleAreaSearch}
+                  data-testid="button-area-search-open"
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  <span className="text-xs hidden lg:inline">Sök område</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Sök jobb och objekt i ett område (drag direkt till veckan)</TooltipContent>
+            </Tooltip>
+          )}
+
+          {onToggleAIPanel && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant={showAIPanel ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={onToggleAIPanel} data-testid="button-toggle-ai-panel">
+                  <Sparkles className="h-4 w-4 text-chart-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">AI-stöd</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+      </div>
+
+      {showCapacity && viewMode === "week" && (
+        <div className="px-3 py-1.5 border-b bg-muted/20">
+          <div className="flex items-center gap-3 text-xs flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="font-medium">Kapacitet:</span>
+            </div>
+            {resources.slice(0, 6).map((resource) => {
+              const weekHours = visibleDates.reduce((sum, day) => sum + getResourceDayHours(resource.id, day), 0);
+              const weekCapacity = resource.weeklyHours || 40;
+              const utilization = Math.round((weekHours / weekCapacity) * 100);
+              const isOverbooked = utilization > 100;
+              const isLow = utilization < 50;
+              return (
+                <div key={resource.id} className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-background border">
+                  <span className="font-medium">{resource.initials || resource.name.split(" ")[0]}</span>
+                  <div className="w-12 h-1.5 bg-muted rounded overflow-hidden">
+                    <div className={`h-full transition-all ${isOverbooked ? "bg-destructive/15" : isLow ? "bg-chart-3/15" : "bg-chart-2/15"}`} style={{ width: `${Math.min(utilization, 100)}%` }} />
+                  </div>
+                  <span className={`${isOverbooked ? "text-destructive" : isLow ? "text-chart-3" : "text-chart-2"}`}>{utilization}%</span>
+                </div>
+              );
+            })}
+            {resources.length > 6 && <span className="text-muted-foreground">+{resources.length - 6} till</span>}
+          </div>
+        </div>
+      )}
+
+      {showGoals && viewMode === "week" && (
+        <div className="px-3 py-1.5 border-b bg-muted/10">
+          <div className="flex items-center gap-4 text-xs flex-wrap" data-testid="goal-bars">
+            <div className="flex items-center gap-1.5">
+              <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="font-medium text-muted-foreground">Veckomål:</span>
+            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 min-w-[120px]" data-testid="goal-bar-time">
+                  <Clock className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-muted-foreground w-5">Tid</span>
+                  <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full transition-all rounded-full ${getGoalColor(weekGoals.time.pct)}`} style={{ width: `${Math.min(weekGoals.time.pct, 100)}%` }} />
+                  </div>
+                  <span className={`font-semibold tabular-nums ${getGoalTextColor(weekGoals.time.pct)}`}>{weekGoals.time.pct}%</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top"><p>{weekGoals.time.current.toFixed(1)}h av {weekGoals.time.target}h planerat</p></TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 min-w-[120px]" data-testid="goal-bar-economy">
+                  <TrendingUp className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-muted-foreground w-8">Ekon.</span>
+                  <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full transition-all rounded-full ${getGoalColor(weekGoals.economy.pct)}`} style={{ width: `${Math.min(weekGoals.economy.pct, 100)}%` }} />
+                  </div>
+                  <span className={`font-semibold tabular-nums ${getGoalTextColor(weekGoals.economy.pct)}`}>{weekGoals.economy.pct}%</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top"><p>{(weekGoals.economy.current / 100).toLocaleString("sv-SE")} kr av {(weekGoals.economy.target / 100).toLocaleString("sv-SE")} kr budget</p></TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 min-w-[120px]" data-testid="goal-bar-count">
+                  <MapPin className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-muted-foreground w-7">Antal</span>
+                  <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full transition-all rounded-full ${getGoalColor(weekGoals.count.pct)}`} style={{ width: `${Math.min(weekGoals.count.pct, 100)}%` }} />
+                  </div>
+                  <span className={`font-semibold tabular-nums ${getGoalTextColor(weekGoals.count.pct)}`}>{weekGoals.count.pct}%</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top"><p>{weekGoals.count.current} av {weekGoals.count.target} stopp planerade</p></TooltipContent>
+            </Tooltip>
+            {weekTravelTotal.minutes > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-chart-3/15 dark:bg-chart-3/15 text-chart-3 border border-chart-3/20 dark:border-chart-3/80" data-testid="goal-bar-travel">
+                    <Navigation className="h-3 w-3" />
+                    <span className="font-medium">{weekTravelTotal.hours}h</span>
+                    <span className="text-chart-3">({weekTravelTotal.km} km)</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top"><p>Total restid veckan: {weekTravelTotal.minutes} min, {weekTravelTotal.km} km</p></TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+});
+
+export const PlannerFooter = memo(function PlannerFooter({
+  jobConflictCount,
+  filteredScheduledCount,
+  unscheduledCount,
+  onConflictClick,
+}: {
+  jobConflictCount: number;
+  filteredScheduledCount: number;
+  unscheduledCount: number;
+  onConflictClick?: () => void;
+}) {
+  return (
+    <div className="px-3 py-1.5 border-t bg-muted/50 flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex items-center gap-3 text-xs" data-testid="legend-block-categories">
+        <span className="text-muted-foreground font-medium mr-1">Kategorier:</span>
+        <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-chart-2/15 rounded-sm"></span><span>Produktion</span></div>
+        <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-chart-3/40 rounded-sm"></span><span>Restid</span></div>
+        <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-chart-1/40 rounded-sm"></span><span>Rast</span></div>
+        <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-muted-foreground/40 rounded-sm"></span><span>Ledig</span></div>
+        {jobConflictCount > 0 && (
+          <>
+            <span className="text-muted-foreground">|</span>
+            <button
+              onClick={onConflictClick}
+              className="flex items-center gap-1 text-destructive hover:text-destructive dark:hover:text-destructive hover:underline cursor-pointer transition-colors"
+              data-testid="button-show-conflicts"
+            >
+              <AlertTriangle className="h-3 w-3 text-warning" />
+              <span>{jobConflictCount} konflikter</span>
+            </button>
+          </>
+        )}
+      </div>
+      <div className="text-xs text-muted-foreground">
+        {filteredScheduledCount} schemalagda | {unscheduledCount} oschemalagda
+      </div>
+    </div>
+  );
+});

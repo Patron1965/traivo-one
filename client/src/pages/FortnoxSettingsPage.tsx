@@ -1,0 +1,1255 @@
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  ExternalLink,
+  Link2,
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  Settings,
+  Users,
+  Package,
+  Building,
+  FolderKanban,
+  Loader2,
+  AlertTriangle,
+  FileText,
+  Clock,
+  Trash2,
+  Plus,
+  Download,
+  Search,
+  CheckCheck,
+} from "lucide-react";
+import type { Customer, Article, Resource, Team } from "@shared/schema";
+
+interface FortnoxConfig {
+  id: string;
+  tenantId: string;
+  clientId: string | null;
+  clientSecret: string | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+  tokenExpiresAt: string | null;
+  isActive: boolean;
+  lastSyncAt: string | null;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
+interface FortnoxMapping {
+  id: string;
+  tenantId: string;
+  entityType: string;
+  unicornId: string;
+  fortnoxId: string;
+  lastSyncedAt: string | null;
+  createdAt: string;
+}
+
+interface FortnoxInvoiceExport {
+  id: string;
+  tenantId: string;
+  workOrderId: string | null;
+  fortnoxInvoiceNumber: string | null;
+  status: string;
+  costCenter: string | null;
+  project: string | null;
+  payerId: string | null;
+  totalAmount: number | null;
+  errorMessage: string | null;
+  isCreditInvoice: boolean | null;
+  sourceType: string | null;
+  sourceId: string | null;
+  exportedAt: string | null;
+  createdAt: string;
+}
+
+interface FortnoxCustomer {
+  customerNumber: string;
+  name: string;
+  organisationNumber: string;
+  address1: string;
+  address2: string;
+  zipCode: string;
+  city: string;
+  phone: string;
+  email: string;
+  contactPerson: string;
+  active: boolean;
+  alreadyImported: boolean;
+  existingMatch: { id: string; name: string } | null;
+}
+
+interface FortnoxArticle {
+  articleNumber: string;
+  description: string;
+  unit: string;
+  salesPrice: number;
+  purchasePrice: number;
+  type: string;
+  active: boolean;
+  alreadyImported: boolean;
+  existingMatch: { id: string; name: string } | null;
+}
+
+interface FortnoxCostCenter {
+  code: string;
+  description: string;
+  active: boolean;
+  alreadyImported: boolean;
+}
+
+interface FortnoxProject {
+  projectNumber: string;
+  description: string;
+  status: string;
+  startDate: string;
+  endDate: string;
+  active: boolean;
+  alreadyImported: boolean;
+}
+
+type FortnoxImportItem = FortnoxCustomer | FortnoxArticle | FortnoxCostCenter | FortnoxProject;
+
+type ImportEntityType = "customer" | "article" | "costcenter" | "project";
+
+const IMPORT_ENTITY_TYPES: Array<{ value: ImportEntityType; label: string; icon: typeof Users }> = [
+  { value: "customer", label: "Kunder", icon: Users },
+  { value: "article", label: "Artiklar", icon: Package },
+  { value: "costcenter", label: "Kostnadsställen", icon: Building },
+  { value: "project", label: "Projekt", icon: FolderKanban },
+];
+
+function getItemKey(item: FortnoxImportItem, entityType: ImportEntityType): string {
+  switch (entityType) {
+    case "customer": return (item as FortnoxCustomer).customerNumber;
+    case "article": return (item as FortnoxArticle).articleNumber;
+    case "costcenter": return (item as FortnoxCostCenter).code;
+    case "project": return (item as FortnoxProject).projectNumber;
+  }
+}
+
+function getItemName(item: FortnoxImportItem, entityType: ImportEntityType): string {
+  switch (entityType) {
+    case "customer": return (item as FortnoxCustomer).name;
+    case "article": return (item as FortnoxArticle).description || (item as FortnoxArticle).articleNumber;
+    case "costcenter": return (item as FortnoxCostCenter).description;
+    case "project": return (item as FortnoxProject).description;
+  }
+}
+
+const ENTITY_TYPES = [
+  { value: "customer", label: "Kunder", icon: Users },
+  { value: "article", label: "Artiklar", icon: Package },
+  { value: "costcenter", label: "Kostnadsställen", icon: Building },
+  { value: "project", label: "Projekt", icon: FolderKanban },
+];
+
+export default function FortnoxSettingsPage() {
+  const { toast } = useToast();
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [connectDialogOpen, setConnectDialogOpen] = useState(false);
+  const [mappingDialogOpen, setMappingDialogOpen] = useState(false);
+  const [selectedEntityType, setSelectedEntityType] = useState("customer");
+  const [selectedEntityId, setSelectedEntityId] = useState("");
+  const [fortnoxIdInput, setFortnoxIdInput] = useState("");
+  const [importEntityType, setImportEntityType] = useState<ImportEntityType>("customer");
+  const [importItems, setImportItems] = useState<FortnoxImportItem[]>([]);
+  const [selectedForImport, setSelectedForImport] = useState<Set<string>>(new Set());
+  const [importSearch, setImportSearch] = useState("");
+  const [importFilter, setImportFilter] = useState<"all" | "new" | "imported">("all");
+  const [importComplete, setImportComplete] = useState<{ created: number; skipped: number; errors: number } | null>(null);
+  const [fullImportSummary, setFullImportSummary] = useState<{
+    customers: { created: number; skipped: number; errors: number };
+    objects: { created: number; skipped: number; errors: number; geocodingQueued?: number };
+    articles: { created: number; skipped: number; errors: number };
+    errors?: string[];
+  } | null>(null);
+
+  const { data: config, isLoading: configLoading } = useQuery<FortnoxConfig>({
+    queryKey: ["/api/fortnox/config"],
+  });
+
+  const { data: mappings = [], isLoading: mappingsLoading } = useQuery<FortnoxMapping[]>({
+    queryKey: ["/api/fortnox/mappings"],
+  });
+
+  const { data: exports = [], isLoading: exportsLoading } = useQuery<FortnoxInvoiceExport[]>({
+    queryKey: ["/api/fortnox/exports"],
+  });
+
+  const { data: customers = [] } = useQuery<Customer[]>({
+    queryKey: ["/api/customers"],
+  });
+
+  const { data: articles = [] } = useQuery<Article[]>({
+    queryKey: ["/api/articles"],
+  });
+
+  const { data: resources = [] } = useQuery<Resource[]>({
+    queryKey: ["/api/resources"],
+  });
+
+  const { data: teams = [] } = useQuery<Team[]>({
+    queryKey: ["/api/teams"],
+  });
+
+  const saveConfigMutation = useMutation({
+    mutationFn: (data: { clientId: string; clientSecret: string }) =>
+      apiRequest("POST", "/api/fortnox/config", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/fortnox/config"] });
+      setConnectDialogOpen(false);
+      toast({ title: "Fortnox-konfiguration sparad" });
+    },
+    onError: () => toast({ title: "Kunde inte spara konfiguration", variant: "destructive" }),
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: (isActive: boolean) =>
+      apiRequest("PATCH", "/api/fortnox/config", { isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/fortnox/config"] });
+      toast({ title: "Integrationsstatus uppdaterad" });
+    },
+    onError: () => toast({ title: "Kunde inte uppdatera status", variant: "destructive" }),
+  });
+
+  const createMappingMutation = useMutation({
+    mutationFn: (data: { entityType: string; unicornId: string; fortnoxId: string }) =>
+      apiRequest("POST", "/api/fortnox/mappings", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/fortnox/mappings"] });
+      setMappingDialogOpen(false);
+      setSelectedEntityId("");
+      setFortnoxIdInput("");
+      toast({ title: "Koppling skapad" });
+    },
+    onError: () => toast({ title: "Kunde inte skapa koppling", variant: "destructive" }),
+  });
+
+  const deleteMappingMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/fortnox/mappings/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/fortnox/mappings"] });
+      toast({ title: "Koppling borttagen" });
+    },
+    onError: () => toast({ title: "Kunde inte ta bort koppling", variant: "destructive" }),
+  });
+
+  const entityLabels: Record<ImportEntityType, string> = {
+    customer: "kunder",
+    article: "artiklar",
+    costcenter: "kostnadsställen",
+    project: "projekt",
+  };
+
+  const fetchEndpoints: Record<ImportEntityType, string> = {
+    customer: "/api/fortnox/customers/fetch",
+    article: "/api/fortnox/articles/fetch",
+    costcenter: "/api/fortnox/costcenters/fetch",
+    project: "/api/fortnox/projects/fetch",
+  };
+
+  const importEndpoints: Record<ImportEntityType, string> = {
+    customer: "/api/fortnox/customers/import",
+    article: "/api/fortnox/articles/import",
+    costcenter: "/api/fortnox/costcenters/import",
+    project: "/api/fortnox/projects/import",
+  };
+
+  const responseKeys: Record<ImportEntityType, string> = {
+    customer: "customers",
+    article: "articles",
+    costcenter: "costcenters",
+    project: "projects",
+  };
+
+  const fetchFortnoxItemsMutation = useMutation({
+    mutationFn: async (entityType: ImportEntityType) => {
+      const res = await apiRequest("GET", fetchEndpoints[entityType]);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      const items = data[responseKeys[importEntityType]] || [];
+      setImportItems(items);
+      const newItems = items.filter((i: FortnoxImportItem) => !i.alreadyImported);
+      setSelectedForImport(new Set(newItems.map((i: FortnoxImportItem) => getItemKey(i, importEntityType))));
+      setImportComplete(null);
+      toast({ title: `${data.total} ${entityLabels[importEntityType]} hämtade från Fortnox` });
+    },
+    onError: () => toast({ title: `Kunde inte hämta ${entityLabels[importEntityType]} från Fortnox`, variant: "destructive" }),
+  });
+
+  const importItemsMutation = useMutation({
+    mutationFn: async (payload: { entityType: ImportEntityType; items: FortnoxImportItem[] }) => {
+      const body = { [responseKeys[payload.entityType]]: payload.items };
+      const res = await apiRequest("POST", importEndpoints[payload.entityType], body);
+      return res.json();
+    },
+    onSuccess: (data: { summary: { created: number; skipped: number; errors: number } }) => {
+      setImportComplete(data.summary);
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fortnox/mappings"] });
+      toast({ title: `${data.summary.created} ${entityLabels[importEntityType]} importerade` });
+    },
+    onError: () => toast({ title: "Import misslyckades", variant: "destructive" }),
+  });
+
+  const fullImportMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/fortnox/full-import", { includeArticles: true });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setFullImportSummary(data.summary ? { ...data.summary, errors: data.errors } : null);
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fortnox/mappings"] });
+      const total = (data.summary?.customers?.created || 0) + (data.summary?.objects?.created || 0) + (data.summary?.articles?.created || 0);
+      toast({ title: `Initial import klar – ${total} nya poster skapade` });
+    },
+    onError: (err: any) => {
+      toast({ title: "Fullimport misslyckades", description: err?.message || String(err), variant: "destructive" });
+    },
+  });
+
+  const isConnected = config?.isActive && config?.accessToken;
+
+  const getEntityOptions = () => {
+    switch (selectedEntityType) {
+      case "customer":
+        return customers.map(c => ({ id: c.id, name: c.name }));
+      case "article":
+        return articles.map(a => ({ id: a.id, name: `${a.articleNumber} - ${a.name}` }));
+      case "costcenter":
+        return resources.map(r => ({ id: r.id, name: r.name }));
+      case "project":
+        return teams.map(t => ({ id: t.id, name: t.name }));
+      default:
+        return [];
+    }
+  };
+
+  const getEntityName = (entityType: string, entityId: string) => {
+    switch (entityType) {
+      case "customer":
+        return customers.find(c => c.id === entityId)?.name || entityId;
+      case "article":
+        const article = articles.find(a => a.id === entityId);
+        return article ? `${article.articleNumber} - ${article.name}` : entityId;
+      case "costcenter":
+        return resources.find(r => r.id === entityId)?.name || entityId;
+      case "project":
+        return teams.find(t => t.id === entityId)?.name || entityId;
+      default:
+        return entityId;
+    }
+  };
+
+  const filteredMappings = mappings.filter(m => m.entityType === selectedEntityType);
+
+  const filteredImportItems = importItems.filter(item => {
+    if (importFilter === "new" && item.alreadyImported) return false;
+    if (importFilter === "imported" && !item.alreadyImported) return false;
+    if (importSearch) {
+      const q = importSearch.toLowerCase();
+      const key = getItemKey(item, importEntityType).toLowerCase();
+      const name = getItemName(item, importEntityType).toLowerCase();
+      if (importEntityType === "customer") {
+        const c = item as FortnoxCustomer;
+        return key.includes(q) || name.includes(q) || c.city.toLowerCase().includes(q) || c.email.toLowerCase().includes(q);
+      }
+      return key.includes(q) || name.includes(q);
+    }
+    return true;
+  });
+
+  const selectableItems = filteredImportItems.filter(i => !i.alreadyImported);
+  const allSelectableSelected = selectableItems.length > 0 && selectableItems.every(i => selectedForImport.has(getItemKey(i, importEntityType)));
+
+  const toggleItem = (key: string) => {
+    setSelectedForImport(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleAllVisible = () => {
+    setSelectedForImport(prev => {
+      const next = new Set(prev);
+      if (allSelectableSelected) {
+        selectableItems.forEach(i => next.delete(getItemKey(i, importEntityType)));
+      } else {
+        selectableItems.forEach(i => next.add(getItemKey(i, importEntityType)));
+      }
+      return next;
+    });
+  };
+
+  const removeSelected = () => {
+    setImportItems(prev => prev.filter(i => !selectedForImport.has(getItemKey(i, importEntityType))));
+    setSelectedForImport(new Set());
+  };
+
+  const handleImport = () => {
+    const toImport = importItems.filter(i => selectedForImport.has(getItemKey(i, importEntityType)) && !i.alreadyImported);
+    if (toImport.length === 0) return;
+    importItemsMutation.mutate({ entityType: importEntityType, items: toImport });
+  };
+
+  const handleImportEntityTypeChange = (type: ImportEntityType) => {
+    setImportEntityType(type);
+    setImportItems([]);
+    setSelectedForImport(new Set());
+    setImportSearch("");
+    setImportFilter("all");
+    setImportComplete(null);
+  };
+
+  return (
+    <div className="p-6 space-y-6">
+      <PageHeader
+        icon={Link2}
+        title="Fortnox-integration"
+        description="Anslut till Fortnox för att synkronisera fakturor och kunddata"
+      />
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center">
+                  <Link2 className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Anslutningsstatus</CardTitle>
+                  <CardDescription>OAuth 2.0-anslutning till Fortnox API</CardDescription>
+                </div>
+              </div>
+              <Badge variant={isConnected ? "default" : "secondary"} className="gap-1">
+                {isConnected ? (
+                  <>
+                    <CheckCircle2 className="h-3 w-3" />
+                    Ansluten
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-3 w-3" />
+                    Ej ansluten
+                  </>
+                )}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {configLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : config?.clientId ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Client ID:</span>
+                    <p className="font-mono">{config.clientId.slice(0, 8)}...</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Senast synkad:</span>
+                    <p>{config.lastSyncAt ? new Date(config.lastSyncAt).toLocaleString("sv-SE") : "Aldrig"}</p>
+                  </div>
+                </div>
+                {config.tokenExpiresAt && (
+                  <Alert variant={new Date(config.tokenExpiresAt) < new Date() ? "destructive" : "default"}>
+                    <Clock className="h-4 w-4" />
+                    <AlertTitle>Token-status</AlertTitle>
+                    <AlertDescription>
+                      {new Date(config.tokenExpiresAt) < new Date()
+                        ? "Access token har gått ut. Återanslut för att förnya."
+                        : `Giltig till ${new Date(config.tokenExpiresAt).toLocaleString("sv-SE")}`}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={config.isActive || false}
+                      onCheckedChange={(checked) => toggleActiveMutation.mutate(checked)}
+                      disabled={toggleActiveMutation.isPending}
+                      data-testid="switch-fortnox-active"
+                    />
+                    <Label>Integration aktiv</Label>
+                  </div>
+                  <Button variant="outline" onClick={() => setConnectDialogOpen(true)} data-testid="button-reconfigure">
+                    <Settings className="h-4 w-4 mr-2" />
+                    Konfigurera om
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-6">
+                <AlertTriangle className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+                <p className="text-muted-foreground mb-4">
+                  Ingen Fortnox-anslutning konfigurerad
+                </p>
+                <Button onClick={() => setConnectDialogOpen(true)} data-testid="button-connect-fortnox">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Anslut till Fortnox
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Information</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              Fortnox-integrationen synkroniserar kunder, artiklar och fakturor mellan Traivo och Fortnox.
+            </p>
+            <div className="space-y-2">
+              <h4 className="font-medium text-foreground">Mappningar:</h4>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Kostnadsställen = Fordon (registreringsnummer)</li>
+                <li>Projekt = Team (teamnamn)</li>
+              </ul>
+            </div>
+            <div className="space-y-2">
+              <h4 className="font-medium text-foreground">Begränsningar:</h4>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Max 25 anrop/5 sekunder</li>
+                <li>Access token: 1 timme</li>
+                <li>Refresh token: 45 dagar</li>
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs defaultValue="mappings" className="w-full">
+        <TabsList>
+          <TabsTrigger value="mappings" className="gap-1" data-testid="tab-mappings">
+            <Link2 className="h-4 w-4" />
+            Entitetskopplingar
+          </TabsTrigger>
+          <TabsTrigger value="exports" className="gap-1" data-testid="tab-exports">
+            <FileText className="h-4 w-4" />
+            Fakturaexporter
+          </TabsTrigger>
+          <TabsTrigger value="import" className="gap-1" data-testid="tab-import">
+            <Download className="h-4 w-4" />
+            Importera från Fortnox
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="mappings" className="mt-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="text-lg">Entitetskopplingar</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Select value={selectedEntityType} onValueChange={setSelectedEntityType}>
+                    <SelectTrigger className="w-[180px]" data-testid="select-entity-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ENTITY_TYPES.map(t => (
+                        <SelectItem key={t.value} value={t.value}>
+                          <div className="flex items-center gap-2">
+                            <t.icon className="h-4 w-4" />
+                            {t.label}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={() => setMappingDialogOpen(true)} data-testid="button-add-mapping">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Lägg till
+                  </Button>
+                </div>
+              </div>
+              <CardDescription>
+                Koppla Traivo-entiteter till motsvarande Fortnox-ID:n
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {mappingsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredMappings.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Link2 className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                  <p>Inga kopplingar för {ENTITY_TYPES.find(t => t.value === selectedEntityType)?.label.toLowerCase()}</p>
+                </div>
+              ) : (
+                <ScrollArea className="h-[300px]">
+                  <div className="space-y-2">
+                    {filteredMappings.map(mapping => (
+                      <div
+                        key={mapping.id}
+                        className="flex items-center justify-between p-3 rounded-md border"
+                        data-testid={`mapping-${mapping.id}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">
+                            {getEntityName(mapping.entityType, mapping.unicornId)}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Fortnox ID: <span className="font-mono">{mapping.fortnoxId}</span>
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deleteMappingMutation.mutate(mapping.id)}
+                          disabled={deleteMappingMutation.isPending}
+                          data-testid={`button-delete-mapping-${mapping.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="exports" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Fakturaexporter</CardTitle>
+              <CardDescription>
+                Historik över fakturor exporterade till Fortnox
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {exportsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : exports.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                  <p>Inga fakturaexporter ännu</p>
+                </div>
+              ) : (
+                <ScrollArea className="h-[300px]">
+                  <div className="space-y-2">
+                    {exports.slice(0, 20).map(exp => (
+                      <div
+                        key={exp.id}
+                        className="flex items-center justify-between p-3 rounded-md border"
+                        data-testid={`export-${exp.id}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium">
+                              {exp.sourceType === "manual" ? "Manuell rad" : exp.sourceType === "credit" ? "Kreditfaktura" : exp.workOrderId ? `Order: ${exp.workOrderId.slice(0, 8)}...` : "Okänd källa"}
+                            </span>
+                            <Badge
+                              variant={
+                                exp.status === "exported" ? "default" :
+                                exp.status === "failed" ? "destructive" :
+                                "secondary"
+                              }
+                            >
+                              {exp.status === "exported" ? "Exporterad" :
+                               exp.status === "failed" ? "Misslyckades" :
+                               exp.status === "pending" ? "Väntar" : exp.status}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {exp.fortnoxInvoiceNumber && `Faktura: ${exp.fortnoxInvoiceNumber} | `}
+                            {exp.totalAmount && `${exp.totalAmount.toLocaleString()} kr | `}
+                            {new Date(exp.createdAt).toLocaleDateString("sv-SE")}
+                          </p>
+                          {exp.errorMessage && (
+                            <p className="text-sm text-destructive mt-1">{exp.errorMessage}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="import" className="mt-4 space-y-4">
+          <Card className="border-primary/30 bg-primary/5">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Download className="h-5 w-5 text-primary" />
+                    Initial fullimport från Fortnox
+                  </CardTitle>
+                  <CardDescription>
+                    Hämtar alla kunder, skapar ett objekt per kund och importerar artiklar i ett enda steg. Idempotent – körs säkert flera gånger.
+                  </CardDescription>
+                </div>
+                <Button
+                  onClick={() => fullImportMutation.mutate()}
+                  disabled={!isConnected || fullImportMutation.isPending}
+                  data-testid="button-full-import"
+                  size="lg"
+                >
+                  {fullImportMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  Starta fullimport
+                </Button>
+              </div>
+            </CardHeader>
+            {fullImportSummary && (
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="rounded-md border bg-background p-3" data-testid="summary-customers">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Users className="h-4 w-4" />
+                      Kunder
+                    </div>
+                    <p className="text-2xl font-semibold mt-1">{fullImportSummary.customers.created}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {fullImportSummary.customers.skipped} hoppade över
+                      {fullImportSummary.customers.errors > 0 && `, ${fullImportSummary.customers.errors} fel`}
+                    </p>
+                  </div>
+                  <div className="rounded-md border bg-background p-3" data-testid="summary-objects">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Building className="h-4 w-4" />
+                      Objekt
+                    </div>
+                    <p className="text-2xl font-semibold mt-1">{fullImportSummary.objects.created}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {fullImportSummary.objects.skipped} hoppade över
+                      {fullImportSummary.objects.errors > 0 && `, ${fullImportSummary.objects.errors} fel`}
+                    </p>
+                    {(fullImportSummary.objects.geocodingQueued ?? 0) > 0 && (
+                      <p
+                        className="text-xs text-muted-foreground mt-1"
+                        data-testid="text-geocoding-queued"
+                      >
+                        {fullImportSummary.objects.geocodingQueued} väntar på geokodning
+                      </p>
+                    )}
+                  </div>
+                  <div className="rounded-md border bg-background p-3" data-testid="summary-articles">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Package className="h-4 w-4" />
+                      Artiklar
+                    </div>
+                    <p className="text-2xl font-semibold mt-1">{fullImportSummary.articles.created}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {fullImportSummary.articles.skipped} hoppade över
+                      {fullImportSummary.articles.errors > 0 && `, ${fullImportSummary.articles.errors} fel`}
+                    </p>
+                  </div>
+                </div>
+                {fullImportSummary.errors && fullImportSummary.errors.length > 0 && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Vissa poster kunde inte importeras</AlertTitle>
+                    <AlertDescription>
+                      <ul className="list-disc list-inside text-xs mt-1 space-y-0.5">
+                        {fullImportSummary.errors.slice(0, 5).map((e, i) => (
+                          <li key={i}>{e}</li>
+                        ))}
+                        {fullImportSummary.errors.length > 5 && (
+                          <li>... och {fullImportSummary.errors.length - 5} till</li>
+                        )}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </CardContent>
+            )}
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <CardTitle className="text-lg">Importera från Fortnox</CardTitle>
+                  <CardDescription>
+                    Hämta data från Fortnox, granska och välj vad som ska importeras till Traivo
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={importEntityType} onValueChange={(v) => handleImportEntityTypeChange(v as ImportEntityType)}>
+                    <SelectTrigger className="w-[180px]" data-testid="select-import-entity-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {IMPORT_ENTITY_TYPES.map(t => (
+                        <SelectItem key={t.value} value={t.value}>
+                          <div className="flex items-center gap-2">
+                            <t.icon className="h-4 w-4" />
+                            {t.label}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    onClick={() => fetchFortnoxItemsMutation.mutate(importEntityType)}
+                    disabled={!isConnected || fetchFortnoxItemsMutation.isPending}
+                    data-testid="button-fetch-fortnox-items"
+                  >
+                    {fetchFortnoxItemsMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2" />
+                    )}
+                    Hämta {entityLabels[importEntityType]}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {!isConnected && (
+                <Alert>
+                  <AlertTriangle className="h-4 w-4 text-chart-4" />
+                  <AlertTitle>Fortnox ej anslutet</AlertTitle>
+                  <AlertDescription>
+                    Anslut till Fortnox först under "Anslutningsstatus" ovan för att kunna importera data.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {importComplete && (
+                <Alert className="mb-4">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <AlertTitle>Import klar</AlertTitle>
+                  <AlertDescription>
+                    {importComplete.created} {entityLabels[importEntityType]} importerade
+                    {importComplete.skipped > 0 && `, ${importComplete.skipped} hoppades över (redan importerade)`}
+                    {importComplete.errors > 0 && `, ${importComplete.errors} fel`}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {importItems.length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="relative flex-1 min-w-[200px]">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Sök..."
+                        value={importSearch}
+                        onChange={(e) => setImportSearch(e.target.value)}
+                        className="pl-9"
+                        data-testid="input-import-search"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant={importFilter === "all" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setImportFilter("all")}
+                        data-testid="filter-all"
+                      >
+                        Alla ({importItems.length})
+                      </Button>
+                      <Button
+                        variant={importFilter === "new" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setImportFilter("new")}
+                        data-testid="filter-new"
+                      >
+                        Nya ({importItems.filter(i => !i.alreadyImported).length})
+                      </Button>
+                      <Button
+                        variant={importFilter === "imported" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setImportFilter("imported")}
+                        data-testid="filter-imported"
+                      >
+                        Redan importerade ({importItems.filter(i => i.alreadyImported).length})
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>{selectedForImport.size} markerade för import</span>
+                      <span>·</span>
+                      <span>{filteredImportItems.length} visas</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {selectedForImport.size > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={removeSelected}
+                          className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                          data-testid="button-remove-selected"
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Ta bort markerade ({selectedForImport.size})
+                        </Button>
+                      )}
+                      <Button
+                        onClick={handleImport}
+                        disabled={selectedForImport.size === 0 || importItemsMutation.isPending}
+                        data-testid="button-import-items"
+                      >
+                        {importItemsMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <CheckCheck className="h-4 w-4 mr-2" />
+                        )}
+                        Importera markerade ({selectedForImport.size})
+                      </Button>
+                    </div>
+                  </div>
+
+                  <ScrollArea className="h-[500px] border rounded-md">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[40px]">
+                            <Checkbox
+                              checked={allSelectableSelected}
+                              onCheckedChange={toggleAllVisible}
+                              data-testid="checkbox-select-all"
+                            />
+                          </TableHead>
+                          {importEntityType === "customer" && (
+                            <>
+                              <TableHead>Kundnr</TableHead>
+                              <TableHead>Namn</TableHead>
+                              <TableHead className="hidden md:table-cell">Org.nr</TableHead>
+                              <TableHead className="hidden md:table-cell">Ort</TableHead>
+                              <TableHead className="hidden lg:table-cell">E-post</TableHead>
+                              <TableHead className="hidden lg:table-cell">Telefon</TableHead>
+                            </>
+                          )}
+                          {importEntityType === "article" && (
+                            <>
+                              <TableHead>Artikelnr</TableHead>
+                              <TableHead>Beskrivning</TableHead>
+                              <TableHead className="hidden md:table-cell">Enhet</TableHead>
+                              <TableHead className="hidden md:table-cell">Pris</TableHead>
+                              <TableHead className="hidden lg:table-cell">Typ</TableHead>
+                            </>
+                          )}
+                          {importEntityType === "costcenter" && (
+                            <>
+                              <TableHead>Kod</TableHead>
+                              <TableHead>Beskrivning</TableHead>
+                            </>
+                          )}
+                          {importEntityType === "project" && (
+                            <>
+                              <TableHead>Projektnr</TableHead>
+                              <TableHead>Beskrivning</TableHead>
+                              <TableHead className="hidden md:table-cell">Status</TableHead>
+                              <TableHead className="hidden lg:table-cell">Startdatum</TableHead>
+                              <TableHead className="hidden lg:table-cell">Slutdatum</TableHead>
+                            </>
+                          )}
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredImportItems.map((item) => {
+                          const key = getItemKey(item, importEntityType);
+                          const isSelected = selectedForImport.has(key);
+                          return (
+                            <TableRow
+                              key={key}
+                              className={item.alreadyImported ? "opacity-50" : isSelected ? "bg-primary/5" : ""}
+                              data-testid={`row-import-${key}`}
+                            >
+                              <TableCell>
+                                <Checkbox
+                                  checked={isSelected}
+                                  onCheckedChange={() => toggleItem(key)}
+                                  disabled={item.alreadyImported}
+                                  data-testid={`checkbox-import-${key}`}
+                                />
+                              </TableCell>
+                              {importEntityType === "customer" && (() => {
+                                const c = item as FortnoxCustomer;
+                                return (
+                                  <>
+                                    <TableCell className="font-mono text-sm">{c.customerNumber}</TableCell>
+                                    <TableCell>
+                                      <div>
+                                        <span className="font-medium">{c.name}</span>
+                                        {c.contactPerson && <p className="text-xs text-muted-foreground">{c.contactPerson}</p>}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="hidden md:table-cell text-sm">{c.organisationNumber || "–"}</TableCell>
+                                    <TableCell className="hidden md:table-cell text-sm">
+                                      {c.city || "–"}
+                                      {c.zipCode && <span className="text-muted-foreground ml-1">({c.zipCode})</span>}
+                                    </TableCell>
+                                    <TableCell className="hidden lg:table-cell text-sm">{c.email || "–"}</TableCell>
+                                    <TableCell className="hidden lg:table-cell text-sm">{c.phone || "–"}</TableCell>
+                                  </>
+                                );
+                              })()}
+                              {importEntityType === "article" && (() => {
+                                const a = item as FortnoxArticle;
+                                return (
+                                  <>
+                                    <TableCell className="font-mono text-sm">{a.articleNumber}</TableCell>
+                                    <TableCell className="font-medium">{a.description || a.articleNumber}</TableCell>
+                                    <TableCell className="hidden md:table-cell text-sm">{a.unit}</TableCell>
+                                    <TableCell className="hidden md:table-cell text-sm">{a.salesPrice > 0 ? `${a.salesPrice} kr` : "–"}</TableCell>
+                                    <TableCell className="hidden lg:table-cell text-sm">{a.type === "STOCK" ? "Lager" : a.type === "SERVICE" ? "Tjänst" : a.type || "–"}</TableCell>
+                                  </>
+                                );
+                              })()}
+                              {importEntityType === "costcenter" && (() => {
+                                const cc = item as FortnoxCostCenter;
+                                return (
+                                  <>
+                                    <TableCell className="font-mono text-sm">{cc.code}</TableCell>
+                                    <TableCell className="font-medium">{cc.description}</TableCell>
+                                  </>
+                                );
+                              })()}
+                              {importEntityType === "project" && (() => {
+                                const p = item as FortnoxProject;
+                                return (
+                                  <>
+                                    <TableCell className="font-mono text-sm">{p.projectNumber}</TableCell>
+                                    <TableCell className="font-medium">{p.description}</TableCell>
+                                    <TableCell className="hidden md:table-cell text-sm">{p.status || "–"}</TableCell>
+                                    <TableCell className="hidden lg:table-cell text-sm">{p.startDate || "–"}</TableCell>
+                                    <TableCell className="hidden lg:table-cell text-sm">{p.endDate || "–"}</TableCell>
+                                  </>
+                                );
+                              })()}
+                              <TableCell>
+                                {item.alreadyImported ? (
+                                  <Badge variant="secondary" className="gap-1">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Importerad
+                                  </Badge>
+                                ) : ("existingMatch" in item && item.existingMatch) ? (
+                                  <Badge variant="outline" className="gap-1 text-chart-3 border-chart-3/30">
+                                    <AlertTriangle className="h-3 w-3 text-chart-4" />
+                                    Matchning
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="gap-1 text-chart-2 border-chart-2/30">
+                                    <Plus className="h-3 w-3" />
+                                    Ny
+                                  </Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </div>
+              )}
+
+              {importItems.length === 0 && isConnected && !fetchFortnoxItemsMutation.isPending && (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Download className="h-12 w-12 mx-auto mb-3 opacity-40" />
+                  <p className="font-medium">Inga {entityLabels[importEntityType]} hämtade ännu</p>
+                  <p className="text-sm mt-1">Välj typ och klicka "Hämta {entityLabels[importEntityType]}" för att ladda data från Fortnox</p>
+                </div>
+              )}
+
+              {fetchFortnoxItemsMutation.isPending && (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
+                  <p className="text-muted-foreground">Hämtar {entityLabels[importEntityType]} från Fortnox...</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={connectDialogOpen} onOpenChange={setConnectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Anslut till Fortnox</DialogTitle>
+            <DialogDescription>
+              Ange dina Fortnox API-uppgifter för att aktivera integrationen.
+              Hämta dessa från Fortnox Developer Portal.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="clientId">Client ID</Label>
+              <Input
+                id="clientId"
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                placeholder="Din Fortnox Client ID"
+                data-testid="input-client-id"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="clientSecret">Client Secret</Label>
+              <Input
+                id="clientSecret"
+                type="password"
+                value={clientSecret}
+                onChange={(e) => setClientSecret(e.target.value)}
+                placeholder="Din Fortnox Client Secret"
+                data-testid="input-client-secret"
+              />
+            </div>
+            <Alert>
+              <AlertTriangle className="h-4 w-4 text-chart-4" />
+              <AlertTitle>OAuth 2.0-flöde</AlertTitle>
+              <AlertDescription>
+                Efter att du sparat uppgifterna kommer du att omdirigeras till Fortnox för att godkänna åtkomst.
+                Detta är för närvarande en förberedelse - full OAuth-implementation kommer när API-nycklar är tillgängliga.
+              </AlertDescription>
+            </Alert>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConnectDialogOpen(false)}>
+              Avbryt
+            </Button>
+            <Button
+              onClick={() => saveConfigMutation.mutate({ clientId, clientSecret })}
+              disabled={!clientId || !clientSecret || saveConfigMutation.isPending}
+              data-testid="button-save-config"
+            >
+              {saveConfigMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Spara och anslut
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={mappingDialogOpen} onOpenChange={setMappingDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Lägg till koppling</DialogTitle>
+            <DialogDescription>
+              Koppla en Traivo-entitet till ett Fortnox-ID
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Entitetstyp</Label>
+              <Select value={selectedEntityType} onValueChange={setSelectedEntityType}>
+                <SelectTrigger data-testid="dialog-select-entity-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ENTITY_TYPES.map(t => (
+                    <SelectItem key={t.value} value={t.value}>
+                      <div className="flex items-center gap-2">
+                        <t.icon className="h-4 w-4" />
+                        {t.label}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Traivo-entitet</Label>
+              <Select value={selectedEntityId} onValueChange={setSelectedEntityId}>
+                <SelectTrigger data-testid="dialog-select-entity">
+                  <SelectValue placeholder="Välj entitet" />
+                </SelectTrigger>
+                <SelectContent>
+                  {getEntityOptions().slice(0, 50).map(opt => (
+                    <SelectItem key={opt.id} value={opt.id}>
+                      {opt.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fortnoxId">Fortnox-ID</Label>
+              <Input
+                id="fortnoxId"
+                value={fortnoxIdInput}
+                onChange={(e) => setFortnoxIdInput(e.target.value)}
+                placeholder="ID från Fortnox"
+                data-testid="input-fortnox-id"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMappingDialogOpen(false)}>
+              Avbryt
+            </Button>
+            <Button
+              onClick={() => createMappingMutation.mutate({
+                entityType: selectedEntityType,
+                unicornId: selectedEntityId,
+                fortnoxId: fortnoxIdInput,
+              })}
+              disabled={!selectedEntityId || !fortnoxIdInput || createMappingMutation.isPending}
+              data-testid="button-create-mapping"
+            >
+              {createMappingMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Skapa koppling
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

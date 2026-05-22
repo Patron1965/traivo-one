@@ -1,0 +1,1298 @@
+import { useEffect, useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Loader2,
+  Search,
+  ShieldAlert,
+  Trash2,
+  UserX,
+  ClipboardList,
+  Users as UsersIcon,
+  Eye,
+  Download,
+  KeyRound,
+} from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
+import { PageHeader } from "@/components/layout/PageHeader";
+
+interface Membership {
+  tenantId: string;
+  tenantName: string | null;
+  role: string;
+  isActive: boolean | null;
+  assignedBy: string | null;
+  createdAt?: string | null;
+}
+
+interface PlatformUser {
+  id: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  isActive: boolean | null;
+  lastLoginAt: string | null;
+  createdAt: string | null;
+  memberships: Membership[];
+}
+
+interface AuditLogRow {
+  id: string;
+  userId: string | null;
+  action: string;
+  resourceType: string | null;
+  resourceId: string | null;
+  changes: unknown;
+  metadata: unknown;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string | null;
+}
+
+interface UserDetail {
+  user: PlatformUser;
+  memberships: Membership[];
+  resourceImpact: Record<string, number>;
+  recentAuditAsActor: AuditLogRow[];
+  recentAuditAsTarget: AuditLogRow[];
+}
+
+interface TimelineRow extends AuditLogRow {
+  role: "actor" | "target" | "both";
+}
+
+interface UserHistory {
+  userId: string;
+  lastLoginAt: string | null;
+  timeline: TimelineRow[];
+  timelineTotal: number;
+  limit: number;
+  offset: number;
+  memberships: Membership[];
+  recentLogins: AuditLogRow[];
+}
+
+interface UsersPage {
+  users: PlatformUser[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+interface LoginRow {
+  id: string;
+  createdAt: string | null;
+  outcome: "success" | "failed";
+  action: string;
+  method: string | null;
+  reason: string | null;
+  metadataEmail: string | null;
+  tenantId: string | null;
+  userId: string | null;
+  userEmail: string | null;
+  userFirstName: string | null;
+  userLastName: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+}
+
+interface LoginsPage {
+  logins: LoginRow[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+type DialogMode = "delete" | "anonymize" | "detail";
+
+function fullName(u: Pick<PlatformUser, "firstName" | "lastName">): string {
+  const f = (u.firstName || "").trim();
+  const l = (u.lastName || "").trim();
+  return [f, l].filter(Boolean).join(" ") || "—";
+}
+
+function formatDate(s: string | null | undefined): string {
+  if (!s) return "—";
+  try {
+    return new Date(s).toLocaleString("sv-SE");
+  } catch {
+    return s;
+  }
+}
+
+export default function PlatformAdminPage() {
+  const { toast } = useToast();
+  const { user: currentUser } = useAuth();
+  const [search, setSearch] = useState("");
+  const [offset, setOffset] = useState(0);
+  const limit = 50;
+  const [target, setTarget] = useState<PlatformUser | null>(null);
+  const [mode, setMode] = useState<DialogMode>("delete");
+  const [confirmText, setConfirmText] = useState("");
+  const [reason, setReason] = useState("");
+  const [force, setForce] = useState(false);
+  const HISTORY_PAGE_SIZE = 100;
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [historyTimeline, setHistoryTimeline] = useState<TimelineRow[]>([]);
+
+  // Server-side gate (källan till sanning) — visar bara sidan om backend bekräftar.
+  const meQuery = useQuery<{ isPlatformOwner: boolean; userId: string } | null>({
+    queryKey: ["/api/platform/me"],
+    retry: false,
+  });
+
+  const isPlatformOwner = meQuery.data?.isPlatformOwner === true;
+
+  const { data: usersPage, isLoading } = useQuery<UsersPage>({
+    queryKey: ["/api/platform/users", { q: search, limit, offset }],
+    enabled: isPlatformOwner,
+  });
+  const users = usersPage?.users ?? [];
+  const total = usersPage?.total ?? 0;
+
+  const { data: audit = [], isLoading: auditLoading } = useQuery<AuditLogRow[]>({
+    queryKey: ["/api/platform/audit-log"],
+    enabled: isPlatformOwner,
+  });
+
+  // ---- Inloggningshistorik (Säkerhet → Logins) ----
+  const [loginOutcome, setLoginOutcome] = useState<"all" | "success" | "failed">("all");
+  const [loginMethod, setLoginMethod] = useState<"all" | "replit" | "password" | "portal" | "mobile">("all");
+  const [loginTenantId, setLoginTenantId] = useState("");
+  const [loginIp, setLoginIp] = useState("");
+  const [loginQ, setLoginQ] = useState("");
+  const [loginFrom, setLoginFrom] = useState("");
+  const [loginTo, setLoginTo] = useState("");
+  const [loginOffset, setLoginOffset] = useState(0);
+  const loginLimit = 100;
+
+  const loginsParams = new URLSearchParams();
+  if (loginOutcome !== "all") loginsParams.set("outcome", loginOutcome);
+  if (loginMethod !== "all") loginsParams.set("method", loginMethod);
+  if (loginTenantId) loginsParams.set("tenantId", loginTenantId);
+  if (loginIp) loginsParams.set("ip", loginIp);
+  if (loginQ) loginsParams.set("q", loginQ);
+  if (loginFrom) {
+    const d = new Date(loginFrom);
+    if (!Number.isNaN(d.getTime())) loginsParams.set("from", d.toISOString());
+  }
+  if (loginTo) {
+    const d = new Date(loginTo);
+    if (!Number.isNaN(d.getTime())) loginsParams.set("to", d.toISOString());
+  }
+  loginsParams.set("limit", String(loginLimit));
+  loginsParams.set("offset", String(loginOffset));
+  const loginsQs = loginsParams.toString();
+
+  const loginsQuery = useQuery<LoginsPage>({
+    queryKey: ["/api/platform/logins", loginsQs],
+    enabled: isPlatformOwner,
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/platform/logins?${loginsQs}`);
+      return (await res.json()) as LoginsPage;
+    },
+  });
+
+  async function exportLoginsCsv() {
+    try {
+      const params = new URLSearchParams(loginsParams);
+      params.set("format", "csv");
+      params.delete("limit");
+      params.delete("offset");
+      const res = await apiRequest("GET", `/api/platform/logins?${params.toString()}`);
+      const blob = await res.blob();
+      const cd = res.headers.get("content-disposition") || "";
+      const match = cd.match(/filename="?([^"]+)"?/i);
+      const filename = match?.[1] || `traivo-logins-${new Date().toISOString().slice(0, 10)}.csv`;
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(href);
+      toast({ title: "Export klar", description: filename });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Okänt fel";
+      toast({ title: "Export misslyckades", description: msg, variant: "destructive" });
+    }
+  }
+
+  function resetLoginFilters() {
+    setLoginOutcome("all");
+    setLoginMethod("all");
+    setLoginTenantId("");
+    setLoginIp("");
+    setLoginQ("");
+    setLoginFrom("");
+    setLoginTo("");
+    setLoginOffset(0);
+  }
+
+  // Hämta detalj (inkl. resourceImpact) både för detalj-fliken OCH för
+  // destruktiva dialoger — så att användaren ser exakt vilka FK-rader
+  // som påverkas innan hen bekräftar.
+  const detailQuery = useQuery<UserDetail>({
+    queryKey: ["/api/platform/users", target?.id],
+    enabled: !!target?.id,
+  });
+
+  // Full historik laddas bara när detalj-dialogen är öppen (sparar
+  // bandbredd om plattformsägaren bara använder snabb-åtgärderna).
+  // Explicit queryFn — default-fetchern bygger URL via queryKey.join("/")
+  // vilket inte kan uttrycka query-parametrar.
+  const historyQuery = useQuery<UserHistory>({
+    queryKey: [
+      "/api/platform/users",
+      target?.id,
+      "history",
+      { limit: HISTORY_PAGE_SIZE, offset: historyOffset },
+    ],
+    enabled: !!target?.id && mode === "detail",
+    queryFn: async () => {
+      const url = `/api/platform/users/${target!.id}/history?limit=${HISTORY_PAGE_SIZE}&offset=${historyOffset}`;
+      const res = await apiRequest("GET", url);
+      return (await res.json()) as UserHistory;
+    },
+  });
+
+  // Ackumulera sidor när användaren klickar "Visa fler" — håller den
+  // fullständiga listan i state så det går att bläddra bakåt i tiden
+  // utan en hård 500-rad-tak. Reset när dialog/target byter.
+  useEffect(() => {
+    if (!historyQuery.data) return;
+    setHistoryTimeline((prev) => {
+      if (historyQuery.data!.offset === 0) return historyQuery.data!.timeline;
+      const seen = new Set(prev.map((r) => r.id));
+      const merged = [...prev];
+      for (const row of historyQuery.data!.timeline) {
+        if (!seen.has(row.id)) merged.push(row);
+      }
+      return merged;
+    });
+  }, [historyQuery.data]);
+
+  // Server gör nu filtreringen — vi visar bara responsen direkt.
+  const filtered = users;
+
+  // GDPR-export: streamar hela tidslinjen (CSV eller JSON) som
+  // attachment. apiRequest hanterar cookies/credentials åt oss så vi
+  // återanvänder den för att få samma 401/403-beteende som övriga anrop.
+  async function exportHistory(userId: string, format: "csv" | "json") {
+    try {
+      const res = await apiRequest(
+        "GET",
+        `/api/platform/users/${userId}/history/export?format=${format}`,
+      );
+      const blob = await res.blob();
+      const cd = res.headers.get("content-disposition") || "";
+      const match = cd.match(/filename="?([^"]+)"?/i);
+      const filename =
+        match?.[1] || `traivo-user-history-${userId}.${format}`;
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(href);
+      toast({ title: "Export klar", description: filename });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Okänt fel";
+      toast({ title: "Export misslyckades", description: msg, variant: "destructive" });
+    }
+  }
+
+  const deleteMutation = useMutation({
+    mutationFn: async (vars: { id: string; reason: string; force: boolean }) => {
+      const res = await apiRequest("DELETE", `/api/platform/users/${vars.id}`, {
+        confirm: "RADERA",
+        reason: vars.reason || null,
+        force: vars.force,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/platform/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/platform/audit-log"] });
+      toast({ title: "Användaren har raderats", description: "Hård radering klar." });
+      closeDialog();
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Okänt fel";
+      toast({ title: "Kunde inte radera", description: msg, variant: "destructive" });
+    },
+  });
+
+  const anonymizeMutation = useMutation({
+    mutationFn: async (vars: { id: string; reason: string; force: boolean }) => {
+      const res = await apiRequest("POST", `/api/platform/users/${vars.id}/anonymize`, {
+        reason: vars.reason || null,
+        force: vars.force,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/platform/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/platform/audit-log"] });
+      toast({ title: "Användaren har anonymiserats" });
+      closeDialog();
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Okänt fel";
+      toast({ title: "Kunde inte anonymisera", description: msg, variant: "destructive" });
+    },
+  });
+
+  const openDialog = (u: PlatformUser, m: DialogMode) => {
+    setTarget(u);
+    setMode(m);
+    setConfirmText("");
+    setReason("");
+    setForce(false);
+    setHistoryOffset(0);
+    setHistoryTimeline([]);
+  };
+
+  const closeDialog = () => {
+    setTarget(null);
+    setConfirmText("");
+    setReason("");
+    setForce(false);
+  };
+
+  const submit = () => {
+    if (!target) return;
+    if (mode === "delete") {
+      if (confirmText !== "RADERA") {
+        toast({ title: "Bekräftelse saknas", description: 'Skriv exakt "RADERA"', variant: "destructive" });
+        return;
+      }
+      deleteMutation.mutate({ id: target.id, reason, force });
+    } else if (mode === "anonymize") {
+      anonymizeMutation.mutate({ id: target.id, reason, force });
+    }
+  };
+
+  const isSelf = target?.id === currentUser?.id;
+  const isPending = deleteMutation.isPending || anonymizeMutation.isPending;
+
+  if (meQuery.isLoading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isPlatformOwner) {
+    return (
+      <div className="p-6 max-w-2xl">
+        <Alert variant="destructive">
+          <ShieldAlert className="h-4 w-4" />
+          <AlertTitle>Åtkomst nekad</AlertTitle>
+          <AlertDescription>
+            Denna sida är förbehållen plattformsägare (kinab + owner).
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      <PageHeader
+        icon={ShieldAlert}
+        title="Plattformsadmin"
+        description="Cross-tenant användarhantering. GDPR-anonymisering och hård radering kräver platform-owner-roll (kinab + owner)."
+      />
+
+      <Alert variant="destructive" data-testid="alert-platform-warning">
+        <ShieldAlert className="h-4 w-4" />
+        <AlertTitle>Höga privilegier</AlertTitle>
+        <AlertDescription>
+          Åtgärderna här är oåterkalleliga och loggas alltid i audit-loggen.
+          Radering tar bort användaren från ALLA organisationer och nollar alla
+          referenser. Anonymisering ersätter PII med platshållare men behåller
+          historiska kopplingar.
+        </AlertDescription>
+      </Alert>
+
+      <Tabs defaultValue="users" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="users" data-testid="tab-users">
+            <UsersIcon className="h-4 w-4 mr-2" />
+            Användare
+          </TabsTrigger>
+          <TabsTrigger value="audit" data-testid="tab-audit">
+            <ClipboardList className="h-4 w-4 mr-2" />
+            Audit-logg
+          </TabsTrigger>
+          <TabsTrigger value="logins" data-testid="tab-logins">
+            <KeyRound className="h-4 w-4 mr-2" />
+            Inloggningshistorik
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="users" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between gap-4">
+                <CardTitle data-testid="text-users-total">
+                  Alla användare ({total} totalt, visar {users.length} fr.o.m. {offset + 1})
+                </CardTitle>
+                <div className="relative w-72">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setOffset(0);
+                    }}
+                    placeholder="Sök e-post, namn, tenant…"
+                    className="pl-8"
+                    data-testid="input-search-users"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Namn</TableHead>
+                      <TableHead>E-post</TableHead>
+                      <TableHead>Org-medlemskap</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Skapad</TableHead>
+                      <TableHead>Senast inloggad</TableHead>
+                      <TableHead className="text-right">Åtgärder</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filtered.map((u) => (
+                      <TableRow
+                        key={u.id}
+                        data-testid={`row-user-${u.id}`}
+                        className="cursor-pointer hover-elevate"
+                        onClick={() => openDialog(u, "detail")}
+                      >
+                        <TableCell>
+                          <div className="font-medium" data-testid={`text-name-${u.id}`}>{fullName(u)}</div>
+                          <div className="text-xs text-muted-foreground">{u.id.slice(0, 8)}…</div>
+                        </TableCell>
+                        <TableCell data-testid={`text-email-${u.id}`}>{u.email || "—"}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap items-center gap-1">
+                            <Badge variant="outline" data-testid={`badge-membership-count-${u.id}`}>
+                              {u.memberships.length} st
+                            </Badge>
+                            {u.memberships.slice(0, 3).map((m) => (
+                              <Badge
+                                key={`${u.id}-${m.tenantId}`}
+                                variant={m.isActive === false ? "outline" : "secondary"}
+                                title={`${m.tenantName ?? m.tenantId} (${m.role})${m.isActive === false ? " — inaktiv" : ""}`}
+                              >
+                                {m.tenantId}/{m.role}
+                              </Badge>
+                            ))}
+                            {u.memberships.length > 3 && (
+                              <Badge variant="outline">+{u.memberships.length - 3}</Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {u.isActive === false ? (
+                            <Badge variant="outline">Inaktiv</Badge>
+                          ) : (
+                            <Badge>Aktiv</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs">{formatDate(u.createdAt)}</TableCell>
+                        <TableCell className="text-xs">{formatDate(u.lastLoginAt)}</TableCell>
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => openDialog(u, "detail")}
+                              data-testid={`button-detail-${u.id}`}
+                            >
+                              <Eye className="h-3.5 w-3.5 mr-1" />
+                              Visa detaljer
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openDialog(u, "anonymize")}
+                              disabled={u.id === currentUser?.id}
+                              data-testid={`button-anonymize-${u.id}`}
+                            >
+                              <UserX className="h-3.5 w-3.5 mr-1" />
+                              Anonymisera
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => openDialog(u, "delete")}
+                              disabled={u.id === currentUser?.id}
+                              data-testid={`button-delete-${u.id}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 mr-1" />
+                              Radera
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {filtered.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                          Inga användare matchar sökningen.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+              {total > limit && (
+                <div className="flex items-center justify-between pt-4 text-sm">
+                  <span className="text-muted-foreground">
+                    Sida {Math.floor(offset / limit) + 1} av {Math.max(1, Math.ceil(total / limit))}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={offset === 0}
+                      onClick={() => setOffset(Math.max(0, offset - limit))}
+                      data-testid="button-prev-page"
+                    >
+                      Föregående
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={offset + limit >= total}
+                      onClick={() => setOffset(offset + limit)}
+                      data-testid="button-next-page"
+                    >
+                      Nästa
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="audit" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Plattformsåtgärder (senaste {audit.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {auditLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : audit.length === 0 ? (
+                <div className="text-center text-muted-foreground py-8">
+                  Inga loggade plattformsåtgärder ännu.
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>När</TableHead>
+                      <TableHead>Åtgärd</TableHead>
+                      <TableHead>Utförd av</TableHead>
+                      <TableHead>Mål</TableHead>
+                      <TableHead>IP</TableHead>
+                      <TableHead>Anledning</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {audit.map((row) => {
+                      const meta = (row.metadata ?? {}) as Record<string, unknown>;
+                      return (
+                        <TableRow key={row.id} data-testid={`row-audit-${row.id}`}>
+                          <TableCell className="text-xs whitespace-nowrap">{formatDate(row.createdAt)}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                row.action === "platform.user.delete"
+                                  ? "destructive"
+                                  : row.action === "platform.access.denied"
+                                    ? "outline"
+                                    : "secondary"
+                              }
+                            >
+                              {row.action}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs">{row.userId || "—"}</TableCell>
+                          <TableCell className="text-xs">
+                            <div>{row.resourceId || "—"}</div>
+                            {(() => {
+                              type RedactedPii = { hash: string; length: number };
+                              type ChangesShape = {
+                                deleted?: { emailRedacted?: RedactedPii | null };
+                                before?: { emailRedacted?: RedactedPii | null };
+                              };
+                              const c = (row.changes ?? {}) as ChangesShape;
+                              const r = c.deleted?.emailRedacted ?? c.before?.emailRedacted;
+                              if (!r) return null;
+                              return (
+                                <div className="text-muted-foreground" title={`SHA-256 prefix • längd ${r.length}`}>
+                                  e-post: {r.hash}…
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
+                          <TableCell className="text-xs">{row.ipAddress || "—"}</TableCell>
+                          <TableCell className="text-xs max-w-xs truncate" title={String(meta.reason ?? "")}>
+                            {String(meta.reason ?? meta.path ?? "—")}
+                            {meta.force ? <Badge variant="outline" className="ml-2">force</Badge> : null}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="logins" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <CardTitle data-testid="text-logins-total">
+                  Inloggningshistorik
+                  {loginsQuery.data && (
+                    <span className="text-muted-foreground font-normal text-sm ml-2">
+                      ({loginsQuery.data.total} totalt, visar {loginsQuery.data.logins.length} fr.o.m. {loginOffset + 1})
+                    </span>
+                  )}
+                </CardTitle>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={resetLoginFilters}
+                    data-testid="button-logins-reset"
+                  >
+                    Återställ filter
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={exportLoginsCsv}
+                    data-testid="button-logins-export-csv"
+                  >
+                    <Download className="h-4 w-4 mr-2" /> Exportera CSV
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <Label className="text-xs">Sök (e-post / IP)</Label>
+                  <Input
+                    value={loginQ}
+                    onChange={(e) => {
+                      setLoginQ(e.target.value);
+                      setLoginOffset(0);
+                    }}
+                    placeholder="t.ex. anna@ eller 192.168."
+                    data-testid="input-logins-q"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Utfall</Label>
+                  <Select
+                    value={loginOutcome}
+                    onValueChange={(v) => {
+                      setLoginOutcome(v as typeof loginOutcome);
+                      setLoginOffset(0);
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-logins-outcome">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Alla</SelectItem>
+                      <SelectItem value="success">Lyckade</SelectItem>
+                      <SelectItem value="failed">Misslyckade</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Metod</Label>
+                  <Select
+                    value={loginMethod}
+                    onValueChange={(v) => {
+                      setLoginMethod(v as typeof loginMethod);
+                      setLoginOffset(0);
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-logins-method">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Alla</SelectItem>
+                      <SelectItem value="replit">Replit (web)</SelectItem>
+                      <SelectItem value="password">Lösenord</SelectItem>
+                      <SelectItem value="portal">Kundportal</SelectItem>
+                      <SelectItem value="mobile">Mobil</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Tenant ID</Label>
+                  <Input
+                    value={loginTenantId}
+                    onChange={(e) => {
+                      setLoginTenantId(e.target.value);
+                      setLoginOffset(0);
+                    }}
+                    placeholder="t.ex. kinab"
+                    data-testid="input-logins-tenant"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">IP-adress (substring)</Label>
+                  <Input
+                    value={loginIp}
+                    onChange={(e) => {
+                      setLoginIp(e.target.value);
+                      setLoginOffset(0);
+                    }}
+                    placeholder="t.ex. 10.0."
+                    data-testid="input-logins-ip"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Från (datum/tid)</Label>
+                  <Input
+                    type="datetime-local"
+                    value={loginFrom}
+                    onChange={(e) => {
+                      setLoginFrom(e.target.value);
+                      setLoginOffset(0);
+                    }}
+                    data-testid="input-logins-from"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Till (datum/tid)</Label>
+                  <Input
+                    type="datetime-local"
+                    value={loginTo}
+                    onChange={(e) => {
+                      setLoginTo(e.target.value);
+                      setLoginOffset(0);
+                    }}
+                    data-testid="input-logins-to"
+                  />
+                </div>
+              </div>
+
+              {loginsQuery.isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : (loginsQuery.data?.logins ?? []).length === 0 ? (
+                <div className="text-center text-muted-foreground py-8" data-testid="text-logins-empty">
+                  Inga inloggningar matchar filtren.
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>När</TableHead>
+                      <TableHead>Användare / E-post</TableHead>
+                      <TableHead>Metod</TableHead>
+                      <TableHead>Utfall</TableHead>
+                      <TableHead>Tenant</TableHead>
+                      <TableHead>IP</TableHead>
+                      <TableHead>User-Agent</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loginsQuery.data!.logins.map((row) => {
+                      const displayName =
+                        [row.userFirstName, row.userLastName].filter(Boolean).join(" ") || null;
+                      const displayEmail = row.userEmail || row.metadataEmail || "—";
+                      return (
+                        <TableRow key={row.id} data-testid={`row-login-${row.id}`}>
+                          <TableCell className="text-xs whitespace-nowrap">
+                            {formatDate(row.createdAt)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm" data-testid={`text-login-email-${row.id}`}>
+                              {displayEmail}
+                            </div>
+                            {displayName && (
+                              <div className="text-xs text-muted-foreground">{displayName}</div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{row.method ?? "—"}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {row.outcome === "success" ? (
+                              <Badge>Lyckad</Badge>
+                            ) : (
+                              <Badge variant="destructive" title={row.reason ?? undefined}>
+                                Misslyckad
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs">{row.tenantId ?? "—"}</TableCell>
+                          <TableCell className="text-xs font-mono">{row.ipAddress ?? "—"}</TableCell>
+                          <TableCell
+                            className="text-xs max-w-xs truncate"
+                            title={row.userAgent ?? ""}
+                          >
+                            {row.userAgent ?? "—"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+
+              {loginsQuery.data && loginsQuery.data.total > loginLimit && (
+                <div className="flex items-center justify-between pt-2 text-sm">
+                  <span className="text-muted-foreground">
+                    Sida {Math.floor(loginOffset / loginLimit) + 1} av{" "}
+                    {Math.max(1, Math.ceil(loginsQuery.data.total / loginLimit))}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={loginOffset === 0}
+                      onClick={() => setLoginOffset(Math.max(0, loginOffset - loginLimit))}
+                      data-testid="button-logins-prev"
+                    >
+                      Föregående
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={loginOffset + loginLimit >= loginsQuery.data.total}
+                      onClick={() => setLoginOffset(loginOffset + loginLimit)}
+                      data-testid="button-logins-next"
+                    >
+                      Nästa
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Detalj-dialog */}
+      <Dialog open={target !== null && mode === "detail"} onOpenChange={(o) => !o && closeDialog()}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto" data-testid="dialog-detail">
+          <DialogHeader>
+            <DialogTitle>{target ? fullName(target) : "—"}</DialogTitle>
+            <DialogDescription>
+              {target && (
+                <span className="text-xs">
+                  {target.email || "ingen e-post"} · ID: {target.id}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {detailQuery.isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : detailQuery.data ? (
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-sm font-semibold mb-2">Organisationer ({detailQuery.data.memberships.length})</h4>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tenant</TableHead>
+                      <TableHead>Roll</TableHead>
+                      <TableHead>Aktiv</TableHead>
+                      <TableHead>Tillsatt av</TableHead>
+                      <TableHead>Skapad</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {detailQuery.data.memberships.map((m, i) => (
+                      <TableRow key={`${m.tenantId}-${i}`}>
+                        <TableCell>
+                          <div>{m.tenantName ?? "—"}</div>
+                          <div className="text-xs text-muted-foreground">{m.tenantId}</div>
+                        </TableCell>
+                        <TableCell>{m.role}</TableCell>
+                        <TableCell>
+                          {m.isActive === false ? (
+                            <Badge variant="outline">Inaktiv</Badge>
+                          ) : (
+                            <Badge>Aktiv</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs">{m.assignedBy ?? "—"}</TableCell>
+                        <TableCell className="text-xs">{formatDate(m.createdAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                    {detailQuery.data.memberships.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
+                          Inga organisationsmedlemskap.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-semibold mb-2" data-testid="text-resource-impact-title">
+                  Kopplade resurser ({Object.keys(detailQuery.data.resourceImpact ?? {}).length} tabeller)
+                </h4>
+                {Object.keys(detailQuery.data.resourceImpact ?? {}).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Inga kopplade rader i kritiska tabeller.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 text-xs" data-testid="grid-resource-impact">
+                    {Object.entries(detailQuery.data.resourceImpact)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([table, n]) => (
+                        <div key={table} className="flex items-center justify-between bg-muted/40 rounded px-2 py-1">
+                          <code className="text-muted-foreground">{table}</code>
+                          <Badge variant="outline">{n}</Badge>
+                        </div>
+                      ))}
+                  </div>
+                )}
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Vid hård radering nollas dessa referenser (SET NULL) eller raderas (user_tenant_roles, sessions).
+                  Pending invitations som hen skapade markeras med "förlorad inbjudare".
+                </p>
+              </div>
+
+              <div data-testid="section-recent-logins">
+                <h4 className="text-sm font-semibold mb-2">
+                  Senaste inloggningar
+                </h4>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Senast känd inloggning:{" "}
+                  <span data-testid="text-last-login">
+                    {formatDate(historyQuery.data?.lastLoginAt ?? target?.lastLoginAt ?? null)}
+                  </span>
+                </p>
+                {historyQuery.isLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Hämtar historik…
+                  </div>
+                ) : (historyQuery.data?.recentLogins ?? []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Inga login-events i audit-loggen ännu (login-events loggas inte separat
+                    idag — endast tidsstämpeln ovan finns).
+                  </p>
+                ) : (
+                  <ul className="text-xs space-y-1 max-h-40 overflow-y-auto">
+                    {historyQuery.data!.recentLogins.map((row) => (
+                      <li key={row.id} className="flex gap-2" data-testid={`row-login-${row.id}`}>
+                        <span className="text-muted-foreground whitespace-nowrap">
+                          {formatDate(row.createdAt)}
+                        </span>
+                        <Badge variant="outline" className="h-4 text-[10px]">{row.action}</Badge>
+                        <span className="text-muted-foreground truncate">{row.ipAddress ?? "—"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div data-testid="section-timeline">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-semibold">
+                    Full historik ({historyTimeline.length} av {historyQuery.data?.timelineTotal ?? 0})
+                  </h4>
+                </div>
+                {historyQuery.isLoading && historyTimeline.length === 0 ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  </div>
+                ) : historyTimeline.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Inga händelser i audit-loggen där användaren är aktör eller mål.
+                  </p>
+                ) : (
+                  <>
+                    <ul className="text-xs space-y-1 max-h-80 overflow-y-auto border rounded p-2">
+                      {historyTimeline.map((row) => (
+                        <li
+                          key={row.id}
+                          className="flex flex-wrap items-center gap-2 py-0.5 border-b last:border-0"
+                          data-testid={`row-timeline-${row.id}`}
+                        >
+                          <span className="text-muted-foreground whitespace-nowrap">
+                            {formatDate(row.createdAt)}
+                          </span>
+                          <Badge
+                            variant={row.role === "target" ? "outline" : "secondary"}
+                            className="h-4 text-[10px]"
+                            title={
+                              row.role === "actor"
+                                ? "Användaren utförde åtgärden"
+                                : row.role === "target"
+                                  ? "Användaren var målet för åtgärden"
+                                  : "Användaren var både aktör och mål"
+                            }
+                          >
+                            {row.role === "actor" ? "aktör" : row.role === "target" ? "mål" : "både"}
+                          </Badge>
+                          <Badge variant="outline" className="h-4 text-[10px]">{row.action}</Badge>
+                          {row.resourceType && (
+                            <span className="text-muted-foreground">
+                              {row.resourceType}
+                              {row.resourceId ? `:${row.resourceId.slice(0, 8)}` : ""}
+                            </span>
+                          )}
+                          {row.ipAddress && (
+                            <span className="text-muted-foreground">{row.ipAddress}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    {historyTimeline.length < (historyQuery.data?.timelineTotal ?? 0) && (
+                      <div className="pt-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setHistoryOffset(historyTimeline.length)}
+                          disabled={historyQuery.isFetching}
+                          data-testid="button-load-more-history"
+                        >
+                          {historyQuery.isFetching ? (
+                            <>
+                              <Loader2 className="h-3 w-3 mr-2 animate-spin" /> Hämtar…
+                            </>
+                          ) : (
+                            <>Visa fler (+{HISTORY_PAGE_SIZE})</>
+                          )}
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            <Alert variant="destructive">
+              <AlertDescription>Kunde inte ladda detaljer.</AlertDescription>
+            </Alert>
+          )}
+          <DialogFooter className="gap-2 sm:gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={() => target && exportHistory(target.id, "json")}
+              disabled={!target}
+              data-testid="button-export-history-json"
+            >
+              <Download className="h-4 w-4 mr-2" /> Exportera JSON
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => target && exportHistory(target.id, "csv")}
+              disabled={!target}
+              data-testid="button-export-history-csv"
+            >
+              <Download className="h-4 w-4 mr-2" /> Exportera CSV
+            </Button>
+            <Button variant="outline" onClick={closeDialog}>Stäng</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Anonymisera/radera-dialog */}
+      <Dialog open={target !== null && mode !== "detail"} onOpenChange={(o) => !o && closeDialog()}>
+        <DialogContent data-testid="dialog-confirm">
+          <DialogHeader>
+            <DialogTitle>
+              {mode === "delete" ? "Hård radera användare" : "Anonymisera användare"}
+            </DialogTitle>
+            <DialogDescription>
+              {target && (
+                <span>
+                  Mål: <strong>{fullName(target)}</strong> ({target.email || "ingen e-post"})
+                  <br />
+                  <span className="text-xs text-muted-foreground">ID: {target.id}</span>
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {isSelf && (
+            <Alert variant="destructive">
+              <AlertDescription>Du kan inte utföra denna åtgärd på ditt eget konto.</AlertDescription>
+            </Alert>
+          )}
+
+          {mode === "delete" ? (
+            <Alert variant="destructive">
+              <ShieldAlert className="h-4 w-4" />
+              <AlertTitle>Oåterkalleligt</AlertTitle>
+              <AlertDescription>
+                Användaren tas bort från databasen. Alla audit/historik-referenser
+                nollas (SET NULL). Aktiva sessioner raderas omedelbart.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Alert>
+              <AlertDescription>
+                E-post och namn ersätts med platshållare, lösenord nollas,
+                medlemskap deaktiveras och aktiva sessioner raderas. Historik
+                bevaras kopplad till det anonymiserade ID:t.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {target && (
+            <div className="rounded border p-3 space-y-2" data-testid="block-confirm-impact">
+              <div className="text-sm font-medium">Kopplade resurser som påverkas</div>
+              {detailQuery.isLoading ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Räknar referenser…
+                </div>
+              ) : detailQuery.data ? (
+                Object.keys(detailQuery.data.resourceImpact ?? {}).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Inga kopplade rader hittades i kritiska tabeller. Endast användarraden
+                    {mode === "delete" ? " och eventuella medlemskap/sessioner" : ", medlemskap och sessioner"} berörs.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1 text-xs max-h-40 overflow-y-auto">
+                    {Object.entries(detailQuery.data.resourceImpact)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([table, n]) => (
+                        <div
+                          key={table}
+                          className="flex items-center justify-between bg-muted/40 rounded px-2 py-0.5"
+                          data-testid={`impact-${table}`}
+                        >
+                          <code className="text-muted-foreground truncate" title={table}>{table}</code>
+                          <Badge variant="outline">{n}</Badge>
+                        </div>
+                      ))}
+                  </div>
+                )
+              ) : (
+                <p className="text-xs text-muted-foreground">Kunde inte räkna referenser.</p>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="reason">Anledning (loggas)</Label>
+              <Textarea
+                id="reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="T.ex. GDPR-begäran från kund, ärendenr…"
+                data-testid="input-reason"
+              />
+            </div>
+            {mode === "delete" && (
+              <div>
+                <Label htmlFor="confirm">
+                  Skriv <code className="bg-muted px-1 rounded">RADERA</code> för att bekräfta
+                </Label>
+                <Input
+                  id="confirm"
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder="RADERA"
+                  data-testid="input-confirm"
+                />
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <input
+                id="force"
+                type="checkbox"
+                checked={force}
+                onChange={(e) => setForce(e.target.checked)}
+                data-testid="checkbox-force"
+              />
+              <Label htmlFor="force" className="text-sm font-normal">
+                Tvinga även om användaren är enda aktiva owner i någon organisation
+              </Label>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog} disabled={isPending}>
+              Avbryt
+            </Button>
+            <Button
+              variant={mode === "delete" ? "destructive" : "default"}
+              onClick={submit}
+              disabled={isPending || isSelf || (mode === "delete" && confirmText !== "RADERA")}
+              data-testid="button-confirm-action"
+            >
+              {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {mode === "delete" ? "Radera permanent" : "Anonymisera"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

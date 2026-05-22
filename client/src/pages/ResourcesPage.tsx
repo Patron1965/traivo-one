@@ -1,0 +1,1399 @@
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useTerminology } from "@/hooks/use-terminology";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Plus,
+  Search,
+  Phone,
+  MapPin,
+  Loader2,
+  Pencil,
+  Trash2,
+  Mail,
+  Calendar,
+  Clock,
+  Filter,
+  CalendarOff,
+  ChevronDown,
+  ChevronUp,
+  Wrench,
+  X,
+  Share2,
+  Copy,
+  Check,
+  Smartphone,
+  MoreHorizontal,
+  Users,
+  TrendingUp,
+  CircleCheck,
+  ChevronLeft,
+  ChevronRight,
+  UserPlus,
+} from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { AICard } from "@/components/AICard";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useToast } from "@/hooks/use-toast";
+import { QueryState } from "@/components/QueryState";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { format, startOfWeek, endOfWeek, addDays, isWithinInterval, parseISO } from "date-fns";
+import { sv } from "date-fns/locale";
+import type { Resource, WorkOrder, Article, ResourceArticle } from "@shared/schema";
+
+function ShareFieldAppButton() {
+  const [copied, setCopied] = useState(false);
+  const [showDialog, setShowDialog] = useState(false);
+  const { toast } = useToast();
+  
+  const fieldAppUrl = `${window.location.origin}/field`;
+  
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(fieldAppUrl);
+      setCopied(true);
+      toast({ title: "Länk kopierad!", description: "Klistra in i SMS eller e-post" });
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast({ title: "Kunde inte kopiera", variant: "destructive" });
+    }
+  };
+  
+  const handleShare = async () => {
+    const shareData = {
+      title: "Traivo Go",
+      text: "Öppna Traivo Go",
+      url: fieldAppUrl,
+    };
+    
+    if (navigator.share && navigator.canShare?.(shareData)) {
+      try {
+        await navigator.share(shareData);
+      } catch (e) {
+        if ((e as Error).name !== "AbortError") {
+          handleCopy();
+        }
+      }
+    } else {
+      await handleCopy();
+      toast({
+        title: "Länk kopierad!",
+        description: "Klistra in länken i SMS eller e-post för att dela.",
+      });
+    }
+  };
+  
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button 
+            variant="outline" 
+            onClick={() => setShowDialog(true)}
+            data-testid="button-share-field-app"
+          >
+            <Smartphone className="h-4 w-4 mr-2" />
+            Dela Traivo Go
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Skicka länk till chaufförer/tekniker</p>
+        </TooltipContent>
+      </Tooltip>
+      
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Smartphone className="h-5 w-5" />
+              Dela Traivo Go
+            </DialogTitle>
+            <DialogDescription>
+              Skicka denna länk till chaufförer och tekniker så de kan använda Traivo Go på sin mobil
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Input 
+                value={fieldAppUrl} 
+                readOnly 
+                className="font-mono text-sm"
+                data-testid="input-field-app-url"
+              />
+              <Button 
+                size="icon" 
+                variant="outline" 
+                onClick={handleCopy}
+                data-testid="button-copy-field-url"
+              >
+                {copied ? <Check className="h-4 w-4 text-chart-2" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </div>
+            
+            <div className="flex flex-col gap-2">
+              <Button onClick={handleShare} variant="outline" className="w-full" data-testid="button-share-field-url">
+                <Share2 className="h-4 w-4 mr-2" />
+                Dela länk
+              </Button>
+              <Button onClick={handleCopy} className="w-full" data-testid="button-copy-field-url-2">
+                <Copy className="h-4 w-4 mr-2" />
+                Kopiera länk
+              </Button>
+            </div>
+            
+            <div className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+              <p className="font-medium mb-1">Tips för chauffören:</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Öppna länken i mobilen</li>
+                <li>Logga in med sitt konto</li>
+                <li>Tryck "Lägg till på hemskärmen" för app-känsla</li>
+              </ol>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+const competencyOptions = [
+  { value: "karltomning", label: "Kärltömning" },
+  { value: "grovsopor", label: "Grovsopor" },
+  { value: "matavfall", label: "Matavfall" },
+  { value: "atervinning", label: "Återvinning" },
+  { value: "farligt_avfall", label: "Farligt avfall" },
+  { value: "adr_certified", label: "ADR-certifierad" },
+  { value: "c_korkort", label: "C-körkort" },
+  { value: "ce_korkort", label: "CE-körkort" },
+];
+
+const competencyLabels: Record<string, string> = Object.fromEntries(
+  competencyOptions.map(c => [c.value, c.label])
+);
+
+const availabilityOptions = [
+  { value: "available", label: "Tillgänglig", color: "bg-chart-2/15" },
+  { value: "vacation", label: "Semester", color: "bg-chart-1/15" },
+  { value: "sick", label: "Sjuk", color: "bg-destructive/15" },
+  { value: "training", label: "Utbildning", color: "bg-chart-3/15" },
+  { value: "other", label: "Annat", color: "bg-gray-500" },
+];
+
+interface ResourceFormData {
+  name: string;
+  initials: string;
+  resourceType: string;
+  phone: string;
+  email: string;
+  homeLocation: string;
+  weeklyHours: number;
+  competencies: string[];
+  status: string;
+  availability: Record<string, string>;
+  smsOnScheduleSend: boolean;
+  smsOnExtraJob: boolean;
+}
+
+const emptyFormData: ResourceFormData = {
+  name: "",
+  initials: "",
+  resourceType: "person",
+  phone: "",
+  email: "",
+  homeLocation: "",
+  weeklyHours: 40,
+  competencies: [],
+  status: "active",
+  availability: {},
+  smsOnScheduleSend: true,
+  smsOnExtraJob: true,
+};
+
+export default function ResourcesPage() {
+  const { toast } = useToast();
+  const { t } = useTerminology();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [competencyFilter, setCompetencyFilter] = useState<string>("all");
+  const [availabilityFilter, setAvailabilityFilter] = useState<string>("all");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [availabilityDialogOpen, setAvailabilityDialogOpen] = useState(false);
+  const [editingResource, setEditingResource] = useState<Resource | null>(null);
+  const [resourceToDelete, setResourceToDelete] = useState<Resource | null>(null);
+  const [selectedResource, setSelectedResource] = useState<Resource | null>(null);
+  const [formData, setFormData] = useState<ResourceFormData>(emptyFormData);
+  const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 12;
+  const [kompetensDialogOpen, setKompetensDialogOpen] = useState(false);
+  const [kompetensResource, setKompetensResource] = useState<Resource | null>(null);
+  const [selectedArticleId, setSelectedArticleId] = useState<string>("");
+  const [efficiencyFactor, setEfficiencyFactor] = useState<number>(1.0);
+  const [productionTimeOverride, setProductionTimeOverride] = useState<number | null>(null);
+
+  const today = new Date();
+  const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
+
+  const { data: resources = [], isLoading, isError, error, refetch } = useQuery<Resource[]>({
+    queryKey: ["/api/resources"],
+  });
+
+  const { data: allWorkOrders = [] } = useQuery<WorkOrder[]>({
+    queryKey: ["/api/work-orders", { allDates: true }],
+    queryFn: async () => {
+      const res = await fetch("/api/work-orders?allDates=true");
+      if (!res.ok) throw new Error("Failed to fetch work orders");
+      return res.json();
+    },
+  });
+
+  const { data: objects = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/objects", "lookup"],
+  });
+
+  const { data: articles = [] } = useQuery<Article[]>({
+    queryKey: ["/api/articles"],
+  });
+
+  const { data: resourceArticles = [] } = useQuery<ResourceArticle[]>({
+    queryKey: ['/api/resources', kompetensResource?.id, 'articles'],
+    enabled: !!kompetensResource,
+  });
+
+  const objectMap = useMemo(() => 
+    new Map(objects.map(o => [o.id, o.name])),
+    [objects]
+  );
+
+  const articleMap = useMemo(() =>
+    new Map(articles.map(a => [a.id, a])),
+    [articles]
+  );
+
+  const availableArticles = useMemo(() => {
+    const assignedIds = new Set(resourceArticles.map(ra => ra.articleId));
+    return articles.filter(a => !assignedIds.has(a.id) && a.status === "active");
+  }, [articles, resourceArticles]);
+
+  const weekWorkOrders = useMemo(() => {
+    return allWorkOrders.filter(wo => {
+      if (!wo.scheduledDate) return false;
+      const date = new Date(wo.scheduledDate);
+      return isWithinInterval(date, { start: weekStart, end: weekEnd });
+    });
+  }, [allWorkOrders, weekStart, weekEnd]);
+
+  const resourceWorkloads = useMemo(() => {
+    const workloads = new Map<string, number>();
+    weekWorkOrders.forEach(wo => {
+      if (wo.resourceId) {
+        const current = workloads.get(wo.resourceId) || 0;
+        workloads.set(wo.resourceId, current + (wo.estimatedDuration || 60));
+      }
+    });
+    return workloads;
+  }, [weekWorkOrders]);
+
+  const getResourceWorkOrders = (resourceId: string) => {
+    return weekWorkOrders.filter(wo => wo.resourceId === resourceId);
+  };
+
+  const getCurrentAvailability = (resource: Resource): string => {
+    const availability = (resource.availability || {}) as Record<string, string>;
+    const todayKey = format(today, "yyyy-MM-dd");
+    return availability[todayKey] || "available";
+  };
+
+  const createMutation = useMutation({
+    mutationFn: async (data: ResourceFormData) => {
+      return apiRequest("POST", "/api/resources", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
+      toast({ title: "Resurs skapad" });
+      closeDialog();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Fel vid skapande", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<ResourceFormData> }) => {
+      return apiRequest("PATCH", `/api/resources/${id}`, data);
+    },
+    onMutate: async ({ id, data }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/resources"] });
+      const prev = queryClient.getQueryData<Resource[]>(["/api/resources"]);
+      if (prev) {
+        queryClient.setQueryData<Resource[]>(
+          ["/api/resources"],
+          prev.map((r) => (r.id === id ? { ...r, ...(data as Partial<Resource>) } : r)),
+        );
+      }
+      closeDialog();
+      setAvailabilityDialogOpen(false);
+      return { prev };
+    },
+    onError: (error: Error, _vars, context) => {
+      if (context?.prev) queryClient.setQueryData(["/api/resources"], context.prev);
+      toast({ title: "Fel vid uppdatering", description: error.message, variant: "destructive" });
+    },
+    onSuccess: () => {
+      toast({ title: "Resurs uppdaterad" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/resources/${id}`);
+    },
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/resources"] });
+      const prev = queryClient.getQueryData<Resource[]>(["/api/resources"]);
+      if (prev) {
+        queryClient.setQueryData<Resource[]>(
+          ["/api/resources"],
+          prev.filter((r) => r.id !== id),
+        );
+      }
+      setDeleteDialogOpen(false);
+      setResourceToDelete(null);
+      return { prev };
+    },
+    onError: (error: Error, _id, context) => {
+      if (context?.prev) queryClient.setQueryData(["/api/resources"], context.prev);
+      toast({ title: "Fel vid borttagning", description: error.message, variant: "destructive" });
+    },
+    onSuccess: () => {
+      toast({ title: "Resurs borttagen" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
+    },
+  });
+
+  const createKompetensMutation = useMutation({
+    mutationFn: async (data: { resourceId: string; articleId: string; efficiencyFactor: number; productionTime?: number }) => {
+      return apiRequest("POST", `/api/resources/${data.resourceId}/articles`, {
+        articleId: data.articleId,
+        efficiencyFactor: data.efficiencyFactor,
+        productionTime: data.productionTime,
+      });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/resources', variables.resourceId, 'articles'] });
+      toast({ title: "Resurskompetens tillagd" });
+      setSelectedArticleId("");
+      setEfficiencyFactor(1.0);
+      setProductionTimeOverride(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte lägga till resurskompetens", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteKompetensMutation = useMutation({
+    mutationFn: async (data: { id: string; resourceId: string }) => {
+      return apiRequest("DELETE", `/api/resource-articles/${data.id}`);
+    },
+    onMutate: async (variables) => {
+      const key = ['/api/resources', variables.resourceId, 'articles'];
+      await queryClient.cancelQueries({ queryKey: key });
+      const prev = queryClient.getQueryData<ResourceArticle[]>(key);
+      if (prev) {
+        queryClient.setQueryData<ResourceArticle[]>(
+          key,
+          prev.filter((ra) => ra.id !== variables.id),
+        );
+      }
+      return { prev, key };
+    },
+    onError: (error: Error, _vars, context) => {
+      if (context?.prev && context?.key) queryClient.setQueryData(context.key, context.prev);
+      toast({ title: "Kunde inte ta bort resurskompetens", description: error.message, variant: "destructive" });
+    },
+    onSuccess: () => {
+      toast({ title: "Resurskompetens borttagen" });
+    },
+    onSettled: (_data, _err, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/resources', variables.resourceId, 'articles'] });
+    },
+  });
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setEditingResource(null);
+    setFormData(emptyFormData);
+  };
+
+  const openCreateDialog = () => {
+    setEditingResource(null);
+    setFormData(emptyFormData);
+    setDialogOpen(true);
+  };
+
+  const openEditDialog = (resource: Resource) => {
+    setEditingResource(resource);
+    setFormData({
+      name: resource.name,
+      initials: resource.initials || "",
+      resourceType: resource.resourceType,
+      phone: resource.phone || "",
+      email: resource.email || "",
+      homeLocation: resource.homeLocation || "",
+      weeklyHours: resource.weeklyHours || 40,
+      competencies: resource.competencies || [],
+      status: resource.status,
+      availability: (resource.availability || {}) as Record<string, string>,
+      smsOnScheduleSend: resource.smsOnScheduleSend !== false,
+      smsOnExtraJob: resource.smsOnExtraJob !== false,
+    });
+    setDialogOpen(true);
+  };
+
+  const openDeleteDialog = (resource: Resource) => {
+    setResourceToDelete(resource);
+    setDeleteDialogOpen(true);
+  };
+
+  const openScheduleDialog = (resource: Resource) => {
+    setSelectedResource(resource);
+    setScheduleDialogOpen(true);
+  };
+
+  const openAvailabilityDialog = (resource: Resource) => {
+    setSelectedResource(resource);
+    setFormData({
+      ...emptyFormData,
+      availability: (resource.availability || {}) as Record<string, string>,
+    });
+    setAvailabilityDialogOpen(true);
+  };
+
+  const handleSubmit = () => {
+    if (!formData.name.trim()) {
+      toast({ title: "Namn krävs", variant: "destructive" });
+      return;
+    }
+    if (editingResource) {
+      updateMutation.mutate({ id: editingResource.id, data: formData });
+    } else {
+      createMutation.mutate(formData);
+    }
+  };
+
+  const handleCompetencyToggle = (competency: string) => {
+    setFormData(prev => ({
+      ...prev,
+      competencies: prev.competencies.includes(competency)
+        ? prev.competencies.filter(c => c !== competency)
+        : [...prev.competencies, competency],
+    }));
+  };
+
+  const handleAvailabilityChange = (date: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      availability: {
+        ...prev.availability,
+        [date]: value,
+      },
+    }));
+  };
+
+  const saveAvailability = () => {
+    if (selectedResource) {
+      updateMutation.mutate({
+        id: selectedResource.id,
+        data: { availability: formData.availability },
+      });
+    }
+  };
+
+  const openKompetensDialog = (resource: Resource) => {
+    setKompetensResource(resource);
+    setSelectedArticleId("");
+    setEfficiencyFactor(1.0);
+    setProductionTimeOverride(null);
+    setKompetensDialogOpen(true);
+  };
+
+  const handleAddKompetens = () => {
+    if (!selectedArticleId || !kompetensResource) {
+      toast({ title: "Välj en artikel", variant: "destructive" });
+      return;
+    }
+    createKompetensMutation.mutate({
+      resourceId: kompetensResource.id,
+      articleId: selectedArticleId,
+      efficiencyFactor,
+      productionTime: productionTimeOverride ?? undefined,
+    });
+  };
+
+  const filteredResources = useMemo(() => {
+    return (resources || []).filter(r => {
+      const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (r.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (r.phone || "").includes(searchQuery);
+
+      const matchesCompetency = competencyFilter === "all" ||
+        (r.competencies || []).includes(competencyFilter);
+
+      const currentAvail = getCurrentAvailability(r);
+      const matchesAvailability = availabilityFilter === "all" ||
+        currentAvail === availabilityFilter;
+
+      return matchesSearch && matchesCompetency && matchesAvailability;
+    });
+  }, [resources, searchQuery, competencyFilter, availabilityFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredResources.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedResources = useMemo(() => {
+    const start = (safePage - 1) * ITEMS_PER_PAGE;
+    return filteredResources.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredResources, safePage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, competencyFilter, availabilityFilter]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [totalPages]);
+
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+
+  const teamStats = useMemo(() => {
+    const activeResources = resources.filter(r => r.status === "active");
+    const availableToday = activeResources.filter(r => getCurrentAvailability(r) === "available").length;
+    const totalWeeklyHours = activeResources.reduce((sum, r) => sum + (r.weeklyHours || 40), 0);
+    const totalWorkloadMinutes = activeResources.reduce((sum, r) => sum + (resourceWorkloads.get(r.id) || 0), 0);
+    const totalWorkloadHours = Math.round(totalWorkloadMinutes / 60 * 10) / 10;
+    const teamUtilization = totalWeeklyHours > 0 ? Math.round((totalWorkloadMinutes / 60) / totalWeeklyHours * 100) : 0;
+    return { activeResources: activeResources.length, availableToday, totalWeeklyHours, totalWorkloadHours, teamUtilization };
+  }, [resources, resourceWorkloads]);
+
+  const hasActiveResourceFilter = !!searchQuery || competencyFilter !== "all" || availabilityFilter !== "all";
+
+  return (
+    <div className="space-y-6 p-6">
+      <PageHeader icon={Users} title={t("resource_plural")} description={`${resources.length} tekniker registrerade`}>
+        <Badge variant="secondary" className="text-xs font-normal gap-1">
+          <CircleCheck className="h-3 w-3 text-chart-2" />
+          {teamStats.availableToday} tillgängliga idag
+        </Badge>
+        <Badge variant="outline" className="text-xs font-normal gap-1">
+          <TrendingUp className="h-3 w-3" />
+          {teamStats.totalWorkloadHours} av {teamStats.totalWeeklyHours}h planerat ({teamStats.teamUtilization}%)
+        </Badge>
+        <ShareFieldAppButton />
+        <Button onClick={openCreateDialog} data-testid="button-add-resource">
+          <Plus className="h-4 w-4 mr-2" />
+          Lägg till resurs
+        </Button>
+      </PageHeader>
+
+      <AICard
+        title="AI Resursanalys"
+        variant="compact"
+        defaultExpanded={false}
+        insights={[
+          { type: "optimization", title: "Kapacitetsbalansering", description: "AI kan föreslå optimal fördelning av arbetsbelastning mellan resurser" },
+          { type: "suggestion", title: "Kompetensoptimering", description: "Matcha resurskompetenser mot arbetsuppgifter för bästa effektivitet" },
+          { type: "info", title: "Tillgänglighetsanalys", description: "Förutse resursbehov och identifiera potentiella flaskhalsar" },
+        ]}
+      />
+
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder={`Sök ${t("resource_plural").toLowerCase()}...`}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+              data-testid="input-search-resources"
+            />
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => setShowFilters(!showFilters)}
+            data-testid="button-toggle-filters"
+          >
+            <Filter className="h-4 w-4 mr-2" />
+            Filter
+            {showFilters ? <ChevronUp className="h-4 w-4 ml-2" /> : <ChevronDown className="h-4 w-4 ml-2" />}
+          </Button>
+        </div>
+
+        {showFilters && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex flex-wrap gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Kompetens</Label>
+                  <Select value={competencyFilter} onValueChange={setCompetencyFilter}>
+                    <SelectTrigger className="w-48" data-testid="select-competency-filter">
+                      <SelectValue placeholder="Alla kompetenser" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Alla kompetenser</SelectItem>
+                      {competencyOptions.map(c => (
+                        <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Tillgänglighet</Label>
+                  <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}>
+                    <SelectTrigger className="w-48" data-testid="select-availability-filter">
+                      <SelectValue placeholder="Alla" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Alla</SelectItem>
+                      {availabilityOptions.map(a => (
+                        <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      <QueryState
+        isLoading={isLoading}
+        isError={isError}
+        isEmpty={filteredResources.length === 0}
+        error={error as { message?: string } | null}
+        onRetry={() => refetch()}
+        loadingVariant="skeleton-rows"
+        skeletonRows={6}
+        emptyTitle={hasActiveResourceFilter ? "Inga resurser matchade filtren" : "Inga resurser ännu"}
+        emptyDescription={hasActiveResourceFilter
+          ? "Försök med andra sökord eller rensa filtren"
+          : "Lägg till tekniker och resurser som ska schemaläggas för fältarbete"}
+        emptyAction={!hasActiveResourceFilter ? (
+          <Button onClick={() => setDialogOpen(true)} data-testid="button-empty-add-resource">
+            <UserPlus className="h-4 w-4 mr-2" />
+            Lägg till resurs
+          </Button>
+        ) : undefined}
+      >
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {paginatedResources.map((resource) => {
+          const workloadMinutes = resourceWorkloads.get(resource.id) || 0;
+          const workloadHours = Math.round(workloadMinutes / 60 * 10) / 10;
+          const weeklyHours = resource.weeklyHours || 40;
+          const workloadPercent = weeklyHours > 0 
+            ? Math.min(100, Math.round((workloadMinutes / 60) / weeklyHours * 100))
+            : 0;
+          const currentAvail = getCurrentAvailability(resource);
+          const availOption = availabilityOptions.find(a => a.value === currentAvail);
+          const resourceJobs = getResourceWorkOrders(resource.id);
+
+          return (
+            <Card
+              key={resource.id}
+              className="group"
+              data-testid={`resource-card-${resource.id}`}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-start gap-4">
+                  <Avatar className="h-12 w-12">
+                    <AvatarFallback className="text-sm">
+                      {resource.initials || resource.name.split(" ").map(n => n[0]).join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h3 className="font-semibold truncate">{resource.name}</h3>
+                        <Badge variant={resource.status === "active" ? "secondary" : "outline"} className="shrink-0">
+                          {resource.status === "active" ? "Aktiv" : "Inaktiv"}
+                        </Badge>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${availOption?.color || "bg-chart-2/15"}`} />
+                          </TooltipTrigger>
+                          <TooltipContent><p>{availOption?.label || "Tillgänglig"}</p></TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openScheduleDialog(resource);
+                              }}
+                              data-testid={`button-schedule-resource-${resource.id}`}
+                            >
+                              <Calendar className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Visa schema</p></TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditDialog(resource);
+                              }}
+                              data-testid={`button-edit-resource-${resource.id}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Redigera</p></TooltipContent>
+                        </Tooltip>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="icon" variant="ghost" onClick={(e) => e.stopPropagation()} data-testid={`button-more-resource-${resource.id}`}>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openAvailabilityDialog(resource)} data-testid={`menu-availability-resource-${resource.id}`}>
+                              <CalendarOff className="h-4 w-4 mr-2" />
+                              Ange frånvaro
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openKompetensDialog(resource)} data-testid={`menu-kompetens-resource-${resource.id}`}>
+                              <Wrench className="h-4 w-4 mr-2" />
+                              Hantera kompetenser
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openDeleteDialog(resource)} className="text-destructive" data-testid={`menu-delete-resource-${resource.id}`}>
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Ta bort resurs
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 text-xs text-muted-foreground mb-3">
+                      {resource.phone && (
+                        <div className="flex items-center gap-2">
+                          <Phone className="h-3 w-3" />
+                          <span>{resource.phone}</span>
+                        </div>
+                      )}
+                      {resource.email && (
+                        <div className="flex items-center gap-2">
+                          <Mail className="h-3 w-3" />
+                          <span className="truncate">{resource.email}</span>
+                        </div>
+                      )}
+                      {resource.homeLocation && (
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-3 w-3" />
+                          <span>{resource.homeLocation}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {(resource.competencies || []).slice(0, 3).map((comp) => (
+                        <Badge key={comp} variant="outline" className="text-[10px]">
+                          {competencyLabels[comp] || comp}
+                        </Badge>
+                      ))}
+                      {(resource.competencies || []).length > 3 && (
+                        <Badge variant="outline" className="text-[10px]">
+                          +{(resource.competencies || []).length - 3}
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Veckobeläggning</span>
+                        <span className={workloadPercent > 90 ? "text-destructive font-medium" : workloadPercent === 0 ? "text-muted-foreground" : ""}>
+                          {workloadPercent === 0 ? `Ingen planering (${weeklyHours}h tillgängligt)` : `${workloadHours} av ${weeklyHours}h (${workloadPercent}%)`}
+                        </span>
+                      </div>
+                      <Progress
+                        value={workloadPercent}
+                        className={workloadPercent > 90 ? "[&>div]:bg-destructive/15" : workloadPercent > 70 ? "[&>div]:bg-chart-4/15" : ""}
+                      />
+                      {resourceJobs.length > 0 && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {resourceJobs.length} jobb denna vecka
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+      </QueryState>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border-t pt-4" data-testid="pagination-resources">
+          <span className="text-sm text-muted-foreground">
+            Visar {(safePage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(safePage * ITEMS_PER_PAGE, filteredResources.length)} av {filteredResources.length}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={safePage <= 1}
+              data-testid="button-prev-page"
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Föregående
+            </Button>
+            <span className="text-sm px-2">
+              Sida {safePage} av {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={safePage >= totalPages}
+              data-testid="button-next-page"
+            >
+              Nästa
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {editingResource ? "Redigera resurs" : "Lägg till resurs"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingResource ? "Uppdatera resursinformation" : "Fyll i information om den nya resursen"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Namn *</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Anna Andersson"
+                  data-testid="input-resource-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="initials">Initialer</Label>
+                <Input
+                  id="initials"
+                  value={formData.initials}
+                  onChange={(e) => setFormData(prev => ({ ...prev, initials: e.target.value.toUpperCase() }))}
+                  placeholder="AA"
+                  maxLength={3}
+                  data-testid="input-resource-initials"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="phone">Telefon</Label>
+                <Input
+                  id="phone"
+                  value={formData.phone}
+                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  placeholder="+46701234567"
+                  data-testid="input-resource-phone"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">E-post</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="anna@kinab.se"
+                  data-testid="input-resource-email"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="homeLocation">Hemort</Label>
+                <Input
+                  id="homeLocation"
+                  value={formData.homeLocation}
+                  onChange={(e) => setFormData(prev => ({ ...prev, homeLocation: e.target.value }))}
+                  placeholder="Södertälje"
+                  data-testid="input-resource-location"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="weeklyHours">Veckotimmar</Label>
+                <Input
+                  id="weeklyHours"
+                  type="number"
+                  value={formData.weeklyHours}
+                  onChange={(e) => setFormData(prev => ({ ...prev, weeklyHours: parseInt(e.target.value) || 40 }))}
+                  min={0}
+                  max={60}
+                  data-testid="input-resource-hours"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="resourceType">Typ</Label>
+                <Select
+                  value={formData.resourceType}
+                  onValueChange={(v) => setFormData(prev => ({ ...prev, resourceType: v }))}
+                >
+                  <SelectTrigger data-testid="select-resource-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="person">Person</SelectItem>
+                    <SelectItem value="vehicle">Fordon</SelectItem>
+                    <SelectItem value="equipment">Utrustning</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(v) => setFormData(prev => ({ ...prev, status: v }))}
+                >
+                  <SelectTrigger data-testid="select-resource-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Aktiv</SelectItem>
+                    <SelectItem value="inactive">Inaktiv</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Kompetenser</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {competencyOptions.map((comp) => (
+                  <div key={comp.value} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`comp-${comp.value}`}
+                      checked={formData.competencies.includes(comp.value)}
+                      onCheckedChange={() => handleCompetencyToggle(comp.value)}
+                      data-testid={`checkbox-competency-${comp.value}`}
+                    />
+                    <Label htmlFor={`comp-${comp.value}`} className="text-sm font-normal cursor-pointer">
+                      {comp.label}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3 border rounded-md p-3">
+              <Label className="text-sm font-medium">SMS-notiser till tekniker</Label>
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="sms-on-publish" className="text-sm font-normal">SMS när schema publiceras</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Skickas när planeraren publicerar veckans schema
+                  </p>
+                </div>
+                <Switch
+                  id="sms-on-publish"
+                  checked={formData.smsOnScheduleSend}
+                  onCheckedChange={(v) => setFormData(prev => ({ ...prev, smsOnScheduleSend: !!v }))}
+                  disabled={!formData.phone}
+                  data-testid="switch-sms-on-schedule-send"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="sms-on-extra" className="text-sm font-normal">SMS vid extrajobb</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Skickas när nytt jobb läggs till efter publicering
+                  </p>
+                </div>
+                <Switch
+                  id="sms-on-extra"
+                  checked={formData.smsOnExtraJob}
+                  onCheckedChange={(v) => setFormData(prev => ({ ...prev, smsOnExtraJob: !!v }))}
+                  disabled={!formData.phone}
+                  data-testid="switch-sms-on-extra-job"
+                />
+              </div>
+              {!formData.phone && (
+                <p className="text-xs text-chart-4">
+                  Lägg till ett telefonnummer för att kunna skicka SMS.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog} disabled={isPending}>
+              Avbryt
+            </Button>
+            <Button onClick={handleSubmit} disabled={isPending} data-testid="button-save-resource">
+              {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {editingResource ? "Spara" : "Lägg till"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Schema för {selectedResource?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Vecka {format(weekStart, "w", { locale: sv })}: {format(weekStart, "d MMM", { locale: sv })} - {format(weekEnd, "d MMM yyyy", { locale: sv })}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {selectedResource && (
+              <>
+                {weekDays.map(day => {
+                  const dayJobs = getResourceWorkOrders(selectedResource.id).filter(wo => {
+                    if (!wo.scheduledDate) return false;
+                    const woDate = new Date(wo.scheduledDate);
+                    return format(woDate, "yyyy-MM-dd") === format(day, "yyyy-MM-dd");
+                  });
+                  const dayName = format(day, "EEEE", { locale: sv });
+                  const dayDate = format(day, "d/M");
+
+                  return (
+                    <div key={day.toISOString()}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="font-medium capitalize">{dayName}</span>
+                        <span className="text-sm text-muted-foreground">{dayDate}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {dayJobs.length} jobb
+                        </Badge>
+                      </div>
+                      {dayJobs.length > 0 ? (
+                        <div className="space-y-2 ml-4">
+                          {dayJobs.map(job => (
+                            <div
+                              key={job.id}
+                              className="flex items-center gap-3 p-2 rounded-md bg-muted/50"
+                            >
+                              <Clock className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm font-medium">{job.scheduledStartTime || "—"}</span>
+                              <span className="text-sm flex-1">{job.title}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {objectMap.get(job.objectId) || "—"}
+                              </span>
+                              <Badge
+                                variant={
+                                  job.orderStatus === "utford" ? "secondary" :
+                                    job.orderStatus === "paborjad" ? "default" : "outline"
+                                }
+                                className="text-xs"
+                              >
+                                {job.orderStatus === "utford" ? "Klar" :
+                                  job.orderStatus === "paborjad" ? "Pågår" :
+                                    job.orderStatus === "planerad_resurs" ? "Schemalagt" : job.orderStatus}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground ml-4">Inga jobb</p>
+                      )}
+                      <Separator className="mt-3" />
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setScheduleDialogOpen(false)}>
+              Stäng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={availabilityDialogOpen} onOpenChange={setAvailabilityDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Tillgänglighet för {selectedResource?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Markera ledighet och frånvaro för kommande dagar
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {weekDays.map(day => {
+              const dateKey = format(day, "yyyy-MM-dd");
+              const currentValue = formData.availability[dateKey] || "available";
+              const dayName = format(day, "EEEE", { locale: sv });
+              const dayDate = format(day, "d/M");
+
+              return (
+                <div key={dateKey} className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium capitalize w-24">{dayName}</span>
+                    <span className="text-sm text-muted-foreground">{dayDate}</span>
+                  </div>
+                  <Select
+                    value={currentValue}
+                    onValueChange={(v) => handleAvailabilityChange(dateKey, v)}
+                  >
+                    <SelectTrigger className="w-40" data-testid={`select-availability-${dateKey}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availabilityOptions.map(a => (
+                        <SelectItem key={a.value} value={a.value}>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${a.color}`} />
+                            {a.label}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAvailabilityDialogOpen(false)}>
+              Avbryt
+            </Button>
+            <Button
+              onClick={saveAvailability}
+              disabled={updateMutation.isPending}
+              data-testid="button-save-availability"
+            >
+              {updateMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Spara
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={kompetensDialogOpen} onOpenChange={setKompetensDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Resurskompetenser för {kompetensResource?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Hantera vilka artiklar denna resurs kan utföra och dess effektivitet
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex gap-4 items-end flex-wrap">
+              <div className="flex-1 min-w-[200px] space-y-2">
+                <Label>Artikel</Label>
+                <Select value={selectedArticleId} onValueChange={setSelectedArticleId}>
+                  <SelectTrigger data-testid="select-kompetens-article">
+                    <SelectValue placeholder="Välj artikel..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableArticles.map(article => (
+                      <SelectItem key={article.id} value={article.id}>
+                        {article.articleNumber} - {article.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="w-32 space-y-2">
+                <Label>Effektivitet</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  max="3.0"
+                  value={efficiencyFactor}
+                  onChange={(e) => setEfficiencyFactor(parseFloat(e.target.value) || 1.0)}
+                  data-testid="input-kompetens-efficiency"
+                />
+              </div>
+              <div className="w-32 space-y-2">
+                <Label>Tid (min)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="Standard"
+                  value={productionTimeOverride ?? ""}
+                  onChange={(e) => setProductionTimeOverride(e.target.value ? parseInt(e.target.value) : null)}
+                  data-testid="input-kompetens-time"
+                />
+              </div>
+              <Button
+                onClick={handleAddKompetens}
+                disabled={!selectedArticleId || createKompetensMutation.isPending}
+                data-testid="button-add-kompetens"
+              >
+                {createKompetensMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">
+                Tilldelade artiklar ({resourceArticles.length})
+              </Label>
+              {resourceArticles.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  Inga artiklar tilldelade ännu
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {resourceArticles.map(ra => {
+                    const article = articleMap.get(ra.articleId);
+                    return (
+                      <div
+                        key={ra.id}
+                        className="flex items-center justify-between gap-4 p-3 rounded-md bg-muted/50"
+                        data-testid={`kompetens-item-${ra.id}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">
+                            {article?.articleNumber || "?"} - {article?.name || "Okänd artikel"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Effektivitet: {ra.efficiencyFactor}x | 
+                            Tid: {ra.productionTime ?? article?.productionTime ?? "—"} min
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          {article?.articleType || "—"}
+                        </Badge>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={() => kompetensResource && deleteKompetensMutation.mutate({ id: ra.id, resourceId: kompetensResource.id })}
+                          disabled={deleteKompetensMutation.isPending}
+                          data-testid={`button-delete-kompetens-${ra.id}`}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setKompetensDialogOpen(false)}>
+              Stäng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ta bort resurs?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Är du säker på att du vill ta bort {resourceToDelete?.name}?
+              Detta kan inte ångras.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => resourceToDelete && deleteMutation.mutate(resourceToDelete.id)}
+              className="bg-destructive/15 text-destructive-foreground"
+              data-testid="button-confirm-delete-resource"
+            >
+              {deleteMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Ta bort
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

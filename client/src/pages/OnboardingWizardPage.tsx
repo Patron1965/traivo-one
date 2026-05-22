@@ -1,0 +1,820 @@
+import { useState, useMemo } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Building2, User, Package, CheckCircle, ArrowRight, ArrowLeft,
+  Loader2, Eye, EyeOff, Sparkles, Copy, ExternalLink, AlertCircle,
+  RefreshCw, Shield, Info
+} from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+
+interface IndustryPackage {
+  id: string;
+  slug: string;
+  name: string;
+  industry: string;
+  description: string;
+  icon: string;
+}
+
+interface OnboardingResult {
+  success: boolean;
+  tenant: { id: string; name: string; orgNumber: string | null; industry: string | null };
+  adminUser: { id: string; email: string; firstName: string | null; lastName: string | null };
+  packageSummary: { packageName: string; articlesInstalled: number; metadataInstalled: number; structuralArticlesInstalled: number } | null;
+}
+
+const INDUSTRIES = [
+  { value: "waste", label: "Avfallshantering", description: "Sophämtning, kärlhantering, containerservice" },
+  { value: "cleaning", label: "Städtjänster", description: "Kontorsstäd, fastighetsstäd, fönsterputsning" },
+  { value: "property", label: "Fastighetsservice", description: "Underhåll, reparationer, fastighetsskötsel" },
+  { value: "other", label: "Annat", description: "Övrig fältservice" },
+];
+
+const STEPS = [
+  { label: "Företagsinfo", icon: Building2 },
+  { label: "Branschpaket", icon: Package },
+  { label: "Admin-användare", icon: User },
+  { label: "Sammanfattning", icon: CheckCircle },
+];
+
+function formatOrgNumber(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+  if (digits.length > 6) {
+    return digits.slice(0, 6) + "-" + digits.slice(6);
+  }
+  return digits;
+}
+
+function isValidOrgNumber(value: string): boolean {
+  if (!value) return true;
+  return /^\d{6}-\d{4}$/.test(value);
+}
+
+function isValidEmail(value: string): boolean {
+  if (!value) return true;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function generatePassword(): string {
+  const chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const specials = "!@#$%&*";
+  let password = "";
+  for (let i = 0; i < 10; i++) {
+    password += chars[Math.floor(Math.random() * chars.length)];
+  }
+  password += specials[Math.floor(Math.random() * specials.length)];
+  password += Math.floor(Math.random() * 10);
+  return password.split("").sort(() => Math.random() - 0.5).join("");
+}
+
+function getPasswordStrength(password: string): { level: number; label: string; color: string } {
+  if (!password) return { level: 0, label: "", color: "" };
+  let score = 0;
+  if (password.length >= 6) score++;
+  if (password.length >= 8) score++;
+  if (/[A-Z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^A-Za-z0-9]/.test(password)) score++;
+
+  if (score <= 1) return { level: 1, label: "Svagt", color: "bg-destructive/15" };
+  if (score <= 2) return { level: 2, label: "Okej", color: "bg-chart-4/15" };
+  if (score <= 3) return { level: 3, label: "Bra", color: "bg-chart-3/15" };
+  if (score <= 4) return { level: 4, label: "Starkt", color: "bg-chart-2/15" };
+  return { level: 5, label: "Mycket starkt", color: "bg-chart-2/15" };
+}
+
+function StepIndicator({ currentStep }: { currentStep: number }) {
+  return (
+    <div className="flex items-center justify-center gap-1 mb-8">
+      {STEPS.map((step, index) => {
+        const Icon = step.icon;
+        const isActive = index === currentStep;
+        const isCompleted = index < currentStep;
+        return (
+          <div key={index} className="flex items-center">
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+              isActive ? "bg-chart-1/15 dark:bg-chart-1/15 text-chart-1" :
+              isCompleted ? "bg-chart-2/15 dark:bg-chart-2/15 text-chart-2" :
+              "bg-muted text-muted-foreground"
+            }`}>
+              <div className={`flex items-center justify-center h-6 w-6 rounded-full text-xs font-bold ${
+                isCompleted ? "bg-chart-2 text-white" :
+                isActive ? "bg-chart-1 text-white" :
+                "bg-muted-foreground/30 text-muted-foreground"
+              }`}>
+                {isCompleted ? <CheckCircle className="h-3.5 w-3.5" /> : index + 1}
+              </div>
+              <Icon className="h-4 w-4 hidden sm:block" />
+              <span className="text-xs font-medium hidden md:block">{step.label}</span>
+            </div>
+            {index < STEPS.length - 1 && (
+              <ArrowRight className="h-4 w-4 text-muted-foreground mx-1" />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function OnboardingWizardPage() {
+  const { toast } = useToast();
+  const [currentStep, setCurrentStep] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showSummaryPassword, setShowSummaryPassword] = useState(false);
+  const [result, setResult] = useState<OnboardingResult | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const [companyName, setCompanyName] = useState("");
+  const [orgNumber, setOrgNumber] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [industry, setIndustry] = useState("");
+
+  const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
+
+  const [adminFirstName, setAdminFirstName] = useState("");
+  const [adminLastName, setAdminLastName] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminPasswordConfirm, setAdminPasswordConfirm] = useState("");
+
+  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
+  const markTouched = (field: string) => setTouchedFields(prev => ({ ...prev, [field]: true }));
+
+  const { data: packages = [] } = useQuery<IndustryPackage[]>({
+    queryKey: ["/api/system/industry-packages"],
+  });
+
+  const onboardMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/system/onboard-tenant", {
+        company: {
+          name: companyName,
+          orgNumber: orgNumber || undefined,
+          contactEmail: contactEmail || undefined,
+          contactPhone: contactPhone || undefined,
+          industry: industry || undefined,
+        },
+        industryPackageId: selectedPackageId || undefined,
+        adminUser: {
+          email: adminEmail,
+          password: adminPassword,
+          firstName: adminFirstName || undefined,
+          lastName: adminLastName || undefined,
+        },
+      });
+      return res.json() as Promise<OnboardingResult>;
+    },
+    onSuccess: (data) => {
+      setResult(data);
+      toast({
+        title: "Företagskonto skapat",
+        description: `${data.tenant.name} har skapats framgångsrikt`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Kunde inte skapa företagskonto",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const validationErrors = useMemo(() => {
+    const errors: Record<string, string> = {};
+    if (orgNumber && !isValidOrgNumber(orgNumber)) {
+      errors.orgNumber = "Ogiltigt format — använd XXXXXX-XXXX";
+    }
+    if (contactEmail && !isValidEmail(contactEmail)) {
+      errors.contactEmail = "Ogiltig e-postadress";
+    }
+    if (adminEmail && !isValidEmail(adminEmail)) {
+      errors.adminEmail = "Ogiltig e-postadress";
+    }
+    if (adminPassword && adminPassword.length < 6) {
+      errors.adminPassword = "Lösenordet måste vara minst 6 tecken";
+    }
+    if (adminPasswordConfirm && adminPassword !== adminPasswordConfirm) {
+      errors.adminPasswordConfirm = "Lösenorden matchar inte";
+    }
+    return errors;
+  }, [orgNumber, contactEmail, adminEmail, adminPassword, adminPasswordConfirm]);
+
+  const canProceed = () => {
+    switch (currentStep) {
+      case 0:
+        return companyName.trim().length > 0
+          && !validationErrors.orgNumber
+          && !validationErrors.contactEmail;
+      case 1: return true;
+      case 2:
+        return adminEmail.trim().length > 0
+          && isValidEmail(adminEmail)
+          && adminPassword.length >= 6
+          && adminPassword === adminPasswordConfirm
+          && !validationErrors.adminEmail;
+      case 3: return true;
+      default: return false;
+    }
+  };
+
+  const handleNext = () => {
+    if (currentStep < 3) {
+      setCurrentStep(currentStep + 1);
+    } else {
+      onboardMutation.mutate();
+    }
+  };
+
+  const handleBack = () => {
+    if (currentStep > 0) setCurrentStep(currentStep - 1);
+  };
+
+  const handleGeneratePassword = () => {
+    const pw = generatePassword();
+    setAdminPassword(pw);
+    setAdminPasswordConfirm(pw);
+    setShowPassword(true);
+    toast({ title: "Lösenord genererat", description: "Ett starkt lösenord har skapats" });
+  };
+
+  const copyCredentials = () => {
+    const text = `Företag: ${result?.tenant.name}\nE-post: ${adminEmail}\nLösenord: ${adminPassword}`;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast({ title: "Kopierat", description: "Inloggningsuppgifter kopierade till urklipp" });
+  };
+
+  const resetWizard = () => {
+    setCurrentStep(0);
+    setResult(null);
+    setCompanyName("");
+    setOrgNumber("");
+    setContactEmail("");
+    setContactPhone("");
+    setIndustry("");
+    setSelectedPackageId(null);
+    setAdminFirstName("");
+    setAdminLastName("");
+    setAdminEmail("");
+    setAdminPassword("");
+    setAdminPasswordConfirm("");
+    setShowPassword(false);
+    setShowSummaryPassword(false);
+    setTouchedFields({});
+  };
+
+  const passwordStrength = getPasswordStrength(adminPassword);
+
+  if (result) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto space-y-6">
+        <div className="text-center space-y-2">
+          <div className="flex items-center justify-center h-16 w-16 rounded-full bg-chart-2/15 dark:bg-chart-2/15 mx-auto">
+            <CheckCircle className="h-8 w-8 text-chart-2" />
+          </div>
+          <h1 className="text-2xl font-bold" data-testid="text-onboarding-success">Företagskonto skapat!</h1>
+          <p className="text-muted-foreground">{result.tenant.name} är redo att användas</p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Företagsinfo</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Företagsnamn</span>
+              <span className="font-medium">{result.tenant.name}</span>
+            </div>
+            {result.tenant.orgNumber && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Org.nr</span>
+                <span className="font-medium">{result.tenant.orgNumber}</span>
+              </div>
+            )}
+            {result.tenant.industry && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Bransch</span>
+                <span className="font-medium">{INDUSTRIES.find(i => i.value === result.tenant.industry)?.label || result.tenant.industry}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Inloggningsuppgifter</CardTitle>
+            <CardDescription>Skicka dessa till kundens administratör</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="bg-muted p-4 rounded-lg space-y-2 font-mono text-sm">
+              <div><span className="text-muted-foreground">E-post:</span> {adminEmail}</div>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">Lösenord:</span>
+                <span>{showSummaryPassword ? adminPassword : "••••••••••"}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => setShowSummaryPassword(!showSummaryPassword)}
+                  data-testid="button-toggle-result-password"
+                >
+                  {showSummaryPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={copyCredentials} data-testid="button-copy-credentials">
+              {copied ? <CheckCircle className="h-4 w-4 mr-2 text-chart-2" /> : <Copy className="h-4 w-4 mr-2" />}
+              {copied ? "Kopierat!" : "Kopiera inloggningsuppgifter"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {result.packageSummary && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Installerat branschpaket</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div>
+                  <div className="text-lg font-bold text-chart-1">{result.packageSummary.articlesInstalled}</div>
+                  <div className="text-xs text-muted-foreground">Artiklar</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-chart-5">{result.packageSummary.metadataInstalled}</div>
+                  <div className="text-xs text-muted-foreground">Metadata-fält</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-chart-2">{result.packageSummary.structuralArticlesInstalled}</div>
+                  <div className="text-xs text-muted-foreground">Strukturartiklar</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card className="border-chart-1/20 dark:border-chart-1/80 bg-chart-1/10 dark:bg-chart-1/15">
+          <CardContent className="pt-6">
+            <p className="text-sm font-medium mb-3">Nästa steg</p>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p>1. Skicka inloggningsuppgifterna till kunden</p>
+              <p>2. Kunden loggar in och importerar sin data via Modus 2.0-importen</p>
+              <p>3. Konfigurera eventuella ytterligare inställningar under Företagsinställningar</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={resetWizard} data-testid="button-create-another">
+            Skapa ytterligare företag
+          </Button>
+          <Button asChild data-testid="button-goto-import">
+            <a href="/import">
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Gå till dataimport
+            </a>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 max-w-2xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold" data-testid="text-onboarding-title">Nytt företagskonto</h1>
+        <p className="text-muted-foreground">Skapa ett nytt företagskonto med branschpaket och admin-användare</p>
+      </div>
+
+      <StepIndicator currentStep={currentStep} />
+
+      {currentStep === 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              Företagsinformation
+            </CardTitle>
+            <CardDescription>Grundläggande information om det nya företaget</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="company-name">Företagsnamn *</Label>
+              <Input
+                id="company-name"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="t.ex. Städservice Stockholm AB"
+                data-testid="input-company-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="org-number">Organisationsnummer</Label>
+              <Input
+                id="org-number"
+                value={orgNumber}
+                onChange={(e) => setOrgNumber(formatOrgNumber(e.target.value))}
+                onBlur={() => markTouched("orgNumber")}
+                placeholder="XXXXXX-XXXX"
+                maxLength={11}
+                data-testid="input-org-number"
+                className={touchedFields.orgNumber && validationErrors.orgNumber ? "border-destructive/50" : ""}
+              />
+              {touchedFields.orgNumber && validationErrors.orgNumber && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {validationErrors.orgNumber}
+                </p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="contact-email">Kontakt-epost</Label>
+                <Input
+                  id="contact-email"
+                  type="email"
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                  onBlur={() => markTouched("contactEmail")}
+                  placeholder="info@foretag.se"
+                  data-testid="input-contact-email"
+                  className={touchedFields.contactEmail && validationErrors.contactEmail ? "border-destructive/50" : ""}
+                />
+                {touchedFields.contactEmail && validationErrors.contactEmail && (
+                  <p className="text-xs text-destructive flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {validationErrors.contactEmail}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contact-phone">Kontakttelefon</Label>
+                <Input
+                  id="contact-phone"
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  placeholder="08-123 456"
+                  data-testid="input-contact-phone"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="industry">Bransch</Label>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" data-testid="icon-industry-tooltip" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs max-w-[200px]">Valet av bransch styr vilka branschpaket som föreslås i nästa steg</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <Select value={industry} onValueChange={setIndustry}>
+                <SelectTrigger id="industry" data-testid="select-industry">
+                  <SelectValue placeholder="Välj bransch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {INDUSTRIES.map((ind) => (
+                    <SelectItem key={ind.value} value={ind.value}>
+                      <div className="flex flex-col">
+                        <span>{ind.label}</span>
+                        <span className="text-xs text-muted-foreground">{ind.description}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {currentStep === 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Välj branschpaket
+            </CardTitle>
+            <CardDescription>
+              Branschpaket installerar fördefinierade artiklar, metadata och inställningar. Du kan hoppa över detta steg.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {packages.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Package className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                <p className="text-sm">Inga branschpaket tillgängliga.</p>
+                <p className="text-xs mt-1">Skapa branschpaket under Branschpaket-sidan först.</p>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {packages.map((pkg) => (
+                  <div
+                    key={pkg.id}
+                    className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                      selectedPackageId === pkg.id
+                        ? "border-chart-1/50 bg-chart-1/10 dark:bg-chart-1/15"
+                        : "hover:border-muted-foreground/50"
+                    }`}
+                    onClick={() => setSelectedPackageId(selectedPackageId === pkg.id ? null : pkg.id)}
+                    data-testid={`card-package-${pkg.slug}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`flex items-center justify-center h-10 w-10 rounded-lg text-lg ${
+                        selectedPackageId === pkg.id ? "bg-chart-1/15 dark:bg-chart-1/15" : "bg-muted"
+                      }`}>
+                        {pkg.icon || "📦"}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-medium">{pkg.name}</h3>
+                          <Badge variant="secondary" className="text-xs">
+                            {INDUSTRIES.find(i => i.value === pkg.industry)?.label || pkg.industry}
+                          </Badge>
+                          {selectedPackageId === pkg.id && (
+                            <Badge variant="default" className="text-xs bg-chart-1/15">Vald</Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">{pkg.description}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {selectedPackageId && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedPackageId(null)}
+                className="text-muted-foreground"
+                data-testid="button-clear-package"
+              >
+                Avmarkera paket (hoppa över)
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {currentStep === 2 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <User className="h-5 w-5" />
+              Skapa admin-användare
+            </CardTitle>
+            <CardDescription>
+              Företagets första inloggning — denna användare blir ägare av kontot
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="admin-first-name">Förnamn</Label>
+                <Input
+                  id="admin-first-name"
+                  value={adminFirstName}
+                  onChange={(e) => setAdminFirstName(e.target.value)}
+                  placeholder="Anna"
+                  data-testid="input-admin-first-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="admin-last-name">Efternamn</Label>
+                <Input
+                  id="admin-last-name"
+                  value={adminLastName}
+                  onChange={(e) => setAdminLastName(e.target.value)}
+                  placeholder="Andersson"
+                  data-testid="input-admin-last-name"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="admin-email">E-postadress *</Label>
+              <Input
+                id="admin-email"
+                type="email"
+                value={adminEmail}
+                onChange={(e) => setAdminEmail(e.target.value)}
+                onBlur={() => markTouched("adminEmail")}
+                placeholder="admin@foretag.se"
+                data-testid="input-admin-email"
+                className={touchedFields.adminEmail && validationErrors.adminEmail ? "border-destructive/50" : ""}
+              />
+              {touchedFields.adminEmail && validationErrors.adminEmail && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {validationErrors.adminEmail}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="admin-password">Lösenord *</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs gap-1 text-muted-foreground"
+                  onClick={handleGeneratePassword}
+                  data-testid="button-generate-password"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Generera lösenord
+                </Button>
+              </div>
+              <div className="relative">
+                <Input
+                  id="admin-password"
+                  type={showPassword ? "text" : "password"}
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  placeholder="Minst 6 tecken"
+                  data-testid="input-admin-password"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-1 top-1 h-7 w-7 p-0"
+                  onClick={() => setShowPassword(!showPassword)}
+                  data-testid="button-toggle-password"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+              {adminPassword.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex gap-1 h-1.5">
+                    {[1, 2, 3, 4, 5].map((level) => (
+                      // nosemgrep: generic.secrets.gitleaks.hashicorp-tf-password
+                      // Falsk positiv: variabeln 'passwordStrength' ar UI-state for losenordsstyrka-meter, inte ett losenord.
+                      <div
+                        key={level}
+                        className={`flex-1 rounded-full transition-colors ${
+                          level <= passwordStrength.level ? passwordStrength.color : "bg-muted"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Shield className="h-3 w-3" />
+                      {passwordStrength.label}
+                    </p>
+                    {adminPassword.length < 6 && (
+                      <p className="text-xs text-destructive">Minst 6 tecken</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="admin-password-confirm">Upprepa lösenord *</Label>
+              <Input
+                id="admin-password-confirm"
+                type={showPassword ? "text" : "password"}
+                value={adminPasswordConfirm}
+                onChange={(e) => setAdminPasswordConfirm(e.target.value)}
+                onBlur={() => markTouched("adminPasswordConfirm")}
+                placeholder="Ange lösenordet igen"
+                data-testid="input-admin-password-confirm"
+                className={touchedFields.adminPasswordConfirm && validationErrors.adminPasswordConfirm ? "border-destructive/50" : ""}
+              />
+              {touchedFields.adminPasswordConfirm && validationErrors.adminPasswordConfirm && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {validationErrors.adminPasswordConfirm}
+                </p>
+              )}
+              {adminPasswordConfirm && adminPassword === adminPasswordConfirm && (
+                <p className="text-xs text-chart-2 flex items-center gap-1" data-testid="text-password-match">
+                  <CheckCircle className="h-3 w-3" />
+                  Lösenorden matchar
+                </p>
+              )}
+            </div>
+            <div className="bg-muted/50 p-3 rounded-md text-xs text-muted-foreground">
+              Användaren skapas med rollen <strong>Ägare</strong> och får fullständig åtkomst till företagskontot.
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {currentStep === 3 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5" />
+              Bekräfta och skapa
+            </CardTitle>
+            <CardDescription>
+              Kontrollera att allt stämmer innan du skapar företagskontot
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <div className="p-3 bg-muted/50 rounded-lg space-y-1">
+                <p className="text-xs text-muted-foreground font-medium">FÖRETAG</p>
+                <p className="font-medium">{companyName}</p>
+                {orgNumber && <p className="text-sm text-muted-foreground">Org.nr: {orgNumber}</p>}
+                {industry && <p className="text-sm text-muted-foreground">Bransch: {INDUSTRIES.find(i => i.value === industry)?.label}</p>}
+                {contactEmail && <p className="text-sm text-muted-foreground">{contactEmail}</p>}
+                {contactPhone && <p className="text-sm text-muted-foreground">{contactPhone}</p>}
+              </div>
+
+              <div className="p-3 bg-muted/50 rounded-lg space-y-1">
+                <p className="text-xs text-muted-foreground font-medium">BRANSCHPAKET</p>
+                {selectedPackageId ? (
+                  <p className="font-medium flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-chart-1" />
+                    {packages.find(p => p.id === selectedPackageId)?.name || "Valt paket"}
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Inget paket valt — kan installeras senare</p>
+                )}
+              </div>
+
+              <div className="p-3 bg-muted/50 rounded-lg space-y-1">
+                <p className="text-xs text-muted-foreground font-medium">ADMIN-ANVÄNDARE</p>
+                <p className="font-medium">
+                  {adminFirstName || adminLastName ? `${adminFirstName} ${adminLastName}`.trim() : adminEmail}
+                </p>
+                <p className="text-sm text-muted-foreground">{adminEmail}</p>
+                <p className="text-sm text-muted-foreground">Roll: Ägare</p>
+                <div className="text-sm text-muted-foreground flex items-center gap-1">
+                  Lösenord: {showSummaryPassword ? adminPassword : "••••••••"}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 w-5 p-0"
+                    onClick={() => setShowSummaryPassword(!showSummaryPassword)}
+                    data-testid="button-toggle-summary-password"
+                  >
+                    {showSummaryPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="flex justify-between">
+        <Button
+          variant="outline"
+          onClick={handleBack}
+          disabled={currentStep === 0}
+          data-testid="button-wizard-back"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Tillbaka
+        </Button>
+
+        <Button
+          onClick={handleNext}
+          disabled={!canProceed() || onboardMutation.isPending}
+          data-testid="button-wizard-next"
+        >
+          {onboardMutation.isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Skapar...
+            </>
+          ) : currentStep === 3 ? (
+            <>
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Skapa företagskonto
+            </>
+          ) : (
+            <>
+              Nästa
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}

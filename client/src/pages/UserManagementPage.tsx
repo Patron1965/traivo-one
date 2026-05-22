@@ -1,0 +1,1534 @@
+import { useState, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Plus,
+  Search,
+  Loader2,
+  Pencil,
+  Trash2,
+  Users,
+  Shield,
+  ShieldCheck,
+  UserCog,
+  Eye,
+  EyeOff,
+  Mail,
+  UserCircle,
+  UsersRound,
+  X,
+  UserPlus,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Clock,
+  Building2,
+  MessageSquare,
+  Send,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+} from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/hooks/use-language";
+import { PageHeader } from "@/components/layout/PageHeader";
+import type { Resource, Team, TeamMember, ResourceProfile, Invitation } from "@shared/schema";
+
+interface UserData {
+  id: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  role: string | null;
+  resourceId: string | null;
+  isActive: boolean | null;
+  lastLoginAt: string | null;
+  createdAt: string | null;
+}
+
+const ROLE_CONFIG: Record<string, { label: string; color: string; icon: typeof Shield; avatarBg: string }> = {
+  admin: { label: "Admin", color: "bg-destructive/10 text-destructive border-destructive/20", icon: ShieldCheck, avatarBg: "bg-destructive/15" },
+  planner: { label: "Planerare", color: "bg-chart-1/10 text-chart-1 border-chart-1/20", icon: UserCog, avatarBg: "bg-chart-1/15" },
+  user: { label: "Användare", color: "bg-muted text-muted-foreground border-border", icon: Users, avatarBg: "bg-muted-foreground" },
+  technician: { label: "Tekniker", color: "bg-chart-2/10 text-chart-2 border-chart-2/20", icon: Shield, avatarBg: "bg-chart-2/15" },
+  customer: { label: "Kund", color: "bg-chart-3/10 text-chart-3 border-chart-3/20", icon: Building2, avatarBg: "bg-chart-3/15" },
+  reporter: { label: "Anmälare", color: "bg-chart-4/10 text-chart-4 border-chart-4/20", icon: MessageSquare, avatarBg: "bg-chart-4/15" },
+};
+
+function formatRelativeTime(dateStr: string | null): string {
+  if (!dateStr) return "Aldrig";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  const diffWeeks = Math.floor(diffDays / 7);
+  const diffMonths = Math.floor(diffDays / 30);
+
+  if (diffSeconds < 60) return "just nu";
+  if (diffMinutes < 60) return `${diffMinutes} ${diffMinutes === 1 ? "minut" : "minuter"} sedan`;
+  if (diffHours < 24) return `${diffHours} ${diffHours === 1 ? "timme" : "timmar"} sedan`;
+  if (diffDays === 1) return "igår";
+  if (diffDays < 7) return `${diffDays} dagar sedan`;
+  if (diffWeeks < 4) return `${diffWeeks} ${diffWeeks === 1 ? "vecka" : "veckor"} sedan`;
+  if (diffMonths < 12) return `${diffMonths} ${diffMonths === 1 ? "månad" : "månader"} sedan`;
+  return date.toLocaleDateString("sv-SE");
+}
+
+function getUserInitials(firstName: string | null, lastName: string | null): string {
+  const f = firstName?.trim()?.[0]?.toUpperCase() || "";
+  const l = lastName?.trim()?.[0]?.toUpperCase() || "";
+  return f || l ? `${f}${l}` : "?";
+}
+
+type SortColumn = "name" | "email" | "role" | "status" | "lastLogin";
+type SortDirection = "asc" | "desc";
+
+export default function UserManagementPage() {
+  const { toast } = useToast();
+  const { t: tl } = useLanguage();
+  const [activeTab, setActiveTab] = useState("users");
+  const [search, setSearch] = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserData | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UserData | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const [teamDialogOpen, setTeamDialogOpen] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+  const [deleteTeamTarget, setDeleteTeamTarget] = useState<Team | null>(null);
+  const [teamForm, setTeamForm] = useState({ name: "", description: "", color: "#3B82F6", profileIds: [] as string[] });
+  const [addMemberTeamId, setAddMemberTeamId] = useState<string | null>(null);
+  const [addMemberResourceId, setAddMemberResourceId] = useState("");
+  const [addMemberRole, setAddMemberRole] = useState("medlem");
+
+  const [sortColumn, setSortColumn] = useState<SortColumn>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const [inlineEditingRole, setInlineEditingRole] = useState<string | null>(null);
+  const [inlineEditingResource, setInlineEditingResource] = useState<string | null>(null);
+
+  const [form, setForm] = useState({
+    email: "",
+    firstName: "",
+    lastName: "",
+    password: "",
+    role: "user",
+    resourceId: "",
+  });
+
+  const { data: users = [], isLoading } = useQuery<UserData[]>({
+    queryKey: ["/api/admin/users"],
+  });
+
+  const { data: resources = [] } = useQuery<Resource[]>({
+    queryKey: ["/api/resources"],
+  });
+
+  const { data: teams = [], isLoading: teamsLoading } = useQuery<Team[]>({
+    queryKey: ["/api/teams"],
+  });
+
+  const { data: allTeamMembers = [] } = useQuery<TeamMember[]>({
+    queryKey: ["/api/team-members"],
+  });
+
+  const { data: profiles = [] } = useQuery<ResourceProfile[]>({
+    queryKey: ["/api/resource-profiles"],
+  });
+
+  const { data: invitationsList = [], isLoading: invitationsLoading } = useQuery<Invitation[]>({
+    queryKey: ["/api/invitations"],
+  });
+
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ email: "", role: "user" });
+
+  const createInviteMutation = useMutation({
+    mutationFn: async (data: { email: string; role: string }) => {
+      const res = await apiRequest("POST", "/api/invitations", data);
+      return res.json() as Promise<{ id: string; email: string; emailDelivered?: boolean; emailError?: string | null }>;
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations"] });
+      if (result.emailDelivered) {
+        toast({
+          title: "Inbjudan skickad",
+          description: `Mejlet skickades till ${inviteForm.email}. Slutgiltig leveransbekräftelse kommer från Resend när mottagaren får det (status "Levererad" i listan).`,
+        });
+      } else {
+        toast({
+          title: "Inbjudan sparad — men e-post kunde inte skickas",
+          description: result.emailError
+            ? `Resend-fel: ${result.emailError}. Kontrollera att avsändardomänen (RESEND_FROM_EMAIL) är verifierad i Resend.`
+            : "Användaren finns i listan men fick inget mejl. Kontrollera Resend-domänen och spam-mappen.",
+          variant: "destructive",
+          duration: 15000,
+        });
+      }
+      setInviteDialogOpen(false);
+      setInviteForm({ email: "", role: "user" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skicka inbjudan", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteInviteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/invitations/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations"] });
+      toast({ title: "Inbjudan borttagen" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort inbjudan", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const resendInviteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/invitations/${id}/resend`, {});
+      return res.json() as Promise<{ email: string; emailDelivered?: boolean; emailError?: string | null }>;
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations"] });
+      if (result.emailDelivered) {
+        toast({ title: "Inbjudan skickad igen", description: `Mejlet accepterades av Resend för ${result.email}. Leveransstatus uppdateras när Resend rapporterar tillbaka.` });
+      } else {
+        toast({
+          title: "Kunde inte skicka om",
+          description: result.emailError
+            ? `Resend-fel: ${result.emailError}. Verifiera avsändardomänen i Resend Dashboard.`
+            : "Okänt fel — kontrollera Resend-domänen.",
+          variant: "destructive",
+          duration: 15000,
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skicka om inbjudan", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: typeof form) => apiRequest("POST", "/api/admin/users", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Användare skapad", description: "Kontot har skapats." });
+      closeDialog();
+    },
+    onError: (err: any) => {
+      toast({ title: "Kunde inte skapa användare", description: err?.message || "Okänt fel", variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => apiRequest("PATCH", `/api/admin/users/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Uppdaterad", description: "Användaren har uppdaterats." });
+      closeDialog();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte uppdatera användare", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const inlineUpdateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => apiRequest("PATCH", `/api/admin/users/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setInlineEditingRole(null);
+      setInlineEditingResource(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte uppdatera användare", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const bulkUpdateMutation = useMutation({
+    mutationFn: (data: { ids: string[]; updates: any }) => apiRequest("PATCH", "/api/admin/users/bulk", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setSelectedIds(new Set());
+      toast({ title: "Uppdaterat", description: "Valda användare har uppdaterats." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte massuppdatera", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/admin/users/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Borttagen", description: "Användaren har tagits bort." });
+      setDeleteTarget(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort användare", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      apiRequest("PATCH", `/api/admin/users/${id}`, { isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+    },
+  });
+
+  const createTeamMutation = useMutation({
+    mutationFn: (data: typeof teamForm) => apiRequest("POST", "/api/teams", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
+      toast({ title: "Team skapat", description: "Teamet har skapats." });
+      closeTeamDialog();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skapa team", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateTeamMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => apiRequest("PATCH", `/api/teams/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
+      toast({ title: "Uppdaterat", description: "Teamet har uppdaterats." });
+      closeTeamDialog();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte uppdatera team", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteTeamMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/teams/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/team-members"] });
+      toast({ title: "Borttaget", description: "Teamet har tagits bort." });
+      setDeleteTeamTarget(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort team", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const addTeamMemberMutation = useMutation({
+    mutationFn: ({ teamId, resourceId, role }: { teamId: string; resourceId: string; role: string }) =>
+      apiRequest("POST", `/api/team-members/${teamId}`, { resourceId, role }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/team-members"] });
+      toast({ title: "Medlem tillagd", description: "Resursen har lagts till i teamet." });
+      setAddMemberTeamId(null);
+      setAddMemberResourceId("");
+      setAddMemberRole("medlem");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte lägga till medlem", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const removeTeamMemberMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/team-member/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/team-members"] });
+      toast({ title: "Borttagen", description: "Medlemmen har tagits bort från teamet." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort medlem", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setEditingUser(null);
+    setShowPassword(false);
+    setForm({ email: "", firstName: "", lastName: "", password: "", role: "user", resourceId: "" });
+  };
+
+  const closeTeamDialog = () => {
+    setTeamDialogOpen(false);
+    setEditingTeam(null);
+    setTeamForm({ name: "", description: "", color: "#3B82F6", profileIds: [] });
+  };
+
+  const openCreate = () => {
+    setEditingUser(null);
+    setForm({ email: "", firstName: "", lastName: "", password: "", role: "user", resourceId: "" });
+    setDialogOpen(true);
+  };
+
+  const openEdit = (user: UserData) => {
+    setEditingUser(user);
+    setForm({
+      email: user.email || "",
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      password: "",
+      role: user.role || "user",
+      resourceId: user.resourceId || "",
+    });
+    setDialogOpen(true);
+  };
+
+  const openCreateTeam = () => {
+    setEditingTeam(null);
+    setTeamForm({ name: "", description: "", color: "#3B82F6", profileIds: [] });
+    setTeamDialogOpen(true);
+  };
+
+  const openEditTeam = (team: Team) => {
+    setEditingTeam(team);
+    setTeamForm({ name: team.name, description: team.description || "", color: team.color || "#3B82F6", profileIds: team.profileIds || [] });
+    setTeamDialogOpen(true);
+  };
+
+  const handleSubmit = () => {
+    if (editingUser) {
+      const data: any = {
+        email: form.email,
+        firstName: form.firstName,
+        lastName: form.lastName,
+        role: form.role,
+        resourceId: form.resourceId || null,
+      };
+      if (form.password) data.password = form.password;
+      updateMutation.mutate({ id: editingUser.id, data });
+    } else {
+      if (!form.email || !form.password) {
+        toast({ title: "Saknade uppgifter", description: "E-post och lösenord krävs", variant: "destructive" });
+        return;
+      }
+      createMutation.mutate(form);
+    }
+  };
+
+  const handleTeamSubmit = () => {
+    if (!teamForm.name.trim()) {
+      toast({ title: "Saknade uppgifter", description: "Teamnamn krävs", variant: "destructive" });
+      return;
+    }
+    if (editingTeam) {
+      updateTeamMutation.mutate({ id: editingTeam.id, data: teamForm });
+    } else {
+      createTeamMutation.mutate(teamForm);
+    }
+  };
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === sortedUsers.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(sortedUsers.map(u => u.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const filteredUsers = users.filter(u => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      u.email?.toLowerCase().includes(q) ||
+      u.firstName?.toLowerCase().includes(q) ||
+      u.lastName?.toLowerCase().includes(q) ||
+      u.role?.toLowerCase().includes(q)
+    );
+  });
+
+  const sortedUsers = useMemo(() => {
+    const sorted = [...filteredUsers].sort((a, b) => {
+      let aVal = "";
+      let bVal = "";
+      switch (sortColumn) {
+        case "name":
+          aVal = `${a.firstName || ""} ${a.lastName || ""}`.trim().toLowerCase();
+          bVal = `${b.firstName || ""} ${b.lastName || ""}`.trim().toLowerCase();
+          break;
+        case "email":
+          aVal = (a.email || "").toLowerCase();
+          bVal = (b.email || "").toLowerCase();
+          break;
+        case "role":
+          aVal = (a.role || "user").toLowerCase();
+          bVal = (b.role || "user").toLowerCase();
+          break;
+        case "status":
+          aVal = a.isActive !== false ? "1" : "0";
+          bVal = b.isActive !== false ? "1" : "0";
+          break;
+        case "lastLogin":
+          aVal = a.lastLoginAt || "";
+          bVal = b.lastLoginAt || "";
+          break;
+      }
+      if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
+      if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [filteredUsers, sortColumn, sortDirection]);
+
+  const getResourceName = (resourceId: string | null) => {
+    if (!resourceId) return null;
+    return resources.find(r => r.id === resourceId)?.name || null;
+  };
+
+  const getTeamMembers = (teamId: string) => {
+    return allTeamMembers.filter(m => m.teamId === teamId);
+  };
+
+  const getAvailableResourcesForTeam = (teamId: string) => {
+    const memberResourceIds = getTeamMembers(teamId).map(m => m.resourceId);
+    return resources.filter(r => !memberResourceIds.includes(r.id));
+  };
+
+  const SortHeader = ({ column, label }: { column: SortColumn; label: string }) => {
+    const isActive = sortColumn === column;
+    return (
+      <button
+        className="flex items-center gap-1 hover:text-foreground transition-colors"
+        onClick={() => handleSort(column)}
+        data-testid={`sort-${column}`}
+      >
+        {label}
+        {isActive ? (
+          sortDirection === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+        ) : (
+          <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
+        )}
+      </button>
+    );
+  };
+
+  const activeCount = users.filter(u => u.isActive !== false).length;
+  const adminCount = users.filter(u => u.role === "admin").length;
+  const activeTeamsCount = teams.filter(t => t.status === "active").length;
+
+  return (
+    <div className="p-6 space-y-6">
+      <PageHeader icon={Users} title={tl("page.user-management.title")} description={tl("page.user-management.description")} testId="text-page-title" />
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Users className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold" data-testid="text-total-users">{users.length}</p>
+                <p className="text-xs text-muted-foreground">Totalt antal</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-chart-2/15">
+                <UserCircle className="h-5 w-5 text-chart-2" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold" data-testid="text-active-users">{activeCount}</p>
+                <p className="text-xs text-muted-foreground">Aktiva</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-destructive/15">
+                <ShieldCheck className="h-5 w-5 text-destructive" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold" data-testid="text-admin-count">{adminCount}</p>
+                <p className="text-xs text-muted-foreground">Administratörer</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-chart-1/15">
+                <UsersRound className="h-5 w-5 text-chart-1" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold" data-testid="text-team-count">{activeTeamsCount}</p>
+                <p className="text-xs text-muted-foreground">Aktiva team</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="users" data-testid="tab-users">
+            <Users className="h-4 w-4 mr-2" />
+            Användare
+          </TabsTrigger>
+          <TabsTrigger value="teams" data-testid="tab-teams">
+            <UsersRound className="h-4 w-4 mr-2" />
+            Team
+          </TabsTrigger>
+          <TabsTrigger value="invitations" data-testid="tab-invitations">
+            <Mail className="h-4 w-4 mr-2" />
+            Inbjudningar
+            {invitationsList.filter(i => i.status === "pending").length > 0 && (
+              <Badge variant="secondary" className="ml-1.5 h-5 min-w-5 px-1 text-xs">
+                {invitationsList.filter(i => i.status === "pending").length}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="users" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <CardTitle className="text-lg">Användare</CardTitle>
+                <div className="flex items-center gap-3">
+                  <div className="relative w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Sök användare..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="pl-9"
+                      data-testid="input-search-users"
+                    />
+                  </div>
+                  <Button onClick={openCreate} data-testid="button-create-user">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Ny användare
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {selectedIds.size > 0 && (
+                <div className="flex items-center gap-3 flex-wrap mb-4 p-3 rounded-md bg-muted/50 border" data-testid="bulk-action-bar">
+                  <span className="text-sm font-medium">{selectedIds.size} markerade</span>
+                  <Select
+                    onValueChange={(role) => {
+                      bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), updates: { role } });
+                    }}
+                  >
+                    <SelectTrigger className="w-40" data-testid="bulk-change-role">
+                      <SelectValue placeholder="Ändra roll" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="planner">Planerare</SelectItem>
+                      <SelectItem value="technician">Tekniker</SelectItem>
+                      <SelectItem value="user">Användare</SelectItem>
+                      <SelectItem value="customer">Kund</SelectItem>
+                      <SelectItem value="reporter">Anmälare</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), updates: { isActive: true } })}
+                    disabled={bulkUpdateMutation.isPending}
+                    data-testid="bulk-activate"
+                  >
+                    Aktivera
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), updates: { isActive: false } })}
+                    disabled={bulkUpdateMutation.isPending}
+                    data-testid="bulk-deactivate"
+                  >
+                    Inaktivera
+                  </Button>
+                  {bulkUpdateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                </div>
+              )}
+              {(() => {
+                const pendingCount = invitationsList.filter(i => i.status === "pending").length;
+                if (pendingCount === 0) return null;
+                return (
+                  <div
+                    className="flex items-start gap-3 mb-4 p-3 rounded-md border bg-muted/40"
+                    data-testid="pending-invitations-banner"
+                  >
+                    <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                    <div className="text-sm">
+                      <p className="font-medium">
+                        {pendingCount} {pendingCount === 1 ? "väntande inbjudan" : "väntande inbjudningar"}
+                      </p>
+                      <p className="text-muted-foreground">
+                        Inbjudna användare visas här först när de loggat in via sin magic-link.
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="ml-auto h-7"
+                      onClick={() => setActiveTab("invitations")}
+                      data-testid="button-view-invitations"
+                    >
+                      Visa inbjudningar
+                    </Button>
+                  </div>
+                );
+              })()}
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : sortedUsers.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  {search ? "Inga användare matchade sökningen" : "Inga användare ännu. Klicka på 'Ny användare' för att skapa den första."}
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={selectedIds.size === sortedUsers.length && sortedUsers.length > 0}
+                          onCheckedChange={toggleSelectAll}
+                          data-testid="checkbox-select-all"
+                        />
+                      </TableHead>
+                      <TableHead><SortHeader column="name" label="Namn" /></TableHead>
+                      <TableHead><SortHeader column="email" label="E-post" /></TableHead>
+                      <TableHead><SortHeader column="role" label="Roll" /></TableHead>
+                      <TableHead>Kopplad resurs</TableHead>
+                      <TableHead>Team</TableHead>
+                      <TableHead><SortHeader column="status" label="Status" /></TableHead>
+                      <TableHead><SortHeader column="lastLogin" label="Senaste inloggning" /></TableHead>
+                      <TableHead className="text-right">Åtgärder</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedUsers.map(user => {
+                      const roleConfig = ROLE_CONFIG[user.role || "user"] || ROLE_CONFIG.user;
+                      const RoleIcon = roleConfig.icon;
+                      const resourceName = getResourceName(user.resourceId);
+                      const userTeams = user.resourceId
+                        ? teams.filter(t => getTeamMembers(t.id).some(m => m.resourceId === user.resourceId))
+                        : [];
+                      const initials = getUserInitials(user.firstName, user.lastName);
+                      return (
+                        <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedIds.has(user.id)}
+                              onCheckedChange={() => toggleSelect(user.id)}
+                              data-testid={`checkbox-user-${user.id}`}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0 ${roleConfig.avatarBg}`}
+                                data-testid={`avatar-user-${user.id}`}
+                              >
+                                {initials}
+                              </div>
+                              <span>
+                                {user.firstName || user.lastName
+                                  ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
+                                  : "-"}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1.5">
+                              <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                              {user.email || "-"}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {inlineEditingRole === user.id ? (
+                              <Select
+                                defaultValue={user.role || "user"}
+                                onValueChange={(newRole) => {
+                                  inlineUpdateMutation.mutate({ id: user.id, data: { role: newRole } });
+                                }}
+                              >
+                                <SelectTrigger className="w-36" data-testid={`inline-role-select-${user.id}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="admin">Admin</SelectItem>
+                                  <SelectItem value="planner">Planerare</SelectItem>
+                                  <SelectItem value="technician">Tekniker</SelectItem>
+                                  <SelectItem value="user">Användare</SelectItem>
+                                  <SelectItem value="customer">Kund</SelectItem>
+                                  <SelectItem value="reporter">Anmälare</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className={`${roleConfig.color} gap-1 cursor-pointer`}
+                                onClick={() => setInlineEditingRole(user.id)}
+                                data-testid={`badge-role-${user.id}`}
+                              >
+                                <RoleIcon className="h-3 w-3" />
+                                {roleConfig.label}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {inlineEditingResource === user.id ? (
+                              <Select
+                                defaultValue={user.resourceId || "none"}
+                                onValueChange={(v) => {
+                                  const newResourceId = v === "none" ? null : v;
+                                  inlineUpdateMutation.mutate({ id: user.id, data: { resourceId: newResourceId } });
+                                }}
+                              >
+                                <SelectTrigger className="w-40" data-testid={`inline-resource-select-${user.id}`}>
+                                  <SelectValue placeholder="Ingen" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">Ingen</SelectItem>
+                                  {resources.map(r => (
+                                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : resourceName ? (
+                              <Badge
+                                variant="secondary"
+                                className="text-xs cursor-pointer"
+                                onClick={() => setInlineEditingResource(user.id)}
+                                data-testid={`badge-resource-${user.id}`}
+                              >
+                                {resourceName}
+                              </Badge>
+                            ) : (
+                              <button
+                                className="text-sm text-primary hover:underline cursor-pointer"
+                                onClick={() => setInlineEditingResource(user.id)}
+                                data-testid={`link-assign-resource-${user.id}`}
+                              >
+                                Koppla resurs
+                              </button>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {userTeams.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {userTeams.map(t => (
+                                  <Badge key={t.id} variant="outline" className="text-xs" style={{ borderColor: t.color || "#3B82F6", color: t.color || "#3B82F6" }}>
+                                    {t.name}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={`cursor-pointer ${user.isActive !== false ? "bg-chart-2/15 text-chart-2 border-chart-2/50" : "bg-gray-500/10 text-gray-400 border-gray-500/20"}`}
+                              onClick={() => toggleActiveMutation.mutate({ id: user.id, isActive: user.isActive === false })}
+                              data-testid={`badge-status-${user.id}`}
+                            >
+                              {user.isActive !== false ? "Aktiv" : "Inaktiv"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                              <Clock className="h-3.5 w-3.5" />
+                              <span data-testid={`text-last-login-${user.id}`} title={user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString("sv-SE") : undefined}>
+                                {formatRelativeTime(user.lastLoginAt)}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button size="icon" variant="ghost" onClick={() => openEdit(user)} data-testid={`button-edit-user-${user.id}`}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button size="icon" variant="ghost" onClick={() => setDeleteTarget(user)} data-testid={`button-delete-user-${user.id}`}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="teams" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Team</CardTitle>
+                <Button onClick={openCreateTeam} data-testid="button-create-team">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nytt team
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Skapa team med 2+ personer som jobbar ihop. Teamet kan sedan tilldelas jobb i planeringen.
+              </p>
+            </CardHeader>
+            <CardContent>
+              {teamsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : teams.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  Inga team ännu. Klicka på 'Nytt team' för att skapa det första.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {teams.map(team => {
+                    const members = getTeamMembers(team.id);
+                    return (
+                      <Card key={team.id} className="border" data-testid={`card-team-${team.id}`}>
+                        <CardContent className="pt-4 pb-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: team.color || "#3B82F6" }} />
+                              <div>
+                                <h3 className="font-semibold text-base">{team.name}</h3>
+                                {team.description && <p className="text-sm text-muted-foreground">{team.description}</p>}
+                                {(team.profileIds?.length ?? 0) > 0 && (
+                                  <div className="flex gap-1 mt-1">
+                                    {team.profileIds!.map(pid => {
+                                      const prof = profiles.find(p => p.id === pid);
+                                      if (!prof) return null;
+                                      return <Badge key={pid} variant="secondary" className="text-[10px] px-1.5 py-0 h-4 gap-0.5" data-testid={`badge-team-assigned-profile-${team.id}-${pid}`}><span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: prof.color || "#3B82F6" }} />{prof.name}</Badge>;
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                              <Badge variant="outline" className="text-xs">
+                                {members.length} {members.length === 1 ? "medlem" : "medlemmar"}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button size="icon" variant="ghost" onClick={() => setAddMemberTeamId(team.id)} data-testid={`button-add-member-${team.id}`}>
+                                <UserPlus className="h-4 w-4" />
+                              </Button>
+                              <Button size="icon" variant="ghost" onClick={() => openEditTeam(team)} data-testid={`button-edit-team-${team.id}`}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button size="icon" variant="ghost" onClick={() => setDeleteTeamTarget(team)} data-testid={`button-delete-team-${team.id}`}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+
+                          {members.length === 0 ? (
+                            <p className="text-sm text-muted-foreground italic pl-6">
+                              Inga medlemmar ännu. Klicka + för att lägga till resurser.
+                            </p>
+                          ) : (
+                            <div className="flex flex-wrap gap-2 pl-6">
+                              {members.map(member => {
+                                const resource = resources.find(r => r.id === member.resourceId);
+                                return (
+                                  <Badge
+                                    key={member.id}
+                                    variant={member.role === "ledare" ? "default" : "secondary"}
+                                    className="text-xs gap-1 pr-1"
+                                    data-testid={`badge-member-${member.id}`}
+                                  >
+                                    {resource?.name || member.resourceId}
+                                    {member.role === "ledare" && <span className="text-[10px] opacity-70">(ledare)</span>}
+                                    <span
+                                      role="button"
+                                      className="hover:bg-background/20 rounded-full p-0.5 cursor-pointer ml-1"
+                                      onClick={() => removeTeamMemberMutation.mutate(member.id)}
+                                      data-testid={`button-remove-member-${member.id}`}
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </span>
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="invitations" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg">Inbjudningar</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Bjud in nya användare via e-post. De kopplas automatiskt till organisationen när de loggar in.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  data-testid="button-invite-user"
+                  onClick={() => setInviteDialogOpen(true)}
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Bjud in
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {invitationsLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : invitationsList.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Mail className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                  <p>Inga inbjudningar ännu</p>
+                  <p className="text-xs mt-1">Klicka "Bjud in" för att bjuda in en ny användare</p>
+                </div>
+              ) : (
+                <>
+                  {invitationsList.some((i) => i.deliveryStatus === "bounced" || i.deliveryStatus === "failed" || i.deliveryStatus === "complained") && (
+                    <div
+                      className="mb-4 flex items-start gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm"
+                      data-testid="banner-invitation-delivery-warning"
+                    >
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                      <div>
+                        <p className="font-medium text-destructive">Vissa inbjudningar levererades inte</p>
+                        <p className="text-muted-foreground text-xs mt-1">
+                          Verifiera avsändardomänen för Traivos mejlavsändare i Resend Dashboard
+                          (Domains → Verify) och kontrollera att DNS-posterna för SPF/DKIM/DMARC är publicerade.
+                          Mejl från en obekräftad domän stoppas tyst av Gmail/Outlook även om Resend rapporterar OK.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>E-post</TableHead>
+                        <TableHead>Roll</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Leverans</TableHead>
+                        <TableHead>Skapad</TableHead>
+                        <TableHead className="w-24"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {invitationsList.map((inv) => {
+                        const ds = inv.deliveryStatus;
+                        const deliveryMeta: { label: string; cls: string; Icon: typeof CheckCircle2; title?: string } =
+                          ds === "delivered"
+                            ? { label: "Levererad", cls: "bg-chart-2/10 text-chart-2 border-chart-2/20", Icon: CheckCircle2 }
+                            : ds === "bounced"
+                              ? { label: "Bouncade", cls: "bg-destructive/10 text-destructive border-destructive/20", Icon: XCircle, title: inv.deliveryError ?? undefined }
+                              : ds === "complained"
+                                ? { label: "Spam-anmäld", cls: "bg-destructive/10 text-destructive border-destructive/20", Icon: XCircle }
+                                : ds === "failed"
+                                  ? { label: "Fel", cls: "bg-destructive/10 text-destructive border-destructive/20", Icon: XCircle, title: inv.deliveryError ?? undefined }
+                                  : ds === "delayed"
+                                    ? { label: "Fördröjd", cls: "bg-warning/10 text-warning border-warning/20", Icon: Clock }
+                                    : ds === "sent"
+                                      ? { label: "Skickad", cls: "bg-muted text-muted-foreground border-border", Icon: Send, title: "Resend tog emot mejlet — väntar på leveransbekräftelse via webhook" }
+                                      : { label: "Ej skickad", cls: "bg-muted text-muted-foreground border-border", Icon: Clock };
+                        const DeliveryIcon = deliveryMeta.Icon;
+                        return (
+                          <TableRow key={inv.id} data-testid={`row-invitation-${inv.id}`}>
+                            <TableCell className="font-medium">{inv.email}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-xs">
+                                {ROLE_CONFIG[inv.role]?.label || inv.role}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={inv.status === "pending" ? "default" : inv.status === "used" ? "secondary" : "outline"}
+                                className="text-xs"
+                              >
+                                {inv.status === "pending" ? "Väntande" : inv.status === "used" ? "Använd" : inv.status === "expired" ? "Utgången" : inv.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className={`text-xs gap-1 ${deliveryMeta.cls}`}
+                                title={deliveryMeta.title}
+                                data-testid={`badge-delivery-${inv.id}`}
+                              >
+                                <DeliveryIcon className="h-3 w-3" />
+                                {deliveryMeta.label}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString("sv-SE") : "-"}
+                            </TableCell>
+                            <TableCell>
+                              {inv.status === "pending" && (
+                                <div className="flex items-center justify-end gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    title="Skicka om inbjudan"
+                                    data-testid={`button-resend-invitation-${inv.id}`}
+                                    disabled={resendInviteMutation.isPending}
+                                    onClick={() => resendInviteMutation.mutate(inv.id)}
+                                  >
+                                    <Send className="h-3.5 w-3.5 text-muted-foreground" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    title="Ta bort inbjudan"
+                                    data-testid={`button-delete-invitation-${inv.id}`}
+                                    onClick={() => deleteInviteMutation.mutate(inv.id)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                                  </Button>
+                                </div>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Bjud in användare</DialogTitle>
+            <DialogDescription>
+              Ange e-postadressen och välj roll. Användaren kopplas automatiskt till organisationen vid inloggning.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>E-postadress</Label>
+              <Input
+                type="email"
+                placeholder="namn@foretag.se"
+                value={inviteForm.email}
+                onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
+                data-testid="input-invite-email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Roll</Label>
+              <Select
+                value={inviteForm.role}
+                onValueChange={(v) => setInviteForm(prev => ({ ...prev, role: v }))}
+              >
+                <SelectTrigger data-testid="select-invite-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="planner">Planerare</SelectItem>
+                  <SelectItem value="technician">Tekniker</SelectItem>
+                  <SelectItem value="user">Användare</SelectItem>
+                  <SelectItem value="viewer">Betraktare</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInviteDialogOpen(false)}>
+              Avbryt
+            </Button>
+            <Button
+              data-testid="button-confirm-invite"
+              onClick={() => createInviteMutation.mutate(inviteForm)}
+              disabled={!inviteForm.email || createInviteMutation.isPending}
+            >
+              {createInviteMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Skicka inbjudan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dialogOpen} onOpenChange={closeDialog}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle>{editingUser ? "Redigera användare" : "Ny användare"}</DialogTitle>
+            <DialogDescription>
+              {editingUser ? "Uppdatera uppgifter. Lämna lösenord tomt för att behålla nuvarande." : "Fyll i uppgifter för det nya kontot."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Förnamn</Label>
+                <Input
+                  value={form.firstName}
+                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                  placeholder="Erik"
+                  data-testid="input-first-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Efternamn</Label>
+                <Input
+                  value={form.lastName}
+                  onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                  placeholder="Svensson"
+                  data-testid="input-last-name"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>E-post *</Label>
+              <Input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="erik@example.com"
+                data-testid="input-email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{editingUser ? "Nytt lösenord (valfritt)" : "Lösenord *"}</Label>
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  placeholder={editingUser ? "Lämna tomt för att behålla" : "Minst 6 tecken"}
+                  data-testid="input-password"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full px-3"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Roll</Label>
+                <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
+                  <SelectTrigger data-testid="select-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="planner">Planerare</SelectItem>
+                    <SelectItem value="technician">Tekniker</SelectItem>
+                    <SelectItem value="user">Användare</SelectItem>
+                    <SelectItem value="customer">Kund</SelectItem>
+                    <SelectItem value="reporter">Anmälare</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Kopplad resurs</Label>
+                <Select value={form.resourceId || "none"} onValueChange={(v) => setForm({ ...form, resourceId: v === "none" ? "" : v })}>
+                  <SelectTrigger data-testid="select-resource">
+                    <SelectValue placeholder="Ingen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Ingen</SelectItem>
+                    {resources.map(r => (
+                      <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog} data-testid="button-cancel">Avbryt</Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={createMutation.isPending || updateMutation.isPending}
+              data-testid="button-save-user"
+            >
+              {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {editingUser ? "Spara" : "Skapa"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={teamDialogOpen} onOpenChange={closeTeamDialog}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>{editingTeam ? "Redigera team" : "Nytt team"}</DialogTitle>
+            <DialogDescription>
+              {editingTeam ? "Uppdatera teamets uppgifter." : "Skapa ett nytt team. Du kan lägga till medlemmar efteråt."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Teamnamn *</Label>
+              <Input
+                value={teamForm.name}
+                onChange={(e) => setTeamForm({ ...teamForm, name: e.target.value })}
+                placeholder="T.ex. Team Söder"
+                data-testid="input-team-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Beskrivning</Label>
+              <Input
+                value={teamForm.description}
+                onChange={(e) => setTeamForm({ ...teamForm, description: e.target.value })}
+                placeholder="T.ex. Ansvarar för södra distriktet"
+                data-testid="input-team-description"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Färg</Label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={teamForm.color}
+                  onChange={(e) => setTeamForm({ ...teamForm, color: e.target.value })}
+                  className="w-10 h-10 rounded cursor-pointer border"
+                  data-testid="input-team-color"
+                />
+                <span className="text-sm text-muted-foreground">{teamForm.color}</span>
+              </div>
+            </div>
+            {profiles.length > 0 && (
+              <div className="space-y-2">
+                <Label>Utföranderoller</Label>
+                <p className="text-xs text-muted-foreground">Alla teammedlemmar ärver valda profilers kapacitet i autoplanering</p>
+                <div className="flex flex-wrap gap-2">
+                  {profiles.map(p => {
+                    const isActive = teamForm.profileIds.includes(p.id);
+                    return (
+                      <Badge
+                        key={p.id}
+                        variant={isActive ? "default" : "outline"}
+                        className={`cursor-pointer transition-colors gap-1 ${isActive ? "" : "opacity-50 hover:opacity-80"}`}
+                        onClick={() => setTeamForm(prev => ({
+                          ...prev,
+                          profileIds: isActive ? prev.profileIds.filter(id => id !== p.id) : [...prev.profileIds, p.id],
+                        }))}
+                        data-testid={`badge-team-profile-${p.id}`}
+                      >
+                        <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: p.color || "#3B82F6" }} />
+                        {p.name}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeTeamDialog} data-testid="button-cancel-team">Avbryt</Button>
+            <Button
+              onClick={handleTeamSubmit}
+              disabled={createTeamMutation.isPending || updateTeamMutation.isPending}
+              data-testid="button-save-team"
+            >
+              {(createTeamMutation.isPending || updateTeamMutation.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {editingTeam ? "Spara" : "Skapa"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!addMemberTeamId} onOpenChange={() => { setAddMemberTeamId(null); setAddMemberResourceId(""); setAddMemberRole("medlem"); }}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Lägg till medlem</DialogTitle>
+            <DialogDescription>
+              Välj en resurs att lägga till i {addMemberTeamId ? teams.find(t => t.id === addMemberTeamId)?.name : "teamet"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Resurs</Label>
+              <Select value={addMemberResourceId || "none"} onValueChange={(v) => setAddMemberResourceId(v === "none" ? "" : v)}>
+                <SelectTrigger data-testid="select-add-member-resource">
+                  <SelectValue placeholder="Välj resurs..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Välj resurs...</SelectItem>
+                  {addMemberTeamId && getAvailableResourcesForTeam(addMemberTeamId).map(r => (
+                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Roll i teamet</Label>
+              <Select value={addMemberRole} onValueChange={setAddMemberRole}>
+                <SelectTrigger data-testid="select-add-member-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="medlem">Medlem</SelectItem>
+                  <SelectItem value="ledare">Ledare</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAddMemberTeamId(null); setAddMemberResourceId(""); setAddMemberRole("medlem"); }} data-testid="button-cancel-add-member">
+              Avbryt
+            </Button>
+            <Button
+              onClick={() => {
+                if (addMemberTeamId && addMemberResourceId) {
+                  addTeamMemberMutation.mutate({ teamId: addMemberTeamId, resourceId: addMemberResourceId, role: addMemberRole });
+                }
+              }}
+              disabled={!addMemberResourceId || addTeamMemberMutation.isPending}
+              data-testid="button-confirm-add-member"
+            >
+              {addTeamMemberMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Lägg till
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ta bort användare?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>Är du säker på att du vill ta bort {deleteTarget?.firstName} {deleteTarget?.lastName} ({deleteTarget?.email})?</p>
+                <p className="text-sm text-chart-4">Detta kommer även att ta bort användarens rolltilldelningar och nollställa kopplingar i relaterade poster (t.ex. granskningar, tilldelningar, loggar).</p>
+                <p>Denna åtgärd kan inte ångras.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              className="bg-destructive/15 text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              {deleteMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Ta bort
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteTeamTarget} onOpenChange={() => setDeleteTeamTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ta bort team?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Är du säker på att du vill ta bort teamet "{deleteTeamTarget?.name}"?
+              Alla teammedlemmar kommer att kopplas bort.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-team">Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTeamTarget && deleteTeamMutation.mutate(deleteTeamTarget.id)}
+              className="bg-destructive/15 text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete-team"
+            >
+              {deleteTeamMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Ta bort
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

@@ -1,0 +1,191 @@
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
+import {
+  Circle,
+  Calendar,
+  CalendarCheck,
+  Truck,
+  MapPin,
+  CheckCircle2,
+  ClipboardCheck,
+  FileText,
+  LucideIcon,
+} from "lucide-react";
+
+export const EXECUTION_STATUS_LABELS: Record<string, string> = {
+  not_planned: "Ej planerad",
+  planned_rough: "Grovplanerad",
+  planned_fine: "Finplanerad",
+  on_way: "På väg",
+  on_site: "På plats",
+  completed: "Utförd",
+  inspected: "Kontrollerad",
+  invoiced: "Fakturerad",
+};
+
+export const EXECUTION_STATUS_ORDER = [
+  "not_planned",
+  "planned_rough",
+  "planned_fine",
+  "on_way",
+  "on_site",
+  "completed",
+  "inspected",
+  "invoiced",
+] as const;
+
+const STATUS_ICONS: Record<string, LucideIcon> = {
+  not_planned: Circle,
+  planned_rough: Calendar,
+  planned_fine: CalendarCheck,
+  on_way: Truck,
+  on_site: MapPin,
+  completed: CheckCircle2,
+  inspected: ClipboardCheck,
+  invoiced: FileText,
+};
+
+const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  not_planned: { bg: "bg-muted", text: "text-muted-foreground", border: "border-muted-foreground/30" },
+  planned_rough: { bg: "bg-chart-1/10 dark:bg-chart-1/15", text: "text-chart-1", border: "border-chart-1/30 dark:border-chart-1/70" },
+  planned_fine: { bg: "bg-chart-1/10 dark:bg-chart-1/15", text: "text-chart-1", border: "border-chart-1/30 dark:border-chart-1/70" },
+  on_way: { bg: "bg-chart-4/10 dark:bg-chart-4/15", text: "text-chart-4", border: "border-chart-4/30 dark:border-chart-4/70" },
+  on_site: { bg: "bg-chart-4/10 dark:bg-chart-4/15", text: "text-chart-4", border: "border-chart-4/30 dark:border-chart-4/70" },
+  completed: { bg: "bg-chart-2/10 dark:bg-chart-2/15", text: "text-chart-2", border: "border-chart-2/30 dark:border-chart-2/70" },
+  inspected: { bg: "bg-chart-2/10 dark:bg-chart-2/15", text: "text-chart-2", border: "border-chart-2/30 dark:border-chart-2/70" },
+  invoiced: { bg: "bg-chart-2/10 dark:bg-chart-2/15", text: "text-chart-2", border: "border-chart-2/30 dark:border-chart-2/70" },
+};
+
+interface ExecutionStatusTrackerProps {
+  status: string;
+  variant?: "badge" | "full" | "compact";
+  showProgress?: boolean;
+  className?: string;
+}
+
+export function ExecutionStatusTracker({
+  status,
+  variant = "badge",
+  showProgress = false,
+  className,
+}: ExecutionStatusTrackerProps) {
+  const currentIndex = EXECUTION_STATUS_ORDER.indexOf(status as typeof EXECUTION_STATUS_ORDER[number]);
+  const progress = currentIndex >= 0 ? ((currentIndex + 1) / EXECUTION_STATUS_ORDER.length) * 100 : 0;
+  const colors = STATUS_COLORS[status] || STATUS_COLORS.not_planned;
+  const Icon = STATUS_ICONS[status] || Circle;
+  const label = EXECUTION_STATUS_LABELS[status] || status;
+
+  if (variant === "badge") {
+    return (
+      <Badge
+        variant="outline"
+        className={cn(colors.bg, colors.text, colors.border, "gap-1", className)}
+        data-testid={`status-badge-${status}`}
+      >
+        <Icon className="h-3 w-3" />
+        {label}
+      </Badge>
+    );
+  }
+
+  if (variant === "compact") {
+    return (
+      <div className={cn("flex items-center gap-2", className)} data-testid={`status-compact-${status}`}>
+        <div className={cn("p-1.5 rounded-full", colors.bg, colors.border, "border")}>
+          <Icon className={cn("h-4 w-4", colors.text)} />
+        </div>
+        <span className={cn("text-sm font-medium", colors.text)}>{label}</span>
+        {showProgress && (
+          <span className="text-xs text-muted-foreground ml-auto">
+            {currentIndex + 1}/{EXECUTION_STATUS_ORDER.length}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("space-y-3", className)} data-testid="status-tracker-full">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className={cn("p-2 rounded-full", colors.bg, colors.border, "border")}>
+            <Icon className={cn("h-5 w-5", colors.text)} />
+          </div>
+          <div>
+            <p className={cn("font-medium", colors.text)}>{label}</p>
+            <p className="text-xs text-muted-foreground">
+              Steg {currentIndex + 1} av {EXECUTION_STATUS_ORDER.length}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {showProgress && <Progress value={progress} className="h-2" />}
+
+      <div className="flex gap-1">
+        {EXECUTION_STATUS_ORDER.map((s, index) => {
+          const isCompleted = index <= currentIndex;
+          const isCurrent = index === currentIndex;
+          const StepIcon = STATUS_ICONS[s];
+          const stepColors = STATUS_COLORS[s];
+
+          return (
+            <div
+              key={s}
+              className={cn(
+                "flex-1 flex flex-col items-center gap-1",
+                index > 0 && "relative"
+              )}
+            >
+              {index > 0 && (
+                <div
+                  className={cn(
+                    "absolute left-0 top-3 w-full h-0.5 -translate-x-1/2",
+                    isCompleted ? "bg-primary" : "bg-muted"
+                  )}
+                />
+              )}
+              <div
+                className={cn(
+                  "relative z-10 p-1 rounded-full border transition-colors",
+                  isCurrent
+                    ? cn(stepColors.bg, stepColors.border, "ring-2 ring-primary ring-offset-2 ring-offset-background")
+                    : isCompleted
+                    ? "bg-primary border-primary"
+                    : "bg-muted border-muted-foreground/30"
+                )}
+                title={EXECUTION_STATUS_LABELS[s]}
+              >
+                <StepIcon
+                  className={cn(
+                    "h-3 w-3",
+                    isCurrent
+                      ? stepColors.text
+                      : isCompleted
+                      ? "text-primary-foreground"
+                      : "text-muted-foreground"
+                  )}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex justify-between text-xs text-muted-foreground">
+        <span>Ej planerad</span>
+        <span>Fakturerad</span>
+      </div>
+    </div>
+  );
+}
+
+interface ExecutionStatusBadgeProps {
+  status: string;
+  className?: string;
+}
+
+export function ExecutionStatusBadge({ status, className }: ExecutionStatusBadgeProps) {
+  return <ExecutionStatusTracker status={status} variant="badge" className={className} />;
+}
