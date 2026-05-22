@@ -11,7 +11,7 @@
 | **PostgreSQL (prod)** | Replit managed (Neon Postgres) | Kontinuerlig WAL + dagliga snapshots | 7 dagar point-in-time (Replit Core); konsultera Replit-konsolen → Database → Backups för exakt fönster | Replit |
 | **PostgreSQL (dev)** | Samma plattform | Replit Checkpoints (per agent-task) | Per session, beroende på checkpoint-cleanup | Replit |
 | **Object Storage** | Replit Object Storage (GCS-backed) | Replikerat av plattformen (multi-region GCS) | Ingen separat snapshot-policy — risken är **accepterad** (se §5) | Replit |
-| **Kod** | Git (Replit-projektets repo) + Replit checkpoints | Per commit / per agent-task | Obegränsat i git, checkpoints rensas över tid | Vi |
+| **Kod** | Git (Replit-projektets repo) + Replit checkpoints + GitHub-mirror (`Patron1965/traivo-one`, se §10) | Per commit / per agent-task; mirror veckovis | Obegränsat i git, checkpoints rensas över tid | Vi |
 | **Env-secrets** | Replit Secrets | Replit-plattformen, **ej kund-exporterbart** | Tills vi tar bort dem | Vi |
 | **Audit-loggar** | DB-tabell `audit_logs` | Ingår i DB-backup | Login: 365d, övrigt: 730d (Task #511) | Vi |
 | **Resend e-post (skickade magic-links etc.)** | Resend-leverantörens lagring | Per leverantörens policy | 30d (Resend default) | Resend |
@@ -32,7 +32,7 @@
 
 **Det här utlovar vi *inte*:** noll dataförlust, sub-minute failover, cross-region disaster recovery, 24/7-jour. Skulle pilot-kunden behöva det dyker det upp som en separat kommersiell diskussion.
 
-## 3. Procedurer — Tre scenarier
+## 3. Procedurer — Fyra scenarier
 
 ### Scenario A: DB är korrupt / borta
 
@@ -74,6 +74,35 @@
 3. **Om bara vår bucket:** Kontakta Replit-support (`hello@replit.com` + ange `REPLIT_DB_URL`-projekt-ID). Bucketen är hanterad — vi har inte direktåtkomst till GCS-konsolen.
 4. **Data-loss-bedömning:** Eftersom bucketen är multi-region GCS-replikerad är permanent förlust extremt osannolik. Tillfällig oåtkomlighet är den realistiska risken.
 5. **Workaround under outage:** Mobil-app cachar foton lokalt offline (offline-first design) — fältarbetare kan fortsätta jobba, sync sker när storage är tillbaka.
+
+### Scenario D: Massradering via auto-checkpoint
+
+**Detektion:** Preview returnerar `ENOENT: no such file or directory, open '/home/runner/workspace/<path>'`. Eller `git ls-tree -r HEAD --name-only | wc -l` är dramatiskt mindre än senaste kända state. Eller `npx tsx scripts/check-mass-deletion.ts` flaggar ny commit (kör veckovis + alltid före varje `git push github main`, oavsett om det är fast-forward eller force).
+
+**Bakgrund:** Replits auto-checkpoint commit:ar exakt disk-state vid loop-avslut utan integritetskontroll. Om en agent-session råkat radera/flytta en mapp och inte slutfört operationen, commit:as raderingen som om den var avsiktlig. Se `docs/incidents/2026-05-21-client-deletion.md` för referens-incidenten där hela `client/` (351 filer) försvann.
+
+1. **Identifiera den skadliga commit:en:**
+   ```bash
+   npx tsx scripts/check-mass-deletion.ts --commits 50 --threshold 50
+   # eller manuellt:
+   git --no-optional-locks log --diff-filter=D --summary --all -- <misstänkt-mapp>/ | head -40
+   ```
+2. **Identifiera senaste healthy parent-commit:** `git log --oneline <bad-sha>~1 -5` — bekräfta att den föregående commit:en har de saknade filerna med `git ls-tree -r <parent-sha> --name-only -- <mapp>/ | head`.
+3. **Återställning utan destruktiva git-kommandon** (sandbox blockerar `git checkout` / `git restore` från main-agenten — använd `git show` i stället):
+   ```bash
+   PARENT=<healthy-parent-sha>
+   while IFS= read -r f; do
+     mkdir -p "$(dirname "$f")"
+     git show "$PARENT:$f" > "$f"
+   done < <(git ls-tree -r "$PARENT" --name-only -- <mapp>/)
+   ```
+   `git show` är read-only och blockeras inte. För 351 filer tog detta <2 sekunder i referens-incidenten.
+4. **Verifiera:** `ls <mapp>/index.html` (eller motsvarande entrypoint) — filerna ska finnas på disk.
+5. **Restart workflow** — preview ska fungera direkt.
+6. **Committa återställningen** — auto-checkpointen vid nästa loop-avslut fångar det återställda läget och persisterar det till git. Pusha till extern remote (`git push github main`) för att säkra en off-platform-kopia.
+7. **Post-mortem:** Lägg upp en kort post i `docs/incidents/YYYY-MM-DD-<beskrivning>.md` enligt mallen i incident-mappen.
+
+**Vad du *inte* ska göra:** `git reset --hard <parent-sha>` förlorar all commit-historik efter den raderande commit:en (inklusive andra legitima ändringar). Använd alltid den fil-för-fil-baserade `git show`-extraktionen ovan.
 
 ## 4. Kontaktvägar & eskalering
 
@@ -168,3 +197,50 @@ Kör **en gång per kvartal** (lägg in i kalendern) eller efter större infrast
 > Restore-procedurer och kontaktvägar är dokumenterade och testas kvartalsvis. Vid en pågående incident informeras er driftkontakt inom 1 timme efter att kundpåverkan bekräftats.
 >
 > Om piloten övergår till bredare drift kompletteras detta med ett formellt SLA.
+
+## 10. GitHub-mirror — extern kod-backup
+
+Hela kodbasen mirrors till **`Patron1965/traivo-one`** på GitHub som extern off-platform-kopia. Detta är vårt skydd mot scenarier där Replit-projektet skulle vara otillgängligt (konto-incident, plattforms-outage, eller scenarier likt Scenario D ovan).
+
+**Aktuell rutin: manuell veckovis push** av plattform-ägare:
+
+```bash
+# 1. Hämta nuvarande GitHub-state så vi vet om något divergerat.
+git --no-optional-locks fetch github
+
+# 2. Tripwire — obligatorisk INNAN varje push (även fast-forward).
+npx tsx scripts/check-mass-deletion.ts --commits 100 --threshold 50
+
+# 3. Push. Använd --force ENDAST om historik medvetet skrivits om.
+git push github main
+
+# 4. Verifiera att GitHub faktiskt pekar på samma SHA som lokalt main.
+LOCAL_SHA=$(git rev-parse main)
+git --no-optional-locks fetch github
+REMOTE_SHA=$(git rev-parse github/main)
+[ "$LOCAL_SHA" = "$REMOTE_SHA" ] && echo "OK — mirror i sync ($LOCAL_SHA)" \
+                                 || echo "FEL — divergens! local=$LOCAL_SHA remote=$REMOTE_SHA"
+```
+
+**Viktigt om tripwiren:** Kör alltid `check-mass-deletion.ts` **före** push. Om scriptet flaggar en misstänkt commit (>50 raderade filer) — granska den först, kör Scenario D-återställning om den var oavsiktlig, och pusha *efter* återställning. Annars riskerar du att skriva över extern kopia med ett trasigt state.
+
+**Om push avvisas (non-fast-forward):** Det betyder att GitHub har commits som inte finns lokalt — antingen har någon pushat direkt till GitHub (sällsynt, vi pushar bara från Replit) eller en tidigare force-push har skrivit om historiken på ena sidan. Lös genom:
+1. `git --no-optional-locks log github/main --not main` — visar vad GitHub har som vi saknar. Om raderna ser legitima ut, pulla in dem (`git fetch github && git merge github/main`).
+2. Om GitHub-historien är fel (t.ex. förorenad av ett externt experiment), bekräfta att Replit-projektets `main` är auktoritativ och kör `git push github main --force` efter att tripwiren körts.
+3. Aldrig force-pusha utan att först ha sparat GitHub-statet (`git fetch github && git branch backup-github-main github/main`) — då har du en räddningsplanka om beslutet visar sig fel.
+
+**Vad mirror:n ger oss:**
+- En andra kopia av all kod-historik som inte är beroende av Replits drift.
+- En möjlighet att klona projektet till en ny Replit (eller annan plattform) om det skulle behövas.
+- En audit-trail som överlever även om Replit-projektets git-historia skulle korrumperas.
+
+**Vad mirror:n *inte* ger oss:**
+- Ingen databasinnehåll, inga env-secrets, inget Object Storage. De följer fortfarande sina respektive backup-vägar (§1).
+- Ingen automatisk failover — vid Replit-incident måste vi manuellt klona från GitHub och konfigurera om en ny miljö.
+
+**Frekvens-policy:**
+- **Minimum:** En push per vecka, ansvar plattform-ägare. Lägg in i kalendern.
+- **Efter större ändringar:** Push direkt efter merge av större tasks (DR-relaterat, schema-migrationer, säkerhetsfixar).
+- **Före varje pilot-demo eller release:** Push, så det finns en tydlig "this is what was demoed"-referens.
+
+**Framtida möjlighet (out of scope nu):** GitHub Action som auto-mirror:ar dagligen via `gh repo sync` eller en push från CI. Inte implementerat eftersom (1) Replit-projektets git push kräver auth som inte är trivial att exponera till en extern CI, (2) manuell rutin ger oss en granskningspunkt där tripwiren tvingas köras.
