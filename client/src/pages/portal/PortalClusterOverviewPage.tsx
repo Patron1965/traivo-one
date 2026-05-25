@@ -466,9 +466,65 @@ interface BreadcrumbEntry {
   level?: string;
 }
 
+function readNodeIdFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const v = params.get("nodeId");
+  return v && v.length > 0 ? v : null;
+}
+
+function writeNodeIdToUrl(nodeId: string | null, replace = false) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (nodeId) url.searchParams.set("nodeId", nodeId);
+  else url.searchParams.delete("nodeId");
+  const newUrl = url.pathname + (url.search ? url.search : "") + url.hash;
+  if (replace) window.history.replaceState(null, "", newUrl);
+  else window.history.pushState(null, "", newUrl);
+}
+
 function MobileBreadcrumbView({ rootNodes }: { rootNodes: ClusterNode[] }) {
   const [path, setPath] = useState<BreadcrumbEntry[]>([{ id: null, name: "Hem" }]);
+  const [urlNodeId, setUrlNodeId] = useState<string | null>(() => readNodeIdFromUrl());
   const current = path[path.length - 1];
+
+  // Lyssna på browserns bakåt/framåt-knapp.
+  useEffect(() => {
+    const handler = () => setUrlNodeId(readNodeIdFromUrl());
+    window.addEventListener("popstate", handler);
+    return () => window.removeEventListener("popstate", handler);
+  }, []);
+
+  // Rekonstruera breadcrumb-stigen från URL:ens nodeId via ancestors-endpoint.
+  const ancestorsQuery = useQuery<{ ancestors: Array<{ id: string; name: string; hierarchyLevel: string }> }>({
+    queryKey: ["/api/portal/clusters/ancestors", urlNodeId],
+    queryFn: () => portalFetch(`/api/portal/clusters/${urlNodeId}/ancestors`),
+    enabled: !!urlNodeId && urlNodeId !== current.id,
+  });
+
+  useEffect(() => {
+    if (!urlNodeId) {
+      // URL har inget nodeId — gå tillbaka till rot om vi inte redan är där.
+      if (current.id !== null) setPath([{ id: null, name: "Hem" }]);
+      return;
+    }
+    if (urlNodeId === current.id) return;
+    // Om ancestors-endpoint inte hittar noden (404/utan scope) — fall tillbaka till rot
+    // och rensa URL:en så användaren inte fastnar på en trasig delad länk.
+    if (ancestorsQuery.isError) {
+      setPath([{ id: null, name: "Hem" }]);
+      setUrlNodeId(null);
+      writeNodeIdToUrl(null, true);
+      return;
+    }
+    const data = ancestorsQuery.data;
+    if (!data) return;
+    const newPath: BreadcrumbEntry[] = [
+      { id: null, name: "Hem" },
+      ...data.ancestors.map(a => ({ id: a.id, name: a.name, level: a.hierarchyLevel })),
+    ];
+    setPath(newPath);
+  }, [urlNodeId, ancestorsQuery.data, ancestorsQuery.isError]);
 
   const childrenQuery = useQuery<ChildrenResponse>({
     queryKey: ["/api/portal/clusters/children", current.id, ""],
@@ -481,15 +537,22 @@ function MobileBreadcrumbView({ rootNodes }: { rootNodes: ClusterNode[] }) {
   });
 
   const nodes: ClusterNode[] = current.id === null ? rootNodes : (childrenQuery.data?.nodes || []);
-  const isLoading = current.id !== null && childrenQuery.isLoading;
-  const isError = current.id !== null && childrenQuery.isError;
+  const isLoading = (current.id !== null && childrenQuery.isLoading) || (!!urlNodeId && urlNodeId !== current.id && ancestorsQuery.isLoading);
+  const isError = (current.id !== null && childrenQuery.isError) || (!!urlNodeId && ancestorsQuery.isError);
 
   const goTo = (index: number) => {
-    setPath(path.slice(0, index + 1));
+    const newPath = path.slice(0, index + 1);
+    setPath(newPath);
+    const newCurrent = newPath[newPath.length - 1];
+    setUrlNodeId(newCurrent.id);
+    writeNodeIdToUrl(newCurrent.id);
   };
 
   const drillDown = (node: ClusterNode) => {
-    setPath([...path, { id: node.id, name: node.name, level: node.hierarchyLevel }]);
+    const newPath = [...path, { id: node.id, name: node.name, level: node.hierarchyLevel }];
+    setPath(newPath);
+    setUrlNodeId(node.id);
+    writeNodeIdToUrl(node.id);
   };
 
   return (

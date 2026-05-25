@@ -608,6 +608,59 @@ app.get("/api/portal/clusters/children", asyncHandler(async (req: any, res: any)
   res.json({ parentId, nodes, matchAncestorIds, matchIds: matchIdList });
 }));
 
+// GET /api/portal/clusters/:objectId/ancestors
+// Returnerar breadcrumb-stigen från rotnivå ner till objektet (exkl. virtuell "Hem"-rot).
+// Använder samma primär-förälder-resolution och scope-kontroll som /children.
+app.get("/api/portal/clusters/:objectId/ancestors", asyncHandler(async (req: any, res: any) => {
+  const session = await requirePortalAuth(req, res);
+  if (!session) return;
+  const { objectId } = req.params;
+
+  if (!isObjectInScope(session, objectId)) {
+    return res.status(404).json({ error: "Hittades inte" });
+  }
+
+  const allCustomerObjects = await storage.getObjectsByCustomer(session.customerId!);
+  const customerObjects = session.scopedObjectIds
+    ? allCustomerObjects.filter(o => session.scopedObjectIds!.has(o.id))
+    : allCustomerObjects;
+
+  const targetObj = customerObjects.find(o => o.id === objectId);
+  if (!targetObj) return res.status(404).json({ error: "Hittades inte" });
+
+  const { primaryParentMap } = await buildParentMaps(
+    session.tenantId!,
+    customerObjects.map(o => o.id),
+  );
+  const visibleIds = new Set(customerObjects.map(o => o.id));
+  const objById = new Map(customerObjects.map(o => [o.id, o]));
+  const effectiveParent = (o: any): string | null => {
+    const raw = primaryParentMap.has(o.id)
+      ? (primaryParentMap.get(o.id) ?? null)
+      : ((o.parentId as string | null) ?? null);
+    if (!raw) return null;
+    return visibleIds.has(raw) ? raw : null;
+  };
+
+  // Bygg kedja från target uppåt och vänd för rot→target-ordning.
+  const chain: Array<{ id: string; name: string; hierarchyLevel: string }> = [];
+  const seen = new Set<string>();
+  let cur: any = targetObj;
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    chain.push({
+      id: cur.id,
+      name: cur.name,
+      hierarchyLevel: cur.hierarchyLevel || "fastighet",
+    });
+    const p = effectiveParent(cur);
+    cur = p ? objById.get(p) : null;
+  }
+  chain.reverse();
+
+  res.json({ ancestors: chain });
+}));
+
 // GET /api/portal/clusters/:objectId/stats
 // Aggregerad statistik för en nod och dess descendants — strikt scope-filtrerat.
 app.get("/api/portal/clusters/:objectId/stats", asyncHandler(async (req: any, res: any) => {
