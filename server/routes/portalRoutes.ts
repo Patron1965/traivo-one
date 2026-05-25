@@ -2993,6 +2993,60 @@ app.post("/api/customers/:customerId/portal-users", requireAdmin, asyncHandler(a
     res.json({ ...user, scopeObjectIds });
 }));
 
+app.post("/api/customers/:customerId/portal-impersonate", requireAdmin, asyncHandler(async (req: any, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const customer = await storage.getCustomer(req.params.customerId);
+    if (!verifyTenantOwnership(customer, tenantId)) {
+      throw new NotFoundError("Kund");
+    }
+
+    // Hitta lämplig e-post: först befintlig portal-user, annars kundens kontakt-email.
+    const portalUsers = await storage.getPortalUsersByCustomer(tenantId, req.params.customerId);
+    const targetEmail = portalUsers[0]?.email || customer!.email;
+    if (!targetEmail) {
+      throw new ValidationError("Kunden saknar portal-användare och kontakt-e-post. Lägg till en portal-användare först.");
+    }
+
+    const { generateSecureToken } = await import("../portal-auth");
+    const { token, hash } = generateSecureToken();
+    const TOKEN_EXPIRY_MINUTES = 15;
+    const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_MINUTES * 60 * 1000);
+
+    await storage.createPortalToken({
+      tenantId,
+      customerId: customer!.id,
+      tokenHash: hash,
+      email: targetEmail,
+      expiresAt,
+      ipAddress: req.ip || null,
+      userAgent: req.headers["user-agent"] || null,
+    });
+
+    try {
+      await storage.createAuditLog({
+        tenantId,
+        userId: req.user?.claims?.sub ?? null,
+        action: "customer.portal_impersonate",
+        resourceType: "customer",
+        resourceId: customer!.id,
+        changes: { customerName: customer!.name, email: targetEmail },
+        ipAddress: req.ip || null,
+        userAgent: req.headers["user-agent"] || null,
+      });
+    } catch (e) {
+      console.warn("[audit] customer.portal_impersonate kunde inte skrivas", e);
+    }
+
+    // Returnera token i ett eget fält så att logger-redaktionen (SENSITIVE_FIELDS) maskar det.
+    // Klienten bygger URL själv (verifyPath + token).
+    res.json({
+      token,
+      verifyPath: "/portal/verify",
+      email: targetEmail,
+      expiresAt: expiresAt.toISOString(),
+    });
+}));
+
 const updateScopeSchema = z.object({
   scopeObjectIds: z.array(z.string().uuid()),
 });

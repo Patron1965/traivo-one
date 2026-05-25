@@ -1,16 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Building2, Search, Layers, Package, ClipboardList, ArrowRight, Users, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
-import { versionedUrl } from "@/lib/queryClient";
+import { Search, Layers, Package, ClipboardList, ArrowRight, Users, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, Trash2, ExternalLink, Loader2 } from "lucide-react";
+import { versionedUrl, apiRequest, queryClient } from "@/lib/queryClient";
 import { QueryState } from "@/components/QueryState";
+import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import type { Customer } from "@shared/schema";
 
 interface CustomerAggregate {
@@ -149,6 +163,88 @@ export default function CustomersPage() {
   const showSpinner = customersFetching && !customersLoading;
   const hasSearch = debouncedSearch.trim().length > 0;
   const tenantHasNoCustomers = !hasSearch && total === 0 && customersPage !== undefined;
+
+  const { user } = useAuth();
+  const canDelete = user?.role === "owner" || user?.role === "admin";
+  const { toast } = useToast();
+
+  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
+  const [confirmText, setConfirmText] = useState("");
+  const [impersonatingId, setImpersonatingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!deleteTarget) setConfirmText("");
+  }, [deleteTarget]);
+
+  const invalidateCustomers = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/customers/totals"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/customers/aggregates"] });
+  };
+
+  const restoreCustomer = async (c: Customer) => {
+    try {
+      await apiRequest("POST", `/api/customers/${c.id}/restore`);
+      invalidateCustomers();
+      toast({ title: "Kunden återställd", description: `${c.name} är aktiv igen.` });
+    } catch (err) {
+      toast({
+        title: "Kunde inte ångra",
+        description: err instanceof Error ? err.message : "Okänt fel",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const deleteMutation = useMutation({
+    mutationFn: async (c: Customer) => {
+      await apiRequest("DELETE", `/api/customers/${c.id}`);
+      return c;
+    },
+    onSuccess: (c) => {
+      invalidateCustomers();
+      setDeleteTarget(null);
+      toast({
+        title: "Kunden borttagen",
+        description: `${c.name} har tagits bort. Du kan ångra inom kort.`,
+        duration: 15000,
+        action: (
+          <ToastAction altText="Ångra borttagning" onClick={() => restoreCustomer(c)}>
+            Ångra
+          </ToastAction>
+        ),
+      });
+    },
+    onError: (err) => {
+      toast({
+        title: "Kunde inte radera",
+        description: err instanceof Error ? err.message : "Okänt fel",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const impersonateCustomer = async (c: Customer) => {
+    setImpersonatingId(c.id);
+    try {
+      const res = await apiRequest("POST", `/api/customers/${c.id}/portal-impersonate`);
+      const data = (await res.json()) as { token?: string; verifyPath?: string };
+      if (!data.token || !data.verifyPath) throw new Error("Tomt svar från servern");
+      const url = `${data.verifyPath}?token=${encodeURIComponent(data.token)}`;
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      toast({
+        title: "Kunde inte öppna portal",
+        description: err instanceof Error ? err.message : "Okänt fel",
+        variant: "destructive",
+      });
+    } finally {
+      setImpersonatingId(null);
+    }
+  };
+
+  const nameMatches = deleteTarget ? confirmText.trim() === deleteTarget.name.trim() : false;
+  const deleteAgg = deleteTarget ? aggMap.get(deleteTarget.id) : undefined;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-6">
@@ -312,12 +408,55 @@ export default function CustomersPage() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Link href={`/customers/${c.id}`}>
-                              <Button variant="ghost" size="sm" data-testid={`button-open-customer-${c.id}`}>
-                                Öppna
-                                <ArrowRight className="h-3.5 w-3.5 ml-1" />
-                              </Button>
-                            </Link>
+                            <TooltipProvider delayDuration={200}>
+                              <div className="flex items-center justify-end gap-1">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => impersonateCustomer(c)}
+                                      disabled={impersonatingId === c.id}
+                                      data-testid={`button-portal-${c.id}`}
+                                    >
+                                      {impersonatingId === c.id ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <ExternalLink className="h-3.5 w-3.5" />
+                                      )}
+                                      <span className="ml-1 hidden sm:inline">Portal</span>
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    Öppna kundens portalvy i ny flik
+                                  </TooltipContent>
+                                </Tooltip>
+
+                                {canDelete && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setDeleteTarget(c)}
+                                        className="text-destructive hover:text-destructive"
+                                        data-testid={`button-delete-customer-${c.id}`}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Radera kund</TooltipContent>
+                                  </Tooltip>
+                                )}
+
+                                <Link href={`/customers/${c.id}`}>
+                                  <Button variant="ghost" size="sm" data-testid={`button-open-customer-${c.id}`}>
+                                    Öppna
+                                    <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                                  </Button>
+                                </Link>
+                              </div>
+                            </TooltipProvider>
                           </TableCell>
                         </TableRow>
                       );
@@ -360,6 +499,59 @@ export default function CustomersPage() {
           </QueryState>
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Radera kund permanent?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  Du är på väg att radera <strong>{deleteTarget?.name}</strong>
+                  {deleteTarget?.customerNumber ? ` (kundnr ${deleteTarget.customerNumber})` : ""}.
+                </p>
+                {deleteAgg && (deleteAgg.objectCount > 0 || deleteAgg.activeOrders > 0) && (
+                  <div className="rounded-md border border-warning bg-warning/10 p-3 text-sm">
+                    <div className="font-medium text-foreground">Kunden har kopplad data:</div>
+                    <ul className="mt-1 list-disc pl-5 text-foreground">
+                      {deleteAgg.objectCount > 0 && <li>{deleteAgg.objectCount} objekt</li>}
+                      {deleteAgg.activeOrders > 0 && <li>{deleteAgg.activeOrders} aktiva ordrar</li>}
+                    </ul>
+                  </div>
+                )}
+                <p className="text-sm">
+                  Skriv kundens namn exakt för att bekräfta: <span className="font-mono">{deleteTarget?.name}</span>
+                </p>
+                <Input
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder={deleteTarget?.name ?? ""}
+                  autoFocus
+                  data-testid="input-confirm-delete-name"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Du kan ångra raderingen direkt efteråt via knappen i meddelandet (15 sek).
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-customer">Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteTarget && nameMatches) deleteMutation.mutate(deleteTarget);
+              }}
+              disabled={!nameMatches || deleteMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete-customer"
+            >
+              {deleteMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Radera permanent
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

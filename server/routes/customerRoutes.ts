@@ -278,14 +278,59 @@ app.patch("/api/customers/:id", asyncHandler(async (req, res) => {
   res.json(customer);
 }));
 
-app.delete("/api/customers/:id", asyncHandler(async (req, res) => {
+app.delete("/api/customers/:id", requireAdmin, asyncHandler(async (req: any, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const existing = await storage.getCustomer(req.params.id);
   if (!verifyTenantOwnership(existing, tenantId)) {
     throw new NotFoundError("Kund");
   }
   await storage.deleteCustomer(req.params.id);
+  try {
+    await storage.createAuditLog({
+      tenantId,
+      userId: req.user?.claims?.sub ?? null,
+      action: "customer.delete",
+      resourceType: "customer",
+      resourceId: req.params.id,
+      changes: { name: existing!.name, customerNumber: existing!.customerNumber ?? null },
+      ipAddress: req.ip || null,
+      userAgent: req.headers["user-agent"] || null,
+    });
+  } catch (e) {
+    console.warn("[audit] customer.delete kunde inte skrivas", e);
+  }
   res.status(204).send();
+}));
+
+app.post("/api/customers/:id/restore", requireAdmin, asyncHandler(async (req: any, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  // Hämta kunden inklusive soft-deletade (getCustomer filtrerar deletedAt).
+  const [existing] = await db
+    .select()
+    .from(customers)
+    .where(and(eq(customers.id, req.params.id), eq(customers.tenantId, tenantId)));
+  if (!existing) {
+    throw new NotFoundError("Kund");
+  }
+  const restored = await storage.restoreCustomer(req.params.id, tenantId);
+  if (!restored) {
+    throw new NotFoundError("Kund");
+  }
+  try {
+    await storage.createAuditLog({
+      tenantId,
+      userId: req.user?.claims?.sub ?? null,
+      action: "customer.restore",
+      resourceType: "customer",
+      resourceId: req.params.id,
+      changes: { name: restored.name },
+      ipAddress: req.ip || null,
+      userAgent: req.headers["user-agent"] || null,
+    });
+  } catch (e) {
+    console.warn("[audit] customer.restore kunde inte skrivas", e);
+  }
+  res.json(restored);
 }));
 
 app.get("/api/objects/lookup", asyncHandler(async (req, res) => {

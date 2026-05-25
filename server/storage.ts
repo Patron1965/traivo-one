@@ -271,6 +271,7 @@ export interface IStorage {
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   updateCustomer(id: string, customer: Partial<InsertCustomer>): Promise<Customer | undefined>;
   deleteCustomer(id: string): Promise<void>;
+  restoreCustomer(id: string, tenantId: string): Promise<Customer | undefined>;
   
   /** Föredragen API: hämtar samtliga objekt för en tenant. */
   getObjects(tenantId: string): Promise<ServiceObject[]>;
@@ -1576,6 +1577,15 @@ export class DatabaseStorage implements IStorage {
     } catch (e) {
       console.warn("[fortnox-mapping] kunde inte rensa mappning för kund", id, e);
     }
+  }
+
+  async restoreCustomer(id: string, tenantId: string): Promise<Customer | undefined> {
+    const [restored] = await db
+      .update(customers)
+      .set({ deletedAt: null })
+      .where(and(eq(customers.id, id), eq(customers.tenantId, tenantId)))
+      .returning();
+    return restored;
   }
 
   async getObjects(tenantId: string): Promise<ServiceObject[]> {
