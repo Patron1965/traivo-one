@@ -9,7 +9,7 @@ import { QueryState } from "@/components/QueryState";
 import {
   ArrowLeft, MapPin, Calendar, ChevronRight, ChevronDown, Building2, Home, Package,
   Trash2, Loader2, Key, CheckCircle2, TreeDeciduous, Search, X, Layers, AlertCircle,
-  Users, FileText, PanelRightClose, PanelRightOpen,
+  Users, FileText, PanelRightClose, PanelRightOpen, ChevronLeft,
 } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -460,6 +460,151 @@ function NodeSidePanel({ selectedId }: { selectedId: string | null }) {
   );
 }
 
+interface BreadcrumbEntry {
+  id: string | null;
+  name: string;
+  level?: string;
+}
+
+function MobileBreadcrumbView({ rootNodes }: { rootNodes: ClusterNode[] }) {
+  const [path, setPath] = useState<BreadcrumbEntry[]>([{ id: null, name: "Hem" }]);
+  const current = path[path.length - 1];
+
+  const childrenQuery = useQuery<ChildrenResponse>({
+    queryKey: ["/api/portal/clusters/children", current.id, ""],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (current.id) params.set("parentId", current.id);
+      return portalFetch(`/api/portal/clusters/children?${params.toString()}`);
+    },
+    enabled: current.id !== null,
+  });
+
+  const nodes: ClusterNode[] = current.id === null ? rootNodes : (childrenQuery.data?.nodes || []);
+  const isLoading = current.id !== null && childrenQuery.isLoading;
+  const isError = current.id !== null && childrenQuery.isError;
+
+  const goTo = (index: number) => {
+    setPath(path.slice(0, index + 1));
+  };
+
+  const drillDown = (node: ClusterNode) => {
+    setPath([...path, { id: node.id, name: node.name, level: node.hierarchyLevel }]);
+  };
+
+  return (
+    <div className="space-y-3" data-testid="mobile-breadcrumb-view">
+      <Card>
+        <CardContent className="p-2">
+          <nav
+            className="flex items-center gap-1 text-sm overflow-x-auto whitespace-nowrap"
+            aria-label="Hierarki-breadcrumb"
+            data-testid="breadcrumb-nav"
+          >
+            {path.map((entry, idx) => {
+              const isLast = idx === path.length - 1;
+              return (
+                <div key={`${entry.id ?? "root"}-${idx}`} className="flex items-center gap-1 shrink-0">
+                  {idx > 0 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                  {isLast ? (
+                    <span
+                      className="font-semibold px-1.5 py-0.5 rounded text-foreground"
+                      data-testid={`breadcrumb-current-${entry.id ?? "root"}`}
+                    >
+                      {entry.name}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => goTo(idx)}
+                      className="px-1.5 py-0.5 rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                      data-testid={`breadcrumb-link-${entry.id ?? "root"}`}
+                    >
+                      {entry.name}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </nav>
+          {path.length > 1 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-2 h-8 px-2"
+              onClick={() => goTo(path.length - 2)}
+              data-testid="button-breadcrumb-back"
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Tillbaka till {path[path.length - 2].name}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {current.id !== null && (
+        <NodeSidePanel selectedId={current.id} />
+      )}
+
+      <Card>
+        <CardContent className="p-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+            {current.id === null ? "Välj koncern eller objekt" : "Underliggande"}
+          </h4>
+          {isLoading ? (
+            <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground" data-testid="breadcrumb-loading">
+              <Loader2 className="h-3 w-3 animate-spin" /> Laddar...
+            </div>
+          ) : isError ? (
+            <div className="flex items-center gap-2 py-4 text-xs text-destructive">
+              <AlertCircle className="h-3 w-3" /> Kunde inte ladda
+            </div>
+          ) : nodes.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic py-2" data-testid="breadcrumb-empty">
+              Inga underliggande objekt.
+            </p>
+          ) : (
+            <ul className="space-y-1.5">
+              {nodes.map((node) => (
+                <li key={node.id}>
+                  <button
+                    type="button"
+                    onClick={() => drillDown(node)}
+                    className="w-full flex items-center gap-2 p-2 rounded-md border bg-background hover:bg-accent hover:border-primary/40 transition-colors text-left"
+                    data-testid={`breadcrumb-child-${node.id}`}
+                  >
+                    <div className={`shrink-0 p-1.5 rounded ${levelColor(node.hierarchyLevel)}`}>
+                      {levelIcon(node.hierarchyLevel)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-sm font-medium truncate">{node.name}</span>
+                        <Badge variant="secondary" className="text-[10px] py-0 px-1.5 h-4">
+                          {levelLabel(node.hierarchyLevel)}
+                        </Badge>
+                      </div>
+                      {node.address && (
+                        <div className="text-xs text-muted-foreground truncate">
+                          {node.address}
+                          {node.postalCode ? `, ${node.postalCode}` : ""}
+                          {node.city ? ` ${node.city}` : ""}
+                        </div>
+                      )}
+                    </div>
+                    {node.hasChildren && (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function PortalClusterOverviewPage() {
   const [, setLocation] = useLocation();
   const tenant = getTenant();
@@ -563,7 +708,11 @@ export default function PortalClusterOverviewPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className={panelOpen ? "grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]" : "grid gap-4 grid-cols-1"}>
+          <>
+            <div className="lg:hidden">
+              <MobileBreadcrumbView rootNodes={rootNodes} />
+            </div>
+            <div className={panelOpen ? "hidden lg:grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]" : "hidden lg:grid gap-4 grid-cols-1"}>
             <Card className="flex flex-col min-h-[60vh]">
               <div className="p-3 border-b">
                 <div className="relative">
@@ -617,7 +766,8 @@ export default function PortalClusterOverviewPage() {
                 <NodeSidePanel selectedId={selectedId} />
               </div>
             )}
-          </div>
+            </div>
+          </>
         )}
       </main>
     </div>
