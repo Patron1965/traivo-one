@@ -23,6 +23,8 @@ import { auditCleanupScheduler } from "./services/audit-cleanup-scheduler";
 import { carryOverNotificationScheduler } from "./services/carry-over-notification-scheduler";
 import { prodHealthCheckScheduler } from "./services/prod-health-check-scheduler";
 import { registerProdHealthCheckRoutes } from "./routes/prodHealthCheckRoutes";
+import { githubMirrorScheduler } from "./services/github-mirror-scheduler";
+import { registerGithubMirrorRoutes } from "./routes/githubMirrorRoutes";
 import { startWeeklyReportScheduler } from "./weekly-report";
 import { metadataRouter } from "./metadata-routes";
 import { formatZodError, DEFAULT_TENANT_ID } from "./routes/helpers";
@@ -98,6 +100,7 @@ export async function registerRoutes(
   carryOverNotificationScheduler.start();
   capacityForecastScheduler.start();
   prodHealthCheckScheduler.start();
+  githubMirrorScheduler.start();
 
   app.use((req: ExpressRequest, _res: ExpressResponse, next) => {
     if (req.url.startsWith(`/api/${API_VERSION}/`) || req.url === `/api/${API_VERSION}`) {
@@ -766,6 +769,7 @@ export async function registerRoutes(
   registerSlaRiskRoutes(app);
   registerCapacityForecastRoutes(app);
   registerProdHealthCheckRoutes(app);
+  registerGithubMirrorRoutes(app);
 
   app.post("/api/route-geometry", async (req: ExpressRequest, res: ExpressResponse) => {
     try {

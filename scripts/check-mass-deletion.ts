@@ -13,32 +13,27 @@
  *   npx tsx scripts/check-mass-deletion.ts                       # default: 50 commits, tröskel 50 deletions
  *   npx tsx scripts/check-mass-deletion.ts --commits 200         # scanna fler commits
  *   npx tsx scripts/check-mass-deletion.ts --threshold 20        # mer paranoid
- *   npx tsx scripts/check-mass-deletion.ts --commits 100 --threshold 30
  *
  * Exit-kod:
  *   0  inga misstänkta commits hittade
  *   1  minst en misstänkt commit hittad (lämpligt för CI-gate)
  *   2  oväntat fel (git inte tillgängligt, etc.)
  *
- * Rekommendation: kör manuellt minst veckovis, och alltid innan
- * varje `git push github main` mot extern remote (inte bara --force).
+ * OBS: Den faktiska scan-logiken bor i
+ * `server/services/mass-deletion-tripwire.ts` så den kan återanvändas
+ * av den automatiserade GitHub-mirror-schedulern (Task #534). Det här
+ * är CLI-omslaget som behåller manuell-rutin som backup (se
+ * docs/disaster-recovery.md §10).
  */
 
-import { execSync } from "node:child_process";
+import {
+  scanForMassDeletion,
+  type SuspiciousCommit,
+} from "../server/services/mass-deletion-tripwire";
 
 interface CliArgs {
   commits: number;
   threshold: number;
-}
-
-interface SuspiciousCommit {
-  sha: string;
-  shortSha: string;
-  author: string;
-  date: string;
-  subject: string;
-  deletions: number;
-  topDeletedPaths: string[];
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -72,77 +67,7 @@ function parseArgs(argv: string[]): CliArgs {
   return args;
 }
 
-function runGit(args: string): string {
-  try {
-    return execSync(`git --no-optional-locks ${args}`, {
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    });
-  } catch (err: any) {
-    console.error(`git ${args} failed:`, err?.message ?? err);
-    process.exit(2);
-  }
-}
-
-function listCommitShas(limit: number): string[] {
-  const out = runGit(`log --pretty=format:%H -n ${limit}`);
-  return out.split("\n").filter(Boolean);
-}
-
-function inspectCommit(sha: string): SuspiciousCommit | null {
-  const meta = runGit(
-    `log -1 --pretty=format:%h%x1f%an%x1f%ai%x1f%s ${sha}`,
-  );
-  const [shortSha, author, date, subject] = meta.split("\x1f");
-  // OBS: använd INTE --no-renames här. Vi vill att git ska detektera renames
-  // (R-status) och move/copy (C-status) som något annat än D (delete), annars
-  // flaggar tripwiren legitima omstruktureringar (t.ex. "flyttade hela mappen
-  // X till Y") som mass-radering. Endast äkta D-rader räknas som deletions.
-  const nameStatus = runGit(`show --name-status --pretty=format: ${sha}`);
-  const deletedPaths: string[] = [];
-  for (const line of nameStatus.split("\n")) {
-    if (!line) continue;
-    const [status, ...rest] = line.split("\t");
-    // R-status: "R100\told\tnew" (rename, två paths) — räknas inte som delete.
-    // C-status: "C75\tsrc\tdst" (copy)                — räknas inte som delete.
-    // D-status: "D\tpath"                              — äkta radering.
-    if (status === "D") deletedPaths.push(rest.join("\t"));
-  }
-  if (deletedPaths.length === 0) return null;
-  return {
-    sha,
-    shortSha,
-    author,
-    date,
-    subject,
-    deletions: deletedPaths.length,
-    topDeletedPaths: deletedPaths.slice(0, 5),
-  };
-}
-
-function main() {
-  const { commits, threshold } = parseArgs(process.argv.slice(2));
-  console.log(
-    `[check-mass-deletion] Scannar de senaste ${commits} commits, tröskel = ${threshold} raderade filer per commit.\n`,
-  );
-
-  const shas = listCommitShas(commits);
-  const suspicious: SuspiciousCommit[] = [];
-  for (const sha of shas) {
-    const inspected = inspectCommit(sha);
-    if (inspected && inspected.deletions >= threshold) suspicious.push(inspected);
-  }
-
-  if (suspicious.length === 0) {
-    console.log(
-      `OK — inga commits över tröskeln hittade bland de senaste ${commits} commits.`,
-    );
-    process.exit(0);
-  }
-
-  console.log(
-    `⚠️  ${suspicious.length} misstänkt(a) commit(s) hittade:\n`,
-  );
+function printSuspicious(suspicious: SuspiciousCommit[]): void {
   for (const c of suspicious) {
     console.log(`  ${c.shortSha}  ${c.date}  ${c.author}`);
     console.log(`    "${c.subject}"`);
@@ -153,6 +78,31 @@ function main() {
     }
     console.log("");
   }
+}
+
+function main() {
+  const { commits, threshold } = parseArgs(process.argv.slice(2));
+  console.log(
+    `[check-mass-deletion] Scannar de senaste ${commits} commits, tröskel = ${threshold} raderade filer per commit.\n`,
+  );
+
+  let result;
+  try {
+    result = scanForMassDeletion({ commits, threshold });
+  } catch (err: any) {
+    console.error("git-scan misslyckades:", err?.message ?? err);
+    process.exit(2);
+  }
+
+  if (result.suspicious.length === 0) {
+    console.log(
+      `OK — inga commits över tröskeln hittade bland de senaste ${result.scanned} commits.`,
+    );
+    process.exit(0);
+  }
+
+  console.log(`⚠️  ${result.suspicious.length} misstänkt(a) commit(s) hittade:\n`);
+  printSuspicious(result.suspicious);
   console.log(
     "Granska varje commit manuellt:\n" +
       "  git show <sha> --stat\n" +

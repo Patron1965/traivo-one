@@ -2,6 +2,10 @@ import type { Express } from "express";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { logger } from "../logger";
+import {
+  getMirrorConfig,
+  getLastSuccessfulMirrorRun,
+} from "../services/github-mirror-scheduler";
 
 interface CheckResult {
   ok: boolean;
@@ -16,6 +20,7 @@ interface HealthResponse {
     db: CheckResult;
     optimizationService: CheckResult;
     geoapify: CheckResult;
+    githubMirror: CheckResult;
   };
 }
 
@@ -69,11 +74,59 @@ function checkGeoapify(): CheckResult {
   return { ok: true };
 }
 
+// Task #534: degradera healthz om automatiserad GitHub-mirror inte
+// har pushat på över N timmar (default 36h, justeras via
+// GITHUB_MIRROR_STALENESS_HOURS). Om mirror är medvetet inaktiverad,
+// eller om remote/token saknas (manuell rutin gäller), returnerar
+// vi ok=true med detail så det syns men inte degraderar healthz.
+async function checkGithubMirror(): Promise<CheckResult> {
+  const cfg = getMirrorConfig();
+  if (!cfg.enabled) {
+    return { ok: true, detail: "disabled (GITHUB_MIRROR_ENABLED=false)" };
+  }
+  if (!cfg.remoteConfigured || !cfg.tokenConfigured) {
+    return {
+      ok: true,
+      detail:
+        "ej konfigurerad — manuell rutin (docs/disaster-recovery.md §10) gäller",
+    };
+  }
+  try {
+    const last = await getLastSuccessfulMirrorRun();
+    if (!last) {
+      return {
+        ok: false,
+        detail: "ingen lyckad push registrerad ännu",
+      };
+    }
+    const ageHours = (Date.now() - new Date(last.ranAt).getTime()) / 3600_000;
+    if (ageHours > cfg.stalenessHours) {
+      return {
+        ok: false,
+        detail: `senaste lyckade push för ${ageHours.toFixed(1)}h sedan (>${cfg.stalenessHours}h tröskel)`,
+      };
+    }
+    return {
+      ok: true,
+      detail: `senaste push för ${ageHours.toFixed(1)}h sedan`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 async function buildHealthResponse(): Promise<{ response: HealthResponse; httpStatus: number }> {
-  const [dbCheck, optCheck] = await Promise.all([checkDb(), checkOptimizationService()]);
+  const [dbCheck, optCheck, mirrorCheck] = await Promise.all([
+    checkDb(),
+    checkOptimizationService(),
+    checkGithubMirror(),
+  ]);
   const geoCheck = checkGeoapify();
 
-  const allOk = dbCheck.ok && optCheck.ok && geoCheck.ok;
+  const allOk = dbCheck.ok && optCheck.ok && geoCheck.ok && mirrorCheck.ok;
   const response: HealthResponse = {
     status: allOk ? "ok" : "degraded",
     checkedAt: new Date().toISOString(),
@@ -81,6 +134,7 @@ async function buildHealthResponse(): Promise<{ response: HealthResponse; httpSt
       db: dbCheck,
       optimizationService: optCheck,
       geoapify: geoCheck,
+      githubMirror: mirrorCheck,
     },
   };
 

@@ -11,7 +11,7 @@
 | **PostgreSQL (prod)** | Replit managed (Neon Postgres) | Kontinuerlig WAL + dagliga snapshots | 7 dagar point-in-time (Replit Core); konsultera Replit-konsolen → Database → Backups för exakt fönster | Replit |
 | **PostgreSQL (dev)** | Samma plattform | Replit Checkpoints (per agent-task) | Per session, beroende på checkpoint-cleanup | Replit |
 | **Object Storage** | Replit Object Storage (GCS-backed) | Replikerat av plattformen (multi-region GCS) | Ingen separat snapshot-policy — risken är **accepterad** (se §5) | Replit |
-| **Kod** | Git (Replit-projektets repo) + Replit checkpoints + GitHub-mirror (`Patron1965/traivo-one`, se §10) | Per commit / per agent-task; mirror veckovis | Obegränsat i git, checkpoints rensas över tid | Vi |
+| **Kod** | Git (Replit-projektets repo) + Replit checkpoints + GitHub-mirror (`Patron1965/traivo-one`, se §10) | Per commit / per agent-task; automatiserad mirror dagligen (Task #534), manuell backup-rutin vid behov | Obegränsat i git, checkpoints rensas över tid | Vi |
 | **Env-secrets** | Replit Secrets | Replit-plattformen, **ej kund-exporterbart** | Tills vi tar bort dem | Vi |
 | **Audit-loggar** | DB-tabell `audit_logs` | Ingår i DB-backup | Login: 365d, övrigt: 730d (Task #511) | Vi |
 | **Resend e-post (skickade magic-links etc.)** | Resend-leverantörens lagring | Per leverantörens policy | 30d (Resend default) | Resend |
@@ -202,7 +202,53 @@ Kör **en gång per kvartal** (lägg in i kalendern) eller efter större infrast
 
 Hela kodbasen mirrors till **`Patron1965/traivo-one`** på GitHub som extern off-platform-kopia. Detta är vårt skydd mot scenarier där Replit-projektet skulle vara otillgängligt (konto-incident, plattforms-outage, eller scenarier likt Scenario D ovan).
 
-**Aktuell rutin: manuell veckovis push** av plattform-ägare:
+### 10.1 Primär rutin — automatiserad daglig push (Task #534)
+
+En in-process scheduler (`server/services/github-mirror-scheduler.ts`) kör automatiskt en daglig push till GitHub-mirror så att backupen inte hänger på att en specifik person kommer ihåg det. Flödet:
+
+1. **Tripwire körs först.** Samma logik som `scripts/check-mass-deletion.ts` (delad modul `server/services/mass-deletion-tripwire.ts`) — scannar default senaste 100 commits och letar efter commits som raderar ≥50 filer.
+2. **Vid tripwire-träff stoppas pushen** och en notis skickas till `GITHUB_MIRROR_OPERATOR_EMAIL` (Resend). Inget skrivs över på GitHub. Granska, åtgärda enligt §Scenario D, och kör om manuellt via UI eller cron-trigger.
+3. **Annars körs `git push <authed-url> HEAD:refs/heads/main`** (utan `--force` — non-fast-forward felas så vi vet om något oväntat har hänt på remote).
+4. **Varje körning skrivs som en rad i `github_mirror_runs`** (status: `success` | `tripwire_blocked` | `push_failed` | `skipped` | `error`). Senaste lyckade push exponeras via `GET /api/admin/github-mirror/status` och via `/healthz` (mirror-checken degraderar healthz när senaste lyckade push är äldre än `GITHUB_MIRROR_STALENESS_HOURS`, default 36h).
+
+**Env-konfiguration:**
+
+```
+GITHUB_MIRROR_ENABLED=true                      # default true i NODE_ENV=production
+GITHUB_MIRROR_REMOTE_URL=https://github.com/Patron1965/traivo-one.git
+GITHUB_MIRROR_TOKEN=<github-PAT-med-contents:write>
+GITHUB_MIRROR_BRANCH=main                       # default main
+GITHUB_MIRROR_INTERVAL_HOURS=24                 # default 24
+GITHUB_MIRROR_INITIAL_DELAY_MIN=30              # default 30 min efter app-start
+GITHUB_MIRROR_TRIPWIRE_COMMITS=100              # default 100
+GITHUB_MIRROR_TRIPWIRE_THRESHOLD=50             # default 50
+GITHUB_MIRROR_OPERATOR_EMAIL=ops@example.se     # tripwire-/fel-larm
+GITHUB_MIRROR_STALENESS_HOURS=36                # healthz-tröskel, default 36h
+GITHUB_MIRROR_CLEANUP_TOKEN=<random-secret>     # för extern cron-trigger
+```
+
+Saknas `GITHUB_MIRROR_REMOTE_URL` eller `GITHUB_MIRROR_TOKEN` loggas en varning vid start och schemaläggaren hoppar över sig själv — då gäller bara backup-rutinen nedan. Healthz-checken degraderar då inte (kategoriserat som "ej konfigurerad").
+
+**Manuell trigger / cron från externt system:**
+
+```bash
+# Admin/owner-session:
+curl -X POST https://<app>/api/admin/github-mirror/run -b cookie.jar
+
+# Eller server-till-server med token:
+curl -X POST https://<app>/api/admin/github-mirror/run \
+     -H "x-cleanup-token: $GITHUB_MIRROR_CLEANUP_TOKEN"
+
+# Hämta status (senaste 20 körningarna + config + stale-flagga):
+curl https://<app>/api/admin/github-mirror/status \
+     -H "x-cleanup-token: $GITHUB_MIRROR_CLEANUP_TOKEN"
+```
+
+### 10.2 Backup-rutin — manuell push (om automatisk är avstängd)
+
+Använd den här rutinen om automatiseringen är medvetet av (`GITHUB_MIRROR_ENABLED=false`) eller om token roterats och inte hunnit uppdateras, eller om healthz-mirror-checken degraderat och du vill köra en ad-hoc-verifiering.
+
+
 
 ```bash
 # 1. Hämta nuvarande GitHub-state så vi vet om något divergerat.
@@ -243,4 +289,4 @@ REMOTE_SHA=$(git rev-parse github/main)
 - **Efter större ändringar:** Push direkt efter merge av större tasks (DR-relaterat, schema-migrationer, säkerhetsfixar).
 - **Före varje pilot-demo eller release:** Push, så det finns en tydlig "this is what was demoed"-referens.
 
-**Framtida möjlighet (out of scope nu):** GitHub Action som auto-mirror:ar dagligen via `gh repo sync` eller en push från CI. Inte implementerat eftersom (1) Replit-projektets git push kräver auth som inte är trivial att exponera till en extern CI, (2) manuell rutin ger oss en granskningspunkt där tripwiren tvingas köras.
+**Historik:** Tidigare var manuell veckovis push den primära rutinen. Task #534 löste det genom en in-process scheduler (se §10.1) — tripwiren körs alltid före push så samma granskningspunkt finns kvar, men kräver inte längre att en specifik person kommer ihåg det.

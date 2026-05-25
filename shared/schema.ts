@@ -5694,3 +5694,32 @@ export const prodHealthCheckRuns = pgTable("prod_health_check_runs", {
 export type ProdHealthCheckRun = typeof prodHealthCheckRuns.$inferSelect;
 export const insertProdHealthCheckRunSchema = createInsertSchema(prodHealthCheckRuns).omit({ id: true, ranAt: true });
 export type InsertProdHealthCheckRun = z.infer<typeof insertProdHealthCheckRunSchema>;
+
+// Task #534 — Automatiserad GitHub-mirror.
+// Persisterar varje schemalagd/manuell körning av mirror-pushen så vi kan
+// visa "senaste lyckade push" i admin-UI / healthz och upptäcka om
+// schemaläggaren slutat fungera. Se docs/disaster-recovery.md §10.
+export const githubMirrorRuns = pgTable("github_mirror_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ranAt: timestamp("ran_at").defaultNow().notNull(),
+  // 'success' | 'tripwire_blocked' | 'push_failed' | 'skipped' | 'error'
+  status: varchar("status", { length: 32 }).notNull(),
+  // 'scheduled' | 'manual' | 'startup'
+  trigger: varchar("trigger", { length: 16 }).notNull().default("scheduled"),
+  branch: varchar("branch", { length: 128 }).notNull().default("main"),
+  localSha: varchar("local_sha", { length: 64 }),
+  remoteSha: varchar("remote_sha", { length: 64 }),
+  fastForward: boolean("fast_forward"),
+  tripwireCommitsScanned: integer("tripwire_commits_scanned"),
+  tripwireThreshold: integer("tripwire_threshold"),
+  tripwireSuspicious: jsonb("tripwire_suspicious"),
+  durationMs: integer("duration_ms").notNull().default(0),
+  alertStatus: varchar("alert_status", { length: 20 }),
+  alertDetail: text("alert_detail"),
+  errorMessage: text("error_message"),
+}, (table) => [
+  index("idx_github_mirror_runs_ran_at").on(table.ranAt),
+  index("idx_github_mirror_runs_status_ran_at").on(table.status, table.ranAt),
+]);
+
+export type GithubMirrorRun = typeof githubMirrorRuns.$inferSelect;
