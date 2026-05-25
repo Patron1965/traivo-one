@@ -674,13 +674,82 @@ export default function PortalClusterOverviewPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => readNodeIdFromUrl());
   const [panelOpen, setPanelOpen] = useState<boolean>(true);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 250);
     return () => clearTimeout(t);
   }, [search]);
+
+  // Lyssna på bakåt/framåt-knapp — håll selectedId i synk med URL:en.
+  useEffect(() => {
+    const handler = () => setSelectedId(readNodeIdFromUrl());
+    window.addEventListener("popstate", handler);
+    return () => window.removeEventListener("popstate", handler);
+  }, []);
+
+  // Wrapper för nodval: uppdaterar både state och URL (pushState så bakåt-knapp funkar).
+  const handleSelect = (id: string) => {
+    setSelectedId(id);
+    if (readNodeIdFromUrl() !== id) writeNodeIdToUrl(id);
+  };
+
+  // När selectedId finns men inte är synligt i trädet: hämta ancestors,
+  // expandera dem och scrolla till noden.
+  const ancestorsQuery = useQuery<{ ancestors: Array<{ id: string; name: string; hierarchyLevel: string }> }>({
+    queryKey: ["/api/portal/clusters/ancestors", selectedId],
+    queryFn: () => portalFetch(`/api/portal/clusters/${selectedId}/ancestors`),
+    enabled: !!selectedId,
+  });
+
+  // Om ancestors-endpoint inte hittar noden (404 / utanför scope) — rensa URL/selection
+  // så användaren inte fastnar på en trasig delad länk.
+  useEffect(() => {
+    if (!selectedId) return;
+    if (ancestorsQuery.isError) {
+      setSelectedId(null);
+      writeNodeIdToUrl(null, true);
+    }
+  }, [selectedId, ancestorsQuery.isError]);
+
+  // Expandera alla ancestors (alla utom själva noden) så vald nod blir synlig.
+  useEffect(() => {
+    if (!selectedId || !ancestorsQuery.data) return;
+    const ancestorIds = ancestorsQuery.data.ancestors
+      .map(a => a.id)
+      .filter(id => id !== selectedId);
+    if (ancestorIds.length === 0) return;
+    setExpanded((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of ancestorIds) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [selectedId, ancestorsQuery.data]);
+
+  // Scrolla till vald nod i DOM:en när den faktiskt renderats (efter ancestors expanderats).
+  useEffect(() => {
+    if (!selectedId) return;
+    let cancelled = false;
+    let attempts = 0;
+    const tryScroll = () => {
+      if (cancelled) return;
+      const el = document.querySelector(`[data-testid="tree-node-${selectedId}"]`);
+      if (el) {
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        return;
+      }
+      if (attempts++ < 20) setTimeout(tryScroll, 100);
+    };
+    tryScroll();
+    return () => { cancelled = true; };
+  }, [selectedId, ancestorsQuery.data, expanded]);
 
   const rootsQuery = useQuery<ChildrenResponse>({
     queryKey: ["/api/portal/clusters/children", null, debouncedSearch],
@@ -816,7 +885,7 @@ export default function PortalClusterOverviewPage() {
                     level={0}
                     query={debouncedSearch.length >= 2 ? debouncedSearch : ""}
                     selectedId={selectedId}
-                    onSelect={setSelectedId}
+                    onSelect={handleSelect}
                     expanded={expanded}
                     setExpanded={setExpanded}
                     rootNodes={rootNodes}
