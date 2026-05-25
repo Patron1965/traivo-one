@@ -478,6 +478,267 @@ app.get("/api/portal/clusters", asyncHandler(async (req, res) => {
     });
 }));
 
+// Hjälpare: bygg primär-förälder-map och multi-parent-count för en kunds objekt
+// via object_parents. Faller tillbaka till objects.parentId om object_parents
+// inte har en rad.
+async function buildParentMaps(tenantId: string, objectIds: string[]) {
+  const primaryParentMap = new Map<string, string | null>();
+  const totalParentCount = new Map<string, number>();
+  if (objectIds.length === 0) return { primaryParentMap, totalParentCount };
+  const idList = sql.join(objectIds.map(id => sql`${id}`), sql`, `);
+  const rows = await db.execute(sql`
+    SELECT object_id, parent_id, is_primary
+    FROM object_parents
+    WHERE tenant_id = ${tenantId} AND object_id IN (${idList})
+  `);
+  const grouped = new Map<string, Array<{ parent_id: string; is_primary: boolean }>>();
+  for (const r of ((rows as any).rows ?? rows) as any[]) {
+    const row = r as { object_id: string; parent_id: string; is_primary: boolean };
+    if (!grouped.has(row.object_id)) grouped.set(row.object_id, []);
+    grouped.get(row.object_id)!.push({ parent_id: row.parent_id, is_primary: row.is_primary });
+  }
+  for (const [oid, parents] of grouped.entries()) {
+    const primary = parents.find(p => p.is_primary) || parents[0];
+    primaryParentMap.set(oid, primary?.parent_id ?? null);
+    totalParentCount.set(oid, parents.length);
+  }
+  return { primaryParentMap, totalParentCount };
+}
+
+// GET /api/portal/clusters/children?parentId=<id|null>
+// Lazy-laddning av en hierarkinivå. Utan parentId returneras rotnoder.
+// Respekterar portal-scope: bara objekt inom scope returneras och hasChildren
+// räknas också inom scope.
+app.get("/api/portal/clusters/children", asyncHandler(async (req: any, res: any) => {
+  const session = await requirePortalAuth(req, res);
+  if (!session) return;
+
+  const parentIdRaw = (req.query.parentId as string | undefined) ?? null;
+  const parentId = parentIdRaw && parentIdRaw !== "null" && parentIdRaw !== "" ? parentIdRaw : null;
+
+  if (parentId && !isObjectInScope(session, parentId)) {
+    return res.status(404).json({ error: "Hittades inte" });
+  }
+
+  const allCustomerObjects = await storage.getObjectsByCustomer(session.customerId!);
+  const customerObjects = session.scopedObjectIds
+    ? allCustomerObjects.filter(o => session.scopedObjectIds!.has(o.id))
+    : allCustomerObjects;
+
+  const { primaryParentMap, totalParentCount } = await buildParentMaps(
+    session.tenantId!,
+    customerObjects.map(o => o.id),
+  );
+
+  // Set över synliga objekt: en effektiv förälder som inte finns i denna
+  // mängd (eller är null) gör att noden promotas till rot, så att objekt
+  // vars förälder ligger utanför scope fortfarande är upptäckbara.
+  const visibleIds = new Set(customerObjects.map(o => o.id));
+  const objById = new Map(customerObjects.map(o => [o.id, o]));
+
+  const effectiveParent = (o: any): string | null => {
+    const raw = primaryParentMap.has(o.id)
+      ? (primaryParentMap.get(o.id) ?? null)
+      : ((o.parentId as string | null) ?? null);
+    if (!raw) return null;
+    return visibleIds.has(raw) ? raw : null;
+  };
+
+  const hasChildrenSet = new Set<string>();
+  for (const o of customerObjects) {
+    const p = effectiveParent(o);
+    if (p) hasChildrenSet.add(p);
+  }
+
+  const q = ((req.query.q as string | undefined) || "").trim().toLowerCase();
+  let matchIds: Set<string> | null = null;
+  let ancestorIds: Set<string> | null = null;
+  if (q.length >= 2) {
+    matchIds = new Set();
+    for (const o of customerObjects) {
+      const hay = `${o.name || ""} ${o.address || ""} ${o.city || ""} ${o.postalCode || ""}`.toLowerCase();
+      if (hay.includes(q)) matchIds.add(o.id);
+    }
+    ancestorIds = new Set();
+    for (const id of matchIds) {
+      const startObj = objById.get(id);
+      if (!startObj) continue;
+      let cur: string | null = effectiveParent(startObj);
+      while (cur) {
+        if (ancestorIds.has(cur)) break;
+        ancestorIds.add(cur);
+        const parentObj = objById.get(cur);
+        cur = parentObj ? effectiveParent(parentObj) : null;
+      }
+    }
+  }
+
+  // Vid sökning: filtrera bort grenar utan träff. Behåll noder som själva
+  // matchar eller har en träff någonstans i sin subtree.
+  let childObjects = customerObjects.filter(o => effectiveParent(o) === parentId);
+  if (matchIds && ancestorIds) {
+    childObjects = childObjects.filter(o => matchIds!.has(o.id) || ancestorIds!.has(o.id));
+  }
+
+  const nodes = childObjects
+    .map(o => ({
+      id: o.id,
+      name: o.name,
+      objectType: o.objectType,
+      hierarchyLevel: o.hierarchyLevel || "fastighet",
+      address: o.address,
+      city: o.city,
+      postalCode: o.postalCode,
+      accessCode: o.accessCode,
+      keyNumber: o.keyNumber,
+      latitude: o.latitude,
+      longitude: o.longitude,
+      hasChildren: hasChildrenSet.has(o.id),
+      extraParents: Math.max(0, (totalParentCount.get(o.id) ?? 0) - 1),
+      matchesSearch: matchIds ? matchIds.has(o.id) : false,
+      hasMatchInSubtree: ancestorIds ? ancestorIds.has(o.id) : false,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "sv"));
+
+  // Vid sökning: returnera hela ancestor-kedjan för alla träffar så att
+  // frontend kan auto-expandera djupa matchningar (inte bara rotnivå).
+  const matchAncestorIds = ancestorIds ? Array.from(ancestorIds) : [];
+  const matchIdList = matchIds ? Array.from(matchIds) : [];
+
+  res.json({ parentId, nodes, matchAncestorIds, matchIds: matchIdList });
+}));
+
+// GET /api/portal/clusters/:objectId/stats
+// Aggregerad statistik för en nod och dess descendants — strikt scope-filtrerat.
+app.get("/api/portal/clusters/:objectId/stats", asyncHandler(async (req: any, res: any) => {
+  const session = await requirePortalAuth(req, res);
+  if (!session) return;
+  const { objectId } = req.params;
+
+  if (!isObjectInScope(session, objectId)) {
+    return res.status(404).json({ error: "Hittades inte" });
+  }
+
+  const allCustomerObjects = await storage.getObjectsByCustomer(session.customerId!);
+  const inScope = (id: string) => !session.scopedObjectIds || session.scopedObjectIds.has(id);
+  const customerObjects = allCustomerObjects.filter(o => inScope(o.id));
+  const targetObj = customerObjects.find(o => o.id === objectId);
+  if (!targetObj) return res.status(404).json({ error: "Hittades inte" });
+
+  const { primaryParentMap, totalParentCount } = await buildParentMaps(
+    session.tenantId!,
+    customerObjects.map(o => o.id),
+  );
+  const visibleIdsStats = new Set(customerObjects.map(o => o.id));
+  const effectiveParent = (o: any): string | null => {
+    const raw = primaryParentMap.has(o.id)
+      ? (primaryParentMap.get(o.id) ?? null)
+      : ((o.parentId as string | null) ?? null);
+    if (!raw) return null;
+    return visibleIdsStats.has(raw) ? raw : null;
+  };
+
+  // Bygg descendant-set (inkl. self) via primär-förälder så att multi-parent-objekt
+  // bara räknas en gång (under sin primära förälder).
+  const childrenMap = new Map<string, string[]>();
+  for (const o of customerObjects) {
+    const p = effectiveParent(o);
+    if (p) {
+      if (!childrenMap.has(p)) childrenMap.set(p, []);
+      childrenMap.get(p)!.push(o.id);
+    }
+  }
+  const descendants = new Set<string>();
+  const queue = [objectId];
+  while (queue.length) {
+    const cur = queue.shift()!;
+    if (descendants.has(cur)) continue;
+    descendants.add(cur);
+    for (const k of childrenMap.get(cur) || []) {
+      if (inScope(k)) queue.push(k);
+    }
+  }
+
+  const objsById = new Map(customerObjects.map(o => [o.id, o]));
+  const countsByLevel: Record<string, number> = {};
+  for (const id of descendants) {
+    if (id === objectId) continue;
+    const o = objsById.get(id);
+    if (!o) continue;
+    const level = o.hierarchyLevel || "fastighet";
+    countsByLevel[level] = (countsByLevel[level] || 0) + 1;
+  }
+
+  const now = new Date();
+  const futureDate = new Date(); futureDate.setMonth(futureDate.getMonth() + 3);
+  const pastDate = new Date(); pastDate.setMonth(pastDate.getMonth() - 6);
+
+  // Inget limit-tak: stats måste vara exakta för stora kunder.
+  const upcomingAll = await storage.getWorkOrders(session.tenantId!, now, futureDate, false);
+  const pastAll = await storage.getWorkOrders(session.tenantId!, pastDate, now, false);
+
+  const upcomingInScope = upcomingAll.filter((wo: any) => wo.objectId && descendants.has(wo.objectId));
+  const pastInScope = pastAll.filter((wo: any) => wo.objectId && descendants.has(wo.objectId));
+
+  const openOrders = upcomingInScope.filter((wo: any) => !["utford", "fakturerad", "avbruten"].includes(wo.orderStatus));
+
+  let lastCompletedAt: string | null = null;
+  for (const wo of pastInScope) {
+    const ca = (wo as any).completedAt;
+    if (ca && (!lastCompletedAt || new Date(ca) > new Date(lastCompletedAt))) {
+      lastCompletedAt = typeof ca === "string" ? ca : new Date(ca).toISOString();
+    }
+  }
+
+  const nextVisits = upcomingInScope
+    .filter((wo: any) => wo.scheduledDate)
+    .sort((a: any, b: any) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime())
+    .slice(0, 10)
+    .map((wo: any) => ({
+      id: wo.id,
+      title: wo.title,
+      scheduledDate: wo.scheduledDate,
+      objectId: wo.objectId,
+      objectName: wo.objectId ? (objsById.get(wo.objectId)?.name ?? null) : null,
+      orderStatus: wo.orderStatus,
+    }));
+
+  let openIssuesCount = 0;
+  try {
+    const allIssues = await storage.getCustomerIssueReports(session.tenantId!, session.customerId!);
+    openIssuesCount = allIssues.filter(ir =>
+      ir.objectId && descendants.has(ir.objectId) && !["resolved", "closed"].includes(ir.status as string),
+    ).length;
+  } catch {
+    openIssuesCount = 0;
+  }
+
+  res.json({
+    object: {
+      id: targetObj.id,
+      name: targetObj.name,
+      hierarchyLevel: targetObj.hierarchyLevel || "fastighet",
+      objectType: targetObj.objectType,
+      address: targetObj.address,
+      city: targetObj.city,
+      postalCode: targetObj.postalCode,
+      accessCode: targetObj.accessCode,
+      keyNumber: targetObj.keyNumber,
+      latitude: targetObj.latitude,
+      longitude: targetObj.longitude,
+      notes: targetObj.notes,
+      extraParents: Math.max(0, (totalParentCount.get(targetObj.id) ?? 0) - 1),
+    },
+    descendantsCount: Math.max(0, descendants.size - 1),
+    countsByLevel,
+    upcomingVisitsCount: upcomingInScope.length,
+    openOrdersCount: openOrders.length,
+    openIssuesCount,
+    lastCompletedAt,
+    nextVisits,
+  });
+}));
+
 // Predefined time slots for booking requests
 const VALID_TIME_SLOTS = ["morning", "afternoon", "all_day"] as const;
 const VALID_REQUEST_TYPES = ["new", "reschedule", "cancel", "extra_service"] as const;
