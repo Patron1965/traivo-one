@@ -1,0 +1,354 @@
+Analys: Tankekarta-vy (Hierarkisk Kundportal) för Traivo ONE
+Datum: 2026-05-25
+Underlag: Kodbasanalys av Patron1965/traivo-one (main-branch)
+Kontext: Kundens idé om en NotebookLM-inspirerad tankekarta där kunden ser hela sin verksamhet hierarkiskt
+
+Executive Summary
+Bedömning: Mycket bra idé — med rätt avgränsningar.
+
+Traivo ONE har redan en exceptionellt stark grund för denna funktion. Kodbasen innehåller:
+
+En 5-nivåers objekthierarki (koncern → brf → fastighet → rum → kärl) med parentId, hierarchyDepth, hierarchyPath och relationer redan definierade
+En befintlig kundportal med 13 sidor, token-baserad autentisering, scoping per portalanvändare och en redan fungerande trädvy (PortalClusterOverviewPage)
+Ett arv-/propagationssystem för metadata som faller nedåt i hierarkin
+Import/export av data på objekt-, kund- och resursnivå
+Idén att utöka detta till en visuell tankekarta-vy adderar genuint affärsvärde — men bör fokuseras på hierarkisk navigation med kontextuella actions snarare än en fri-form mind map. En realistisk implementation kan levereras som en iterativ utbyggnad av befintlig PortalClusterOverviewPage snarare än en helt ny modul.
+
+Risknivå: Låg till medel (datamodellen stödjer redan konceptet)
+Estimerad komplexitet: Medel (UI-utmaning snarare än datamodellsutmaning)
+Rekommendation: Genomför i 3 faser, börja med utökad trädvy
+
+1. Befintlig datastruktur som stödjer detta
+1.1 Objekthierarkin — redan 5 nivåer djup
+Schemat definierar en tydlig hierarki i shared/schema.ts (rad 80–87):
+
+typescript
+Copy
+export const OBJECT_HIERARCHY_LEVELS = [
+  "koncern",     // Översta nivå - juridisk koncern
+  "brf",         // Bostadsrättsförening
+  "fastighet",   // Fysisk fastighet
+  "rum",         // Återvinningsrum/område inom fastighet
+  "karl"         // Individuellt kärl
+] as const;
+Varje objekt (objects-tabellen, rad 89–186) har:
+
+Fält	Typ	Syfte
+parentId	varchar FK → objects	Primär förälder-länk
+hierarchyLevel	text	Vilken nivå (koncern/brf/fastighet/rum/karl)
+objectLevel	integer	Numerisk nivå (1–5)
+hierarchyDepth	integer	Djup i trädet
+hierarchyPath	text[]	Fullständig sökväg (array av object IDs från rot)
+objectType	text	Typ av objekt (omrade, fastighet, etc.)
+customerId	varchar FK → customers	Vilken kund objektet tillhör
+clusterId	varchar FK → clusters	Kluster-koppling
+Relationer redan definierade (rad 988–993):
+
+typescript
+Copy
+parent: one(objects, { fields: [objects.parentId], references: [objects.id], relationName: "objectHierarchy" }),
+children: many(objects, { relationName: "objectHierarchy" }),
+1.2 Multi-förälder-stöd — redan implementerat
+Tabellen object_parents (rad 1821–1833) stödjer multipla föräldra-relationer med kontext:
+
+Fält	Beskrivning
+objectId	Barnobjektet
+parentId	Förälder
+isPrimary	Boolean — markerar primär relation
+relationContext	"primary", "billing", "operational", "ownership"
+En UI-komponent ObjectParentsPanel finns redan med stöd för att lägga till/ta bort föräldrar med olika relationstyper.
+
+1.3 Kluster — hierarkisk gruppering
+clusters-tabellen (rad 806–855) fungerar som en aggregeringsnivå:
+
+rootCustomerId — vilken kund som äger hierarkin
+inheritableFields — konfigurerbara fält som ärvs nedåt
+cachedObjectCount, cachedHierarchyDepth — förberäknade värden
+color — redan stöd för visuell differentiering
+Geografisk data (centerLatitude/Longitude, postalCodes) — för kartvisning
+1.4 Metadata-propagation — arv nedåt i hierarkin
+Ett sofistikerat metadata-system (rad 1845–1905):
+
+3 propagationstyper: fixed (stannar), falling (ärvs nedåt), dynamic (ändras och faller)
+metadataDefinitions — vilka fält som kan propagera
+objectMetadata — faktiska värden på objekt, med inheritedFromObjectId för spårbarhet
+breaksInheritance — möjlighet att stoppa arv på specifik nivå
+En dedikerad InheritanceProcessor (server/inheritance-processor.ts) hanterar ancestor chains och ärvningslogik.
+
+1.5 Artiklar — också hierarkiska
+articles-tabellen har objectTypes (array) som anger vilka objekttyper en artikel är tillämplig på
+ARTICLE_HOOK_LEVELS definierar 9 nivåer (koncern → kod) för artikelkoppling
+structuralArticles — BOM-struktur (Bill of Materials) med parentArticleId → childArticleId
+articleComponents — komponent-hierarki med parentArticleId, childArticleId, quantity
+1.6 Befintliga entiteter som kan visualiseras
+Entitet	Tabell	Koppling till hierarkin
+Kunder	customers	Rot-nivå, äger objekt
+Objekt	objects	5-nivåers hierarki
+Kluster	clusters	Gruppering med rootCustomer
+Arbetsordrar	work_orders	Kopplade till objectId, customerId
+Artiklar	articles	Kopplade via objectTypes och articleHookLevel
+Abonnemang	subscriptions	Per objekt, kund eller kluster
+Resurser	resources	Via arbetsordrar och team
+Fordon	vehicles	Via resourceVehicles
+Utrustning	equipment	Via resourceEquipment
+IoT-enheter	iot_devices	Direkt kopplat till objectId
+Metadata	object_metadata	Per objekt med propagation
+Bilder	object_images	Per objekt
+2. Vad som redan finns av visualisering
+2.1 PortalClusterOverviewPage — befintlig trädvy
+Filen client/src/pages/portal/PortalClusterOverviewPage.tsx (281 rader) implementerar redan:
+
+Hierarkisk trädvisning med ClusterNode-interface (id, name, objectType, hierarchyLevel, children)
+Expand/collapse per nod (auto-expanderad 2 nivåer)
+Ikoner per nivå: Building2 (koncern/brf), Home (fastighet), Package (rum), Trash2 (karl)
+Färgkodning per nivå: Olika bakgrundsfärger per hierarchyLevel
+Kontextdata per nod: adress, stad, postnummer, accesskod, nyckelnummer, nästa/förra besök
+Backend-stöd: /api/portal/clusters (portalRoutes.ts rad 350–460) bygger redan trädstrukturen:
+
+Hämtar alla objekt för kunden
+Filtrerar med scoping
+Beräknar besöksinformation (nästa/förra besök)
+Bygger parent-child-relationer
+Sorterar barn alfabetiskt
+2.2 PortalDashboardPage — huvudvy med 1522 rader
+En omfattande dashboard med:
+
+Scope-badge (visar vilka objekt användaren ser)
+Bokningswidget (SelfBookingWidget)
+Live ETA-widget (LiveETAWidget)
+Besöksfeedback (VisitFeedback)
+Chat med tekniker (WorkOrderChat)
+2.3 PortalMapPage — kartvisning
+Leaflet-baserad kartvy med alla kundens objekt geografiskt placerade.
+
+2.4 Övriga portalfunktioner
+Sida	Funktion
+PortalCompletedJobsPage	Utförda uppdrag
+PortalContractsPage	Avtal
+PortalInvoicesPage	Fakturor
+PortalIssuesPage	Felanmälan
+PortalFieldPage	Fältvy (815 rader)
+PortalROIReportPage	ROI-rapport
+PortalSettingsPage	Inställningar
+3. Teknisk genomförbarhet
+3.1 Vad som kan byggas direkt (låg effort)
+Funktion	Befintligt stöd	Effort
+Utökad trädvy med fler datapunkter	PortalClusterOverviewPage + /api/portal/clusters	Låg
+Visa artiklar kopplade till objekt	ARTICLE_HOOK_LEVELS, objectApplicableArticles	Låg
+Visa metadata per objekt	objectMetadata + metadataDefinitions	Låg
+Visa arbetsordrar per nod	work_orders.objectId redan joinat	Låg
+Visa IoT-data per kärl	iot_devices.objectId	Låg
+Visa bilder per objekt	object_images	Låg
+Export av data per nivå	/api/export/:type finns, behöver utökas med filter	Låg-Medel
+3.2 Vad som kräver ny utveckling (medel effort)
+Funktion	Utmaning	Effort
+Interaktiv tankekarta-layout (vs trädlista)	Kräver nytt visualiseringsbibliotek	Medel
+Drill-down med kontextuella sidopaneler	Ny UI-komponent	Medel
+Import på valfri hierarkinivå	Befintlig import är flat, behöver hierarkisk mapping	Medel
+Aggregerad statistik per nivå (antal kärl, ordrar, kostnader)	Kräver nya SQL-queries med GROUP BY + hierarkisk aggregering	Medel
+Sök/filter inom hierarkin	Text-sök + expansion av matchade noder	Medel
+3.3 Vad som är tekniskt utmanande (hög effort)
+Funktion	Utmaning	Effort
+Fri-form mind map med drag-and-drop	Komplex UI, kräver bibliotek som ReactFlow/D3	Hög
+Realtidsuppdateringar av träddata	WebSocket-integration (socket.io-bridge finns)	Hög
+Visuell redigering av hierarkin (flytta objekt)	Komplex validering + arv-omberäkning	Hög
+Offline-stöd för stora hierarkier	Kräver lokalt cache + sync-logik	Hög
+3.4 Teknikval — rekommendation
+Befintlig stack:
+
+Frontend: React + TypeScript + TanStack Query + shadcn/ui + Tailwind CSS
+Kartor: Leaflet/react-leaflet
+Grafer: Recharts
+Backend: Express + Drizzle ORM + PostgreSQL
+Rekommenderade tillägg för tankekarta-vy:
+
+Alternativ	Beskrivning	Passform
+react-d3-tree	Enkel trädvisualisering, lättviktig	⭐⭐⭐⭐⭐ Bäst för fas 1
+ReactFlow (@xyflow/react)	Interaktiva nodbaserade grafer	⭐⭐⭐⭐ Bäst för fas 2
+D3.js (direkt)	Fullständig kontroll, sunburst/treemap	⭐⭐⭐ Flexibelt men mer jobb
+Cytoscape.js	Nätverksgrafer, bra för multi-parent	⭐⭐⭐ Om nätverksvy behövs
+Rekommendation: Starta med react-d3-tree för enkel hierarkisk visualisering, utöka med ReactFlow om interaktivitet behövs.
+
+4. UX/UI-överväganden
+4.1 NotebookLM-inspirationen — vad som är applicerbart
+NotebookLMs mind map fungerar genom att:
+
+Visa en central nod med förgreningar
+Låta användaren expandera/kollapsa grenar
+Klicka på en nod för att få kontextuell information
+Navigera genom att zooma och panorera
+Applicerbart för Traivo ONE:
+
+✅ Expand/collapse (finns redan i PortalClusterOverviewPage)
+✅ Kontextuell information vid klick (nästa besök, historik)
+✅ Hierarkisk navigation (5 definierade nivåer)
+⚠️ Fri-form layout — mindre relevant för strukturerad fältservice-data
+4.2 Bättre UX-metaforer för fältservice
+En ren tankekarta passar bäst för ostrukturerade idéer. Fältservice-data är starkt strukturerad. Bättre UX-mönster:
+
+Mönster	Beskrivning	Lämpligt för
+Utfällbar trädlista (befintlig)	Kompakt, skalbar, mobile-friendly	Daglig navigation
+Treemap (ytor proportionella mot antal)	Visuellt impaktfull, visar volymer	Översikt för beslutsfattare
+Sunburst-diagram	Cirkulärt med nivåer som ringar	Snabb överblick av hierarkin
+Interaktiv nodgraf	Klickbara noder med sidopanel	Utforskande analys
+Breadcrumb + barn	Visar en nivå åt gången	Mobil-first navigation
+4.3 Responsivitet — kritisk utmaning
+Kundportalen används sannolikt på:
+
+📱 Mobil — fastighetsskötare på plats
+💻 Desktop — förvaltare som analyserar sin verksamhet
+📊 Tablet — fältpersonal
+En tankekarta-vy fungerar bra på desktop men skalas dåligt på mobil. Rekommendation:
+
+Desktop: Interaktiv nodgraf med sidopanel
+Mobil: Breadcrumb-navigation med en nivå åt gången (á la Finder/File Explorer)
+4.4 Prestanda
+Kunders data kan vara stora — en avfallshanteringsverksamhet med t.ex:
+
+50 koncerner → 200 BRF:er → 1 000 fastigheter → 3 000 rum → 15 000 kärl
+15 000+ noder i en visuell graf kräver:
+
+Lazy loading — ladda bara synliga nivåer
+Virtualisering — rendera bara synliga noder
+Server-side aggregering — skicka sammanfattningar, inte alla objekt
+Caching — cachedObjectCount och cachedHierarchyDepth finns redan i clusters
+5. Affärsvärde för kunden
+5.1 Direkta fördelar
+Fördel	Beskrivning	Påverkan
+Ökad transparens	Kunden ser exakt vad de betalar för	Minskad churn
+Självbetjäning	Kunden kan själv hitta info utan att ringa	Minskad supportbelastning
+Bättre datainsikt	Aggregerad statistik per nivå	Stödjer kundens egna beslut
+Differentiering	Få fältservice-portaler har hierarkisk vy	Sälj-argument
+Import/export	Kunden kan underhålla sin egen data	Minskar administrativt arbete
+5.2 Målgruppsbedömning
+Målgrupp	Behov	Prioritet
+Fastighetsförvaltare	Överblick av alla fastigheter + kärl	⭐⭐⭐⭐⭐
+BRF-styrelser	Se sitt bestånd + kommande service	⭐⭐⭐⭐
+Kommunala avfallsbolag	Aggregerad statistik per område	⭐⭐⭐⭐
+Enskild kontaktperson	Hitta sin soptunna + nästa tömning	⭐⭐⭐
+5.3 Intäktspotential
+Kundportalmodulen (customer_portal) ingår redan i "Professional"-paketet
+En utökad hierarkisk vy kan motivera premium-prissättning
+Data-export per nivå kan vara en premium-funktion
+6. Jämförelse med liknande lösningar i branschen
+6.1 Fältservice (FSM)
+Lösning	Hierarkisk vy	Kundportal	Mind map
+Dynamics 365 FSM	Asset hierarchy (parent/child)	Ja, portal.dynamics.com	Nej
+ServiceMax	Installed Products (hierarkisk)	Ja, Salesforce Community	Nej
+FieldEquip	Asset tree med sub-assets	Ja, begränsad	Nej
+Routeware (waste)	Enkel kundvy	Ja, självbetjäning	Nej
+AMCS (waste)	Container management	Ja, kundportal	Nej
+Traivo ONE (nuvarande)	✅ 5-nivåers hierarki med trädvy	✅ 13 portalsidor	❌ Ej mind map
+Slutsats: Ingen direkt konkurrent erbjuder en tankekarta-liknande vy. De flesta stannar vid enkla trädlistor eller platta listor. En visuell hierarki-vy skulle vara branschunik.
+
+6.2 NotebookLM vs Traivo ONE-kontext
+Aspekt	NotebookLM	Traivo ONE-vy
+Data	Ostrukturerad text → AI-genererad struktur	Redan strukturerad hierarki
+Syfte	Utforska och förstå	Navigera och agera
+Interaktion	Klicka → chatta	Klicka → se detaljer, boka, anmäla
+Skalbarhet	~100 noder	Potentiellt 15 000+ noder
+Den bästa inspirationen från NotebookLM är kontextuell drill-down — inte den visuella layouten i sig.
+
+7. Rekommendationer och implementationsförslag
+Fas 1: Utökad trädvy med kontextuella paneler (4–6 veckor)
+Bygger på befintlig PortalClusterOverviewPage.
+
+Konkreta åtgärder:
+
+Utöka /api/portal/clusters med mer data:
+Antal objekt per nod (aggregerat nedåt)
+Antal aktiva ordrar per nod
+Senaste/nästa service per nod
+Kopplade artiklar och abonnemang
+IoT-status (om tillämpligt)
+Metadata-värden
+Sidopanel vid klick på nod:
+Detaljinformation om objektet
+Kommande/historiska arbetsordrar
+Kopplade artiklar och priser
+Bilder (via object_images)
+Metadata-värden
+Snabb-actions: "Anmäl fel", "Boka extra service"
+Sök/filter:
+Textfält som filtrerar och auto-expanderar matchade noder
+Filter på objekttyp, hierarkinivå, status
+Export per nivå:
+"Exportera alla kärl under denna fastighet" (CSV/Excel)
+Utöka befintlig /api/export/:type med hierarkisk filtrering
+Tekniskt:
+
+Utöka ClusterNodeCard med onClick → sidopanel
+Ny HierarchyDetailPanel-komponent
+Ny API-endpoint: /api/portal/objects/:id/summary (aggregerad data)
+Använd befintliga shadcn/ui Sheet/Dialog-komponenter
+Fas 2: Visuell grafvy (6–8 veckor)
+Ny alternativ visualisering vid sidan av trädlistan.
+
+Installera ReactFlow (@xyflow/react):
+Nodbaserad graf med zoom/pan
+Custom node-typer per hierarkinivå (med ikoner, färger)
+Minimap för överblick vid stora hierarkier
+Treemap-vy (alternativ):
+Varje rektangels storlek proportionell mot antal kärl/ordrar
+Klickbar för drill-down
+Färgkodad efter status (grön = OK, gul = behöver service, röd = problem)
+Lazy loading:
+Visa bara 2 nivåer initialt
+Ladda barn vid expand
+Använd hierarchyPath för effektiv filtrering
+Dashboard-integration:
+KPI-kort ovanför grafen (totalt antal objekt, aktiva ordrar, etc.)
+Direktlänk från dashboard till specifik nod
+Tekniskt:
+
+Ny sida: PortalHierarchyMapPage.tsx
+Ny API: /api/portal/hierarchy/level?parentId=X (lazy)
+ReactFlow custom nodes + edges
+Recharts-integration för KPI-kort (redan i stacken)
+Fas 3: Import/export och avancerade funktioner (4–6 veckor)
+Import på hierarkinivå:
+Kunden laddar upp CSV med nya kärl under en specifik fastighet
+Använd befintlig ImportColumnMapper-komponent som utgångspunkt
+Automatisk koppling till rätt förälder via hierarchyPath
+Aggregerad rapportering:
+"Visa mig alla kärl under BRF Solgläntan som inte tömts på 2 veckor"
+Filtrera + aggregera med befintliga work_orders-data
+Notifikationer per nivå:
+"Meddela mig när något kärl under Fastighet X anmäls"
+Bygg på befintligt notifikationssystem
+AI-integration (framtid):
+"Sammanfatta status för hela min verksamhet"
+Bygg på befintlig AI-infrastruktur (ai-insights.ts, ai-communication.ts)
+8. Potentiella risker
+8.1 Tekniska risker
+Risk	Sannolikhet	Konsekvens	Mitigation
+Prestandaproblem vid stora hierarkier	Medel	Långsam laddning, dålig UX	Lazy loading, server-side aggregering, cachade värden (redan finns i clusters)
+Mobil UX-problem med grafvy	Hög	Oanvändbar på mobil	Dual-vy: trädlista (mobil) + graf (desktop)
+Komplex state-hantering	Medel	Buggar vid expand/collapse	TanStack Query caching + stegvis implementation
+Inkonsekventa hierarkier i kunddata	Medel	Trasiga träd	Validering vid import + DataQualityDashboard (finns redan)
+8.2 Affärsrisker
+Risk	Sannolikhet	Konsekvens	Mitigation
+Överdimensionerad funktionalitet	Medel	Kunder vill bara se nästa tömning	Starta med fas 1 (trädvy), mät adoption
+Datakvalitet avgörande	Hög	Felaktig hierarki → fel information	Validering + befintlig datakvalitets-dashboard
+Scope creep	Hög	"Kan vi inte också..."	Strikt fasindelning, MVP-first
+Kunden förstår inte vyn	Låg-Medel	Låg adoption	Onboarding-guide (befintlig TourGuide-komponent kan återanvändas)
+8.3 Säkerhetsrisker
+Risk	Mitigation (redan finns)
+Kund ser annan kunds data	requirePortalAuth + tenantId-filtrering på alla queries
+Portalanvändare ser för mycket	portalUserObjectScopes + scopedObjectIds-filtrering
+Data-export av känslig info	Rollbaserad behörighet per export-nivå
+9. Sammanfattning — Konkret rekommendation
+Börja här:
+Utöka PortalClusterOverviewPage med sidopanel vid klick (2 veckor)
+Lägg till sök/filter i trädvyn (1 vecka)
+Visa aggregerad statistik per nod — antal kärl, ordrar, senaste service (2 veckor)
+Export-knapp per nivå i hierarkin (1 vecka)
+Undvik:
+❌ Att bygga en fri-form mind map — datan är redan strukturerad
+❌ Att försöka visa allt på en gång — 15 000 kärl i en graf fungerar inte
+❌ Att bygga en ny autentiseringsmodell — portalens auth fungerar redan
+❌ Att kopiera NotebookLM rakt av — AI-genererade grafer vs strukturerad data är fundamentalt olika
+Den bästa insikten:
+Traivo ONEs styrka är att hierarkin redan är modellerad i databasen (5 nivåer, parentId, hierarchyPath, metadata-arv, multi-parent-stöd, IoT-koppling). Det som saknas är ett bättre visuellt skal runt denna data i kundportalen. Den befintliga PortalClusterOverviewPage är en utmärkt startpunkt — den behöver inte ersättas, den behöver utökas.
+
+Rapporten baseras på analys av 149 databastabeller, 13 portalsidor, och den kompletta server/klient-arkitekturen i Traivo ONE.
