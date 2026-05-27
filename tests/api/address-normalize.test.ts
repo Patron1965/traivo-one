@@ -19,6 +19,43 @@ describe("normalizeStreetAddress", () => {
     expect(normalizeStreetAddress("Storgatan 12B")).toBe("storgatan 12b");
     expect(normalizeStreetAddress("Storgatan 12-14")).toBe("storgatan 12-14");
   });
+  it("matches '12 A' with '12A' (space between number and letter suffix collapses)", () => {
+    expect(normalizeStreetAddress("Storgatan 12 A")).toBe("storgatan 12a");
+    expect(normalizeStreetAddress("Storgatan 12A")).toBe("storgatan 12a");
+    expect(normalizeStreetAddress("Storgatan 12 a")).toBe("storgatan 12a");
+  });
+  it("normalises hyphen number ranges with extra spaces", () => {
+    expect(normalizeStreetAddress("Storgatan 12 - 14")).toBe("storgatan 12-14");
+    expect(normalizeStreetAddress("Storgatan 12 -14")).toBe("storgatan 12-14");
+  });
+});
+
+describe("normalizeAddressKey — real-world variants (15+)", () => {
+  const equalCases: Array<[string, string, string]> = [
+    ["plain", "Storgatan 5", "storgatan 5"],
+    ["whitespace", "  Storgatan   5  ", "storgatan 5"],
+    ["uppercase", "STORGATAN 5", "storgatan 5"],
+    ["mixed case", "StorGatan 5", "storgatan 5"],
+    ["trailing dot", "Storgatan 5.", "storgatan 5"],
+    ["trailing comma", "Storgatan 5,", "storgatan 5"],
+    ["paren noise", "Storgatan 5 (huvudentré)", "storgatan 5 huvudentre"],
+    ["diacritics ö", "Köpmansgatan 7", "kopmansgatan 7"],
+    ["diacritics å", "Långgatan 3", "langgatan 3"],
+    ["suffix letter spaced", "Storgatan 12 A", "storgatan 12a"],
+    ["suffix letter glued", "Storgatan 12A", "storgatan 12a"],
+    ["suffix letter spaced lowercase", "storgatan 12 a", "storgatan 12a"],
+    ["range with spaces", "Storgatan 12 - 14", "storgatan 12-14"],
+    ["range glued", "Storgatan 12-14", "storgatan 12-14"],
+    ["abbrev g.", "Stor g. 5", "stor gatan 5"],
+    ["abbrev v.", "Lugna v. 7", "lugna vagen 7"],
+    ["abbrev suffix-glued", "Storg. 5", "stor gatan 5"],
+    ["norwegian ø", "Sørgatan 1", "sorgatan 1"],
+  ];
+  for (const [label, input, expected] of equalCases) {
+    it(`normalizes "${input}" → "${expected}" (${label})`, () => {
+      expect(normalizeStreetAddress(input)).toBe(expected);
+    });
+  }
   it("collapses extra whitespace and punctuation", () => {
     expect(normalizeStreetAddress("Stor-Gatan, 5.")).toBe("stor-gatan 5");
     expect(normalizeStreetAddress("Stor   gatan    5")).toBe("stor gatan 5");
@@ -30,7 +67,7 @@ describe("normalizeStreetAddress", () => {
   });
 });
 
-describe("normalizeCity", () => {
+describe("normalizeCity_extra", () => {
   it("lowercases, strips diacritics", () => {
     expect(normalizeCity("Malmö")).toBe("malmo");
     expect(normalizeCity("Örebro")).toBe("orebro");

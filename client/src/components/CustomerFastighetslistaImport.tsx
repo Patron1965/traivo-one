@@ -1,10 +1,9 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -16,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Loader2, Upload, CheckCircle2, AlertTriangle, RotateCcw, Building2, ChevronsUpDown, Check,
-  Plus, FileWarning, Flag, ArrowRight, Eye, Undo2,
+  Plus, FileWarning, Flag, ArrowRight, Eye, Undo2, Copy,
 } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -29,10 +28,11 @@ interface AvailableField { key: string; label: string; required: boolean }
 interface PreviewResponse {
   customer: { id: string; name: string };
   columns: string[];
+  headerFingerprint: string;
   sampleRows: Record<string, string>[];
   totalRows: number;
   rows: Record<string, string>[];
-  savedMapping: null | { columnMap: Record<string, string | null>; label: string | null; updatedAt: string; lastUsedAt: string; usable: boolean };
+  savedMapping: null | { columnMap: Record<string, string | null>; label: string | null; updatedAt: string; lastUsedAt: string; usable: boolean; fingerprintMatches: boolean };
   suggestedMapping: Record<string, string | null>;
   availableFields: AvailableField[];
   parseErrors: string[];
@@ -42,9 +42,9 @@ interface DiffNew { rowIndex: number; key: string; address: string; postalCode: 
 interface DiffChanged { rowIndex: number; key: string; objectId: string; address: string; postalCode: string; city: string; name: string; objectNumber: string; changes: Record<string, { old: string; new: string }> }
 interface DiffMissing { id: string; name: string; address: string | null; postalCode: string | null; city: string | null; objectNumber: string | null; reconciliationFlag: string | null }
 interface DiffInvalid { rowIndex: number; reason: string; raw: Record<string, string> }
-interface DiffDuplicate { key: string; rowIndices: number[] }
+interface DiffDuplicate { key: string; winnerRowIndex: number; excludedRowIndices: number[]; addressPreview: string }
 interface DiffResponse {
-  summary: { totalFileRows: number; validFileRows: number; newCount: number; changedCount: number; missingCount: number; unchangedCount: number; duplicateGroupCount: number; invalidCount: number };
+  summary: { totalFileRows: number; validFileRows: number; newCount: number; changedCount: number; missingCount: number; unchangedCount: number; duplicateGroupCount: number; duplicateExcludedCount: number; invalidCount: number };
   new: DiffNew[];
   changed: DiffChanged[];
   missing: DiffMissing[];
@@ -61,6 +61,13 @@ interface CommitResponse {
   totalRows: number;
 }
 
+const FIELD_LABELS_SV: Record<string, string> = {
+  postalCode: "Postnummer",
+  city: "Ort",
+  name: "Namn",
+  objectNumber: "Externt ID",
+};
+
 export default function CustomerFastighetslistaImport() {
   const { toast } = useToast();
   const [step, setStep] = useState<Step>("select-customer");
@@ -71,7 +78,9 @@ export default function CustomerFastighetslistaImport() {
   const [columnMap, setColumnMap] = useState<Record<string, string | null>>({});
   const [diff, setDiff] = useState<DiffResponse | null>(null);
   const [selectedNew, setSelectedNew] = useState<Set<number>>(new Set());
-  const [selectedChanged, setSelectedChanged] = useState<Set<string>>(new Set());
+  // Per-fält-godkännande: objectId → Set(fieldName). Förvald: alla fält i alla
+  // changed-rader markerade.
+  const [selectedFields, setSelectedFields] = useState<Record<string, Set<string>>>({});
   const [flagMissing, setFlagMissing] = useState(true);
   const [saveMapping, setSaveMapping] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -79,6 +88,40 @@ export default function CustomerFastighetslistaImport() {
 
   const customersQuery = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const selectedCustomer = useMemo(() => customersQuery.data?.find(c => c.id === customerId) || null, [customersQuery.data, customerId]);
+
+  // Antal valda changed-rader (rader där minst ett fält är ikryssat)
+  const selectedChangedCount = useMemo(
+    () => Object.values(selectedFields).filter(s => s.size > 0).length,
+    [selectedFields]
+  );
+
+  const runDiff = useCallback(async (currentColumnMap?: Record<string, string | null>, currentPreview?: PreviewResponse) => {
+    const p = currentPreview ?? preview;
+    const cm = currentColumnMap ?? columnMap;
+    if (!p) return;
+    setLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/import/customer-fastighetslista/diff", {
+        customerId,
+        columnMap: cm,
+        rows: p.rows,
+      });
+      const data: DiffResponse = await res.json();
+      setDiff(data);
+      setSelectedNew(new Set(data.new.map(n => n.rowIndex)));
+      // Förvald: alla fält i alla rader
+      const fields: Record<string, Set<string>> = {};
+      for (const c of data.changed) {
+        fields[c.objectId] = new Set(Object.keys(c.changes));
+      }
+      setSelectedFields(fields);
+      setStep("diff");
+    } catch (err: any) {
+      toast({ title: "Fel vid avstämning", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }, [preview, columnMap, customerId, toast]);
 
   const handleFileChange = useCallback(async (selected: File) => {
     if (!customerId) return;
@@ -93,7 +136,7 @@ export default function CustomerFastighetslistaImport() {
       const data: PreviewResponse = await res.json();
       setPreview(data);
 
-      // Förvalde mappning: sparad om användbar, annars AI-förslag
+      // Förvald mappning: sparad om användbar, annars AI-förslag
       const initial: Record<string, string | null> = {};
       const useSaved = data.savedMapping?.usable;
       for (const f of data.availableFields) {
@@ -102,6 +145,18 @@ export default function CustomerFastighetslistaImport() {
           : (data.suggestedMapping[f.key] ?? null);
       }
       setColumnMap(initial);
+
+      // Auto-hoppa direkt till diff om filens kolumn-layout är identisk
+      // med när mappningen senast sparades (fingerprint-match).
+      if (data.savedMapping?.fingerprintMatches && data.savedMapping?.usable && initial.address) {
+        toast({
+          title: "Identisk filstruktur upptäckt",
+          description: `Hoppar direkt till avstämning — sparad mappning från ${format(new Date(data.savedMapping.lastUsedAt), "yyyy-MM-dd", { locale: sv })} används.`,
+        });
+        await runDiff(initial, data);
+        return;
+      }
+
       setStep("mapping");
       if (useSaved) {
         toast({ title: "Sparad mappning hittades", description: `Använder mappningen som sparades ${data.savedMapping!.lastUsedAt ? format(new Date(data.savedMapping!.lastUsedAt), "yyyy-MM-dd", { locale: sv }) : "tidigare"} för ${data.customer.name}` });
@@ -111,41 +166,26 @@ export default function CustomerFastighetslistaImport() {
     } finally {
       setLoading(false);
     }
-  }, [customerId, toast]);
-
-  const runDiff = useCallback(async () => {
-    if (!preview) return;
-    setLoading(true);
-    try {
-      const res = await apiRequest("POST", "/api/import/customer-fastighetslista/diff", {
-        customerId,
-        columnMap,
-        rows: preview.rows,
-      });
-      const data: DiffResponse = await res.json();
-      setDiff(data);
-      // Förvald: allt nytt och allt ändrat
-      setSelectedNew(new Set(data.new.map(n => n.rowIndex)));
-      setSelectedChanged(new Set(data.changed.map(c => c.key)));
-      setStep("diff");
-    } catch (err: any) {
-      toast({ title: "Fel vid avstämning", description: err.message, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  }, [preview, customerId, columnMap, toast]);
+  }, [customerId, toast, runDiff]);
 
   const runCommit = useCallback(async () => {
     if (!preview || !diff) return;
     setStep("importing");
     setLoading(true);
     try {
+      // Serialisera per-fält-map till { [objectId]: [fieldName, ...] }
+      const approvedChangedFields: Record<string, string[]> = {};
+      for (const [oid, fset] of Object.entries(selectedFields)) {
+        if (fset.size > 0) approvedChangedFields[oid] = Array.from(fset);
+      }
       const res = await apiRequest("POST", "/api/import/customer-fastighetslista/commit", {
         customerId,
         columnMap,
         rows: preview.rows,
+        headers: preview.columns,
+        headerFingerprint: preview.headerFingerprint,
         approvedNewIndices: Array.from(selectedNew),
-        approvedChangedKeys: Array.from(selectedChanged),
+        approvedChangedFields,
         flagMissing,
         saveMapping,
       });
@@ -161,7 +201,7 @@ export default function CustomerFastighetslistaImport() {
     } finally {
       setLoading(false);
     }
-  }, [preview, diff, customerId, columnMap, selectedNew, selectedChanged, flagMissing, saveMapping, toast]);
+  }, [preview, diff, customerId, columnMap, selectedNew, selectedFields, flagMissing, saveMapping, toast]);
 
   const undoBatch = useCallback(async () => {
     if (!result?.batchId) return;
@@ -187,11 +227,40 @@ export default function CustomerFastighetslistaImport() {
     setColumnMap({});
     setDiff(null);
     setSelectedNew(new Set());
-    setSelectedChanged(new Set());
+    setSelectedFields({});
     setFlagMissing(true);
     setSaveMapping(true);
     setResult(null);
   }, []);
+
+  // Hjälpare: toggle ett enskilt fält
+  const toggleField = useCallback((objectId: string, field: string, on: boolean) => {
+    setSelectedFields(prev => {
+      const next = { ...prev };
+      const set = new Set(next[objectId] || []);
+      if (on) set.add(field); else set.delete(field);
+      next[objectId] = set;
+      return next;
+    });
+  }, []);
+
+  // Hjälpare: toggle alla fält i en rad
+  const toggleAllFieldsForRow = useCallback((cr: DiffChanged, on: boolean) => {
+    setSelectedFields(prev => ({
+      ...prev,
+      [cr.objectId]: on ? new Set(Object.keys(cr.changes)) : new Set(),
+    }));
+  }, []);
+
+  // Hjälpare: räkna alla individuella fält-checkboxar (för "Markera alla")
+  const totalChangedFields = useMemo(() => {
+    if (!diff) return 0;
+    return diff.changed.reduce((acc, c) => acc + Object.keys(c.changes).length, 0);
+  }, [diff]);
+  const selectedFieldsTotal = useMemo(
+    () => Object.values(selectedFields).reduce((acc, s) => acc + s.size, 0),
+    [selectedFields]
+  );
 
   const steps = ["select-customer", "upload", "mapping", "diff", "done"] as const;
   const stepLabels = ["Kund", "Ladda fil", "Mappning", "Granska", "Klart"];
@@ -368,7 +437,7 @@ export default function CustomerFastighetslistaImport() {
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep("upload")} data-testid="button-back-upload"><RotateCcw className="h-4 w-4 mr-2" />Ladda annan fil</Button>
-            <Button onClick={runDiff} disabled={loading || !columnMap.address} data-testid="button-run-diff">
+            <Button onClick={() => runDiff()} disabled={loading || !columnMap.address} data-testid="button-run-diff">
               {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Eye className="h-4 w-4 mr-2" />}
               Stäm av mot Traivo
             </Button>
@@ -389,12 +458,31 @@ export default function CustomerFastighetslistaImport() {
 
           {diff.summary.duplicateGroupCount > 0 && (
             <Card className="border-warning/30 bg-warning/10">
-              <CardContent className="p-3 flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 text-warning mt-0.5" />
-                <div className="text-sm">
-                  <strong>{diff.summary.duplicateGroupCount} adresser förekommer flera gånger i filen.</strong>
-                  <span className="text-muted-foreground"> Endast en av varje matchas — kontrollera att det är medvetet.</span>
+              <CardContent className="p-3 space-y-2">
+                <div className="flex items-start gap-2">
+                  <Copy className="h-4 w-4 text-warning mt-0.5" />
+                  <div className="text-sm flex-1">
+                    <strong>{diff.summary.duplicateGroupCount} adresser förekommer flera gånger.</strong>{" "}
+                    <span className="text-muted-foreground">
+                      Första raden i varje grupp används (winner) — {diff.summary.duplicateExcludedCount} duplikat-rad{diff.summary.duplicateExcludedCount === 1 ? "" : "er"} hoppas över.
+                      Om fel rad valts: redigera filen så att önskad rad ligger först och ladda upp igen.
+                    </span>
+                  </div>
                 </div>
+                <ScrollArea className="max-h-32 border rounded bg-background/50 p-2">
+                  <div className="space-y-1 text-xs">
+                    {diff.duplicates.slice(0, 50).map(d => (
+                      <div key={d.key} data-testid={`duplicate-group-${d.key}`}>
+                        <span className="font-medium">{d.addressPreview || d.key}</span> —{" "}
+                        <span className="text-chart-2">rad {d.winnerRowIndex + 2} används</span>,{" "}
+                        <span className="text-muted-foreground">hoppar över rad {d.excludedRowIndices.map(i => i + 2).join(", ")}</span>
+                      </div>
+                    ))}
+                    {diff.duplicates.length > 50 && (
+                      <div className="text-muted-foreground">…och {diff.duplicates.length - 50} till</div>
+                    )}
+                  </div>
+                </ScrollArea>
               </CardContent>
             </Card>
           )}
@@ -460,41 +548,71 @@ export default function CustomerFastighetslistaImport() {
                   <div className="flex items-center justify-between p-2 border-b">
                     <div className="flex items-center gap-2">
                       <Checkbox
-                        checked={selectedChanged.size === diff.changed.length}
-                        onCheckedChange={(c) => setSelectedChanged(c ? new Set(diff.changed.map(x => x.key)) : new Set())}
+                        checked={selectedFieldsTotal === totalChangedFields && totalChangedFields > 0}
+                        onCheckedChange={(c) => {
+                          if (c) {
+                            const all: Record<string, Set<string>> = {};
+                            for (const cr of diff.changed) all[cr.objectId] = new Set(Object.keys(cr.changes));
+                            setSelectedFields(all);
+                          } else {
+                            setSelectedFields({});
+                          }
+                        }}
                         data-testid="checkbox-select-all-changed"
                       />
-                      <Label className="text-sm">Markera alla</Label>
+                      <Label className="text-sm">Markera alla fält</Label>
                     </div>
-                    <Badge variant="secondary">{selectedChanged.size} valda</Badge>
+                    <Badge variant="secondary">{selectedFieldsTotal} av {totalChangedFields} fält valda</Badge>
                   </div>
-                  <ScrollArea className="h-80">
+                  <p className="text-xs text-muted-foreground p-2 border-b">
+                    Per-fält-granskning — välj exakt vilka fält som ska skrivas över. Avmarkera enskilda fält du vill behålla orörda.
+                  </p>
+                  <ScrollArea className="h-96">
                     <Table>
                       <TableHeader><TableRow>
-                        <TableHead className="w-8"></TableHead>
+                        <TableHead className="w-10"></TableHead>
                         <TableHead>Adress</TableHead>
-                        <TableHead>Ändringar</TableHead>
+                        <TableHead>Ändringar (markera per fält)</TableHead>
                       </TableRow></TableHeader>
                       <TableBody>
-                        {diff.changed.map(c => (
-                          <TableRow key={c.key} data-testid={`row-changed-${c.objectId}`}>
-                            <TableCell><Checkbox
-                              checked={selectedChanged.has(c.key)}
-                              onCheckedChange={(v) => setSelectedChanged(s => { const next = new Set(s); if (v) next.add(c.key); else next.delete(c.key); return next; })}
-                            /></TableCell>
-                            <TableCell className="text-sm">{c.address}{c.city ? `, ${c.city}` : ""}</TableCell>
-                            <TableCell className="text-xs">
-                              {Object.entries(c.changes).map(([field, ch]) => (
-                                <div key={field} className="flex gap-2 items-baseline">
-                                  <span className="font-medium">{field}:</span>
-                                  <span className="text-muted-foreground line-through">{ch.old || "—"}</span>
-                                  <ArrowRight className="h-3 w-3 inline" />
-                                  <span className="text-chart-2">{ch.new}</span>
+                        {diff.changed.map(cr => {
+                          const fieldSet = selectedFields[cr.objectId] || new Set<string>();
+                          const allFieldsForRow = Object.keys(cr.changes);
+                          const allSelected = allFieldsForRow.length > 0 && allFieldsForRow.every(f => fieldSet.has(f));
+                          const someSelected = allFieldsForRow.some(f => fieldSet.has(f));
+                          return (
+                            <TableRow key={cr.key} data-testid={`row-changed-${cr.objectId}`}>
+                              <TableCell className="align-top pt-3">
+                                <Checkbox
+                                  checked={allSelected ? true : (someSelected ? "indeterminate" : false)}
+                                  onCheckedChange={(v) => toggleAllFieldsForRow(cr, !!v)}
+                                  data-testid={`checkbox-row-changed-${cr.objectId}`}
+                                />
+                              </TableCell>
+                              <TableCell className="text-sm align-top pt-3">{cr.address}{cr.city ? `, ${cr.city}` : ""}</TableCell>
+                              <TableCell className="text-xs">
+                                <div className="space-y-1.5">
+                                  {Object.entries(cr.changes).map(([field, ch]) => {
+                                    const checked = fieldSet.has(field);
+                                    return (
+                                      <label key={field} className="flex items-center gap-2 cursor-pointer">
+                                        <Checkbox
+                                          checked={checked}
+                                          onCheckedChange={(v) => toggleField(cr.objectId, field, !!v)}
+                                          data-testid={`checkbox-field-${cr.objectId}-${field}`}
+                                        />
+                                        <span className="font-medium w-24 shrink-0">{FIELD_LABELS_SV[field] || field}:</span>
+                                        <span className={`text-muted-foreground line-through ${!checked ? "opacity-50" : ""}`}>{ch.old || "—"}</span>
+                                        <ArrowRight className="h-3 w-3 inline shrink-0 text-muted-foreground" />
+                                        <span className={checked ? "text-chart-2" : "text-muted-foreground line-through opacity-50"}>{ch.new}</span>
+                                      </label>
+                                    );
+                                  })}
                                 </div>
-                              ))}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </ScrollArea>
@@ -564,7 +682,7 @@ export default function CustomerFastighetslistaImport() {
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep("mapping")}><RotateCcw className="h-4 w-4 mr-2" />Tillbaka till mappning</Button>
-            <Button onClick={runCommit} disabled={loading || (selectedNew.size === 0 && selectedChanged.size === 0 && !flagMissing)} data-testid="button-commit-import">
+            <Button onClick={runCommit} disabled={loading || (selectedNew.size === 0 && selectedChangedCount === 0 && !flagMissing)} data-testid="button-commit-import">
               {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
               Genomför avstämning
             </Button>

@@ -59,7 +59,14 @@ export function normalizeStreetAddress(address: string | null | undefined): stri
   s = s.replace(/[^a-z0-9 \-/]/g, " ");
   s = s.replace(/\s+/g, " ").trim();
   const tokens = s.split(" ").filter(Boolean);
-  return expandTokens(tokens).join(" ");
+  let out = expandTokens(tokens).join(" ");
+  // Slå ihop husnummer + bokstavs-suffix separerat av mellanslag:
+  // "12 a" → "12a", "12 - 14" hanteras separat (bindestreck behålls).
+  out = out.replace(/(\d)\s+([a-z])\b/g, "$1$2");
+  // Slå ihop husnummer + bindestreck + nummer/bokstav med extra spaces:
+  // "12 - 14" → "12-14"
+  out = out.replace(/(\d)\s*-\s*([0-9a-z])/g, "$1-$2");
+  return out;
 }
 
 export function normalizeCity(city: string | null | undefined): string {

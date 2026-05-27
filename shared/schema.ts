@@ -5249,6 +5249,10 @@ export const customerImportMappings = pgTable("customer_import_mappings", {
   customerId: varchar("customer_id").references(() => customers.id).notNull(),
   label: text("label"),
   columnMap: jsonb("column_map").notNull(),
+  // MD5-hash av sorterade lowercase-headers i den uppladdade filen — används
+  // för att avgöra om filens kolumn-layout är identisk med när mappningen
+  // sparades. Vid match kan UI auto-hoppa förbi mappnings-steget.
+  sourceFingerprint: text("source_fingerprint"),
   lastUsedAt: timestamp("last_used_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
