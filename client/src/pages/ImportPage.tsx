@@ -26,6 +26,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { ImportSummaryView } from "@/components/ImportSummaryView";
 import { ImportHealthOverview } from "@/components/ImportHealthOverview";
 import ImportColumnMapper from "@/components/ImportColumnMapper";
+import CustomerFastighetslistaImport from "@/components/CustomerFastighetslistaImport";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import Papa from "papaparse";
 import { format } from "date-fns";
@@ -2198,7 +2199,7 @@ export default function ImportPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [activeTab, setActiveTab] = useState<"modus" | "enrich" | "manual" | "fortnox" | "mapped" | "history" | "quality">("modus");
+  const [activeTab, setActiveTab] = useState<"modus" | "enrich" | "manual" | "fortnox" | "mapped" | "customerlist" | "history" | "quality">("customerlist");
   const [showObjectColumns, setShowObjectColumns] = useState(false);
   const [showTaskColumns, setShowTaskColumns] = useState(false);
   const [showEventColumns, setShowEventColumns] = useState(false);
@@ -3053,8 +3054,12 @@ export default function ImportPage() {
     <div className="p-6 space-y-6">
       <PageHeader icon={Upload} title={tl("page.import.title")} description={tl("page.import.description")} testId="text-import-title" />
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "modus" | "enrich" | "manual" | "fortnox" | "mapped" | "history" | "quality")}>
-        <TabsList className="grid w-full grid-cols-7">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "modus" | "enrich" | "manual" | "fortnox" | "mapped" | "customerlist" | "history" | "quality")}>
+        <TabsList className="grid w-full grid-cols-8">
+          <TabsTrigger value="customerlist" className="flex items-center gap-2" data-testid="tab-customerlist-import">
+            <Building2 className="h-4 w-4" />
+            Kundlista
+          </TabsTrigger>
           <TabsTrigger value="modus" className="flex items-center gap-2" data-testid="tab-modus-import">
             <FileSpreadsheet className="h-4 w-4" />
             Modus 2.0
@@ -3084,6 +3089,10 @@ export default function ImportPage() {
             Datakvalitet
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="customerlist" className="space-y-6">
+          <CustomerFastighetslistaImport />
+        </TabsContent>
 
         <TabsContent value="modus" className="space-y-6">
           <Card className="border-chart-1/20 dark:border-chart-1/80 bg-chart-1/10 dark:bg-chart-1/15">

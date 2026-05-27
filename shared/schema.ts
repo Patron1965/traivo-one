@@ -173,6 +173,13 @@ export const objects = pgTable("objects", {
   deliveryPreferences: jsonb("delivery_preferences"),
   lastServiceDate: timestamp("last_service_date"),
   importBatchId: text("import_batch_id"),
+  // === RECONCILIATION (årlig kundfastighetslista) ===
+  // Sätts av customer-fastighetslista-importen när ett objekt finns i Traivo men
+  // saknas i den uppladdade fastighetslistan. Inget ändras automatiskt — bara flagga
+  // för manuell granskning. Värde t.ex. "missing_in_fastighetslista".
+  reconciliationFlag: text("reconciliation_flag"),
+  reconciliationFlaggedAt: timestamp("reconciliation_flagged_at"),
+  reconciliationBatchId: text("reconciliation_batch_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
@@ -5230,6 +5237,26 @@ export const importColumnMappings = pgTable("import_column_mappings", {
 }, (table) => [
   index("idx_import_col_map_batch").on(table.batchId),
 ]);
+
+// ============================================
+// Customer Import Mappings — sparad kolumnmappning per kund för årlig
+// fastighetslista-avstämning. En rad per (tenant, customer) — uppdateras när
+// planerare bekräftar mappning. columnMap = { systemField: csvColumn, ... }.
+// ============================================
+export const customerImportMappings = pgTable("customer_import_mappings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  label: text("label"),
+  columnMap: jsonb("column_map").notNull(),
+  lastUsedAt: timestamp("last_used_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_customer_import_mappings_tenant_customer").on(table.tenantId, table.customerId),
+]);
+
+export type CustomerImportMapping = typeof customerImportMappings.$inferSelect;
 
 export const etaNotifications = pgTable("eta_notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

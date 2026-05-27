@@ -14,7 +14,8 @@ import ExcelJS from "exceljs";
 import { importJobs, notifyImportProgress } from "./helpers";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 import { getMapProvider } from "../services/mapProvider";
-import { objects, workOrders, customers, objectMetadata, workOrderLines, metadataKatalog, fortnoxMappings, customerServiceContracts, importBatches, auditLogs, type InsertFortnoxContractSuggestion, type InsertWorkOrder } from "@shared/schema";
+import { objects, workOrders, customers, objectMetadata, workOrderLines, metadataKatalog, fortnoxMappings, customerServiceContracts, importBatches, auditLogs, customerImportMappings, type InsertFortnoxContractSuggestion, type InsertWorkOrder } from "@shared/schema";
+import { normalizeAddressKey } from "@shared/address-normalize";
 import { createMetadata, updateMetadata, getAllMetadataTypes, seedKarlMetadataTypes, KARL_METADATA_DEFINITIONS } from "../metadata-queries";
 import { metadataVarden } from "@shared/schema";
 import { ensureClusterForCustomer, updateClusterCache } from "../auto-cluster";
@@ -6170,5 +6171,557 @@ app.post(
     });
   }),
 );
+
+// ============================================================
+// Customer Fastighetslista — årlig avstämning av kundens fastighetslista
+// mot Traivos objekt. Matchning sker på normaliserad adress + ort.
+// ============================================================
+
+const FL_FIELDS: Record<string, { label: string; aliases: string[]; required?: boolean }> = {
+  address: { label: "Adress (gata + nummer)", required: true, aliases: ["adress", "address", "gatuadress", "gata", "besoksadress", "besöksadress", "street", "leveransadress", "delivery_address", "adress 1", "adress1"] },
+  postalCode: { label: "Postnummer", aliases: ["postnummer", "postnr", "zip", "zip_code", "postal_code", "postalcode"] },
+  city: { label: "Ort / Postort", aliases: ["ort", "stad", "city", "postort"] },
+  name: { label: "Objektnamn (valfritt)", aliases: ["namn", "name", "objektnamn", "fastighet", "fastighetsnamn", "benamning", "benämning"] },
+  objectNumber: { label: "Externt ID / Fastighetsbeteckning (valfritt)", aliases: ["fastighetsbeteckning", "beteckning", "externt id", "externid", "kundens id", "kundnummer", "objektnummer", "objectnumber", "id"] },
+};
+
+function autoSuggestFlMapping(headers: string[]): Record<string, string | null> {
+  const result: Record<string, string | null> = {};
+  const usedCols = new Set<string>();
+  for (const [field, info] of Object.entries(FL_FIELDS)) {
+    let match: string | null = null;
+    // Exakt först
+    for (const h of headers) {
+      if (usedCols.has(h)) continue;
+      const hLower = h.toLowerCase().trim();
+      const hNorm = hLower.replace(/[\s_-]/g, "");
+      if (info.aliases.some(a => hLower === a || hNorm === a.replace(/[\s_-]/g, ""))) {
+        match = h;
+        break;
+      }
+    }
+    // Fuzzy fallback
+    if (!match) {
+      for (const h of headers) {
+        if (usedCols.has(h)) continue;
+        const hLower = h.toLowerCase().trim();
+        if (info.aliases.some(a => hLower.includes(a) || a.includes(hLower))) {
+          match = h;
+          break;
+        }
+      }
+    }
+    if (match) usedCols.add(match);
+    result[field] = match;
+  }
+  return result;
+}
+
+interface FlDiffSummary {
+  totalFileRows: number;
+  validFileRows: number;
+  newCount: number;
+  changedCount: number;
+  missingCount: number;
+  unchangedCount: number;
+  duplicateGroupCount: number;
+  invalidCount: number;
+}
+
+interface FlNewRow { rowIndex: number; key: string; address: string; postalCode: string; city: string; name: string; objectNumber: string; }
+interface FlChangedRow { rowIndex: number; key: string; objectId: string; address: string; postalCode: string; city: string; name: string; objectNumber: string; changes: Record<string, { old: string; new: string }>; }
+interface FlMissingRow { id: string; name: string; address: string | null; postalCode: string | null; city: string | null; objectNumber: string | null; reconciliationFlag: string | null; }
+interface FlInvalidRow { rowIndex: number; reason: string; raw: Record<string, string>; }
+interface FlDuplicateGroup { key: string; rowIndices: number[]; }
+
+interface FlDiff {
+  summary: FlDiffSummary;
+  new: FlNewRow[];
+  changed: FlChangedRow[];
+  missing: FlMissingRow[];
+  duplicates: FlDuplicateGroup[];
+  invalid: FlInvalidRow[];
+}
+
+async function computeFlDiff(tenantId: string, customerId: string, columnMap: Record<string, string | null | undefined>, rows: Record<string, string>[]): Promise<FlDiff> {
+  if (!columnMap?.address) throw new ValidationError("Adress-kolumnen måste mappas");
+
+  const existing = await db.select().from(objects).where(and(
+    eq(objects.tenantId, tenantId),
+    eq(objects.customerId, customerId),
+    isNull(objects.deletedAt),
+  ));
+
+  const existingByKey = new Map<string, typeof existing[number]>();
+  for (const o of existing) {
+    const k = normalizeAddressKey({ address: o.address, postalCode: o.postalCode, city: o.city });
+    if (k && !existingByKey.has(k)) existingByKey.set(k, o);
+  }
+
+  const newRows: FlNewRow[] = [];
+  const changedRows: FlChangedRow[] = [];
+  const invalid: FlInvalidRow[] = [];
+  const matchedKeys = new Set<string>();
+  const seenInFile = new Map<string, number[]>();
+  let unchangedCount = 0;
+
+  const fAddr = columnMap.address as string;
+  const fPost = columnMap.postalCode || null;
+  const fCity = columnMap.city || null;
+  const fName = columnMap.name || null;
+  const fObjNum = columnMap.objectNumber || null;
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i] || {};
+    const address = (r[fAddr] || "").trim();
+    if (!address) { invalid.push({ rowIndex: i, reason: "Adress saknas", raw: r }); continue; }
+    const postalCode = fPost ? (r[fPost] || "").trim() : "";
+    const city = fCity ? (r[fCity] || "").trim() : "";
+    const name = fName ? (r[fName] || "").trim() : "";
+    const objectNumber = fObjNum ? (r[fObjNum] || "").trim() : "";
+
+    const key = normalizeAddressKey({ address, postalCode, city });
+    if (!key) { invalid.push({ rowIndex: i, reason: "Adress kan inte normaliseras", raw: r }); continue; }
+
+    if (!seenInFile.has(key)) seenInFile.set(key, []);
+    seenInFile.get(key)!.push(i);
+
+    const match = existingByKey.get(key);
+    if (match) {
+      matchedKeys.add(key);
+      const changes: Record<string, { old: string; new: string }> = {};
+      if (postalCode && (match.postalCode || "").trim() !== postalCode) changes.postalCode = { old: match.postalCode || "", new: postalCode };
+      if (city && (match.city || "").trim() !== city) changes.city = { old: match.city || "", new: city };
+      if (name && (match.name || "").trim() !== name) changes.name = { old: match.name || "", new: name };
+      if (objectNumber && (match.objectNumber || "").trim() !== objectNumber) changes.objectNumber = { old: match.objectNumber || "", new: objectNumber };
+      if (Object.keys(changes).length > 0) {
+        changedRows.push({ rowIndex: i, key, objectId: match.id, address, postalCode, city, name, objectNumber, changes });
+      } else {
+        unchangedCount++;
+      }
+    } else {
+      newRows.push({ rowIndex: i, key, address, postalCode, city, name, objectNumber });
+    }
+  }
+
+  const duplicates: FlDuplicateGroup[] = [];
+  for (const [key, idxs] of Array.from(seenInFile.entries())) {
+    if (idxs.length > 1) duplicates.push({ key, rowIndices: idxs });
+  }
+
+  const missing: FlMissingRow[] = existing
+    .filter(o => {
+      const k = normalizeAddressKey({ address: o.address, postalCode: o.postalCode, city: o.city });
+      return k && !matchedKeys.has(k);
+    })
+    .map(o => ({ id: o.id, name: o.name, address: o.address, postalCode: o.postalCode, city: o.city, objectNumber: o.objectNumber, reconciliationFlag: o.reconciliationFlag }));
+
+  const validFileRows = rows.length - invalid.length;
+  return {
+    summary: {
+      totalFileRows: rows.length,
+      validFileRows,
+      newCount: newRows.length,
+      changedCount: changedRows.length,
+      missingCount: missing.length,
+      unchangedCount,
+      duplicateGroupCount: duplicates.length,
+      invalidCount: invalid.length,
+    },
+    new: newRows,
+    changed: changedRows,
+    missing,
+    duplicates,
+    invalid,
+  };
+}
+
+// GET — hämta sparad mappning för en kund
+app.get("/api/import/customer-fastighetslista/mapping", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customerId = String(req.query.customerId || "");
+  if (!customerId) throw new ValidationError("customerId krävs");
+  const [row] = await db.select().from(customerImportMappings).where(and(
+    eq(customerImportMappings.tenantId, tenantId),
+    eq(customerImportMappings.customerId, customerId),
+  )).limit(1);
+  if (!row) return res.json({ mapping: null });
+  res.json({ mapping: { columnMap: row.columnMap, label: row.label, updatedAt: row.updatedAt, lastUsedAt: row.lastUsedAt } });
+}));
+
+// POST /preview — ladda upp fil, returnera kolumner + sparad/föreslagen mappning + parsade rader
+app.post("/api/import/customer-fastighetslista/preview", upload.single("file"), asyncHandler(async (req, res) => {
+  if (!req.file) throw new ValidationError("Ingen fil uppladdad");
+  const customerId = String(req.body.customerId || "");
+  if (!customerId) throw new ValidationError("customerId krävs");
+  const tenantId = getTenantIdWithFallback(req);
+
+  const [cust] = await db.select().from(customers).where(and(
+    eq(customers.id, customerId),
+    eq(customers.tenantId, tenantId),
+    isNull(customers.deletedAt),
+  )).limit(1);
+  if (!cust) throw new NotFoundError("Kunden hittades inte i denna tenant");
+
+  const { rows, errors } = await parseModusUpload(req.file);
+  if (rows.length === 0) {
+    throw new ValidationError("Filen verkar tom" + (errors.length ? `: ${errors.slice(0,3).join("; ")}` : ""));
+  }
+
+  const headers = Object.keys(rows[0]);
+
+  const [saved] = await db.select().from(customerImportMappings).where(and(
+    eq(customerImportMappings.tenantId, tenantId),
+    eq(customerImportMappings.customerId, customerId),
+  )).limit(1);
+
+  const savedColumnMap = saved?.columnMap as Record<string, string | null> | undefined;
+  // Verifiera att sparade kolumner finns kvar i filen
+  let savedMappingUsable = false;
+  if (savedColumnMap) {
+    const headerSet = new Set(headers);
+    savedMappingUsable = !!(savedColumnMap.address && headerSet.has(savedColumnMap.address as string));
+  }
+
+  const suggested = autoSuggestFlMapping(headers);
+
+  res.json({
+    customer: { id: cust.id, name: cust.name },
+    columns: headers,
+    sampleRows: rows.slice(0, 5),
+    totalRows: rows.length,
+    rows,
+    savedMapping: saved ? {
+      columnMap: savedColumnMap,
+      label: saved.label,
+      updatedAt: saved.updatedAt,
+      lastUsedAt: saved.lastUsedAt,
+      usable: savedMappingUsable,
+    } : null,
+    suggestedMapping: suggested,
+    availableFields: Object.entries(FL_FIELDS).map(([key, val]) => ({ key, label: val.label, required: !!val.required })),
+    parseErrors: errors,
+  });
+}));
+
+// POST /diff — kör avstämning utan att skriva
+app.post("/api/import/customer-fastighetslista/diff", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const { customerId, columnMap, rows } = req.body || {};
+  if (!customerId || typeof customerId !== "string") throw new ValidationError("customerId krävs");
+  if (!columnMap || typeof columnMap !== "object") throw new ValidationError("columnMap krävs");
+  if (!Array.isArray(rows)) throw new ValidationError("rows måste vara en array");
+
+  const [cust] = await db.select().from(customers).where(and(
+    eq(customers.id, customerId),
+    eq(customers.tenantId, tenantId),
+    isNull(customers.deletedAt),
+  )).limit(1);
+  if (!cust) throw new NotFoundError("Kunden hittades inte i denna tenant");
+
+  const diff = await computeFlDiff(tenantId, customerId, columnMap, rows);
+  res.json(diff);
+}));
+
+// POST /commit — skapa nya, uppdatera ändrade, flagga saknade
+app.post("/api/import/customer-fastighetslista/commit", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const userId = (req as any).user?.id || (req as any).user?.claims?.sub || null;
+  const {
+    customerId,
+    columnMap,
+    rows,
+    approvedNewIndices,
+    approvedChangedKeys,
+    flagMissing,
+    saveMapping,
+    mappingLabel,
+  } = req.body || {};
+
+  if (!customerId || typeof customerId !== "string") throw new ValidationError("customerId krävs");
+  if (!columnMap || typeof columnMap !== "object") throw new ValidationError("columnMap krävs");
+  if (!Array.isArray(rows)) throw new ValidationError("rows måste vara en array");
+
+  const [cust] = await db.select().from(customers).where(and(
+    eq(customers.id, customerId),
+    eq(customers.tenantId, tenantId),
+    isNull(customers.deletedAt),
+  )).limit(1);
+  if (!cust) throw new NotFoundError("Kunden hittades inte i denna tenant");
+
+  // Räkna ut diff på nytt på server-sidan — vi litar aldrig på klient-listor.
+  const diff = await computeFlDiff(tenantId, customerId, columnMap, rows);
+
+  const batchId = `kfl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const now = new Date();
+  const selectedNew = new Set<number>(Array.isArray(approvedNewIndices) ? approvedNewIndices : []);
+  const selectedChanged = new Set<string>(Array.isArray(approvedChangedKeys) ? approvedChangedKeys : []);
+
+  const auditRows: any[] = [];
+  const createdIds: string[] = [];
+  let createdCount = 0;
+  let updatedCount = 0;
+  let flaggedCount = 0;
+
+  for (const nr of diff.new) {
+    if (!selectedNew.has(nr.rowIndex)) continue;
+    const [created] = await db.insert(objects).values({
+      tenantId,
+      customerId,
+      name: nr.name || nr.address,
+      address: nr.address,
+      postalCode: nr.postalCode || null,
+      city: nr.city || null,
+      objectNumber: nr.objectNumber || null,
+      objectType: "fastighet",
+      hierarchyLevel: "fastighet",
+      importBatchId: batchId,
+    }).returning();
+    createdIds.push(created.id);
+    createdCount++;
+    triggerGeocodeIfMissing(created.id);
+  }
+
+  for (const cr of diff.changed) {
+    if (!selectedChanged.has(cr.key)) continue;
+    const update: Record<string, any> = {};
+    const before: Record<string, any> = {};
+    for (const [field, ch] of Object.entries(cr.changes)) {
+      update[field] = ch.new;
+      before[field] = ch.old;
+    }
+    if (Object.keys(update).length === 0) continue;
+    await db.update(objects).set(update).where(and(
+      eq(objects.id, cr.objectId),
+      eq(objects.tenantId, tenantId),
+    ));
+    auditRows.push({
+      tenantId,
+      userId,
+      action: "update_from_fastighetslista",
+      resourceType: "object",
+      resourceId: cr.objectId,
+      changes: { before, after: update },
+      metadata: { source: "customer-fastighetslista", batchId, customerId },
+    });
+    updatedCount++;
+  }
+
+  if (flagMissing && diff.missing.length > 0) {
+    for (const m of diff.missing) {
+      await db.update(objects).set({
+        reconciliationFlag: "missing_in_fastighetslista",
+        reconciliationFlaggedAt: now,
+        reconciliationBatchId: batchId,
+      }).where(and(eq(objects.id, m.id), eq(objects.tenantId, tenantId)));
+      auditRows.push({
+        tenantId,
+        userId,
+        action: "flag_missing_in_fastighetslista",
+        resourceType: "object",
+        resourceId: m.id,
+        changes: {
+          before: { reconciliationFlag: m.reconciliationFlag || null },
+          after: { reconciliationFlag: "missing_in_fastighetslista", reconciliationBatchId: batchId },
+        },
+        metadata: { source: "customer-fastighetslista", batchId, customerId },
+      });
+      flaggedCount++;
+    }
+  }
+
+  if (auditRows.length > 0) {
+    await db.insert(auditLogs).values(auditRows);
+  }
+
+  await db.insert(importBatches).values({
+    tenantId,
+    batchId,
+    totalRows: rows.length,
+    created: createdCount,
+    updated: updatedCount,
+    errors: diff.summary.invalidCount,
+    metadata: {
+      source: "customer-fastighetslista",
+      customerId,
+      customerName: cust.name,
+      columnMap,
+      flagMissing: !!flagMissing,
+      flaggedCount,
+      summary: diff.summary,
+    },
+  });
+
+  // Spara/uppdatera kolumnmappning för kunden (default på)
+  if (saveMapping !== false) {
+    const existingMap = await db.select().from(customerImportMappings).where(and(
+      eq(customerImportMappings.tenantId, tenantId),
+      eq(customerImportMappings.customerId, customerId),
+    )).limit(1);
+    if (existingMap.length > 0) {
+      await db.update(customerImportMappings).set({
+        columnMap,
+        label: mappingLabel || existingMap[0].label,
+        lastUsedAt: now,
+        updatedAt: now,
+      }).where(eq(customerImportMappings.id, existingMap[0].id));
+    } else {
+      await db.insert(customerImportMappings).values({
+        tenantId, customerId, columnMap, label: mappingLabel || null, lastUsedAt: now,
+      });
+    }
+  }
+
+  invalidateWorkflowCaches(tenantId);
+
+  res.json({
+    batchId,
+    createdCount,
+    updatedCount,
+    flaggedCount,
+    missingTotal: diff.missing.length,
+    totalRows: rows.length,
+    summary: diff.summary,
+  });
+}));
+
+// POST /undo — backa en commit: ta bort skapade, återställ ändrade, rensa flaggor
+app.post("/api/import/customer-fastighetslista/undo", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const userId = (req as any).user?.id || (req as any).user?.claims?.sub || null;
+  const { batchId } = req.body || {};
+  if (!batchId || typeof batchId !== "string") throw new ValidationError("batchId krävs");
+  if (!batchId.startsWith("kfl-")) throw new ValidationError("Endast kund-fastighetslista-batchar kan backas här");
+
+  const [batch] = await db.select().from(importBatches).where(and(
+    eq(importBatches.tenantId, tenantId),
+    eq(importBatches.batchId, batchId),
+  )).limit(1);
+  if (!batch) throw new NotFoundError("Batch hittades inte");
+
+  // 1) Soft-delete objekt som skapades i denna batch
+  const createdObjects = await db.select().from(objects).where(and(
+    eq(objects.tenantId, tenantId),
+    eq(objects.importBatchId, batchId),
+    isNull(objects.deletedAt),
+  ));
+  const now = new Date();
+  let removedCount = 0;
+  if (createdObjects.length > 0) {
+    await db.update(objects).set({ deletedAt: now }).where(and(
+      eq(objects.tenantId, tenantId),
+      eq(objects.importBatchId, batchId),
+      isNull(objects.deletedAt),
+    ));
+    removedCount = createdObjects.length;
+  }
+
+  // 2) Återställ ändrade objekt från audit_logs
+  const updateAudits = await db.select().from(auditLogs).where(and(
+    eq(auditLogs.tenantId, tenantId),
+    eq(auditLogs.action, "update_from_fastighetslista"),
+    sql`${auditLogs.metadata}->>'batchId' = ${batchId}`,
+  ));
+  let revertedCount = 0;
+  for (const a of updateAudits) {
+    const changes = a.changes as any;
+    const before = changes?.before;
+    if (!before || typeof before !== "object") continue;
+    const revertSet: Record<string, any> = {};
+    for (const [k, v] of Object.entries(before)) {
+      revertSet[k] = v === "" ? null : v;
+    }
+    if (Object.keys(revertSet).length > 0) {
+      await db.update(objects).set(revertSet).where(and(
+        eq(objects.id, a.resourceId!),
+        eq(objects.tenantId, tenantId),
+      ));
+      revertedCount++;
+    }
+  }
+
+  // 3) Rensa reconciliationFlag på objekt som flaggades av denna batch
+  const unflagResult = await db.update(objects).set({
+    reconciliationFlag: null,
+    reconciliationFlaggedAt: null,
+    reconciliationBatchId: null,
+  }).where(and(
+    eq(objects.tenantId, tenantId),
+    eq(objects.reconciliationBatchId, batchId),
+  )).returning({ id: objects.id });
+  const unflaggedCount = unflagResult.length;
+
+  // 4) Spåra själva undo-operationen
+  await db.insert(auditLogs).values({
+    tenantId,
+    userId,
+    action: "undo_customer_fastighetslista",
+    resourceType: "import_batch",
+    resourceId: batchId,
+    changes: { before: { batchId, created: removedCount, updated: revertedCount, flagged: unflaggedCount }, after: { undone: true } },
+    metadata: { source: "customer-fastighetslista-undo", batchId },
+  });
+
+  invalidateWorkflowCaches(tenantId);
+
+  res.json({ batchId, removedCount, revertedCount, unflaggedCount });
+}));
+
+// GET — lista objekt som flaggats som saknade
+app.get("/api/import/customer-fastighetslista/flagged-objects", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customerId = req.query.customerId ? String(req.query.customerId) : null;
+  const whereParts = [
+    eq(objects.tenantId, tenantId),
+    isNull(objects.deletedAt),
+    isNotNull(objects.reconciliationFlag),
+  ];
+  if (customerId) whereParts.push(eq(objects.customerId, customerId));
+  const rows = await db.select({
+    id: objects.id,
+    name: objects.name,
+    address: objects.address,
+    postalCode: objects.postalCode,
+    city: objects.city,
+    objectNumber: objects.objectNumber,
+    customerId: objects.customerId,
+    reconciliationFlag: objects.reconciliationFlag,
+    reconciliationFlaggedAt: objects.reconciliationFlaggedAt,
+    reconciliationBatchId: objects.reconciliationBatchId,
+  }).from(objects).where(and(...whereParts)).orderBy(desc(objects.reconciliationFlaggedAt));
+  res.json({ objects: rows });
+}));
+
+// POST — rensa flagga (planerare har granskat manuellt)
+app.post("/api/import/customer-fastighetslista/clear-flag", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const userId = (req as any).user?.id || (req as any).user?.claims?.sub || null;
+  const { objectId } = req.body || {};
+  if (!objectId || typeof objectId !== "string") throw new ValidationError("objectId krävs");
+  const [obj] = await db.select().from(objects).where(and(
+    eq(objects.id, objectId),
+    eq(objects.tenantId, tenantId),
+  )).limit(1);
+  if (!obj) throw new NotFoundError("Objektet hittades inte");
+  if (!obj.reconciliationFlag) return res.json({ ok: true, alreadyCleared: true });
+
+  await db.update(objects).set({
+    reconciliationFlag: null,
+    reconciliationFlaggedAt: null,
+    reconciliationBatchId: null,
+  }).where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));
+
+  await db.insert(auditLogs).values({
+    tenantId,
+    userId,
+    action: "clear_reconciliation_flag",
+    resourceType: "object",
+    resourceId: objectId,
+    changes: { before: { reconciliationFlag: obj.reconciliationFlag, reconciliationBatchId: obj.reconciliationBatchId }, after: { reconciliationFlag: null } },
+    metadata: { source: "customer-fastighetslista" },
+  });
+
+  res.json({ ok: true });
+}));
 
 }
