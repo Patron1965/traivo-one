@@ -1,5 +1,19 @@
-const CACHE_NAME = 'unicorn-field-v9';
-const API_CACHE_NAME = 'unicorn-api-v1';
+// OBS: Bumpa BÅDA versionerna när SW-logiken eller cachebart innehåll ändras.
+// Vid bump tömmer `activate`-handlern alla gamla cachar och nya SW tar över via
+// skipWaiting + clients.claim — annars sitter användarna kvar med gammal HTML,
+// gammalt JS-bundle och gamla cachade API-svar tills de manuellt rensar storage.
+const CACHE_NAME = 'unicorn-field-v10';
+const API_CACHE_NAME = 'unicorn-api-v2';
+
+// Routes som ALDRIG ska gå genom SW-cache eller offline-fallback — tenant-
+// branding, terminologi och övriga konfigurationsendpoints måste alltid hämtas
+// färska annars syns inte ändringar förrän användaren rensar storage.
+const ALWAYS_BYPASS_PREFIXES = [
+  '/api/system/',
+  '/api/terminology',
+  '/api/me',
+  '/api/auth/',
+];
 
 const STATIC_ASSETS = [
   '/favicon.png',
@@ -75,6 +89,12 @@ self.addEventListener('fetch', (event) => {
   
   const url = new URL(event.request.url);
   
+  // Bypassa SW helt för konfig-endpoints — låt webbläsaren prata direkt med
+  // servern så Cache-Control-headern (no-cache, must-revalidate) respekteras.
+  if (ALWAYS_BYPASS_PREFIXES.some(p => url.pathname.startsWith(p))) {
+    return; // ingen respondWith = browser hanterar requesten själv
+  }
+
   if (url.pathname.startsWith('/api/')) {
     if (isCacheableApiRoute(url)) {
       event.respondWith(
