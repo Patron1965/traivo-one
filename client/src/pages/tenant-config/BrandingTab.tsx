@@ -146,9 +146,13 @@ export function BrandingTab() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof form) => {
-      return apiRequest("PUT", "/api/system/tenant-branding", data);
+      const res = await apiRequest("PUT", "/api/system/tenant-branding", data);
+      return res.json() as Promise<TenantBranding>;
     },
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      // Skriv in serverresponse direkt i cachen så TenantBrandingProvider och
+      // formuläret reagerar omedelbart — invalideringen bekräftar i bakgrunden.
+      queryClient.setQueryData(["/api/system/tenant-branding"], updated);
       queryClient.invalidateQueries({ queryKey: ["/api/system/tenant-branding"] });
       toast({ title: "Sparat", description: "Varumärkesprofilen har uppdaterats. Ändringarna syns direkt." });
     },
@@ -159,7 +163,7 @@ export function BrandingTab() {
 
   const resetMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("PUT", "/api/system/tenant-branding", {
+      const res = await apiRequest("PUT", "/api/system/tenant-branding", {
         companyName: "",
         logoUrl: "",
         primaryColor: "#1B4B6B",
@@ -167,8 +171,10 @@ export function BrandingTab() {
         accentColor: "#4A9B9B",
         tagline: "",
       });
+      return res.json() as Promise<TenantBranding>;
     },
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["/api/system/tenant-branding"], updated);
       queryClient.invalidateQueries({ queryKey: ["/api/system/tenant-branding"] });
       setForm({
         companyName: "",

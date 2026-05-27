@@ -713,7 +713,11 @@ app.get("/api/system/map-tiles/:z/:x/:y", mapTileLimiter, async (req, res) => {
 app.get("/api/system/tenant-branding", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const branding = await storage.getTenantBranding(tenantId);
-    res.setHeader("Cache-Control", "private, max-age=300, stale-while-revalidate=600");
+    // Branding är mutable per-tenant config. Tidigare max-age=300 gjorde att
+    // webbläsaren serverade stale data i 5 min efter en PUT, vilket fick det
+    // att se ut som att Spara inte fungerade. Tvinga revalidering varje gång
+    // (ETag-baserade 304:or fungerar fortfarande och håller payload låg).
+    res.setHeader("Cache-Control", "private, no-cache, must-revalidate");
     res.setHeader("Vary", "Cookie, Accept-Encoding");
     res.json(branding || null);
 }));
