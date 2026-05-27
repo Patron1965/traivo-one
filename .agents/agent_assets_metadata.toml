@@ -96,3 +96,9 @@ id = "jtxk0HOzZpM8pcKKcN9sZ"
 uri = "file://attached_assets/traivo-go-traivo-one-kompatibilitet.md"
 type = "text"
 title = "Traivo Go ↔ Traivo One kompatibilitet (plan)"
+
+[[outputs]]
+id = "x_Nyr6CbGwC8jy1pGBtte"
+uri = "file://.local/exports/traivo-import-kinab.pdf"
+type = "pdf"
+title = "Importfunktioner i Traivo — underlag till Kinab"
