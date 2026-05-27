@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, isMobileAuthe
 import { getTenantIdWithFallback, requireTenantWithFallback, requireRole } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
-import { isAuthenticated } from "../replit_integrations/auth";
+import { isAuthenticated, isAuthenticatedHtml } from "../replit_integrations/auth";
 import { workSessions, workEntries, equipmentBookings, deviationReports, teamMembers, insertPlannerSearchFilterSchema } from "@shared/schema";
 
 import { notificationService } from "../notifications";
@@ -321,7 +321,7 @@ app.patch("/api/planner/orders/:id/reassign", requireTenantWithFallback, require
     res.json({ success: true, orderId, resourceId, resourceName: resource.name });
 }));
 
-app.get("/planner/map", isAuthenticated, (req, res) => {
+app.get("/planner/map", isAuthenticatedHtml({ returnTo: "/planner-map" }), (req, res) => {
   const STATUS_COLORS: Record<string, string> = {
     // Aktuella svenska orderstatusar (matchar shared/schema.ts ORDER_STATUSES)
     skapad: "#3B82F6",
