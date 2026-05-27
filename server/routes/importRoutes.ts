@@ -6255,7 +6255,17 @@ interface FlDiff {
   invalid: FlInvalidRow[];
 }
 
-async function computeFlDiff(tenantId: string, customerId: string, columnMap: Record<string, string | null | undefined>, rows: Record<string, string>[]): Promise<FlDiff> {
+interface ParsedFlRow { rowIndex: number; key: string; address: string; postalCode: string; city: string; name: string; objectNumber: string; }
+
+async function computeFlDiff(
+  tenantId: string,
+  customerId: string,
+  columnMap: Record<string, string | null | undefined>,
+  rows: Record<string, string>[],
+  // Planner-valda vinnar-rader per nyckel. Om en nyckel inte finns här används
+  // första förekomsten. Ogiltigt rad-index (utanför gruppen) ignoreras tyst.
+  duplicateWinners?: Record<string, number> | null,
+): Promise<FlDiff> {
   if (!columnMap?.address) throw new ValidationError("Adress-kolumnen måste mappas");
 
   const existing = await db.select().from(objects).where(and(
@@ -6270,22 +6280,18 @@ async function computeFlDiff(tenantId: string, customerId: string, columnMap: Re
     if (k && !existingByKey.has(k)) existingByKey.set(k, o);
   }
 
-  const newRows: FlNewRow[] = [];
-  const changedRows: FlChangedRow[] = [];
-  const invalid: FlInvalidRow[] = [];
-  const matchedKeys = new Set<string>();
-  // Spårar första gången vi sett en nyckel i filen, samt alla rad-index
-  // (för duplicate-rapportering). Endast första förekomsten räknas som
-  // "vinnare" och ingår i new/changed — övriga går till duplicates-listan.
-  const firstSeen = new Map<string, { rowIndex: number; addressPreview: string }>();
-  const allOccurrences = new Map<string, number[]>();
-  let unchangedCount = 0;
-
   const fAddr = columnMap.address as string;
   const fPost = columnMap.postalCode || null;
   const fCity = columnMap.city || null;
   const fName = columnMap.name || null;
   const fObjNum = columnMap.objectNumber || null;
+
+  // Pre-pass: parsa varje rad och samla per-nyckel-index. Vi processar diff:en
+  // i en andra-pass efter att vinnare per duplicate-grupp valts.
+  const parsedByIndex: Array<ParsedFlRow | null> = new Array(rows.length).fill(null);
+  const invalid: FlInvalidRow[] = [];
+  const occurrencesByKey = new Map<string, number[]>();
+  const previewByKey = new Map<string, string>();
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i] || {};
@@ -6299,46 +6305,56 @@ async function computeFlDiff(tenantId: string, customerId: string, columnMap: Re
     const key = normalizeAddressKey({ address, postalCode, city });
     if (!key) { invalid.push({ rowIndex: i, reason: "Adress kan inte normaliseras", raw: r }); continue; }
 
-    if (!allOccurrences.has(key)) allOccurrences.set(key, []);
-    allOccurrences.get(key)!.push(i);
-
-    // Dedupe — endast första gången en nyckel ses processas som new/changed.
-    if (firstSeen.has(key)) {
-      continue;
+    parsedByIndex[i] = { rowIndex: i, key, address, postalCode, city, name, objectNumber };
+    if (!occurrencesByKey.has(key)) {
+      occurrencesByKey.set(key, []);
+      previewByKey.set(key, [address, city].filter(Boolean).join(", "));
     }
-    firstSeen.set(key, { rowIndex: i, addressPreview: [address, city].filter(Boolean).join(", ") });
+    occurrencesByKey.get(key)!.push(i);
+  }
+
+  const newRows: FlNewRow[] = [];
+  const changedRows: FlChangedRow[] = [];
+  const matchedKeys = new Set<string>();
+  const duplicates: FlDuplicateGroup[] = [];
+  let unchangedCount = 0;
+  let duplicateExcludedCount = 0;
+
+  for (const [key, indices] of Array.from(occurrencesByKey.entries())) {
+    // Välj vinnare: planner-valt rad-index om giltigt, annars första.
+    let winnerIdx = indices[0];
+    const requested = duplicateWinners?.[key];
+    if (typeof requested === "number" && indices.includes(requested)) {
+      winnerIdx = requested;
+    }
+    const winnerRow = parsedByIndex[winnerIdx]!;
+
+    if (indices.length > 1) {
+      const excluded = indices.filter(i => i !== winnerIdx);
+      duplicateExcludedCount += excluded.length;
+      duplicates.push({
+        key,
+        winnerRowIndex: winnerIdx,
+        excludedRowIndices: excluded,
+        addressPreview: previewByKey.get(key) || key,
+      });
+    }
 
     const match = existingByKey.get(key);
     if (match) {
       matchedKeys.add(key);
       const changes: Record<string, { old: string; new: string }> = {};
-      if (postalCode && (match.postalCode || "").trim() !== postalCode) changes.postalCode = { old: match.postalCode || "", new: postalCode };
-      if (city && (match.city || "").trim() !== city) changes.city = { old: match.city || "", new: city };
-      if (name && (match.name || "").trim() !== name) changes.name = { old: match.name || "", new: name };
-      if (objectNumber && (match.objectNumber || "").trim() !== objectNumber) changes.objectNumber = { old: match.objectNumber || "", new: objectNumber };
+      if (winnerRow.postalCode && (match.postalCode || "").trim() !== winnerRow.postalCode) changes.postalCode = { old: match.postalCode || "", new: winnerRow.postalCode };
+      if (winnerRow.city && (match.city || "").trim() !== winnerRow.city) changes.city = { old: match.city || "", new: winnerRow.city };
+      if (winnerRow.name && (match.name || "").trim() !== winnerRow.name) changes.name = { old: match.name || "", new: winnerRow.name };
+      if (winnerRow.objectNumber && (match.objectNumber || "").trim() !== winnerRow.objectNumber) changes.objectNumber = { old: match.objectNumber || "", new: winnerRow.objectNumber };
       if (Object.keys(changes).length > 0) {
-        changedRows.push({ rowIndex: i, key, objectId: match.id, address, postalCode, city, name, objectNumber, changes });
+        changedRows.push({ rowIndex: winnerIdx, key, objectId: match.id, address: winnerRow.address, postalCode: winnerRow.postalCode, city: winnerRow.city, name: winnerRow.name, objectNumber: winnerRow.objectNumber, changes });
       } else {
         unchangedCount++;
       }
     } else {
-      newRows.push({ rowIndex: i, key, address, postalCode, city, name, objectNumber });
-    }
-  }
-
-  const duplicates: FlDuplicateGroup[] = [];
-  let duplicateExcludedCount = 0;
-  for (const [key, idxs] of Array.from(allOccurrences.entries())) {
-    if (idxs.length > 1) {
-      const winner = idxs[0];
-      const excluded = idxs.slice(1);
-      duplicateExcludedCount += excluded.length;
-      duplicates.push({
-        key,
-        winnerRowIndex: winner,
-        excludedRowIndices: excluded,
-        addressPreview: firstSeen.get(key)?.addressPreview || key,
-      });
+      newRows.push({ rowIndex: winnerIdx, key, address: winnerRow.address, postalCode: winnerRow.postalCode, city: winnerRow.city, name: winnerRow.name, objectNumber: winnerRow.objectNumber });
     }
   }
 
@@ -6447,7 +6463,7 @@ app.post("/api/import/customer-fastighetslista/preview", upload.single("file"), 
 // POST /diff — kör avstämning utan att skriva
 app.post("/api/import/customer-fastighetslista/diff", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
-  const { customerId, columnMap, rows } = req.body || {};
+  const { customerId, columnMap, rows, duplicateWinners } = req.body || {};
   if (!customerId || typeof customerId !== "string") throw new ValidationError("customerId krävs");
   if (!columnMap || typeof columnMap !== "object") throw new ValidationError("columnMap krävs");
   if (!Array.isArray(rows)) throw new ValidationError("rows måste vara en array");
@@ -6459,7 +6475,7 @@ app.post("/api/import/customer-fastighetslista/diff", asyncHandler(async (req, r
   )).limit(1);
   if (!cust) throw new NotFoundError("Kunden hittades inte i denna tenant");
 
-  const diff = await computeFlDiff(tenantId, customerId, columnMap, rows);
+  const diff = await computeFlDiff(tenantId, customerId, columnMap, rows, duplicateWinners || null);
   res.json(diff);
 }));
 
@@ -6478,7 +6494,13 @@ app.post("/api/import/customer-fastighetslista/commit", asyncHandler(async (req,
     // skickas in tolkas det som "alla fält för dessa rader".
     approvedChangedFields,
     approvedChangedKeys,
+    // Per-rad-val för "saknade" objekt. Endast id:n i denna array flaggas.
+    // Bakåtkompat: om bara `flagMissing: true` skickas in flaggas ALLA
+    // saknade objekt (gamla beteendet).
+    flagMissingIds,
     flagMissing,
+    // Planner-valda vinnare per duplicate-grupp (samma format som /diff).
+    duplicateWinners,
     saveMapping,
     mappingLabel,
   } = req.body || {};
@@ -6495,7 +6517,15 @@ app.post("/api/import/customer-fastighetslista/commit", asyncHandler(async (req,
   if (!cust) throw new NotFoundError("Kunden hittades inte i denna tenant");
 
   // Räkna ut diff på nytt på server-sidan — vi litar aldrig på klient-listor.
-  const diff = await computeFlDiff(tenantId, customerId, columnMap, rows);
+  const diff = await computeFlDiff(tenantId, customerId, columnMap, rows, duplicateWinners || null);
+
+  // Per-rad-val för saknade: om `flagMissingIds` skickas in används den som
+  // whitelist (även en tom array = inga flaggor). Faller tillbaka till
+  // gamla all-eller-inget-beteendet via `flagMissing: true`.
+  const useExplicitMissing = Array.isArray(flagMissingIds);
+  const missingIdsToFlag = useExplicitMissing
+    ? new Set<string>((flagMissingIds as unknown[]).filter((x): x is string => typeof x === "string"))
+    : (flagMissing ? new Set<string>(diff.missing.map(m => m.id)) : new Set<string>());
 
   const batchId = `kfl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const now = new Date();
@@ -6574,8 +6604,9 @@ app.post("/api/import/customer-fastighetslista/commit", asyncHandler(async (req,
       updatedCount++;
     }
 
-    if (flagMissing && diff.missing.length > 0) {
+    if (missingIdsToFlag.size > 0) {
       for (const m of diff.missing) {
+        if (!missingIdsToFlag.has(m.id)) continue;
         await tx.update(objects).set({
           reconciliationFlag: "missing_in_fastighetslista",
           reconciliationFlaggedAt: now,
@@ -6613,7 +6644,8 @@ app.post("/api/import/customer-fastighetslista/commit", asyncHandler(async (req,
         customerId,
         customerName: cust.name,
         columnMap,
-        flagMissing: !!flagMissing,
+        flagMissing: !!flagMissing || useExplicitMissing,
+        flagMissingIds: useExplicitMissing ? Array.from(missingIdsToFlag) : null,
         flaggedCount,
         summary: diff.summary,
       },
@@ -6655,6 +6687,22 @@ app.post("/api/import/customer-fastighetslista/commit", asyncHandler(async (req,
 
   invalidateWorkflowCaches(tenantId);
 
+  // Hämta skapade objekt så done-steget kan länka till dem och visa
+  // "Geokoda nu"-knapp för de som saknar koordinater.
+  let createdObjectsResp: Array<{ id: string; name: string; address: string; hasCoords: boolean }> = [];
+  if (result.createdIds.length > 0) {
+    const createdRows = await db.select().from(objects).where(and(
+      eq(objects.tenantId, tenantId),
+      inArray(objects.id, result.createdIds),
+    ));
+    createdObjectsResp = createdRows.map(o => ({
+      id: o.id,
+      name: o.name,
+      address: o.address,
+      hasCoords: o.latitude != null && o.longitude != null,
+    }));
+  }
+
   res.json({
     batchId,
     createdCount: result.createdCount,
@@ -6663,6 +6711,7 @@ app.post("/api/import/customer-fastighetslista/commit", asyncHandler(async (req,
     missingTotal: diff.missing.length,
     totalRows: rows.length,
     summary: diff.summary,
+    createdObjects: createdObjectsResp,
   });
 }));
 

@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Loader2, Upload, CheckCircle2, AlertTriangle, RotateCcw, Building2, ChevronsUpDown, Check,
-  Plus, FileWarning, Flag, ArrowRight, Eye, Undo2, Copy,
+  Plus, FileWarning, Flag, ArrowRight, Eye, Undo2, Copy, MapPin, ExternalLink,
 } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -52,6 +53,7 @@ interface DiffResponse {
   invalid: DiffInvalid[];
 }
 
+interface CreatedObject { id: string; name: string; address: string; hasCoords: boolean }
 interface CommitResponse {
   batchId: string;
   createdCount: number;
@@ -59,6 +61,7 @@ interface CommitResponse {
   flaggedCount: number;
   missingTotal: number;
   totalRows: number;
+  createdObjects: CreatedObject[];
 }
 
 const FIELD_LABELS_SV: Record<string, string> = {
@@ -81,10 +84,17 @@ export default function CustomerFastighetslistaImport() {
   // Per-fält-godkännande: objectId → Set(fieldName). Förvald: alla fält i alla
   // changed-rader markerade.
   const [selectedFields, setSelectedFields] = useState<Record<string, Set<string>>>({});
-  const [flagMissing, setFlagMissing] = useState(true);
+  // Planner-valda vinnare per duplicate-grupp (nyckel → rad-index från filen).
+  // Tom = använd första förekomsten (server-default).
+  const [duplicateWinners, setDuplicateWinners] = useState<Record<string, number>>({});
+  // Per-rad-val för saknade objekt. Default: alla markerade.
+  const [missingToFlag, setMissingToFlag] = useState<Set<string>>(new Set());
   const [saveMapping, setSaveMapping] = useState(true);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CommitResponse | null>(null);
+  // För Geokoda-knappen i done-steget
+  const [geocodingIds, setGeocodingIds] = useState<Set<string>>(new Set());
+  const [geocodedIds, setGeocodedIds] = useState<Set<string>>(new Set());
 
   const customersQuery = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const selectedCustomer = useMemo(() => customersQuery.data?.find(c => c.id === customerId) || null, [customersQuery.data, customerId]);
@@ -95,9 +105,14 @@ export default function CustomerFastighetslistaImport() {
     [selectedFields]
   );
 
-  const runDiff = useCallback(async (currentColumnMap?: Record<string, string | null>, currentPreview?: PreviewResponse) => {
+  const runDiff = useCallback(async (
+    currentColumnMap?: Record<string, string | null>,
+    currentPreview?: PreviewResponse,
+    currentWinners?: Record<string, number>,
+  ) => {
     const p = currentPreview ?? preview;
     const cm = currentColumnMap ?? columnMap;
+    const winners = currentWinners ?? duplicateWinners;
     if (!p) return;
     setLoading(true);
     try {
@@ -105,6 +120,7 @@ export default function CustomerFastighetslistaImport() {
         customerId,
         columnMap: cm,
         rows: p.rows,
+        duplicateWinners: winners,
       });
       const data: DiffResponse = await res.json();
       setDiff(data);
@@ -115,13 +131,21 @@ export default function CustomerFastighetslistaImport() {
         fields[c.objectId] = new Set(Object.keys(c.changes));
       }
       setSelectedFields(fields);
+      // Förvald: alla saknade objekt markerade för flaggning
+      setMissingToFlag(new Set(data.missing.map(m => m.id)));
       setStep("diff");
     } catch (err: any) {
       toast({ title: "Fel vid avstämning", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  }, [preview, columnMap, customerId, toast]);
+  }, [preview, columnMap, customerId, duplicateWinners, toast]);
+
+  // Räkna om diff:en efter att planner valt nya duplicate-vinnare
+  const recomputeWithWinners = useCallback(async (winners: Record<string, number>) => {
+    setDuplicateWinners(winners);
+    await runDiff(undefined, undefined, winners);
+  }, [runDiff]);
 
   const handleFileChange = useCallback(async (selected: File) => {
     if (!customerId) return;
@@ -186,7 +210,8 @@ export default function CustomerFastighetslistaImport() {
         headerFingerprint: preview.headerFingerprint,
         approvedNewIndices: Array.from(selectedNew),
         approvedChangedFields,
-        flagMissing,
+        flagMissingIds: Array.from(missingToFlag),
+        duplicateWinners,
         saveMapping,
       });
       const data: CommitResponse = await res.json();
@@ -194,6 +219,7 @@ export default function CustomerFastighetslistaImport() {
       setStep("done");
       queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
       queryClient.invalidateQueries({ queryKey: ["/api/import/batches"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers", customerId] });
       toast({ title: "Avstämning klar", description: `${data.createdCount} skapade, ${data.updatedCount} uppdaterade, ${data.flaggedCount} flaggade` });
     } catch (err: any) {
       toast({ title: "Importfel", description: err.message, variant: "destructive" });
@@ -201,7 +227,27 @@ export default function CustomerFastighetslistaImport() {
     } finally {
       setLoading(false);
     }
-  }, [preview, diff, customerId, columnMap, selectedNew, selectedFields, flagMissing, saveMapping, toast]);
+  }, [preview, diff, customerId, columnMap, selectedNew, selectedFields, missingToFlag, duplicateWinners, saveMapping, toast]);
+
+  // Geokoda ett enskilt nyskapat objekt från done-steget
+  const geocodeOne = useCallback(async (id: string) => {
+    setGeocodingIds(s => new Set(s).add(id));
+    try {
+      const res = await apiRequest("POST", `/api/objects/${id}/geocode`, { force: true });
+      const data = await res.json();
+      if (data.status === "geocoded") {
+        setGeocodedIds(s => new Set(s).add(id));
+        toast({ title: "Geokodning klar", description: "Koordinater satta" });
+      } else {
+        toast({ title: "Kunde inte geokoda", description: data.message || data.status, variant: "destructive" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+    } catch (err: any) {
+      toast({ title: "Geokodningsfel", description: err.message, variant: "destructive" });
+    } finally {
+      setGeocodingIds(s => { const next = new Set(s); next.delete(id); return next; });
+    }
+  }, [toast]);
 
   const undoBatch = useCallback(async () => {
     if (!result?.batchId) return;
@@ -228,9 +274,12 @@ export default function CustomerFastighetslistaImport() {
     setDiff(null);
     setSelectedNew(new Set());
     setSelectedFields({});
-    setFlagMissing(true);
+    setDuplicateWinners({});
+    setMissingToFlag(new Set());
     setSaveMapping(true);
     setResult(null);
+    setGeocodingIds(new Set());
+    setGeocodedIds(new Set());
   }, []);
 
   // Hjälpare: toggle ett enskilt fält
@@ -464,23 +513,48 @@ export default function CustomerFastighetslistaImport() {
                   <div className="text-sm flex-1">
                     <strong>{diff.summary.duplicateGroupCount} adresser förekommer flera gånger.</strong>{" "}
                     <span className="text-muted-foreground">
-                      Första raden i varje grupp används (winner) — {diff.summary.duplicateExcludedCount} duplikat-rad{diff.summary.duplicateExcludedCount === 1 ? "" : "er"} hoppas över.
-                      Om fel rad valts: redigera filen så att önskad rad ligger först och ladda upp igen.
+                      Välj vilken rad som ska gälla per grupp — diff:en räknas om automatiskt.
                     </span>
                   </div>
                 </div>
-                <ScrollArea className="max-h-32 border rounded bg-background/50 p-2">
-                  <div className="space-y-1 text-xs">
-                    {diff.duplicates.slice(0, 50).map(d => (
-                      <div key={d.key} data-testid={`duplicate-group-${d.key}`}>
-                        <span className="font-medium">{d.addressPreview || d.key}</span> —{" "}
-                        <span className="text-chart-2">rad {d.winnerRowIndex + 2} används</span>,{" "}
-                        <span className="text-muted-foreground">hoppar över rad {d.excludedRowIndices.map(i => i + 2).join(", ")}</span>
-                      </div>
-                    ))}
-                    {diff.duplicates.length > 50 && (
-                      <div className="text-muted-foreground">…och {diff.duplicates.length - 50} till</div>
-                    )}
+                <ScrollArea className="max-h-64 border rounded bg-background/50 p-2">
+                  <div className="space-y-3">
+                    {diff.duplicates.map(d => {
+                      const allIndices = [d.winnerRowIndex, ...d.excludedRowIndices].sort((a, b) => a - b);
+                      const winnerVal = String(d.winnerRowIndex);
+                      const colName = (col: string | null | undefined) => col || "";
+                      return (
+                        <div key={d.key} className="space-y-1.5" data-testid={`duplicate-group-${d.key}`}>
+                          <div className="text-xs font-medium">{d.addressPreview || d.key}</div>
+                          <Select
+                            value={winnerVal}
+                            onValueChange={(v) => {
+                              const idx = parseInt(v, 10);
+                              if (!Number.isNaN(idx)) {
+                                recomputeWithWinners({ ...duplicateWinners, [d.key]: idx });
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-xs" data-testid={`select-winner-${d.key}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {allIndices.map(idx => {
+                                const r = preview.rows[idx] || {};
+                                const name = colName(columnMap.name) ? r[colName(columnMap.name)] : "";
+                                const objNum = colName(columnMap.objectNumber) ? r[colName(columnMap.objectNumber)] : "";
+                                const meta = [name, objNum].filter(Boolean).join(" · ");
+                                return (
+                                  <SelectItem key={idx} value={String(idx)} data-testid={`option-winner-${d.key}-${idx}`}>
+                                    Rad {idx + 2}{meta ? ` — ${meta}` : ""}
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    })}
                   </div>
                 </ScrollArea>
               </CardContent>
@@ -623,31 +697,51 @@ export default function CustomerFastighetslistaImport() {
             <TabsContent value="missing">
               <Card>
                 <CardContent className="p-2">
-                  <div className="flex items-center gap-2 p-2 border-b">
-                    <Checkbox checked={flagMissing} onCheckedChange={(c) => setFlagMissing(!!c)} data-testid="checkbox-flag-missing" />
-                    <Label className="text-sm">Flagga dessa objekt som "saknas i fastighetslista" för manuell granskning</Label>
-                  </div>
                   {diff.missing.length === 0 ? <p className="text-sm text-muted-foreground p-4 text-center">Inga saknade objekt.</p> :
-                  <ScrollArea className="h-80">
-                    <Table>
-                      <TableHeader><TableRow>
-                        <TableHead>Namn</TableHead>
-                        <TableHead>Adress</TableHead>
-                        <TableHead>Externt ID</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow></TableHeader>
-                      <TableBody>
-                        {diff.missing.map(m => (
-                          <TableRow key={m.id} data-testid={`row-missing-${m.id}`}>
-                            <TableCell className="text-sm">{m.name}</TableCell>
-                            <TableCell className="text-xs">{[m.address, m.postalCode, m.city].filter(Boolean).join(", ") || "—"}</TableCell>
-                            <TableCell className="text-xs">{m.objectNumber || "—"}</TableCell>
-                            <TableCell>{m.reconciliationFlag ? <Badge variant="outline" className="text-xs">Redan flaggad</Badge> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </ScrollArea>}
+                  <>
+                    <div className="flex items-center justify-between p-2 border-b">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={missingToFlag.size === diff.missing.length && diff.missing.length > 0}
+                          onCheckedChange={(c) => setMissingToFlag(c ? new Set(diff.missing.map(m => m.id)) : new Set())}
+                          data-testid="checkbox-select-all-missing"
+                        />
+                        <Label className="text-sm">Flagga alla för manuell granskning</Label>
+                      </div>
+                      <Badge variant="secondary">{missingToFlag.size} av {diff.missing.length} valda</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground p-2 border-b">
+                      Per-rad-val: markera vilka objekt som ska flaggas som "saknas i fastighetslista". Avmarkera om objektet medvetet ska lämnas orört (t.ex. ett intern-objekt som aldrig finns i kundens lista).
+                    </p>
+                    <ScrollArea className="h-80">
+                      <Table>
+                        <TableHeader><TableRow>
+                          <TableHead className="w-8"></TableHead>
+                          <TableHead>Namn</TableHead>
+                          <TableHead>Adress</TableHead>
+                          <TableHead>Externt ID</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow></TableHeader>
+                        <TableBody>
+                          {diff.missing.map(m => (
+                            <TableRow key={m.id} data-testid={`row-missing-${m.id}`}>
+                              <TableCell>
+                                <Checkbox
+                                  checked={missingToFlag.has(m.id)}
+                                  onCheckedChange={(c) => setMissingToFlag(s => { const next = new Set(s); if (c) next.add(m.id); else next.delete(m.id); return next; })}
+                                  data-testid={`checkbox-missing-${m.id}`}
+                                />
+                              </TableCell>
+                              <TableCell className="text-sm">{m.name}</TableCell>
+                              <TableCell className="text-xs">{[m.address, m.postalCode, m.city].filter(Boolean).join(", ") || "—"}</TableCell>
+                              <TableCell className="text-xs">{m.objectNumber || "—"}</TableCell>
+                              <TableCell>{m.reconciliationFlag ? <Badge variant="outline" className="text-xs">Redan flaggad</Badge> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </>}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -682,7 +776,7 @@ export default function CustomerFastighetslistaImport() {
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep("mapping")}><RotateCcw className="h-4 w-4 mr-2" />Tillbaka till mappning</Button>
-            <Button onClick={runCommit} disabled={loading || (selectedNew.size === 0 && selectedChangedCount === 0 && !flagMissing)} data-testid="button-commit-import">
+            <Button onClick={runCommit} disabled={loading || (selectedNew.size === 0 && selectedChangedCount === 0 && missingToFlag.size === 0)} data-testid="button-commit-import">
               {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
               Genomför avstämning
             </Button>
@@ -699,16 +793,79 @@ export default function CustomerFastighetslistaImport() {
 
       {step === "done" && result && (
         <Card>
-          <CardContent className="p-8 text-center space-y-4">
-            <CheckCircle2 className="h-12 w-12 mx-auto text-chart-2" />
-            <h3 className="text-lg font-semibold">Avstämning klar!</h3>
-            <div className="grid gap-2 grid-cols-3 max-w-md mx-auto">
-              <div><div className="text-2xl font-bold text-chart-2" data-testid="result-created">{result.createdCount}</div><div className="text-xs text-muted-foreground">Skapade</div></div>
-              <div><div className="text-2xl font-bold text-chart-4" data-testid="result-updated">{result.updatedCount}</div><div className="text-xs text-muted-foreground">Uppdaterade</div></div>
-              <div><div className="text-2xl font-bold text-warning" data-testid="result-flagged">{result.flaggedCount}</div><div className="text-xs text-muted-foreground">Flaggade</div></div>
+          <CardContent className="p-8 space-y-4">
+            <div className="text-center space-y-2">
+              <CheckCircle2 className="h-12 w-12 mx-auto text-chart-2" />
+              <h3 className="text-lg font-semibold">Avstämning klar!</h3>
             </div>
-            <p className="text-xs text-muted-foreground">Batch-ID: <code>{result.batchId}</code></p>
-            <div className="flex justify-center gap-3">
+            <div className="grid gap-2 grid-cols-3 max-w-md mx-auto">
+              <div className="text-center"><div className="text-2xl font-bold text-chart-2" data-testid="result-created">{result.createdCount}</div><div className="text-xs text-muted-foreground">Skapade</div></div>
+              <div className="text-center"><div className="text-2xl font-bold text-chart-4" data-testid="result-updated">{result.updatedCount}</div><div className="text-xs text-muted-foreground">Uppdaterade</div></div>
+              <div className="text-center"><div className="text-2xl font-bold text-warning" data-testid="result-flagged">{result.flaggedCount}</div><div className="text-xs text-muted-foreground">Flaggade</div></div>
+            </div>
+            <p className="text-xs text-muted-foreground text-center">Batch-ID: <code>{result.batchId}</code></p>
+
+            {result.createdObjects && result.createdObjects.length > 0 && (
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold">{result.createdObjects.length} nya objekt skapade</h4>
+                  {result.createdObjects.some(o => !o.hasCoords && !geocodedIds.has(o.id)) && (
+                    <span className="text-xs text-muted-foreground">Geokodning körs automatiskt i bakgrunden — använd "Geokoda nu" för att tvinga direkt försök</span>
+                  )}
+                </div>
+                <ScrollArea className="max-h-64 border rounded">
+                  <Table>
+                    <TableHeader><TableRow>
+                      <TableHead>Namn</TableHead>
+                      <TableHead>Adress</TableHead>
+                      <TableHead className="w-32 text-center">Koordinater</TableHead>
+                      <TableHead className="w-44"></TableHead>
+                    </TableRow></TableHeader>
+                    <TableBody>
+                      {result.createdObjects.map(o => {
+                        const isDone = o.hasCoords || geocodedIds.has(o.id);
+                        const isBusy = geocodingIds.has(o.id);
+                        return (
+                          <TableRow key={o.id} data-testid={`created-object-${o.id}`}>
+                            <TableCell className="text-sm">
+                              <Link href={`/objects/${o.id}`} className="text-primary hover:underline inline-flex items-center gap-1" data-testid={`link-object-${o.id}`}>
+                                {o.name}
+                                <ExternalLink className="h-3 w-3" />
+                              </Link>
+                            </TableCell>
+                            <TableCell className="text-xs">{o.address}</TableCell>
+                            <TableCell className="text-center">
+                              {isDone
+                                ? <Badge variant="outline" className="text-xs"><Check className="h-3 w-3 mr-1" />OK</Badge>
+                                : <Badge variant="outline" className="text-xs text-warning">Saknas</Badge>}
+                            </TableCell>
+                            <TableCell>
+                              {!isDone && (
+                                <Button
+                                  size="sm" variant="outline"
+                                  onClick={() => geocodeOne(o.id)} disabled={isBusy}
+                                  data-testid={`button-geocode-${o.id}`}
+                                >
+                                  {isBusy ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <MapPin className="h-3 w-3 mr-1" />}
+                                  Geokoda nu
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </div>
+            )}
+
+            <div className="flex justify-center gap-3 pt-2">
+              <Link href="/objects">
+                <Button variant="outline" data-testid="link-all-objects">
+                  <Building2 className="h-4 w-4 mr-2" />Visa alla objekt
+                </Button>
+              </Link>
               <Button variant="outline" onClick={undoBatch} disabled={loading} data-testid="button-undo-batch">
                 {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Undo2 className="h-4 w-4 mr-2" />}
                 Backa avstämningen
