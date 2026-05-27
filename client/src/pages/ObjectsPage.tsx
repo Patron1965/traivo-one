@@ -431,6 +431,21 @@ export default function ObjectsPage() {
     },
   });
 
+  // Task #550: rensa reconciliation-flagga ("saknas i fastighetslista") manuellt
+  // efter att planner har granskat objektet.
+  const clearReconciliationMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("POST", `/api/import/customer-fastighetslista/objects/${id}/clear-flag`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
+      toast({ title: "Flagga rensad", description: "Objektet är inte längre markerat som saknat i fastighetslistan." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte rensa flaggan", description: error.message, variant: "destructive" });
+    },
+  });
+
   const createObjectMutation = useMutation({
     mutationFn: async (data: Partial<ServiceObject>) => {
       return apiRequest("POST", "/api/objects", data);
@@ -1018,6 +1033,19 @@ export default function ObjectsPage() {
                   </TooltipContent>
                 </Tooltip>
               )}
+              {obj.reconciliationFlag === "missing_in_fastighetslista" && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="outline" className="text-xs gap-1 cursor-help text-warning border-warning/40" data-testid={`badge-reconciliation-${obj.id}`}>
+                      <AlertTriangle className="h-3 w-3" />
+                      Saknas i fastighetslista
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs text-sm">Detta objekt finns i Traivo men saknades i kundens senast uppladdade fastighetslista. Granska manuellt och rensa flaggan via 3-prick-menyn.</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
               {reportCounts[obj.id] > 0 && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1233,6 +1261,15 @@ export default function ObjectsPage() {
                           Avvisa objekt
                         </DropdownMenuItem>
                       </>
+                    )}
+                    {obj.reconciliationFlag === "missing_in_fastighetslista" && (
+                      <DropdownMenuItem
+                        onClick={(e) => { e.stopPropagation(); clearReconciliationMutation.mutate(obj.id); }}
+                        data-testid={`menu-clear-reconciliation-${obj.id}`}
+                      >
+                        <Check className="h-4 w-4 mr-2" />
+                        Rensa "saknas i fastighetslista"
+                      </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>
