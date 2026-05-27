@@ -17,6 +17,74 @@ import {
   isAcceptableImage,
 } from "@/lib/file-mime";
 
+// Konvertera #rrggbb → HSL-komponenter och tillbaka, så vi kan härleda en
+// sammanhängande palett från en enda källfärg (vanligt när scrape bara hittar
+// theme-color). Sekundär = mörkare/desaturerad variant, accent = komplement.
+const hexToHsl = (hex: string): { h: number; s: number; l: number } | null => {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!m) return null;
+  const r = parseInt(m[1], 16) / 255;
+  const g = parseInt(m[2], 16) / 255;
+  const b = parseInt(m[3], 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  let h = 0;
+  let s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+      case g: h = ((b - r) / d + 2) / 6; break;
+      case b: h = ((r - g) / d + 4) / 6; break;
+    }
+  }
+  return { h: h * 360, s: s * 100, l: l * 100 };
+};
+
+const hslToHex = (h: number, s: number, l: number): string => {
+  const hh = ((h % 360) + 360) % 360 / 360;
+  const ss = Math.max(0, Math.min(1, s / 100));
+  const ll = Math.max(0, Math.min(1, l / 100));
+  let r: number; let g: number; let b: number;
+  if (ss === 0) { r = g = b = ll; }
+  else {
+    const q = ll < 0.5 ? ll * (1 + ss) : ll + ss - ll * ss;
+    const p = 2 * ll - q;
+    const hue2rgb = (p: number, q: number, t: number) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    };
+    r = hue2rgb(p, q, hh + 1/3);
+    g = hue2rgb(p, q, hh);
+    b = hue2rgb(p, q, hh - 1/3);
+  }
+  const to = (v: number) => Math.round(v * 255).toString(16).padStart(2, "0");
+  return `#${to(r)}${to(g)}${to(b)}`.toUpperCase();
+};
+
+// Härleder en harmonisk palett från en primärfärg när scrape bara gav en.
+// Sekundär = djupare/mörkare variant (för rubriker/navigering).
+// Accent = analog (hue +35°) med lite mer mättnad (för CTA/badges).
+const derivePalette = (primary: string): { secondary: string; accent: string } | null => {
+  const hsl = hexToHsl(primary);
+  if (!hsl) return null;
+  // Gråskaligt primär (vit/svart/grå) — behåll neutralt utan att hitta på en hue.
+  if (hsl.s < 5) {
+    const secondary = hslToHex(0, 0, Math.max(15, hsl.l * 0.35));
+    const accent = hslToHex(0, 0, Math.max(35, Math.min(60, hsl.l)));
+    return { secondary, accent };
+  }
+  const secondary = hslToHex(hsl.h, Math.max(20, hsl.s * 0.55), Math.max(18, hsl.l * 0.4));
+  const accent = hslToHex(hsl.h + 35, Math.min(80, hsl.s + 10), Math.min(60, Math.max(40, hsl.l)));
+  return { secondary, accent };
+};
+
 const isExternallyHostedLogo = (url: string): boolean => {
   if (!url) return false;
   if (!/^https?:\/\//i.test(url)) return false;
@@ -116,11 +184,15 @@ export function BrandingTab() {
         }
       }
       if (data.colors.length >= 1) {
+        const primary = data.colors[0];
+        // Om scrape bara hittade 1–2 färger, härled resten ur primärfärgen
+        // så att paletten alltid är komplett efter Hämta.
+        const derived = derivePalette(primary);
         setForm(prev => ({
           ...prev,
-          primaryColor: data.colors[0] || prev.primaryColor,
-          secondaryColor: data.colors[1] || prev.secondaryColor,
-          accentColor: data.colors[2] || prev.accentColor,
+          primaryColor: primary || prev.primaryColor,
+          secondaryColor: data.colors[1] || derived?.secondary || prev.secondaryColor,
+          accentColor: data.colors[2] || derived?.accent || prev.accentColor,
         }));
       }
       setShowPreview(true);
@@ -236,8 +308,29 @@ export function BrandingTab() {
       const confirmResp = await apiRequest("POST", "/api/system/tenant-branding/confirm-logo", { objectPath });
       const { url } = await confirmResp.json();
 
+      // Uppdatera formulär omedelbart för lokal preview.
       setForm(prev => ({ ...prev, logoUrl: url }));
-      toast({ title: "Logotyp uppladdad", description: "Logotypen har laddats upp." });
+
+      // Auto-spara så att TopNav, Splash och övriga konsumenter får den nya
+      // logotypen direkt — annars måste användaren komma ihåg att klicka Spara
+      // efter upload, vilket upplevs som att uppladdningen "inte gör något".
+      try {
+        const saveRes = await apiRequest("PUT", "/api/system/tenant-branding", {
+          ...form,
+          logoUrl: url,
+        });
+        const updated = (await saveRes.json()) as TenantBranding;
+        queryClient.setQueryData(["/api/system/tenant-branding"], updated);
+        queryClient.invalidateQueries({ queryKey: ["/api/system/tenant-branding"] });
+        toast({ title: "Logotyp uppladdad", description: "Logotypen har laddats upp och syns nu i hela systemet." });
+      } catch (saveErr: any) {
+        toast({
+          title: "Logotyp uppladdad — men inte sparad",
+          description: saveErr?.message || "Klicka Spara för att aktivera den.",
+          variant: "destructive",
+          duration: 6000,
+        });
+      }
     } catch (error: any) {
       toast({
         title: "Logotypen kunde inte laddas upp",
