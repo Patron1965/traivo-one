@@ -435,7 +435,7 @@ export default function ObjectsPage() {
   // efter att planner har granskat objektet.
   const clearReconciliationMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest("POST", `/api/import/customer-fastighetslista/objects/${id}/clear-flag`);
+      return apiRequest("POST", `/api/import/customer-fastighetslista/clear-flag`, { objectId: id });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
