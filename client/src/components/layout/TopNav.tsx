@@ -374,6 +374,7 @@ function TenantLogo() {
   const displayLogo = logoUrl || traivoLogo;
   const displayName = companyName || "Kinab";
   const [imgFailed, setImgFailed] = useState(false);
+  const hasCustomLogo = !!logoUrl && !imgFailed;
 
   return (
     <Link href="/">
@@ -382,12 +383,14 @@ function TenantLogo() {
           <img
             src={displayLogo}
             alt={displayName}
-            className="h-7 w-auto max-w-[160px] object-contain shrink-0"
+            className="h-8 w-auto max-w-[180px] object-contain shrink-0"
             onError={() => setImgFailed(true)}
             data-testid="img-tenant-logo"
           />
         )}
-        <span className="text-lg font-semibold tracking-tight text-foreground whitespace-nowrap" data-testid="text-tenant-name">{displayName}</span>
+        {!hasCustomLogo && (
+          <span className="text-lg font-semibold tracking-tight text-foreground whitespace-nowrap" data-testid="text-tenant-name">{displayName}</span>
+        )}
       </div>
     </Link>
   );
