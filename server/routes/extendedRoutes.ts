@@ -1616,23 +1616,46 @@ app.post("/api/admin/users", requireAdminAuth, asyncHandler(async (req, res) => 
       return res.status(400).json({ error: `Ogiltig roll: ${role}` });
     }
 
+    const tenantId = (req as any).tenantId;
+    const hashedPassword = hashPassword(password);
+
     const existing = await storage.getUserByUsername(email);
+    let user;
     if (existing) {
-      throw new ConflictError("En användare med den e-postadressen finns redan");
+      // Kontrollera om användaren är medlem någonstans. Om hen är "föräldralös"
+      // (raderad från alla organisationer men användarraden låg kvar pga FK:er)
+      // återanvänder vi raden och kopplar in hen i denna organisation med nya
+      // uppgifter. Det matchar förväntningen att en raderad användare kan
+      // återskapas med samma e-post.
+      const memberships = await getUserTenants(existing.id);
+      const inThisTenant = memberships.some((m) => m.tenantId === tenantId);
+      if (inThisTenant) {
+        throw new ConflictError("En användare med den e-postadressen finns redan i denna organisation");
+      }
+      if (memberships.length > 0) {
+        throw new ConflictError("E-postadressen används redan av en användare i en annan organisation");
+      }
+      const updated = await storage.updateUser(existing.id, {
+        firstName: firstName || existing.firstName || null,
+        lastName: lastName || existing.lastName || null,
+        passwordHash: hashedPassword,
+        resourceId: resourceId ?? existing.resourceId ?? null,
+        isActive: true,
+      });
+      user = updated ?? existing;
+      console.log(`[user-mgmt] Återaktiverade befintlig användare "${email}"`);
+    } else {
+      user = await storage.createUser({
+        email,
+        firstName: firstName || null,
+        lastName: lastName || null,
+        passwordHash: hashedPassword,
+        role: "user",
+        resourceId: resourceId || null,
+        isActive: true,
+      });
     }
 
-    const hashedPassword = hashPassword(password);
-    const user = await storage.createUser({
-      email,
-      firstName: firstName || null,
-      lastName: lastName || null,
-      passwordHash: hashedPassword,
-      role: "user",
-      resourceId: resourceId || null,
-      isActive: true,
-    });
-
-    const tenantId = (req as any).tenantId;
     if (tenantId) {
       await assignUserToTenant(user.id, tenantId, (role || "user") as UserRole, (req as any).userId);
     }
