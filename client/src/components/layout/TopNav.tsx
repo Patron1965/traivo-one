@@ -140,7 +140,10 @@ function NavDropdown({ label, items, icon: Icon, colorClass, badges, isFavorite,
   }, 0);
 
   return (
-    <DropdownMenu>
+    // modal={false} — annars konsumerar den öppna dropdownens overlay klicket
+    // på nästa NavDropdown-trigger så användaren måste klicka två gånger för
+    // att byta meny (t.ex. Grunddata → AI öppnade tom dropdown).
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
@@ -227,7 +230,7 @@ function FavoritesDropdown({ allItems, badges, favorites, toggleFavorite }: Favo
   if (favoriteItems.length === 0) return null;
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
@@ -325,7 +328,7 @@ function UserMenu() {
       : user?.email?.[0]?.toUpperCase() || "U";
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="gap-1.5 pl-1.5 pr-2 h-8" data-testid="button-user-menu">
           <Avatar className="h-7 w-7">

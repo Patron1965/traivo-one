@@ -1,3 +1,4 @@
 - [CSV-export hardening](csv-export-hardening.md) — alla CSV-exporter måste neutralisera formula-injection (prefix `'` på celler som börjar med `= + - @ \t \r`).
 - [Branding/cache headers](branding-cache-headers.md) — mutable per-tenant config-endpoints får ej ha `max-age>0`; använd `no-cache, must-revalidate` + `setQueryData` i mutation onSuccess.
 - [SW + config endpoints](service-worker-stale-config.md) — alla konfig-endpoints måste bypassas i `sw.js` ALWAYS_BYPASS_PREFIXES; bumpa båda CACHE_NAME och API_CACHE_NAME vid varje SW-ändring.
+- [Radix DropdownMenu i menyrad](radix-dropdown-menu-bar.md) — syskon-dropdowns kräver `modal={false}`, annars sväljs första klicket på nästa trigger och menyn verkar tom.
