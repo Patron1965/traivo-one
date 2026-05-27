@@ -373,11 +373,20 @@ function TenantLogo() {
   const { logoUrl, companyName } = useTenantBranding();
   const displayLogo = logoUrl || traivoLogo;
   const displayName = companyName || "Kinab";
-  const isDefaultLogo = !logoUrl;
+  const [imgFailed, setImgFailed] = useState(false);
 
   return (
     <Link href="/">
-      <div className="flex items-center cursor-pointer hover-elevate rounded-md px-2 py-1" data-testid="link-home-logo">
+      <div className="flex items-center gap-2 cursor-pointer hover-elevate rounded-md px-2 py-1" data-testid="link-home-logo">
+        {!imgFailed && (
+          <img
+            src={displayLogo}
+            alt={displayName}
+            className="h-7 w-auto max-w-[160px] object-contain shrink-0"
+            onError={() => setImgFailed(true)}
+            data-testid="img-tenant-logo"
+          />
+        )}
         <span className="text-lg font-semibold tracking-tight text-foreground whitespace-nowrap" data-testid="text-tenant-name">{displayName}</span>
       </div>
     </Link>
