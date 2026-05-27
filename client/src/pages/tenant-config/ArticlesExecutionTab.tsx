@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Link } from "wouter";
 import type { Article } from "@shared/schema";
 import { EXECUTION_CODE_OPTIONS } from "./shared-constants";
-import { Package, CheckCircle2, AlertTriangle, Tag, ExternalLink, Save, Loader2 } from "lucide-react";
+import { Package, CheckCircle2, AlertTriangle, Tag, ExternalLink, Save, Loader2, Upload, Download } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 
 export function ArticlesExecutionTab() {
@@ -20,6 +20,27 @@ export function ArticlesExecutionTab() {
   });
 
   const [editingCodes, setEditingCodes] = useState<Record<string, string>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const importMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/onboarding/import/articles", { method: "POST", body: fd, credentials: "include" });
+      if (!res.ok) throw new Error((await res.text()) || "Importen misslyckades");
+      return res.json() as Promise<{ created: number; updated: number; skipped: number; errors: { row: number; message: string }[] }>;
+    },
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      const errs = r.errors?.length ? ` (${r.errors.length} fel)` : "";
+      toast({ title: "Import klar", description: `${r.created} nya, ${r.updated} uppdaterade, ${r.skipped} hoppade${errs}.` });
+    },
+    onError: (e: Error) => toast({ title: "Kunde inte importera", description: e.message, variant: "destructive" }),
+  });
+
+  const handleExport = () => {
+    window.location.href = "/api/articles/export.csv";
+  };
 
   const updateArticleMutation = useMutation({
     mutationFn: async ({ id, executionCode }: { id: string; executionCode: string }) => {
@@ -97,12 +118,40 @@ export function ArticlesExecutionTab() {
               </CardTitle>
               <CardDescription>Tilldela exekveringskoder till artiklar för att styra vilka resurser som kan utföra dem</CardDescription>
             </div>
-            <Link href="/articles">
-              <Button variant="outline" size="sm" data-testid="link-articles-page">
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Fullständig artikelvy
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                data-testid="input-import-articles"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) importMutation.mutate(f);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importMutation.isPending}
+                data-testid="button-import-articles"
+              >
+                {importMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                Importera CSV
               </Button>
-            </Link>
+              <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-articles">
+                <Download className="h-4 w-4 mr-2" />
+                Exportera CSV
+              </Button>
+              <Link href="/articles">
+                <Button variant="outline" size="sm" data-testid="link-articles-page">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Fullständig artikelvy
+                </Button>
+              </Link>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

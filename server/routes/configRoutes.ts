@@ -13,6 +13,37 @@ import { notificationService } from "../notifications";
 
 export async function registerConfigRoutes(app: Express) {
 // ============== ARTICLES ==============
+function csvEscape(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  let s = String(value);
+  // Neutralisera formula-injection i Excel/Sheets: prefixa apostrof om värdet
+  // börjar med =, +, -, @, TAB eller CR. Apostrofen visas inte i kalkylprogrammet.
+  if (s.length > 0 && /^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function rowsToCsv(headers: string[], rows: (unknown[])[]): string {
+  const lines = [headers.map(csvEscape).join(",")];
+  for (const row of rows) lines.push(row.map(csvEscape).join(","));
+  return "\uFEFF" + lines.join("\r\n") + "\r\n";
+}
+
+app.get("/api/articles/export.csv", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const list = await storage.getArticles(tenantId);
+    const headers = ["articleNumber","name","description","articleType","productionTime","cost","listPrice","unit","executionCode","status"];
+    const rows = list.map((a: any) => [
+      a.articleNumber, a.name, a.description ?? "", a.articleType,
+      a.productionTime ?? 0, a.cost ?? 0, a.listPrice ?? 0,
+      a.unit ?? "st", a.executionCode ?? "", a.status ?? "active",
+    ]);
+    const csv = rowsToCsv(headers, rows);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="artiklar-${new Date().toISOString().slice(0,10)}.csv"`);
+    res.send(csv);
+}));
+
 app.get("/api/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const page = parseInt(req.query.page as string);
@@ -223,6 +254,23 @@ app.patch("/api/objects/:objectId/articles/:linkId", asyncHandler(async (req, re
 }));
 
 // ============== PRICE LISTS ==============
+app.get("/api/price-lists/export.csv", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const lists = await storage.getPriceLists(tenantId);
+    const headers = ["name","priceListType","customerId","discountPercent","priority","validFrom","validTo","status"];
+    const rows = lists.map((p: any) => [
+      p.name, p.priceListType, p.customerId ?? "", p.discountPercent ?? "",
+      p.priority ?? 1,
+      p.validFrom ? new Date(p.validFrom).toISOString().slice(0, 10) : "",
+      p.validTo ? new Date(p.validTo).toISOString().slice(0, 10) : "",
+      p.status ?? "active",
+    ]);
+    const csv = rowsToCsv(headers, rows);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="prislistor-${new Date().toISOString().slice(0,10)}.csv"`);
+    res.send(csv);
+}));
+
 app.get("/api/price-lists", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const page = parseInt(req.query.page as string);

@@ -1,16 +1,41 @@
-import { useQuery } from "@tanstack/react-query";
+import { useRef } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Link } from "wouter";
 import type { PriceList } from "@shared/schema";
-import { Receipt, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient } from "@/lib/queryClient";
+import { Receipt, CheckCircle2, ExternalLink, Loader2, Upload, Download } from "lucide-react";
 
 export function PriceListsTab() {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: priceLists = [], isLoading } = useQuery<PriceList[]>({
     queryKey: ["/api/price-lists"],
   });
+
+  const importMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/onboarding/import/price-lists", { method: "POST", body: fd, credentials: "include" });
+      if (!res.ok) throw new Error((await res.text()) || "Importen misslyckades");
+      return res.json() as Promise<{ created: number; updated: number; skipped: number; errors: { row: number; message: string }[] }>;
+    },
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/price-lists"] });
+      const errs = r.errors?.length ? ` (${r.errors.length} fel)` : "";
+      toast({ title: "Import klar", description: `${r.created} nya, ${r.updated} uppdaterade, ${r.skipped} hoppade${errs}.` });
+    },
+    onError: (e: Error) => toast({ title: "Kunde inte importera", description: e.message, variant: "destructive" }),
+  });
+
+  const handleExport = () => {
+    window.location.href = "/api/price-lists/export.csv";
+  };
 
   if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
@@ -72,12 +97,40 @@ export function PriceListsTab() {
               </CardTitle>
               <CardDescription>Översikt över konfigurerade prislistor</CardDescription>
             </div>
-            <Link href="/price-lists">
-              <Button variant="outline" size="sm" data-testid="link-price-lists-page">
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Hantera prislistor
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                data-testid="input-import-price-lists"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) importMutation.mutate(f);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importMutation.isPending}
+                data-testid="button-import-price-lists"
+              >
+                {importMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                Importera CSV
               </Button>
-            </Link>
+              <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-price-lists">
+                <Download className="h-4 w-4 mr-2" />
+                Exportera CSV
+              </Button>
+              <Link href="/price-lists">
+                <Button variant="outline" size="sm" data-testid="link-price-lists-page">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Hantera prislistor
+                </Button>
+              </Link>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

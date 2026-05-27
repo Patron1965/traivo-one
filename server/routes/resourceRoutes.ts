@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { storage } from "../storage";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
-import { getTenantIdWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { insertResourceSchema } from "@shared/schema";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
@@ -88,7 +88,7 @@ app.patch("/api/resources/:id", asyncHandler(async (req, res) => {
   res.json(resource);
 }));
 
-app.delete("/api/resources/:id", asyncHandler(async (req, res) => {
+app.delete("/api/resources/:id", requireAdmin, asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const existing = await storage.getResource(req.params.id);
   if (!verifyTenantOwnership(existing, tenantId)) {

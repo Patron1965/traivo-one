@@ -8,7 +8,18 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Link } from "wouter";
 import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
 import { EXECUTION_CODE_OPTIONS, getProfileIcon } from "./shared-constants";
-import { Users, Shield, AlertTriangle, ExternalLink, CheckCircle2, Save, Loader2 } from "lucide-react";
+import { Users, Shield, AlertTriangle, ExternalLink, CheckCircle2, Save, Loader2, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export function ResourcesExecutionTab() {
   const { toast } = useToast();
@@ -39,6 +50,18 @@ export function ResourcesExecutionTab() {
     },
     onError: (error: Error) => {
       toast({ title: "Kunde inte uppdatera behörigheter", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteResourceMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/resources/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/resource-profiles"] });
+      toast({ title: "Borttagen", description: "Resursen har tagits bort." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort resursen", description: error.message, variant: "destructive" });
     },
   });
 
@@ -154,27 +177,60 @@ export function ResourcesExecutionTab() {
                         </div>
                       </div>
                     </div>
-                    {changed && (
-                      <Button
-                        size="sm"
-                        data-testid={`button-save-resource-codes-${resource.id}`}
-                        onClick={() => {
-                          updateResourceMutation.mutate({
-                            id: resource.id,
-                            executionCodes: editingCodes[resource.id],
-                          });
-                          setEditingCodes(prev => {
-                            const next = { ...prev };
-                            delete next[resource.id];
-                            return next;
-                          });
-                        }}
-                        disabled={updateResourceMutation.isPending}
-                      >
-                        <Save className="h-3 w-3 mr-1" />
-                        Spara
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {changed && (
+                        <Button
+                          size="sm"
+                          data-testid={`button-save-resource-codes-${resource.id}`}
+                          onClick={() => {
+                            updateResourceMutation.mutate({
+                              id: resource.id,
+                              executionCodes: editingCodes[resource.id],
+                            });
+                            setEditingCodes(prev => {
+                              const next = { ...prev };
+                              delete next[resource.id];
+                              return next;
+                            });
+                          }}
+                          disabled={updateResourceMutation.isPending}
+                        >
+                          <Save className="h-3 w-3 mr-1" />
+                          Spara
+                        </Button>
+                      )}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            data-testid={`button-delete-resource-${resource.id}`}
+                            disabled={deleteResourceMutation.isPending}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Ta bort {resource.name}?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Resursen tas bort från listan och kan inte längre tilldelas nya uppdrag. Historik och redan utfört arbete påverkas inte. Eventuell kopplad användare och inloggning finns kvar.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel data-testid={`button-cancel-delete-resource-${resource.id}`}>Avbryt</AlertDialogCancel>
+                            <AlertDialogAction
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              data-testid={`button-confirm-delete-resource-${resource.id}`}
+                              onClick={() => deleteResourceMutation.mutate(resource.id)}
+                            >
+                              Ta bort
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {EXECUTION_CODE_OPTIONS.map(opt => {

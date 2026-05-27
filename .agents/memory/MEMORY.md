@@ -1,0 +1,1 @@
+- [CSV-export hardening](csv-export-hardening.md) — alla CSV-exporter måste neutralisera formula-injection (prefix `'` på celler som börjar med `= + - @ \t \r`).
