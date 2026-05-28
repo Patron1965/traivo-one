@@ -101,11 +101,17 @@ export async function restoreObject(objectId: string, tenantId: string): Promise
 }
 
 export async function listArchivedObjects(tenantId: string, limit = 200) {
+  // customer_id hämtas via primär object_payer (ADR v3) — inte legacy objects.customer_id.
   return db.execute(sql`
-    SELECT id, name, object_number, customer_id, deleted_at AS archived_at, archived_by, archived_reason
-    FROM objects
-    WHERE tenant_id = ${tenantId} AND deleted_at IS NOT NULL
-    ORDER BY deleted_at DESC
+    SELECT o.id, o.name, o.object_number,
+      (SELECT op.customer_id FROM object_payers op
+        WHERE op.object_id = o.id AND op.is_primary = true
+        ORDER BY op.priority DESC NULLS LAST, op.created_at ASC
+        LIMIT 1) AS customer_id,
+      o.deleted_at AS archived_at, o.archived_by, o.archived_reason
+    FROM objects o
+    WHERE o.tenant_id = ${tenantId} AND o.deleted_at IS NOT NULL
+    ORDER BY o.deleted_at DESC
     LIMIT ${limit}
   `).then(r => r.rows);
 }

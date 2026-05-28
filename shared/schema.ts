@@ -1169,7 +1169,8 @@ export const customersRelations = relations(customers, ({ one, many }) => ({
 
 export const objectsRelations = relations(objects, ({ one, many }) => ({
   tenant: one(tenants, { fields: [objects.tenantId], references: [tenants.id] }),
-  customer: one(customers, { fields: [objects.customerId], references: [customers.id] }),
+  // Notera: ingen direkt `customer`-relation — kundkoppling går via
+  // `object_payers` (primary @ tidpunkt). Se `server/services/object-customer.ts`.
   cluster: one(clusters, { fields: [objects.clusterId], references: [clusters.id] }),
   parent: one(objects, { fields: [objects.parentId], references: [objects.id], relationName: "objectHierarchy" }),
   children: many(objects, { relationName: "objectHierarchy" }),

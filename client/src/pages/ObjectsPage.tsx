@@ -1,3 +1,11 @@
+// OBS (ADR v3 / Task #565): Objekt är neutrala — `obj.customerId` som returneras
+// av `/api/objects*` är *primär-payer-customer_id* projicerad serverside via
+// `objectColumnsWithPrimaryCustomer()` i `server/storage.ts` (källa: `object_payers.is_primary=true`).
+// Sortering, gruppering, kund-namnslookup (`useCustomerLookup`), filter och kopia
+// av kund-koppling i denna vy använder därför payer-relationen — INTE legacy
+// `objects.customer_id`. Kolumnen kan droppas (Task #560) utan att klienten ändras.
+// Vid copy-objekt: `objectToCopy.customerId` är payer-customer_id; POST till
+// `/api/objects` med detta fält backfillas till `object_payers` av servern.
 import { useState, useMemo, useCallback, useEffect, memo } from "react";
 import { useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";

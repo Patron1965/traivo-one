@@ -121,6 +121,19 @@ function isObjectInScope(session: PortalSession, objectId: string | null | undef
   return session.scopedObjectIds.has(objectId);
 }
 
+// Returnera true om objektet tillhör portal-kunden (primär payer).
+// `obj.customerId` från `storage.getObject*` är primär-payer-customer_id
+// projicerad via `objectColumnsWithPrimaryCustomer()` (object_payers, ADR v3) —
+// inte legacy `objects.customer_id`. Helpern dokumenterar att jämförelsen
+// gäller payer-relationen, vilket gör att check överlever DROP av legacy-kolumnen.
+function isObjectOwnedByPortalCustomer(
+  obj: { customerId?: string | null } | null | undefined,
+  session: PortalSession,
+): boolean {
+  if (!obj || !session.customerId) return false;
+  return obj.customerId === session.customerId;
+}
+
 app.get("/api/portal/tenants", asyncHandler(async (req, res) => {
     const tenants = await storage.getPublicTenants();
     res.json(tenants.map(t => ({ id: t.id, name: t.name })));
@@ -921,7 +934,7 @@ app.post("/api/portal/booking-requests", asyncHandler(async (req, res) => {
 
     if (objectId) {
       const obj = await storage.getObject(objectId);
-      if (!obj || obj.customerId !== session.customerId || !isObjectInScope(session, obj.id)) {
+      if (!obj || !isObjectOwnedByPortalCustomer(obj, session) || !isObjectInScope(session, obj.id)) {
         throw new NotFoundError("Objekt hittades inte");
       }
     }
@@ -1075,7 +1088,7 @@ app.post("/api/portal/issue-reports", asyncHandler(async (req, res) => {
 
     if (objectId) {
       const obj = await storage.getObject(objectId);
-      if (!obj || obj.customerId !== session.customerId || !isObjectInScope(session, obj.id)) {
+      if (!obj || !isObjectOwnedByPortalCustomer(obj, session) || !isObjectInScope(session, obj.id)) {
         throw new NotFoundError("Objekt hittades inte");
       }
     }
@@ -1149,7 +1162,7 @@ app.get("/api/portal/objects/:objectId/delivery-preferences", asyncHandler(async
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     const obj = await storage.getObject(req.params.objectId);
-    if (!obj || !verifyTenantOwnership(obj, session.tenantId!) || obj.customerId !== session.customerId || !isObjectInScope(session, obj.id)) {
+    if (!obj || !verifyTenantOwnership(obj, session.tenantId!) || !isObjectOwnedByPortalCustomer(obj, session) || !isObjectInScope(session, obj.id)) {
       throw new NotFoundError("Objekt");
     }
     res.json({ deliveryPreferences: obj.deliveryPreferences ?? null });
@@ -1159,7 +1172,7 @@ const updatePortalObjectDeliveryPrefsHandler = asyncHandler(async (req: ExpressR
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     const obj = await storage.getObject(req.params.objectId);
-    if (!obj || !verifyTenantOwnership(obj, session.tenantId!) || obj.customerId !== session.customerId || !isObjectInScope(session, obj.id)) {
+    if (!obj || !verifyTenantOwnership(obj, session.tenantId!) || !isObjectOwnedByPortalCustomer(obj, session) || !isObjectInScope(session, obj.id)) {
       throw new NotFoundError("Objekt");
     }
     const { deliveryPreferencesSchema } = await import("@shared/schema");
@@ -1818,7 +1831,7 @@ app.post("/api/portal/self-bookings", asyncHandler(async (req, res) => {
     // Verify object belongs to customer if provided
     if (objectId) {
       const object = await storage.getObject(objectId);
-      if (!object || object.customerId !== session.customerId || !isObjectInScope(session, object.id)) {
+      if (!object || !isObjectOwnedByPortalCustomer(object, session) || !isObjectInScope(session, object.id)) {
         throw new NotFoundError("Objekt hittades inte");
       }
     }
@@ -2289,7 +2302,7 @@ app.get("/api/portal/field/object/:id", asyncHandler(async (req, res) => {
     if (!session) return;
 
     const obj = await storage.getObject(req.params.id);
-    if (!obj || obj.customerId !== session.customerId || !isObjectInScope(session, obj.id)) {
+    if (!obj || !isObjectOwnedByPortalCustomer(obj, session) || !isObjectInScope(session, obj.id)) {
       throw new NotFoundError("Objekt hittades inte");
     }
 
@@ -2387,7 +2400,7 @@ app.post("/api/portal/field/report", asyncHandler(async (req, res) => {
     const { objectId, category, description, photos, latitude, longitude } = parsed.data;
 
     const obj = await storage.getObject(objectId);
-    if (!obj || obj.customerId !== session.customerId || !isObjectInScope(session, obj.id)) {
+    if (!obj || !isObjectOwnedByPortalCustomer(obj, session) || !isObjectInScope(session, obj.id)) {
       throw new NotFoundError("Objekt hittades inte eller tillhör inte din kund");
     }
 
@@ -2513,7 +2526,7 @@ app.get("/api/portal/field/qr-lookup/:code", asyncHandler(async (req, res) => {
       throw new NotFoundError("Objektet kopplat till QR-koden hittades inte");
     }
 
-    if (obj.customerId !== session.customerId || !isObjectInScope(session, obj.id)) {
+    if (!isObjectOwnedByPortalCustomer(obj, session) || !isObjectInScope(session, obj.id)) {
       throw new ForbiddenError("Detta objekt tillhör inte din organisation");
     }
 

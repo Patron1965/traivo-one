@@ -685,11 +685,12 @@ app.get("/api/objects/tree/:parentId/descendants", asyncHandler(async (req, res)
   const { parentId } = req.params;
   const { customerId } = req.query;
 
+  // Kundkoppling via object_payers (primary) — inte legacy objects.customer_id.
   const customerClause = (customerId && typeof customerId === "string")
-    ? sql` AND customer_id = ${customerId}`
+    ? sql` AND EXISTS (SELECT 1 FROM object_payers op WHERE op.object_id = objects.id AND op.is_primary = true AND op.customer_id = ${customerId})`
     : sql``;
   const customerClauseR = (customerId && typeof customerId === "string")
-    ? sql` AND o.customer_id = ${customerId}`
+    ? sql` AND EXISTS (SELECT 1 FROM object_payers op WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId})`
     : sql``;
 
   const result = await db.execute(sql`

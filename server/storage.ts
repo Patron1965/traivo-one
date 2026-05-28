@@ -1596,11 +1596,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCustomerStats(tenantId: string, customerId: string) {
+    // Kundkoppling läses via object_payers (primary), inte legacy
+    // objects.customer_id — ADR v3.
+    const objectIsForCustomerSql = sql`EXISTS (
+      SELECT 1 FROM object_payers op
+      WHERE op.object_id = objects.id
+        AND op.is_primary = true
+        AND op.customer_id = ${customerId}
+    )`;
     const [levelsRes, ordersRes, subsRes, invoicedRes, clusterRes] = await Promise.all([
       db.execute(sql`
         SELECT COALESCE(hierarchy_level, 'fastighet') as level, COUNT(*)::int as count
         FROM objects
-        WHERE tenant_id = ${tenantId} AND customer_id = ${customerId} AND deleted_at IS NULL
+        WHERE tenant_id = ${tenantId} AND ${objectIsForCustomerSql} AND deleted_at IS NULL
         GROUP BY COALESCE(hierarchy_level, 'fastighet')
       `),
       db.execute(sql`
@@ -1633,7 +1641,7 @@ export class DatabaseStorage implements IStorage {
         LEFT JOIN (
           SELECT cluster_id, COUNT(*) as object_count
           FROM objects
-          WHERE tenant_id = ${tenantId} AND customer_id = ${customerId} AND deleted_at IS NULL
+          WHERE tenant_id = ${tenantId} AND ${objectIsForCustomerSql} AND deleted_at IS NULL
           GROUP BY cluster_id
         ) oc ON oc.cluster_id = cl.id
         WHERE cl.tenant_id = ${tenantId} AND cl.deleted_at IS NULL AND cl.root_customer_id = ${customerId}

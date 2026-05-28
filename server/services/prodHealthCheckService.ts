@@ -221,10 +221,14 @@ export async function runProdHealthCheck(
               AND NOT EXISTS (SELECT 1 FROM objects p WHERE p.id = o.parent_id)`,
     },
     {
-      name: "orphans: objects.customer_id",
-      sql: `SELECT count(*)::int AS c FROM objects o
-            WHERE o.tenant_id = $1 AND o.customer_id IS NOT NULL
-              AND NOT EXISTS (SELECT 1 FROM customers c WHERE c.id = o.customer_id)`,
+      // ADR v3 / Task #565: kund-koppling går via object_payers — legacy
+      // objects.customer_id är på väg ut (Task #560 DROP). Probet kollar
+      // istället att alla primär-payer-customer_id pekar på existerande kund.
+      name: "orphans: object_payers.customer_id (primary)",
+      sql: `SELECT count(*)::int AS c FROM object_payers op
+            JOIN objects o ON o.id = op.object_id
+            WHERE o.tenant_id = $1 AND op.is_primary = true
+              AND NOT EXISTS (SELECT 1 FROM customers c WHERE c.id = op.customer_id)`,
     },
     {
       name: "orphans: clusters.root_customer_id",

@@ -86,16 +86,22 @@ app.get("/api/geocode/status", (_req, res) => {
 });
 
 app.get("/api/objects/duplicates/summary", asyncHandler(async (_req, res) => {
+  // Kundkoppling via object_payers (primary) — inte legacy objects.customer_id.
   const result = await db.execute(sql`
     SELECT 
       COUNT(*) as total_groups,
       SUM(cnt - 1) as removable_count,
       (SELECT COUNT(*) FROM objects WHERE deleted_at IS NULL) as total_objects
     FROM (
-      SELECT name, address, customer_id, COUNT(*) as cnt
-      FROM objects
-      WHERE deleted_at IS NULL
-      GROUP BY name, address, customer_id
+      SELECT name, address, primary_customer_id, COUNT(*) as cnt
+      FROM (
+        SELECT o.name, o.address,
+          (SELECT op.customer_id FROM object_payers op
+            WHERE op.object_id = o.id AND op.is_primary = true LIMIT 1) AS primary_customer_id
+        FROM objects o
+        WHERE o.deleted_at IS NULL
+      ) s
+      GROUP BY name, address, primary_customer_id
       HAVING COUNT(*) > 1
     ) t
   `);
@@ -112,11 +118,23 @@ app.get("/api/objects/duplicates", asyncHandler(async (req, res) => {
   const limit = Math.min(50, parseInt(req.query.limit as string) || 20);
   const offset = (page - 1) * limit;
 
+  // Kundkoppling tas via object_payers (primary) — inte legacy objects.customer_id.
+  const primaryPayerSubquery = sql`(
+    SELECT op.customer_id FROM object_payers op
+    WHERE op.object_id = o.id AND op.is_primary = true
+    LIMIT 1
+  )`;
+
   const groups = await db.execute(sql`
-    SELECT name, address, customer_id, COUNT(*) as cnt
-    FROM objects
-    WHERE deleted_at IS NULL
-    GROUP BY name, address, customer_id
+    SELECT name, address, primary_customer_id AS customer_id, COUNT(*) as cnt
+    FROM (
+      SELECT o.name, o.address,
+        (SELECT op.customer_id FROM object_payers op
+          WHERE op.object_id = o.id AND op.is_primary = true LIMIT 1) AS primary_customer_id
+      FROM objects o
+      WHERE o.deleted_at IS NULL
+    ) t
+    GROUP BY name, address, primary_customer_id
     HAVING COUNT(*) > 1
     ORDER BY COUNT(*) DESC
     LIMIT ${limit} OFFSET ${offset}
@@ -124,20 +142,22 @@ app.get("/api/objects/duplicates", asyncHandler(async (req, res) => {
 
   const duplicateGroups = [];
   for (const g of groups.rows) {
+    const customerMatch = g.customer_id
+      ? sql`${primaryPayerSubquery} = ${g.customer_id}`
+      : sql`${primaryPayerSubquery} IS NULL`;
     const memberRows = await db.execute(sql`
-      SELECT o.id, o.name, o.address, o.object_number, o.customer_id, o.cluster_id,
+      SELECT o.id, o.name, o.address, o.object_number, ${primaryPayerSubquery} AS customer_id, o.cluster_id,
              o.latitude, o.longitude, o.city, o.postal_code, o.object_type,
              o.created_at,
-             c.name as customer_name,
+             (SELECT c.name FROM customers c WHERE c.id = ${primaryPayerSubquery}) as customer_name,
              (SELECT COUNT(*) FROM work_orders wo WHERE wo.object_id = o.id) as work_order_count,
              (SELECT COUNT(*) FROM work_order_objects woo WHERE woo.object_id = o.id) as linked_wo_count,
              (SELECT COUNT(*) FROM object_articles oa WHERE oa.object_id = o.id) as article_count,
              (SELECT COUNT(*) FROM object_contacts oc WHERE oc.object_id = o.id) as contact_count
       FROM objects o
-      LEFT JOIN customers c ON o.customer_id = c.id
       WHERE o.name = ${g.name}
         AND ${g.address ? sql`o.address = ${g.address}` : sql`o.address IS NULL`}
-        AND ${g.customer_id ? sql`o.customer_id = ${g.customer_id}` : sql`o.customer_id IS NULL`}
+        AND ${customerMatch}
         AND o.deleted_at IS NULL
       ORDER BY
         (SELECT COUNT(*) FROM work_orders wo WHERE wo.object_id = o.id) DESC,
@@ -262,11 +282,23 @@ app.post("/api/objects/duplicates/auto-merge", asyncHandler(async (req, res) => 
 
   const { maxGroups, dryRun } = parsed.data;
 
+  // Kundkoppling via object_payers (primary) — inte legacy objects.customer_id.
+  const primaryPayerSubquery = sql`(
+    SELECT op.customer_id FROM object_payers op
+    WHERE op.object_id = o.id AND op.is_primary = true
+    LIMIT 1
+  )`;
+
   const groups = await db.execute(sql`
-    SELECT name, address, customer_id, COUNT(*) as cnt
-    FROM objects
-    WHERE deleted_at IS NULL
-    GROUP BY name, address, customer_id
+    SELECT name, address, primary_customer_id AS customer_id, COUNT(*) as cnt
+    FROM (
+      SELECT o.name, o.address,
+        (SELECT op.customer_id FROM object_payers op
+          WHERE op.object_id = o.id AND op.is_primary = true LIMIT 1) AS primary_customer_id
+      FROM objects o
+      WHERE o.deleted_at IS NULL
+    ) t
+    GROUP BY name, address, primary_customer_id
     HAVING COUNT(*) > 1
     ORDER BY COUNT(*) DESC
     LIMIT ${maxGroups}
@@ -277,13 +309,16 @@ app.post("/api/objects/duplicates/auto-merge", asyncHandler(async (req, res) => 
   let groupsProcessed = 0;
 
   for (const g of groups.rows) {
+    const customerMatch = g.customer_id
+      ? sql`${primaryPayerSubquery} = ${g.customer_id}`
+      : sql`${primaryPayerSubquery} IS NULL`;
     const members = await db.execute(sql`
       SELECT o.id,
              (SELECT COUNT(*) FROM work_orders wo WHERE wo.object_id = o.id) as wo_count
       FROM objects o
       WHERE o.name = ${g.name}
         AND ${g.address ? sql`o.address = ${g.address}` : sql`o.address IS NULL`}
-        AND ${g.customer_id ? sql`o.customer_id = ${g.customer_id}` : sql`o.customer_id IS NULL`}
+        AND ${customerMatch}
         AND o.deleted_at IS NULL
       ORDER BY
         (SELECT COUNT(*) FROM work_orders wo WHERE wo.object_id = o.id) DESC,
