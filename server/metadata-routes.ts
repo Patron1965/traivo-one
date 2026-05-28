@@ -42,18 +42,16 @@ metadataRouter.get("/types", async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Ingen tenant hittad" });
     }
 
-    // PDF §7: idempotent auto-seed på första access — säkrar att standardkatalogen
-    // finns för varje tenant utan att kräva manuellt anrop till /types/seed.
-    let types = await getAllMetadataTypes(tenantId);
-    const hasStandardCatalog = types.some((t: any) => t.area != null);
-    if (!hasStandardCatalog) {
-      try {
-        await seedDefaultMetadataTypes(tenantId);
-        types = await getAllMetadataTypes(tenantId);
-      } catch (seedErr) {
-        console.warn("[metadata] auto-seed failed (kontinuerar med befintliga typer):", seedErr);
-      }
+    // PDF §7: idempotent auto-seed på varje access — seedDefaultMetadataTypes är
+    // idempotent per namn och fyller på saknade standardtyper även för delvis-
+    // populerade tenants. Ingen heuristik-gate, så partiella katalogen aldrig
+    // missar standardbaslinjen.
+    try {
+      await seedDefaultMetadataTypes(tenantId);
+    } catch (seedErr) {
+      console.warn("[metadata] auto-seed failed (kontinuerar med befintliga typer):", seedErr);
     }
+    const types = await getAllMetadataTypes(tenantId);
     res.json(types);
   } catch (error) {
     console.error("Error fetching metadata types:", error);
@@ -341,7 +339,8 @@ metadataRouter.post("/", async (req: Request, res: Response) => {
         error.message?.includes('does not belong') ||
         error.message?.includes('Unknown datatype') ||
         error.message?.includes('Ogiltigt värde') ||
-        error.message?.includes('Dubblett')) {
+        error.message?.includes('Dubblett') ||
+        error.message?.includes('Nivå-lås')) {
       return res.status(400).json({ error: error.message });
     }
     res.status(500).json({ error: "Kunde inte skapa metadata" });
@@ -381,7 +380,8 @@ metadataRouter.put("/:id", async (req: Request, res: Response) => {
         error.message?.includes('not found') ||
         error.message?.includes('Unknown datatype') ||
         error.message?.includes('Ogiltigt värde') ||
-        error.message?.includes('Dubblett')) {
+        error.message?.includes('Dubblett') ||
+        error.message?.includes('Nivå-lås')) {
       return res.status(400).json({ error: error.message });
     }
     res.status(500).json({ error: "Kunde inte uppdatera metadata" });
