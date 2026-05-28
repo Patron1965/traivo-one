@@ -18,7 +18,7 @@ import { NotFoundError, ValidationError } from "../errors";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { db } from "../db";
-import { customers, importSessions, objects } from "@shared/schema";
+import { customers, importBatches, importSessions, objects } from "@shared/schema";
 import { storage } from "../storage";
 
 type StepNumber = 1 | 2 | 3;
@@ -437,6 +437,18 @@ export function registerImportWizardRoutes(app: Express): void {
               };
             }
           }
+
+          // Spec: import_batches återanvänds som "lager" för wizard-batchar med session_id-koppling.
+          await tx.insert(importBatches).values({
+            tenantId,
+            batchId,
+            sessionId: session.id,
+            totalRows: validation.rows.length,
+            created: createdIds.length,
+            updated: 0,
+            errors: 0,
+            metadata: { wizardStep: step, customerId: session.customerId } as any,
+          } as any);
 
           const createdCounts: Record<string, number> = {
             ...((session.createdCounts as Record<string, number>) ?? {}),

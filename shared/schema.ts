@@ -5137,10 +5137,12 @@ export const importBatches = pgTable("import_batches", {
   errors: integer("errors").default(0),
   scorecardSummary: jsonb("scorecard_summary"),
   metadata: jsonb("metadata").default({}),
+  sessionId: varchar("session_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_import_batches_tenant").on(table.tenantId),
   uniqueIndex("idx_import_batches_batch_id").on(table.batchId),
+  index("idx_import_batches_session").on(table.sessionId),
 ]);
 
 export const insertImportBatchSchema = createInsertSchema(importBatches).omit({ id: true, createdAt: true });

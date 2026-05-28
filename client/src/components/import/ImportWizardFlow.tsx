@@ -191,8 +191,23 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
         : `/api/import/wizard/sessions/${sessionId}/preview`;
       const res = await apiRequest("POST", path, { step, rows: currentRows });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok && !commit) {
-        throw new Error(body?.message ?? "Förhandsgranskning misslyckades");
+      if (!res.ok) {
+        // Backend kan svara med {errors:[...]} (validering före commit) eller
+        // {failures:[...]} (transaktion rullades tillbaka). Båda ska visa
+        // åtgärdbar feedback istället för att kasta runtime-undantag.
+        const errArr: Array<{ index: number; message: string }> = Array.isArray(body?.errors)
+          ? body.errors
+          : Array.isArray(body?.failures)
+            ? body.failures
+            : [];
+        const first = errArr[0]?.message ?? body?.message ?? body?.error;
+        const summary = errArr.length > 0
+          ? `${errArr.length} rad(er) blockerade: ${first}`
+          : (first ?? (commit ? "Commit misslyckades" : "Förhandsgranskning misslyckades"));
+        if (!commit && Array.isArray(body?.errors)) {
+          setPreview(body as PreviewResponse);
+        }
+        throw new Error(summary);
       }
       return body as PreviewResponse | CommitResponse;
     },
@@ -201,20 +216,12 @@ function StepEditor({ step, locked, onCommitDone, sessionId }: StepEditorProps) 
         setPreview(r);
         toast({ title: "Förhandsvisning", description: `${r.valid} OK, ${r.invalid} fel.` });
       } else {
-        if (r.ok) {
-          toast({ title: `Steg ${step} klart`, description: `${r.created} objekt skapade.` });
-          setText("");
-          setFileRows(null);
-          setFileName("");
-          setPreview(null);
-          onCommitDone();
-        } else {
-          toast({
-            title: "Commit misslyckades",
-            description: `${r.failures.length} rader gick inte att skapa.`,
-            variant: "destructive",
-          });
-        }
+        toast({ title: `Steg ${step} klart`, description: `${r.created} objekt skapade.` });
+        setText("");
+        setFileRows(null);
+        setFileName("");
+        setPreview(null);
+        onCommitDone();
       }
     },
     onError: (e: any) =>
