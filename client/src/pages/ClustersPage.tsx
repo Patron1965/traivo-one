@@ -301,7 +301,7 @@ export default function ClustersPage() {
     form.reset({
       name: cluster.name,
       description: cluster.description || "",
-      rootCustomerId: (cluster as any).rootCustomerId || "",
+      rootCustomerId: cluster.rootCustomerId || "",
       centerLatitude: cluster.centerLatitude?.toString() || "",
       centerLongitude: cluster.centerLongitude?.toString() || "",
       radiusKm: cluster.radiusKm?.toString() || "5",

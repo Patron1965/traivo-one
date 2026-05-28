@@ -148,7 +148,13 @@ import {
   deliveryPreferencesSchema,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray, getTableColumns, type SQL } from "drizzle-orm";
+import { eq, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray, getTableColumns, type SQL, type SQLWrapper } from "drizzle-orm";
+
+type Condition = SQL | SQLWrapper | undefined;
+type ExecuteResult = { rows?: unknown[]; rowCount?: number };
+function asExecuteResult(r: unknown): ExecuteResult {
+  return (r ?? {}) as ExecuteResult;
+}
 import {
   primaryPayerCustomerIdSql,
   objectHasPrimaryCustomerSql,
@@ -1454,7 +1460,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateTenant(id: string, data: Partial<InsertTenant>): Promise<Tenant | undefined> {
-    const { id: _, ...updateData } = data as any;
+    const { id: _, ...updateData } = data as Partial<InsertTenant> & { id?: string };
     const [tenant] = await db.update(tenants).set(updateData).where(eq(tenants.id, id)).returning();
     return tenant || undefined;
   }
@@ -2848,7 +2854,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string, dateFilter?: { field: 'desired' | 'created' | 'sla'; from?: string; to?: string }): Promise<{ workOrders: WorkOrderWithObject[]; total: number; missingDateFieldCount?: number }> {
-    const baseConditions: any[] = [
+    const baseConditions: Condition[] = [
       eq(workOrders.tenantId, tenantId),
       isNull(workOrders.deletedAt),
       notInArray(workOrders.orderStatus, ['utford', 'fakturerad', 'avbruten', 'omojlig']),
@@ -2866,26 +2872,26 @@ export class DatabaseStorage implements IStorage {
       );
     }
 
-    let dateCondition: any = null;
-    let missingFieldCondition: any = null;
+    let dateCondition: Condition = undefined;
+    let missingFieldCondition: Condition = undefined;
     if (dateFilter && (dateFilter.from || dateFilter.to)) {
       const fromDate = dateFilter.from ? new Date(`${dateFilter.from}T00:00:00.000Z`) : null;
       const toDate = dateFilter.to ? new Date(`${dateFilter.to}T23:59:59.999Z`) : null;
       if (fromDate && !isNaN(fromDate.getTime()) || toDate && !isNaN(toDate.getTime())) {
         if (dateFilter.field === 'desired') {
-          const parts: any[] = [isNotNull(workOrders.desiredDeliveryStart)];
+          const parts: Condition[] = [isNotNull(workOrders.desiredDeliveryStart)];
           if (toDate) parts.push(lte(workOrders.desiredDeliveryStart, toDate));
           if (fromDate) parts.push(sql`COALESCE(${workOrders.desiredDeliveryEnd}, ${workOrders.desiredDeliveryStart}) >= ${fromDate}`);
           dateCondition = and(...parts);
           missingFieldCondition = isNull(workOrders.desiredDeliveryStart);
         } else if (dateFilter.field === 'sla') {
-          const parts: any[] = [isNotNull(workOrders.plannedWindowEnd)];
+          const parts: Condition[] = [isNotNull(workOrders.plannedWindowEnd)];
           if (fromDate) parts.push(gte(workOrders.plannedWindowEnd, fromDate));
           if (toDate) parts.push(lte(workOrders.plannedWindowEnd, toDate));
           dateCondition = and(...parts);
           missingFieldCondition = isNull(workOrders.plannedWindowEnd);
         } else if (dateFilter.field === 'created') {
-          const parts: any[] = [];
+          const parts: Condition[] = [];
           if (fromDate) parts.push(gte(workOrders.createdAt, fromDate));
           if (toDate) parts.push(lte(workOrders.createdAt, toDate));
           if (parts.length > 0) dateCondition = and(...parts);
@@ -2989,7 +2995,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUnscheduledMissingDateField(tenantId: string, field: 'desired' | 'sla', search?: string, limit: number = 100): Promise<WorkOrderWithObject[]> {
-    const conditions: any[] = [
+    const conditions: Condition[] = [
       eq(workOrders.tenantId, tenantId),
       isNull(workOrders.deletedAt),
       notInArray(workOrders.orderStatus, ['utford', 'fakturerad', 'avbruten', 'omojlig']),
@@ -3112,7 +3118,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getWorkOrdersPaginated(tenantId: string, limit: number, offset: number, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, status?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }> {
-    const conditions: any[] = [eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt)];
+    const conditions: Condition[] = [eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt)];
 
     if (startDate && endDate) {
       if (includeUnscheduled) {
@@ -5116,8 +5122,8 @@ export class DatabaseStorage implements IStorage {
     `);
 
     return {
-      loginDeleted: (loginRes as any)?.rowCount ?? 0,
-      otherDeleted: (otherRes as any)?.rowCount ?? 0,
+      loginDeleted: asExecuteResult(loginRes).rowCount ?? 0,
+      otherDeleted: asExecuteResult(otherRes).rowCount ?? 0,
     };
   }
 
@@ -5724,7 +5730,7 @@ export class DatabaseStorage implements IStorage {
     entityType: "customer" | "article" | "resource",
     unicornId: string,
   ): Promise<number> {
-    const result: any = await db
+    const result = await db
       .delete(fortnoxMappings)
       .where(and(eq(fortnoxMappings.entityType, entityType), eq(fortnoxMappings.unicornId, unicornId)))
       .returning({ id: fortnoxMappings.id });
@@ -5743,13 +5749,13 @@ export class DatabaseStorage implements IStorage {
 
     for (const v of variants) {
       const tenantTableClause = tenantId ? sql`AND tenant_id = ${tenantId}` : sql``;
-      const r: any = await db.execute(sql`
+      const r = await db.execute(sql`
         DELETE FROM fortnox_mappings
         WHERE entity_type = ${v.key}
           AND unicorn_id NOT IN (SELECT id FROM ${sql.raw(v.table)} WHERE 1=1 ${tenantTableClause})
           ${tenantClause}
       `);
-      const n = Number(r?.rowCount ?? 0);
+      const n = Number(asExecuteResult(r).rowCount ?? 0);
       stats[v.key] = n;
       stats.total += n;
     }
@@ -6392,7 +6398,7 @@ export class DatabaseStorage implements IStorage {
         SET price = ROUND(price * ${factor})
         WHERE price_list_id = ${priceListId}
       `);
-      updated = (result as any).rowCount ?? 0;
+      updated = asExecuteResult(result).rowCount ?? 0;
       await tx.update(priceLists).set({
         indexAdjusted: true,
         indexDate,
@@ -6441,10 +6447,11 @@ export class DatabaseStorage implements IStorage {
     const frozenUnitPrice = totalPrice / safeQty;
     const frozenUnitCost = totalCost / safeQty;
     const frozenUnitTime = totalMin / safeQty;
-    let metadataSnapshot: any = {};
+    let metadataSnapshot: Record<string, unknown> = {};
     if (wo.objectId) {
       const obj = await this.getObject(wo.objectId);
-      metadataSnapshot = (obj as any)?.metadata ?? {};
+      const meta = (obj as { metadata?: Record<string, unknown> } | undefined)?.metadata;
+      metadataSnapshot = meta ?? {};
     }
     const frozenAt = new Date();
 
@@ -6507,7 +6514,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateInvoiceRecipient(tenantId: string, id: string, data: Partial<InsertInvoiceRecipient>): Promise<InvoiceRecipient | undefined> {
-    const { tenantId: _ignoreTenant, customerId: _ignoreCustomer, ...patch } = data as any;
+    const { tenantId: _ignoreTenant, customerId: _ignoreCustomer, ...patch } = data as Partial<InsertInvoiceRecipient>;
     const [row] = await db.update(invoiceRecipients)
       .set(patch)
       .where(and(eq(invoiceRecipients.id, id), eq(invoiceRecipients.tenantId, tenantId)))
@@ -6673,7 +6680,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(invoiceRecalculationLog.triggeredAt));
     const limit = Math.min(opts.limit ?? 100, 500);
     const offset = opts.offset ?? 0;
-    return (q as any).limit(limit).offset(offset);
+    return (q as unknown as { limit: (n: number) => { offset: (n: number) => Promise<InvoiceRecalculationLog[]> } }).limit(limit).offset(offset);
   }
 
   async createInvoiceRecalculationLog(entry: InsertInvoiceRecalculationLog): Promise<InvoiceRecalculationLog> {
@@ -7241,8 +7248,11 @@ export class DatabaseStorage implements IStorage {
       SELECT DISTINCT id FROM scope_tree
     `);
     const set = new Set<string>();
-    for (const r of (rows as any).rows ?? rows as any) {
-      set.add((r as any).id);
+    const exec = asExecuteResult(rows);
+    const items: unknown[] = exec.rows ?? (Array.isArray(rows) ? (rows as unknown[]) : []);
+    for (const r of items) {
+      const id = (r as { id?: string }).id;
+      if (id) set.add(id);
     }
     return set;
   }
@@ -8037,7 +8047,7 @@ export class DatabaseStorage implements IStorage {
     const conditions = [eq(driverNotifications.resourceId, resourceId)];
     if (options?.unreadOnly) conditions.push(eq(driverNotifications.isRead, false));
     let query = db.select().from(driverNotifications).where(and(...conditions)).orderBy(desc(driverNotifications.createdAt));
-    if (options?.limit) query = query.limit(options.limit) as any;
+    if (options?.limit) query = query.limit(options.limit) as typeof query;
     return query;
   }
 
@@ -8572,7 +8582,10 @@ export class DatabaseStorage implements IStorage {
 // ============================================
 // ADR v3 §2.5 (Task #558): Konsoliderings-policy CRUD
 // ============================================
-(DatabaseStorage.prototype as any).listInvoiceConsolidationPolicies = async function (
+type ProtoExt = Record<string, (...args: unknown[]) => unknown>;
+const PROTO: ProtoExt = DatabaseStorage.prototype as unknown as ProtoExt;
+
+PROTO.listInvoiceConsolidationPolicies = async function (
   tenantId: string,
   opts: { customerId?: string; recipientId?: string; activeOnly?: boolean } = {},
 ): Promise<InvoiceConsolidationPolicy[]> {
@@ -8590,7 +8603,7 @@ export class DatabaseStorage implements IStorage {
     .orderBy(desc(invoiceConsolidationPolicies.updatedAt));
 };
 
-(DatabaseStorage.prototype as any).getInvoiceConsolidationPolicy = async function (
+PROTO.getInvoiceConsolidationPolicy = async function (
   tenantId: string,
   id: string,
 ): Promise<InvoiceConsolidationPolicy | undefined> {
@@ -8605,19 +8618,19 @@ export class DatabaseStorage implements IStorage {
   return row;
 };
 
-(DatabaseStorage.prototype as any).createInvoiceConsolidationPolicy = async function (
+PROTO.createInvoiceConsolidationPolicy = async function (
   data: InsertInvoiceConsolidationPolicy,
 ): Promise<InvoiceConsolidationPolicy> {
   const [row] = await db.insert(invoiceConsolidationPolicies).values(data).returning();
   return row;
 };
 
-(DatabaseStorage.prototype as any).updateInvoiceConsolidationPolicy = async function (
+PROTO.updateInvoiceConsolidationPolicy = async function (
   tenantId: string,
   id: string,
   data: Partial<InsertInvoiceConsolidationPolicy>,
 ): Promise<InvoiceConsolidationPolicy | undefined> {
-  const { tenantId: _ignoreTenant, ...patch } = data as any;
+  const { tenantId: _ignoreTenant, ...patch } = data as Partial<InsertInvoiceConsolidationPolicy>;
   const [row] = await db
     .update(invoiceConsolidationPolicies)
     .set({ ...patch, updatedAt: new Date() })
@@ -8629,7 +8642,7 @@ export class DatabaseStorage implements IStorage {
   return row;
 };
 
-(DatabaseStorage.prototype as any).deleteInvoiceConsolidationPolicy = async function (
+PROTO.deleteInvoiceConsolidationPolicy = async function (
   tenantId: string,
   id: string,
 ): Promise<void> {

@@ -37,6 +37,109 @@ import { useMapConfig } from "@/hooks/use-map-config";
 import type { ServiceObject, WorkOrder, DeliveryPreferences } from "@shared/schema";
 import { PolylineEditor } from "@/components/PolylineEditor";
 import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors } from "@/lib/status-colors";
+import type { LucideIcon } from "lucide-react";
+
+interface InheritanceSource {
+  field: string;
+  inherited?: boolean;
+  sourceName?: string;
+}
+
+type ResolvedObjectResponse = Partial<Omit<ServiceObject, "id" | "deletedAt">> & {
+  id: string;
+  deletedAt?: string | Date | null;
+  inheritanceSources?: InheritanceSource[];
+};
+
+interface MetadataKatalog {
+  namn?: string;
+  kategori?: string;
+  kronologiskVisning?: boolean;
+}
+
+interface MetadataEntry {
+  id: string;
+  metadataKatalogId?: string;
+  katalog?: MetadataKatalog;
+  vardeString?: string | null;
+  vardeInteger?: number | null;
+  vardeDecimal?: number | null;
+  vardeBoolean?: boolean | null;
+  vardeDatetime?: string | null;
+  vardeJson?: unknown;
+  metod?: string | null;
+  lastChangedAt?: string | null;
+  source?: "inherited" | "direct" | string;
+  fromObject?: { name?: string } | null;
+}
+
+interface MetadataResponse {
+  metadata?: MetadataEntry[];
+}
+
+interface MetadataType {
+  id?: string;
+  namn: string;
+  kategori?: string;
+}
+
+interface ObjectContact {
+  id: string;
+  name: string;
+  contactType?: string;
+  phone?: string;
+  email?: string;
+  role?: string;
+  inherited?: boolean;
+}
+
+interface ObjectImage {
+  id: string;
+  url?: string;
+  imageUrl?: string;
+  title?: string;
+  description?: string;
+}
+
+type WorkOrderListItem = Partial<Omit<WorkOrder, "id" | "scheduledDate">> & {
+  id: string;
+  scheduledDate?: string | Date | null;
+  resourceName?: string;
+};
+
+interface ParentRelation {
+  id: string;
+  parentId?: string;
+  parentName?: string;
+  childId?: string;
+  childName?: string;
+  relationType?: string;
+}
+
+interface CustomerSummary {
+  id: string;
+  name: string;
+  customerNumber?: string | null;
+}
+
+interface ObjectEditForm {
+  name?: string;
+  objectNumber?: string;
+  objectType?: string;
+  hierarchyLevel?: string;
+  status?: string;
+  notes?: string;
+  accessType?: string;
+  accessCode?: string;
+  keyNumber?: string;
+  containerCount?: number | string;
+  containerCountK2?: number | string;
+  containerCountK3?: number | string;
+  containerCountK4?: number | string;
+  serialNumber?: string;
+  manufacturer?: string;
+  condition?: string;
+}
 
 const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
   koncern: { label: "Koncern", color: "bg-chart-5/15 text-chart-5 border border-chart-5/30" },
@@ -101,7 +204,7 @@ const WEEKDAY_LABELS = [
   { value: 0, label: "Sön" },
 ];
 
-function InfoRow({ label, value, icon: Icon }: { label: string; value: string | number | null | undefined; icon?: any }) {
+function InfoRow({ label, value, icon: Icon }: { label: string; value: string | number | null | undefined; icon?: LucideIcon }) {
   if (value === null || value === undefined || value === "") return null;
   return (
     <div className="flex items-start gap-3 py-2">
@@ -119,7 +222,7 @@ function InheritedInfoRow({ label, value, inherited, source, icon: Icon }: {
   value: string | number | null | undefined;
   inherited?: boolean;
   source?: string;
-  icon?: any;
+  icon?: LucideIcon;
 }) {
   if (value === null || value === undefined || value === "") return null;
   return (
@@ -170,7 +273,7 @@ export default function ObjectDetailPage() {
   const [restrictionDialogOpen, setRestrictionDialogOpen] = useState(false);
   const [workOrderDialogOpen, setWorkOrderDialogOpen] = useState(false);
 
-  const [editForm, setEditForm] = useState<any>({});
+  const [editForm, setEditForm] = useState<ObjectEditForm>({});
   const [contactForm, setContactForm] = useState({ name: "", contactType: "primary", phone: "", email: "", role: "" });
   const [imageForm, setImageForm] = useState({ imageUrl: "", imageType: "photo", description: "" });
   const [restrictionForm, setRestrictionForm] = useState({
@@ -198,7 +301,7 @@ export default function ObjectDetailPage() {
     setSearchOpen(false);
   }, [objectId]);
 
-  const { data: resolvedObject, isLoading: loadingObject } = useQuery<any>({
+  const { data: resolvedObject, isLoading: loadingObject } = useQuery<ResolvedObjectResponse>({
     queryKey: ["/api/objects", objectId, "resolved"],
     queryFn: async () => {
       const res = await fetch(`/api/objects/${objectId}/resolved`);
@@ -208,7 +311,7 @@ export default function ObjectDetailPage() {
     enabled: !!objectId,
   });
 
-  const { data: customer } = useQuery<any>({
+  const { data: customer } = useQuery<CustomerSummary>({
     queryKey: ["/api/customers", resolvedObject?.customerId],
     enabled: !!resolvedObject?.customerId,
   });
@@ -256,7 +359,7 @@ export default function ObjectDetailPage() {
     enabled: !!objectId,
   });
 
-  const { data: workOrders = [] } = useQuery<any[]>({
+  const { data: workOrders = [] } = useQuery<WorkOrderListItem[]>({
     queryKey: ["/api/objects", objectId, "work-orders"],
     queryFn: async () => {
       const res = await fetch(`/api/objects/${objectId}/work-orders`);
@@ -266,18 +369,18 @@ export default function ObjectDetailPage() {
     enabled: !!objectId,
   });
 
-  const { data: metadataResponse } = useQuery<any>({
+  const { data: metadataResponse } = useQuery<MetadataResponse>({
     queryKey: ["/api/metadata/objects", objectId],
     queryFn: async () => {
       const res = await fetch(`/api/metadata/objects/${objectId}`);
-      if (!res.ok) return null;
+      if (!res.ok) return { metadata: [] };
       return res.json();
     },
     enabled: !!objectId,
   });
-  const metadata: any[] = metadataResponse?.metadata || [];
+  const metadata: MetadataEntry[] = metadataResponse?.metadata || [];
 
-  const { data: contacts = [] } = useQuery<any[]>({
+  const { data: contacts = [] } = useQuery<ObjectContact[]>({
     queryKey: ["/api/objects", objectId, "contacts"],
     queryFn: async () => {
       const res = await fetch(`/api/objects/${objectId}/contacts?inheritance=true`);
@@ -287,7 +390,7 @@ export default function ObjectDetailPage() {
     enabled: !!objectId,
   });
 
-  const { data: images = [] } = useQuery<any[]>({
+  const { data: images = [] } = useQuery<ObjectImage[]>({
     queryKey: ["/api/objects", objectId, "images"],
     queryFn: async () => {
       const res = await fetch(`/api/objects/${objectId}/images`);
@@ -307,7 +410,7 @@ export default function ObjectDetailPage() {
     enabled: !!objectId,
   });
 
-  const { data: parentRelations = [] } = useQuery<any[]>({
+  const { data: parentRelations = [] } = useQuery<ParentRelation[]>({
     queryKey: ["/api/objects", objectId, "parents"],
     queryFn: async () => {
       const res = await fetch(`/api/objects/${objectId}/parents`);
@@ -317,7 +420,7 @@ export default function ObjectDetailPage() {
     enabled: !!objectId,
   });
 
-  const { data: metadataTypes = [] } = useQuery<any[]>({
+  const { data: metadataTypes = [] } = useQuery<MetadataType[]>({
     queryKey: ["/api/metadata/types"],
     queryFn: async () => {
       const res = await fetch("/api/metadata/types");
@@ -344,7 +447,7 @@ export default function ObjectDetailPage() {
   });
 
   const updateObjectMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: Partial<ServiceObject>) => {
       await apiRequest("PATCH", `/api/objects/${objectId}`, data);
     },
     onSuccess: () => {
@@ -359,7 +462,7 @@ export default function ObjectDetailPage() {
   });
 
   const addContactMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: Partial<ObjectContact>) => {
       await apiRequest("POST", `/api/objects/${objectId}/contacts`, data);
     },
     onSuccess: () => {
@@ -387,7 +490,7 @@ export default function ObjectDetailPage() {
   });
 
   const addImageMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: Partial<ObjectImage>) => {
       await apiRequest("POST", `/api/objects/${objectId}/images`, data);
     },
     onSuccess: () => {
@@ -415,7 +518,7 @@ export default function ObjectDetailPage() {
   });
 
   const addRestrictionMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: Partial<ObjectTimeRestriction>) => {
       await apiRequest("POST", `/api/objects/${objectId}/time-restrictions`, data);
     },
     onSuccess: () => {
@@ -528,10 +631,10 @@ export default function ObjectDetailPage() {
   }
 
   const obj = resolvedObject;
-  const inheritanceSources: any[] = obj.inheritanceSources || [];
+  const inheritanceSources: InheritanceSource[] = obj.inheritanceSources || [];
 
   const getInheritanceInfo = (fieldName: string) => {
-    const source = inheritanceSources.find((s: any) => s.field === fieldName);
+    const source = inheritanceSources.find((s) => s.field === fieldName);
     return {
       inherited: source?.inherited || false,
       sourceName: source?.sourceName || "",
@@ -561,7 +664,7 @@ export default function ObjectDetailPage() {
           <ArrowLeft className="h-4 w-4 mr-1" /> Objekt
         </Button>
         <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        {ancestors.length > 0 && ancestors.slice().reverse().map((anc: any) => (
+        {ancestors.length > 0 && ancestors.slice().reverse().map((anc) => (
           <span key={anc.id} className="flex items-center gap-1">
             <Button
               variant="link"
@@ -595,7 +698,7 @@ export default function ObjectDetailPage() {
               </Badge>
             )}
             <Badge variant="secondary" data-testid="badge-object-type">
-              {objectTypeLabels[obj.objectType] || obj.objectType}
+              {(obj.objectType && objectTypeLabels[obj.objectType]) || obj.objectType}
             </Badge>
             <Badge className={statusColors[obj.status || "active"] || statusColors.active} data-testid="badge-status">
               {obj.status === "active" ? "Aktiv" : obj.status === "inactive" ? "Inaktiv" : obj.status || "Aktiv"}
@@ -769,8 +872,8 @@ export default function ObjectDetailPage() {
               <CardContent className="space-y-1">
                 <InfoRow label="Objektnamn" value={obj.name} icon={Building2} />
                 <InfoRow label="Objektnummer" value={obj.objectNumber} icon={Hash} />
-                <InfoRow label="Objekttyp" value={objectTypeLabels[obj.objectType] || obj.objectType} icon={Box} />
-                <InfoRow label="Hierarkinivå" value={hierarchyLevelLabels[obj.hierarchyLevel]?.label || obj.hierarchyLevel} icon={Layers} />
+                <InfoRow label="Objekttyp" value={(obj.objectType && objectTypeLabels[obj.objectType]) || obj.objectType} icon={Box} />
+                <InfoRow label="Hierarkinivå" value={(obj.hierarchyLevel && hierarchyLevelLabels[obj.hierarchyLevel]?.label) || obj.hierarchyLevel} icon={Layers} />
                 <InfoRow label="Status" value={obj.status === "active" ? "Aktiv" : obj.status === "inactive" ? "Inaktiv" : obj.status} icon={Info} />
                 {obj.notes && <InfoRow label="Anteckningar" value={obj.notes} icon={FileText} />}
               </CardContent>
@@ -909,7 +1012,7 @@ export default function ObjectDetailPage() {
           </Card>
 
           <div className="mt-4">
-            <PolylineEditor object={obj} />
+            <PolylineEditor object={obj as unknown as ServiceObject} />
           </div>
         </TabsContent>
 
@@ -1022,7 +1125,7 @@ export default function ObjectDetailPage() {
               <CardContent>
                 {ancestors.length > 0 ? (
                   <div className="space-y-2">
-                    {ancestors.slice().reverse().map((anc: any, idx: number) => (
+                    {ancestors.slice().reverse().map((anc, idx) => (
                       <div
                         key={anc.id}
                         className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
@@ -1062,7 +1165,7 @@ export default function ObjectDetailPage() {
               <CardContent>
                 {descendants.length > 0 ? (
                   <div className="space-y-1 max-h-96 overflow-y-auto">
-                    {descendants.map((child: any) => (
+                    {descendants.map((child) => (
                       <div
                         key={child.id}
                         className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
@@ -1111,7 +1214,7 @@ export default function ObjectDetailPage() {
             <CardContent>
               {metadata.length > 0 ? (
                 <div className="divide-y">
-                  {metadata.map((m: any) => {
+                  {metadata.map((m) => {
                     const displayValue = m.vardeString ?? m.vardeInteger ?? m.vardeDecimal ??
                       (m.vardeBoolean !== null && m.vardeBoolean !== undefined ? (m.vardeBoolean ? "Ja" : "Nej") : null) ??
                       (m.vardeDatetime ? new Date(m.vardeDatetime).toLocaleDateString("sv-SE") : null) ??
@@ -1148,7 +1251,7 @@ export default function ObjectDetailPage() {
                           {showHistory && (
                             <MetadataHistorikButton
                               objectId={objectId}
-                              katalogId={m.metadataKatalogId}
+                              katalogId={m.metadataKatalogId || ""}
                               katalogNamn={m.katalog?.namn || ""}
                             />
                           )}
@@ -1197,7 +1300,7 @@ export default function ObjectDetailPage() {
             <CardContent>
               {contacts.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {contacts.map((c: any) => (
+                  {contacts.map((c) => (
                     <div key={c.id} className="p-3 border rounded-lg" data-testid={`contact-card-${c.id}`}>
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-medium text-sm">{c.name}</span>
@@ -1263,7 +1366,7 @@ export default function ObjectDetailPage() {
             <CardContent>
               {images.length > 0 ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {images.map((img: any) => (
+                  {images.map((img) => (
                     <div key={img.id} className="relative group" data-testid={`image-card-${img.id}`}>
                       <div className="aspect-square rounded-lg overflow-hidden border bg-muted">
                         <img
@@ -1324,7 +1427,7 @@ export default function ObjectDetailPage() {
             <CardContent>
               {workOrders.length > 0 ? (
                 <div className="divide-y">
-                  {workOrders.map((wo: any) => (
+                  {workOrders.map((wo) => (
                     <div key={wo.id} className="flex items-center justify-between py-3 gap-4" data-testid={`workorder-row-${wo.id}`}>
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-medium truncate">{wo.title || `Order ${wo.id.slice(0, 8)}`}</div>
@@ -1560,7 +1663,7 @@ export default function ObjectDetailPage() {
         </TabsContent>
 
         <TabsContent value="history-archive">
-          <ObjectHistoryArchiveTab objectId={objectId} isArchived={!!(resolvedObject as any)?.deletedAt} />
+          <ObjectHistoryArchiveTab objectId={objectId} isArchived={!!resolvedObject?.deletedAt} />
         </TabsContent>
       </Tabs>
 
@@ -1753,7 +1856,7 @@ export default function ObjectDetailPage() {
             </Button>
             <Button
               onClick={() => {
-                const payload: any = {};
+                const payload: ObjectEditForm = {};
                 if (editSection === "overview") {
                   payload.name = editForm.name;
                   payload.objectNumber = editForm.objectNumber;
@@ -1776,7 +1879,7 @@ export default function ObjectDetailPage() {
                   payload.manufacturer = editForm.manufacturer;
                   payload.condition = editForm.condition;
                 }
-                updateObjectMutation.mutate(payload);
+                updateObjectMutation.mutate(payload as Partial<ServiceObject>);
               }}
               disabled={updateObjectMutation.isPending}
               data-testid="button-save-edit"
@@ -2106,8 +2209,8 @@ export default function ObjectDetailPage() {
 
 function MetadataAddButton({ objectId, metadataTypes, onAdd, isPending }: {
   objectId: string;
-  metadataTypes: any[];
-  onAdd: (data: any) => void;
+  metadataTypes: MetadataType[];
+  onAdd: (data: { objektId: string; metadataTypNamn: string; varde: string }) => void;
   isPending: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -2116,7 +2219,7 @@ function MetadataAddButton({ objectId, metadataTypes, onAdd, isPending }: {
 
   const handleAdd = () => {
     if (!selectedType) return;
-    const metaType = metadataTypes.find((t: any) => t.namn === selectedType || t.id === selectedType);
+    const metaType = metadataTypes.find((t) => t.namn === selectedType || t.id === selectedType);
     onAdd({
       objektId: objectId,
       metadataTypNamn: metaType?.namn || selectedType,
@@ -2152,7 +2255,7 @@ function MetadataAddButton({ objectId, metadataTypes, onAdd, isPending }: {
                     <SelectValue placeholder="Välj typ..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {metadataTypes.map((t: any) => (
+                    {metadataTypes.map((t) => (
                       <SelectItem key={t.id || t.namn} value={t.namn}>
                         {t.namn} {t.kategori ? `(${t.kategori})` : ""}
                       </SelectItem>

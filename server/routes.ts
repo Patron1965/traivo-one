@@ -526,9 +526,10 @@ export async function registerRoutes(
       const clusterResult = await db.execute(sql`
         SELECT COUNT(*) FILTER (WHERE status = 'active') AS active FROM clusters WHERE tenant_id = ${tenantId}
       `);
-      const getRow = (result: any) => {
-        const rows = Array.isArray(result) ? result : result?.rows;
-        return (Array.isArray(rows) ? rows[0] : result) || {};
+      const getRow = (result: unknown): Record<string, unknown> => {
+        const r = result as { rows?: unknown[] } | unknown[] | undefined;
+        const rows = Array.isArray(r) ? r : r?.rows;
+        return ((Array.isArray(rows) ? rows[0] : result) as Record<string, unknown>) || {};
       };
       const stats = getRow(orderResult) as Record<string, string | number | null>;
       const custStats = getRow(customerResult) as Record<string, string | number | null>;
@@ -570,7 +571,7 @@ export async function registerRoutes(
         ORDER BY scheduled_date ASC
         LIMIT 20
       `);
-      const overdueRows = Array.isArray(overdueResult) ? overdueResult : (overdueResult as any)?.rows || [];
+      const overdueRows: Record<string, unknown>[] = Array.isArray(overdueResult) ? overdueResult : ((overdueResult as { rows?: Record<string, unknown>[] })?.rows || []);
 
       const activeResources = await storage.getResources(tenantId);
       const activeResourceIds = activeResources.filter(r => r.status === "active").map(r => r.id);
@@ -587,9 +588,9 @@ export async function registerRoutes(
             AND order_status NOT IN ('utford', 'fakturerad', 'omojlig')
             AND deleted_at IS NULL
         `);
-        const busyRows = Array.isArray(busyResult) ? busyResult : (busyResult as any)?.rows || [];
+        const busyRows: Record<string, unknown>[] = Array.isArray(busyResult) ? busyResult : ((busyResult as { rows?: Record<string, unknown>[] })?.rows || []);
         const busyIds = new Set(
-          (busyRows as any[]).map((r: any) => r.resource_id).filter(Boolean)
+          busyRows.map((r) => r.resource_id as string | null).filter((x): x is string => Boolean(x))
         );
         idleResources = activeResources
           .filter(r => r.status === "active" && !busyIds.has(r.id))
@@ -618,14 +619,27 @@ export async function registerRoutes(
           AND b.deleted_at IS NULL
         LIMIT 50
       `);
-      const collisionRows = Array.isArray(collisionResult) ? collisionResult : (collisionResult as any)?.rows || [];
+      const collisionRows: Record<string, unknown>[] = Array.isArray(collisionResult) ? collisionResult : ((collisionResult as { rows?: Record<string, unknown>[] })?.rows || []);
 
       const parseTime = (t: string) => {
         const [h, m] = t.split(":").map(Number);
         return h * 60 + (m || 0);
       };
-      const collisionList = collisionRows as any[];
-      const doubleBookings: any[] = [];
+      type CollisionRow = {
+        start_a?: string | null; start_b?: string | null;
+        duration_a?: number | null; duration_b?: number | null;
+        resource_id?: string | null;
+        order_a_id?: string; order_a_title?: string | null;
+        order_b_id?: string; order_b_title?: string | null;
+      };
+      const collisionList = collisionRows as CollisionRow[];
+      type DoubleBooking = {
+        resourceId: string | null | undefined;
+        resourceName: string;
+        orderA: { id: string | undefined; title: string | null | undefined; startTime: string | null | undefined };
+        orderB: { id: string | undefined; title: string | null | undefined; startTime: string | null | undefined };
+      };
+      const doubleBookings: DoubleBooking[] = [];
       for (const row of collisionList) {
         if (!row.start_a || !row.start_b) continue;
         const startA = parseTime(row.start_a);
@@ -643,8 +657,9 @@ export async function registerRoutes(
         }
       }
 
-      const overdueList = overdueRows as any[];
-      const overdueAlerts = overdueList.map((r: any) => ({
+      type OverdueRow = { id?: string; title?: string | null; scheduled_date?: string | Date | null; resource_id?: string | null };
+      const overdueList = overdueRows as OverdueRow[];
+      const overdueAlerts = overdueList.map((r) => ({
         id: r.id,
         title: r.title || `Order ${(r.id || "").slice(0, 8)}`,
         scheduledDate: r.scheduled_date,
@@ -687,10 +702,11 @@ export async function registerRoutes(
           AND deleted_at IS NULL
         GROUP BY resource_id
       `);
-      const orderRows = Array.isArray(orderResult) ? orderResult : (orderResult as any)?.rows || [];
+      const orderRows: Record<string, unknown>[] = Array.isArray(orderResult) ? orderResult : ((orderResult as { rows?: Record<string, unknown>[] })?.rows || []);
 
       const bookedMap = new Map<string, number>();
-      const rowList = orderRows as any[];
+      type CapacityRow = { resource_id?: string | null; booked_minutes?: number | string | null };
+      const rowList = orderRows as CapacityRow[];
       for (const row of rowList) {
         if (row.resource_id) {
           bookedMap.set(row.resource_id, Number(row.booked_minutes || 0));
