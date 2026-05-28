@@ -17,6 +17,7 @@ import Papa from "papaparse";
 import type { ServiceObject } from "@shared/schema";
 import { ImportRowPreview } from "@/components/import/ImportRowPreview";
 import { ImportTypeHistory } from "@/components/import/ImportTypeHistory";
+import { DownloadTemplateButton } from "@/components/DownloadTemplateButton";
 
 type PreviewResult = {
   dryRun: true;
@@ -143,14 +144,82 @@ export function ChildObjectImportFlow({
 
   const onFile = async (f: File) => {
     setFileName(f.name);
-    const text = await f.text();
-    const rows = parseCsvRows(text);
-    setFileRows(rows);
-    setPreview(null);
-    if (rows.length === 0) {
+    const name = f.name.toLowerCase();
+    const isXlsx = name.endsWith(".xlsx") || name.endsWith(".xls");
+    try {
+      let rows: Array<Record<string, string>> = [];
+      if (isXlsx) {
+        const ExcelJS = (await import("exceljs")).default;
+        const buf = await f.arrayBuffer();
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(buf);
+        const sheet = wb.worksheets[0];
+        if (!sheet) throw new Error("Hittade inget kalkylblad");
+        const cellToString = (val: unknown): string => {
+          if (val === null || val === undefined) return "";
+          if (val instanceof Date) return val.toISOString().split("T")[0];
+          if (typeof val === "object" && val !== null) {
+            if ("richText" in val) {
+              return (val as { richText: Array<{ text?: string }> }).richText
+                .map(r => r.text ?? "")
+                .join("");
+            }
+            if ("formula" in val) {
+              return String((val as { result?: unknown }).result ?? "");
+            }
+            if ("hyperlink" in val) {
+              return (val as { text: string }).text;
+            }
+          }
+          return String(val);
+        };
+        const aoa: string[][] = [];
+        sheet.eachRow({ includeEmpty: false }, (row) => {
+          const rowData: string[] = [];
+          const colCount = sheet.columnCount || row.cellCount;
+          for (let c = 1; c <= colCount; c++) {
+            rowData.push(cellToString(row.getCell(c).value));
+          }
+          aoa.push(rowData);
+        });
+        // Filtrera bort vår markerade exempelrad om den finns kvar
+        const filtered = aoa.filter(
+          (r, idx) => idx === 0 || !(r[0] ?? "").startsWith("[EXEMPEL"),
+        );
+        if (filtered.length === 0) {
+          rows = [];
+        } else {
+          const headers = filtered[0].map(h => h.trim());
+          rows = filtered.slice(1).map(cells => {
+            const out: Record<string, string> = {};
+            headers.forEach((h, i) => {
+              const key = HEADER_ALIASES[h.toLowerCase().trim()];
+              const v = cells[i];
+              if (key && v != null && String(v).trim() !== "") {
+                out[key] = String(v).trim();
+              }
+            });
+            return out;
+          }).filter(r => r.name);
+        }
+      } else {
+        const text = await f.text();
+        rows = parseCsvRows(text);
+      }
+      setFileRows(rows);
+      setPreview(null);
+      if (rows.length === 0) {
+        toast({
+          title: "Inga giltiga rader",
+          description: "Filen verkar tom eller saknar 'namn'-kolumn.",
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      setFileRows(null);
       toast({
-        title: "Inga giltiga rader",
-        description: "Filen verkar tom eller saknar 'namn'-kolumn.",
+        title: "Kunde inte läsa filen",
+        description: e?.message ?? "Filen kunde inte tolkas.",
         variant: "destructive",
       });
     }
@@ -238,7 +307,7 @@ export function ChildObjectImportFlow({
           <Tabs value={mode} onValueChange={v => setMode(v as "paste" | "file")}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="paste" data-testid="tab-child-import-paste">Klistra in</TabsTrigger>
-              <TabsTrigger value="file" data-testid="tab-child-import-file">CSV-fil</TabsTrigger>
+              <TabsTrigger value="file" data-testid="tab-child-import-file">CSV/Excel-fil</TabsTrigger>
             </TabsList>
             <TabsContent value="paste" className="space-y-2 mt-3">
               <div className="text-xs text-muted-foreground">
@@ -266,12 +335,15 @@ export function ChildObjectImportFlow({
                 <code className="px-1 bg-muted rounded">{HEADER.join(", ")}</code>{" "}
                 eller svenska motsvarigheter (namn, objektnummer, niva, adress, ort, postnummer).
               </div>
+              <div className="flex justify-end">
+                <DownloadTemplateButton type="barnobjekt" />
+              </div>
               <div className="rounded-lg border border-dashed p-6 text-center">
                 <FileUp className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                 <input
                   id="child-import-file"
                   type="file"
-                  accept=".csv,.txt"
+                  accept=".csv,.txt,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   className="hidden"
                   onChange={e => {
                     const f = e.target.files?.[0];
@@ -281,7 +353,7 @@ export function ChildObjectImportFlow({
                 />
                 <label htmlFor="child-import-file">
                   <Button asChild variant="outline" size="sm">
-                    <span>Välj CSV-fil</span>
+                    <span>Välj fil (CSV eller Excel)</span>
                   </Button>
                 </label>
                 {fileName && (

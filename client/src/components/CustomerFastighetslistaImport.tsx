@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { DownloadTemplateButton } from "@/components/DownloadTemplateButton";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Loader2, Upload, CheckCircle2, AlertTriangle, RotateCcw, Building2, ChevronsUpDown, Check,
@@ -417,7 +418,8 @@ export default function CustomerFastighetslistaImport() {
                 <span>{loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}Välj fil</span>
               </Button>
             </label>
-            <div className="mt-4">
+            <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
+              <DownloadTemplateButton type="fastighetslista" />
               <Button variant="ghost" size="sm" onClick={() => setStep("select-customer")}>
                 <RotateCcw className="h-3 w-3 mr-2" />Byt kund
               </Button>

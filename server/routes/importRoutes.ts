@@ -23,6 +23,110 @@ import { metadataVarden } from "@shared/schema";
 import { ensureClusterForCustomer, updateClusterCache } from "../auto-cluster";
 import { restoreEnrichModusBatch } from "../enrich-modus-restore";
 import { invalidateAreaSearchCityCache } from "./plannerRoutes";
+import { getImportTemplate, IMPORT_TEMPLATES, type ImportTemplateDefinition } from "@shared/import-templates";
+
+async function buildTemplateWorkbook(def: ImportTemplateDefinition): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Traivo";
+  wb.created = new Date();
+
+  // Dataflik
+  const sheet = wb.addWorksheet(def.sheetName);
+  sheet.columns = def.columns.map((c) => ({
+    header: c.name,
+    key: c.name,
+    width: Math.min(Math.max(c.name.length + 4, 14), 40),
+  }));
+
+  // Rubrikrad: obligatoriska kolumner i fet stil + färgad bakgrund (warning)
+  const headerRow = sheet.getRow(1);
+  headerRow.height = 22;
+  def.columns.forEach((c, idx) => {
+    const cell = headerRow.getCell(idx + 1);
+    cell.value = c.name;
+    cell.font = { bold: true, color: { argb: "FF1B4B6B" } };
+    cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: c.required ? "FFFDE8B4" : "FFE8F4F8" },
+    };
+    cell.border = {
+      top: { style: "thin", color: { argb: "FFB9C7D2" } },
+      left: { style: "thin", color: { argb: "FFB9C7D2" } },
+      bottom: { style: "medium", color: { argb: "FF1B4B6B" } },
+      right: { style: "thin", color: { argb: "FFB9C7D2" } },
+    };
+  });
+  sheet.views = [{ state: "frozen", ySplit: 2 }];
+
+  // Exempelrad — visuellt markerad så användaren förstår att ta bort den
+  const exampleRow = sheet.addRow(def.columns.map((c) => c.example ?? ""));
+  exampleRow.eachCell({ includeEmpty: true }, (cell) => {
+    cell.font = { italic: true, color: { argb: "FF6B7C8C" } };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFF5F5F2" },
+    };
+    cell.alignment = { vertical: "top", wrapText: true };
+  });
+  // Markör i första kolumnen — gör tydligt att raden ska tas bort
+  const firstCell = exampleRow.getCell(1);
+  const originalFirst = firstCell.value;
+  firstCell.value = `[EXEMPEL – ta bort denna rad] ${originalFirst ?? ""}`.trim();
+
+  // Läs-mig-flik
+  const readme = wb.addWorksheet("Läs mig");
+  readme.columns = [
+    { header: "Kolumn", key: "name", width: 32 },
+    { header: "Obligatorisk", key: "required", width: 14 },
+    { header: "Beskrivning", key: "description", width: 80 },
+    { header: "Exempel", key: "example", width: 40 },
+  ];
+  // Rubrik
+  const introRow = readme.addRow([def.title]);
+  introRow.font = { bold: true, size: 14, color: { argb: "FF1B4B6B" } };
+  readme.mergeCells(introRow.number, 1, introRow.number, 4);
+  const introTextRow = readme.addRow([def.intro]);
+  introTextRow.alignment = { wrapText: true, vertical: "top" };
+  readme.mergeCells(introTextRow.number, 1, introTextRow.number, 4);
+  introTextRow.height = 60;
+  readme.addRow([]);
+  const note = readme.addRow([
+    "Obs: Rader markerade [EXEMPEL ...] i dataflikens första kolumn ska tas bort innan filen laddas upp. Obligatoriska kolumner är markerade med gul rubrikbakgrund.",
+  ]);
+  note.font = { italic: true, color: { argb: "FF8C6A1B" } };
+  readme.mergeCells(note.number, 1, note.number, 4);
+  note.alignment = { wrapText: true, vertical: "top" };
+  note.height = 40;
+  readme.addRow([]);
+
+  // Kolumn-tabellens header
+  const tableHeaderRow = readme.addRow(["Kolumn", "Obligatorisk", "Beskrivning", "Exempel"]);
+  tableHeaderRow.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1B4B6B" } };
+    cell.alignment = { vertical: "middle" };
+  });
+  for (const c of def.columns) {
+    const row = readme.addRow([c.name, c.required ? "Ja" : "Nej", c.description, c.example ?? ""]);
+    row.alignment = { wrapText: true, vertical: "top" };
+    if (c.required) {
+      row.getCell(1).font = { bold: true };
+      row.getCell(2).font = { bold: true, color: { argb: "FF8C6A1B" } };
+      row.getCell(2).fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFFDE8B4" },
+      };
+    }
+  }
+  readme.views = [{ state: "frozen", ySplit: 6 }];
+
+  const arrayBuffer = await wb.xlsx.writeBuffer();
+  return Buffer.from(arrayBuffer as ArrayBuffer);
+}
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -243,6 +347,27 @@ function mapFortnoxRow(row: Record<string, string>, rowNum: number): FortnoxCust
 }
 
 export async function registerImportRoutes(app: Express) {
+// Mall-endpoint: GET /api/import/template/:type → returnerar .xlsx-mall för importtypen.
+// Single source of truth: kolumndefinitionerna ligger i `shared/import-templates.ts`
+// och används både av UI:t (visa förväntade kolumner) och den här genereringen.
+app.get("/api/import/template/:type", asyncHandler(async (req, res) => {
+  const def = getImportTemplate(req.params.type);
+  if (!def) {
+    return res.status(404).json({
+      error: "Okänd importtyp",
+      validTypes: Object.keys(IMPORT_TEMPLATES),
+    });
+  }
+  const buffer = await buildTemplateWorkbook(def);
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
+  res.setHeader("Content-Disposition", `attachment; filename="${def.fileName}"`);
+  res.setHeader("Cache-Control", "no-cache, must-revalidate");
+  res.send(buffer);
+}));
+
 app.post("/api/import/customers", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       throw new ValidationError("Ingen fil uppladdad");

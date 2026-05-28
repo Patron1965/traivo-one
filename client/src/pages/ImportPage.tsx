@@ -42,6 +42,8 @@ import { sv } from "date-fns/locale";
 import type { Customer, Resource, ServiceObject } from "@shared/schema";
 import { ImportPreviewPanel, ResourcePreviewPanel, type NameOverrides } from "@/components/ImportPreviewPanel";
 import { DataQualityDashboard } from "@/components/DataQualityDashboard";
+import { IMPORT_TEMPLATES } from "@shared/import-templates";
+import { DownloadTemplateButton } from "@/components/DownloadTemplateButton";
 
 type ImportType = "customers" | "resources" | "objects";
 type ModusImportType = "objects" | "tasks" | "events" | "invoice-lines";
@@ -221,62 +223,71 @@ const IMPORT_TYPES_INFO = [
   },
 ];
 
-const MODUS_OBJECT_COLUMNS = [
-  { name: "Id", required: true, description: "Unikt Modus-ID för objektet" },
-  { name: "Namn", required: true, description: "Objektets namn (t.ex. fastighetsnamn)" },
-  { name: "Typ", required: true, description: "Objekttyp: Fastighet, Adress, Soprum, etc." },
-  { name: "Parent", required: false, description: "ID för överordnat objekt (hierarki)" },
-  { name: "Kund", required: false, description: "Kundnamn (skapande-tenant/historik). Auktoritativ betalare hanteras i object_payers — se ADR v3." },
-  { name: "Latitud", required: false, description: "GPS-koordinat (komma ersätts automatiskt med punkt)" },
-  { name: "Longitud", required: false, description: "GPS-koordinat (komma ersätts automatiskt med punkt)" },
-  { name: "Adress 1", required: false, description: "Gatuadress" },
-  { name: "Ort", required: false, description: "Ort/stad" },
-  { name: "Postnummer", required: false, description: "Postnummer" },
-  { name: "Beskrivning", required: false, description: "Rad 2=Kontaktperson, Rad 3=Telefon, Rad 4=E-post" },
-  { name: "Metadata - *", required: false, description: "Alla kolumner som börjar med 'Metadata - ' importeras automatiskt" },
-];
+// Kolumndefinitionerna kommer från en central källa (shared/import-templates.ts)
+// så att UI:t (denna tabell) och mall-generatorn på servern alltid är synkade.
+const MODUS_OBJECT_COLUMNS = IMPORT_TEMPLATES["modus-objekt"].columns;
+const MODUS_TASK_COLUMNS = IMPORT_TEMPLATES["modus-tasks"].columns;
 
-const MODUS_TASK_COLUMNS = [
-  { name: "Uppgifts Id", required: true, description: "Unikt ID för uppgiften" },
-  { name: "Objekt", required: true, description: "Referens till Modus objekt-ID" },
-  { name: "Kund", required: false, description: "Kundnamn i format 'Namn (ID)'" },
-  { name: "Uppgiftsnamn", required: false, description: "Titel på arbetsorderna" },
-  { name: "Uppgiftstyp", required: false, description: "Kärltvätt, Rumstvätt, Tvätt UJ-behållare" },
-  { name: "Jobb", required: false, description: "Jobbgruppering, format 'Namn (ID)'" },
-  { name: "Beställning", required: false, description: "Beställningsnummer" },
-  { name: "Prislista", required: false, description: "Prislistans namn (t.ex. Vafab Miljö)" },
-  { name: "Varaktighet", required: false, description: "Uppskattad tid i minuter" },
-  { name: "Kostnad", required: false, description: "Beräknad kostnad (komma-decimal)" },
-  { name: "Pris", required: false, description: "Beräknat pris (komma-decimal)" },
-  { name: "Status", required: false, description: "done, not_started, in_progress, not_feasible" },
-  { name: "Resultat", required: false, description: "Anteckningar/kommentarer från fältarbetare" },
-  { name: "Fakturerad", required: false, description: "1 = fakturerad, 0 = ej fakturerad" },
-  { name: "Starttid", required: false, description: "Startdatum i ISO-format" },
-  { name: "Sluttid", required: false, description: "Slutdatum i ISO-format" },
-  { name: "Planerad år", required: false, description: "Planerat år (t.ex. 2024)" },
-  { name: "Planerad vecka", required: false, description: "Planerad vecka (1-52)" },
-  { name: "Planerad dag o tid", required: false, description: "Datum och tid i ISO-format" },
-  { name: "Team", required: false, description: "Resursnamn/fordons-ID (skapas automatiskt)" },
-];
-
-const MODUS_INVOICE_COLUMNS = [
-  { name: "Uppgift Id", required: true, description: "Kopplar fakturaraden till en uppgift" },
-  { name: "Rad", required: false, description: "Radnummer inom uppgiften" },
-  { name: "Beskrivning", required: false, description: "Beskrivning: 'Adress: Tjänstetyp'" },
-  { name: "Antal", required: false, description: "Antal enheter" },
-  { name: "Pris", required: false, description: "Styckpris (komma-decimal, t.ex. 156,56)" },
-  { name: "Fortnox Artikel Id", required: false, description: "Artikelkod: K100 (kärltvätt), UJ100 (underjord)" },
-  { name: "Fortnox Kostnadsställe", required: false, description: "Kostnadsställe i Fortnox" },
-  { name: "Fortnox Projekt", required: false, description: "Projektkod/team-referens" },
-];
-
-const MODUS_EVENT_COLUMNS = [
-  { name: "Event Id", required: false, description: "Löpnummer för händelsen" },
-  { name: "Uppgifts Id", required: true, description: "Kopplar händelsen till en uppgift" },
-  { name: "Event Typ", required: true, description: "in_progress, done, not_started, not_feasible" },
-  { name: "Beskrivning", required: false, description: "Statusbeskrivning" },
-  { name: "Tid", required: true, description: "Tidsstämpel för händelsen" },
-];
+// Konvertera en uppladdad .xlsx/.xls-fil till en CSV-fil (semikolon-separerad)
+// så att den kan skickas vidare till backend-endpoints som förväntar sig CSV.
+// Tar även bort den markerade exempelraden från Excel-mallen om den finns kvar.
+async function maybeConvertXlsxToCsv(file: File): Promise<File> {
+  const name = file.name.toLowerCase();
+  const isXlsx = name.endsWith(".xlsx") || name.endsWith(".xls");
+  if (!isXlsx) return file;
+  const ExcelJS = (await import("exceljs")).default;
+  const buf = await file.arrayBuffer();
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const sheet = wb.worksheets[0];
+  if (!sheet) throw new Error("Hittade inget kalkylblad i Excel-filen");
+  const cellToString = (val: unknown): string => {
+    if (val === null || val === undefined) return "";
+    if (val instanceof Date) return val.toISOString().split("T")[0];
+    if (typeof val === "object" && val !== null) {
+      if ("richText" in val) {
+        return (val as { richText: Array<{ text?: string }> }).richText
+          .map((r) => r.text ?? "")
+          .join("");
+      }
+      if ("formula" in val) {
+        return String((val as { result?: unknown }).result ?? "");
+      }
+      if ("hyperlink" in val) {
+        return (val as { text: string }).text;
+      }
+    }
+    return String(val);
+  };
+  const rows: string[][] = [];
+  sheet.eachRow({ includeEmpty: false }, (row) => {
+    const rowData: string[] = [];
+    const colCount = sheet.columnCount || row.cellCount;
+    for (let c = 1; c <= colCount; c++) {
+      rowData.push(cellToString(row.getCell(c).value));
+    }
+    rows.push(rowData);
+  });
+  // Behåll header-rad (index 0) men ta bort vår markerade exempelrad
+  const filtered = rows.filter(
+    (r, idx) => idx === 0 || !(r[0] ?? "").startsWith("[EXEMPEL"),
+  );
+  const csv = filtered
+    .map((row) =>
+      row
+        .map((cell) => {
+          const s = cell ?? "";
+          if (/[;"\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+          return s;
+        })
+        .join(";"),
+    )
+    .join("\n");
+  const csvName = file.name.replace(/\.(xlsx|xls)$/i, ".csv");
+  return new File([csv], csvName, { type: "text/csv" });
+}
+const MODUS_INVOICE_COLUMNS = IMPORT_TEMPLATES["modus-fakturarader"].columns;
+const MODUS_EVENT_COLUMNS = IMPORT_TEMPLATES["modus-events"].columns;
 
 // Lokal alias kvar för befintliga referenser; delas nu via shared file
 // så ImportTypeHistory kan öppna samma dialog.
@@ -1379,6 +1390,12 @@ function FortnoxXlsxImportPanel() {
           <CardDescription>Excel-export från Fortnox med kolumner som customer_number, name, delivery_address, …</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-xs text-muted-foreground">
+              Saknar du en mall? Ladda ner en tom Excel-mall med rätt kolumner.
+            </p>
+            <DownloadTemplateButton type="fortnox-kunder" />
+          </div>
           <Input
             ref={fileInputRef}
             type="file"
@@ -1768,6 +1785,12 @@ function FortnoxInvoiceImportPanel() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-xs text-muted-foreground">
+              Saknar du en mall? Ladda ner en tom Excel-mall med rätt kolumner.
+            </p>
+            <DownloadTemplateButton type="fortnox-fakturahistorik" />
+          </div>
           <Input
             ref={fileInputRef}
             type="file"
@@ -3382,7 +3405,7 @@ export default function ImportPage() {
                 </ul>
               </div>
 
-              <div>
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -3393,19 +3416,30 @@ export default function ImportPage() {
                   {showObjectColumns ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
                   {showObjectColumns ? "Dölj" : "Visa"} förväntade kolumner
                 </Button>
-                {showObjectColumns && <ColumnTable columns={MODUS_OBJECT_COLUMNS} />}
+                <DownloadTemplateButton type="modus-objekt" />
               </div>
+              {showObjectColumns && <ColumnTable columns={MODUS_OBJECT_COLUMNS} />}
 
               <div className="flex items-center gap-3 flex-wrap">
                 <input
                   type="file"
-                  accept=".csv"
+                  accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   className="hidden"
                   id="modus-objects"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleModusValidate(file);
+                  onChange={async (e) => {
+                    const raw = e.target.files?.[0];
                     e.target.value = "";
+                    if (!raw) return;
+                    try {
+                      const file = await maybeConvertXlsxToCsv(raw);
+                      handleModusValidate(file);
+                    } catch (err: any) {
+                      toast({
+                        title: "Kunde inte läsa Excel-filen",
+                        description: err?.message ?? "Filen kunde inte tolkas.",
+                        variant: "destructive",
+                      });
+                    }
                   }}
                 />
                 <Button
@@ -3743,7 +3777,7 @@ export default function ImportPage() {
                 </div>
               )}
 
-              <div>
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -3754,18 +3788,32 @@ export default function ImportPage() {
                   {showTaskColumns ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
                   {showTaskColumns ? "Dölj" : "Visa"} förväntade kolumner
                 </Button>
-                {showTaskColumns && <ColumnTable columns={MODUS_TASK_COLUMNS} />}
+                <DownloadTemplateButton type="modus-tasks" />
               </div>
+              {showTaskColumns && <ColumnTable columns={MODUS_TASK_COLUMNS} />}
 
               <div className="flex items-center gap-3">
                 <input
                   type="file"
-                  accept=".csv"
+                  accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   className="hidden"
                   id="modus-tasks"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
+                  onChange={async (e) => {
+                    const raw = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!raw) return;
+                    let file: File;
+                    try {
+                      file = await maybeConvertXlsxToCsv(raw);
+                    } catch (err: any) {
+                      toast({
+                        title: "Kunde inte läsa Excel-filen",
+                        description: err?.message ?? "Filen kunde inte tolkas.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    {
                       Papa.parse<Record<string, string>>(file, {
                         header: true,
                         skipEmptyLines: true,
@@ -4129,7 +4177,7 @@ export default function ImportPage() {
                 </ul>
               </div>
 
-              <div>
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -4140,19 +4188,30 @@ export default function ImportPage() {
                   {showInvoiceColumns ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
                   {showInvoiceColumns ? "Dölj" : "Visa"} förväntade kolumner
                 </Button>
-                {showInvoiceColumns && <ColumnTable columns={MODUS_INVOICE_COLUMNS} />}
+                <DownloadTemplateButton type="modus-fakturarader" />
               </div>
+              {showInvoiceColumns && <ColumnTable columns={MODUS_INVOICE_COLUMNS} />}
 
               <div className="flex items-center gap-3">
                 <input
                   type="file"
-                  accept=".csv"
+                  accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   className="hidden"
                   id="modus-invoice-lines"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleModusUpload("invoice-lines", file);
+                  onChange={async (e) => {
+                    const raw = e.target.files?.[0];
                     e.target.value = "";
+                    if (!raw) return;
+                    try {
+                      const file = await maybeConvertXlsxToCsv(raw);
+                      handleModusUpload("invoice-lines", file);
+                    } catch (err: any) {
+                      toast({
+                        title: "Kunde inte läsa Excel-filen",
+                        description: err?.message ?? "Filen kunde inte tolkas.",
+                        variant: "destructive",
+                      });
+                    }
                   }}
                 />
                 <Button
@@ -4263,7 +4322,7 @@ export default function ImportPage() {
                 </ul>
               </div>
 
-              <div>
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -4274,19 +4333,30 @@ export default function ImportPage() {
                   {showEventColumns ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
                   {showEventColumns ? "Dölj" : "Visa"} förväntade kolumner
                 </Button>
-                {showEventColumns && <ColumnTable columns={MODUS_EVENT_COLUMNS} />}
+                <DownloadTemplateButton type="modus-events" />
               </div>
+              {showEventColumns && <ColumnTable columns={MODUS_EVENT_COLUMNS} />}
 
               <div className="flex items-center gap-3">
                 <input
                   type="file"
-                  accept=".csv"
+                  accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   className="hidden"
                   id="modus-events"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleModusUpload("events", file);
+                  onChange={async (e) => {
+                    const raw = e.target.files?.[0];
                     e.target.value = "";
+                    if (!raw) return;
+                    try {
+                      const file = await maybeConvertXlsxToCsv(raw);
+                      handleModusUpload("events", file);
+                    } catch (err: any) {
+                      toast({
+                        title: "Kunde inte läsa Excel-filen",
+                        description: err?.message ?? "Filen kunde inte tolkas.",
+                        variant: "destructive",
+                      });
+                    }
                   }}
                 />
                 <Button
