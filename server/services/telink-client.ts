@@ -3,6 +3,8 @@
 // PDF §4.1 (öppna API:t) + §4.2 (auto-ärende vid kontaktbyte).
 // Läsning bara — ingen write-back till Telink i denna fas.
 // ============================================
+import { promises as dns } from "node:dns";
+import net from "node:net";
 import { db } from "../db";
 import {
   objects,
@@ -49,6 +51,123 @@ export const TELINK_DEFAULTS = {
 } as const;
 
 /**
+ * SSRF-skydd: Telink-bas-URL är tenant-admin-styrd och används i server-
+ * side fetch. Vi måste därför hindra att den pekas mot interna nätverk,
+ * loopback eller obetrodda värdar.
+ *
+ * Default-allowlist täcker publika Telink-domäner. Operatörer som behöver
+ * lägga till en alternativ värd anger den i ENV TELINK_ALLOWED_HOSTS som
+ * komma-separerad lista (matchas case-insensitivt, exakt eller suffix
+ * med ledande punkt).
+ */
+const TELINK_DEFAULT_ALLOWED_HOSTS = ["telink.se", "api.telink.se"];
+const TELINK_ALLOWED_PORTS = new Set([443, 80]);
+
+function getAllowedHosts(): string[] {
+  const env = process.env.TELINK_ALLOWED_HOSTS;
+  if (!env) return TELINK_DEFAULT_ALLOWED_HOSTS;
+  const extras = env
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  return [...TELINK_DEFAULT_ALLOWED_HOSTS, ...extras];
+}
+
+function isHostAllowed(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  for (const allow of getAllowedHosts()) {
+    if (h === allow) return true;
+    if (h.endsWith(`.${allow}`)) return true;
+  }
+  return false;
+}
+
+function isPrivateOrLoopbackIp(addr: string): boolean {
+  if (!addr) return true;
+  const family = net.isIP(addr);
+  if (family === 4) {
+    const parts = addr.split(".").map((p) => parseInt(p, 10));
+    if (parts.length !== 4 || parts.some((p) => Number.isNaN(p))) return true;
+    const [a, b] = parts;
+    if (a === 10) return true;
+    if (a === 127) return true;
+    if (a === 0) return true;
+    if (a === 169 && b === 254) return true; // link-local
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
+    if (a >= 224) return true; // multicast / reserved
+    return false;
+  }
+  if (family === 6) {
+    const v = addr.toLowerCase();
+    if (v === "::1" || v === "::") return true;
+    if (v.startsWith("fe80:") || v.startsWith("fc") || v.startsWith("fd")) return true;
+    if (v.startsWith("::ffff:")) {
+      // IPv4-mappad — kolla v4-delen
+      return isPrivateOrLoopbackIp(v.slice("::ffff:".length));
+    }
+    return false;
+  }
+  // Okänd — neka.
+  return true;
+}
+
+/**
+ * Validerar en Telink-bas-URL och returnerar normaliserad form.
+ * Kastar vid otillåten URL. Anropas både i config-PUT (UI-fel) och
+ * vid varje fetch (DNS-pinning förhindrar TOCTOU mellan validering
+ * och request).
+ */
+export async function assertSafeTelinkBaseUrl(rawUrl: string): Promise<URL> {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error("Ogiltig bas-URL");
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error("Telink-bas-URL måste använda https://");
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("Telink-bas-URL får inte innehålla användarnamn eller lösenord");
+  }
+  const port = parsed.port ? parseInt(parsed.port, 10) : 443;
+  if (!TELINK_ALLOWED_PORTS.has(port)) {
+    throw new Error(`Telink-bas-URL får inte använda port ${port}`);
+  }
+  const hostname = parsed.hostname;
+  if (!hostname) throw new Error("Telink-bas-URL saknar värdnamn");
+  if (!isHostAllowed(hostname)) {
+    throw new Error(
+      `Värden "${hostname}" är inte tillåten. Lägg till den i TELINK_ALLOWED_HOSTS om den ska användas.`,
+    );
+  }
+  // DNS-uppslag: även om hostname är allowlistad, blockera om den
+  // (av misstag eller skadligt) löses upp till intern adress.
+  let addresses: string[];
+  if (net.isIP(hostname)) {
+    addresses = [hostname];
+  } else {
+    try {
+      const records = await dns.lookup(hostname, { all: true });
+      addresses = records.map((r) => r.address);
+    } catch {
+      throw new Error(`Kunde inte slå upp ${hostname}`);
+    }
+  }
+  if (!addresses.length) throw new Error(`Inga IP-adresser för ${hostname}`);
+  for (const addr of addresses) {
+    if (isPrivateOrLoopbackIp(addr)) {
+      throw new Error(
+        `Värden ${hostname} löses upp till en privat/intern adress (${addr}) och blockeras.`,
+      );
+    }
+  }
+  return parsed;
+}
+
+/**
  * Plockar Telink-config från tenant.settings. Returnerar null om saknas
  * eller inte aktiverad.
  */
@@ -89,11 +208,15 @@ export async function fetchTelinkContacts(
   config: TelinkConfig,
   opts: { signal?: AbortSignal } = {},
 ): Promise<TelinkContactRecord[]> {
+  // SSRF-skydd: validera (allowlist + privat-IP-block) före varje request
+  // — inte bara vid config-spara. Vi resolvar dessutom till en konkret IP
+  // för att hindra DNS-rebinding mellan validering och socket-open.
+  const safeBase = await assertSafeTelinkBaseUrl(config.baseUrl);
   // Hämtar enbart butikschef-kontakter — vi filtrerar både via query-param
   // (om Telink stödjer det) och post-filtrerar på `role` så vi aldrig
   // uppdaterar metadata med t.ex. supportkontakter.
-  const url = config.baseUrl.replace(/\/+$/, "") + "/contacts?role=store_manager";
-  const res = await fetch(url, {
+  const url = new URL("contacts?role=store_manager", safeBase.toString().replace(/\/?$/, "/"));
+  const res = await fetch(url.toString(), {
     method: "GET",
     headers: {
       Authorization: `Bearer ${config.apiKey}`,

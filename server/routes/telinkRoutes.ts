@@ -15,7 +15,12 @@ import { storage } from "../storage";
 import { asyncHandler } from "../asyncHandler";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { NotFoundError, ValidationError } from "../errors";
-import { runTelinkSyncForTenant, readTelinkConfig, TELINK_DEFAULTS } from "../services/telink-client";
+import {
+  runTelinkSyncForTenant,
+  readTelinkConfig,
+  TELINK_DEFAULTS,
+  assertSafeTelinkBaseUrl,
+} from "../services/telink-client";
 
 const NO_CACHE_HEADERS = "no-store, no-cache, must-revalidate";
 
@@ -91,6 +96,17 @@ export function registerTelinkRoutes(app: Express): void {
             parsed.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", "),
         );
       }
+      // SSRF-skydd: validera bas-URL mot allowlist + privat-IP-block
+      // redan vid spara, så admin får direkt felmeddelande istället
+      // för en gömd schemaläggar-krasch.
+      try {
+        await assertSafeTelinkBaseUrl(parsed.data.baseUrl);
+      } catch (err) {
+        throw new ValidationError(
+          "Bas-URL otillåten: " + (err instanceof Error ? err.message : String(err)),
+        );
+      }
+
       const tenant = await storage.getTenant(tenantId);
       if (!tenant) throw new NotFoundError("Företag hittades inte");
 
