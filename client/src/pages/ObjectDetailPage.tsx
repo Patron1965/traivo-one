@@ -1012,7 +1012,7 @@ export default function ObjectDetailPage() {
           </Card>
 
           <div className="mt-4">
-            <PolylineEditor object={obj as unknown as ServiceObject} />
+            <PolylineEditor object={obj as ServiceObject} />
           </div>
         </TabsContent>
 

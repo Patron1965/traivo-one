@@ -8582,8 +8582,26 @@ export class DatabaseStorage implements IStorage {
 // ============================================
 // ADR v3 §2.5 (Task #558): Konsoliderings-policy CRUD
 // ============================================
-type ProtoExt = Record<string, (...args: unknown[]) => unknown>;
-const PROTO: ProtoExt = DatabaseStorage.prototype as unknown as ProtoExt;
+interface InvoiceConsolidationPolicyProto {
+  listInvoiceConsolidationPolicies(
+    tenantId: string,
+    opts?: { customerId?: string; recipientId?: string; activeOnly?: boolean },
+  ): Promise<InvoiceConsolidationPolicy[]>;
+  getInvoiceConsolidationPolicy(
+    tenantId: string,
+    id: string,
+  ): Promise<InvoiceConsolidationPolicy | undefined>;
+  createInvoiceConsolidationPolicy(
+    data: InsertInvoiceConsolidationPolicy,
+  ): Promise<InvoiceConsolidationPolicy>;
+  updateInvoiceConsolidationPolicy(
+    tenantId: string,
+    id: string,
+    data: Partial<InsertInvoiceConsolidationPolicy>,
+  ): Promise<InvoiceConsolidationPolicy | undefined>;
+  deleteInvoiceConsolidationPolicy(tenantId: string, id: string): Promise<void>;
+}
+const PROTO = DatabaseStorage.prototype as DatabaseStorage & InvoiceConsolidationPolicyProto;
 
 PROTO.listInvoiceConsolidationPolicies = async function (
   tenantId: string,
