@@ -12,7 +12,7 @@ import { storage } from "../storage";
 import { verifyTenantOwnership, formatZodError } from "./helpers";
 import { z } from "zod";
 import { db } from "../db";
-import { clusters, objects, displayNameRulesSchema, clusterDynamicRulesSchema } from "@shared/schema";
+import { clusters, objects, importBatches, displayNameRulesSchema, clusterDynamicRulesSchema } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
 import {
   computeDisplayName,
@@ -204,25 +204,60 @@ export function registerObjectLifecycleRoutes(app: Express): void {
       throw new ValidationError(`${errors.length} rader har fel — kör dryRun för detaljer`);
     }
 
+    const childBatchId = `child-objects-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const childStartedBy = (req as any).user?.id || null;
     const created: string[] = [];
-    for (const r of parsed.data.rows) {
-      const obj = await storage.createObject({
-        tenantId,
-        customerId: parent.customerId,
-        parentId: parent.id,
-        clusterId: parent.clusterId ?? null,
-        name: r.name,
-        objectNumber: r.objectNumber ?? null,
-        objectType: r.objectType ?? parent.objectType ?? "byggnad",
-        hierarchyLevel: r.hierarchyLevel ?? null,
-        address: r.address ?? parent.address ?? null,
-        city: r.city ?? parent.city ?? null,
-        postalCode: r.postalCode ?? parent.postalCode ?? null,
-        accessType: (r.accessType as any) ?? parent.accessType ?? null,
-        accessCode: r.accessCode ?? parent.accessCode ?? null,
-      } as any);
-      created.push(obj.id);
+    const failures: Array<{ index: number; message: string }> = [];
+    for (let i = 0; i < parsed.data.rows.length; i++) {
+      const r = parsed.data.rows[i];
+      try {
+        const obj = await storage.createObject({
+          tenantId,
+          customerId: parent.customerId,
+          parentId: parent.id,
+          clusterId: parent.clusterId ?? null,
+          name: r.name,
+          objectNumber: r.objectNumber ?? null,
+          objectType: r.objectType ?? parent.objectType ?? "byggnad",
+          hierarchyLevel: r.hierarchyLevel ?? null,
+          address: r.address ?? parent.address ?? null,
+          city: r.city ?? parent.city ?? null,
+          postalCode: r.postalCode ?? parent.postalCode ?? null,
+          accessType: (r.accessType as any) ?? parent.accessType ?? null,
+          accessCode: r.accessCode ?? parent.accessCode ?? null,
+          importBatchId: childBatchId,
+        } as any);
+        created.push(obj.id);
+      } catch (err: any) {
+        failures.push({ index: i, message: err?.message || String(err) });
+      }
     }
-    res.json({ dryRun: false, created: created.length, ids: created });
+
+    // Skriv import_batches-rad så historikpanelen (Task #574) kan visa
+    // föregående underobjekt-importer per parent-objekt.
+    try {
+      await db.insert(importBatches).values({
+        tenantId,
+        batchId: childBatchId,
+        totalRows: parsed.data.rows.length,
+        created: created.length,
+        updated: 0,
+        errors: failures.length,
+        metadata: {
+          type: "child-objects",
+          status: failures.length > 0 ? "completed_with_errors" : "completed",
+          parentObjectId: parent.id,
+          parentObjectName: parent.name,
+          startedBy: childStartedBy,
+          filename: null,
+          completedAt: new Date().toISOString(),
+          sampleErrors: failures.slice(0, 20).map(f => `Rad ${f.index + 1}: ${f.message}`),
+        },
+      });
+    } catch (err) {
+      console.error(`[child-objects ${childBatchId}] kunde inte skriva import_batches-rad:`, err);
+    }
+
+    res.json({ dryRun: false, created: created.length, ids: created, batchId: childBatchId, errors: failures });
   }));
 }

@@ -31,6 +31,8 @@ import ImportColumnMapper from "@/components/ImportColumnMapper";
 import CustomerFastighetslistaImport from "@/components/CustomerFastighetslistaImport";
 import { ImportEntryChooser, type ImportMode } from "@/components/import/ImportEntryChooser";
 import { ChildObjectImportFlow } from "@/components/import/ChildObjectImportFlow";
+import { ImportTypeHistory } from "@/components/import/ImportTypeHistory";
+import { BatchDetailsDialog as SharedBatchDetailsDialog } from "@/components/import/BatchDetailsDialog";
 import { ComingSoonPanel } from "@/components/import/ComingSoonPanel";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import Papa from "papaparse";
@@ -275,143 +277,9 @@ const MODUS_EVENT_COLUMNS = [
   { name: "Tid", required: true, description: "Tidsstämpel för händelsen" },
 ];
 
-function BatchDetailsDialog({ batchId, open, onClose }: { batchId: string | null; open: boolean; onClose: () => void }) {
-  const batchQuery = useQuery<EnrichBatchStatus>({
-    queryKey: ["/api/import/batches", batchId],
-    enabled: open && !!batchId,
-    refetchInterval: (q) => {
-      const status = q.state.data?.metadata?.status;
-      // Stoppa polling när batchen är klar (eller saknar status — gäller t.ex. icke-enrich-batcher)
-      if (!status || status === "completed" || status === "failed") return false;
-      return 2000;
-    },
-    refetchOnWindowFocus: true,
-  });
-
-  // När en pågående batch blir klar — invalidera historiken så listan uppdateras direkt.
-  const phaseRef = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    const phase = batchQuery.data?.metadata?.status;
-    if (phaseRef.current === "in_progress" && (phase === "completed" || phase === "failed")) {
-      queryClient.invalidateQueries({ queryKey: ["/api/import/history"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/import/data-quality"] });
-    }
-    phaseRef.current = phase;
-  }, [batchQuery.data?.metadata?.status]);
-
-  const batch = batchQuery.data;
-  const phase = batch?.metadata?.status;
-  const total = batch?.totalRows ?? 0;
-  const done = batch?.metadata?.rowsProcessed ?? 0;
-  const progressPct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-batch-details">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {phase === "in_progress" && <Loader2 className="h-5 w-5 text-chart-1 animate-spin" />}
-            {phase === "completed" && <CheckCircle className="h-5 w-5 text-chart-2" />}
-            {phase === "failed" && <AlertCircle className="h-5 w-5 text-destructive" />}
-            {phase === "in_progress" ? "Berikning pågår" :
-             phase === "completed" ? "Berikning klar" :
-             phase === "failed" ? "Berikning misslyckades" :
-             "Batch-detaljer"}
-          </DialogTitle>
-          <DialogDescription>
-            Batch <code data-testid="text-dialog-batch-id">{batchId}</code>
-            {batch?.createdAt && ` — startad ${format(new Date(batch.createdAt), "d MMM yyyy HH:mm", { locale: sv })}`}
-          </DialogDescription>
-        </DialogHeader>
-
-        {batchQuery.isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : !batch ? (
-          <div className="text-sm text-muted-foreground py-4">Batch hittades inte.</div>
-        ) : (
-          <div className="space-y-4">
-            {phase === "in_progress" && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    Bearbetade rader:{" "}
-                    <strong data-testid="text-dialog-progress-rows">{done.toLocaleString("sv-SE")}</strong> / {total.toLocaleString("sv-SE")}
-                  </span>
-                  <span className="font-medium" data-testid="text-dialog-progress-pct">{progressPct}%</span>
-                </div>
-                <Progress value={progressPct} className="h-2" data-testid="progress-dialog-batch" />
-                <div className="text-xs text-muted-foreground">Status uppdateras automatiskt var 2:e sekund.</div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-              <div className="p-3 bg-muted/30 rounded border">
-                <div className="text-2xl font-bold text-chart-2" data-testid="text-dialog-created">{batch.created ?? 0}</div>
-                <div className="text-xs text-muted-foreground">Nya värden</div>
-              </div>
-              <div className="p-3 bg-muted/30 rounded border">
-                <div className="text-2xl font-bold text-warning" data-testid="text-dialog-updated">{batch.updated ?? 0}</div>
-                <div className="text-xs text-muted-foreground">Uppdaterade</div>
-              </div>
-              <div className="p-3 bg-muted/30 rounded border">
-                <div className="text-2xl font-bold text-muted-foreground" data-testid="text-dialog-unchanged">{batch.metadata?.unchanged ?? 0}</div>
-                <div className="text-xs text-muted-foreground">Oförändrade</div>
-              </div>
-              <div className="p-3 bg-muted/30 rounded border">
-                <div className="text-2xl font-bold text-warning" data-testid="text-dialog-errors">{batch.errors ?? 0}</div>
-                <div className="text-xs text-muted-foreground">Fel</div>
-              </div>
-            </div>
-
-            {(batch.metadata?.matchedRowCount != null || batch.metadata?.uniqueMatchedObjectCount != null ||
-              (batch.metadata?.unmatchedCount ?? 0) > 0 || (batch.metadata?.invalidIdCount ?? 0) > 0) && (
-              <div className="text-xs text-muted-foreground space-y-1">
-                {batch.metadata?.uniqueMatchedObjectCount != null && (
-                  <div>
-                    <strong>{batch.metadata.uniqueMatchedObjectCount}</strong> unika objekt påverkades av {batch.metadata.matchedRowCount ?? 0} matchade rader.
-                  </div>
-                )}
-                {(batch.metadata?.unmatchedCount ?? 0) > 0 && (
-                  <div>{batch.metadata?.unmatchedCount} omatchade MODUS-id.</div>
-                )}
-                {(batch.metadata?.invalidIdCount ?? 0) > 0 && (
-                  <div>{batch.metadata?.invalidIdCount} rader saknade giltigt MODUS-id.</div>
-                )}
-              </div>
-            )}
-
-            {phase === "failed" && batch.metadata?.failureReason && (
-              <div className="text-sm p-3 rounded bg-destructive/10 dark:bg-destructive/15 border border-destructive/20 dark:border-destructive/80" data-testid="text-dialog-failure-reason">
-                <strong>Felorsak:</strong> {batch.metadata.failureReason}
-              </div>
-            )}
-
-            {(batch.errors ?? 0) > 0 && batch.metadata?.sampleErrors && batch.metadata.sampleErrors.length > 0 && (
-              <div className="text-sm p-3 rounded bg-destructive/10 dark:bg-destructive/15 border border-destructive/20 dark:border-destructive/80">
-                <strong>Felmeddelanden</strong> (visar första {Math.min(10, batch.metadata.sampleErrors.length)}):
-                <ul className="mt-2 list-disc list-inside text-xs space-y-1">
-                  {batch.metadata.sampleErrors.slice(0, 10).map((e, i) => <li key={i}>{e}</li>)}
-                </ul>
-              </div>
-            )}
-
-            {batch.metadata?.metadataColumns && batch.metadata.metadataColumns.length > 0 && (
-              <div className="text-xs text-muted-foreground">
-                <strong>Metadata-kolumner:</strong> {batch.metadata.metadataColumns.join(", ")}
-              </div>
-            )}
-          </div>
-        )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} data-testid="button-close-batch-details">Stäng</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// Lokal alias kvar för befintliga referenser; delas nu via shared file
+// så ImportTypeHistory kan öppna samma dialog.
+const BatchDetailsDialog = SharedBatchDetailsDialog;
 
 function ImportHistorySection() {
   const { toast } = useToast();
@@ -3472,6 +3340,8 @@ export default function ImportPage() {
           </Card>
 
           {activeModusStep === 2 && !completedSteps.has(2) && (
+          <div className="space-y-4">
+          <ImportTypeHistory importType="modus-objects" description="Senaste Modus-objektimporter (fastigheter)." />
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -3809,9 +3679,12 @@ export default function ImportPage() {
               )}
             </CardContent>
           </Card>
+          </div>
           )}
 
           {activeModusStep === 3 && !completedSteps.has(3) && (
+          <div className="space-y-4">
+          <ImportTypeHistory importType="modus-tasks" description="Senaste Modus-uppgiftsimporter (arbetsordrar)." />
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -4202,9 +4075,12 @@ export default function ImportPage() {
               )}
             </CardContent>
           </Card>
+          </div>
           )}
 
           {activeModusStep === 4 && !completedSteps.has(4) && (
+          <div className="space-y-4">
+          <ImportTypeHistory importType="modus-invoice-lines" description="Senaste Modus-fakturaradsimporter." />
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -4333,9 +4209,12 @@ export default function ImportPage() {
               )}
             </CardContent>
           </Card>
+          </div>
           )}
 
           {activeModusStep === 5 && !completedSteps.has(5) && (
+          <div className="space-y-4">
+          <ImportTypeHistory importType="modus-events" description="Senaste Modus-händelseanalyser." />
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -4462,6 +4341,7 @@ export default function ImportPage() {
               )}
             </CardContent>
           </Card>
+          </div>
           )}
 
           {activeModusStep === 6 && !completedSteps.has(6) && (

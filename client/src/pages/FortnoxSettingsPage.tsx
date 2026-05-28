@@ -28,6 +28,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ImportTypeHistory } from "@/components/import/ImportTypeHistory";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
@@ -663,7 +664,12 @@ export default function FortnoxSettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="exports" className="mt-4">
+        <TabsContent value="exports" className="mt-4 space-y-4">
+          <ImportTypeHistory
+            importType="fortnox-invoices"
+            title="Tidigare fakturaexporter (per dag)"
+            description="Senaste dagarnas Fortnox-fakturaexporter. Visar antal exporterade, fel och status."
+          />
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Fakturaexporter</CardTitle>
@@ -726,6 +732,10 @@ export default function FortnoxSettingsPage() {
         </TabsContent>
 
         <TabsContent value="import" className="mt-4 space-y-4">
+          <ImportTypeHistory
+            importType="fortnox-customers"
+            description="Senaste Fortnox-kundimporter."
+          />
           <Card className="border-primary/30 bg-primary/5">
             <CardHeader>
               <div className="flex items-center justify-between gap-2 flex-wrap">

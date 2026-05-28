@@ -1047,6 +1047,7 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
     const baseMetadata = {
       type: "modus-objects" as const,
       startedBy: (req as any).user?.id || null,
+      filename: req.file?.originalname || null,
       startedAt,
     };
 
@@ -1692,6 +1693,8 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
     // Async-flagga: kör jobbet i bakgrund och returnera 202 + batchId omedelbart.
     // Gör det möjligt att köra stora omimporter utan att HTTP-anslutningen timeoutar.
     const asyncMode = (req.query?.async === "1") || (req.body?.async === "1");
+    const taskFilename = req.file?.originalname || null;
+    const taskStartedBy = (req as any).user?.id || null;
     if (asyncMode) {
       await db.insert(importBatches).values({
         tenantId,
@@ -1707,6 +1710,8 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
           rowsProcessed: 0,
           mode: skipExisting ? "skip_existing" : "upsert",
           startedAt: new Date().toISOString(),
+          startedBy: taskStartedBy,
+          filename: taskFilename,
         },
       });
       res.status(202).json({
@@ -1723,6 +1728,8 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
         resourceNameOverrides,
         customerOverrides,
         unresolvedCustomerPolicy,
+        filename: taskFilename,
+        startedBy: taskStartedBy,
       }).catch((err) => {
         console.error(`[modus-tasks ${taskBatchId}] bakgrundsjobb kraschade:`, err);
       });
@@ -1967,8 +1974,12 @@ async function runModusTasksImportJob(params: {
   resourceNameOverrides: Record<string, string>;
   customerOverrides: Record<string, string>;
   unresolvedCustomerPolicy: "object" | "skip";
+  filename?: string | null;
+  startedBy?: string | null;
 }): Promise<void> {
   const { tenantId, taskBatchId, rows, skipExisting, resourceNameOverrides, customerOverrides, unresolvedCustomerPolicy } = params;
+  const filename = params.filename ?? null;
+  const startedBy = params.startedBy ?? null;
   const totalRows = rows.length;
   try {
     const objects = await storage.getObjects(tenantId);
@@ -2171,6 +2182,8 @@ async function runModusTasksImportJob(params: {
               skipped: skipped.length,
               errors: errors.length,
               mode: skipExisting ? "skip_existing" : "upsert",
+              filename,
+              startedBy,
             },
           }).where(eq(importBatches.batchId, taskBatchId));
         } catch {}
@@ -2195,7 +2208,10 @@ async function runModusTasksImportJob(params: {
         skippedExisting: skippedExistingCount,
         mode: skipExisting ? "skip_existing" : "upsert",
         errorSamples: errors.slice(0, 50),
+        sampleErrors: errors.slice(0, 50),
         completedAt: new Date().toISOString(),
+        filename,
+        startedBy,
       },
     }).where(eq(importBatches.batchId, taskBatchId));
   } catch (err) {
@@ -2209,6 +2225,8 @@ async function runModusTasksImportJob(params: {
           phase: "fel",
           error: String(err),
           failedAt: new Date().toISOString(),
+          filename,
+          startedBy,
         },
       }).where(eq(importBatches.batchId, taskBatchId));
     } catch {}
@@ -2233,6 +2251,8 @@ app.post("/api/import/modus/events", upload.single("file"), asyncHandler(async (
 
     if (asyncMode) {
       const eventsBatchId = crypto.randomUUID();
+      const evFilename = req.file?.originalname || null;
+      const evStartedBy = (req as any).user?.id || null;
       await db.insert(importBatches).values({
         tenantId,
         batchId: eventsBatchId,
@@ -2244,6 +2264,8 @@ app.post("/api/import/modus/events", upload.single("file"), asyncHandler(async (
           type: "modus-events",
           status: "in_progress",
           startedAt: new Date().toISOString(),
+          filename: evFilename,
+          startedBy: evStartedBy,
         },
       });
       res.status(202).json({
@@ -2252,7 +2274,7 @@ app.post("/api/import/modus/events", upload.single("file"), asyncHandler(async (
         status: "in_progress",
         totalRows: totalEvents,
       });
-      runModusEventsAnalysisJob({ tenantId, eventsBatchId, rows: parsed.rows }).catch((err) => {
+      runModusEventsAnalysisJob({ tenantId, eventsBatchId, rows: parsed.rows, filename: evFilename, startedBy: evStartedBy }).catch((err) => {
         console.error(`[modus-events ${eventsBatchId}] bakgrundsjobb kraschade:`, err);
       });
       return;
@@ -2315,8 +2337,12 @@ async function runModusEventsAnalysisJob(params: {
   tenantId: string;
   eventsBatchId: string;
   rows: Record<string, string>[];
+  filename?: string | null;
+  startedBy?: string | null;
 }): Promise<void> {
   const { eventsBatchId, rows } = params;
+  const filename = params.filename ?? null;
+  const startedBy = params.startedBy ?? null;
   try {
     const summary = analyseModusEvents(rows);
     await db.update(importBatches).set({
@@ -2326,6 +2352,8 @@ async function runModusEventsAnalysisJob(params: {
         totalEvents: rows.length,
         ...summary,
         completedAt: new Date().toISOString(),
+        filename,
+        startedBy,
       },
     }).where(eq(importBatches.batchId, eventsBatchId));
   } catch (err) {
@@ -2338,6 +2366,8 @@ async function runModusEventsAnalysisJob(params: {
           status: "failed",
           error: String(err),
           failedAt: new Date().toISOString(),
+          filename,
+          startedBy,
         },
       }).where(eq(importBatches.batchId, eventsBatchId));
     } catch {}
@@ -2363,6 +2393,8 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(
 
     // Async-flagga: kör jobbet i bakgrund och returnera 202 + batchId direkt (admin-batch-flöde).
     const asyncMode = (req.query?.async === "1") || (req.body?.async === "1");
+    const invFilename = req.file?.originalname || null;
+    const invStartedBy = (req as any).user?.id || null;
     if (asyncMode) {
       await db.insert(importBatches).values({
         tenantId,
@@ -2378,6 +2410,8 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(
           rowsProcessed: 0,
           mode: skipExisting ? "skip_existing" : "upsert",
           startedAt: new Date().toISOString(),
+          filename: invFilename,
+          startedBy: invStartedBy,
         },
       });
       res.status(202).json({
@@ -2391,6 +2425,8 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(
         invoiceBatchId,
         rows: parsed.rows,
         skipExisting,
+        filename: invFilename,
+        startedBy: invStartedBy,
       }).catch((err) => {
         console.error(`[modus-invoice-lines ${invoiceBatchId}] bakgrundsjobb kraschade:`, err);
       });
@@ -2538,8 +2574,12 @@ async function runModusInvoiceLinesImportJob(params: {
   invoiceBatchId: string;
   rows: Record<string, string>[];
   skipExisting: boolean;
+  filename?: string | null;
+  startedBy?: string | null;
 }): Promise<void> {
   const { tenantId, invoiceBatchId, rows, skipExisting } = params;
+  const filename = params.filename ?? null;
+  const startedBy = params.startedBy ?? null;
   const totalRows = rows.length;
   try {
     const candidateRefs: string[] = [];
@@ -2655,6 +2695,8 @@ async function runModusInvoiceLinesImportJob(params: {
               articlesAutoCreated,
               errors: errors.length,
               mode: skipExisting ? "skip_existing" : "upsert",
+              filename,
+              startedBy,
             },
           }).where(eq(importBatches.batchId, invoiceBatchId));
         } catch {}
@@ -2680,9 +2722,12 @@ async function runModusInvoiceLinesImportJob(params: {
         skippedExisting: skippedExistingCount,
         mode: skipExisting ? "skip_existing" : "upsert",
         errorSamples: errors.slice(0, 50),
+        sampleErrors: errors.slice(0, 50),
         ordersRecalculated: recalcResult.recalculated,
         ordersValueChanged: recalcResult.changed,
         completedAt: new Date().toISOString(),
+        filename,
+        startedBy,
       },
     }).where(eq(importBatches.batchId, invoiceBatchId));
   } catch (err) {
@@ -2695,6 +2740,8 @@ async function runModusInvoiceLinesImportJob(params: {
           status: "failed",
           error: String(err),
           failedAt: new Date().toISOString(),
+          filename,
+          startedBy,
         },
       }).where(eq(importBatches.batchId, invoiceBatchId));
     } catch {}
@@ -4369,17 +4416,112 @@ app.post("/api/import/modus/objects-mapped", upload.single("file"), asyncHandler
     });
 }));
 
-// P20: Import history with rollback status
+// P20: Import history with rollback status.
+// Stödjer filtrering på importType (per panel) och limit (Task #574 — varje
+// importpanel visar bara de senaste N körningarna för sin egen typ, så
+// Modus-objekt och Fortnox-kunder inte blandas ihop).
 app.get("/api/import/history", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { importBatches } = await import("@shared/schema");
-    
+
+    const importType = typeof req.query.importType === "string" ? req.query.importType.trim() : "";
+    const rawLimit = typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : NaN;
+    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(100, rawLimit)) : 50;
+
+    // Fortnox-fakturaexport saknar import_batches-rader (varje export är
+    // per-WO). Vi syntetiserar batches per dag från fortnox_invoice_exports
+    // så historikpanelen kan visa "denna dagens export" och trend mot förra.
+    if (importType === "fortnox-invoices") {
+      const { fortnoxInvoiceExports } = await import("@shared/schema");
+      const rows = await db.select({
+        day: sql<string>`to_char(${fortnoxInvoiceExports.createdAt} AT TIME ZONE 'Europe/Stockholm', 'YYYY-MM-DD')`,
+        total: sql<number>`count(*)::int`,
+        exported: sql<number>`sum(case when ${fortnoxInvoiceExports.status} = 'exported' then 1 else 0 end)::int`,
+        failed: sql<number>`sum(case when ${fortnoxInvoiceExports.status} = 'failed' then 1 else 0 end)::int`,
+        cancelled: sql<number>`sum(case when ${fortnoxInvoiceExports.status} = 'cancelled' then 1 else 0 end)::int`,
+        pending: sql<number>`sum(case when ${fortnoxInvoiceExports.status} = 'pending' then 1 else 0 end)::int`,
+        latestAt: sql<string>`max(${fortnoxInvoiceExports.createdAt})`,
+      })
+        .from(fortnoxInvoiceExports)
+        .where(eq(fortnoxInvoiceExports.tenantId, tenantId))
+        .groupBy(sql`to_char(${fortnoxInvoiceExports.createdAt} AT TIME ZONE 'Europe/Stockholm', 'YYYY-MM-DD')`)
+        .orderBy(sql`to_char(${fortnoxInvoiceExports.createdAt} AT TIME ZONE 'Europe/Stockholm', 'YYYY-MM-DD') DESC`)
+        .limit(limit);
+
+      const synthesized = rows.map((r: any) => ({
+        id: `fortnox-invoices-${r.day}`,
+        batchId: `fortnox-invoices-${r.day}`,
+        totalRows: r.total,
+        created: r.exported,
+        updated: 0,
+        errors: r.failed,
+        createdAt: r.latestAt,
+        startedByName: null,
+        metadata: {
+          type: "fortnox-invoices",
+          status: r.pending > 0 ? "in_progress"
+                : r.failed > 0 ? "completed_with_errors"
+                : r.cancelled > 0 && r.exported === 0 ? "aborted"
+                : "completed",
+          day: r.day,
+          pending: r.pending,
+          cancelled: r.cancelled,
+        },
+      }));
+      res.json(synthesized);
+      return;
+    }
+
+    // importType-filtret matchar både metadata.type och äldre batchId-prefix
+    // (kfl-, enrich-modus-, cleanup-, fortnox-) så historik från innan vi
+    // började stämpla metadata.type fortfarande hittas.
+    const typeFilter = importType
+      ? sql`(${importBatches.metadata}->>'type' = ${importType}
+              OR (${importType} = 'customer-fastighetslista' AND ${importBatches.batchId} LIKE 'kfl-%')
+              OR (${importType} = 'enrich-modus' AND ${importBatches.batchId} LIKE 'enrich-modus-%')
+              OR (${importType} = 'cleanup' AND ${importBatches.batchId} LIKE 'cleanup-%')
+              OR (${importType} = 'fortnox-customers' AND ${importBatches.batchId} LIKE 'fortnox-%'))`
+      : undefined;
+
     const batches = await db.select().from(importBatches)
-      .where(eq(importBatches.tenantId, tenantId))
+      .where(typeFilter ? and(eq(importBatches.tenantId, tenantId), typeFilter) : eq(importBatches.tenantId, tenantId))
       .orderBy(desc(importBatches.createdAt))
-      .limit(50);
-    
-    res.json(batches);
+      .limit(limit);
+
+    // Berika rader med användarnamn (slå upp en gång i batch) så historiklistan
+    // kan visa "Anna Andersson" istället för bara user-id.
+    const userIds = Array.from(new Set(
+      batches
+        .map(b => {
+          const m = (b.metadata as any) || {};
+          return typeof m.startedBy === "string" ? m.startedBy : null;
+        })
+        .filter((v): v is string => !!v)
+    ));
+    let userNameMap = new Map<string, string>();
+    if (userIds.length > 0) {
+      const { users } = await import("@shared/schema");
+      const userRows = await db.select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+      }).from(users).where(inArray(users.id, userIds));
+      for (const u of userRows) {
+        const name = [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email || u.id;
+        userNameMap.set(u.id, name);
+      }
+    }
+    const enriched = batches.map(b => {
+      const m = (b.metadata as any) || {};
+      const startedBy = typeof m.startedBy === "string" ? m.startedBy : null;
+      return {
+        ...b,
+        startedByName: startedBy ? (userNameMap.get(startedBy) || null) : null,
+      };
+    });
+
+    res.json(enriched);
 }));
 
 app.get("/api/import/data-quality", asyncHandler(async (req, res) => {
@@ -5656,6 +5798,51 @@ app.post("/api/import/modus/objects/enrich/apply", requireAdmin, upload.single("
 app.get("/api/import/batches/:batchId", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const { batchId } = req.params;
+
+  // Syntetiserade fortnox-invoices-batcher per dag har ingen rad i
+  // import_batches; vi bygger detalj-vyn on-the-fly från fortnox_invoice_exports
+  // så klick→detaljer ger samma vy som för riktiga batcher.
+  const fxMatch = batchId.match(/^fortnox-invoices-(\d{4}-\d{2}-\d{2})$/);
+  if (fxMatch) {
+    const day = fxMatch[1];
+    const { fortnoxInvoiceExports } = await import("@shared/schema");
+    const rows = await db.select().from(fortnoxInvoiceExports)
+      .where(and(
+        eq(fortnoxInvoiceExports.tenantId, tenantId),
+        sql`to_char(${fortnoxInvoiceExports.createdAt} AT TIME ZONE 'Europe/Stockholm', 'YYYY-MM-DD') = ${day}`,
+      ))
+      .orderBy(desc(fortnoxInvoiceExports.createdAt));
+
+    const exported = rows.filter(r => r.status === "exported").length;
+    const failed = rows.filter(r => r.status === "failed");
+    const cancelled = rows.filter(r => r.status === "cancelled").length;
+    const pending = rows.filter(r => r.status === "pending").length;
+    const sampleErrors = failed.slice(0, 20).map(r =>
+      `${r.fortnoxInvoiceNumber || r.workOrderId || r.id}: ${r.errorMessage || "okänt fel"}`
+    );
+    res.json({
+      id: batchId,
+      batchId,
+      totalRows: rows.length,
+      created: exported,
+      updated: 0,
+      errors: failed.length,
+      createdAt: rows[0]?.createdAt || null,
+      metadata: {
+        type: "fortnox-invoices",
+        status: pending > 0 ? "in_progress"
+              : failed.length > 0 ? "completed_with_errors"
+              : cancelled > 0 && exported === 0 ? "aborted"
+              : "completed",
+        day,
+        pending,
+        cancelled,
+        sampleErrors,
+      },
+    });
+    return;
+  }
+
   const [batch] = await db.select().from(importBatches)
     .where(and(eq(importBatches.batchId, batchId), eq(importBatches.tenantId, tenantId)));
   if (!batch) throw new NotFoundError("Import-batch hittades inte");
@@ -6642,7 +6829,9 @@ app.post("/api/import/customer-fastighetslista/commit", asyncHandler(async (req,
       updated: updatedCount,
       errors: diff.summary.invalidCount,
       metadata: {
+        type: "customer-fastighetslista",
         source: "customer-fastighetslista",
+        status: "completed",
         customerId,
         customerName: cust.name,
         columnMap,
@@ -6650,6 +6839,9 @@ app.post("/api/import/customer-fastighetslista/commit", asyncHandler(async (req,
         flagMissingIds: useExplicitMissing ? Array.from(missingIdsToFlag) : null,
         flaggedCount,
         summary: diff.summary,
+        filename: typeof req.body?.filename === "string" ? req.body.filename : ((req as any).file?.originalname || null),
+        startedBy: userId,
+        completedAt: new Date().toISOString(),
       },
     });
 

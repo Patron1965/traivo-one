@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, ensureResourc
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
-import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, type InsertWorkOrder } from "@shared/schema";
+import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, importBatches, type InsertWorkOrder } from "@shared/schema";
 import { getISOWeek } from "./helpers";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 
@@ -2339,6 +2339,8 @@ app.post("/api/fortnox/customers/import", asyncHandler(async (req, res) => {
     const results: Array<{ customerNumber: string; name: string; status: "created" | "skipped" | "error"; error?: string; customerId?: string }> = [];
     const existingMappings = await storage.getFortnoxMappings(tenantId, "customer");
     const mappedFortnoxIds = new Set(existingMappings.map(m => m.fortnoxId));
+    const fortnoxBatchId = `fortnox-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}-${Math.random().toString(36).slice(2, 6)}`;
+    const fortnoxStartedBy = (req as any).user?.id || null;
 
     for (const fc of parsed.data.customers) {
       try {
@@ -2359,7 +2361,7 @@ app.post("/api/fortnox/customers/import", asyncHandler(async (req, res) => {
           city: fc.city || null,
           postalCode: fc.zipCode || null,
           notes: fc.organisationNumber ? `Org.nr: ${fc.organisationNumber}` : null,
-          importBatchId: `fortnox-${new Date().toISOString().slice(0, 10)}`,
+          importBatchId: fortnoxBatchId,
         });
 
         await storage.createFortnoxMapping({
@@ -2379,9 +2381,34 @@ app.post("/api/fortnox/customers/import", asyncHandler(async (req, res) => {
     const skipped = results.filter(r => r.status === "skipped").length;
     const errors = results.filter(r => r.status === "error").length;
 
+    // Skriv import_batches-rad så historikpanelen (Task #574) kan visa
+    // föregående Fortnox-kundimporter med samma format som Modus-importerna.
+    try {
+      await db.insert(importBatches).values({
+        tenantId,
+        batchId: fortnoxBatchId,
+        totalRows: results.length,
+        created,
+        updated: 0,
+        errors,
+        metadata: {
+          type: "fortnox-customers",
+          status: "completed",
+          startedBy: fortnoxStartedBy,
+          filename: null,
+          skipped,
+          completedAt: new Date().toISOString(),
+          sampleErrors: results.filter(r => r.status === "error").slice(0, 20).map(r => `${r.customerNumber} ${r.name}: ${r.error || "okänt fel"}`),
+        },
+      });
+    } catch (err) {
+      console.error(`[fortnox-customers ${fortnoxBatchId}] kunde inte skriva import_batches-rad:`, err);
+    }
+
     res.json({
       summary: { created, skipped, errors, total: results.length },
       results,
+      batchId: fortnoxBatchId,
     });
 }));
 

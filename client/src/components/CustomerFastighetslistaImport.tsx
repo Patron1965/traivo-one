@@ -21,6 +21,7 @@ import {
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Customer } from "@shared/schema";
+import { ImportTypeHistory } from "@/components/import/ImportTypeHistory";
 
 type Step = "select-customer" | "upload" | "mapping" | "diff" | "importing" | "done";
 
@@ -213,6 +214,9 @@ export default function CustomerFastighetslistaImport() {
         flagMissingIds: Array.from(missingToFlag),
         duplicateWinners,
         saveMapping,
+        // Originalfilnamnet bevaras genom hela flödet så historikpanelen
+        // (Task #574) kan visa "vilken fil" varje rad kom från.
+        filename: file?.name || null,
       });
       const data: CommitResponse = await res.json();
       setResult(data);
@@ -317,6 +321,10 @@ export default function CustomerFastighetslistaImport() {
 
   return (
     <div className="space-y-4" data-testid="customer-fastighetslista-import">
+      <ImportTypeHistory
+        importType="customer-fastighetslista"
+        description="Senaste fastighetslistor uppladdade per kund."
+      />
       <Card className="border-chart-1/20 dark:border-chart-1/80 bg-chart-1/10 dark:bg-chart-1/15">
         <CardContent className="pt-6">
           <div className="flex items-start gap-3">

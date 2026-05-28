@@ -16,6 +16,7 @@ import { Eye, Upload, FilePlus, Check, ChevronsUpDown, ExternalLink, FileUp } fr
 import Papa from "papaparse";
 import type { ServiceObject } from "@shared/schema";
 import { ImportRowPreview } from "@/components/import/ImportRowPreview";
+import { ImportTypeHistory } from "@/components/import/ImportTypeHistory";
 
 type PreviewResult = {
   dryRun: true;
@@ -157,6 +158,10 @@ export function ChildObjectImportFlow({
 
   return (
     <div className="space-y-4">
+      <ImportTypeHistory
+        importType="child-objects"
+        description="Senaste underobjekt-importer per föräldraobjekt."
+      />
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
