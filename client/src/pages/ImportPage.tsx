@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useSearch } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +20,8 @@ import {
   Upload, Users, Building2, Truck, Trash2, CheckCircle, AlertCircle, 
   Loader2, Download, Eye, X, FileUp, Check, Clock, FileSpreadsheet, Database,
   ArrowRight, Info, Settings, ChevronDown, ChevronUp, ListChecks, History, Undo2,
-  SkipForward, Ban, BarChart3, ClipboardList, Tag, AlertTriangle, Merge, Copy, Link2
+  SkipForward, Ban, BarChart3, ClipboardList, Tag, AlertTriangle, Merge, Copy, Link2,
+  FilePlus, Receipt, Wallet
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -27,6 +29,9 @@ import { ImportSummaryView } from "@/components/ImportSummaryView";
 import { ImportHealthOverview } from "@/components/ImportHealthOverview";
 import ImportColumnMapper from "@/components/ImportColumnMapper";
 import CustomerFastighetslistaImport from "@/components/CustomerFastighetslistaImport";
+import { ImportEntryChooser, type ImportMode } from "@/components/import/ImportEntryChooser";
+import { ChildObjectImportFlow } from "@/components/import/ChildObjectImportFlow";
+import { ComingSoonPanel } from "@/components/import/ComingSoonPanel";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import Papa from "papaparse";
 import { format } from "date-fns";
@@ -218,7 +223,7 @@ const MODUS_OBJECT_COLUMNS = [
   { name: "Namn", required: true, description: "Objektets namn (t.ex. fastighetsnamn)" },
   { name: "Typ", required: true, description: "Objekttyp: Fastighet, Adress, Soprum, etc." },
   { name: "Parent", required: false, description: "ID för överordnat objekt (hierarki)" },
-  { name: "Kund", required: false, description: "Kundnamn, ofta i format 'Namn (ID)'" },
+  { name: "Kund", required: false, description: "Kundnamn (skapande-tenant/historik). Auktoritativ betalare hanteras i object_payers — se ADR v3." },
   { name: "Latitud", required: false, description: "GPS-koordinat (komma ersätts automatiskt med punkt)" },
   { name: "Longitud", required: false, description: "GPS-koordinat (komma ersätts automatiskt med punkt)" },
   { name: "Adress 1", required: false, description: "Gatuadress" },
@@ -2199,7 +2204,55 @@ export default function ImportPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [activeTab, setActiveTab] = useState<"modus" | "enrich" | "manual" | "fortnox" | "mapped" | "customerlist" | "history" | "quality">("customerlist");
+  // Task #564: läs ?mode=&tab=&parent= från URL (genvägar från objekt-detalj)
+  const searchString = useSearch();
+  const urlParams = useMemo(() => new URLSearchParams(searchString || ""), [searchString]);
+  const urlMode = urlParams.get("mode") as ImportMode | null;
+  const urlTab = urlParams.get("tab");
+  const urlParent = urlParams.get("parent") || undefined;
+
+  const MODE_STORAGE_KEY = "traivo-import-mode";
+  const [importMode, setImportMode] = useState<ImportMode | null>(() => {
+    if (urlMode === "migration" || urlMode === "ongoing") return urlMode;
+    const saved = typeof window !== "undefined" ? localStorage.getItem(MODE_STORAGE_KEY) : null;
+    return saved === "migration" || saved === "ongoing" ? saved : null;
+  });
+  useEffect(() => {
+    if (importMode) localStorage.setItem(MODE_STORAGE_KEY, importMode);
+  }, [importMode]);
+
+  type ActiveTab =
+    | "modus" | "enrich" | "manual" | "fortnox" | "mapped"
+    | "customerlist" | "children" | "payers" | "recipients"
+    | "history" | "quality";
+  const initialTab: ActiveTab = ((): ActiveTab => {
+    const validTabs: ActiveTab[] = [
+      "modus", "enrich", "manual", "fortnox", "mapped",
+      "customerlist", "children", "payers", "recipients",
+      "history", "quality",
+    ];
+    if (urlTab && validTabs.includes(urlTab as ActiveTab)) return urlTab as ActiveTab;
+    return "customerlist";
+  })();
+  const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
+
+  // Task #564: normalisera activeTab när importMode ändras — undvik out-of-scope-vy
+  const visibleTabsForMode = useCallback((mode: ImportMode | null): ActiveTab[] => {
+    const migration: ActiveTab[] = ["modus", "enrich", "manual", "fortnox", "mapped"];
+    const ongoing: ActiveTab[] = ["customerlist", "children", "payers", "recipients"];
+    const always: ActiveTab[] = ["history", "quality"];
+    if (mode === "migration") return [...migration, ...always];
+    if (mode === "ongoing") return [...ongoing, ...always];
+    return [...migration, ...ongoing, ...always];
+  }, []);
+  useEffect(() => {
+    const allowed = visibleTabsForMode(importMode);
+    if (!allowed.includes(activeTab)) {
+      const fallback: ActiveTab =
+        importMode === "migration" ? "modus" : importMode === "ongoing" ? "customerlist" : "customerlist";
+      setActiveTab(fallback);
+    }
+  }, [importMode, activeTab, visibleTabsForMode]);
   const [showObjectColumns, setShowObjectColumns] = useState(false);
   const [showTaskColumns, setShowTaskColumns] = useState(false);
   const [showEventColumns, setShowEventColumns] = useState(false);
@@ -3054,32 +3107,54 @@ export default function ImportPage() {
     <div className="p-6 space-y-6">
       <PageHeader icon={Upload} title={tl("page.import.title")} description={tl("page.import.description")} testId="text-import-title" />
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "modus" | "enrich" | "manual" | "fortnox" | "mapped" | "customerlist" | "history" | "quality")}>
-        <TabsList className="grid w-full grid-cols-8">
-          <TabsTrigger value="customerlist" className="flex items-center gap-2" data-testid="tab-customerlist-import">
-            <Building2 className="h-4 w-4" />
-            Kundlista
-          </TabsTrigger>
-          <TabsTrigger value="modus" className="flex items-center gap-2" data-testid="tab-modus-import">
-            <FileSpreadsheet className="h-4 w-4" />
-            Modus 2.0
-          </TabsTrigger>
-          <TabsTrigger value="enrich" className="flex items-center gap-2" data-testid="tab-enrich-karl">
-            <Tag className="h-4 w-4" />
-            Berika kärl
-          </TabsTrigger>
-          <TabsTrigger value="manual" className="flex items-center gap-2" data-testid="tab-manual-import">
-            <Upload className="h-4 w-4" />
-            Manuell CSV
-          </TabsTrigger>
-          <TabsTrigger value="fortnox" className="flex items-center gap-2" data-testid="tab-fortnox-import">
-            <Link2 className="h-4 w-4" />
-            Fortnox-export
-          </TabsTrigger>
-          <TabsTrigger value="mapped" className="flex items-center gap-2" data-testid="tab-mapped-import">
-            <Database className="h-4 w-4" />
-            Mappad import
-          </TabsTrigger>
+      <ImportEntryChooser value={importMode} onChange={setImportMode} />
+
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ActiveTab)}>
+        <TabsList className="flex w-full flex-wrap h-auto justify-start gap-1">
+          {(importMode === null || importMode === "migration") && (
+            <>
+              <TabsTrigger value="modus" className="flex items-center gap-2" data-testid="tab-modus-import">
+                <FileSpreadsheet className="h-4 w-4" />
+                Modus 2.0
+              </TabsTrigger>
+              <TabsTrigger value="enrich" className="flex items-center gap-2" data-testid="tab-enrich-karl">
+                <Tag className="h-4 w-4" />
+                Berika kärl
+              </TabsTrigger>
+              <TabsTrigger value="manual" className="flex items-center gap-2" data-testid="tab-manual-import">
+                <Upload className="h-4 w-4" />
+                Manuell CSV
+              </TabsTrigger>
+              <TabsTrigger value="fortnox" className="flex items-center gap-2" data-testid="tab-fortnox-import">
+                <Link2 className="h-4 w-4" />
+                Fortnox-export
+              </TabsTrigger>
+              <TabsTrigger value="mapped" className="flex items-center gap-2" data-testid="tab-mapped-import">
+                <Database className="h-4 w-4" />
+                Mappad import
+              </TabsTrigger>
+            </>
+          )}
+          {(importMode === null || importMode === "ongoing") && (
+            <>
+              <TabsTrigger value="customerlist" className="flex items-center gap-2" data-testid="tab-customerlist-import">
+                <Building2 className="h-4 w-4" />
+                Kundlista
+              </TabsTrigger>
+              <TabsTrigger value="children" className="flex items-center gap-2" data-testid="tab-children-import">
+                <FilePlus className="h-4 w-4" />
+                Underobjekt
+              </TabsTrigger>
+              <TabsTrigger value="payers" className="flex items-center gap-2" data-testid="tab-payers-import">
+                <Wallet className="h-4 w-4" />
+                Betalare
+              </TabsTrigger>
+              <TabsTrigger value="recipients" className="flex items-center gap-2" data-testid="tab-recipients-import">
+                <Receipt className="h-4 w-4" />
+                Fakturamottagare
+              </TabsTrigger>
+            </>
+          )}
           <TabsTrigger value="history" className="flex items-center gap-2" data-testid="tab-import-history">
             <History className="h-4 w-4" />
             Historik
@@ -4714,6 +4789,16 @@ export default function ImportPage() {
               <p className="text-xs text-muted-foreground mt-3">
                 Tips: Via Modus 2.0-fliken skapas kunder automatiskt vid objektimport — då behövs ingen separat kundfil.
               </p>
+              <div className="mt-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-muted-foreground space-y-1">
+                <p className="font-medium text-warning">ADR v3: objekt är neutrala</p>
+                <p>
+                  Kolumnen <code className="px-1 bg-muted rounded">kund</code> i objektmallen sätter
+                  bara <em>skapande-tenant</em> och historisk koppling — den auktoritativa
+                  betalar-/fakturarelationen ligger i <code className="px-1 bg-muted rounded">object_payers</code> och
+                  <code className="px-1 bg-muted rounded"> work_orders.customer_id</code>. För nya
+                  betalare/fakturamottagare, använd "Lägg till löpande" → Betalare / Fakturamottagare.
+                </p>
+              </div>
             </CardContent>
           </Card>
 
@@ -4919,6 +5004,36 @@ export default function ImportPage() {
 
         <TabsContent value="enrich" className="space-y-6">
           <EnrichKarlSection />
+        </TabsContent>
+
+        <TabsContent value="children" className="space-y-6">
+          <ChildObjectImportFlow initialParentId={urlParent} />
+        </TabsContent>
+
+        <TabsContent value="payers" className="space-y-6">
+          <ComingSoonPanel
+            testId="panel-payers-import"
+            title="Importera betalare (object_payers)"
+            description="Massimport av betalare per objekt enligt ADR v3 — vem som betalar för ett objekt under en viss period."
+            bullets={[
+              "Kolumner: objektnummer, kundnummer (betalare), startdatum, slutdatum (valfri), prislista (valfri).",
+              "Stöder överlappskontroll (en primär betalare per period).",
+              "Genväg från objekt-detalj → Ekonomi-fliken kommer länka hit förvalt.",
+            ]}
+          />
+        </TabsContent>
+
+        <TabsContent value="recipients" className="space-y-6">
+          <ComingSoonPanel
+            testId="panel-recipients-import"
+            title="Importera fakturamottagare (invoice_recipients)"
+            description="Massimport av fakturamottagare enligt ADR v3 — vart fakturan faktiskt skickas (kan skilja sig från betalaren)."
+            bullets={[
+              "Kolumner: kundnummer (betalare), fakturanivå (objekt/avtal/samling), mottagar-id, kontaktuppgifter.",
+              "Stöder samlingsfakturor (en mottagare → flera objekt).",
+              "Validerar mot befintliga betalare innan import.",
+            ]}
+          />
         </TabsContent>
 
         <TabsContent value="history" className="space-y-6">
