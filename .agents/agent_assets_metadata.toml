@@ -102,3 +102,15 @@ id = "x_Nyr6CbGwC8jy1pGBtte"
 uri = "file://.local/exports/traivo-import-kinab.pdf"
 type = "pdf"
 title = "Importfunktioner i Traivo — underlag till Kinab"
+
+[[outputs]]
+id = "wQZJnH7r7YYjh0LmZOdwZ"
+uri = "file://attached_assets/Traivo_objektimport_mall.xlsx"
+type = "table"
+title = "Traivo objektimport-mall (ny version)"
+
+[[outputs]]
+id = "RqvnHCPDCftSmwijPazBp"
+uri = "file://attached_assets/Traivo_objektimport_mall_v1.xlsx"
+type = "table"
+title = "Traivo objektimport-mall v1 (officiell att skicka till Mats)"

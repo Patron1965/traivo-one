@@ -1,0 +1,76 @@
+Omfattning av datainsamlingen
+Vad som saknas:
+
+653 kärlrader fördelade över 218 butiker
+Varje butik har i snitt 3 kärl (Pantkärl, Matavfallskärl, Kundvagnsgarage)
+För varje kärl behövs 2 uppgifter: Antal + Tömningsdag
+Total volym: ~1 300 datapunkter att samla in
+
+🎯 Rekommenderad strategi beroende på datakälla
+Scenario A: Data finns digitalt (snabbast)
+Om KINAB har:
+
+Excel/CSV med körscheman
+Export från gammalt system
+Databas med rutt-info
+SharePoint/filserver med aktuella listor
+Då:
+
+Exportera till Excel/CSV
+Jag kan skapa ett sammankopplingsscript som matchar era butiknamn/nummer mot Steg 3 och fyller i kolumnerna automatiskt
+Klar på 1–2 timmar (inklusive kvalitetskontroll)
+Scenario B: Data finns på papper/i rutinerna (medel)
+Om uppgifterna är:
+
+I chaufförernas rutlistor
+I transportledningens pärm
+I avtalsdokument per butik
+Då:
+
+Skapa en ifyllnadsmall (enkel Excel där KINAB fyller i per butik)
+Fyll i region för region (börja med den minsta för att testa flödet)
+Jag kan automatisera sammanslagningen när data kommer in
+Tidåtgång: 1–3 dagar (beroende på intern resurs hos KINAB)
+Scenario C: Data måste samlas in från grunden (långsam)
+Om KINAB inte har strukturerad info:
+
+Varje butik behöver kontaktas
+Chaufförer/koordinatorer måste gå igenom sina rutter
+Då:
+
+Fasad rollout per region (t.ex. börja med "Syd Handlarägd" = 11 butiker)
+Ring/maila butikschef: "Hur många kärl? Vilken dag töms de?"
+Kör pilot-import med 1 region först, sedan skala upp
+Tidåtgång: 1–4 veckor (beroende på svarstid från butiker)
+🛠️ Praktisk hjälp jag kan erbjuda
+1. Skapande av ifyllnadsmall
+En Excel-fil med:
+
+Kolumner: Butiksnummer | Butiksnamn | Pantkärl Antal | Pantkärl Tömdag | Matavfall Antal | Matavfall Tömdag | ...
+Förfyllda butiknamn från er data
+Dropdown-listor för Tömningsdag (1-5)
+Validering (Antal måste vara positivt heltal)
+2. Merge-script
+Python/Excel-script som:
+
+Tar er ifyllda data från mall
+Matchar mot rätt rad i Steg 3
+Uppdaterar Antal + Tömningsdag
+Genererar felrapport om någon butik saknas
+3. Partiell import-support
+Om ni vill köra region för region:
+
+Filtrera ut 1 region åt gången från Steg 3
+Importera den först
+Lägg till nästa region när data finns klar
+❓ Kritiska frågor att ställa KINAB nu
+"Har ni körscheman i digital form?" (Excel, PDF, annat system)
+"Vet chaufförerna vilka dagar de kör varje butik?" (om ja: kan de fylla i en lista?)
+"Finns det avtal/kontrakt där antal kärl står?" (juridik eller kundservice kan ha info)
+"Vilken region känner ni er mest säker på?" (börja där för pilot)
+💡 Min rekommendation
+Om du inte vet säkert var data finns:
+
+Börja med 5 butiker (plocka 5 ni känner väl till)
+Fyll i deras Antal + Tömningsdag manuellt för att testa import-flödet
+Om det fungerar, skala upp med rätt metod (A, B eller C ovan)
