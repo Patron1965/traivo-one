@@ -399,9 +399,16 @@ export default function CustomersPage() {
                       return (
                         <TableRow key={c.id} data-testid={`row-customer-${c.id}`} className="hover-elevate">
                           <TableCell>
-                            <Link href={`/customers/${c.id}`} className="font-medium hover:underline" data-testid={`link-customer-${c.id}`}>
-                              {c.name}
-                            </Link>
+                            <div className="flex items-center gap-2">
+                              <Link href={`/customers/${c.id}`} className="font-medium hover:underline" data-testid={`link-customer-${c.id}`}>
+                                {c.name}
+                              </Link>
+                              {c.hierarchyType && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4" data-testid={`badge-hierarchy-${c.id}`}>
+                                  {c.hierarchyType.charAt(0).toUpperCase() + c.hierarchyType.slice(1)}
+                                </Badge>
+                              )}
+                            </div>
                             {c.contactPerson && (
                               <div className="text-xs text-muted-foreground">{c.contactPerson}</div>
                             )}
