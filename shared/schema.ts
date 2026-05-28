@@ -1926,6 +1926,22 @@ export const fortnoxConfig = pgTable("fortnox_config", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Task #582: Telink-integrationskonfiguration (per tenant).
+// Separat tabell — INTE tenant.settings JSON — så apiKey aldrig
+// hamnar i bredare settings-läsningar, loggar eller debug-utskrifter.
+export const telinkConfig = pgTable("telink_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull().unique(),
+  enabled: boolean("enabled").notNull().default(false),
+  baseUrl: text("base_url").notNull().default(""),
+  apiKey: text("api_key").notNull().default(""),
+  contactNameFieldKey: varchar("contact_name_field_key", { length: 100 }).notNull().default("kontakt_namn"),
+  contactPhoneFieldKey: varchar("contact_phone_field_key", { length: 100 }).notNull().default("kontakt_telefon"),
+  lastSyncAt: timestamp("last_sync_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Mappning Unicorn <-> Fortnox entiteter
 export const fortnoxMappings = pgTable("fortnox_mappings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

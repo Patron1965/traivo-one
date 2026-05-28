@@ -13,6 +13,7 @@ import {
   importBatches,
   customerIssueReports,
   type ServiceObject,
+  telinkConfig as telinkConfigTable,
 } from "@shared/schema";
 import { and, eq, isNull, inArray } from "drizzle-orm";
 import { storage } from "../storage";
@@ -168,31 +169,118 @@ export async function assertSafeTelinkBaseUrl(rawUrl: string): Promise<URL> {
 }
 
 /**
- * Plockar Telink-config från tenant.settings. Returnerar null om saknas
- * eller inte aktiverad.
+ * Resultat av config-uppslag — sett från admin-UI även när apiKey saknas
+ * eller integration är AV. Skiljs från fetch-redo TelinkConfig nedan.
  */
-export function readTelinkConfig(settings: unknown): TelinkConfig | null {
-  if (!settings || typeof settings !== "object") return null;
-  const raw = (settings as Record<string, unknown>).telink;
-  if (!raw || typeof raw !== "object") return null;
-  const r = raw as Record<string, unknown>;
-  const enabled = r.enabled === true;
-  const baseUrl = typeof r.baseUrl === "string" ? r.baseUrl.trim() : "";
-  const apiKey = typeof r.apiKey === "string" ? r.apiKey : "";
-  if (!baseUrl || !apiKey) return null;
+export interface TelinkConfigRow {
+  enabled: boolean;
+  baseUrl: string;
+  hasApiKey: boolean;
+  contactNameFieldKey: string;
+  contactPhoneFieldKey: string;
+}
+
+/**
+ * Läser admin-vy av Telink-config (utan apiKey). Använd från GET-endpoint.
+ */
+export async function getTelinkConfigForUi(tenantId: string): Promise<TelinkConfigRow> {
+  const [row] = await db
+    .select()
+    .from(telinkConfigTable)
+    .where(eq(telinkConfigTable.tenantId, tenantId))
+    .limit(1);
+  if (!row) {
+    return {
+      enabled: false,
+      baseUrl: "",
+      hasApiKey: false,
+      contactNameFieldKey: TELINK_DEFAULTS.contactNameFieldKey,
+      contactPhoneFieldKey: TELINK_DEFAULTS.contactPhoneFieldKey,
+    };
+  }
   return {
-    enabled,
-    baseUrl,
-    apiKey,
-    contactNameFieldKey:
-      typeof r.contactNameFieldKey === "string" && r.contactNameFieldKey.trim()
-        ? r.contactNameFieldKey.trim()
-        : TELINK_DEFAULTS.contactNameFieldKey,
-    contactPhoneFieldKey:
-      typeof r.contactPhoneFieldKey === "string" && r.contactPhoneFieldKey.trim()
-        ? r.contactPhoneFieldKey.trim()
-        : TELINK_DEFAULTS.contactPhoneFieldKey,
+    enabled: row.enabled,
+    baseUrl: row.baseUrl,
+    hasApiKey: row.apiKey.length > 0,
+    contactNameFieldKey: row.contactNameFieldKey,
+    contactPhoneFieldKey: row.contactPhoneFieldKey,
   };
+}
+
+/**
+ * Läser fetch-redo Telink-config (inkl apiKey). Returnerar null om saknas,
+ * disabled, eller om baseUrl/apiKey är tomt. Använd endast server-internt.
+ */
+export async function loadTelinkConfig(tenantId: string): Promise<TelinkConfig | null> {
+  const [row] = await db
+    .select()
+    .from(telinkConfigTable)
+    .where(eq(telinkConfigTable.tenantId, tenantId))
+    .limit(1);
+  if (!row) return null;
+  if (!row.baseUrl || !row.apiKey) return null;
+  return {
+    enabled: row.enabled,
+    baseUrl: row.baseUrl,
+    apiKey: row.apiKey,
+    contactNameFieldKey: row.contactNameFieldKey || TELINK_DEFAULTS.contactNameFieldKey,
+    contactPhoneFieldKey: row.contactPhoneFieldKey || TELINK_DEFAULTS.contactPhoneFieldKey,
+  };
+}
+
+/**
+ * Upsert av Telink-config för en tenant. apiKey=undefined behåller befintlig.
+ */
+export async function upsertTelinkConfig(
+  tenantId: string,
+  input: {
+    enabled: boolean;
+    baseUrl: string;
+    apiKey?: string;
+    contactNameFieldKey?: string;
+    contactPhoneFieldKey?: string;
+  },
+): Promise<TelinkConfigRow> {
+  const [existing] = await db
+    .select()
+    .from(telinkConfigTable)
+    .where(eq(telinkConfigTable.tenantId, tenantId))
+    .limit(1);
+
+  const nameKey =
+    input.contactNameFieldKey?.trim() ||
+    existing?.contactNameFieldKey ||
+    TELINK_DEFAULTS.contactNameFieldKey;
+  const phoneKey =
+    input.contactPhoneFieldKey?.trim() ||
+    existing?.contactPhoneFieldKey ||
+    TELINK_DEFAULTS.contactPhoneFieldKey;
+  const apiKey =
+    input.apiKey && input.apiKey.trim() ? input.apiKey.trim() : existing?.apiKey ?? "";
+
+  if (existing) {
+    await db
+      .update(telinkConfigTable)
+      .set({
+        enabled: input.enabled,
+        baseUrl: input.baseUrl,
+        apiKey,
+        contactNameFieldKey: nameKey,
+        contactPhoneFieldKey: phoneKey,
+        updatedAt: new Date(),
+      })
+      .where(eq(telinkConfigTable.tenantId, tenantId));
+  } else {
+    await db.insert(telinkConfigTable).values({
+      tenantId,
+      enabled: input.enabled,
+      baseUrl: input.baseUrl,
+      apiKey,
+      contactNameFieldKey: nameKey,
+      contactPhoneFieldKey: phoneKey,
+    });
+  }
+  return getTelinkConfigForUi(tenantId);
 }
 
 /**
@@ -416,7 +504,7 @@ export async function runTelinkSyncForTenant(
   if (!tenant) {
     throw new Error("Tenant saknas");
   }
-  const config = readTelinkConfig(tenant.settings);
+  const config = await loadTelinkConfig(tenantId);
   if (!config) {
     throw new Error("Telink-konfiguration saknas eller är ofullständig");
   }

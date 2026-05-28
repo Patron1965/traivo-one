@@ -1,7 +1,7 @@
 // ============================================
 // Task #582: Telink-koppling — API-endpoints.
 //   GET    /api/telink/config         (admin) — visar config med apiKey-redaktion
-//   PUT    /api/telink/config         (admin) — sparar config (merge i tenant.settings)
+//   PUT    /api/telink/config         (admin) — sparar config i telink_config-tabellen
 //   POST   /api/telink/sync           (admin) — kör full synk nu
 //   POST   /api/telink/sync/object/:id (admin) — synk för ett objekt
 //   GET    /api/telink/history        (admin) — senaste sync-batchar
@@ -11,14 +11,13 @@ import { z } from "zod";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { importBatches, objects } from "@shared/schema";
-import { storage } from "../storage";
 import { asyncHandler } from "../asyncHandler";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { NotFoundError, ValidationError } from "../errors";
 import {
   runTelinkSyncForTenant,
-  readTelinkConfig,
-  TELINK_DEFAULTS,
+  getTelinkConfigForUi,
+  upsertTelinkConfig,
   assertSafeTelinkBaseUrl,
 } from "../services/telink-client";
 
@@ -32,58 +31,20 @@ const configSchema = z.object({
   contactPhoneFieldKey: z.string().min(1).max(100).optional(),
 });
 
-function redactConfig(settings: unknown): {
-  enabled: boolean;
-  baseUrl: string;
-  hasApiKey: boolean;
-  contactNameFieldKey: string;
-  contactPhoneFieldKey: string;
-} {
-  const cfg = readTelinkConfig(settings);
-  if (cfg) {
-    return {
-      enabled: cfg.enabled,
-      baseUrl: cfg.baseUrl,
-      hasApiKey: true,
-      contactNameFieldKey: cfg.contactNameFieldKey ?? TELINK_DEFAULTS.contactNameFieldKey,
-      contactPhoneFieldKey: cfg.contactPhoneFieldKey ?? TELINK_DEFAULTS.contactPhoneFieldKey,
-    };
-  }
-  // Returnera defaults så frontend kan rendera tomt formulär
-  const raw =
-    settings && typeof settings === "object"
-      ? (((settings as Record<string, unknown>).telink as Record<string, unknown>) ?? {})
-      : {};
-  return {
-    enabled: raw.enabled === true,
-    baseUrl: typeof raw.baseUrl === "string" ? raw.baseUrl : "",
-    hasApiKey: typeof raw.apiKey === "string" && (raw.apiKey as string).length > 0,
-    contactNameFieldKey:
-      typeof raw.contactNameFieldKey === "string"
-        ? (raw.contactNameFieldKey as string)
-        : TELINK_DEFAULTS.contactNameFieldKey,
-    contactPhoneFieldKey:
-      typeof raw.contactPhoneFieldKey === "string"
-        ? (raw.contactPhoneFieldKey as string)
-        : TELINK_DEFAULTS.contactPhoneFieldKey,
-  };
-}
-
 export function registerTelinkRoutes(app: Express): void {
-  // --- GET config -----------------------------------------------------------
+  // --- GET config — admin-vy utan apiKey -----------------------------------
   app.get(
     "/api/telink/config",
     requireAdmin,
     asyncHandler(async (req, res) => {
       const tenantId = getTenantIdWithFallback(req);
-      const tenant = await storage.getTenant(tenantId);
-      if (!tenant) throw new NotFoundError("Företag hittades inte");
+      const ui = await getTelinkConfigForUi(tenantId);
       res.setHeader("Cache-Control", NO_CACHE_HEADERS);
-      res.json(redactConfig(tenant.settings));
+      res.json(ui);
     }),
   );
 
-  // --- PUT config (merge in tenant.settings.telink) -------------------------
+  // --- PUT config — upsert i dedikerad telink_config-tabell ----------------
   app.put(
     "/api/telink/config",
     requireAdmin,
@@ -96,9 +57,9 @@ export function registerTelinkRoutes(app: Express): void {
             parsed.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", "),
         );
       }
-      // SSRF-skydd: validera bas-URL mot allowlist + privat-IP-block
-      // redan vid spara, så admin får direkt felmeddelande istället
-      // för en gömd schemaläggar-krasch.
+      // SSRF-skydd: validera bas-URL mot allowlist + privat-IP-block redan
+      // vid spara, så admin får direkt felmeddelande istället för gömd
+      // schemaläggar-krasch.
       try {
         await assertSafeTelinkBaseUrl(parsed.data.baseUrl);
       } catch (err) {
@@ -107,42 +68,15 @@ export function registerTelinkRoutes(app: Express): void {
         );
       }
 
-      const tenant = await storage.getTenant(tenantId);
-      if (!tenant) throw new NotFoundError("Företag hittades inte");
-
-      const currentSettings: Record<string, unknown> =
-        tenant.settings && typeof tenant.settings === "object"
-          ? { ...(tenant.settings as Record<string, unknown>) }
-          : {};
-      const currentTelink: Record<string, unknown> =
-        currentSettings.telink && typeof currentSettings.telink === "object"
-          ? { ...(currentSettings.telink as Record<string, unknown>) }
-          : {};
-
-      const nextTelink: Record<string, unknown> = {
-        ...currentTelink,
+      const ui = await upsertTelinkConfig(tenantId, {
         enabled: parsed.data.enabled,
         baseUrl: parsed.data.baseUrl.trim().replace(/\/+$/, ""),
-        contactNameFieldKey:
-          parsed.data.contactNameFieldKey?.trim() ||
-          (currentTelink.contactNameFieldKey as string | undefined) ||
-          TELINK_DEFAULTS.contactNameFieldKey,
-        contactPhoneFieldKey:
-          parsed.data.contactPhoneFieldKey?.trim() ||
-          (currentTelink.contactPhoneFieldKey as string | undefined) ||
-          TELINK_DEFAULTS.contactPhoneFieldKey,
-      };
-      if (parsed.data.apiKey && parsed.data.apiKey.trim()) {
-        nextTelink.apiKey = parsed.data.apiKey.trim();
-      } else if (currentTelink.apiKey) {
-        nextTelink.apiKey = currentTelink.apiKey;
-      }
-      currentSettings.telink = nextTelink;
-
-      const updated = await storage.updateTenantSettings(tenantId, currentSettings);
-      if (!updated) throw new NotFoundError("Företag hittades inte");
+        apiKey: parsed.data.apiKey,
+        contactNameFieldKey: parsed.data.contactNameFieldKey,
+        contactPhoneFieldKey: parsed.data.contactPhoneFieldKey,
+      });
       res.setHeader("Cache-Control", NO_CACHE_HEADERS);
-      res.json(redactConfig(updated.settings));
+      res.json(ui);
     }),
   );
 
