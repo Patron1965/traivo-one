@@ -326,7 +326,6 @@ export async function createMetadata(data: {
   if ((lockCheck.rows as any[]).length > 0) {
     throw new Error(`Nivå-lås: värdet för "${metadataTyp.namn}" är låst av en förälder och kan inte överskridas på denna nivå.`);
   }
-
   // PDF §14: dubblettkontroll (allowDuplicates=false → max ett lokalt värde per objekt)
   if (!metadataTyp.allowDuplicates) {
     const [duplicate] = await db

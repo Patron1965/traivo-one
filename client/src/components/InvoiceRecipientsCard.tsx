@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Receipt, Plus, Trash2, AlertTriangle, Info, ArrowUp } from "lucide-react";
+import { Receipt, Plus, Trash2, AlertTriangle, Info, ArrowUp, Pencil } from "lucide-react";
 import {
   INVOICE_RECIPIENT_LEVELS,
   INVOICE_RECIPIENT_LEVEL_LABELS,
@@ -73,9 +73,11 @@ export default function InvoiceRecipientsCard({ customerId, objectId, canEdit = 
     enabled: !!customerId,
   });
 
-  const createMutation = useMutation({
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const saveMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", `/api/customers/${customerId}/invoice-recipients`, {
+      const payload = {
         ...form,
         recipientEmail: form.recipientEmail || null,
         recipientAddress: form.recipientAddress || null,
@@ -84,14 +86,19 @@ export default function InvoiceRecipientsCard({ customerId, objectId, canEdit = 
         recipientReference: form.recipientReference || null,
         fortnoxCustomerId: form.fortnoxCustomerId || null,
         notes: form.notes || null,
-      });
+      };
+      if (editingId) {
+        return apiRequest("PATCH", `/api/customers/${customerId}/invoice-recipients/${editingId}`, payload);
+      }
+      return apiRequest("POST", `/api/customers/${customerId}/invoice-recipients`, payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/customers", customerId, "invoice-recipients"] });
       queryClient.invalidateQueries({ queryKey: resolvedKey });
       setDialogOpen(false);
+      setEditingId(null);
       setForm(emptyForm);
-      toast({ title: "Fakturamottagare sparad" });
+      toast({ title: editingId ? "Fakturamottagare uppdaterad" : "Fakturamottagare sparad" });
     },
     onError: (e: any) => toast({ title: "Kunde inte spara", description: String(e?.message || e), variant: "destructive" }),
   });
@@ -185,49 +192,107 @@ export default function InvoiceRecipientsCard({ customerId, objectId, canEdit = 
               </Alert>
             )}
 
-            {/* Egen lista — visa bara på kundvyn */}
+            {/* Egen lista — visa bara på kundvyn, grupperad per nivå */}
             {customerId && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="text-xs font-medium text-muted-foreground mt-2">
                   Egna mottagare ({ownRecipients.length})
                 </div>
                 {ownLoading ? (
                   <p className="text-xs text-muted-foreground">Laddar...</p>
-                ) : ownRecipients.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    Inga egna mottagare. Ärver från överordnad kund om sådan finns.
-                  </p>
                 ) : (
-                  ownRecipients.map(r => (
-                    <div key={r.id} className="flex items-center justify-between rounded-md border p-2 text-sm" data-testid={`row-recipient-${r.id}`}>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium truncate">{r.recipientName}</span>
-                          <Badge variant="outline" className="text-[10px]">
-                            {INVOICE_RECIPIENT_LEVEL_LABELS[r.level as InvoiceRecipientLevel] ?? r.level}
-                          </Badge>
-                          <Badge variant="secondary" className="text-[10px]">prio {r.priority}</Badge>
-                          {r.breaksInheritance && (
-                            <Badge variant="outline" className="text-[10px]">Kapar arv</Badge>
+                  INVOICE_RECIPIENT_LEVELS.map(level => {
+                    const rowsForLevel = ownRecipients.filter(r => r.level === level);
+                    return (
+                      <div key={level} className="space-y-1.5" data-testid={`recipient-level-group-${level}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            {INVOICE_RECIPIENT_LEVEL_LABELS[level]}
+                          </div>
+                          {canEdit && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-2 text-xs"
+                              onClick={() => {
+                                setEditingId(null);
+                                setForm({ ...emptyForm, level });
+                                setDialogOpen(true);
+                              }}
+                              data-testid={`button-add-recipient-${level}`}
+                            >
+                              <Plus className="h-3 w-3 mr-1" /> Ny
+                            </Button>
                           )}
                         </div>
-                        {r.recipientEmail && (
-                          <p className="text-xs text-muted-foreground truncate">{r.recipientEmail}</p>
+                        {rowsForLevel.length === 0 ? (
+                          <p className="text-xs text-muted-foreground italic pl-1">
+                            Inga mottagare på denna nivå.
+                          </p>
+                        ) : (
+                          rowsForLevel.map(r => (
+                            <div key={r.id} className="flex items-center justify-between rounded-md border p-2 text-sm" data-testid={`row-recipient-${r.id}`}>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium truncate">{r.recipientName}</span>
+                                  <Badge variant="secondary" className="text-[10px]">prio {r.priority}</Badge>
+                                  {r.breaksInheritance && (
+                                    <Badge variant="outline" className="text-[10px]">Kapar arv</Badge>
+                                  )}
+                                </div>
+                                {r.recipientEmail && (
+                                  <p className="text-xs text-muted-foreground truncate">{r.recipientEmail}</p>
+                                )}
+                              </div>
+                              {canEdit && (
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      setEditingId(r.id);
+                                      setForm({
+                                        level: r.level as InvoiceRecipientLevel,
+                                        recipientName: r.recipientName,
+                                        recipientEmail: r.recipientEmail ?? "",
+                                        recipientAddress: r.recipientAddress ?? "",
+                                        recipientPostalCode: r.recipientPostalCode ?? "",
+                                        recipientCity: r.recipientCity ?? "",
+                                        recipientReference: r.recipientReference ?? "",
+                                        fortnoxCustomerId: r.fortnoxCustomerId ?? "",
+                                        breaksInheritance: r.breaksInheritance,
+                                        priority: r.priority,
+                                        notes: r.notes ?? "",
+                                      });
+                                      setDialogOpen(true);
+                                    }}
+                                    data-testid={`button-edit-recipient-${r.id}`}
+                                    title="Redigera"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      if (confirm("Inaktivera denna fakturamottagare? Historik bevaras för redan frysta fakturor.")) {
+                                        deleteMutation.mutate(r.id);
+                                      }
+                                    }}
+                                    disabled={deleteMutation.isPending}
+                                    data-testid={`button-delete-recipient-${r.id}`}
+                                    title="Inaktivera (soft delete)"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          ))
                         )}
                       </div>
-                      {canEdit && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => deleteMutation.mutate(r.id)}
-                          disabled={deleteMutation.isPending}
-                          data-testid={`button-delete-recipient-${r.id}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
-                      )}
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             )}
@@ -235,10 +300,16 @@ export default function InvoiceRecipientsCard({ customerId, objectId, canEdit = 
         )}
       </CardContent>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        setDialogOpen(open);
+        if (!open) {
+          setEditingId(null);
+          setForm(emptyForm);
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Ny fakturamottagare</DialogTitle>
+            <DialogTitle>{editingId ? "Redigera fakturamottagare" : "Ny fakturamottagare"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="grid grid-cols-2 gap-3">
@@ -304,8 +375,8 @@ export default function InvoiceRecipientsCard({ customerId, objectId, canEdit = 
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} data-testid="button-cancel-recipient">Avbryt</Button>
             <Button
-              onClick={() => createMutation.mutate()}
-              disabled={!form.recipientName || createMutation.isPending}
+              onClick={() => saveMutation.mutate()}
+              disabled={!form.recipientName || saveMutation.isPending}
               data-testid="button-save-recipient"
             >
               Spara

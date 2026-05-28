@@ -8,6 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
 import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
 import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
+import ObjectPayersCard from "@/components/ObjectPayersCard";
+import { useAuth } from "@/hooks/use-auth";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
@@ -156,6 +158,8 @@ export default function ObjectDetailPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const objectId = params?.id || "";
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "owner";
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editSection, setEditSection] = useState<"overview" | "access" | "equipment">("overview");
@@ -729,6 +733,9 @@ export default function ObjectDetailPage() {
           <TabsTrigger value="delivery-preferences" data-testid="tab-delivery-preferences">
             Leveranspreferenser
           </TabsTrigger>
+          <TabsTrigger value="ekonomi" data-testid="tab-ekonomi">
+            Ekonomi
+          </TabsTrigger>
           <TabsTrigger value="matching-articles" data-testid="tab-matching-articles">
             <LinkIcon className="h-3.5 w-3.5 mr-1" />
             Matchande artiklar {matchingArticles.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{matchingArticles.length}</Badge>}
@@ -740,11 +747,6 @@ export default function ObjectDetailPage() {
 
         {/* ==================== ÖVERSIKT ==================== */}
         <TabsContent value="overview">
-          {objectId && (
-            <div className="mb-4">
-              <InvoiceRecipientsCard objectId={objectId} />
-            </div>
-          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardHeader className="pb-3">
@@ -1467,6 +1469,23 @@ export default function ObjectDetailPage() {
           {!((obj as { deliveryPreferences?: DeliveryPreferences | null }).deliveryPreferences) && customer && (
             <p className="text-xs text-muted-foreground mt-3">
               Inga preferenser för objektet — kundens preferenser används som fallback.
+            </p>
+          )}
+        </TabsContent>
+
+        {/* ==================== EKONOMI ==================== */}
+        <TabsContent value="ekonomi">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {objectId && (
+              <ObjectPayersCard objectId={objectId} canEdit={isAdmin} />
+            )}
+            {objectId && (
+              <InvoiceRecipientsCard objectId={objectId} />
+            )}
+          </div>
+          {!isAdmin && (
+            <p className="text-xs text-muted-foreground mt-3">
+              Endast administratörer kan ändra betalare och fakturamottagare.
             </p>
           )}
         </TabsContent>

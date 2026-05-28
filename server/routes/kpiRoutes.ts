@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
 import { requireAdmin, requirePlanner } from "../tenant-middleware";
-import { objects, workOrders, objectMetadata, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles, weeklyReportNotes, weeklyReportActionItemSchema, type WeeklyReportActionItem } from "@shared/schema";
+import { objects, workOrders, objectMetadata, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles, weeklyReportNotes, weeklyReportActionItemSchema, type WeeklyReportActionItem, objectPayers } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { sendEmail } from "../replit_integrations/resend";
 import { issueMagicLink } from "../replit_integrations/auth/magicLinkAuth";
@@ -2195,6 +2195,49 @@ app.get("/api/objects/:objectId/effective-metadata", asyncHandler(async (req, re
 }));
 
 // ============== OBJECT PAYERS ==============
+// Hjälpare: överlappskontroll mellan giltighetsperioder (open-ended NULL = ±oändlighet).
+// Speglar logik i server/routes/importPayersRoutes.ts så enkelraderna får samma garanti
+// som CSV-importen: två primary-betalare per objekt får inte överlappa i tiden.
+function payerRangesOverlap(
+  aFrom: Date | null | undefined,
+  aTo: Date | null | undefined,
+  bFrom: Date | null | undefined,
+  bTo: Date | null | undefined,
+): boolean {
+  const aStart = aFrom ? new Date(aFrom).getTime() : -Infinity;
+  const aEnd = aTo ? new Date(aTo).getTime() : Infinity;
+  const bStart = bFrom ? new Date(bFrom).getTime() : -Infinity;
+  const bEnd = bTo ? new Date(bTo).getTime() : Infinity;
+  return aStart <= bEnd && bStart <= aEnd;
+}
+
+async function assertNoPrimaryOverlap(
+  tenantId: string,
+  objectId: string,
+  candidate: { isPrimary?: boolean | null; validFrom?: Date | null; validTo?: Date | null },
+  ignoreId?: string,
+): Promise<void> {
+  if (!candidate.isPrimary) return;
+  const existing = await db.select({
+    id: objectPayers.id,
+    validFrom: objectPayers.validFrom,
+    validTo: objectPayers.validTo,
+  })
+    .from(objectPayers)
+    .where(and(
+      eq(objectPayers.tenantId, tenantId),
+      eq(objectPayers.objectId, objectId),
+      eq(objectPayers.isPrimary, true),
+    ));
+  const conflict = existing.find(e =>
+    e.id !== ignoreId &&
+    payerRangesOverlap(candidate.validFrom ?? null, candidate.validTo ?? null, e.validFrom ?? null, e.validTo ?? null),
+  );
+  if (conflict) {
+    throw new ConflictError("Primär betalare överlappar med befintlig period för detta objekt");
+  }
+}
+
 app.get("/api/objects/:objectId/payers", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
@@ -2204,21 +2247,34 @@ app.get("/api/objects/:objectId/payers", asyncHandler(async (req, res) => {
     res.json(payers);
 }));
 
-app.post("/api/objects/:objectId/payers", asyncHandler(async (req, res) => {
+app.post("/api/objects/:objectId/payers", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       throw new ForbiddenError("Åtkomst nekad");
     }
+    const body = { ...req.body };
+    if (typeof body.validFrom === "string") body.validFrom = new Date(body.validFrom);
+    if (typeof body.validTo === "string") body.validTo = new Date(body.validTo);
+    if (body.validFrom === "" || body.validFrom === null) body.validFrom = null;
+    if (body.validTo === "" || body.validTo === null) body.validTo = null;
     const data = insertObjectPayerSchema.parse({
-      ...req.body,
+      ...body,
       tenantId,
-      objectId: req.params.objectId
+      objectId: req.params.objectId,
+    });
+    if (data.validFrom && data.validTo && new Date(data.validFrom).getTime() > new Date(data.validTo).getTime()) {
+      throw new ValidationError("Från-datum får inte vara efter Till-datum");
+    }
+    await assertNoPrimaryOverlap(tenantId, req.params.objectId, {
+      isPrimary: data.isPrimary ?? (data.payerType === "primary"),
+      validFrom: data.validFrom ?? null,
+      validTo: data.validTo ?? null,
     });
     const payer = await storage.createObjectPayer(data);
     res.status(201).json(payer);
 }));
 
-app.patch("/api/objects/:objectId/payers/:id", asyncHandler(async (req, res) => {
+app.patch("/api/objects/:objectId/payers/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       throw new ForbiddenError("Åtkomst nekad");
@@ -2233,23 +2289,53 @@ app.patch("/api/objects/:objectId/payers/:id", asyncHandler(async (req, res) => 
       priority: z.number().optional(),
       validFrom: z.string().nullable().optional().transform(v => v ? new Date(v) : null),
       validTo: z.string().nullable().optional().transform(v => v ? new Date(v) : null),
-      invoiceReference: z.string().optional(),
-      fortnoxCustomerId: z.string().optional(),
-      notes: z.string().optional(),
+      invoiceReference: z.string().nullable().optional(),
+      fortnoxCustomerId: z.string().nullable().optional(),
+      notes: z.string().nullable().optional(),
     });
     const updateData = updateSchema.parse(req.body);
+    if (updateData.validFrom && updateData.validTo && updateData.validFrom.getTime() > updateData.validTo.getTime()) {
+      throw new ValidationError("Från-datum får inte vara efter Till-datum");
+    }
+    // Slå ihop befintliga värden med inkommande för att avgöra om resultatet skulle
+    // bli en överlappande primary-rad.
+    const [existing] = await db.select().from(objectPayers).where(and(
+      eq(objectPayers.id, req.params.id),
+      eq(objectPayers.objectId, req.params.objectId),
+      eq(objectPayers.tenantId, tenantId),
+    ));
+    if (!existing) throw new NotFoundError("Betalare hittades inte eller tillhör inte detta objekt");
+    const merged = {
+      isPrimary: updateData.isPrimary ?? existing.isPrimary,
+      validFrom: updateData.validFrom !== undefined ? updateData.validFrom : existing.validFrom,
+      validTo: updateData.validTo !== undefined ? updateData.validTo : existing.validTo,
+    };
+    await assertNoPrimaryOverlap(tenantId, req.params.objectId, merged, req.params.id);
     const payer = await storage.updateObjectPayer(req.params.id, req.params.objectId, tenantId, updateData);
     if (!payer) throw new NotFoundError("Betalare hittades inte eller tillhör inte detta objekt");
     res.json(payer);
 }));
 
-app.delete("/api/objects/:objectId/payers/:id", asyncHandler(async (req, res) => {
+app.delete("/api/objects/:objectId/payers/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       throw new ForbiddenError("Åtkomst nekad");
     }
     await storage.deleteObjectPayer(req.params.id, req.params.objectId, tenantId);
     res.status(204).send();
+}));
+
+// "Avsluta" en betalare = sätt validTo till nu istället för hard-delete.
+app.post("/api/objects/:objectId/payers/:id/end", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
+      throw new ForbiddenError("Åtkomst nekad");
+    }
+    const endAt = req.body?.endAt ? new Date(req.body.endAt) : new Date();
+    if (isNaN(endAt.getTime())) throw new ValidationError("Ogiltigt slutdatum");
+    const payer = await storage.updateObjectPayer(req.params.id, req.params.objectId, tenantId, { validTo: endAt });
+    if (!payer) throw new NotFoundError("Betalare hittades inte eller tillhör inte detta objekt");
+    res.json(payer);
 }));
 
 // ============== BILLING CUSTOMER SELECTION ==============
