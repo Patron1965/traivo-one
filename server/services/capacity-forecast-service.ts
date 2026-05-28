@@ -1,5 +1,6 @@
 import { db } from "../db";
 import { and, eq, gte, isNull, lte, inArray, sql } from "drizzle-orm";
+import { primaryPayerCustomerIdSql, objectPrimaryCustomerInSql } from "./object-customer";
 import {
   annualGoals,
   articles,
@@ -176,16 +177,16 @@ async function resolveGoalsToClusters(
   const customerClusterMap = new Map<string, string[]>();
   if (customerIds.length > 0) {
     const rows = await db
-      .select({ customerId: objects.customerId, clusterId: objects.clusterId })
+      .select({ customerId: primaryPayerCustomerIdSql(), clusterId: objects.clusterId })
       .from(objects)
       .where(and(
         eq(objects.tenantId, tenantId),
-        inArray(objects.customerId, customerIds),
+        objectPrimaryCustomerInSql(customerIds),
         isNull(objects.deletedAt),
         sql`${objects.clusterId} IS NOT NULL`,
       ));
     for (const r of rows) {
-      if (!r.clusterId) continue;
+      if (!r.clusterId || !r.customerId) continue;
       if (!customerClusterMap.has(r.customerId)) customerClusterMap.set(r.customerId, []);
       const arr = customerClusterMap.get(r.customerId)!;
       if (!arr.includes(r.clusterId)) arr.push(r.clusterId);

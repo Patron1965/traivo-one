@@ -434,20 +434,21 @@ export async function exportWorkOrderToFortnox(
 
     const objectPayers = invoiceExport.payerId 
       ? [await storage.getObjectPayer(invoiceExport.payerId)]
-      : await storage.getObjectPayers(workOrder.objectId);
+      : (workOrder.objectId ? await storage.getObjectPayers(workOrder.objectId) : []);
 
     const validPayers = objectPayers.filter(Boolean);
-    
-    let fallbackCustomerMapping: { fortnoxId: string } | null = null;
+
+    // Tidigare fanns en fallback som plockade `obj.customerId` från legacy
+    // objects.customer_id-kolumnen om inga object_payers hittades. Den
+    // kolumnen är på väg ut (ADR v3 — objekt är neutrala) och får inte
+    // längre läsas. Saknas payer är det ett konfigurationsfel som måste
+    // åtgärdas explicit via object_payers innan WO kan faktureras.
     if (!validPayers.length) {
-      const obj = await storage.getObject(workOrder.objectId);
-      if (!obj?.customerId) {
-        return { success: false, error: "No payer or customer found for work order" };
-      }
-      fallbackCustomerMapping = await storage.getFortnoxMapping(tenantId, "customer", obj.customerId) || null;
-      if (!fallbackCustomerMapping) {
-        return { success: false, error: "Customer not mapped to Fortnox" };
-      }
+      return {
+        success: false,
+        error:
+          "Ingen payer registrerad för objektet. Lägg till minst en betalare i object_payers innan fakturering.",
+      };
     }
 
     const client = new FortnoxClient(tenantId);
@@ -459,23 +460,20 @@ export async function exportWorkOrderToFortnox(
     let totalInvoiced = 0;
     const invoiceNumbers: string[] = [];
 
-    for (const payer of validPayers.length ? validPayers : [null]) {
+    for (const payer of validPayers) {
       const payerPercentage = payer?.sharePercent || 100;
       let customerFortnoxId: string;
-      
-      if (payer?.customerId) {
-        const customerMapping = await storage.getFortnoxMapping(tenantId, "customer", payer.customerId);
-        if (!customerMapping) {
-          console.warn(`Payer ${payer.id} customer not mapped to Fortnox, skipping`);
-          continue;
-        }
-        customerFortnoxId = customerMapping.fortnoxId;
-      } else if (fallbackCustomerMapping) {
-        customerFortnoxId = fallbackCustomerMapping.fortnoxId;
-      } else {
-        console.warn("No customer mapping available, skipping");
+
+      if (!payer?.customerId) {
+        console.warn(`Payer ${payer?.id} has no customerId, skipping`);
         continue;
       }
+      const customerMapping = await storage.getFortnoxMapping(tenantId, "customer", payer.customerId);
+      if (!customerMapping) {
+        console.warn(`Payer ${payer.id} customer not mapped to Fortnox, skipping`);
+        continue;
+      }
+      customerFortnoxId = customerMapping.fortnoxId;
 
       const invoiceRows = [];
       // ADR v3 (F6): Anvand frozen-snapshot om WO ar fryst.

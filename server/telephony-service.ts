@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { storage } from "./storage";
 import { eq, and, isNull, gte, lte, desc, sql } from "drizzle-orm";
+import { objectHasPrimaryCustomerSql } from "./services/object-customer";
 import { customers, objects, workOrders, clusters, metadataKatalog, metadataVarden, statusMessageTemplates } from "@shared/schema";
 
 function normalizePhone(phone: string): string {
@@ -103,7 +104,7 @@ export async function lookupCustomerByPhone(tenantId: string, phone: string) {
         .from(objects)
         .where(
           and(
-            eq(objects.customerId, customer.id),
+            objectHasPrimaryCustomerSql(customer.id),
             eq(objects.tenantId, tenantId),
             isNull(objects.deletedAt)
           )

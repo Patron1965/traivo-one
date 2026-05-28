@@ -2,6 +2,7 @@ import type { Express } from "express";
 import type { SQL } from "drizzle-orm";
 import { db } from "../db";
 import { eq, and, gte, lte, isNull, sql, desc, inArray } from "drizzle-orm";
+import { primaryPayerCustomerIdSql, objectHasPrimaryCustomerSql, getObjectPrimaryCustomerId } from "../services/object-customer";
 import { z } from "zod";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { annualGoals, workOrders, workOrderLines, subscriptions, orderConcepts, customers, objects, articles, clusters, resources, objectTimeRestrictions, insertAnnualGoalSchema, insertWorkOrderSchema, type FlexibleFrequency, type Season } from "@shared/schema";
@@ -373,11 +374,11 @@ app.post("/api/annual-goals/generate-from-subscriptions", asyncHandler(async (re
       }
     } else if (oc.customerId) {
       const customerObjects = await db
-        .select({ id: objects.id, customerId: objects.customerId })
+        .select({ id: objects.id, customerId: primaryPayerCustomerIdSql() })
         .from(objects)
         .where(and(
           eq(objects.tenantId, tenantId),
-          eq(objects.customerId, oc.customerId),
+          objectHasPrimaryCustomerSql(oc.customerId),
           isNull(objects.deletedAt),
         ));
 
@@ -639,7 +640,7 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
       goalObjectIds = [goal.objectId];
     } else if (goal.customerId) {
       const custObjs = await db.select({ id: objects.id }).from(objects)
-        .where(and(eq(objects.tenantId, tenantId), eq(objects.customerId, goal.customerId), isNull(objects.deletedAt)));
+        .where(and(eq(objects.tenantId, tenantId), objectHasPrimaryCustomerSql(goal.customerId), isNull(objects.deletedAt)));
       goalObjectIds = custObjs.map(o => o.id);
     } else if (goal.clusterId) {
       const clusterObjs = await db.select({ id: objects.id }).from(objects)
@@ -965,7 +966,7 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
       const [firstObj] = await db
         .select({ id: objects.id })
         .from(objects)
-        .where(and(eq(objects.tenantId, tenantId), eq(objects.customerId, customerIdForOrder), isNull(objects.deletedAt)))
+        .where(and(eq(objects.tenantId, tenantId), objectHasPrimaryCustomerSql(customerIdForOrder), isNull(objects.deletedAt)))
         .limit(1);
       if (firstObj) objectId = firstObj.id;
     }
@@ -980,8 +981,7 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
 
     if (!objectId || !customerIdForOrder) {
       if (objectId && !customerIdForOrder) {
-        const [obj] = await db.select({ customerId: objects.customerId }).from(objects).where(eq(objects.id, objectId));
-        if (obj) customerIdForOrder = obj.customerId;
+        customerIdForOrder = await getObjectPrimaryCustomerId(objectId);
       }
       if (!objectId || !customerIdForOrder) continue;
     }
@@ -999,7 +999,7 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
       const custObjects = await db
         .select({ id: objects.id })
         .from(objects)
-        .where(and(eq(objects.tenantId, tenantId), eq(objects.customerId, customerIdForOrder), isNull(objects.deletedAt)));
+        .where(and(eq(objects.tenantId, tenantId), objectHasPrimaryCustomerSql(customerIdForOrder), isNull(objects.deletedAt)));
       targetObjectIds = custObjects.map(o => o.id);
     } else if (clusterId) {
       const clusterObjects = await db

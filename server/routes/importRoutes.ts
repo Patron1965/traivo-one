@@ -3,6 +3,7 @@ import { storage } from "../storage";
 import { invalidateWorkflowCaches } from "../services/dashboardCache";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, isNotNull, inArray } from "drizzle-orm";
+import { primaryPayerCustomerIdSql, objectHasPrimaryCustomerSql, objectPrimaryCustomerInSql, objectHasNoPrimaryCustomerSql } from "../services/object-customer";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
@@ -3894,7 +3895,7 @@ app.get("/api/import/health-stats", asyncHandler(async (req, res) => {
         .where(and(
           eq(objects.tenantId, tenantId),
           isNull(objects.deletedAt),
-          sql`(${objects.customerId} IS NULL OR NOT EXISTS (SELECT 1 FROM customers c WHERE c.id = ${objects.customerId} AND c.tenant_id = ${tenantId} AND c.deleted_at IS NULL))`,
+          objectHasNoPrimaryCustomerSql(tenantId),
         )),
       db.select({ count: sql<number>`count(*)::int` })
         .from(workOrders)
@@ -4933,7 +4934,7 @@ app.get("/api/import/cleanup/parents/preview", requireAdmin, asyncHandler(async 
   const limit = Math.min(parseInt((req.query.limit as string) || "200"), 1000);
 
   const orphans = await db.select({
-    id: objects.id, name: objects.name, customerId: objects.customerId,
+    id: objects.id, name: objects.name, customerId: primaryPayerCustomerIdSql(),
     address: objects.address, city: objects.city,
     latitude: objects.latitude, longitude: objects.longitude,
   }).from(objects).where(and(
@@ -4947,19 +4948,20 @@ app.get("/api/import/cleanup/parents/preview", requireAdmin, asyncHandler(async 
   const customerIds = Array.from(new Set(orphans.map(o => o.customerId).filter((c): c is string => !!c)));
   const candidates = customerIds.length > 0
     ? await db.select({
-        id: objects.id, name: objects.name, customerId: objects.customerId,
+        id: objects.id, name: objects.name, customerId: primaryPayerCustomerIdSql(),
         address: objects.address, city: objects.city,
         latitude: objects.latitude, longitude: objects.longitude,
       }).from(objects).where(and(
         eq(objects.tenantId, tenantId),
         isNull(objects.deletedAt),
-        inArray(objects.customerId, customerIds),
+        objectPrimaryCustomerInSql(customerIds),
         sql`${objects.hierarchyLevel} IN ('rum','fastighet','brf')`,
       ))
     : [];
 
   const candidatesByCustomer = new Map<string, typeof candidates>();
   for (const c of candidates) {
+    if (!c.customerId) continue;
     const list = candidatesByCustomer.get(c.customerId) || [];
     list.push(c);
     candidatesByCustomer.set(c.customerId, list);
@@ -5035,7 +5037,7 @@ app.post("/api/import/cleanup/parents/apply", requireAdmin, asyncHandler(async (
 
   const result = await db.transaction(async (tx) => {
     const objs = await tx.select({
-      id: objects.id, parentId: objects.parentId, customerId: objects.customerId,
+      id: objects.id, parentId: objects.parentId, customerId: primaryPayerCustomerIdSql(),
       hierarchyLevel: objects.hierarchyLevel,
     }).from(objects).where(and(
       eq(objects.tenantId, tenantId),
@@ -5045,7 +5047,7 @@ app.post("/api/import/cleanup/parents/apply", requireAdmin, asyncHandler(async (
     const objMap = new Map(objs.map(o => [o.id, o]));
 
     const parents = await tx.select({
-      id: objects.id, customerId: objects.customerId, hierarchyLevel: objects.hierarchyLevel,
+      id: objects.id, customerId: primaryPayerCustomerIdSql(), hierarchyLevel: objects.hierarchyLevel,
     }).from(objects).where(and(
       eq(objects.tenantId, tenantId),
       inArray(objects.id, parentIds),
@@ -5959,12 +5961,12 @@ async function computeObjectsNotInExport(params: {
     name: objects.name,
     address: objects.address,
     city: objects.city,
-    customerId: objects.customerId,
+    customerId: primaryPayerCustomerIdSql(),
     customerName: customers.name,
     createdAt: objects.createdAt,
   })
     .from(objects)
-    .leftJoin(customers, eq(objects.customerId, customers.id))
+    .leftJoin(customers, sql`${customers.id} = (SELECT op.customer_id FROM object_payers op WHERE op.object_id = ${objects.id} AND op.is_primary = true LIMIT 1)`)
     .where(and(
       eq(objects.tenantId, tenantId),
       isNull(objects.deletedAt),
@@ -6270,7 +6272,7 @@ async function computeFlDiff(
 
   const existing = await db.select().from(objects).where(and(
     eq(objects.tenantId, tenantId),
-    eq(objects.customerId, customerId),
+    objectHasPrimaryCustomerSql(customerId),
     isNull(objects.deletedAt),
   ));
 
@@ -6812,7 +6814,7 @@ app.get("/api/import/customer-fastighetslista/flagged-objects", asyncHandler(asy
     isNull(objects.deletedAt),
     isNotNull(objects.reconciliationFlag),
   ];
-  if (customerId) whereParts.push(eq(objects.customerId, customerId));
+  if (customerId) whereParts.push(objectHasPrimaryCustomerSql(customerId));
   const rows = await db.select({
     id: objects.id,
     name: objects.name,
@@ -6820,7 +6822,7 @@ app.get("/api/import/customer-fastighetslista/flagged-objects", asyncHandler(asy
     postalCode: objects.postalCode,
     city: objects.city,
     objectNumber: objects.objectNumber,
-    customerId: objects.customerId,
+    customerId: primaryPayerCustomerIdSql(),
     reconciliationFlag: objects.reconciliationFlag,
     reconciliationFlaggedAt: objects.reconciliationFlaggedAt,
     reconciliationBatchId: objects.reconciliationBatchId,

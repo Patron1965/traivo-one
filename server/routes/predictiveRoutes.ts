@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { db } from "../db";
 import { eq, and, gte, lte, isNull, sql, desc, asc, inArray, ne } from "drizzle-orm";
+import { primaryPayerCustomerIdSql, getObjectPrimaryCustomerId } from "../services/object-customer";
 import { z } from "zod";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
@@ -93,7 +94,7 @@ export async function registerPredictiveRoutes(app: Express) {
       })
       .from(iotDevices)
       .innerJoin(objects, eq(objects.id, iotDevices.objectId))
-      .leftJoin(customers, eq(customers.id, objects.customerId))
+      .leftJoin(customers, sql`${customers.id} = (SELECT op.customer_id FROM object_payers op WHERE op.object_id = ${objects.id} AND op.is_primary = true LIMIT 1)`)
       .where(and(
         eq(iotDevices.tenantId, tenantId),
         eq(iotDevices.status, "active"),
@@ -312,7 +313,7 @@ export async function registerPredictiveRoutes(app: Express) {
       })
       .from(predictiveForecasts)
       .innerJoin(objects, eq(objects.id, predictiveForecasts.objectId))
-      .leftJoin(customers, eq(customers.id, objects.customerId))
+      .leftJoin(customers, sql`${customers.id} = (SELECT op.customer_id FROM object_payers op WHERE op.object_id = ${objects.id} AND op.is_primary = true LIMIT 1)`)
       .where(and(
         eq(predictiveForecasts.tenantId, tenantId),
         eq(predictiveForecasts.status, "active"),
@@ -344,7 +345,7 @@ export async function registerPredictiveRoutes(app: Express) {
 
     const { objectId, scheduledDate, description } = parsed.data;
 
-    const [obj] = await db.select({ name: objects.name, customerId: objects.customerId })
+    const [obj] = await db.select({ name: objects.name, customerId: primaryPayerCustomerIdSql() })
       .from(objects).where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));
     if (!obj) throw new ValidationError("Objekt hittades inte");
 

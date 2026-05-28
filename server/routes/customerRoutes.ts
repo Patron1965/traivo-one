@@ -8,6 +8,7 @@ import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { db } from "../db";
 import { eq, and, isNull, sql, or, inArray } from "drizzle-orm";
+import { primaryPayerCustomerIdSql, objectHasPrimaryCustomerSql } from "../services/object-customer";
 import { ensureClusterAndAssign } from "../auto-cluster";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 
@@ -468,7 +469,7 @@ app.get("/api/objects/lookup", asyncHandler(async (req, res) => {
       hierarchyLevel: objects.hierarchyLevel,
       objectType: objects.objectType,
       accessCode: objects.accessCode,
-      customerId: objects.customerId,
+      customerId: primaryPayerCustomerIdSql(),
       parentId: objects.parentId,
     })
     .from(objects)
@@ -550,11 +551,11 @@ app.get("/api/objects/tree", asyncHandler(async (req, res) => {
         objectNumber: objects.objectNumber,
         objectType: objects.objectType,
         address: objects.address,
-        customerId: objects.customerId,
+        customerId: primaryPayerCustomerIdSql(),
         customerName: customers.name,
       })
       .from(objects)
-      .leftJoin(customers, eq(objects.customerId, customers.id))
+      .leftJoin(customers, sql`${customers.id} = (SELECT op.customer_id FROM object_payers op WHERE op.object_id = ${objects.id} AND op.is_primary = true LIMIT 1)`)
       .where(and(
         eq(objects.tenantId, tenantId),
         isNull(objects.deletedAt),
@@ -579,11 +580,11 @@ app.get("/api/objects/tree", asyncHandler(async (req, res) => {
     parentFilter,
   ];
   if (customerId && typeof customerId === "string") {
-    conditions.push(eq(objects.customerId, customerId));
+    conditions.push(objectHasPrimaryCustomerSql(customerId));
   }
 
   const customerFilter = (customerId && typeof customerId === "string")
-    ? sql` AND c.customer_id = ${customerId}`
+    ? sql` AND EXISTS (SELECT 1 FROM object_payers op WHERE op.object_id = c.id AND op.is_primary = true AND op.customer_id = ${customerId})`
     : sql``;
   const childCountSql = sql<number>`(SELECT count(*) FROM objects c WHERE c.parent_id = ${objects.id} AND c.tenant_id = ${tenantId} AND c.deleted_at IS NULL${customerFilter})`;
 
@@ -594,7 +595,7 @@ app.get("/api/objects/tree", asyncHandler(async (req, res) => {
       objectNumber: objects.objectNumber,
       objectType: objects.objectType,
       address: objects.address,
-      customerId: objects.customerId,
+      customerId: primaryPayerCustomerIdSql(),
       childCount: childCountSql,
     })
     .from(objects)
@@ -624,11 +625,11 @@ app.get("/api/objects/tree/:parentId/children", asyncHandler(async (req, res) =>
     eq(objects.parentId, parentId),
   ];
   if (customerId && typeof customerId === "string") {
-    conditions.push(eq(objects.customerId, customerId));
+    conditions.push(objectHasPrimaryCustomerSql(customerId));
   }
 
   const customerFilter2 = (customerId && typeof customerId === "string")
-    ? sql` AND c.customer_id = ${customerId}`
+    ? sql` AND EXISTS (SELECT 1 FROM object_payers op WHERE op.object_id = c.id AND op.is_primary = true AND op.customer_id = ${customerId})`
     : sql``;
   const childCountSql2 = sql<number>`(SELECT count(*) FROM objects c WHERE c.parent_id = ${objects.id} AND c.tenant_id = ${tenantId} AND c.deleted_at IS NULL${customerFilter2})`;
 
@@ -639,7 +640,7 @@ app.get("/api/objects/tree/:parentId/children", asyncHandler(async (req, res) =>
       objectNumber: objects.objectNumber,
       objectType: objects.objectType,
       address: objects.address,
-      customerId: objects.customerId,
+      customerId: primaryPayerCustomerIdSql(),
       childCount: childCountSql2,
     })
     .from(objects)

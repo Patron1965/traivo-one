@@ -142,7 +142,25 @@ import {
   deliveryPreferencesSchema,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray, type SQL } from "drizzle-orm";
+import { eq, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray, getTableColumns, type SQL } from "drizzle-orm";
+import {
+  primaryPayerCustomerIdSql,
+  objectHasPrimaryCustomerSql,
+  objectPrimaryCustomerInSql,
+  objectHasNoPrimaryCustomerSql,
+} from "./services/object-customer";
+
+/**
+ * Returnerar en Drizzle "select-shape" för objects där `customerId` är
+ * överlagrat med primär-payer-customer_id (från object_payers) istället
+ * för den legacy-kolumn `objects.customer_id` som är på väg ut.
+ *
+ * Använd som `db.select(objectColumnsWithPrimaryCustomer()).from(objects)...`.
+ */
+function objectColumnsWithPrimaryCustomer() {
+  const cols = getTableColumns(objects);
+  return { ...cols, customerId: primaryPayerCustomerIdSql() };
+}
 
 // Smala typade helpers för neon/drizzle-execute-resultat — driver-formerna
 // skiljer sig (neon-http returnerar `rows`, andra returnerar arrayen direkt
@@ -1472,6 +1490,9 @@ export class DatabaseStorage implements IStorage {
     const objIdFilter = customerIds && customerIds.length > 0
       ? sql` AND customer_id IN (${sql.join(customerIds.map(id => sql`${id}`), sql`, `)})`
       : sql``;
+    const opCustomerFilter = customerIds && customerIds.length > 0
+      ? sql` AND op.customer_id IN (${sql.join(customerIds.map(id => sql`${id}`), sql`, `)})`
+      : sql``;
     const clusterIdFilter = customerIds && customerIds.length > 0
       ? sql` AND root_customer_id IN (${sql.join(customerIds.map(id => sql`${id}`), sql`, `)})`
       : sql``;
@@ -1489,10 +1510,11 @@ export class DatabaseStorage implements IStorage {
         GROUP BY root_customer_id
       ) cl ON cl.root_customer_id = c.id
       LEFT JOIN (
-        SELECT customer_id, COUNT(*) as object_count
-        FROM objects
-        WHERE tenant_id = ${tenantId} AND deleted_at IS NULL${objIdFilter}
-        GROUP BY customer_id
+        SELECT op.customer_id, COUNT(*) as object_count
+        FROM object_payers op
+        JOIN objects o2 ON o2.id = op.object_id AND o2.deleted_at IS NULL
+        WHERE o2.tenant_id = ${tenantId} AND op.is_primary = true${opCustomerFilter}
+        GROUP BY op.customer_id
       ) o ON o.customer_id = c.id
       LEFT JOIN (
         SELECT customer_id, COUNT(*) as active_orders
@@ -1790,7 +1812,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getObjects(tenantId: string): Promise<ServiceObject[]> {
-    return db.select().from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
+    return db.select(objectColumnsWithPrimaryCustomer()).from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
   }
 
   async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean; issue?: string; clusterId?: string }): Promise<{ objects: ServiceObject[]; total: number }> {
@@ -1800,9 +1822,9 @@ export class DatabaseStorage implements IStorage {
     
     if (customerIds && customerIds.length > 0) {
       if (customerIds.length === 1) {
-        whereConditions = and(whereConditions, eq(objects.customerId, customerIds[0]));
+        whereConditions = and(whereConditions, objectHasPrimaryCustomerSql(customerIds[0]));
       } else {
-        whereConditions = and(whereConditions, inArray(objects.customerId, customerIds));
+        whereConditions = and(whereConditions, objectPrimaryCustomerInSql(customerIds));
       }
     }
     
@@ -1832,7 +1854,7 @@ export class DatabaseStorage implements IStorage {
       } else if (filters.issue === "no-address") {
         whereConditions = and(whereConditions, sql`(${objects.address} IS NULL OR ${objects.address} = '')`);
       } else if (filters.issue === "no-customer") {
-        whereConditions = and(whereConditions, sql`(${objects.customerId} IS NULL OR NOT EXISTS (SELECT 1 FROM customers c WHERE c.id = ${objects.customerId} AND c.tenant_id = ${tenantId} AND c.deleted_at IS NULL))`);
+        whereConditions = and(whereConditions, objectHasNoPrimaryCustomerSql(tenantId));
       } else if (filters.issue === "empty-metadata") {
         whereConditions = and(whereConditions, sql`EXISTS (SELECT 1 FROM object_metadata om WHERE om.object_id = ${objects.id} AND om.tenant_id = ${tenantId} AND (om.value IS NULL OR om.value = '') AND om.value_json IS NULL)`);
       }
@@ -1854,7 +1876,7 @@ export class DatabaseStorage implements IStorage {
     const [countResult] = await db.select({ count: count() }).from(objects).where(whereConditions);
     const total = countResult?.count || 0;
     
-    const objectsList = await db.select()
+    const objectsList = await db.select(objectColumnsWithPrimaryCustomer())
       .from(objects)
       .where(whereConditions)
       .orderBy(objects.name)
@@ -1867,7 +1889,7 @@ export class DatabaseStorage implements IStorage {
   async getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]> {
     if (ids.length === 0) return [];
     const { inArray } = await import("drizzle-orm");
-    return db.select()
+    return db.select(objectColumnsWithPrimaryCustomer())
       .from(objects)
       .where(and(
         eq(objects.tenantId, tenantId),
@@ -1880,7 +1902,12 @@ export class DatabaseStorage implements IStorage {
     const { issueType, status, customerId, limit } = options || {};
     const statusFilter = status ? sql` AND dr.status = ${status}` : sql``;
     const issueTypeFilter = issueType ? sql` AND COALESCE(dr.category, 'other') = ${issueType}` : sql``;
-    const customerFilter = customerId ? sql` AND o.customer_id = ${customerId}` : sql``;
+    const customerFilter = customerId
+      ? sql` AND EXISTS (
+          SELECT 1 FROM object_payers op
+          WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId}
+        )`
+      : sql``;
 
     // Aggregate per (object, category) using a single SQL query.
     const aggResult = await db.execute(sql`
@@ -2002,21 +2029,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getObject(id: string): Promise<ServiceObject | undefined> {
-    const [object] = await db.select().from(objects).where(and(eq(objects.id, id), isNull(objects.deletedAt)));
+    const [object] = await db.select(objectColumnsWithPrimaryCustomer()).from(objects).where(and(eq(objects.id, id), isNull(objects.deletedAt)));
     return object || undefined;
   }
 
   async getObjectByObjectNumber(tenantId: string, objectNumber: string): Promise<ServiceObject | undefined> {
-    const [object] = await db.select().from(objects).where(
+    const [object] = await db.select(objectColumnsWithPrimaryCustomer()).from(objects).where(
       and(eq(objects.tenantId, tenantId), eq(objects.objectNumber, objectNumber), isNull(objects.deletedAt))
     );
     return object || undefined;
   }
 
   async getObjectsByCustomer(customerId: string, tenantId?: string): Promise<ServiceObject[]> {
-    const conditions = [eq(objects.customerId, customerId), isNull(objects.deletedAt)];
+    // Källan för "tillhör kund X" är object_payers (primary), inte legacy
+    // objects.customer_id. tenantId krävs egentligen för att garantera
+    // tenant-isolation; vi tar ändå emot den som optional för bakåtkomp.
+    const conditions = [objectHasPrimaryCustomerSql(customerId), isNull(objects.deletedAt)];
     if (tenantId) conditions.push(eq(objects.tenantId, tenantId));
-    return db.select().from(objects).where(and(...conditions));
+    return db.select(objectColumnsWithPrimaryCustomer()).from(objects).where(and(...conditions));
   }
 
   async getCustomerObjectTreeRoots(customerId: string, tenantId: string, clusterId?: string | null): Promise<CustomerTreeNode[]> {
@@ -2040,7 +2070,10 @@ export class DatabaseStorage implements IStorage {
           WHERE c.parent_id = o.id AND c.deleted_at IS NULL
         ) AS "childCount"
       FROM objects o
-      WHERE o.customer_id = ${customerId}
+      WHERE EXISTS (
+          SELECT 1 FROM object_payers op
+          WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId}
+        )
         AND o.tenant_id = ${tenantId}
         AND o.deleted_at IS NULL
         ${clusterFilter}
@@ -2048,8 +2081,9 @@ export class DatabaseStorage implements IStorage {
           o.parent_id IS NULL
           OR NOT EXISTS (
             SELECT 1 FROM objects p
+            JOIN object_payers pp ON pp.object_id = p.id AND pp.is_primary = true
             WHERE p.id = o.parent_id
-              AND p.customer_id = ${customerId}
+              AND pp.customer_id = ${customerId}
               AND p.deleted_at IS NULL
           )
         )
@@ -2075,7 +2109,10 @@ export class DatabaseStorage implements IStorage {
         ) AS "childCount"
       FROM objects o
       WHERE o.parent_id = ${parentId}
-        AND o.customer_id = ${customerId}
+        AND EXISTS (
+          SELECT 1 FROM object_payers op
+          WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId}
+        )
         AND o.tenant_id = ${tenantId}
         AND o.deleted_at IS NULL
       ORDER BY o.name
@@ -2107,7 +2144,10 @@ export class DatabaseStorage implements IStorage {
         o.hierarchy_level AS "hierarchyLevel",
         o.cluster_id AS "clusterId"
       FROM objects o
-      WHERE o.customer_id = ${customerId}
+      WHERE EXISTS (
+          SELECT 1 FROM object_payers op
+          WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId}
+        )
         AND o.tenant_id = ${tenantId}
         AND o.deleted_at IS NULL
         AND o.latitude IS NOT NULL
@@ -2147,7 +2187,10 @@ export class DatabaseStorage implements IStorage {
         o.cluster_id AS "clusterId",
         o.parent_id AS "parentId"
       FROM objects o
-      WHERE o.customer_id = ${customerId}
+      WHERE EXISTS (
+          SELECT 1 FROM object_payers op
+          WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId}
+        )
         AND o.tenant_id = ${tenantId}
         AND o.deleted_at IS NULL
         AND (
@@ -2199,7 +2242,10 @@ export class DatabaseStorage implements IStorage {
         JOIN objects p ON p.id = c.parent_id
         WHERE p.tenant_id = ${tenantId}
           AND p.deleted_at IS NULL
-          AND p.customer_id = ${customerId}
+          AND EXISTS (
+            SELECT 1 FROM object_payers op
+            WHERE op.object_id = p.id AND op.is_primary = true AND op.customer_id = ${customerId}
+          )
       )
       SELECT leaf_id AS "leafId", id, name, hierarchy_level AS "hierarchyLevel", depth
       FROM chain
@@ -2254,7 +2300,10 @@ export class DatabaseStorage implements IStorage {
     const totalRow = await db.execute(sql`
       SELECT COUNT(*)::int AS total
       FROM objects o
-      WHERE o.customer_id = ${customerId}
+      WHERE EXISTS (
+          SELECT 1 FROM object_payers op
+          WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId}
+        )
         AND o.tenant_id = ${tenantId}
         AND o.deleted_at IS NULL
         AND o.latitude IS NOT NULL
@@ -2275,7 +2324,10 @@ export class DatabaseStorage implements IStorage {
           o.hierarchy_level AS "hierarchyLevel",
           o.cluster_id AS "clusterId"
         FROM objects o
-        WHERE o.customer_id = ${customerId}
+        WHERE EXISTS (
+            SELECT 1 FROM object_payers op
+            WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId}
+          )
           AND o.tenant_id = ${tenantId}
           AND o.deleted_at IS NULL
           AND o.latitude IS NOT NULL
@@ -2306,7 +2358,10 @@ export class DatabaseStorage implements IStorage {
             o.latitude,
             o.longitude
           FROM objects o
-          WHERE o.customer_id = ${customerId}
+          WHERE EXISTS (
+              SELECT 1 FROM object_payers op
+              WHERE op.object_id = o.id AND op.is_primary = true AND op.customer_id = ${customerId}
+            )
             AND o.tenant_id = ${tenantId}
             AND o.deleted_at IS NULL
             AND o.latitude IS NOT NULL
@@ -5287,13 +5342,25 @@ export class DatabaseStorage implements IStorage {
       meta_value: string | null;
     }
 
+    // customer_id för varje nivå hämtas via primär payer i object_payers
+    // (legacy objects.customer_id är på väg ut).
+    const primaryPayerExpr = sql`(
+      SELECT op.customer_id FROM object_payers op
+      WHERE op.object_id = objects.id AND op.is_primary = true
+      LIMIT 1
+    )`;
+    const primaryPayerExprO = sql`(
+      SELECT op.customer_id FROM object_payers op
+      WHERE op.object_id = o.id AND op.is_primary = true
+      LIMIT 1
+    )`;
     const rows = await db.execute(sql`
       WITH RECURSIVE hierarchy AS (
-        SELECT id, name, customer_id, parent_id, 0 AS depth
+        SELECT id, name, ${primaryPayerExpr} AS customer_id, parent_id, 0 AS depth
         FROM objects
         WHERE id = ${objectId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
         UNION ALL
-        SELECT o.id, o.name, o.customer_id, o.parent_id, h.depth + 1
+        SELECT o.id, o.name, ${primaryPayerExprO} AS customer_id, o.parent_id, h.depth + 1
         FROM objects o
         JOIN hierarchy h ON o.id = h.parent_id
         WHERE o.tenant_id = ${tenantId} AND o.deleted_at IS NULL

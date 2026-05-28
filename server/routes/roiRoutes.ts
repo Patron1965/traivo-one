@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { db } from "../db";
 import { eq, and, gte, lte, sql, count, sum, avg, desc, inArray, or, isNull } from "drizzle-orm";
+import { objectHasPrimaryCustomerSql } from "../services/object-customer";
 import { getTenantIdWithFallback, requireRole } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { ValidationError } from "../errors";
@@ -84,7 +85,7 @@ export async function registerRoiRoutes(app: Express) {
     const customerObjects = await db
       .select({ id: objects.id })
       .from(objects)
-      .where(and(eq(objects.tenantId, tenantId), eq(objects.customerId, customerId)));
+      .where(and(eq(objects.tenantId, tenantId), objectHasPrimaryCustomerSql(customerId)));
     const customerObjectIds = customerObjects.map(o => o.id);
 
     const customerDeviations = (customerObjectIds.length > 0 || orderIdList.length > 0)
