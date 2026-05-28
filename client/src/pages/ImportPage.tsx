@@ -332,9 +332,18 @@ function ImportHistorySection() {
           description: `${data.restored || 0} värden återställda och ${data.deleted || 0} skapade värden borttagna.`,
         });
       } else {
+        const rb = data.rolledBack || {};
+        const parts: string[] = [];
+        if (rb.objects) parts.push(`${rb.objects} objekt`);
+        if (rb.workOrders) parts.push(`${rb.workOrders} ordrar`);
+        if (rb.customers) parts.push(`${rb.customers} kunder`);
+        if (rb.objectPayers) parts.push(`${rb.objectPayers} betalare`);
+        if (rb.invoiceRecipients) parts.push(`${rb.invoiceRecipients} fakturamottagare`);
         toast({
           title: "Import ångrad",
-          description: `${data.rolledBack?.objects || 0} objekt, ${data.rolledBack?.workOrders || 0} ordrar, ${data.rolledBack?.customers || 0} kunder inaktiverade.`,
+          description: parts.length > 0
+            ? `${parts.join(", ")} borttagna/inaktiverade.`
+            : "Inga rader att ångra hittades i denna batch.",
         });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/import/history"] });
@@ -475,11 +484,17 @@ function ImportHistorySection() {
               : isCleanup
                 ? "Återställ sanering?"
                 : "Ångra import?";
+            const isPayers = !!confirmBatchId && confirmBatchId.startsWith("import-payers-");
+            const isRecipients = !!confirmBatchId && confirmBatchId.startsWith("import-recipients-");
             const description = isEnrich
               ? "Metadata-värden som denna berikning skapade tas bort, och värden som ändrades återställs till sitt tidigare värde via audit-loggen. Inga objekt raderas."
               : isCleanup
                 ? "Sanerade fält (namn, föräldrakopplingar, adresser) återställs till sina tidigare värden via audit-loggen. Inga objekt raderas."
-                : "Alla objekt, ordrar och kunder som importerades i denna batch kommer att inaktiveras. Data raderas inte permanent men syns inte längre i systemet.";
+                : isPayers
+                  ? "Alla betalare (object_payers) som importerades i denna batch tas bort. Manuellt registrerade betalare påverkas inte."
+                  : isRecipients
+                    ? "Alla fakturamottagare som importerades i denna batch markeras som borttagna. Eventuella frusna arbetsordrar som refererar mottagaren behåller sin historik."
+                    : "Alla objekt, ordrar och kunder som importerades i denna batch kommer att inaktiveras. Data raderas inte permanent men syns inte längre i systemet.";
             const buttonLabel = isEnrich
               ? "Återställ berikning"
               : isCleanup

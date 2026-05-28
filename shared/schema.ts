@@ -2017,10 +2017,14 @@ export const objectPayers = pgTable("object_payers", {
   // Fortnox-koppling
   fortnoxCustomerId: varchar("fortnox_customer_id"),
   notes: text("notes"),
+  // Task #569: spårar vilken import-batch som skapade raden, så rollback kan
+  // hitta exakt vilka rader en batch lade till. NULL = ej importerad (manuell).
+  importBatchId: text("import_batch_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_object_payers_object").on(table.objectId),
   index("idx_object_payers_customer").on(table.customerId),
+  index("idx_object_payers_import_batch").on(table.importBatchId),
 ]);
 
 // ============================================
@@ -2058,12 +2062,16 @@ export const invoiceRecipients = pgTable("invoice_recipients", {
   validFrom: timestamp("valid_from"),
   validTo: timestamp("valid_to"),
   notes: text("notes"),
+  // Task #569: spårar vilken import-batch som skapade raden, så rollback kan
+  // hitta exakt vilka rader en batch lade till. NULL = ej importerad (manuell).
+  importBatchId: text("import_batch_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
   index("idx_invoice_recipients_tenant").on(table.tenantId),
   index("idx_invoice_recipients_customer").on(table.customerId),
   index("idx_invoice_recipients_tenant_customer_level").on(table.tenantId, table.customerId, table.level),
+  index("idx_invoice_recipients_import_batch").on(table.importBatchId),
 ]);
 
 // ============================================

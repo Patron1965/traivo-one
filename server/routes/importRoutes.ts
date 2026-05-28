@@ -4371,7 +4371,45 @@ app.post("/api/import/rollback/:batchId", requireAdmin, asyncHandler(async (req,
       WHERE import_batch_id = ${batchId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
       RETURNING id
     `);
-    
+
+    // Task #569: object_payers och invoice_recipients importeras via
+    // /api/object-payers/import respektive /api/invoice-recipients/import
+    // och stämplas med import_batch_id. object_payers saknar deleted_at och
+    // hard-deletas; invoice_recipients har deleted_at och soft-deletas så
+    // ev. frusna WO som refererar id:t behåller läsbar historik.
+    const deletedPayers = await db.execute(sql`
+      DELETE FROM object_payers
+      WHERE import_batch_id = ${batchId} AND tenant_id = ${tenantId}
+      RETURNING id
+    `);
+    const deletedRecipients = await db.execute(sql`
+      UPDATE invoice_recipients SET deleted_at = NOW()
+      WHERE import_batch_id = ${batchId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
+      RETURNING id
+    `);
+
+    const payerIds = ((deletedPayers as any).rows || deletedPayers).map((r: any) => r.id);
+    const recipientIds = ((deletedRecipients as any).rows || deletedRecipients).map((r: any) => r.id);
+    const userId = (req as any).user?.id ?? null;
+    const auditEntries: any[] = [];
+    for (const id of payerIds) {
+      auditEntries.push({
+        tenantId, userId, action: "rollback_import", resourceType: "object_payers", resourceId: id,
+        changes: { before: { rolledBack: false }, after: { rolledBack: true, deleted: true } },
+        metadata: { batchId, source: "import-rollback", batchType: "object-payers" },
+      });
+    }
+    for (const id of recipientIds) {
+      auditEntries.push({
+        tenantId, userId, action: "rollback_import", resourceType: "invoice_recipients", resourceId: id,
+        changes: { before: { rolledBack: false }, after: { rolledBack: true, softDeleted: true } },
+        metadata: { batchId, source: "import-rollback", batchType: "invoice-recipients" },
+      });
+    }
+    if (auditEntries.length > 0) {
+      await db.insert(auditLogs).values(auditEntries);
+    }
+
     await db.update(importBatches)
       .set({ metadata: sql`jsonb_set(COALESCE(metadata, '{}'::jsonb), '{rolledBack}', 'true')` })
       .where(eq(importBatches.batchId, batchId));
@@ -4382,6 +4420,8 @@ app.post("/api/import/rollback/:batchId", requireAdmin, asyncHandler(async (req,
         objects: (deletedObjects.rows || deletedObjects).length,
         workOrders: (deletedOrders.rows || deletedOrders).length,
         customers: (deletedCustomers.rows || deletedCustomers).length,
+        objectPayers: payerIds.length,
+        invoiceRecipients: recipientIds.length,
       },
     });
 }));

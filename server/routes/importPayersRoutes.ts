@@ -228,6 +228,7 @@ export function registerImportPayersRoutes(app: Express): void {
         invoiceReference: r.invoiceReference ?? null,
         fortnoxCustomerId: r.fortnoxCustomerId ?? null,
         notes: r.notes ?? null,
+        importBatchId: batchId,
       });
       preview.push({
         index: i,
@@ -372,6 +373,7 @@ export function registerImportPayersRoutes(app: Express): void {
         priority: r.priority ?? 1,
         breaksInheritance: r.breaksInheritance ?? false,
         notes: r.notes ?? null,
+        importBatchId: batchId,
       });
       preview.push({
         index: i,
