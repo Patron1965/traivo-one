@@ -140,9 +140,16 @@ async function validateRows(
   rawRows: Array<Record<string, any>>,
   interimMap: InterimMap,
 ): Promise<{ rows: NormalizedRow[]; errors: RowError[]; preview: PreviewItem[]; duplicates: number }> {
-  // Spec: steg 2:s parent måste tillhöra steg 1, steg 3:s parent måste tillhöra steg 2.
-  const expectedParentStep: Record<StepNumber, number | null> = { 1: null, 2: 1, 3: 2 };
-  const requiredParentStep = expectedParentStep[step];
+  // Spec: parent får referera vilket som helst tidigare commit:at steg (eller
+  // samma steg för kedjning inom batch). Steg 2 kan ärva från steg 1; steg 3
+  // kan ärva från steg 1 eller steg 2 (interimnummer från steg 1 ska gå att
+  // referera direkt i steg 3, t.ex. när en organisation äger objekt utan butik).
+  const allowedParentSteps: Record<StepNumber, number[]> = {
+    1: [1],
+    2: [1, 2],
+    3: [1, 2, 3],
+  };
+  const allowedForStep = allowedParentSteps[step];
   const errors: RowError[] = [];
   const rows: NormalizedRow[] = [];
   const seenInterimInBatch = new Map<string, number>();
@@ -189,11 +196,10 @@ async function validateRows(
         });
         continue;
       }
-      if (requiredParentStep != null && parent.step !== requiredParentStep && parent.step !== step) {
-        // Tillåt även parent på samma steg (kedja inom steg). Annars kräv exakt föregående steg.
+      if (!allowedForStep.includes(parent.step)) {
         errors.push({
           index: row.index,
-          message: `Överordnat "${row.parentInterim}" tillhör steg ${parent.step}; steg ${step} förväntar steg ${requiredParentStep} (eller samma steg för kedjning).`,
+          message: `Överordnat "${row.parentInterim}" tillhör steg ${parent.step}; steg ${step} accepterar steg ${allowedForStep.join("/")}.`,
         });
         continue;
       }
