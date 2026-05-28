@@ -663,23 +663,42 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
 
   const metadata = objectWithMetadata?.metadata || [];
 
+  // PDF §7: gruppera primärt per område (area), fall tillbaka till kategori för legacy-typer.
+  const AREA_ORDER = ["grunduppgifter", "produktion", "status", "ekonomi"];
   const groupedMetadata = useMemo(() => {
     const groups: Record<string, MetadataEntry[]> = {};
     for (const m of metadata) {
-      const cat = m.katalog.kategori || "annat";
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(m);
+      const key = (m.katalog as any).area || m.katalog.kategori || "annat";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(m);
     }
-    return groups;
+    // Sortera inom varje grupp efter displayNumber (PDF §7) → sortOrder → namn.
+    for (const key of Object.keys(groups)) {
+      groups[key].sort((a, b) => {
+        const an = (a.katalog as any).displayNumber ?? a.katalog.sortOrder ?? 9999;
+        const bn = (b.katalog as any).displayNumber ?? b.katalog.sortOrder ?? 9999;
+        if (an !== bn) return an - bn;
+        return a.katalog.namn.localeCompare(b.katalog.namn, "sv");
+      });
+    }
+    // Ordna grupperna: områden först i fast ordning, sedan legacy-kategorier alfabetiskt.
+    const ordered: Record<string, MetadataEntry[]> = {};
+    for (const k of AREA_ORDER) if (groups[k]) ordered[k] = groups[k];
+    for (const k of Object.keys(groups).sort()) if (!ordered[k]) ordered[k] = groups[k];
+    return ordered;
   }, [metadata]);
 
   const categoryLabels: Record<string, string> = {
+    grunduppgifter: "Grunduppgifter",
+    produktion: "Produktion",
+    status: "Status",
+    ekonomi: "Ekonomi",
     geografi: "Geografi",
     kontakt: "Kontakt",
     artikel: "Artikel",
     administrativ: "Administrativ",
     beskrivning: "Beskrivning",
-    annat: "Ovrig",
+    annat: "Övrigt",
   };
 
   const updateMutation = useMutation({
@@ -769,13 +788,48 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
     updateMutation.mutate({ id: entry.id, varde: val });
   };
 
-  const availableTypesForAdd = metadataTypes.filter(t => 
-    !metadata.some(m => m.source === 'local' && m.katalog.namn === t.namn)
-  );
+  // PDF §14: katalogtyper med allowDuplicates får dyka upp flera gånger i "Lägg till".
+  const availableTypesForAdd = metadataTypes
+    .filter(t =>
+      (t as any).allowDuplicates === true ||
+      !metadata.some(m => m.source === 'local' && m.katalog.namn === t.namn)
+    )
+    .sort((a, b) => {
+      const aArea = AREA_ORDER.indexOf((a as any).area ?? "");
+      const bArea = AREA_ORDER.indexOf((b as any).area ?? "");
+      const aIdx = aArea === -1 ? 99 : aArea;
+      const bIdx = bArea === -1 ? 99 : bArea;
+      if (aIdx !== bIdx) return aIdx - bIdx;
+      const an = (a as any).displayNumber ?? a.sortOrder ?? 9999;
+      const bn = (b as any).displayNumber ?? b.sortOrder ?? 9999;
+      if (an !== bn) return an - bn;
+      return a.namn.localeCompare(b.namn, "sv");
+    });
 
   const selectedTypeForAdd = metadataTypes.find(t => t.namn === newMetadata.metadataTypNamn);
 
-  function renderInput(datatype: string, value: string, onChange: (v: string) => void, testId: string) {
+  function renderInput(
+    datatype: string,
+    value: string,
+    onChange: (v: string) => void,
+    testId: string,
+    allowedValues?: string[] | null,
+  ) {
+    // PDF §7/§14: dropdown från katalogen
+    if (allowedValues && allowedValues.length > 0) {
+      return (
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger className="h-8" data-testid={testId}>
+            <SelectValue placeholder="Välj värde..." />
+          </SelectTrigger>
+          <SelectContent>
+            {allowedValues.map((opt) => (
+              <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
+    }
     switch (datatype) {
       case 'boolean':
         return (
@@ -873,6 +927,11 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                                 </TooltipTrigger>
                                 <TooltipContent>{DATA_TYPE_LABELS[entry.katalog.datatyp] || entry.katalog.datatyp}</TooltipContent>
                               </Tooltip>
+                              {(entry.katalog as any).displayNumber != null && (
+                                <span className="text-[10px] font-mono text-muted-foreground shrink-0 tabular-nums">
+                                  {(entry.katalog as any).displayNumber}.
+                                </span>
+                              )}
                               <span className="text-sm font-medium truncate">{entry.katalog.namn}</span>
                               {entry.katalog.beteckning && (
                                 <Badge variant="outline" className="text-[10px] font-mono px-1 py-0 h-4 shrink-0">
@@ -955,7 +1014,7 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                           {isEditing ? (
                             <div className="flex items-center gap-2 mt-2">
                               <div className="flex-1">
-                                {renderInput(entry.katalog.datatyp, editValue, setEditValue, `input-edit-${entry.id}`)}
+                                {renderInput(entry.katalog.datatyp, editValue, setEditValue, `input-edit-${entry.id}`, entry.katalog.allowedValues)}
                               </div>
                               <Button 
                                 size="icon" 
@@ -1029,11 +1088,18 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                       <SelectValue placeholder="Valj typ..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {availableTypesForAdd.map(t => (
-                        <SelectItem key={t.id} value={t.namn}>
-                          {t.namn} ({DATA_TYPE_LABELS[t.datatyp] || t.datatyp})
-                        </SelectItem>
-                      ))}
+                      {availableTypesForAdd.map(t => {
+                        const area = (t as any).area as string | undefined;
+                        const dn = (t as any).displayNumber as number | undefined;
+                        const prefix = dn != null ? `${dn}. ` : "";
+                        const suffix = (t as any).allowDuplicates ? " · flera tillåts" : "";
+                        const areaLabel = area ? `[${categoryLabels[area] || area}] ` : "";
+                        return (
+                          <SelectItem key={t.id} value={t.namn}>
+                            {areaLabel}{prefix}{t.namn} ({DATA_TYPE_LABELS[t.datatyp] || t.datatyp}){suffix}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1042,7 +1108,7 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                   <>
                     <div className="space-y-2">
                       <Label>Varde</Label>
-                      {renderInput(selectedTypeForAdd.datatyp, newMetadata.varde, (v) => setNewMetadata(p => ({ ...p, varde: v })), "input-new-metadata-value")}
+                      {renderInput(selectedTypeForAdd.datatyp, newMetadata.varde, (v) => setNewMetadata(p => ({ ...p, varde: v })), "input-new-metadata-value", selectedTypeForAdd.allowedValues)}
                     </div>
 
                     <div className="flex items-center justify-between">

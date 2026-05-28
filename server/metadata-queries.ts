@@ -103,6 +103,13 @@ export async function getObjectWithAllMetadata(
         mk.kategori as katalog_kategori,
         mk.sort_order as katalog_sort_order,
         mk.icon as katalog_icon,
+        mk.area as katalog_area,
+        mk.display_number as katalog_display_number,
+        mk.allow_duplicates as katalog_allow_duplicates,
+        mk.allowed_values as katalog_allowed_values,
+        mk.beteckning as katalog_beteckning,
+        mk.is_system as katalog_is_system,
+        mk.is_required as katalog_is_required,
         pc.level,
         pc.name as from_objekt_namn,
         pc.blocked_katalog_ids,
@@ -181,8 +188,15 @@ export async function getObjectWithAllMetadata(
         kategori: row.katalog_kategori,
         sortOrder: row.katalog_sort_order,
         icon: row.katalog_icon,
+        area: row.katalog_area ?? null,
+        displayNumber: row.katalog_display_number ?? null,
+        allowDuplicates: row.katalog_allow_duplicates ?? false,
+        allowedValues: row.katalog_allowed_values ?? null,
+        beteckning: row.katalog_beteckning ?? null,
+        isSystem: row.katalog_is_system ?? false,
+        isRequired: row.katalog_is_required ?? false,
         createdAt: row.created_at,
-      },
+      } as any,
       source: row.source,
       fromObject: row.source === 'inherited' ? {
         id: row.objekt_id,
@@ -277,6 +291,30 @@ export async function createMetadata(data: {
 
   if (!metadataTyp) {
     throw new Error(`Metadata type "${data.metadataTypNamn}" not found for this tenant`);
+  }
+
+  // PDF §7/§14: dropdown-validering (allowedValues)
+  if (metadataTyp.allowedValues && metadataTyp.allowedValues.length > 0) {
+    const asString = data.varde === null || data.varde === undefined ? '' : String(data.varde);
+    if (!metadataTyp.allowedValues.includes(asString)) {
+      throw new Error(`Ogiltigt värde för "${metadataTyp.namn}". Tillåtna värden: ${metadataTyp.allowedValues.join(', ')}`);
+    }
+  }
+
+  // PDF §14: dubblettkontroll (allowDuplicates=false → max ett lokalt värde per objekt)
+  if (!metadataTyp.allowDuplicates) {
+    const [duplicate] = await db
+      .select({ id: metadataVarden.id })
+      .from(metadataVarden)
+      .where(and(
+        eq(metadataVarden.objektId, data.objektId),
+        eq(metadataVarden.metadataKatalogId, metadataTyp.id),
+        eq(metadataVarden.tenantId, data.tenantId)
+      ))
+      .limit(1);
+    if (duplicate) {
+      throw new Error(`Dubblett: "${metadataTyp.namn}" finns redan på objektet. Tillåt dubbletter i katalogen om flera värden behövs.`);
+    }
   }
 
   const vardeFields: Record<string, string | number | boolean | Date | Record<string, unknown> | null> = {
@@ -412,6 +450,14 @@ export async function updateMetadata(
 
   if (!metadataTyp) {
     throw new Error(`Metadata type not found for this tenant`);
+  }
+
+  // PDF §7/§14: dropdown-validering (allowedValues) — gäller även uppdatering
+  if (metadataTyp.allowedValues && metadataTyp.allowedValues.length > 0) {
+    const asString = varde === null || varde === undefined ? '' : String(varde);
+    if (!metadataTyp.allowedValues.includes(asString)) {
+      throw new Error(`Ogiltigt värde för "${metadataTyp.namn}". Tillåtna värden: ${metadataTyp.allowedValues.join(', ')}`);
+    }
   }
 
   const vardeFields: Record<string, string | number | boolean | Date | Record<string, unknown> | null> = {
@@ -1226,16 +1272,71 @@ export async function getAllMetadataTypes(tenantId: string): Promise<MetadataKat
 // SEED STANDARD METADATATYPER FÖR EN TENANT
 // ============================================================================
 
-export async function seedDefaultMetadataTypes(tenantId: string): Promise<void> {
-  const existingTypes = await db
-    .select()
+// PDF §7: standardkatalog grupperad per område (idempotent per namn).
+// Lägg till nya typer utan att röra existerande (analogt med seedKarlMetadataTypes).
+export const STANDARD_METADATA_DEFINITIONS: Array<{
+  namn: string;
+  datatyp: string;
+  arLogisk: boolean;
+  standardArvs: boolean;
+  kategori: string;
+  beskrivning: string;
+  sortOrder: number;
+  icon: string;
+  area?: 'grunduppgifter' | 'produktion' | 'status' | 'ekonomi';
+  displayNumber?: number;
+  allowDuplicates?: boolean;
+  allowedValues?: string[];
+  isSystem?: boolean;
+  isRequired?: boolean;
+  referensTabell?: string;
+}> = [
+  // === Grunduppgifter ===
+  { namn: 'Objektnamn', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'grunduppgifter', beskrivning: 'Objektets namn (systemfält)', sortOrder: 1, icon: 'Type', area: 'grunduppgifter', displayNumber: 1, isSystem: true, isRequired: true },
+  { namn: 'Kontakt', datatyp: 'string', arLogisk: true, standardArvs: true, kategori: 'grunduppgifter', beskrivning: 'Kontaktperson (namn/telefon/e-post)', sortOrder: 3, icon: 'User', area: 'grunduppgifter', displayNumber: 3 },
+  { namn: 'Vinjetbild', datatyp: 'image', arLogisk: false, standardArvs: false, kategori: 'grunduppgifter', beskrivning: 'Bild som representerar objektet', sortOrder: 6, icon: 'Image', area: 'grunduppgifter', displayNumber: 6 },
+
+  // === Produktion ===
+  { namn: 'Typ', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Objekttyp (kärl, miljörum, säck, container, ...)', sortOrder: 9, icon: 'Layers', area: 'produktion', displayNumber: 9, allowedValues: ['Kärl', 'Miljörum', 'Säck', 'Container', 'Underjordsbehållare', 'Övrigt'] },
+  { namn: 'Antal', datatyp: 'integer', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Antal av objektet', sortOrder: 12, icon: 'Hash', area: 'produktion', displayNumber: 12 },
+  { namn: 'Yta', datatyp: 'decimal', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Yta i m² (flera värden tillåts)', sortOrder: 15, icon: 'Square', area: 'produktion', displayNumber: 15, allowDuplicates: true },
+  { namn: 'Storlek', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Storlek (S/M/L/XL)', sortOrder: 18, icon: 'Maximize', area: 'produktion', displayNumber: 18, allowedValues: ['S', 'M', 'L', 'XL'] },
+  { namn: 'Lyftkrok', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Lyftkrokens skick', sortOrder: 21, icon: 'Anchor', area: 'produktion', displayNumber: 21, allowedValues: ['Okej', 'Inte okej'] },
+  { namn: 'Tömningsdag', datatyp: 'string', arLogisk: true, standardArvs: true, kategori: 'produktion', beskrivning: 'Veckodag för tömning', sortOrder: 24, icon: 'Calendar', area: 'produktion', displayNumber: 24, allowedValues: ['Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag', 'Söndag'] },
+  { namn: 'Färg', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Färg på objektet', sortOrder: 27, icon: 'Palette', area: 'produktion', displayNumber: 27, allowedValues: ['Grön', 'Blå', 'Brun', 'Svart', 'Vit', 'Grå', 'Röd', 'Gul'] },
+];
+
+export async function seedDefaultMetadataTypes(tenantId: string): Promise<{ created: string[]; existing: string[] }> {
+  const existing = await db
+    .select({ namn: metadataKatalog.namn })
     .from(metadataKatalog)
     .where(eq(metadataKatalog.tenantId, tenantId));
+  const existingNames = new Set(existing.map(e => e.namn.toLowerCase()));
 
-  if (existingTypes.length > 0) {
-    return;
+  const created: string[] = [];
+  const skipped: string[] = [];
+
+  // 1. PDF §7 standardkatalog
+  for (const def of STANDARD_METADATA_DEFINITIONS) {
+    if (existingNames.has(def.namn.toLowerCase())) {
+      skipped.push(def.namn);
+      continue;
+    }
+    await db.insert(metadataKatalog).values({ tenantId, ...def });
+    created.push(def.namn);
   }
 
+  // 2. Legacy default-typer — behåll bakåtkompatibilitet för tomma tenants,
+  // men hoppa över namn som redan finns i standardkatalogen (undvik dubbletter).
+  if (existing.length === 0) {
+    const standardNames = new Set(STANDARD_METADATA_DEFINITIONS.map(d => d.namn.toLowerCase()));
+    await seedLegacyDefaultMetadataTypes(tenantId, standardNames);
+  }
+
+  return { created, existing: skipped };
+}
+
+async function seedLegacyDefaultMetadataTypes(tenantId: string, skipNames: Set<string> = new Set()): Promise<void> {
   const defaultTypes = [
     { namn: 'Adress', datatyp: 'string', arLogisk: true, standardArvs: true, kategori: 'geografi', beskrivning: 'Postadress (grov position)', sortOrder: 1, icon: 'MapPin' },
     { namn: 'GPS', datatyp: 'string', arLogisk: true, standardArvs: true, kategori: 'geografi', beskrivning: 'GPS-koordinater (longitud, latitud)', sortOrder: 2, icon: 'Navigation' },
@@ -1273,6 +1374,7 @@ export async function seedDefaultMetadataTypes(tenantId: string): Promise<void> 
   ];
 
   for (const type of defaultTypes) {
+    if (skipNames.has(type.namn.toLowerCase())) continue;
     await db.insert(metadataKatalog).values({
       tenantId,
       ...type,

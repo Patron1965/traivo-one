@@ -3761,7 +3761,15 @@ export const metadataKatalog = pgTable("metadata_katalog", {
   allowedValues: text("allowed_values").array(),
   // Vilken nivå som får ändra (null = alla)
   editableByLevel: varchar("editable_by_level", { length: 50 }),
-  
+
+  // === PDF §7/§14: Områden, presentationsnummer, dubbletter ===
+  // Område för UI-gruppering: grunduppgifter, produktion, status, ekonomi
+  area: text("area"),
+  // Visningsnummer för ordning inom område (1, 3, 6, 9, ... — luft mellan för insättning)
+  displayNumber: integer("display_number"),
+  // Tillåt flera värden på samma objekt (t.ex. flera Yta-värden 90 m² + 250 m²)
+  allowDuplicates: boolean("allow_duplicates").default(false).notNull(),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_metadata_katalog_tenant_namn").on(table.tenantId, table.namn),

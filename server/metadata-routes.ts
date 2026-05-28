@@ -65,6 +65,8 @@ metadataRouter.post("/types/seed", async (req: Request, res: Response) => {
   }
 });
 
+const METADATA_AREAS = ['grunduppgifter', 'produktion', 'status', 'ekonomi'] as const;
+
 const createMetadataTypeSchema = z.object({
   namn: z.string().min(1),
   beskrivning: z.string().optional(),
@@ -75,6 +77,14 @@ const createMetadataTypeSchema = z.object({
   kategori: z.string().optional().default('annat'),
   sortOrder: z.number().optional().default(0),
   icon: z.string().optional(),
+  // PDF §7/§14
+  area: z.enum(METADATA_AREAS).optional(),
+  displayNumber: z.number().int().optional(),
+  allowDuplicates: z.boolean().optional().default(false),
+  allowedValues: z.array(z.string()).optional(),
+  isRequired: z.boolean().optional(),
+  isSystem: z.boolean().optional(),
+  beteckning: z.string().max(30).optional(),
 });
 
 metadataRouter.post("/types", async (req: Request, res: Response) => {
@@ -315,10 +325,12 @@ metadataRouter.post("/", async (req: Request, res: Response) => {
       });
     }
     // Return 400 for validation errors (invalid values, missing objects, etc.)
-    if (error.message?.includes('Invalid') || 
+    if (error.message?.includes('Invalid') ||
         error.message?.includes('not found') ||
         error.message?.includes('does not belong') ||
-        error.message?.includes('Unknown datatype')) {
+        error.message?.includes('Unknown datatype') ||
+        error.message?.includes('Ogiltigt värde') ||
+        error.message?.includes('Dubblett')) {
       return res.status(400).json({ error: error.message });
     }
     res.status(500).json({ error: "Kunde inte skapa metadata" });
@@ -354,9 +366,11 @@ metadataRouter.put("/:id", async (req: Request, res: Response) => {
       });
     }
     // Return 400 for validation errors (invalid values, not found, etc.)
-    if (error.message?.includes('Invalid') || 
+    if (error.message?.includes('Invalid') ||
         error.message?.includes('not found') ||
-        error.message?.includes('Unknown datatype')) {
+        error.message?.includes('Unknown datatype') ||
+        error.message?.includes('Ogiltigt värde') ||
+        error.message?.includes('Dubblett')) {
       return res.status(400).json({ error: error.message });
     }
     res.status(500).json({ error: "Kunde inte uppdatera metadata" });
