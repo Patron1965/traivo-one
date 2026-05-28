@@ -608,7 +608,9 @@ export default function ObjectDetailPage() {
             )}
           </div>
         </div>
-        <TelinkSyncButton objectId={obj.id} />
+        {(user?.role === "admin" || user?.role === "owner") && (
+          <TelinkSyncButton objectId={obj.id} />
+        )}
       </div>
 
       <ObjectVignetteSection objectId={obj.id} />

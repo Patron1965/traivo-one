@@ -44,8 +44,14 @@ class TelinkSyncScheduler {
   private initialTimeoutId: NodeJS.Timeout | null = null;
 
   private get enabled(): boolean {
+    // Default PÅ: schemaläggaren rullar i alla miljöer så snart processen
+    // startar. Faktisk synk-aktivering styrs per tenant via
+    // tenant.settings.telink.enabled — tenants som inte konfigurerat
+    // Telink skippas tyst av runForAllTenants(). Sätt
+    // TELINK_SYNC_ENABLED=false för att slå AV schemaläggaren globalt
+    // (t.ex. i tester eller lokal utveckling).
     const flag = process.env.TELINK_SYNC_ENABLED;
-    if (!flag) return false; // default AV (Fas 3, kunden styr via tenant-config)
+    if (!flag) return true;
     return ["1", "true", "yes", "on"].includes(flag.toLowerCase());
   }
 

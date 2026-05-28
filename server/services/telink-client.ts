@@ -89,7 +89,10 @@ export async function fetchTelinkContacts(
   config: TelinkConfig,
   opts: { signal?: AbortSignal } = {},
 ): Promise<TelinkContactRecord[]> {
-  const url = config.baseUrl.replace(/\/+$/, "") + "/contacts";
+  // Hämtar enbart butikschef-kontakter — vi filtrerar både via query-param
+  // (om Telink stödjer det) och post-filtrerar på `role` så vi aldrig
+  // uppdaterar metadata med t.ex. supportkontakter.
+  const url = config.baseUrl.replace(/\/+$/, "") + "/contacts?role=store_manager";
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -117,6 +120,11 @@ export async function fetchTelinkContacts(
     const name =
       pickString(r, ["name", "contactName", "contact_name", "fullName", "full_name"]) ?? "";
     if (!name) continue;
+    const role = pickString(r, ["role", "title"]);
+    // Hård post-filter: behåll bara butikschefer även om Telink-API:t
+    // ignorerar query-paramen. Saknad roll → släpps igenom (vissa
+    // installationer returnerar inte role-fältet alls).
+    if (role && !isStoreManagerRole(role)) continue;
     out.push({
       externalId: pickString(r, ["externalId", "external_id", "id"]),
       objectNumber: pickString(r, [
@@ -128,10 +136,22 @@ export async function fetchTelinkContacts(
       name,
       phone: pickString(r, ["phone", "phoneNumber", "phone_number", "tel"]),
       email: pickString(r, ["email", "e_mail"]),
-      role: pickString(r, ["role", "title"]),
+      role,
     });
   }
   return out;
+}
+
+function isStoreManagerRole(role: string): boolean {
+  const r = role.trim().toLowerCase();
+  return (
+    r === "store_manager" ||
+    r === "store manager" ||
+    r === "butikschef" ||
+    r.includes("butikschef") ||
+    r.includes("store_manager") ||
+    r.includes("store manager")
+  );
 }
 
 function pickString(obj: Record<string, unknown>, keys: string[]): string | null {
@@ -461,7 +481,7 @@ async function createContactChangeIssue(args: {
     issueType: "other",
     priority: "normal",
     status: "open",
-    title: `Ny kontakt: ${newName} på ${obj.name}`,
+    title: `Ny butikschef: ${newName} på ${obj.name}`,
     description: lines.join("\n"),
     customerContact: newName,
   });
