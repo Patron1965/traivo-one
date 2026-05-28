@@ -762,6 +762,80 @@ app.get("/api/objects/:id/descendants", asyncHandler(async (req, res) => {
   res.json(descendants);
 }));
 
+// ============================================
+// VINJETBILD (task #580 — PDF §14.5)
+// Flow: klient hämtar signerad URL via POST /api/uploads/request-url, laddar
+// upp filen, bekräftar via POST /api/uploads/confirm (sätter tenant-ACL), och
+// kallar sedan POST /api/objects/:id/vignette med objektpath:en. Tidigare
+// aktiv vinjet markeras som superseded (soft) — bilden finns kvar i storage
+// och visas i historik-strip.
+// ============================================
+app.get("/api/objects/:id/vignettes", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const vignettes = await storage.getObjectVignettes(tenantId, req.params.id);
+  res.json(vignettes.map((v) => ({
+    id: v.id,
+    storagePath: v.storagePath,
+    url: `/api/storage/serve${v.storagePath}`,
+    uploadedBy: v.uploadedBy,
+    uploadedAt: v.uploadedAt,
+    supersededAt: v.supersededAt,
+    isCurrent: v.supersededAt === null,
+  })));
+}));
+
+app.post("/api/objects/:id/vignette", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const schema = z.object({
+    objectPath: z.string().regex(/^\/objects\/[a-zA-Z0-9/_-]+$/, "Ogiltig objektsökväg"),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+
+  // Verifiera att uppladdningen är bekräftad (har ACL-policy med rätt tenant-ägare).
+  // Annars kan en klient hänvisa till en annan tenants bild eller en orphan.
+  const { ObjectStorageService, ObjectPermission } = await import("../replit_integrations/object_storage/objectStorage").then(async (mod) => ({
+    ObjectStorageService: mod.ObjectStorageService,
+    ObjectPermission: (await import("../replit_integrations/object_storage/objectAcl")).ObjectPermission,
+  }));
+  const oss = new ObjectStorageService();
+  const file = await oss.getObjectEntityFile(parsed.data.objectPath);
+  const userId = (req as any).user?.claims?.sub as string | undefined;
+  const canAccess = await oss.canAccessObjectEntity({
+    userId,
+    tenantId,
+    objectFile: file,
+    requestedPermission: ObjectPermission.READ,
+  });
+  if (!canAccess) {
+    throw new ValidationError("Bilden saknar bekräftad uppladdning eller tillhör en annan tenant. Kör /api/uploads/confirm först.");
+  }
+
+  const created = await storage.replaceObjectVignette({
+    tenantId,
+    objectId: req.params.id,
+    storagePath: parsed.data.objectPath,
+    uploadedBy: userId ?? null,
+  });
+  res.status(201).json({
+    id: created.id,
+    storagePath: created.storagePath,
+    url: `/api/storage/serve${created.storagePath}`,
+    uploadedBy: created.uploadedBy,
+    uploadedAt: created.uploadedAt,
+    supersededAt: created.supersededAt,
+    isCurrent: true,
+  });
+}));
+
 app.post("/api/objects/:id/recalculate-inheritance", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const existing = await storage.getObject(req.params.id);

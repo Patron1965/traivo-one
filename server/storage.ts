@@ -43,6 +43,8 @@ import {
   type FortnoxInvoiceExport, type InsertFortnoxInvoiceExport,
   type ManualInvoiceLine, type InsertManualInvoiceLine,
   type ObjectImage, type InsertObjectImage,
+  type ObjectVignette, type InsertObjectVignette,
+  objectVignettes,
   type ObjectContact, type InsertObjectContact,
   type TaskDesiredTimewindow, type InsertTaskDesiredTimewindow,
   type TaskDependency, type InsertTaskDependency,
@@ -663,6 +665,10 @@ export interface IStorage {
   getObjectImage(id: string): Promise<ObjectImage | undefined>;
   createObjectImage(image: InsertObjectImage): Promise<ObjectImage>;
   deleteObjectImage(id: string, objectId: string, tenantId: string): Promise<void>;
+  // Vinjetbilder (task #580): aktuell + historik per objekt.
+  getObjectVignettes(tenantId: string, objectId: string): Promise<ObjectVignette[]>;
+  getCurrentObjectVignette(tenantId: string, objectId: string): Promise<ObjectVignette | undefined>;
+  replaceObjectVignette(input: InsertObjectVignette): Promise<ObjectVignette>;
   
   // Object Contacts (with inheritance support)
   getObjectContacts(objectId: string): Promise<ObjectContact[]>;
@@ -5842,6 +5848,50 @@ export class DatabaseStorage implements IStorage {
       eq(objectImages.objectId, objectId),
       eq(objectImages.tenantId, tenantId)
     ));
+  }
+
+  // ============================================
+  // Object Vignettes (task #580 — PDF §14.5)
+  // En "aktuell" rad per objekt (supersededAt IS NULL) + historiska versioner.
+  // ============================================
+
+  async getObjectVignettes(tenantId: string, objectId: string): Promise<ObjectVignette[]> {
+    return db.select().from(objectVignettes)
+      .where(and(eq(objectVignettes.tenantId, tenantId), eq(objectVignettes.objectId, objectId)))
+      .orderBy(desc(objectVignettes.uploadedAt));
+  }
+
+  async getCurrentObjectVignette(tenantId: string, objectId: string): Promise<ObjectVignette | undefined> {
+    const [row] = await db.select().from(objectVignettes)
+      .where(and(
+        eq(objectVignettes.tenantId, tenantId),
+        eq(objectVignettes.objectId, objectId),
+        isNull(objectVignettes.supersededAt),
+      ))
+      .limit(1);
+    return row || undefined;
+  }
+
+  // Atomiskt byte: markerar nuvarande aktiva som superseded och inserter ny aktiv.
+  // Partial unique-index (idx_object_vignettes_active_unique) garanterar att två
+  // samtidiga byten inte kan ge två aktiva — andra transaktionen failas och retryas.
+  async replaceObjectVignette(input: InsertObjectVignette): Promise<ObjectVignette> {
+    return db.transaction(async (tx) => {
+      const now = new Date();
+      await tx.update(objectVignettes)
+        .set({ supersededAt: now })
+        .where(and(
+          eq(objectVignettes.tenantId, input.tenantId),
+          eq(objectVignettes.objectId, input.objectId),
+          isNull(objectVignettes.supersededAt),
+        ));
+      const [row] = await tx.insert(objectVignettes).values({
+        ...input,
+        uploadedAt: now,
+        supersededAt: null,
+      }).returning();
+      return row;
+    });
   }
 
   // ============================================

@@ -2230,6 +2230,28 @@ export const objectImages = pgTable("object_images", {
 ]);
 
 // ============================================
+// VINJETBILDER - PDF §14.5: en aktuell vinjetbild per objekt + versionshistorik.
+// Soft-supersede istället för hard-delete så fältpersonal kan se tidigare bilder
+// och slitage kan dokumenteras över tid. Aktuell bild = rad med supersededAt IS NULL.
+// ============================================
+export const objectVignettes = pgTable("object_vignettes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id, { onDelete: "cascade" }).notNull(),
+  // Object Storage entity-path (/objects/uploads/<uuid>). Serveras genom
+  // /api/storage/serve<storagePath> som validerar tenant-ACL.
+  storagePath: text("storage_path").notNull(),
+  uploadedBy: varchar("uploaded_by").references(() => users.id, { onDelete: "set null" }),
+  uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
+  // Sätts när bilden ersätts av en nyare version. NULL = aktuell vinjetbild.
+  supersededAt: timestamp("superseded_at"),
+}, (table) => [
+  index("idx_object_vignettes_tenant_object_uploaded").on(table.tenantId, table.objectId, table.uploadedAt),
+  // Partial unique-index för "max en aktuell per objekt" enforce:as i migration
+  // (Drizzle saknar partial-index-syntax — se 0051_object_vignettes.sql).
+]);
+
+// ============================================
 // OBJEKTKONTAKTER - Kontakter kopplade till objekt med arv
 // ============================================
 
@@ -2973,6 +2995,7 @@ export const insertInvoiceRecipientSchema = createInsertSchema(invoiceRecipients
 export const insertMetadataDefinitionSchema = createInsertSchema(metadataDefinitions).omit({ id: true, createdAt: true, deletedAt: true });
 export const insertObjectMetadataSchema = createInsertSchema(objectMetadata).omit({ id: true, createdAt: true });
 export const insertObjectImageSchema = createInsertSchema(objectImages).omit({ id: true, createdAt: true });
+export const insertObjectVignetteSchema = createInsertSchema(objectVignettes).omit({ id: true, uploadedAt: true, supersededAt: true });
 export const insertObjectContactSchema = createInsertSchema(objectContacts).omit({ id: true, createdAt: true });
 export const insertTaskDesiredTimewindowSchema = createInsertSchema(taskDesiredTimewindows).omit({ id: true, createdAt: true });
 export const insertTaskDependencySchema = createInsertSchema(taskDependencies).omit({ id: true, createdAt: true });
@@ -3003,6 +3026,8 @@ export type ObjectMetadata = typeof objectMetadata.$inferSelect;
 export type InsertObjectMetadata = z.infer<typeof insertObjectMetadataSchema>;
 export type ObjectImage = typeof objectImages.$inferSelect;
 export type InsertObjectImage = z.infer<typeof insertObjectImageSchema>;
+export type ObjectVignette = typeof objectVignettes.$inferSelect;
+export type InsertObjectVignette = z.infer<typeof insertObjectVignetteSchema>;
 export type ObjectContact = typeof objectContacts.$inferSelect;
 export type InsertObjectContact = z.infer<typeof insertObjectContactSchema>;
 export type TaskDesiredTimewindow = typeof taskDesiredTimewindows.$inferSelect;

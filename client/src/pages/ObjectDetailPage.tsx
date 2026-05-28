@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
 import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
+import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
 import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
 import ObjectPayersCard from "@/components/ObjectPayersCard";
 import { useAuth } from "@/hooks/use-auth";
@@ -607,6 +608,8 @@ export default function ObjectDetailPage() {
           </div>
         </div>
       </div>
+
+      <ObjectVignetteSection objectId={obj.id} />
 
       {customerIdForSearch && (
         <div className="relative" data-testid="object-tree-search">
