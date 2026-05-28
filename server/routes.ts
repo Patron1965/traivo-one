@@ -739,6 +739,9 @@ export async function registerRoutes(
   registerResourceRoutes(app);
   registerWorkOrderRoutes(app);
   registerImportRoutes(app);
+  // Task #578: tre-stegs import-wizard (Organisation → Butiker → Fysiska objekt)
+  const { registerImportWizardRoutes } = await import("./routes/importWizardRoutes");
+  registerImportWizardRoutes(app);
   await registerOnboardingRoutes(app);
   registerConfigRoutes(app);
   registerClusterRoutes(app);

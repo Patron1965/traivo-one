@@ -5148,6 +5148,32 @@ export type InsertImportBatch = z.infer<typeof insertImportBatchSchema>;
 export type ImportBatch = typeof importBatches.$inferSelect;
 
 // ============================================
+// Import Sessions — wizard-bunden interim → objectId-mapping (task #578)
+// ============================================
+// Håller mapping `interim → objectId` som spänner över alla tre stegen i
+// tre-stegs import-wizarden (Organisation → Butiker → Fysiska objekt).
+// step_completed = senast committad steg (0/1/2/3). interim_map ackumuleras
+// stegvis så steg 2/3 kan referera steg 1:s interimnummer.
+export const importSessions = pgTable("import_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  status: text("status").default("in_progress").notNull(),
+  stepCompleted: integer("step_completed").default(0).notNull(),
+  interimMap: jsonb("interim_map").default({}).notNull(),
+  createdCounts: jsonb("created_counts").default({}).notNull(),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_import_sessions_tenant").on(table.tenantId),
+  index("idx_import_sessions_tenant_status").on(table.tenantId, table.status),
+]);
+
+export type ImportSession = typeof importSessions.$inferSelect;
+export type InsertImportSession = typeof importSessions.$inferInsert;
+
+// ============================================
 // Tenant Labels — branschanpassad terminologi
 // ============================================
 export const tenantLabels = pgTable("tenant_labels", {

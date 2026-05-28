@@ -31,6 +31,7 @@ import ImportColumnMapper from "@/components/ImportColumnMapper";
 import CustomerFastighetslistaImport from "@/components/CustomerFastighetslistaImport";
 import { ImportEntryChooser, type ImportMode } from "@/components/import/ImportEntryChooser";
 import { ChildObjectImportFlow } from "@/components/import/ChildObjectImportFlow";
+import { ImportWizardFlow } from "@/components/import/ImportWizardFlow";
 import { ImportTypeHistory } from "@/components/import/ImportTypeHistory";
 import { BatchDetailsDialog as SharedBatchDetailsDialog } from "@/components/import/BatchDetailsDialog";
 import { ComingSoonPanel } from "@/components/import/ComingSoonPanel";
@@ -2120,9 +2121,9 @@ export default function ImportPage() {
 
   const MODE_STORAGE_KEY = "traivo-import-mode";
   const [importMode, setImportMode] = useState<ImportMode | null>(() => {
-    if (urlMode === "migration" || urlMode === "ongoing") return urlMode;
+    if (urlMode === "migration" || urlMode === "ongoing" || urlMode === "wizard") return urlMode;
     const saved = typeof window !== "undefined" ? localStorage.getItem(MODE_STORAGE_KEY) : null;
-    return saved === "migration" || saved === "ongoing" ? saved : null;
+    return saved === "migration" || saved === "ongoing" || saved === "wizard" ? (saved as ImportMode) : null;
   });
   useEffect(() => {
     if (importMode) localStorage.setItem(MODE_STORAGE_KEY, importMode);
@@ -2131,11 +2132,13 @@ export default function ImportPage() {
   type ActiveTab =
     | "modus" | "enrich" | "manual" | "fortnox" | "mapped"
     | "customerlist" | "children" | "payers" | "recipients"
+    | "wizard"
     | "history" | "quality";
   const initialTab: ActiveTab = ((): ActiveTab => {
     const validTabs: ActiveTab[] = [
       "modus", "enrich", "manual", "fortnox", "mapped",
       "customerlist", "children", "payers", "recipients",
+      "wizard",
       "history", "quality",
     ];
     if (urlTab && validTabs.includes(urlTab as ActiveTab)) return urlTab as ActiveTab;
@@ -2143,20 +2146,28 @@ export default function ImportPage() {
   })();
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
 
-  // Task #564: normalisera activeTab när importMode ändras — undvik out-of-scope-vy
+  // Task #564 + #578: normalisera activeTab när importMode ändras
   const visibleTabsForMode = useCallback((mode: ImportMode | null): ActiveTab[] => {
     const migration: ActiveTab[] = ["modus", "enrich", "manual", "fortnox", "mapped"];
     const ongoing: ActiveTab[] = ["customerlist", "children", "payers", "recipients"];
+    const wizard: ActiveTab[] = ["wizard"];
     const always: ActiveTab[] = ["history", "quality"];
     if (mode === "migration") return [...migration, ...always];
     if (mode === "ongoing") return [...ongoing, ...always];
-    return [...migration, ...ongoing, ...always];
+    if (mode === "wizard") return [...wizard, ...always];
+    return [...migration, ...ongoing, ...wizard, ...always];
   }, []);
   useEffect(() => {
     const allowed = visibleTabsForMode(importMode);
     if (!allowed.includes(activeTab)) {
       const fallback: ActiveTab =
-        importMode === "migration" ? "modus" : importMode === "ongoing" ? "customerlist" : "customerlist";
+        importMode === "migration"
+          ? "modus"
+          : importMode === "wizard"
+          ? "wizard"
+          : importMode === "ongoing"
+          ? "customerlist"
+          : "customerlist";
       setActiveTab(fallback);
     }
   }, [importMode, activeTab, visibleTabsForMode]);
@@ -3061,6 +3072,12 @@ export default function ImportPage() {
                 Fakturamottagare
               </TabsTrigger>
             </>
+          )}
+          {(importMode === null || importMode === "wizard") && (
+            <TabsTrigger value="wizard" className="flex items-center gap-2" data-testid="tab-wizard-import">
+              <FilePlus className="h-4 w-4" />
+              Tre-stegs wizard
+            </TabsTrigger>
           )}
           <TabsTrigger value="history" className="flex items-center gap-2" data-testid="tab-import-history">
             <History className="h-4 w-4" />
@@ -4996,6 +5013,10 @@ export default function ImportPage() {
 
         <TabsContent value="enrich" className="space-y-6">
           <EnrichKarlSection />
+        </TabsContent>
+
+        <TabsContent value="wizard" className="space-y-6">
+          <ImportWizardFlow />
         </TabsContent>
 
         <TabsContent value="children" className="space-y-6">

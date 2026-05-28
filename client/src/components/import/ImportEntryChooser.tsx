@@ -1,14 +1,54 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Database, PlusCircle, ChevronRight } from "lucide-react";
+import { Database, PlusCircle, ChevronRight, ListOrdered } from "lucide-react";
 
-export type ImportMode = "migration" | "ongoing";
+export type ImportMode = "migration" | "ongoing" | "wizard";
 
 interface Props {
   value: ImportMode | null;
   onChange: (mode: ImportMode) => void;
 }
+
+interface ModeOption {
+  key: ImportMode;
+  icon: typeof Database;
+  title: string;
+  description: string;
+  testId: string;
+}
+
+const MODES: ModeOption[] = [
+  {
+    key: "migration",
+    icon: Database,
+    title: "Förstagångs-migrering",
+    description:
+      "Stora exporter från Modus, Fortnox eller egna XLSX-listor. Stegvis migration med batch, ångra och historik.",
+    testId: "button-mode-migration",
+  },
+  {
+    key: "ongoing",
+    icon: PlusCircle,
+    title: "Lägg till löpande",
+    description:
+      "Vardagligt underhåll: nya underobjekt, betalare, fakturamottagare, kundlistor — paste eller mindre filer.",
+    testId: "button-mode-ongoing",
+  },
+  {
+    key: "wizard",
+    icon: ListOrdered,
+    title: "Tre-stegs import-wizard",
+    description:
+      "Guidat onboarding-flöde: Organisation → Butiker → Fysiska objekt. Interimnummer kopplar stegen.",
+    testId: "button-mode-wizard",
+  },
+];
+
+const MODE_LABELS: Record<ImportMode, string> = {
+  migration: "Förstagångs-migrering",
+  ongoing: "Lägg till löpande",
+  wizard: "Tre-stegs import-wizard",
+};
 
 export function ImportEntryChooser({ value, onChange }: Props) {
   return (
@@ -20,47 +60,34 @@ export function ImportEntryChooser({ value, onChange }: Props) {
             Välj ingång — verktygen nedanför filtreras därefter.
           </p>
         </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => onChange("migration")}
-            className={`text-left rounded-lg border p-4 transition-colors hover-elevate active-elevate-2 ${
-              value === "migration" ? "border-primary bg-primary/5" : "border-border"
-            }`}
-            data-testid="button-mode-migration"
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <Database className="h-4 w-4 text-primary" />
-              <span className="font-medium">Förstagångs-migrering</span>
-              {value === "migration" && <Badge variant="default" className="ml-auto text-xs">Vald</Badge>}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Stora exporter från Modus, Fortnox eller egna XLSX-listor. Stegvis migration med batch, ångra och historik.
-            </p>
-          </button>
-          <button
-            type="button"
-            onClick={() => onChange("ongoing")}
-            className={`text-left rounded-lg border p-4 transition-colors hover-elevate active-elevate-2 ${
-              value === "ongoing" ? "border-primary bg-primary/5" : "border-border"
-            }`}
-            data-testid="button-mode-ongoing"
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <PlusCircle className="h-4 w-4 text-primary" />
-              <span className="font-medium">Lägg till löpande</span>
-              {value === "ongoing" && <Badge variant="default" className="ml-auto text-xs">Vald</Badge>}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Vardagligt underhåll: nya underobjekt, betalare, fakturamottagare, kundlistor — paste eller mindre filer.
-            </p>
-          </button>
+        <div className="grid gap-3 md:grid-cols-3">
+          {MODES.map((m) => {
+            const Icon = m.icon;
+            const selected = value === m.key;
+            return (
+              <button
+                key={m.key}
+                type="button"
+                onClick={() => onChange(m.key)}
+                className={`text-left rounded-lg border p-4 transition-colors hover-elevate active-elevate-2 ${
+                  selected ? "border-primary bg-primary/5" : "border-border"
+                }`}
+                data-testid={m.testId}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Icon className="h-4 w-4 text-primary" />
+                  <span className="font-medium">{m.title}</span>
+                  {selected && <Badge variant="default" className="ml-auto text-xs">Vald</Badge>}
+                </div>
+                <p className="text-xs text-muted-foreground">{m.description}</p>
+              </button>
+            );
+          })}
         </div>
         {value && (
           <div className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="text-mode-hint">
             <ChevronRight className="h-3 w-3" />
-            Visar verktyg för:{" "}
-            <strong>{value === "migration" ? "Förstagångs-migrering" : "Lägg till löpande"}</strong>
+            Visar verktyg för: <strong>{MODE_LABELS[value]}</strong>
           </div>
         )}
       </CardContent>
