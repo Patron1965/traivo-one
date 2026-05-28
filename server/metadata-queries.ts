@@ -370,6 +370,14 @@ export async function createMetadata(data: {
     andringsMetod: data.metod ?? 'manuell',
   });
 
+  // Task #552 (D): notifiera bakgrundsjob om metadata-ändring.
+  try {
+    const { enqueueMetadataChange } = await import("./services/metadata-change-jobs");
+    enqueueMetadataChange(data.tenantId, data.objektId);
+  } catch (err) {
+    console.error("[metadata-queries] enqueueMetadataChange failed (create):", err);
+  }
+
   return newMetadata;
 }
 
@@ -498,6 +506,14 @@ export async function updateMetadata(
     andringsMetod: metod ?? 'manuell',
   });
 
+  // Task #552 (D): notifiera bakgrundsjob om metadata-ändring.
+  try {
+    const { enqueueMetadataChange } = await import("./services/metadata-change-jobs");
+    enqueueMetadataChange(tenantId, existing.objektId);
+  } catch (err) {
+    console.error("[metadata-queries] enqueueMetadataChange failed (update):", err);
+  }
+
   return updated;
 }
 
@@ -623,6 +639,17 @@ export async function propagateMetadataDown(
       if (!affectedObjectIds.includes(childId)) {
         affectedObjectIds.push(childId);
       }
+    }
+  }
+
+  // Task #552 (D): notifiera bakgrundsjob — använd `force` för att inte
+  // debounca när hela barnträd arvr ned.
+  if (affectedObjectIds.length > 0) {
+    try {
+      const { enqueueMetadataChange } = await import("./services/metadata-change-jobs");
+      for (const id of affectedObjectIds) enqueueMetadataChange(tenantId, id, { force: true });
+    } catch (err) {
+      console.error("[metadata-queries] enqueueMetadataChange failed (propagate):", err);
     }
   }
 

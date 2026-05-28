@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
+import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
@@ -730,6 +731,9 @@ export default function ObjectDetailPage() {
           <TabsTrigger value="matching-articles" data-testid="tab-matching-articles">
             <LinkIcon className="h-3.5 w-3.5 mr-1" />
             Matchande artiklar {matchingArticles.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{matchingArticles.length}</Badge>}
+          </TabsTrigger>
+          <TabsTrigger value="history-archive" data-testid="tab-history-archive">
+            Historik & Arkiv
           </TabsTrigger>
         </TabsList>
 
@@ -1506,6 +1510,10 @@ export default function ObjectDetailPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="history-archive">
+          <ObjectHistoryArchiveTab objectId={objectId} isArchived={!!(resolvedObject as any)?.deletedAt} />
         </TabsContent>
       </Tabs>
 

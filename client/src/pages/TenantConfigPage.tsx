@@ -41,6 +41,7 @@ import {
   ModulesTab,
   MetadataLabelsTab,
   InvitationsTab,
+  DisplayNameRulesTab,
 } from "./tenant-config";
 
 export default function TenantConfigPage() {
@@ -53,7 +54,7 @@ export default function TenantConfigPage() {
   const validTabs = [
     "onboarding","company","branding","terminology","articles","price-lists",
     "resources","resource-profiles","teams","iot","modules","metadata-labels",
-    "invitations",
+    "invitations","display-names",
   ];
   const initialTab = (() => {
     const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tab") : null;
@@ -161,6 +162,10 @@ export default function TenantConfigPage() {
             <Mail className="h-4 w-4" />
             <span className="hidden sm:inline">Inbjudningar</span>
           </TabsTrigger>
+          <TabsTrigger value="display-names" data-testid="tab-display-names" className="flex items-center gap-2">
+            <Tag className="h-4 w-4" />
+            <span className="hidden sm:inline">Visningsnamn</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="onboarding">
@@ -201,6 +206,9 @@ export default function TenantConfigPage() {
         </TabsContent>
         <TabsContent value="invitations">
           <InvitationsTab />
+        </TabsContent>
+        <TabsContent value="display-names">
+          <DisplayNameRulesTab />
         </TabsContent>
       </Tabs>
     </div>

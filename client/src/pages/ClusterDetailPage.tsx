@@ -54,6 +54,7 @@ import {
 } from "lucide-react";
 import { QueryErrorState } from "@/components/ErrorBoundary";
 import { QueryState } from "@/components/QueryState";
+import { ClusterDynamicRulesTab } from "@/components/ClusterDynamicRulesTab";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
@@ -608,6 +609,9 @@ export default function ClusterDetailPage() {
           <TabsTrigger value="orders" data-testid="tab-orders">
             Ordrar ({workOrders.length})
           </TabsTrigger>
+          <TabsTrigger value="rules" data-testid="tab-cluster-rules">
+            Regler
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="hierarchy">
@@ -928,6 +932,10 @@ export default function ClusterDetailPage() {
               </QueryState>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="rules">
+          <ClusterDynamicRulesTab clusterId={clusterId} />
         </TabsContent>
       </Tabs>
 

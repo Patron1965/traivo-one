@@ -180,6 +180,12 @@ export const objects = pgTable("objects", {
   reconciliationFlag: text("reconciliation_flag"),
   reconciliationFlaggedAt: timestamp("reconciliation_flagged_at"),
   reconciliationBatchId: text("reconciliation_batch_id"),
+  // === ARKIVERING (task #552) ===
+  // Vem som arkiverade (user id) och varför. `deletedAt` används fortfarande som
+  // soft-delete-markör; dessa fält är metadata på arkiveringen för spårbarhet
+  // och för "återställ"-flödet.
+  archivedBy: varchar("archived_by"),
+  archivedReason: text("archived_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
@@ -852,7 +858,20 @@ export const clusters = pgTable("clusters", {
   cachedAvgSetupTime: integer("cached_avg_setup_time").default(0),
   // Antal nivåer i hierarkin (beräknas automatiskt)
   cachedHierarchyDepth: integer("cached_hierarchy_depth").default(0),
-  
+
+  // === DYNAMISKA KLUSTER-REGLER (task #552) ===
+  // Regelsats som matchar objekt mot detta kluster via metadata-värden eller
+  // adressfält. Saknas (null) = vanligt manuellt kluster.
+  // Struktur (validerad i clusterDynamicRulesSchema):
+  //   { match: "all" | "any", rules: [
+  //       { kind: "metadata", katalogNamn: string, operator: "eq"|"ne"|"contains"|"in", value: any }
+  //       | { kind: "postalPrefix", value: string }
+  //       | { kind: "city", value: string }
+  //     ] }
+  dynamicRules: jsonb("dynamic_rules"),
+  // Tidpunkt då dynamiska regler senast applicerades (för UI-info).
+  dynamicRulesLastAppliedAt: timestamp("dynamic_rules_last_applied_at"),
+
   status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
@@ -861,6 +880,44 @@ export const clusters = pgTable("clusters", {
   index("idx_clusters_tenant_status").on(table.tenantId, table.status),
   index("idx_clusters_tenant_root_customer").on(table.tenantId, table.rootCustomerId),
 ]);
+
+// Zod-schema för dynamiska kluster-regler. Används av API-validering och
+// klient-form.
+export const clusterDynamicRuleSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("metadata"),
+    katalogNamn: z.string().min(1),
+    operator: z.enum(["eq", "ne", "contains", "in"]).default("eq"),
+    value: z.union([z.string(), z.number(), z.boolean(), z.array(z.union([z.string(), z.number()]))]),
+  }),
+  z.object({
+    kind: z.literal("postalPrefix"),
+    value: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal("city"),
+    value: z.string().min(1),
+  }),
+]);
+export const clusterDynamicRulesSchema = z.object({
+  match: z.enum(["all", "any"]).default("all"),
+  rules: z.array(clusterDynamicRuleSchema).min(1).max(20),
+});
+export type ClusterDynamicRules = z.infer<typeof clusterDynamicRulesSchema>;
+
+// Tenant-konfiguration för "släktnamn"/hierarkiskt visningsnamn (task #552).
+// Sparas i `tenants.settings.displayNameRules` (jsonb) — ingen separat kolumn.
+export const displayNameRulesSchema = z.object({
+  enabled: z.boolean().default(false),
+  separator: z.string().min(1).max(5).default(" › "),
+  maxDepth: z.number().int().min(1).max(6).default(3),
+  // Endast objekt med dessa hierarchyLevel-värden räknas in i sökvägen.
+  // Tom array = alla nivåer.
+  includeLevels: z.array(z.string()).default([]),
+  // Hoppa över förälder vars namn är identiskt med barnets (undvika "Foo › Foo").
+  skipDuplicateNames: z.boolean().default(true),
+});
+export type DisplayNameRules = z.infer<typeof displayNameRulesSchema>;
 
 // Team - grupper av resurser
 export const teams = pgTable("teams", {
