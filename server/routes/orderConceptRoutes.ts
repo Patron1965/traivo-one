@@ -332,7 +332,34 @@ app.post("/api/order-concepts/:id/validate", asyncHandler(async (req, res) => {
       warnings.push({ code: "NO_MONTHLY_FEE", message: "Månadsavgift ej beräknad" });
     }
 
-    res.json({ valid: errors.length === 0, errors, warnings });
+    // ADR v3 §2.3 (Task #556): Konfliktvarning för fakturamottagare.
+    // Blockerar expansion tills operator väljer (errors), eller varnar om
+    // operator har valt en annan nivå än den resolvern hittar (hint-konflikt).
+    let invoiceRecipient: { recipient: any; sourceCustomerId: string | null; sourceLevel: string | null; conflicts: any[]; hintConflict: boolean; hasConflict: boolean; chain: any[] } | null = null;
+    if (concept.customerId) {
+      const resolved = await storage.resolveInvoiceRecipient(tenantId, concept.customerId, {
+        hintLevel: (concept.invoiceLevel as any) ?? null,
+      });
+      invoiceRecipient = resolved as any;
+      if (resolved.conflicts.length > 1) {
+        errors.push({
+          code: "INVOICE_RECIPIENT_CONFLICT",
+          message: `Flera fakturamottagare har samma prioritet på nivån "${resolved.sourceLevel}" (${resolved.conflicts.length} kandidater). Välj en explicit innan konceptet expanderas.`,
+        });
+      } else if (resolved.hintConflict) {
+        warnings.push({
+          code: "INVOICE_LEVEL_HINT_CONFLICT",
+          message: `Konceptets faktureringsnivå (${concept.invoiceLevel}) matchar inte den vinnande mottagarnivån (${resolved.sourceLevel}). Resolvern använder närmaste nivå i hierarkin.`,
+        });
+      } else if (!resolved.recipient) {
+        warnings.push({
+          code: "NO_INVOICE_RECIPIENT",
+          message: "Ingen fakturamottagare hittades i kundhierarkin — Fortnox-export faller tillbaka till object_payers/objects.customer_id.",
+        });
+      }
+    }
+
+    res.json({ valid: errors.length === 0, errors, warnings, invoiceRecipient });
 }));
 
 // ============================================

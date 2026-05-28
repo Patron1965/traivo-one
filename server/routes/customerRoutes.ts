@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { z } from "zod";
-import { insertCustomerSchema, insertCustomerRelationshipSchema, insertObjectSchema, objects, customers, workOrders, CUSTOMER_HIERARCHY_TYPES } from "@shared/schema";
+import { insertCustomerSchema, insertCustomerRelationshipSchema, insertObjectSchema, objects, customers, workOrders, CUSTOMER_HIERARCHY_TYPES, insertInvoiceRecipientSchema, INVOICE_RECIPIENT_LEVELS, type InvoiceRecipientLevel } from "@shared/schema";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
@@ -893,6 +893,81 @@ app.delete("/api/objects/:id", asyncHandler(async (req, res) => {
   }
   await storage.deleteObject(req.params.id);
   res.status(204).send();
+}));
+
+// ============================================
+// ADR v3 §2.3 (Task #556): Fakturamottagare per kund
+// ============================================
+
+const invoiceRecipientPatchSchema = insertInvoiceRecipientSchema
+  .partial()
+  .omit({ tenantId: true, customerId: true });
+
+app.get("/api/customers/:id/invoice-recipients", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customer = await storage.getCustomer(req.params.id);
+  if (!verifyTenantOwnership(customer, tenantId)) throw new NotFoundError("Kund");
+  const rows = await storage.getInvoiceRecipients(tenantId, req.params.id);
+  res.json(rows);
+}));
+
+app.post("/api/customers/:id/invoice-recipients", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customer = await storage.getCustomer(req.params.id);
+  if (!verifyTenantOwnership(customer, tenantId)) throw new NotFoundError("Kund");
+  const parsed = insertInvoiceRecipientSchema.safeParse({
+    ...req.body,
+    tenantId,
+    customerId: req.params.id,
+  });
+  if (!parsed.success) return res.status(400).json({ error: formatZodError(parsed.error) });
+  if (!INVOICE_RECIPIENT_LEVELS.includes(parsed.data.level as InvoiceRecipientLevel)) {
+    throw new ValidationError(`Ogiltig nivå (måste vara en av ${INVOICE_RECIPIENT_LEVELS.join(", ")})`);
+  }
+  const row = await storage.createInvoiceRecipient(parsed.data);
+  res.status(201).json(row);
+}));
+
+app.patch("/api/customers/:id/invoice-recipients/:recipientId", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getInvoiceRecipient(tenantId, req.params.recipientId);
+  if (!existing || existing.customerId !== req.params.id) throw new NotFoundError("Fakturamottagare");
+  const parsed = invoiceRecipientPatchSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: formatZodError(parsed.error) });
+  if (parsed.data.level && !INVOICE_RECIPIENT_LEVELS.includes(parsed.data.level as InvoiceRecipientLevel)) {
+    throw new ValidationError(`Ogiltig nivå`);
+  }
+  const updated = await storage.updateInvoiceRecipient(tenantId, req.params.recipientId, parsed.data);
+  res.json(updated);
+}));
+
+app.delete("/api/customers/:id/invoice-recipients/:recipientId", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getInvoiceRecipient(tenantId, req.params.recipientId);
+  if (!existing || existing.customerId !== req.params.id) throw new NotFoundError("Fakturamottagare");
+  await storage.deleteInvoiceRecipient(tenantId, req.params.recipientId);
+  res.status(204).send();
+}));
+
+app.get("/api/customers/:id/resolved-invoice-recipient", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customer = await storage.getCustomer(req.params.id);
+  if (!verifyTenantOwnership(customer, tenantId)) throw new NotFoundError("Kund");
+  const hintLevel = typeof req.query.hintLevel === "string" ? req.query.hintLevel as InvoiceRecipientLevel : null;
+  const resolved = await storage.resolveInvoiceRecipient(tenantId, req.params.id, { hintLevel });
+  res.json(resolved);
+}));
+
+app.get("/api/objects/:id/resolved-invoice-recipient", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const obj = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(obj, tenantId)) throw new NotFoundError("Objekt");
+  if (!obj!.customerId) {
+    return res.json({ recipient: null, sourceCustomerId: null, sourceLevel: null, conflicts: [], hintConflict: false, hasConflict: false, chain: [] });
+  }
+  const hintLevel = typeof req.query.hintLevel === "string" ? req.query.hintLevel as InvoiceRecipientLevel : null;
+  const resolved = await storage.resolveInvoiceRecipient(tenantId, obj!.customerId, { hintLevel });
+  res.json(resolved);
 }));
 
 }

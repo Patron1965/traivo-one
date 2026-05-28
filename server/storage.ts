@@ -127,6 +127,8 @@ import {
   taskDependencyTemplates, taskDependencyInstances, invoiceRules, orderConceptRunLogs,
   orderConceptObjects, orderConceptArticles, articleObjectMappings,
   invoiceConfigurations, documentConfigurations, deliverySchedules,
+  invoiceRecipients,
+  type InvoiceRecipient, type InsertInvoiceRecipient, type InvoiceRecipientLevel,
   customerPortalTokens, customerPortalSessions, customerBookingRequests, customerPortalMessages,
   portalUsers, portalUserObjectScopes,
   customerInvoices, customerIssueReports, customerServiceContracts, fortnoxContractSuggestions, customerNotificationSettings,
@@ -718,6 +720,26 @@ export interface IStorage {
 
   // ADR v3 (F5): Frozen WO snapshot + Invoice Recalculation Log
   freezeWorkOrder(workOrderId: string, tenantId: string, opts?: { force?: boolean }): Promise<{ workOrderId: string; frozenUnit: string; frozenQuantity: number; frozenUnitPrice: number; frozenUnitCost: number; frozenUnitTime: number; alreadyFrozen: boolean }>;
+
+  // ADR v3 §2.3 (Task #556): Fakturamottagare med arv + konfliktresolver
+  getInvoiceRecipients(tenantId: string, customerId: string): Promise<InvoiceRecipient[]>;
+  getInvoiceRecipient(tenantId: string, id: string): Promise<InvoiceRecipient | undefined>;
+  createInvoiceRecipient(data: InsertInvoiceRecipient): Promise<InvoiceRecipient>;
+  updateInvoiceRecipient(tenantId: string, id: string, data: Partial<InsertInvoiceRecipient>): Promise<InvoiceRecipient | undefined>;
+  deleteInvoiceRecipient(tenantId: string, id: string): Promise<void>;
+  resolveInvoiceRecipient(
+    tenantId: string,
+    customerId: string,
+    opts?: { hintLevel?: InvoiceRecipientLevel | null; pinnedRecipientId?: string | null; at?: Date },
+  ): Promise<{
+    recipient: InvoiceRecipient | null;
+    sourceCustomerId: string | null;
+    sourceLevel: InvoiceRecipientLevel | null;
+    conflicts: InvoiceRecipient[];
+    hintConflict: boolean;
+    hasConflict: boolean;
+    chain: Array<{ customerId: string; customerName: string; recipients: InvoiceRecipient[] }>;
+  }>;
   recalculateWorkOrder(workOrderId: string, tenantId: string, triggeredBy: string | null, reason?: string): Promise<{ previousValue: number; newValue: number; delta: number; logId: string | null }>;
   getInvoiceRecalculationLogs(tenantId: string, opts?: { workOrderId?: string; limit?: number; offset?: number }): Promise<InvoiceRecalculationLog[]>;
   createInvoiceRecalculationLog(entry: InsertInvoiceRecalculationLog): Promise<InvoiceRecalculationLog>;
@@ -6205,6 +6227,27 @@ export class DatabaseStorage implements IStorage {
       metadataSnapshot = (obj as any)?.metadata ?? {};
     }
     const frozenAt = new Date();
+
+    // ADR v3 §2.3 (Task #556): Frys vinnande fakturamottagare samtidigt.
+    // Vi rör inte befintliga frozen_invoice_* om de redan är satta (omfrysning
+    // behåller operatorvalet). När inget är satt: kör resolvern och frys det
+    // resolvern hittar — eller lämna NULL (Fortnox faller då tillbaka på
+    // object_payers/objects.customer_id som tidigare).
+    const recipientUpdate: Record<string, unknown> = {};
+    if (!wo.frozenInvoiceRecipientId && wo.customerId) {
+      try {
+        const resolved = await this.resolveInvoiceRecipient(tenantId, wo.customerId, { at: frozenAt });
+        if (resolved.recipient) {
+          recipientUpdate.frozenInvoiceRecipientId = resolved.recipient.id;
+          recipientUpdate.frozenInvoiceLevel = resolved.sourceLevel;
+          recipientUpdate.frozenInvoiceSourceCustomerId = resolved.sourceCustomerId;
+        }
+        recipientUpdate.invoiceConflictFlag = resolved.hasConflict;
+      } catch {
+        // Resolver ska inte blockera frysning — back-compat: lämna NULL.
+      }
+    }
+
     await db.update(workOrders).set({
       frozenUnit,
       frozenQuantity,
@@ -6213,8 +6256,152 @@ export class DatabaseStorage implements IStorage {
       frozenUnitTime,
       frozenAt,
       metadataSnapshot,
+      ...recipientUpdate,
     }).where(and(eq(workOrders.id, workOrderId), eq(workOrders.tenantId, tenantId)));
     return { workOrderId, frozenUnit, frozenQuantity, frozenUnitPrice, frozenUnitCost, frozenUnitTime, frozenAt, alreadyFrozen };
+  }
+
+  // ============================================
+  // ADR v3 §2.3 (Task #556): Fakturamottagare med arv + konfliktresolver
+  // ============================================
+  async getInvoiceRecipients(tenantId: string, customerId: string): Promise<InvoiceRecipient[]> {
+    return db.select().from(invoiceRecipients).where(and(
+      eq(invoiceRecipients.tenantId, tenantId),
+      eq(invoiceRecipients.customerId, customerId),
+      isNull(invoiceRecipients.deletedAt),
+    )).orderBy(desc(invoiceRecipients.priority), desc(invoiceRecipients.createdAt));
+  }
+
+  async getInvoiceRecipient(tenantId: string, id: string): Promise<InvoiceRecipient | undefined> {
+    const [row] = await db.select().from(invoiceRecipients).where(and(
+      eq(invoiceRecipients.id, id),
+      eq(invoiceRecipients.tenantId, tenantId),
+      isNull(invoiceRecipients.deletedAt),
+    ));
+    return row;
+  }
+
+  async createInvoiceRecipient(data: InsertInvoiceRecipient): Promise<InvoiceRecipient> {
+    const [row] = await db.insert(invoiceRecipients).values(data).returning();
+    return row;
+  }
+
+  async updateInvoiceRecipient(tenantId: string, id: string, data: Partial<InsertInvoiceRecipient>): Promise<InvoiceRecipient | undefined> {
+    const { tenantId: _ignoreTenant, customerId: _ignoreCustomer, ...patch } = data as any;
+    const [row] = await db.update(invoiceRecipients)
+      .set(patch)
+      .where(and(eq(invoiceRecipients.id, id), eq(invoiceRecipients.tenantId, tenantId)))
+      .returning();
+    return row;
+  }
+
+  async deleteInvoiceRecipient(tenantId: string, id: string): Promise<void> {
+    // Soft-delete — frysta WO ska kunna läsa historisk mottagare.
+    await db.update(invoiceRecipients)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(invoiceRecipients.id, id), eq(invoiceRecipients.tenantId, tenantId)));
+  }
+
+  async resolveInvoiceRecipient(
+    tenantId: string,
+    customerId: string,
+    opts: { hintLevel?: InvoiceRecipientLevel | null; pinnedRecipientId?: string | null; at?: Date } = {},
+  ) {
+    const at = opts.at ?? new Date();
+    const pinnedId = opts.pinnedRecipientId ?? null;
+
+    // 1. Pinnad mottagare vinner alltid (operator har valt).
+    if (pinnedId) {
+      const pinned = await this.getInvoiceRecipient(tenantId, pinnedId);
+      if (pinned) {
+        return {
+          recipient: pinned,
+          sourceCustomerId: pinned.customerId,
+          sourceLevel: pinned.level as InvoiceRecipientLevel,
+          conflicts: [] as InvoiceRecipient[],
+          hintConflict: false,
+          hasConflict: false,
+          chain: [],
+        };
+      }
+    }
+
+    // 2. Bygg kund-kedja bottom-up: [customer, ...ancestors].
+    const [self] = await db.select().from(customers).where(and(
+      eq(customers.id, customerId),
+      eq(customers.tenantId, tenantId),
+      isNull(customers.deletedAt),
+    ));
+    if (!self) {
+      return { recipient: null, sourceCustomerId: null, sourceLevel: null, conflicts: [], hintConflict: false, hasConflict: false, chain: [] };
+    }
+    const ancestors = await this.getCustomerAncestors(tenantId, customerId);
+    const chainCustomers = [self, ...ancestors];
+
+    const isActive = (r: InvoiceRecipient): boolean => {
+      if (r.deletedAt) return false;
+      if (r.validFrom && new Date(r.validFrom) > at) return false;
+      if (r.validTo && new Date(r.validTo) < at) return false;
+      return true;
+    };
+
+    const chain: Array<{ customerId: string; customerName: string; recipients: InvoiceRecipient[] }> = [];
+    let winner: InvoiceRecipient | null = null;
+    let sourceCustomerId: string | null = null;
+    let conflicts: InvoiceRecipient[] = [];
+    let inheritanceBroken = false;
+
+    for (const cust of chainCustomers) {
+      const all = await this.getInvoiceRecipients(tenantId, cust.id);
+      const active = all.filter(isActive);
+      chain.push({ customerId: cust.id, customerName: cust.name, recipients: active });
+
+      if (winner) {
+        // Vi har redan en vinnare — fortsätt bara bygga chain för UI.
+        continue;
+      }
+
+      if (active.length === 0) {
+        // Inget på denna kund — om denna kund explicit kapar (via tom rad
+        // med breaksInheritance kunde finnas i framtiden) stannar vi. För nu
+        // betyder "inga rader" "fortsätt uppåt".
+        continue;
+      }
+
+      // Hitta högsta priority. Ties → konflikt.
+      const maxPriority = Math.max(...active.map(r => r.priority ?? 1));
+      const top = active.filter(r => (r.priority ?? 1) === maxPriority);
+      winner = top[0];
+      sourceCustomerId = cust.id;
+      if (top.length > 1) {
+        // Samma-nivå-konflikt (F1): operator måste välja explicit.
+        conflicts = top;
+      }
+
+      // Om någon mottagare på vinnar-kunden kapar arv, är det redundant
+      // (vi har redan vinnaren här) — men sätt flagga för audit.
+      if (active.some(r => r.breaksInheritance)) {
+        inheritanceBroken = true;
+      }
+      // Vinnaren är funnen — fortsätt bara fylla chain.
+    }
+
+    const sourceLevel = winner ? (winner.level as InvoiceRecipientLevel) : null;
+    const hintConflict = !!(opts.hintLevel && sourceLevel && opts.hintLevel !== sourceLevel);
+    const hasConflict = conflicts.length > 0 || hintConflict;
+
+    // inheritanceBroken används bara för audit — flaggar inte konflikt själv.
+    void inheritanceBroken;
+
+    return {
+      recipient: winner,
+      sourceCustomerId,
+      sourceLevel,
+      conflicts,
+      hintConflict,
+      hasConflict,
+      chain,
+    };
   }
 
   async recalculateWorkOrder(

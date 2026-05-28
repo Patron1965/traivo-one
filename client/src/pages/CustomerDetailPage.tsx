@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { CUSTOMER_HIERARCHY_TYPES } from "@shared/schema";
 import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
 import { PortalUsersTab } from "@/components/customer/PortalUsersTab";
+import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1394,6 +1395,12 @@ export default function CustomerDetailPage() {
               </CardContent>
             </Card>
           </div>
+
+          {customerId && (
+            <div className="mb-4">
+              <InvoiceRecipientsCard customerId={customerId} canEdit={isAdmin} />
+            </div>
+          )}
 
           <Tabs defaultValue="tree" onValueChange={(v) => setMapTabActive(v === "map")}>
             <TabsList>

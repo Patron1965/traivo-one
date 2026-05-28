@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
 import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
+import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
@@ -739,6 +740,11 @@ export default function ObjectDetailPage() {
 
         {/* ==================== ÖVERSIKT ==================== */}
         <TabsContent value="overview">
+          {objectId && (
+            <div className="mb-4">
+              <InvoiceRecipientsCard objectId={objectId} />
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardHeader className="pb-3">

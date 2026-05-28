@@ -432,17 +432,50 @@ export async function exportWorkOrderToFortnox(
       return { success: false, error: "No work order lines to invoice" };
     }
 
+    // ADR v3 §2.3 (Task #556): Om WO har frusen fakturamottagare vinner den
+    // över object_payers/objects.customer_id. payerId-override på exporten
+    // (manuell split) går alltid först. NULL = back-compat (gammalt beteende).
+    let frozenRecipientFortnoxId: string | null = null;
+    if (!invoiceExport.payerId && (workOrder as any).frozenInvoiceRecipientId) {
+      const frozenRec = await storage.getInvoiceRecipient(
+        tenantId,
+        (workOrder as any).frozenInvoiceRecipientId,
+      );
+      if (frozenRec?.fortnoxCustomerId) {
+        frozenRecipientFortnoxId = frozenRec.fortnoxCustomerId;
+      } else if (frozenRec?.customerId) {
+        const mapping = await storage.getFortnoxMapping(tenantId, "customer", frozenRec.customerId);
+        if (mapping) frozenRecipientFortnoxId = mapping.fortnoxId;
+      }
+    }
+
     const objectPayers = invoiceExport.payerId 
       ? [await storage.getObjectPayer(invoiceExport.payerId)]
       : (workOrder.objectId ? await storage.getObjectPayers(workOrder.objectId) : []);
 
     const validPayers = objectPayers.filter(Boolean);
 
+    // ADR v3 §2.3 (Task #556): När WO har frusen fakturamottagare overridar
+    // den object_payers — vi byter ut payer-listan mot en syntetisk payer
+    // som routas till mottagarens Fortnox-kund. payerId-override (manuell
+    // split) går alltid först och har redan begränsat validPayers ovan.
+    if (frozenRecipientFortnoxId && !invoiceExport.payerId) {
+      validPayers.length = 0;
+      validPayers.push({
+        id: `frozen-recipient:${(workOrder as any).frozenInvoiceRecipientId}`,
+        customerId: (workOrder as any).frozenInvoiceSourceCustomerId || workOrder.customerId,
+        sharePercent: 100,
+        articleTypes: [],
+        _frozenFortnoxId: frozenRecipientFortnoxId,
+      } as any);
+    }
+
     // Tidigare fanns en fallback som plockade `obj.customerId` från legacy
     // objects.customer_id-kolumnen om inga object_payers hittades. Den
     // kolumnen är på väg ut (ADR v3 — objekt är neutrala) och får inte
     // längre läsas. Saknas payer är det ett konfigurationsfel som måste
-    // åtgärdas explicit via object_payers innan WO kan faktureras.
+    // åtgärdas explicit via object_payers (eller via frusen fakturamottagare
+    // på WO) innan WO kan faktureras.
     if (!validPayers.length) {
       return {
         success: false,
@@ -468,12 +501,19 @@ export async function exportWorkOrderToFortnox(
         console.warn(`Payer ${payer?.id} has no customerId, skipping`);
         continue;
       }
-      const customerMapping = await storage.getFortnoxMapping(tenantId, "customer", payer.customerId);
-      if (!customerMapping) {
-        console.warn(`Payer ${payer.id} customer not mapped to Fortnox, skipping`);
-        continue;
+      // Frusen fakturamottagare: hoppa över customer-mapping och routa direkt
+      // till mottagarens Fortnox-kundnummer (löst ovan).
+      const frozenFortnoxId = (payer as any)?._frozenFortnoxId as string | undefined;
+      if (frozenFortnoxId) {
+        customerFortnoxId = frozenFortnoxId;
+      } else {
+        const customerMapping = await storage.getFortnoxMapping(tenantId, "customer", payer.customerId);
+        if (!customerMapping) {
+          console.warn(`Payer ${payer.id} customer not mapped to Fortnox, skipping`);
+          continue;
+        }
+        customerFortnoxId = customerMapping.fortnoxId;
       }
-      customerFortnoxId = customerMapping.fortnoxId;
 
       const invoiceRows = [];
       // ADR v3 (F6): Anvand frozen-snapshot om WO ar fryst.

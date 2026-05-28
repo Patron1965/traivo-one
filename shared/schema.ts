@@ -414,6 +414,15 @@ export const workOrders = pgTable("work_orders", {
   frozenAt: timestamp("frozen_at"),
   // Snapshot av relevanta metadata-värden vid expansion (för audit/omräkning).
   metadataSnapshot: jsonb("metadata_snapshot"),
+  // === ADR v3 §2.3 (Task #556): Frozen fakturamottagare ===
+  // Vinnande mottagare bestäms vid expansion och fryses här. Fortnox-export
+  // läser dessa fält och faller tillbaka till object_payers/objects.customer_id
+  // när de är NULL (back-compat). invoice_conflict_flag sätts om resolver
+  // upptäckte flera kandidater och operator inte hade pinnat valet.
+  frozenInvoiceRecipientId: varchar("frozen_invoice_recipient_id"),
+  frozenInvoiceLevel: text("frozen_invoice_level"),
+  frozenInvoiceSourceCustomerId: varchar("frozen_invoice_source_customer_id"),
+  invoiceConflictFlag: boolean("invoice_conflict_flag").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
@@ -2006,6 +2015,49 @@ export const objectPayers = pgTable("object_payers", {
 ]);
 
 // ============================================
+// FAKTURAMOTTAGARE PER KUND (ADR v3 §2.3 — Task #556)
+// ============================================
+// Tre nivåer (central/area/local) bundna till en kund i hierarkin. Resolver
+// söker uppåt via parent_customer_id; närmaste nivå vinner. breaks_inheritance
+// kapar arv neråt (oavsett om denna nivå har egna rader). priority bryter
+// ties på samma nivå/kund. Soft delete via valid_from/valid_to (immutabelt
+// efter frysning på WO).
+export const INVOICE_RECIPIENT_LEVELS = ["central", "area", "local"] as const;
+export type InvoiceRecipientLevel = typeof INVOICE_RECIPIENT_LEVELS[number];
+export const INVOICE_RECIPIENT_LEVEL_LABELS: Record<InvoiceRecipientLevel, string> = {
+  central: "Central",
+  area: "Område",
+  local: "Lokal",
+};
+
+export const invoiceRecipients = pgTable("invoice_recipients", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  level: text("level").notNull(),
+  recipientName: text("recipient_name").notNull(),
+  recipientEmail: text("recipient_email"),
+  recipientAddress: text("recipient_address"),
+  recipientPostalCode: text("recipient_postal_code"),
+  recipientCity: text("recipient_city"),
+  recipientReference: text("recipient_reference"),
+  fortnoxCustomerId: varchar("fortnox_customer_id"),
+  // True = kapa arv neråt. Lägre kunder ärver inte denna konfiguration.
+  breaksInheritance: boolean("breaks_inheritance").default(false).notNull(),
+  // Högre = vinner när flera kandidater finns på samma kund/nivå.
+  priority: integer("priority").default(1).notNull(),
+  validFrom: timestamp("valid_from"),
+  validTo: timestamp("valid_to"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_invoice_recipients_tenant").on(table.tenantId),
+  index("idx_invoice_recipients_customer").on(table.customerId),
+  index("idx_invoice_recipients_tenant_customer_level").on(table.tenantId, table.customerId, table.level),
+]);
+
+// ============================================
 // MANUELLA ARTIKELKOPPLINGAR PER OBJEKT
 // ============================================
 
@@ -2899,6 +2951,7 @@ export const insertFortnoxMappingSchema = createInsertSchema(fortnoxMappings).om
 export const insertFortnoxInvoiceExportSchema = createInsertSchema(fortnoxInvoiceExports).omit({ id: true, createdAt: true });
 export const insertManualInvoiceLineSchema = createInsertSchema(manualInvoiceLines).omit({ id: true, createdAt: true });
 export const insertObjectPayerSchema = createInsertSchema(objectPayers).omit({ id: true, createdAt: true });
+export const insertInvoiceRecipientSchema = createInsertSchema(invoiceRecipients).omit({ id: true, createdAt: true, deletedAt: true });
 export const insertMetadataDefinitionSchema = createInsertSchema(metadataDefinitions).omit({ id: true, createdAt: true, deletedAt: true });
 export const insertObjectMetadataSchema = createInsertSchema(objectMetadata).omit({ id: true, createdAt: true });
 export const insertObjectImageSchema = createInsertSchema(objectImages).omit({ id: true, createdAt: true });
@@ -2924,6 +2977,8 @@ export type ManualInvoiceLine = typeof manualInvoiceLines.$inferSelect;
 export type InsertManualInvoiceLine = z.infer<typeof insertManualInvoiceLineSchema>;
 export type ObjectPayer = typeof objectPayers.$inferSelect;
 export type InsertObjectPayer = z.infer<typeof insertObjectPayerSchema>;
+export type InvoiceRecipient = typeof invoiceRecipients.$inferSelect;
+export type InsertInvoiceRecipient = z.infer<typeof insertInvoiceRecipientSchema>;
 export type MetadataDefinition = typeof metadataDefinitions.$inferSelect;
 export type InsertMetadataDefinition = z.infer<typeof insertMetadataDefinitionSchema>;
 export type ObjectMetadata = typeof objectMetadata.$inferSelect;

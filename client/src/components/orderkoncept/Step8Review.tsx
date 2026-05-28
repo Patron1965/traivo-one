@@ -6,8 +6,11 @@ import { Loader2, CheckCircle2, AlertTriangle, XCircle, Package, FileText, Dolla
 import {
   INVOICE_LEVEL_LABELS, INVOICE_MODEL_LABELS, INVOICE_PERIOD_LABELS,
   DELIVERY_MODEL_LABELS,
-  type InvoiceLevel, type InvoiceModel, type InvoicePeriod, type DeliveryModel
+  INVOICE_RECIPIENT_LEVEL_LABELS,
+  type InvoiceLevel, type InvoiceModel, type InvoicePeriod, type DeliveryModel,
+  type InvoiceRecipient, type InvoiceRecipientLevel,
 } from "@shared/schema";
+import { Receipt } from "lucide-react";
 
 interface Step8Props {
   conceptId: string;
@@ -29,6 +32,14 @@ interface ValidationResult {
   valid: boolean;
   errors: { code: string; message: string }[];
   warnings: { code: string; message: string }[];
+  invoiceRecipient?: {
+    recipient: InvoiceRecipient | null;
+    sourceCustomerId: string | null;
+    sourceLevel: InvoiceRecipientLevel | null;
+    conflicts: InvoiceRecipient[];
+    hintConflict: boolean;
+    hasConflict: boolean;
+  } | null;
 }
 
 export default function Step8Review({
@@ -92,6 +103,34 @@ export default function Step8Review({
               <AlertDescription className="text-sm text-chart-4">{warn.message}</AlertDescription>
             </Alert>
           ))}
+
+          {validation.invoiceRecipient && (
+            <div className="rounded-md border bg-muted/30 p-3" data-testid="step8-invoice-recipient">
+              <div className="flex items-center gap-2 mb-1">
+                <Receipt className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Fakturamottagare (fryses vid aktivering)</span>
+              </div>
+              {validation.invoiceRecipient.recipient ? (
+                <div className="text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{validation.invoiceRecipient.recipient.recipientName}</span>
+                    {validation.invoiceRecipient.sourceLevel && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {INVOICE_RECIPIENT_LEVEL_LABELS[validation.invoiceRecipient.sourceLevel]}
+                      </Badge>
+                    )}
+                  </div>
+                  {validation.invoiceRecipient.recipient.recipientEmail && (
+                    <p className="text-xs text-muted-foreground">{validation.invoiceRecipient.recipient.recipientEmail}</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Ingen mottagare i hierarkin — Fortnox-export faller tillbaka till objektets betalare.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       ) : null}
 
