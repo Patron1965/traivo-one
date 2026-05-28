@@ -85,6 +85,7 @@ export function getGrunddataItems(t: (key: string, fallback: string) => string, 
     { title: l("nav.article-components"), url: "/article-components", icon: Package, description: l("nav.article-components.desc") },
     { title: l("nav.price-lists"), url: "/price-lists", icon: Receipt, description: l("nav.price-lists.desc") },
     { title: l("nav.import"), url: "/import", icon: Upload, description: l("nav.import.desc") },
+    { title: "Importera objekt (mall)", url: "/objektmall-import", icon: Upload, description: "Bulkimport av organisationer, butiker och kärl via Excel-mall" },
   ];
 }
 

@@ -759,6 +759,9 @@ export async function registerRoutes(
   // Task #578: tre-stegs import-wizard (Organisation → Butiker → Fysiska objekt)
   const { registerImportWizardRoutes } = await import("./routes/importWizardRoutes");
   registerImportWizardRoutes(app);
+  // Task #603: Excel-mall objektimport (multi-flik upload + dry-run + commit)
+  const { registerObjektmallImportRoutes } = await import("./routes/objektmallImportRoutes");
+  registerObjektmallImportRoutes(app);
   await registerOnboardingRoutes(app);
   registerConfigRoutes(app);
   registerClusterRoutes(app);
