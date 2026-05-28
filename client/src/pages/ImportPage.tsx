@@ -21,7 +21,7 @@ import {
   Loader2, Download, Eye, X, FileUp, Check, Clock, FileSpreadsheet, Database,
   ArrowRight, Info, Settings, ChevronDown, ChevronUp, ListChecks, History, Undo2,
   SkipForward, Ban, BarChart3, ClipboardList, Tag, AlertTriangle, Merge, Copy, Link2,
-  FilePlus, Receipt, Wallet
+  FilePlus, Receipt, Wallet, RefreshCw
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -36,6 +36,7 @@ import { ImportTypeHistory } from "@/components/import/ImportTypeHistory";
 import { BatchDetailsDialog as SharedBatchDetailsDialog } from "@/components/import/BatchDetailsDialog";
 import { ComingSoonPanel } from "@/components/import/ComingSoonPanel";
 import { PayerOrRecipientImportFlow } from "@/components/import/PayerOrRecipientImportFlow";
+import { ObjectsDiffPanel } from "@/components/import/ObjectsDiffPanel";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import Papa from "papaparse";
 import { format } from "date-fns";
@@ -2131,13 +2132,13 @@ export default function ImportPage() {
 
   type ActiveTab =
     | "modus" | "enrich" | "manual" | "fortnox" | "mapped"
-    | "customerlist" | "children" | "payers" | "recipients"
+    | "customerlist" | "children" | "payers" | "recipients" | "diff"
     | "wizard"
     | "history" | "quality";
   const initialTab: ActiveTab = ((): ActiveTab => {
     const validTabs: ActiveTab[] = [
       "modus", "enrich", "manual", "fortnox", "mapped",
-      "customerlist", "children", "payers", "recipients",
+      "customerlist", "children", "payers", "recipients", "diff",
       "wizard",
       "history", "quality",
     ];
@@ -2149,7 +2150,7 @@ export default function ImportPage() {
   // Task #564 + #578: normalisera activeTab när importMode ändras
   const visibleTabsForMode = useCallback((mode: ImportMode | null): ActiveTab[] => {
     const migration: ActiveTab[] = ["modus", "enrich", "manual", "fortnox", "mapped"];
-    const ongoing: ActiveTab[] = ["customerlist", "children", "payers", "recipients"];
+    const ongoing: ActiveTab[] = ["customerlist", "children", "payers", "recipients", "diff"];
     const wizard: ActiveTab[] = ["wizard"];
     const always: ActiveTab[] = ["history", "quality"];
     if (mode === "migration") return [...migration, ...always];
@@ -3070,6 +3071,10 @@ export default function ImportPage() {
               <TabsTrigger value="recipients" className="flex items-center gap-2" data-testid="tab-recipients-import">
                 <Receipt className="h-4 w-4" />
                 Fakturamottagare
+              </TabsTrigger>
+              <TabsTrigger value="diff" className="flex items-center gap-2" data-testid="tab-diff-import">
+                <RefreshCw className="h-4 w-4" />
+                Diff &amp; uppdatera
               </TabsTrigger>
             </>
           )}
@@ -5029,6 +5034,10 @@ export default function ImportPage() {
 
         <TabsContent value="recipients" className="space-y-6">
           <PayerOrRecipientImportFlow kind="recipients" />
+        </TabsContent>
+
+        <TabsContent value="diff" className="space-y-6">
+          <ObjectsDiffPanel />
         </TabsContent>
 
         <TabsContent value="history" className="space-y-6">

@@ -7219,4 +7219,860 @@ app.post("/api/import/customer-fastighetslista/clear-flag", asyncHandler(async (
   res.json({ ok: true });
 }));
 
+// ============================================================================
+// Task #581 — Export → Excel-diff → reimport för uppdateringar (PDF §5.1)
+// ----------------------------------------------------------------------------
+// Generisk export-diff-reimport för `objects`-tabellen. Användaren kan:
+//   1) GET  /api/import/objects-diff/export   → XLSX med nuvarande objekt
+//   2) POST /api/import/objects-diff/preview  → diff-vy {created, updated, missing}
+//   3) POST /api/import/objects-diff/commit   → applicerar diffen och registrerar
+//      en import_batches-rad (metadata.type = "objects-diff") så #574-historiken
+//      visar resultatet.
+// Matchning: primärt på `objectNumber` (trim + case-insensitive), sekundärt på
+// (name + parentObjectNumber) när objectNumber saknas på uppladdad rad.
+// Säkerhet: alla queries är tenant-scopade (defense-in-depth) + commit kräver
+// admin. XLSX-export neutraliserar formula-injection (memory: csv-export-hardening).
+// ============================================================================
+
+interface ObjectsDiffColumn {
+  key: string;            // intern fältnyckel
+  header: string;         // XLSX rubrik (svensk)
+  readOnly?: boolean;     // visas i export men hanteras särskilt i diff
+}
+
+const OBJECTS_DIFF_COLUMNS: ObjectsDiffColumn[] = [
+  { key: "objectNumber", header: "objectNumber" },
+  { key: "name", header: "name" },
+  { key: "hierarchyLevel", header: "hierarchyLevel" },
+  { key: "parentObjectNumber", header: "parentObjectNumber" },
+  { key: "customerName", header: "customerName", readOnly: true },
+  { key: "address", header: "address" },
+  { key: "city", header: "city" },
+  { key: "postalCode", header: "postalCode" },
+  { key: "notes", header: "notes" },
+];
+
+// Neutralisera formula-injection: prefixa farliga ledande tecken med apostrof.
+function safeCellValue(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  if (s.length === 0) return s;
+  const first = s.charAt(0);
+  if (first === "=" || first === "+" || first === "-" || first === "@" || first === "\t" || first === "\r") {
+    return "'" + s;
+  }
+  return s;
+}
+
+function normalizeKey(v: string | null | undefined): string {
+  return (v ?? "").trim().toLowerCase();
+}
+
+async function loadObjectsForDiff(tenantId: string) {
+  const rows = await db
+    .select({
+      id: objects.id,
+      objectNumber: objects.objectNumber,
+      name: objects.name,
+      hierarchyLevel: objects.hierarchyLevel,
+      parentId: objects.parentId,
+      customerId: objects.customerId,
+      address: objects.address,
+      city: objects.city,
+      postalCode: objects.postalCode,
+      notes: objects.notes,
+    })
+    .from(objects)
+    .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
+
+  // Bygg parent objectNumber-uppslag i en enda extra query
+  const parentIds = Array.from(
+    new Set(rows.map((r) => r.parentId).filter((p): p is string => !!p)),
+  );
+  const parentMap = new Map<string, string | null>();
+  if (parentIds.length > 0) {
+    const parents = await db
+      .select({ id: objects.id, objectNumber: objects.objectNumber })
+      .from(objects)
+      .where(and(eq(objects.tenantId, tenantId), inArray(objects.id, parentIds)));
+    for (const p of parents) parentMap.set(p.id, p.objectNumber);
+  }
+
+  // Kundnamn-uppslag (för export-kolumnen "customerName")
+  const customerIds = Array.from(new Set(rows.map((r) => r.customerId).filter((c): c is string => !!c)));
+  const customerMap = new Map<string, string>();
+  if (customerIds.length > 0) {
+    const custs = await db
+      .select({ id: customers.id, name: customers.name })
+      .from(customers)
+      .where(and(eq(customers.tenantId, tenantId), inArray(customers.id, customerIds)));
+    for (const c of custs) customerMap.set(c.id, c.name);
+  }
+
+  return rows.map((r) => ({
+    id: r.id,
+    objectNumber: r.objectNumber,
+    name: r.name,
+    hierarchyLevel: r.hierarchyLevel,
+    parentObjectNumber: r.parentId ? parentMap.get(r.parentId) ?? null : null,
+    parentId: r.parentId,
+    customerId: r.customerId,
+    customerName: r.customerId ? customerMap.get(r.customerId) ?? "" : "",
+    address: r.address,
+    city: r.city,
+    postalCode: r.postalCode,
+    notes: r.notes,
+  }));
+}
+
+// GET /api/import/objects-diff/export  → XLSX med nuvarande objektlista
+app.get("/api/import/objects-diff/export", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const current = await loadObjectsForDiff(tenantId);
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Traivo";
+  wb.created = new Date();
+
+  const sheet = wb.addWorksheet("Objekt");
+  sheet.columns = OBJECTS_DIFF_COLUMNS.map((c) => ({
+    header: c.header,
+    key: c.key,
+    width: Math.min(Math.max(c.header.length + 4, 16), 36),
+  }));
+  const headerRow = sheet.getRow(1);
+  headerRow.height = 22;
+  OBJECTS_DIFF_COLUMNS.forEach((c, idx) => {
+    const cell = headerRow.getCell(idx + 1);
+    cell.value = c.header;
+    cell.font = { bold: true, color: { argb: "FF1B4B6B" } };
+    cell.alignment = { vertical: "middle", horizontal: "left" };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: c.readOnly ? "FFE8F4F8" : "FFFDE8B4" },
+    };
+    cell.border = {
+      top: { style: "thin", color: { argb: "FFB9C7D2" } },
+      left: { style: "thin", color: { argb: "FFB9C7D2" } },
+      bottom: { style: "medium", color: { argb: "FF1B4B6B" } },
+      right: { style: "thin", color: { argb: "FFB9C7D2" } },
+    };
+  });
+  sheet.views = [{ state: "frozen", ySplit: 1 }];
+
+  for (const r of current) {
+    const row: Record<string, string> = {};
+    for (const c of OBJECTS_DIFF_COLUMNS) {
+      row[c.key] = safeCellValue((r as any)[c.key]);
+    }
+    sheet.addRow(row);
+  }
+
+  // Läs-mig-flik
+  const readme = wb.addWorksheet("Läs mig");
+  readme.columns = [
+    { header: "Kolumn", key: "name", width: 28 },
+    { header: "Beskrivning", key: "description", width: 80 },
+  ];
+  const intro = readme.addRow(["Export-diff-reimport för objektlistan"]);
+  intro.font = { bold: true, size: 14, color: { argb: "FF1B4B6B" } };
+  readme.mergeCells(intro.number, 1, intro.number, 2);
+  const body = readme.addRow([
+    "Den här filen innehåller en kopia av era nuvarande objekt. " +
+      "Ändra fält direkt i kolumnerna, lägg till nya rader längst ner eller " +
+      "ta bort rader som inte längre gäller. När ni laddar upp filen igen visas en " +
+      "preview med tre sektioner: Nya, Ändrade och Saknade. Inget skrivs förrän ni " +
+      "klickar på 'Bekräfta uppdatering'. Saknade rader markeras med " +
+      "reconciliation-flagga — de raderas aldrig automatiskt. " +
+      "Matchning sker primärt på kolumnen 'objectNumber'.",
+  ]);
+  body.alignment = { wrapText: true, vertical: "top" };
+  readme.mergeCells(body.number, 1, body.number, 2);
+  body.height = 100;
+  readme.addRow([]);
+  const tableHeader = readme.addRow(["Kolumn", "Beskrivning"]);
+  tableHeader.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1B4B6B" } };
+  });
+  const colDocs: Record<string, string> = {
+    objectNumber: "Unikt externt objektnummer. Primär matchningsnyckel — lämna orört på befintliga rader.",
+    name: "Objektets namn.",
+    hierarchyLevel: "Hierarkinivå (t.ex. koncern, brf, fastighet, rum, karl).",
+    parentObjectNumber: "Föräldraobjektets objectNumber (för att uttrycka hierarki).",
+    customerName: "Kundnamn (read-only — visas för referens; ändras inte vid reimport).",
+    address: "Gatuadress.",
+    city: "Ort/stad.",
+    postalCode: "Postnummer.",
+    notes: "Fria anteckningar.",
+  };
+  for (const c of OBJECTS_DIFF_COLUMNS) {
+    readme.addRow([c.header, colDocs[c.key] ?? ""]).alignment = { wrapText: true, vertical: "top" };
+  }
+
+  const arrayBuffer = await wb.xlsx.writeBuffer();
+  const buf = Buffer.from(arrayBuffer as ArrayBuffer);
+  const datestamp = new Date().toISOString().slice(0, 10);
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="traivo-objekt-export-${datestamp}.xlsx"`,
+  );
+  res.setHeader("Cache-Control", "no-cache, must-revalidate");
+  res.send(buf);
+}));
+
+// Gemensam parsning + diff-beräkning för preview/commit. Returnerar fullständig
+// diff plus rådata för apply-fasen.
+interface UploadedObjectsDiffRow {
+  rowNumber: number;
+  objectNumber: string;
+  name: string;
+  hierarchyLevel: string;
+  parentObjectNumber: string;
+  customerName: string;
+  address: string;
+  city: string;
+  postalCode: string;
+  notes: string;
+  errors: string[];
+}
+
+interface ObjectsDiffFieldChange {
+  field: string;
+  before: string | null;
+  after: string | null;
+}
+
+interface ObjectsDiffPreview {
+  totals: {
+    totalUploaded: number;
+    totalCurrent: number;
+    created: number;
+    updated: number;
+    missing: number;
+    unchanged: number;
+    errors: number;
+  };
+  created: Array<{
+    row: number;
+    objectNumber: string;
+    name: string;
+    customerName: string;
+    hierarchyLevel: string;
+    parentObjectNumber: string;
+    address: string;
+    city: string;
+    postalCode: string;
+    notes: string;
+  }>;
+  updated: Array<{
+    id: string;
+    objectNumber: string | null;
+    name: string;
+    customerName: string;
+    fieldDiffs: ObjectsDiffFieldChange[];
+  }>;
+  missing: Array<{
+    id: string;
+    objectNumber: string | null;
+    name: string;
+    customerName: string;
+  }>;
+  errors: Array<{ row: number; message: string }>;
+}
+
+function normalizeStr(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  return String(v).trim();
+}
+
+function fieldsEqual(a: unknown, b: unknown): boolean {
+  return normalizeStr(a) === normalizeStr(b);
+}
+
+async function parseObjectsDiffUpload(
+  file: Express.Multer.File,
+): Promise<UploadedObjectsDiffRow[]> {
+  const { rows } = await parseModusUpload(file);
+  const out: UploadedObjectsDiffRow[] = [];
+  rows.forEach((r, idx) => {
+    const errors: string[] = [];
+    // Hoppa över ev. exempelrader som ligger kvar från export
+    const objNum = normalizeStr(r.objectNumber);
+    const name = normalizeStr(r.name);
+    if (!objNum && !name) return;
+    if (!name) errors.push("Saknar namn");
+    out.push({
+      rowNumber: idx + 2, // +1 header, +1 till 1-indexerat
+      objectNumber: objNum,
+      name,
+      hierarchyLevel: normalizeStr(r.hierarchyLevel),
+      parentObjectNumber: normalizeStr(r.parentObjectNumber),
+      customerName: normalizeStr(r.customerName),
+      address: normalizeStr(r.address),
+      city: normalizeStr(r.city),
+      postalCode: normalizeStr(r.postalCode),
+      notes: normalizeStr(r.notes),
+      errors,
+    });
+  });
+  return out;
+}
+
+function computeObjectsDiff(
+  uploaded: UploadedObjectsDiffRow[],
+  current: Awaited<ReturnType<typeof loadObjectsForDiff>>,
+): {
+  preview: ObjectsDiffPreview;
+  createRows: UploadedObjectsDiffRow[];
+  updateOps: Array<{
+    id: string;
+    uploaded: UploadedObjectsDiffRow;
+    fieldDiffs: ObjectsDiffFieldChange[];
+  }>;
+  missingIds: string[];
+} {
+  // Indexera nuvarande
+  const byNumber = new Map<string, typeof current[number]>();
+  const byNameParent = new Map<string, typeof current[number]>();
+  for (const c of current) {
+    if (c.objectNumber) byNumber.set(normalizeKey(c.objectNumber), c);
+    const k = `${normalizeKey(c.name)}|${normalizeKey(c.parentObjectNumber || "")}`;
+    if (!byNameParent.has(k)) byNameParent.set(k, c);
+  }
+
+  const matchedCurrentIds = new Set<string>();
+  const created: ObjectsDiffPreview["created"] = [];
+  const updated: ObjectsDiffPreview["updated"] = [];
+  const errors: ObjectsDiffPreview["errors"] = [];
+  const createRows: UploadedObjectsDiffRow[] = [];
+  const updateOps: Array<{
+    id: string;
+    uploaded: UploadedObjectsDiffRow;
+    fieldDiffs: ObjectsDiffFieldChange[];
+  }> = [];
+  let unchanged = 0;
+
+  for (const row of uploaded) {
+    if (row.errors.length > 0) {
+      for (const m of row.errors) errors.push({ row: row.rowNumber, message: m });
+      continue;
+    }
+    let match: typeof current[number] | undefined;
+    if (row.objectNumber) {
+      match = byNumber.get(normalizeKey(row.objectNumber));
+    }
+    if (!match) {
+      const k = `${normalizeKey(row.name)}|${normalizeKey(row.parentObjectNumber)}`;
+      match = byNameParent.get(k);
+    }
+
+    if (!match) {
+      created.push({
+        row: row.rowNumber,
+        objectNumber: row.objectNumber,
+        name: row.name,
+        customerName: row.customerName,
+        hierarchyLevel: row.hierarchyLevel,
+        parentObjectNumber: row.parentObjectNumber,
+        address: row.address,
+        city: row.city,
+        postalCode: row.postalCode,
+        notes: row.notes,
+      });
+      createRows.push(row);
+      continue;
+    }
+
+    if (matchedCurrentIds.has(match.id)) {
+      errors.push({
+        row: row.rowNumber,
+        message: `Dubblett: flera rader matchar samma objekt (${match.objectNumber || match.name})`,
+      });
+      continue;
+    }
+    matchedCurrentIds.add(match.id);
+
+    // Beräkna fält-diff. customerName är read-only och ingår inte i diff.
+    const diffs: ObjectsDiffFieldChange[] = [];
+    const compareFields: Array<{ field: keyof UploadedObjectsDiffRow; currentVal: unknown }> = [
+      { field: "name", currentVal: match.name },
+      { field: "hierarchyLevel", currentVal: match.hierarchyLevel },
+      { field: "parentObjectNumber", currentVal: match.parentObjectNumber },
+      { field: "address", currentVal: match.address },
+      { field: "city", currentVal: match.city },
+      { field: "postalCode", currentVal: match.postalCode },
+      { field: "notes", currentVal: match.notes },
+    ];
+    for (const f of compareFields) {
+      const after = row[f.field] as string;
+      if (!fieldsEqual(f.currentVal, after)) {
+        diffs.push({
+          field: String(f.field),
+          before: normalizeStr(f.currentVal),
+          after: normalizeStr(after),
+        });
+      }
+    }
+
+    if (diffs.length === 0) {
+      unchanged++;
+    } else {
+      updated.push({
+        id: match.id,
+        objectNumber: match.objectNumber,
+        name: match.name,
+        customerName: match.customerName,
+        fieldDiffs: diffs,
+      });
+      updateOps.push({ id: match.id, uploaded: row, fieldDiffs: diffs });
+    }
+  }
+
+  const missing: ObjectsDiffPreview["missing"] = [];
+  const missingIds: string[] = [];
+  for (const c of current) {
+    if (matchedCurrentIds.has(c.id)) continue;
+    // Endast objekt med objectNumber räknas som "saknade" — interim/orefererade
+    // objekt utan nummer ska inte plötsligt flaggas bara för att de inte är med
+    // i en uppladdad partiell lista.
+    if (!c.objectNumber) continue;
+    missing.push({
+      id: c.id,
+      objectNumber: c.objectNumber,
+      name: c.name,
+      customerName: c.customerName,
+    });
+    missingIds.push(c.id);
+  }
+
+  return {
+    preview: {
+      totals: {
+        totalUploaded: uploaded.length,
+        totalCurrent: current.length,
+        created: created.length,
+        updated: updated.length,
+        missing: missing.length,
+        unchanged,
+        errors: errors.length,
+      },
+      created,
+      updated,
+      missing,
+      errors,
+    },
+    createRows,
+    updateOps,
+    missingIds,
+  };
+}
+
+// POST /api/import/objects-diff/preview — analyserar utan att skriva
+app.post(
+  "/api/import/objects-diff/preview",
+  upload.single("file"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw new ValidationError("Ingen fil uppladdad");
+    const tenantId = getTenantIdWithFallback(req);
+    const uploaded = await parseObjectsDiffUpload(req.file);
+    if (uploaded.length === 0) {
+      throw new ValidationError(
+        "Filen verkar tom eller har fel kolumnrubriker. " +
+          "Förväntade rubriker: " +
+          OBJECTS_DIFF_COLUMNS.map((c) => c.header).join(", ") +
+          ". Ladda ner mallen via 'Exportera nuvarande' och ändra direkt i den.",
+      );
+    }
+    const current = await loadObjectsForDiff(tenantId);
+    const { preview } = computeObjectsDiff(uploaded, current);
+
+    // Safety: om filen matchar väldigt lite av aktuell data är det troligen
+    // ett misstag (delvis lista, fel fil). Vi flaggar detta så UI:t kan visa
+    // varning innan användaren bekräftar mass-flag av saknade.
+    const numberedCurrent = current.filter((c) => c.objectNumber).length;
+    const matchedNumbered = numberedCurrent - preview.totals.missing;
+    const matchRatio = numberedCurrent > 0 ? matchedNumbered / numberedCurrent : 1;
+    res.json({
+      ...preview,
+      safety: {
+        numberedCurrent,
+        matchedNumbered,
+        matchRatio,
+        suspectedPartialUpload: numberedCurrent >= 5 && matchRatio < 0.5,
+      },
+    });
+  }),
+);
+
+// POST /api/import/objects-diff/commit — applicerar diffen.
+// Form-fält:
+//   file:            den ifyllda XLSX/CSV-filen
+//   defaultCustomerId (valfri): kund som nya rader hängs på om customerName
+//     inte matchar någon befintlig kund. Utan denna hoppas create-rader över.
+//   applyCreate, applyUpdate, applyMissing: "true"/"false" — låter användaren
+//     välja vilka kategorier som ska tillämpas (default: alla tre).
+app.post(
+  "/api/import/objects-diff/commit",
+  requireAdmin,
+  upload.single("file"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw new ValidationError("Ingen fil uppladdad");
+    const tenantId = getTenantIdWithFallback(req);
+    const userId = (req as any).user?.claims?.sub || (req as any).user?.id || null;
+
+    const flag = (v: unknown, def = true): boolean => {
+      if (v === undefined || v === null || v === "") return def;
+      const s = String(v).toLowerCase();
+      return s === "true" || s === "1" || s === "yes" || s === "on";
+    };
+    const applyCreate = flag(req.body?.applyCreate);
+    const applyUpdate = flag(req.body?.applyUpdate);
+    const applyMissing = flag(req.body?.applyMissing);
+    const confirmAllowMassMissing = flag(req.body?.confirmAllowMassMissing, false);
+    const defaultCustomerId =
+      typeof req.body?.defaultCustomerId === "string" && req.body.defaultCustomerId.trim()
+        ? req.body.defaultCustomerId.trim()
+        : null;
+
+    if (defaultCustomerId) {
+      // Defense-in-depth: verifiera att vald standardkund tillhör tenanten
+      const [owned] = await db
+        .select({ id: customers.id })
+        .from(customers)
+        .where(and(eq(customers.id, defaultCustomerId), eq(customers.tenantId, tenantId)))
+        .limit(1);
+      if (!owned) throw new ForbiddenError("defaultCustomerId tillhör inte din tenant");
+    }
+
+    const uploaded = await parseObjectsDiffUpload(req.file);
+    if (uploaded.length === 0) {
+      throw new ValidationError(
+        "Filen verkar tom eller har fel kolumnrubriker. " +
+          "Förväntade rubriker: " +
+          OBJECTS_DIFF_COLUMNS.map((c) => c.header).join(", ") +
+          ". Ladda ner mallen via 'Exportera nuvarande' och ändra direkt i den.",
+      );
+    }
+    const current = await loadObjectsForDiff(tenantId);
+    const { preview, createRows, updateOps, missingIds } = computeObjectsDiff(uploaded, current);
+
+    // Safety-grind: om uppladdad fil matchar väldigt lite av aktuell data är
+    // det nästan alltid ett misstag (delvis lista, fel fil, fel-formatterad
+    // export). Mass-flag av saknade kan då felaktigt påverka hundratals
+    // objekt — kräv explicit bekräftelse-flagga från klienten i så fall.
+    const numberedCurrent = current.filter((c) => c.objectNumber).length;
+    const matchedNumbered = numberedCurrent - missingIds.length;
+    const matchRatio = numberedCurrent > 0 ? matchedNumbered / numberedCurrent : 1;
+    const suspectedPartialUpload = numberedCurrent >= 5 && matchRatio < 0.5;
+    if (applyMissing && suspectedPartialUpload && !confirmAllowMassMissing) {
+      throw new ValidationError(
+        `Säkerhetsstopp: filen matchar bara ${matchedNumbered} av ${numberedCurrent} ` +
+          `numrerade objekt (${Math.round(matchRatio * 100)}%). Detta ser ut som en ` +
+          `delvis lista — mass-markering av saknade objekt är blockerad. Avmarkera ` +
+          `'Markera saknade' eller ladda upp den fullständiga listan.`,
+      );
+    }
+
+    const batchId = `objects-diff-${Date.now()}`;
+    const now = new Date();
+    const customerByName = new Map<string, string>();
+    for (const c of current) {
+      if (c.customerId && c.customerName) {
+        customerByName.set(normalizeKey(c.customerName), c.customerId);
+      }
+    }
+    // Komplett kundlista som fallback för rader vars customerName inte matchar
+    // ett befintligt objekts kund (t.ex. första gången en kund får ett objekt).
+    const allCustomers = await storage.getCustomers(tenantId);
+    for (const c of allCustomers) {
+      const k = normalizeKey(c.name);
+      if (!customerByName.has(k)) customerByName.set(k, c.id);
+    }
+
+    let appliedCreated = 0;
+    let appliedUpdated = 0;
+    let appliedMissingMarked = 0;
+    const applyErrors: Array<{ row: number; message: string }> = [];
+    const createdIds: string[] = [];
+    const updatedIds: string[] = [];
+
+    // Indexera nuvarande objects efter objectNumber för parent-resolution
+    const idByObjectNumber = new Map<string, string>();
+    for (const c of current) {
+      if (c.objectNumber) idByObjectNumber.set(normalizeKey(c.objectNumber), c.id);
+    }
+
+    if (applyUpdate) {
+      for (const op of updateOps) {
+        try {
+          // Bygg patch atomiskt — om något fält inte kan resolvas (t.ex. parent
+          // saknas) hoppar vi över HELA raden istället för att applicera en
+          // partiell uppdatering som missvisar operatören.
+          const patch: Partial<typeof objects.$inferInsert> = {};
+          let skipRow = false;
+          for (const d of op.fieldDiffs) {
+            const after = d.after ?? "";
+            switch (d.field) {
+              case "name":
+                patch.name = after;
+                break;
+              case "hierarchyLevel":
+                patch.hierarchyLevel = after || null;
+                break;
+              case "parentObjectNumber": {
+                if (after === "") {
+                  patch.parentId = null;
+                } else {
+                  const pid = idByObjectNumber.get(normalizeKey(after));
+                  if (!pid) {
+                    applyErrors.push({
+                      row: op.uploaded.rowNumber,
+                      message:
+                        `Parent-objectNumber "${after}" hittades inte — hela raden hoppades över`,
+                    });
+                    skipRow = true;
+                    break;
+                  }
+                  patch.parentId = pid;
+                }
+                break;
+              }
+              case "address":
+                patch.address = after || null;
+                break;
+              case "city":
+                patch.city = after || null;
+                break;
+              case "postalCode":
+                patch.postalCode = after || null;
+                break;
+              case "notes":
+                patch.notes = after || null;
+                break;
+            }
+          }
+          if (skipRow) continue;
+          if (Object.keys(patch).length === 0) continue;
+          // Defense-in-depth: tenant_id i WHERE även om vi redan slagit upp via tenant
+          const result = await db
+            .update(objects)
+            .set({ ...patch, importBatchId: batchId })
+            .where(
+              and(
+                eq(objects.id, op.id),
+                eq(objects.tenantId, tenantId),
+                isNull(objects.deletedAt),
+              ),
+            )
+            .returning({ id: objects.id });
+          if (result.length > 0) {
+            appliedUpdated++;
+            updatedIds.push(op.id);
+            await db.insert(auditLogs).values({
+              tenantId,
+              userId,
+              action: "objects_diff_update",
+              resourceType: "object",
+              resourceId: op.id,
+              changes: {
+                before: Object.fromEntries(op.fieldDiffs.map((d) => [d.field, d.before])),
+                after: Object.fromEntries(op.fieldDiffs.map((d) => [d.field, d.after])),
+              },
+              metadata: { batchId, source: "objects-diff" },
+            });
+          }
+        } catch (err: any) {
+          applyErrors.push({
+            row: op.uploaded.rowNumber,
+            message: `Uppdatering misslyckades: ${err?.message || String(err)}`,
+          });
+        }
+      }
+    }
+
+    if (applyCreate) {
+      // Sortera create-rader så föräldrar (utan parent) skapas före barn när
+      // möjligt. Vi gör flera pass tills inget mer kan skapas.
+      const remaining = [...createRows];
+      const localCreated = new Map<string, string>(); // objectNumber → newId
+      const localCustomerById = new Map<string, string>(); // newId → customerId (för kund-arv till barn-rader)
+      let progress = true;
+      while (remaining.length > 0 && progress) {
+        progress = false;
+        for (let i = remaining.length - 1; i >= 0; i--) {
+          const row = remaining[i];
+          let parentId: string | null = null;
+          if (row.parentObjectNumber) {
+            const pid =
+              idByObjectNumber.get(normalizeKey(row.parentObjectNumber)) ||
+              localCreated.get(normalizeKey(row.parentObjectNumber));
+            if (!pid) continue; // försök i nästa pass
+            parentId = pid;
+          }
+          // Resolva customerId
+          let customerId: string | null = null;
+          if (row.customerName) {
+            customerId = customerByName.get(normalizeKey(row.customerName)) || null;
+          }
+          if (!customerId && parentId) {
+            const parent = current.find((c) => c.id === parentId);
+            if (parent?.customerId) customerId = parent.customerId;
+            else if (localCustomerById.has(parentId)) {
+              // Föräldern skapades i denna körning — ärv dess kund
+              customerId = localCustomerById.get(parentId) || null;
+            }
+          }
+          if (!customerId && defaultCustomerId) customerId = defaultCustomerId;
+          if (!customerId) {
+            applyErrors.push({
+              row: row.rowNumber,
+              message:
+                "Kund kunde inte härledas (ange customerName som matchar befintlig kund, eller välj en standardkund)",
+            });
+            remaining.splice(i, 1);
+            progress = true;
+            continue;
+          }
+          try {
+            const created = await storage.createObject({
+              tenantId,
+              customerId,
+              parentId: parentId || undefined,
+              name: row.name,
+              objectNumber: row.objectNumber || null,
+              hierarchyLevel: row.hierarchyLevel || undefined,
+              address: row.address || null,
+              city: row.city || null,
+              postalCode: row.postalCode || null,
+              notes: row.notes || null,
+              importBatchId: batchId,
+            } as any);
+            appliedCreated++;
+            createdIds.push(created.id);
+            localCustomerById.set(created.id, customerId);
+            if (row.objectNumber) {
+              localCreated.set(normalizeKey(row.objectNumber), created.id);
+              idByObjectNumber.set(normalizeKey(row.objectNumber), created.id);
+            }
+            await db.insert(auditLogs).values({
+              tenantId,
+              userId,
+              action: "objects_diff_create",
+              resourceType: "object",
+              resourceId: created.id,
+              changes: { after: { name: row.name, objectNumber: row.objectNumber } },
+              metadata: { batchId, source: "objects-diff" },
+            });
+          } catch (err: any) {
+            applyErrors.push({
+              row: row.rowNumber,
+              message: `Skapande misslyckades: ${err?.message || String(err)}`,
+            });
+          }
+          remaining.splice(i, 1);
+          progress = true;
+        }
+      }
+      // Rader kvar = oresolverbara parent-referenser
+      for (const row of remaining) {
+        applyErrors.push({
+          row: row.rowNumber,
+          message: `parentObjectNumber "${row.parentObjectNumber}" hittades inte (varken befintligt objekt eller nyskapad rad i denna fil)`,
+        });
+      }
+    }
+
+    if (applyMissing && missingIds.length > 0) {
+      // Markera saknade rader med reconciliationFlag (raderas aldrig automatiskt)
+      const upd = await db
+        .update(objects)
+        .set({
+          reconciliationFlag: "missing_in_diff_reimport",
+          reconciliationFlaggedAt: now,
+          reconciliationBatchId: batchId,
+        })
+        .where(
+          and(
+            eq(objects.tenantId, tenantId),
+            inArray(objects.id, missingIds),
+            isNull(objects.deletedAt),
+          ),
+        )
+        .returning({ id: objects.id });
+      appliedMissingMarked = upd.length;
+      if (upd.length > 0) {
+        await db.insert(auditLogs).values(
+          upd.map((u) => ({
+            tenantId,
+            userId,
+            action: "objects_diff_mark_missing",
+            resourceType: "object",
+            resourceId: u.id,
+            changes: { after: { reconciliationFlag: "missing_in_diff_reimport" } },
+            metadata: { batchId, source: "objects-diff" },
+          })),
+        );
+      }
+    }
+
+    await db.insert(importBatches).values({
+      tenantId,
+      batchId,
+      totalRows: uploaded.length,
+      created: appliedCreated,
+      updated: appliedUpdated,
+      errors: applyErrors.length + preview.errors.length,
+      metadata: {
+        type: "objects-diff",
+        source: "objects-diff",
+        status: "completed",
+        startedBy: userId,
+        applyCreate,
+        applyUpdate,
+        applyMissing,
+        defaultCustomerId,
+        missingMarked: appliedMissingMarked,
+        unchanged: preview.totals.unchanged,
+        previewTotals: preview.totals,
+        applyErrors: applyErrors.slice(0, 100),
+        parseErrors: preview.errors.slice(0, 100),
+      },
+    });
+
+    // Invalidera vyer som beror på objektlistan
+    try {
+      invalidateWorkflowCaches(tenantId);
+    } catch {
+      /* cache är best-effort */
+    }
+    try {
+      invalidateAreaSearchCityCache(tenantId);
+    } catch {
+      /* cache är best-effort */
+    }
+
+    res.json({
+      batchId,
+      applied: {
+        created: appliedCreated,
+        updated: appliedUpdated,
+        missingMarked: appliedMissingMarked,
+      },
+      skipped: {
+        create: !applyCreate,
+        update: !applyUpdate,
+        missing: !applyMissing,
+      },
+      errors: [...preview.errors, ...applyErrors],
+      preview: preview.totals,
+    });
+  }),
+);
+
 }
