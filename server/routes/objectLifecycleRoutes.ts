@@ -12,7 +12,7 @@ import { storage } from "../storage";
 import { verifyTenantOwnership, formatZodError } from "./helpers";
 import { z } from "zod";
 import { db } from "../db";
-import { clusters, displayNameRulesSchema, clusterDynamicRulesSchema } from "@shared/schema";
+import { clusters, objects, displayNameRulesSchema, clusterDynamicRulesSchema } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
 import {
   computeDisplayName,
@@ -142,5 +142,87 @@ export function registerObjectLifecycleRoutes(app: Express): void {
     const dryRun = req.query.dryRun === "true" || req.body?.dryRun === true;
     const result = await evaluateDynamicCluster(c.id, tenantId, parsed.data, { dryRun });
     res.json({ dryRun, ...result });
+  }));
+
+  // === (F) ITERATIV UNDEROBJEKT-IMPORT ======================================
+  // Lägg till barnobjekt under en befintlig parent i en omgång.
+  // Body: { rows: [...], dryRun?: boolean }
+  // Validerar varje rad, returnerar preview vid dryRun annars commit-resultat.
+  const childRowSchema = z.object({
+    name: z.string().min(1).max(200),
+    hierarchyLevel: z.string().max(64).optional(),
+    objectType: z.string().max(64).optional(),
+    objectNumber: z.string().max(64).optional(),
+    address: z.string().max(200).optional(),
+    city: z.string().max(120).optional(),
+    postalCode: z.string().max(20).optional(),
+    accessType: z.string().max(32).optional(),
+    accessCode: z.string().max(32).optional(),
+  });
+  const importChildrenSchema = z.object({
+    rows: z.array(childRowSchema).min(1).max(500),
+    dryRun: z.boolean().optional(),
+  });
+
+  app.post("/api/objects/:parentId/import-children", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const [parent] = await db
+      .select()
+      .from(objects)
+      .where(and(eq(objects.id, req.params.parentId), eq(objects.tenantId, tenantId)));
+    if (!parent) throw new NotFoundError("Parent-objekt");
+    const parsed = importChildrenSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).message ?? "Ogiltig payload");
+
+    const dryRun = parsed.data.dryRun === true;
+    const errors: Array<{ index: number; message: string }> = [];
+    const preview: Array<{ index: number; name: string }> = [];
+
+    // Konfliktcheck: object_number-dubletter inom tenant
+    const newObjectNumbers = parsed.data.rows.map(r => r.objectNumber).filter((v): v is string => !!v);
+    let existingNumbers = new Set<string>();
+    if (newObjectNumbers.length > 0) {
+      const ex = await db
+        .select({ n: objects.objectNumber })
+        .from(objects)
+        .where(eq(objects.tenantId, tenantId));
+      existingNumbers = new Set(ex.map(r => r.n).filter((v): v is string => !!v));
+    }
+
+    parsed.data.rows.forEach((r, i) => {
+      if (r.objectNumber && existingNumbers.has(r.objectNumber)) {
+        errors.push({ index: i, message: `Objektnummer "${r.objectNumber}" finns redan` });
+      } else {
+        preview.push({ index: i, name: r.name });
+      }
+    });
+
+    if (dryRun) {
+      return res.json({ dryRun: true, valid: preview.length, invalid: errors.length, errors, preview });
+    }
+    if (errors.length > 0) {
+      throw new ValidationError(`${errors.length} rader har fel — kör dryRun för detaljer`);
+    }
+
+    const created: string[] = [];
+    for (const r of parsed.data.rows) {
+      const obj = await storage.createObject({
+        tenantId,
+        customerId: parent.customerId,
+        parentId: parent.id,
+        clusterId: parent.clusterId ?? null,
+        name: r.name,
+        objectNumber: r.objectNumber ?? null,
+        objectType: r.objectType ?? parent.objectType ?? "byggnad",
+        hierarchyLevel: r.hierarchyLevel ?? null,
+        address: r.address ?? parent.address ?? null,
+        city: r.city ?? parent.city ?? null,
+        postalCode: r.postalCode ?? parent.postalCode ?? null,
+        accessType: (r.accessType as any) ?? parent.accessType ?? null,
+        accessCode: r.accessCode ?? parent.accessCode ?? null,
+      } as any);
+      created.push(obj.id);
+    }
+    res.json({ dryRun: false, created: created.length, ids: created });
   }));
 }

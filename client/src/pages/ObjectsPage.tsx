@@ -930,9 +930,10 @@ export default function ObjectsPage() {
   };
 
   const exportCSV = () => {
-    const headers = ["Namn", "Objektnummer", "Typ", "Adress", "Stad", "Tillgång", "Kod"];
+    const headers = ["Namn", "Visningsnamn", "Objektnummer", "Typ", "Adress", "Stad", "Tillgång", "Kod"];
     const rows = filteredObjects.map(obj => [
       obj.name,
+      (obj as any).displayName ?? obj.name,
       obj.objectNumber || "",
       objectTypeLabels[obj.objectType] || obj.objectType,
       obj.address || "",
@@ -1007,7 +1008,9 @@ export default function ObjectsPage() {
                 onClick={(e) => { e.stopPropagation(); navigate(`/objects/${obj.id}`); }}
                 data-testid={`link-object-detail-${obj.id}`}
               >
-                {obj.name && obj.name !== "0" ? obj.name : obj.objectNumber || obj.name}
+                {((obj as any).displayName && (obj as any).displayName !== obj.name)
+                  ? (obj as any).displayName
+                  : (obj.name && obj.name !== "0" ? obj.name : obj.objectNumber || obj.name)}
               </span>
               {obj.objectNumber && obj.name && obj.name !== "0" && (
                 <span className="text-xs text-muted-foreground font-mono">{obj.objectNumber}</span>

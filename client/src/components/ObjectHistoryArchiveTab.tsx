@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AlertTriangle, Archive, RotateCcw, History } from "lucide-react";
+import { SubObjectImportPanel } from "./SubObjectImportPanel";
 
 type HistoryEntry = {
   id: string;
@@ -120,6 +121,8 @@ export function ObjectHistoryArchiveTab({ objectId, isArchived }: { objectId: st
           )}
         </CardContent>
       </Card>
+
+      {!isArchived && <SubObjectImportPanel parentId={objectId} />}
 
       <Card>
         <CardHeader>
