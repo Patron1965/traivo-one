@@ -3673,6 +3673,32 @@ export default function ImportPage() {
                       onCancel={() => { setShowImportPreview(false); }}
                       isImporting={modusUploading === "objects"}
                       totalRows={modusValidation.totalRows}
+                      rowPreviewSummary={{
+                        valid: Math.max(
+                          0,
+                          modusValidation.totalRows -
+                            modusValidation.missingFieldsCount -
+                            modusValidation.invalidCoordinatesCount,
+                        ),
+                        invalid:
+                          modusValidation.missingFieldsCount +
+                          modusValidation.invalidCoordinatesCount,
+                        duplicates: modusValidation.duplicateModusIdsCount,
+                        errors: [
+                          ...modusValidation.missingFields.slice(0, 20).map((m) => ({
+                            row: m.row,
+                            message: `Saknar fält: ${m.fields.join(", ")}`,
+                          })),
+                          ...modusValidation.invalidCoordinates.slice(0, 20).map((c) => ({
+                            row: c.row,
+                            message: `Ogiltiga koordinater (lat=${c.lat}, lng=${c.lng})`,
+                          })),
+                          ...modusValidation.duplicateModusIds.slice(0, 20).map((d) => ({
+                            message: `Dubblett Modus-ID ${d.modusId} på rader ${d.rows.join(", ")}`,
+                          })),
+                        ],
+                        preview: previewObjectRows.map((r) => ({ name: r.originalName })),
+                      }}
                     />
                   )}
                 </div>

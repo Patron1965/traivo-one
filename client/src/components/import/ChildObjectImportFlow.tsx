@@ -9,13 +9,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Eye, Upload, FilePlus, Check, ChevronsUpDown, ExternalLink, FileUp } from "lucide-react";
 import Papa from "papaparse";
 import type { ServiceObject } from "@shared/schema";
+import { ImportRowPreview } from "@/components/import/ImportRowPreview";
 
 type PreviewResult = {
   dryRun: true;
@@ -312,33 +312,13 @@ export function ChildObjectImportFlow({
           </div>
 
           {preview && (
-            <div className="space-y-2 text-sm" data-testid="text-import-preview">
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="default" className="bg-chart-2/15">{preview.valid} OK</Badge>
-                {preview.invalid > 0 && <Badge variant="destructive">{preview.invalid} fel</Badge>}
-              </div>
-              {preview.errors.length > 0 && (
-                <div className="border rounded p-2 bg-destructive/10 max-h-40 overflow-y-auto">
-                  {preview.errors.map((e, i) => (
-                    <div key={i} className="text-xs text-destructive">
-                      Rad {e.index + 1}: {e.message}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {preview.preview.length > 0 && (
-                <div className="border rounded p-2 max-h-40 overflow-y-auto">
-                  {preview.preview.slice(0, 20).map((p, i) => (
-                    <div key={i} className="text-xs">{p.name}</div>
-                  ))}
-                  {preview.preview.length > 20 && (
-                    <div className="text-xs text-muted-foreground">
-                      … och {preview.preview.length - 20} till
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <ImportRowPreview
+              valid={preview.valid}
+              invalid={preview.invalid}
+              errors={preview.errors}
+              preview={preview.preview}
+              testId="text-import-preview"
+            />
           )}
         </CardContent>
       </Card>

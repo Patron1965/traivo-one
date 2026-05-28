@@ -12,6 +12,7 @@ import {
   Search, Replace, Users, Building2, Database, Truck,
   Pencil, Upload, Loader2
 } from "lucide-react";
+import { ImportRowPreview, type ImportRowPreviewError, type ImportRowPreviewItem } from "@/components/import/ImportRowPreview";
 
 export interface NameOverrides {
   objects: Record<string, string>;
@@ -27,6 +28,14 @@ interface ObjectRow {
   customer: string;
 }
 
+export interface ImportPreviewSummary {
+  valid: number;
+  invalid: number;
+  errors: ImportRowPreviewError[];
+  preview: ImportRowPreviewItem[];
+  duplicates?: number;
+}
+
 interface ImportPreviewPanelProps {
   objectRows: ObjectRow[];
   customerNames: string[];
@@ -38,6 +47,7 @@ interface ImportPreviewPanelProps {
   onCancel: () => void;
   isImporting: boolean;
   totalRows: number;
+  rowPreviewSummary?: ImportPreviewSummary;
 }
 
 export function ImportPreviewPanel({
@@ -51,6 +61,7 @@ export function ImportPreviewPanel({
   onCancel,
   isImporting,
   totalRows,
+  rowPreviewSummary,
 }: ImportPreviewPanelProps) {
   const [activeTab, setActiveTab] = useState("objects");
   const [searchReplaceOpen, setSearchReplaceOpen] = useState(false);
@@ -199,6 +210,17 @@ export function ImportPreviewPanel({
           Sök & Ersätt
         </Button>
       </div>
+
+      {rowPreviewSummary && (
+        <ImportRowPreview
+          valid={rowPreviewSummary.valid}
+          invalid={rowPreviewSummary.invalid}
+          errors={rowPreviewSummary.errors}
+          preview={rowPreviewSummary.preview}
+          duplicates={rowPreviewSummary.duplicates}
+          testId="import-preview-summary"
+        />
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-3">
