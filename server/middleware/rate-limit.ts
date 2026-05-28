@@ -1,11 +1,20 @@
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
+/** Strukturerad rate-limit-payload som matchar `ErrorResponse` från errorHandler. */
+function rateLimitBody(message: string) {
+  return {
+    error: message,
+    code: "ERR_RATE_LIMITED" as const,
+    message,
+  };
+}
+
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 20,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  message: { error: "För många försök från denna IP-adress. Försök igen om 15 minuter." },
+  message: rateLimitBody("För många försök från denna IP-adress. Försök igen om 15 minuter."),
   skip: () => process.env.NODE_ENV === "test",
 });
 
@@ -14,7 +23,7 @@ export const mobileLoginLimiter = rateLimit({
   limit: 30,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  message: { error: "För många inloggningsförsök. Försök igen om 15 minuter." },
+  message: rateLimitBody("För många inloggningsförsök. Försök igen om 15 minuter."),
   skip: () => process.env.NODE_ENV === "test",
 });
 
@@ -27,7 +36,7 @@ export const magicLinkLimiter = rateLimit({
   limit: 5,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  message: { error: "För många länkförfrågningar. Försök igen om 15 minuter." },
+  message: rateLimitBody("För många länkförfrågningar. Försök igen om 15 minuter."),
   skip: () => process.env.NODE_ENV === "test",
   keyGenerator: (req, res) => {
     const email = typeof req.body?.email === "string"
@@ -58,6 +67,6 @@ export const mapTileLimiter = rateLimit({
   limit: TILE_LIMIT_PER_MIN,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  message: { error: "För många tile-anrop från denna IP-adress. Försök igen om en stund." },
+  message: rateLimitBody("För många tile-anrop från denna IP-adress. Försök igen om en stund."),
   skip: () => process.env.NODE_ENV === "test",
 });

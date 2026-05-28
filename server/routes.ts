@@ -29,8 +29,7 @@ import { registerInvoiceQueueRoutes } from "./routes/invoiceQueueRoutes";
 import { registerGithubMirrorRoutes } from "./routes/githubMirrorRoutes";
 import { startWeeklyReportScheduler } from "./weekly-report";
 import { metadataRouter } from "./metadata-routes";
-import { formatZodError, DEFAULT_TENANT_ID } from "./routes/helpers";
-import { AppError } from "./errors";
+import { DEFAULT_TENANT_ID } from "./routes/helpers";
 
 import { registerCustomerRoutes } from "./routes/customerRoutes";
 import { registerObjectRoutes } from "./routes/objectRoutes";
@@ -835,22 +834,9 @@ export async function registerRoutes(
     }
   });
 
-  app.use((err: unknown, _req: ExpressRequest, res: ExpressResponse, _next: unknown) => {
-    if (res.headersSent) return;
-
-    if (err instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(err));
-    }
-
-    if (err instanceof AppError) {
-      return res.status(err.statusCode).json({ error: err.message });
-    }
-
-    console.error("[global-error]", err);
-    const message = err instanceof Error ? err.message : "Ett oväntat serverfel uppstod";
-    const status = (err as Record<string, number>)?.status || 500;
-    res.status(status).json({ error: message });
-  });
+  // Global error-middleware registreras i server/index.ts (errorHandler) efter
+  // att alla routes är monterade — den hanterar AppError, ZodError och okända fel
+  // med strukturerad JSON-respons inkl. code/message/details/requestId.
 
   return httpServer;
 }

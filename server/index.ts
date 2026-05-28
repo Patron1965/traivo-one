@@ -6,9 +6,9 @@ import { createServer } from "http";
 import { seedDatabase } from "./seed";
 import { fixInitialOwnerRole } from "./startup-fixes";
 import { startImportBatchWatchdog } from "./import-batch-watchdog";
-import { AppError } from "./errors";
 import { logger } from "./logger";
 import { requestIdMiddleware } from "./middleware/request-id";
+import { errorHandler } from "./middleware/errorHandler";
 import { registerHealthRoutes } from "./routes/healthRoutes";
 
 const app = express();
@@ -234,23 +234,7 @@ process.on('exit', (code) => {
     await registerRoutes(httpServer, app);
     console.log('[startup] Routes registered');
 
-    app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
-      if (res.headersSent) return;
-      const status = err instanceof AppError ? err.statusCode : (err as Record<string, number>)?.status || (err as Record<string, number>)?.statusCode || 500;
-      const message = err instanceof Error ? err.message : "Ett oväntat serverfel uppstod";
-      const reqLog = req.log ?? logger;
-      reqLog.error(
-        {
-          status,
-          err: err instanceof Error ? { message: err.message, stack: err.stack } : err,
-          route: req.path,
-          method: req.method,
-          tenantId: req.tenantId,
-        },
-        `request error ${status}`,
-      );
-      res.status(status).json({ error: message, requestId: req.requestId });
-    });
+    app.use(errorHandler);
 
     // importantly only setup vite in development and after
     // setting up all the other routes so the catch-all route

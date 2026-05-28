@@ -1,11 +1,44 @@
+/**
+ * Standardiserade error-koder för API-svar. Frontend kan mappa dessa till
+ * specifika UI-beteenden (t.ex. redirect till login vid ERR_UNAUTHORIZED,
+ * visa fält-fel vid ERR_VALIDATION).
+ */
+export type AppErrorCode =
+  | "ERR_BAD_REQUEST"
+  | "ERR_VALIDATION"
+  | "ERR_UNAUTHORIZED"
+  | "ERR_FORBIDDEN"
+  | "ERR_NOT_FOUND"
+  | "ERR_CONFLICT"
+  | "ERR_RATE_LIMITED"
+  | "ERR_INTERNAL"
+  | "ERR_UNAVAILABLE";
+
+export interface AppErrorOptions {
+  code?: AppErrorCode;
+  details?: unknown;
+  isOperational?: boolean;
+  cause?: unknown;
+}
+
 export class AppError extends Error {
   public readonly statusCode: number;
+  public readonly code: AppErrorCode;
+  public readonly details?: unknown;
   public readonly isOperational: boolean;
+  public readonly cause?: unknown;
 
-  constructor(message: string, statusCode: number = 500, isOperational = true) {
+  constructor(
+    message: string,
+    statusCode: number = 500,
+    options: AppErrorOptions = {},
+  ) {
     super(message);
     this.statusCode = statusCode;
-    this.isOperational = isOperational;
+    this.code = options.code ?? defaultCodeForStatus(statusCode);
+    this.details = options.details;
+    this.isOperational = options.isOperational ?? true;
+    this.cause = options.cause;
     // Bevara den faktiska underklassens prototyp så `instanceof NotFoundError`
     // (och andra subklasser) fungerar — annars sätter Object.setPrototypeOf
     // alltid prototypen till AppError.prototype.
@@ -13,33 +46,46 @@ export class AppError extends Error {
   }
 }
 
+function defaultCodeForStatus(status: number): AppErrorCode {
+  switch (status) {
+    case 400: return "ERR_BAD_REQUEST";
+    case 401: return "ERR_UNAUTHORIZED";
+    case 403: return "ERR_FORBIDDEN";
+    case 404: return "ERR_NOT_FOUND";
+    case 409: return "ERR_CONFLICT";
+    case 429: return "ERR_RATE_LIMITED";
+    case 503: return "ERR_UNAVAILABLE";
+    default: return "ERR_INTERNAL";
+  }
+}
+
 export class NotFoundError extends AppError {
-  constructor(resource: string = "Resurs") {
-    super(`${resource} hittades inte`, 404);
+  constructor(resource: string = "Resurs", details?: unknown) {
+    super(`${resource} hittades inte`, 404, { code: "ERR_NOT_FOUND", details });
   }
 }
 
 export class ValidationError extends AppError {
-  constructor(message: string = "Ogiltig data") {
-    super(message, 400);
+  constructor(message: string = "Ogiltig data", details?: unknown) {
+    super(message, 400, { code: "ERR_VALIDATION", details });
   }
 }
 
 export class UnauthorizedError extends AppError {
-  constructor(message: string = "Ej autentiserad") {
-    super(message, 401);
+  constructor(message: string = "Ej autentiserad", details?: unknown) {
+    super(message, 401, { code: "ERR_UNAUTHORIZED", details });
   }
 }
 
 export class ForbiddenError extends AppError {
-  constructor(message: string = "Åtkomst nekad") {
-    super(message, 403);
+  constructor(message: string = "Åtkomst nekad", details?: unknown) {
+    super(message, 403, { code: "ERR_FORBIDDEN", details });
   }
 }
 
 export class ConflictError extends AppError {
-  constructor(message: string = "Resurskonflikt") {
-    super(message, 409);
+  constructor(message: string = "Resurskonflikt", details?: unknown) {
+    super(message, 409, { code: "ERR_CONFLICT", details });
   }
 }
 
