@@ -1895,9 +1895,13 @@ app.post("/api/system/send-project-report", requireAdmin, asyncHandler(async (re
 }));
 
 // ============== METADATA DEFINITIONS ==============
+// ADR v3 §2.4 — soft-delete + referensräkning. Definitioner får aldrig
+// hard-deleteas via API; ändringar av "låsta" fält (fieldKey, dataType,
+// propagationType, applicableLevels) blockeras när definitionen används.
 app.get("/api/metadata-definitions", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const definitions = await storage.getMetadataDefinitions(tenantId);
+    const includeDeleted = req.query.includeDeleted === "true";
+    const definitions = await storage.getMetadataDefinitions(tenantId, { includeDeleted });
     res.json(definitions);
 }));
 
@@ -1909,6 +1913,16 @@ app.get("/api/metadata-definitions/:id", asyncHandler(async (req, res) => {
     res.json(verified);
 }));
 
+app.get("/api/metadata-definitions/:id/usage", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const existing = await storage.getMetadataDefinition(req.params.id);
+    if (!verifyTenantOwnership(existing, tenantId)) {
+      throw new NotFoundError("Definition hittades inte");
+    }
+    const usage = await storage.getMetadataDefinitionUsage(req.params.id);
+    res.json(usage);
+}));
+
 app.post("/api/metadata-definitions", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertMetadataDefinitionSchema.parse({ ...req.body, tenantId });
@@ -1916,13 +1930,21 @@ app.post("/api/metadata-definitions", requireAdmin, asyncHandler(async (req, res
     res.status(201).json(definition);
 }));
 
+// Fält som ändrar definitionens *form* (typ/struktur) — blockerade när
+// definitionen används, eftersom befintliga värden/snapshots skulle
+// tolkas fel om typen ändrades retroaktivt.
+const LOCKED_DEFINITION_FIELDS = ["dataType", "propagationType", "applicableLevels"] as const;
+
 app.patch("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getMetadataDefinition(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
       throw new NotFoundError("Definition hittades inte");
     }
-    // Only allow updating safe fields - never tenantId, id, fieldKey, or createdAt
+    if (existing!.deletedAt) {
+      throw new ConflictError("Definitionen är arkiverad. Återställ den först (sätt deletedAt=null) innan du redigerar.");
+    }
+    // fieldKey är immutable (ADR v3 §2.4) — använd replacedByDefinitionId vid byte.
     const updateSchema = z.object({
       fieldLabel: z.string().optional(),
       dataType: z.string().optional(),
@@ -1930,8 +1952,32 @@ app.patch("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (req
       applicableLevels: z.array(z.string()).optional(),
       isRequired: z.boolean().optional(),
       defaultValue: z.string().nullable().optional(),
+      sortOrder: z.number().int().optional(),
+      validationRules: z.record(z.unknown()).optional(),
+      replacedByDefinitionId: z.string().nullable().optional(),
     });
     const updateData = updateSchema.parse(req.body);
+
+    // Tillåt alltid "icke-strukturella" fält. Strukturella ändringar
+    // kräver att inga värden/koncept/framtida WO refererar fältet.
+    const structuralChanges = LOCKED_DEFINITION_FIELDS.filter((f) => {
+      if (!(f in updateData)) return false;
+      const next = (updateData as Record<string, unknown>)[f];
+      const prev = (existing as unknown as Record<string, unknown>)[f];
+      // Jämför som JSON för arrays/primitives — räcker för denna detektion.
+      return JSON.stringify(next) !== JSON.stringify(prev);
+    });
+
+    if (structuralChanges.length > 0) {
+      const usage = await storage.getMetadataDefinitionUsage(req.params.id);
+      if (usage.total > 0) {
+        throw new ConflictError(
+          `Kan inte ändra ${structuralChanges.join(", ")} — definitionen används (${usage.total} referenser). ` +
+          `Skapa en ny definition och migrera värden via replacedByDefinitionId.`
+        );
+      }
+    }
+
     const definition = await storage.updateMetadataDefinition(req.params.id, updateData);
     if (!definition) throw new NotFoundError("Definition hittades inte");
     res.json(definition);
@@ -1943,6 +1989,31 @@ app.delete("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (re
     if (!verifyTenantOwnership(existing, tenantId)) {
       throw new NotFoundError("Definition hittades inte");
     }
+    if (existing!.deletedAt) {
+      return res.status(204).send();
+    }
+
+    const usage = await storage.getMetadataDefinitionUsage(req.params.id);
+    const confirmUsageRaw = req.query.confirmUsage;
+    const confirmUsage = typeof confirmUsageRaw === "string" ? Number(confirmUsageRaw) : NaN;
+    const forced = Number.isFinite(confirmUsage);
+
+    if (usage.total > 0 && !forced) {
+      // 409 + strukturerad payload — UI kan visa exakt vad som blockerar.
+      return res.status(409).json({
+        error: "metadata_definition_in_use",
+        message: `Definitionen används på ${usage.total} ställen. Bekräfta med ?confirmUsage=${usage.total} för att soft-deleta ändå.`,
+        usage,
+      });
+    }
+
+    if (usage.total > 0 && forced && confirmUsage !== usage.total) {
+      throw new ConflictError(
+        `confirmUsage=${confirmUsage} matchar inte aktuell usage_count (${usage.total}). ` +
+        `Ladda om och bekräfta med rätt värde — undviker race-condition vid samtidiga ändringar.`
+      );
+    }
+
     await storage.deleteMetadataDefinition(req.params.id);
     res.status(204).send();
 }));

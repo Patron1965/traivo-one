@@ -164,6 +164,7 @@ export function getAdminItems(tl?: (key: string) => string): NavItem[] {
   return [
     { title: l("nav.company-settings"), url: "/tenant-config", icon: Settings2, description: l("nav.company-settings.desc") },
     { title: l("nav.metadata-settings"), url: "/metadata-settings", icon: Database, description: l("nav.metadata-settings.desc") },
+    { title: "Metadatadefinitioner", url: "/metadata-definitions", icon: Database, description: "Tekniska fältdefinitioner (fieldKey) — soft-delete + livscykelskydd" },
     { title: l("nav.user-management"), url: "/user-management", icon: Users, description: l("nav.user-management.desc") },
     { title: l("nav.settings"), url: "/settings", icon: Settings, description: l("nav.settings.desc") },
     { title: l("nav.fortnox"), url: "/fortnox", icon: Receipt, description: l("nav.fortnox.desc") },

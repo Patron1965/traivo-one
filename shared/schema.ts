@@ -2097,9 +2097,17 @@ export const metadataDefinitions = pgTable("metadata_definitions", {
   // Sorteringsordning i UI
   sortOrder: integer("sort_order").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  // ADR v3 §2.4 — soft-delete + livscykelskydd (bokföringsanalogin).
+  // Definitionen får inte hard-deleteas så länge värden eller framtida
+  // ordrar refererar fieldKey — annars tappar historiska snapshots mening.
+  deletedAt: timestamp("deleted_at"),
+  // Vid splittring (1→N): pekar på efterföljande definition så historik
+  // kan följa kedjan. Sätts manuellt vid migrations-flöde.
+  replacedByDefinitionId: varchar("replaced_by_definition_id"),
 }, (table) => [
   index("idx_metadata_definitions_tenant").on(table.tenantId),
   index("idx_metadata_definitions_field").on(table.fieldKey),
+  index("idx_metadata_definitions_tenant_deleted").on(table.tenantId, table.deletedAt),
 ]);
 
 // Metadatavärden på objekt
@@ -2891,7 +2899,7 @@ export const insertFortnoxMappingSchema = createInsertSchema(fortnoxMappings).om
 export const insertFortnoxInvoiceExportSchema = createInsertSchema(fortnoxInvoiceExports).omit({ id: true, createdAt: true });
 export const insertManualInvoiceLineSchema = createInsertSchema(manualInvoiceLines).omit({ id: true, createdAt: true });
 export const insertObjectPayerSchema = createInsertSchema(objectPayers).omit({ id: true, createdAt: true });
-export const insertMetadataDefinitionSchema = createInsertSchema(metadataDefinitions).omit({ id: true, createdAt: true });
+export const insertMetadataDefinitionSchema = createInsertSchema(metadataDefinitions).omit({ id: true, createdAt: true, deletedAt: true });
 export const insertObjectMetadataSchema = createInsertSchema(objectMetadata).omit({ id: true, createdAt: true });
 export const insertObjectImageSchema = createInsertSchema(objectImages).omit({ id: true, createdAt: true });
 export const insertObjectContactSchema = createInsertSchema(objectContacts).omit({ id: true, createdAt: true });

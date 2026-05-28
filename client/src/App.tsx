@@ -63,6 +63,7 @@ const IndustryPackagesPage = lazy(() => import("@/pages/IndustryPackagesPage"));
 const MobileFieldPage = lazy(() => import("@/pages/MobileFieldPage"));
 const ProjectReportPage = lazy(() => import("@/pages/ProjectReportPage"));
 const MetadataSettingsPage = lazy(() => import("@/pages/MetadataSettingsPage"));
+const MetadataDefinitionsPage = lazy(() => import("@/pages/MetadataDefinitionsPage"));
 const FortnoxSettingsPage = lazy(() => import("@/pages/FortnoxSettingsPage"));
 const MyTasksPage = lazy(() => import("@/pages/MyTasksPage"));
 const MyReportsPage = lazy(() => import("@/pages/MyReportsPage"));
@@ -181,6 +182,7 @@ function Router() {
         <Route path="/project-report">{() => <ProtectedRoute component={ProjectReportPage} path="/project-report" />}</Route>
         <Route path="/metadata">{() => <Redirect to="/metadata-settings" />}</Route>
         <Route path="/metadata-settings">{() => <ProtectedRoute component={MetadataSettingsPage} path="/metadata-settings" />}</Route>
+        <Route path="/metadata-definitions">{() => <ProtectedRoute component={MetadataDefinitionsPage} path="/metadata-definitions" />}</Route>
         <Route path="/invoicing">{() => <ProtectedRoute component={InvoicingPage} path="/invoicing" />}</Route>
         <Route path="/fleet">{() => <ProtectedRoute component={FleetManagementPage} path="/fleet" />}</Route>
         <Route path="/user-management">{() => <ProtectedRoute component={UserManagementPage} path="/user-management" />}</Route>

@@ -3,3 +3,4 @@
 - [SW + config endpoints](service-worker-stale-config.md) — alla konfig-endpoints måste bypassas i `sw.js` ALWAYS_BYPASS_PREFIXES; bumpa båda CACHE_NAME och API_CACHE_NAME vid varje SW-ändring.
 - [Radix DropdownMenu i menyrad](radix-dropdown-menu-bar.md) — syskon-dropdowns kräver `modal={false}`, annars sväljs första klicket på nästa trigger och menyn verkar tom.
 - [Multi-tenant UPDATE predicates](multi-tenant-update-predicates.md) — alla UPDATE/DELETE/COUNT måste ha `tenant_id` i WHERE även när pre-check redan validerat — defense-in-depth.
+- [Metadata-definitioner livscykel](metadata-definitions-lifecycle.md) — `metadata_definitions` är "kontoplan": aldrig hard-delete; DELETE kräver `?confirmUsage=N` exakt; strukturella PATCH-fält låses när usage>0.

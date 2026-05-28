@@ -176,6 +176,26 @@ export interface ResolvedArticlePrice {
   overridePrice: number | null;
 }
 
+export interface MetadataDefinitionUsage {
+  definitionId: string;
+  fieldKey: string | null;
+  objectValueCount: number;
+  activeConceptCount: number;
+  futureActiveConceptCount?: number;
+  futureWorkOrderCount: number;
+  conceptSnapshotCount: number;
+  total: number;
+  blockers: {
+    concepts: Array<{
+      id: string;
+      name: string;
+      status: string | null;
+      nextRunDate: string | null;
+      usedAs: "crossPollinationField" | "subscriptionMetadataField";
+    }>;
+  };
+}
+
 export interface CustomerTreeNode {
   id: string;
   name: string;
@@ -536,11 +556,12 @@ export interface IStorage {
   getAllActiveResourcePositions(): Promise<Resource[]>;
   
   // Metadata Definitions
-  getMetadataDefinitions(tenantId: string): Promise<MetadataDefinition[]>;
+  getMetadataDefinitions(tenantId: string, opts?: { includeDeleted?: boolean }): Promise<MetadataDefinition[]>;
   getMetadataDefinition(id: string): Promise<MetadataDefinition | undefined>;
   createMetadataDefinition(definition: InsertMetadataDefinition): Promise<MetadataDefinition>;
   updateMetadataDefinition(id: string, data: Partial<InsertMetadataDefinition>): Promise<MetadataDefinition | undefined>;
   deleteMetadataDefinition(id: string): Promise<void>;
+  getMetadataDefinitionUsage(id: string): Promise<MetadataDefinitionUsage>;
   
   // Object Metadata
   getObjectMetadata(objectId: string): Promise<ObjectMetadata[]>;
@@ -4946,10 +4967,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Metadata Definitions
-  async getMetadataDefinitions(tenantId: string): Promise<MetadataDefinition[]> {
+  async getMetadataDefinitions(tenantId: string, opts?: { includeDeleted?: boolean }): Promise<MetadataDefinition[]> {
+    const whereExpr = opts?.includeDeleted
+      ? eq(metadataDefinitions.tenantId, tenantId)
+      : and(eq(metadataDefinitions.tenantId, tenantId), isNull(metadataDefinitions.deletedAt));
     return db.select()
       .from(metadataDefinitions)
-      .where(eq(metadataDefinitions.tenantId, tenantId))
+      .where(whereExpr)
       .orderBy(metadataDefinitions.fieldKey);
   }
 
@@ -4965,7 +4989,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateMetadataDefinition(id: string, data: Partial<InsertMetadataDefinition>): Promise<MetadataDefinition | undefined> {
+  async updateMetadataDefinition(id: string, data: Partial<InsertMetadataDefinition> & { deletedAt?: Date | null }): Promise<MetadataDefinition | undefined> {
     const [result] = await db.update(metadataDefinitions)
       .set(data)
       .where(eq(metadataDefinitions.id, id))
@@ -4973,8 +4997,118 @@ export class DatabaseStorage implements IStorage {
     return result || undefined;
   }
 
+  /**
+   * Soft-delete: sätter deletedAt så definitionen försvinner ur default-listor
+   * men `object_metadata`/`metadata_snapshot`-värden förblir läsbara för
+   * historik och Fortnox-export. Hard-delete sker aldrig via API
+   * (ADR v3 §2.4 — bokföringsanalogin).
+   */
   async deleteMetadataDefinition(id: string): Promise<void> {
-    await db.delete(metadataDefinitions).where(eq(metadataDefinitions.id, id));
+    await db.update(metadataDefinitions)
+      .set({ deletedAt: new Date() })
+      .where(eq(metadataDefinitions.id, id));
+  }
+
+  /**
+   * Räknar referenser till en metadata-definition över alla källor som
+   * skulle bryta historik om definitionen försvann (ADR v3 §2.4):
+   *   - `object_metadata.definition_id` — befintliga objektvärden
+   *   - `order_concepts` med `crossPollinationField` / `subscriptionMetadataField` = fieldKey
+   *   - `work_orders.metadata_snapshot ? fieldKey` med `scheduled_date > NOW()` (framtida ordrar)
+   *   - `order_concept_objects.metadata_snapshot ? fieldKey` (frysta snapshots)
+   *
+   * Centraliseras här så samma räkning används i UI, DELETE-blockering
+   * och eventuella scheduler-checkar.
+   */
+  async getMetadataDefinitionUsage(id: string): Promise<MetadataDefinitionUsage> {
+    const def = await this.getMetadataDefinition(id);
+    if (!def) {
+      return {
+        definitionId: id,
+        fieldKey: null,
+        objectValueCount: 0,
+        activeConceptCount: 0,
+        futureWorkOrderCount: 0,
+        conceptSnapshotCount: 0,
+        total: 0,
+        blockers: { concepts: [] },
+      };
+    }
+    const tenantId = def.tenantId;
+    const fieldKey = def.fieldKey;
+
+    const objectValuesRes = await db.execute(sql`
+      SELECT COUNT(*)::int AS c
+      FROM object_metadata
+      WHERE tenant_id = ${tenantId} AND definition_id = ${id}
+    `);
+    const objectValueCount = Number(rowsOf<{ c: number }>(objectValuesRes)[0]?.c ?? 0);
+
+    const conceptsRes = await db.execute(sql`
+      SELECT id, name, status, next_run_date, cross_pollination_field, subscription_metadata_field
+      FROM order_concepts
+      WHERE tenant_id = ${tenantId}
+        AND deleted_at IS NULL
+        AND (cross_pollination_field = ${fieldKey} OR subscription_metadata_field = ${fieldKey})
+    `);
+    const conceptRows = rowsOf<{
+      id: string;
+      name: string;
+      status: string | null;
+      next_run_date: string | Date | null;
+      cross_pollination_field: string | null;
+      subscription_metadata_field: string | null;
+    }>(conceptsRes);
+    const activeConcepts = conceptRows.filter(r => (r.status ?? "active") === "active");
+    const futureActiveConcepts = activeConcepts.filter(r => {
+      if (!r.next_run_date) return false;
+      const t = new Date(r.next_run_date as string).getTime();
+      return Number.isFinite(t) && t > Date.now();
+    });
+
+    const futureWoRes = await db.execute(sql`
+      SELECT COUNT(*)::int AS c
+      FROM work_orders
+      WHERE tenant_id = ${tenantId}
+        AND deleted_at IS NULL
+        AND scheduled_date IS NOT NULL
+        AND scheduled_date > NOW()
+        AND metadata_snapshot IS NOT NULL
+        AND metadata_snapshot ? ${fieldKey}
+    `);
+    const futureWorkOrderCount = Number(rowsOf<{ c: number }>(futureWoRes)[0]?.c ?? 0);
+
+    const ocoSnapshotRes = await db.execute(sql`
+      SELECT COUNT(*)::int AS c
+      FROM order_concept_objects oco
+      JOIN order_concepts oc ON oc.id = oco.order_concept_id
+      WHERE oc.tenant_id = ${tenantId}
+        AND oco.metadata_snapshot IS NOT NULL
+        AND oco.metadata_snapshot ? ${fieldKey}
+    `);
+    const conceptSnapshotCount = Number(rowsOf<{ c: number }>(ocoSnapshotRes)[0]?.c ?? 0);
+
+    const total = objectValueCount + activeConcepts.length + futureWorkOrderCount + conceptSnapshotCount;
+
+    return {
+      definitionId: id,
+      fieldKey,
+      objectValueCount,
+      activeConceptCount: activeConcepts.length,
+      futureActiveConceptCount: futureActiveConcepts.length,
+      futureWorkOrderCount,
+      conceptSnapshotCount,
+      total,
+      blockers: {
+        concepts: activeConcepts.map(c => ({
+          id: c.id,
+          name: c.name,
+          status: c.status,
+          nextRunDate: c.next_run_date ? new Date(c.next_run_date as string).toISOString() : null,
+          usedAs: c.cross_pollination_field === fieldKey ? "crossPollinationField" : "subscriptionMetadataField",
+        })),
+      },
+    };
   }
 
   // Object Metadata
