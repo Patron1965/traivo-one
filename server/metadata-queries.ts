@@ -301,34 +301,30 @@ export async function createMetadata(data: {
     }
   }
 
-  // PDF §14: respektera nivå-lås från ärvda värden — om en förälder har satt
-  // niva_las=TRUE på samma metadata-katalog så får lägre nivåer inte skapa lokalt värde.
-  const lockedAncestor = await db
-    .select({ id: metadataVarden.id, objektId: metadataVarden.objektId })
-    .from(metadataVarden)
-    .innerJoin(objects, eq(objects.id, metadataVarden.objektId))
-    .where(and(
-      eq(metadataVarden.tenantId, data.tenantId),
-      eq(metadataVarden.metadataKatalogId, metadataTyp.id),
-      eq(metadataVarden.nivaLas, true),
-    ))
-    .limit(50);
-  if (lockedAncestor.length > 0) {
-    // Walk upp från objektet och se om någon förälder finns med i låsta-listan.
-    const lockedIds = new Set(lockedAncestor.map(l => l.objektId));
-    let cursorId: string | null = objekt.parentId;
-    let depth = 0;
-    while (cursorId && depth < 50) {
-      if (lockedIds.has(cursorId)) {
-        throw new Error(`Nivå-lås: värdet för "${metadataTyp.namn}" är låst av en förälder och kan inte överskridas på denna nivå.`);
-      }
-      const [parent] = await db
-        .select({ parentId: objects.parentId })
-        .from(objects)
-        .where(and(eq(objects.id, cursorId), eq(objects.tenantId, data.tenantId)));
-      cursorId = parent?.parentId ?? null;
-      depth++;
-    }
+  // PDF §14: respektera nivå-lås från ärvda värden — gå alltid via objektets
+  // ancestor-kedja (rekursivt CTE) och kolla om någon förälder har niva_las=TRUE
+  // för samma katalog. Deterministiskt och oberoende av tenant-bred volym.
+  const lockCheck = await db.execute(sql`
+    WITH RECURSIVE ancestors AS (
+      SELECT id, parent_id, 0 AS depth
+      FROM objects
+      WHERE id = ${objekt.parentId ?? null}::text AND tenant_id = ${data.tenantId}
+      UNION ALL
+      SELECT o.id, o.parent_id, a.depth + 1
+      FROM objects o
+      INNER JOIN ancestors a ON o.id = a.parent_id
+      WHERE o.tenant_id = ${data.tenantId} AND a.depth < 100
+    )
+    SELECT a.id AS objekt_id
+    FROM ancestors a
+    INNER JOIN metadata_varden mv ON mv.objekt_id = a.id
+    WHERE mv.tenant_id = ${data.tenantId}
+      AND mv.metadata_katalog_id = ${metadataTyp.id}
+      AND mv.niva_las = TRUE
+    LIMIT 1
+  `);
+  if ((lockCheck.rows as any[]).length > 0) {
+    throw new Error(`Nivå-lås: värdet för "${metadataTyp.namn}" är låst av en förälder och kan inte överskridas på denna nivå.`);
   }
 
   // PDF §14: dubblettkontroll (allowDuplicates=false → max ett lokalt värde per objekt)
