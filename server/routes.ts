@@ -63,6 +63,8 @@ import { registerUrgentJobRoutes } from "./routes/urgentJobRoutes";
 import { registerCapacityForecastRoutes, capacityForecastScheduler } from "./routes/capacityForecastRoutes";
 import { registerRealtimeTestRoutes } from "./routes/realtime-test";
 import { registerResendWebhookRoutes } from "./routes/resendWebhookRoutes";
+import { registerTelinkRoutes } from "./routes/telinkRoutes";
+import { telinkSyncScheduler } from "./services/telink-sync-scheduler";
 
 async function ensureDefaultTenant() {
   // Only auto-create the legacy demo tenant if the database has no tenants at all.
@@ -783,6 +785,10 @@ export async function registerRoutes(
   // Task #558: Fakturakö + konsoliderings-policy
   registerInvoiceQueueRoutes(app);
   invoiceConsolidationScheduler.start();
+
+  // Task #582: Telink-koppling + auto-ärende vid kontaktbyte
+  registerTelinkRoutes(app);
+  telinkSyncScheduler.start();
 
   app.post("/api/route-geometry", async (req: ExpressRequest, res: ExpressResponse) => {
     try {

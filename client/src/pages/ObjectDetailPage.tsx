@@ -10,6 +10,7 @@ import { ObjectHistoryArchiveTab } from "@/components/ObjectHistoryArchiveTab";
 import { ObjectVignetteSection } from "@/components/ObjectVignetteSection";
 import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
 import ObjectPayersCard from "@/components/ObjectPayersCard";
+import { TelinkSyncButton } from "@/components/TelinkSyncButton";
 import { useAuth } from "@/hooks/use-auth";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -607,6 +608,7 @@ export default function ObjectDetailPage() {
             )}
           </div>
         </div>
+        <TelinkSyncButton objectId={obj.id} />
       </div>
 
       <ObjectVignetteSection objectId={obj.id} />

@@ -26,9 +26,11 @@ import {
   Target,
   Timer,
   Calendar,
-  AlertTriangle
+  AlertTriangle,
+  Plug
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { TelinkConfigCard } from "@/components/TelinkConfigCard";
 
 interface TenantSettings {
   setupTimeTarget: number;
@@ -130,7 +132,7 @@ export default function SettingsPage() {
       </PageHeader>
 
       <Tabs defaultValue="company" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="company" className="flex items-center gap-2" data-testid="tab-settings-company">
             <Building2 className="h-4 w-4" />
             Företag
@@ -138,6 +140,10 @@ export default function SettingsPage() {
           <TabsTrigger value="planning" className="flex items-center gap-2" data-testid="tab-settings-planning">
             <Calendar className="h-4 w-4" />
             Planering
+          </TabsTrigger>
+          <TabsTrigger value="integrations" className="flex items-center gap-2" data-testid="tab-settings-integrations">
+            <Plug className="h-4 w-4" />
+            Integrationer
           </TabsTrigger>
           <TabsTrigger value="profile" className="flex items-center gap-2" data-testid="tab-settings-profile">
             <User className="h-4 w-4" />
@@ -421,6 +427,10 @@ export default function SettingsPage() {
               Spara planeringsinställningar
             </Button>
           </div>
+        </TabsContent>
+
+        <TabsContent value="integrations" className="space-y-4">
+          <TelinkConfigCard />
         </TabsContent>
 
         <TabsContent value="profile" className="space-y-4">
