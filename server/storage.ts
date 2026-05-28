@@ -2,6 +2,7 @@ import {
   type User, type InsertUser, type UpsertUser,
   type Tenant, type InsertTenant,
   type Customer, type InsertCustomer,
+  type CustomerRelationship, type InsertCustomerRelationship,
   type ServiceObject, type InsertObject,
   type Resource, type InsertResource,
   type WorkOrder, type InsertWorkOrder, type WorkOrderWithObject,
@@ -113,7 +114,7 @@ import {
   fuelLogs, maintenanceLogs, objectParents, objectArticles,
   resourceProfiles, resourceProfileAssignments,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports, manualInvoiceLines,
-  users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
+  users, tenants, customers, customerRelationships, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
   vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability,
   vehicleSchedule, subscriptions, teams, teamMembers, planningParameters, clusters,
@@ -249,7 +250,7 @@ export interface IStorage {
   updateTenantSmsSettings(id: string, data: { smsEnabled?: boolean; smsProvider?: string; smsFromName?: string }): Promise<Tenant | undefined>;
   
   getCustomers(tenantId: string): Promise<Customer[]>;
-  getCustomersPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ customers: Customer[]; total: number }>;
+  getCustomersPaginated(tenantId: string, limit: number, offset: number, search?: string, filters?: { hierarchyType?: string | "none"; rootsOnly?: boolean }): Promise<{ customers: Customer[]; total: number }>;
   getCustomersByIds(tenantId: string, ids: string[]): Promise<Customer[]>;
   getCustomer(id: string): Promise<Customer | undefined>;
   getCustomerAggregates(tenantId: string, customerIds?: string[]): Promise<Array<{ customerId: string; clusterCount: number; objectCount: number; activeOrders: number }>>;
@@ -272,6 +273,28 @@ export interface IStorage {
   updateCustomer(id: string, customer: Partial<InsertCustomer>): Promise<Customer | undefined>;
   deleteCustomer(id: string): Promise<void>;
   restoreCustomer(id: string, tenantId: string): Promise<Customer | undefined>;
+
+  // ADR v3 §2.2: kundhierarki (koncern → region → lokal).
+  /** Returnerar omedelbar förälder eller null. Verifierar tenant. */
+  getCustomerParent(tenantId: string, customerId: string): Promise<Customer | null>;
+  /** Returnerar direkta barn (en nivå ner). */
+  getCustomerChildren(tenantId: string, customerId: string): Promise<Customer[]>;
+  /** Returnerar förfäder från närmaste förälder upp till roten (max 32 nivåer). */
+  getCustomerAncestors(tenantId: string, customerId: string): Promise<Customer[]>;
+  /**
+   * Sätter `parent_customer_id`. Kastar Error om: parent saknas, parent
+   * tillhör annan tenant, eller om bytet skulle skapa en cykel.
+   * `parentId=null` lyfter kunden till fristående/rot.
+   */
+  setCustomerParent(tenantId: string, customerId: string, parentId: string | null): Promise<Customer>;
+
+  // ADR v3 §2.2: icke-ägar-relationer (återförsäljare etc).
+  getCustomerRelationships(tenantId: string, customerId: string): Promise<{
+    outgoing: CustomerRelationship[];
+    incoming: CustomerRelationship[];
+  }>;
+  createCustomerRelationship(data: InsertCustomerRelationship): Promise<CustomerRelationship>;
+  deleteCustomerRelationship(tenantId: string, id: string): Promise<void>;
   
   /** Föredragen API: hämtar samtliga objekt för en tenant. */
   getObjects(tenantId: string): Promise<ServiceObject[]>;
@@ -1366,7 +1389,13 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(customers).where(and(eq(customers.tenantId, tenantId), isNull(customers.deletedAt)));
   }
 
-  async getCustomersPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ customers: Customer[]; total: number }> {
+  async getCustomersPaginated(
+    tenantId: string,
+    limit: number,
+    offset: number,
+    search?: string,
+    filters?: { hierarchyType?: string | "none"; rootsOnly?: boolean },
+  ): Promise<{ customers: Customer[]; total: number }> {
     const { count } = await import("drizzle-orm");
     let whereConditions = and(eq(customers.tenantId, tenantId), isNull(customers.deletedAt));
     if (search && search.trim()) {
@@ -1380,6 +1409,14 @@ export class DatabaseStorage implements IStorage {
           sql`LOWER(${customers.city}) LIKE ${searchTerm}`
         )
       );
+    }
+    if (filters?.hierarchyType) {
+      whereConditions = filters.hierarchyType === "none"
+        ? and(whereConditions, isNull(customers.hierarchyType))
+        : and(whereConditions, eq(customers.hierarchyType, filters.hierarchyType));
+    }
+    if (filters?.rootsOnly) {
+      whereConditions = and(whereConditions, isNull(customers.parentCustomerId));
     }
     const [countResult] = await db.select({ count: count() }).from(customers).where(whereConditions);
     const total = countResult?.count || 0;
@@ -1586,6 +1623,149 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(customers.id, id), eq(customers.tenantId, tenantId)))
       .returning();
     return restored;
+  }
+
+  // ─── ADR v3 §2.2: Kund-hierarki ─────────────────────────────────────────
+  async getCustomerParent(tenantId: string, customerId: string): Promise<Customer | null> {
+    const [row] = await db
+      .select()
+      .from(customers)
+      .where(and(eq(customers.id, customerId), eq(customers.tenantId, tenantId), isNull(customers.deletedAt)));
+    if (!row || !row.parentCustomerId) return null;
+    const [parent] = await db
+      .select()
+      .from(customers)
+      .where(and(
+        eq(customers.id, row.parentCustomerId),
+        eq(customers.tenantId, tenantId),
+        isNull(customers.deletedAt),
+      ));
+    return parent ?? null;
+  }
+
+  async getCustomerChildren(tenantId: string, customerId: string): Promise<Customer[]> {
+    return db
+      .select()
+      .from(customers)
+      .where(and(
+        eq(customers.tenantId, tenantId),
+        eq(customers.parentCustomerId, customerId),
+        isNull(customers.deletedAt),
+      ))
+      .orderBy(customers.name);
+  }
+
+  async getCustomerAncestors(tenantId: string, customerId: string): Promise<Customer[]> {
+    // Iterativ uppåtgång med cykelskydd (max 32 nivåer = max-djup-skydd).
+    const seen = new Set<string>([customerId]);
+    const result: Customer[] = [];
+    let currentId: string | null | undefined = customerId;
+    for (let i = 0; i < 32; i++) {
+      if (!currentId) break;
+      const [row] = await db
+        .select()
+        .from(customers)
+        .where(and(
+          eq(customers.id, currentId),
+          eq(customers.tenantId, tenantId),
+          isNull(customers.deletedAt),
+        ));
+      if (!row || !row.parentCustomerId) break;
+      if (seen.has(row.parentCustomerId)) break; // cykel-skydd
+      const [parent] = await db
+        .select()
+        .from(customers)
+        .where(and(
+          eq(customers.id, row.parentCustomerId),
+          eq(customers.tenantId, tenantId),
+          isNull(customers.deletedAt),
+        ));
+      if (!parent) break;
+      result.push(parent);
+      seen.add(parent.id);
+      currentId = parent.id;
+    }
+    return result;
+  }
+
+  async setCustomerParent(tenantId: string, customerId: string, parentId: string | null): Promise<Customer> {
+    const [existing] = await db
+      .select()
+      .from(customers)
+      .where(and(eq(customers.id, customerId), eq(customers.tenantId, tenantId), isNull(customers.deletedAt)));
+    if (!existing) {
+      throw new Error("Kund hittades inte");
+    }
+
+    if (parentId) {
+      if (parentId === customerId) {
+        throw new Error("En kund kan inte vara sin egen förälder");
+      }
+      const [parent] = await db
+        .select()
+        .from(customers)
+        .where(and(eq(customers.id, parentId), eq(customers.tenantId, tenantId), isNull(customers.deletedAt)));
+      if (!parent) {
+        throw new Error("Föräldra-kund hittades inte i denna tenant");
+      }
+      // Cykelskydd: parentens förfäder får inte innehålla customerId.
+      const parentAncestors = await this.getCustomerAncestors(tenantId, parentId);
+      if (parentAncestors.some((a) => a.id === customerId)) {
+        throw new Error("Cirkulär hierarki — den valda föräldern är redan ett barn till denna kund");
+      }
+    }
+
+    const [updated] = await db
+      .update(customers)
+      .set({ parentCustomerId: parentId })
+      .where(and(eq(customers.id, customerId), eq(customers.tenantId, tenantId)))
+      .returning();
+    if (!updated) throw new Error("Kunde inte uppdatera kund");
+    return updated;
+  }
+
+  async getCustomerRelationships(tenantId: string, customerId: string): Promise<{
+    outgoing: CustomerRelationship[];
+    incoming: CustomerRelationship[];
+  }> {
+    const [outgoing, incoming] = await Promise.all([
+      db.select().from(customerRelationships).where(and(
+        eq(customerRelationships.tenantId, tenantId),
+        eq(customerRelationships.fromCustomerId, customerId),
+      )).orderBy(desc(customerRelationships.createdAt)),
+      db.select().from(customerRelationships).where(and(
+        eq(customerRelationships.tenantId, tenantId),
+        eq(customerRelationships.toCustomerId, customerId),
+      )).orderBy(desc(customerRelationships.createdAt)),
+    ]);
+    return { outgoing, incoming };
+  }
+
+  async createCustomerRelationship(data: InsertCustomerRelationship): Promise<CustomerRelationship> {
+    // Verifiera att båda kunder tillhör samma tenant.
+    const both = await db
+      .select({ id: customers.id })
+      .from(customers)
+      .where(and(
+        eq(customers.tenantId, data.tenantId),
+        isNull(customers.deletedAt),
+        inArray(customers.id, [data.fromCustomerId, data.toCustomerId]),
+      ));
+    if (both.length !== 2 && data.fromCustomerId !== data.toCustomerId) {
+      throw new Error("En eller båda kunderna saknas i denna tenant");
+    }
+    if (data.fromCustomerId === data.toCustomerId) {
+      throw new Error("En kund kan inte ha relation till sig själv");
+    }
+    const [row] = await db.insert(customerRelationships).values(data).returning();
+    return row;
+  }
+
+  async deleteCustomerRelationship(tenantId: string, id: string): Promise<void> {
+    await db.delete(customerRelationships).where(and(
+      eq(customerRelationships.id, id),
+      eq(customerRelationships.tenantId, tenantId),
+    ));
   }
 
   async getObjects(tenantId: string): Promise<ServiceObject[]> {

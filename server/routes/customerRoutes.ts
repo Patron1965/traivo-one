@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { z } from "zod";
-import { insertCustomerSchema, insertObjectSchema, objects, customers, workOrders } from "@shared/schema";
+import { insertCustomerSchema, insertCustomerRelationshipSchema, insertObjectSchema, objects, customers, workOrders, CUSTOMER_HIERARCHY_TYPES } from "@shared/schema";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
@@ -151,7 +151,13 @@ app.get("/api/customers", asyncHandler(async (req, res) => {
   const search = typeof req.query.search === "string" ? req.query.search : undefined;
   if (page > 0 && limit > 0) {
     const offset = (page - 1) * limit;
-    const result = await storage.getCustomersPaginated(tenantId, limit, offset, search);
+    const levelQ = typeof req.query.level === "string" ? req.query.level : undefined;
+    const validLevel = levelQ && (levelQ === "none" || (CUSTOMER_HIERARCHY_TYPES as readonly string[]).includes(levelQ)) ? levelQ : undefined;
+    const rootsOnly = req.query.rootsOnly === "true";
+    const result = await storage.getCustomersPaginated(tenantId, limit, offset, search, {
+      hierarchyType: validLevel,
+      rootsOnly,
+    });
     return res.json({ data: result.customers, total: result.total, page, limit });
   }
   const customers = await storage.getCustomers(tenantId);
@@ -257,7 +263,20 @@ app.get("/api/customers/:id", asyncHandler(async (req, res) => {
 app.post("/api/customers", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const data = insertCustomerSchema.parse({ ...req.body, tenantId });
-  const customer = await storage.createCustomer(data);
+  // ADR v3 §2.2: validera parent separat — skapa kunden utan parent först,
+  // applicera sedan via setCustomerParent (tenant- och existens-koll).
+  const { parentCustomerId, ...createData } = data as typeof data & { parentCustomerId?: string | null };
+  const customer = await storage.createCustomer(createData);
+  if (parentCustomerId) {
+    try {
+      const updated = await storage.setCustomerParent(tenantId, customer.id, parentCustomerId);
+      return res.status(201).json(updated);
+    } catch (e) {
+      // Rensa upp halv-skapad kund så vi inte lämnar dangling rader.
+      try { await storage.deleteCustomer(customer.id); } catch {}
+      throw new ValidationError(e instanceof Error ? e.message : "Kunde inte sätta förälder");
+    }
+  }
   res.status(201).json(customer);
 }));
 
@@ -272,10 +291,116 @@ app.patch("/api/customers/:id", asyncHandler(async (req, res) => {
   if (!parseResult.success) {
     return res.status(400).json(formatZodError(parseResult.error));
   }
-  const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as Record<string, unknown>;
-  const customer = await storage.updateCustomer(req.params.id, updateData);
+  const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, parentCustomerId, ...updateData } = parseResult.data as Record<string, unknown>;
+
+  // ADR v3 §2.2: hantera parent-byte via dedikerad setter (cykel-validering).
+  if (parentCustomerId !== undefined && parentCustomerId !== existing!.parentCustomerId) {
+    try {
+      await storage.setCustomerParent(tenantId, req.params.id, (parentCustomerId as string | null) ?? null);
+    } catch (e) {
+      throw new ValidationError(e instanceof Error ? e.message : "Kunde inte sätta förälder");
+    }
+  }
+
+  const customer = Object.keys(updateData).length > 0
+    ? await storage.updateCustomer(req.params.id, updateData)
+    : await storage.getCustomer(req.params.id);
   if (!customer) throw new NotFoundError("Kund");
   res.json(customer);
+}));
+
+// ─── ADR v3 §2.2: Kund-hierarki ────────────────────────────────────────────
+app.get("/api/customers/:id/hierarchy", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customer = await storage.getCustomer(req.params.id);
+  if (!verifyTenantOwnership(customer, tenantId)) throw new NotFoundError("Kund");
+  const [parent, children, ancestors] = await Promise.all([
+    storage.getCustomerParent(tenantId, req.params.id),
+    storage.getCustomerChildren(tenantId, req.params.id),
+    storage.getCustomerAncestors(tenantId, req.params.id),
+  ]);
+  res.json({
+    id: customer!.id,
+    name: customer!.name,
+    hierarchyType: customer!.hierarchyType,
+    isReseller: customer!.isReseller,
+    parent: parent ? { id: parent.id, name: parent.name, hierarchyType: parent.hierarchyType } : null,
+    ancestors: ancestors.map((a) => ({ id: a.id, name: a.name, hierarchyType: a.hierarchyType })),
+    children: children.map((c) => ({ id: c.id, name: c.name, hierarchyType: c.hierarchyType, isReseller: c.isReseller })),
+  });
+}));
+
+app.put("/api/customers/:id/parent", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getCustomer(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) throw new NotFoundError("Kund");
+  const bodySchema = z.object({ parentCustomerId: z.string().nullable() });
+  const parsed = bodySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
+  try {
+    const updated = await storage.setCustomerParent(tenantId, req.params.id, parsed.data.parentCustomerId);
+    res.json(updated);
+  } catch (e) {
+    throw new ValidationError(e instanceof Error ? e.message : "Kunde inte sätta förälder");
+  }
+}));
+
+app.get("/api/customers/:id/relationships", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customer = await storage.getCustomer(req.params.id);
+  if (!verifyTenantOwnership(customer, tenantId)) throw new NotFoundError("Kund");
+  const rels = await storage.getCustomerRelationships(tenantId, req.params.id);
+  res.json(rels);
+}));
+
+app.post("/api/customers/:id/relationships", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customer = await storage.getCustomer(req.params.id);
+  if (!verifyTenantOwnership(customer, tenantId)) throw new NotFoundError("Kund");
+  const parsed = insertCustomerRelationshipSchema.safeParse({
+    ...req.body,
+    tenantId,
+    fromCustomerId: req.params.id,
+  });
+  if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
+  try {
+    const row = await storage.createCustomerRelationship(parsed.data);
+    res.status(201).json(row);
+  } catch (e) {
+    throw new ValidationError(e instanceof Error ? e.message : "Kunde inte skapa relation");
+  }
+}));
+
+app.delete("/api/customers/:id/relationships/:relId", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customer = await storage.getCustomer(req.params.id);
+  if (!verifyTenantOwnership(customer, tenantId)) throw new NotFoundError("Kund");
+  await storage.deleteCustomerRelationship(tenantId, req.params.relId);
+  res.status(204).send();
+}));
+
+// Lista kunder filtrerat på hierarki-nivå (för UI-filter och dropdowns).
+app.get("/api/customers-by-hierarchy", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const levelParam = typeof req.query.level === "string" ? req.query.level : undefined;
+  const rootsOnly = req.query.rootsOnly === "true";
+  const all = await storage.getCustomers(tenantId);
+  let filtered = all;
+  if (levelParam && (CUSTOMER_HIERARCHY_TYPES as readonly string[]).includes(levelParam)) {
+    filtered = filtered.filter((c) => c.hierarchyType === levelParam);
+  } else if (levelParam === "null") {
+    filtered = filtered.filter((c) => !c.hierarchyType);
+  }
+  if (rootsOnly) {
+    filtered = filtered.filter((c) => !c.parentCustomerId);
+  }
+  res.json(filtered.map((c) => ({
+    id: c.id,
+    name: c.name,
+    hierarchyType: c.hierarchyType,
+    parentCustomerId: c.parentCustomerId,
+    isReseller: c.isReseller,
+  })));
 }));
 
 app.delete("/api/customers/:id", requireAdmin, asyncHandler(async (req: any, res) => {

@@ -49,6 +49,22 @@ export const users = pgTable("users", {
 
 export type UpsertUser = typeof users.$inferInsert;
 
+// ADR v3 §2.2: hierarchy_type är en self-deklarerad nivå-etikett på en
+// kund-nod. NULL = "fristående" (back-compat). Värdena är fria — UI:t
+// väljer endast bland CUSTOMER_HIERARCHY_TYPES, men DB:n låser inte
+// strängen så framtida nivåer kan läggas till utan migration.
+export const CUSTOMER_HIERARCHY_TYPES = ["koncern", "region", "lokal"] as const;
+export type CustomerHierarchyType = typeof CUSTOMER_HIERARCHY_TYPES[number];
+
+// ADR v3 §2.2: icke-ägar-relationer mellan kunder. Återförsäljare,
+// "beställer-åt", servicepartner. Skild från `parent_customer_id`-trädet.
+export const CUSTOMER_RELATIONSHIP_TYPES = [
+  "reseller_for",
+  "orders_on_behalf",
+  "service_partner",
+] as const;
+export type CustomerRelationshipType = typeof CUSTOMER_RELATIONSHIP_TYPES[number];
+
 export const customers = pgTable("customers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
@@ -70,6 +86,12 @@ export const customers = pgTable("customers", {
   // fallback när objekt saknar egen `deliveryPreferences`. Struktur valideras av
   // deliveryPreferencesSchema.
   deliveryPreferences: jsonb("delivery_preferences"),
+  // ADR v3 §2.2: kundhierarki (koncern → region → lokal). Self-FK ger
+  // strikt träd; NULL = fristående kund (back-compat default).
+  // Cykelförbud enforce:as i applikationslagret (server/storage.ts).
+  parentCustomerId: varchar("parent_customer_id").references((): any => customers.id),
+  hierarchyType: varchar("hierarchy_type", { length: 20 }),
+  isReseller: boolean("is_reseller").default(false),
   importBatchId: text("import_batch_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
@@ -77,6 +99,25 @@ export const customers = pgTable("customers", {
   index("idx_customers_tenant").on(table.tenantId),
   index("idx_customers_tenant_name").on(table.tenantId, table.name),
   index("idx_customers_tenant_created").on(table.tenantId, table.createdAt),
+  index("idx_customers_parent").on(table.tenantId, table.parentCustomerId),
+]);
+
+// ADR v3 §2.2: icke-ägar-relationer (återförsäljare, agent, beställer-åt).
+// Skild från parent-trädet — en återförsäljare *beställer åt* en kund,
+// men *äger inte* kunden i hierarkin. Tidsbestämd via valid_from/valid_to.
+export const customerRelationships = pgTable("customer_relationships", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  fromCustomerId: varchar("from_customer_id").references(() => customers.id, { onDelete: "cascade" }).notNull(),
+  toCustomerId: varchar("to_customer_id").references(() => customers.id, { onDelete: "cascade" }).notNull(),
+  relationshipType: varchar("relationship_type", { length: 30 }).notNull(),
+  validFrom: timestamp("valid_from"),
+  validTo: timestamp("valid_to"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_cust_rel_tenant_from").on(table.tenantId, table.fromCustomerId),
+  index("idx_cust_rel_tenant_to").on(table.tenantId, table.toCustomerId),
 ]);
 
 // Hierarkinivåer för objekt (Mats klusterfilosofi)
@@ -1334,7 +1375,19 @@ export function isOutsidePreferredWindow(
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, createdAt: true })
-  .extend({ deliveryPreferences: deliveryPreferencesSchema.nullish() });
+  .extend({
+    deliveryPreferences: deliveryPreferencesSchema.nullish(),
+    hierarchyType: z.enum(CUSTOMER_HIERARCHY_TYPES).nullish(),
+    parentCustomerId: z.string().nullish(),
+    isReseller: z.boolean().optional(),
+  });
+export const insertCustomerRelationshipSchema = createInsertSchema(customerRelationships)
+  .omit({ id: true, createdAt: true })
+  .extend({
+    relationshipType: z.enum(CUSTOMER_RELATIONSHIP_TYPES),
+    validFrom: z.coerce.date().nullish(),
+    validTo: z.coerce.date().nullish(),
+  });
 export const insertObjectSchema = createInsertSchema(objects).omit({ id: true, createdAt: true })
   .extend({ deliveryPreferences: deliveryPreferencesSchema.nullish() });
 export const insertResourceSchema = createInsertSchema(resources).omit({ id: true, createdAt: true });
@@ -1367,6 +1420,8 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Customer = typeof customers.$inferSelect;
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
+export type CustomerRelationship = typeof customerRelationships.$inferSelect;
+export type InsertCustomerRelationship = z.infer<typeof insertCustomerRelationshipSchema>;
 export type ServiceObject = typeof objects.$inferSelect;
 export type InsertObject = z.infer<typeof insertObjectSchema>;
 export type Resource = typeof resources.$inferSelect;

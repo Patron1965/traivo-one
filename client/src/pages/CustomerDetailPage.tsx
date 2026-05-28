@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { Link, useRoute } from "wouter";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { CUSTOMER_HIERARCHY_TYPES } from "@shared/schema";
 import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
 import { PortalUsersTab } from "@/components/customer/PortalUsersTab";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -497,6 +502,195 @@ interface ProfitabilityResponse {
     marginPercent: number;
     orders: number;
   }>;
+}
+
+type HierarchyNode = { id: string; name: string; hierarchyType?: string | null; isReseller?: boolean };
+type HierarchyResponse = {
+  id: string;
+  name: string;
+  hierarchyType: string | null;
+  isReseller: boolean;
+  parent: HierarchyNode | null;
+  ancestors: HierarchyNode[];
+  children: HierarchyNode[];
+};
+
+const HIERARCHY_LABEL: Record<string, string> = {
+  koncern: "Koncern",
+  region: "Region",
+  lokal: "Lokal",
+};
+
+function HierarchyTypeBadge({ type }: { type?: string | null }) {
+  if (!type) return null;
+  return <Badge variant="outline" className="ml-2 text-xs">{HIERARCHY_LABEL[type] ?? type}</Badge>;
+}
+
+function CustomerHierarchyTab({ customerId, isAdmin }: { customerId: string; isAdmin: boolean }) {
+  const { toast } = useToast();
+  const { data, isLoading, isError, refetch } = useQuery<HierarchyResponse>({
+    queryKey: ["/api/customers", customerId, "hierarchy"],
+  });
+  const candidatesQuery = useQuery<HierarchyNode[]>({
+    queryKey: ["/api/customers-by-hierarchy"],
+    enabled: isAdmin,
+  });
+
+  const [parentDraft, setParentDraft] = useState<string>("");
+  const [typeDraft, setTypeDraft] = useState<string>("");
+
+  useEffect(() => {
+    if (data) {
+      setParentDraft(data.parent?.id ?? "__none__");
+      setTypeDraft(data.hierarchyType ?? "__none__");
+    }
+  }, [data]);
+
+  const parentMutation = useMutation({
+    mutationFn: async (parentCustomerId: string | null) => {
+      return apiRequest("PUT", `/api/customers/${customerId}/parent`, { parentCustomerId });
+    },
+    onSuccess: () => {
+      toast({ title: "Förälder uppdaterad" });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers", customerId, "hierarchy"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers", customerId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+    },
+    onError: (e: Error) => toast({ title: "Kunde inte uppdatera förälder", description: e.message, variant: "destructive" }),
+  });
+
+  const typeMutation = useMutation({
+    mutationFn: async (hierarchyType: string | null) => {
+      return apiRequest("PATCH", `/api/customers/${customerId}`, { hierarchyType });
+    },
+    onSuccess: () => {
+      toast({ title: "Nivå uppdaterad" });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers", customerId, "hierarchy"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers", customerId] });
+    },
+    onError: (e: Error) => toast({ title: "Kunde inte uppdatera nivå", description: e.message, variant: "destructive" }),
+  });
+
+  if (isLoading) {
+    return (
+      <Card><CardContent className="p-6 flex items-center gap-2 text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Laddar koncernstruktur…
+      </CardContent></Card>
+    );
+  }
+  if (isError || !data) {
+    return (
+      <Card><CardContent className="p-6 flex items-center gap-2 text-sm text-destructive">
+        <AlertTriangle className="h-4 w-4" /> Kunde inte hämta hierarki.
+        <Button variant="ghost" size="sm" onClick={() => refetch()}>Försök igen</Button>
+      </CardContent></Card>
+    );
+  }
+
+  // Filtrera bort sig själv och egna ättlingar ur parent-kandidater (förfäder okej är de redan).
+  const childIds = new Set(data.children.map((c) => c.id));
+  const parentOptions = (candidatesQuery.data ?? []).filter(
+    (c) => c.id !== customerId && !childIds.has(c.id),
+  );
+
+  const breadcrumb = [...data.ancestors].reverse();
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader><CardTitle className="text-sm">Position i koncern</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {breadcrumb.length === 0 && !data.parent ? (
+            <p className="text-sm text-muted-foreground" data-testid="text-no-parent">
+              Fristående kund (ingen förälder).
+            </p>
+          ) : (
+            <nav className="flex flex-wrap items-center gap-1 text-sm" data-testid="breadcrumb-hierarchy">
+              {breadcrumb.map((a) => (
+                <Fragment key={a.id}>
+                  <Link href={`/customers/${a.id}`}>
+                    <a className="text-primary hover:underline" data-testid={`link-ancestor-${a.id}`}>
+                      {a.name}
+                    </a>
+                  </Link>
+                  <HierarchyTypeBadge type={a.hierarchyType} />
+                  <span className="text-muted-foreground mx-1">/</span>
+                </Fragment>
+              ))}
+              <span className="font-medium" data-testid="text-current-customer">{data.name}</span>
+              <HierarchyTypeBadge type={data.hierarchyType} />
+            </nav>
+          )}
+
+          {isAdmin && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t">
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Nivå</label>
+                <Select
+                  value={typeDraft}
+                  onValueChange={(v) => {
+                    setTypeDraft(v);
+                    typeMutation.mutate(v === "__none__" ? null : v);
+                  }}
+                >
+                  <SelectTrigger data-testid="select-hierarchy-type"><SelectValue placeholder="Välj nivå" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Ingen —</SelectItem>
+                    {CUSTOMER_HIERARCHY_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>{HIERARCHY_LABEL[t] ?? t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Förälder</label>
+                <Select
+                  value={parentDraft}
+                  onValueChange={(v) => {
+                    setParentDraft(v);
+                    parentMutation.mutate(v === "__none__" ? null : v);
+                  }}
+                >
+                  <SelectTrigger data-testid="select-parent-customer"><SelectValue placeholder="Välj förälder" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Ingen (fristående) —</SelectItem>
+                    {parentOptions.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}{c.hierarchyType ? ` (${HIERARCHY_LABEL[c.hierarchyType] ?? c.hierarchyType})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-sm">Underliggande kunder ({data.children.length})</CardTitle></CardHeader>
+        <CardContent>
+          {data.children.length === 0 ? (
+            <p className="text-sm text-muted-foreground" data-testid="text-no-children">Inga underliggande kunder.</p>
+          ) : (
+            <ul className="divide-y" data-testid="list-children">
+              {data.children.map((c) => (
+                <li key={c.id} className="py-2 flex items-center justify-between">
+                  <div className="flex items-center">
+                    <Link href={`/customers/${c.id}`}>
+                      <a className="text-primary hover:underline" data-testid={`link-child-${c.id}`}>{c.name}</a>
+                    </Link>
+                    <HierarchyTypeBadge type={c.hierarchyType} />
+                    {c.isReseller && <Badge variant="secondary" className="ml-2 text-xs">Återförsäljare</Badge>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 function CustomerProfitabilityTab({ customerId }: { customerId: string }) {
@@ -1206,6 +1400,9 @@ export default function CustomerDetailPage() {
               <TabsTrigger value="tree" data-testid="tab-tree">
                 <TreePine className="h-4 w-4 mr-2" /> Hierarki
               </TabsTrigger>
+              <TabsTrigger value="customer-hierarchy" data-testid="tab-customer-hierarchy">
+                <Users className="h-4 w-4 mr-2" /> Koncernstruktur
+              </TabsTrigger>
               <TabsTrigger value="map" data-testid="tab-map">
                 <MapIcon className="h-4 w-4 mr-2" /> Karta
               </TabsTrigger>
@@ -1227,6 +1424,12 @@ export default function CustomerDetailPage() {
             {isAdmin && customerId && (
               <TabsContent value="portal-users">
                 <PortalUsersTab customerId={customerId} />
+              </TabsContent>
+            )}
+
+            {customerId && (
+              <TabsContent value="customer-hierarchy">
+                <CustomerHierarchyTab customerId={customerId} isAdmin={isAdmin} />
               </TabsContent>
             )}
 

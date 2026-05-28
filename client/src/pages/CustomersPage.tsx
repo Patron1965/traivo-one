@@ -3,6 +3,9 @@ import { Link } from "wouter";
 import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { CUSTOMER_HIERARCHY_TYPES } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -63,6 +66,8 @@ export default function CustomersPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebounced(search, 300);
+  const [hierarchyFilter, setHierarchyFilter] = useState<string>("all");
+  const [rootsOnly, setRootsOnly] = useState<boolean>(false);
 
   type SortField = "name" | "orgNumber" | "customerNumber" | "city" | "clusters" | "objects" | "activeOrders";
   const [sortConfig, setSortConfig] = useState<{ field: SortField; direction: "asc" | "desc" }>({ field: "name", direction: "asc" });
@@ -80,13 +85,15 @@ export default function CustomersPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, hierarchyFilter, rootsOnly]);
 
   const { data: customersPage, isLoading: customersLoading, isFetching: customersFetching, isError: customersIsError, error: customersError, refetch: customersRefetch } = useQuery<CustomersPage>({
-    queryKey: ["/api/customers", { page, limit: PAGE_SIZE, search: debouncedSearch }],
+    queryKey: ["/api/customers", { page, limit: PAGE_SIZE, search: debouncedSearch, hierarchyFilter, rootsOnly }],
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
       if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
+      if (hierarchyFilter !== "all") params.set("level", hierarchyFilter);
+      if (rootsOnly) params.set("rootsOnly", "true");
       const res = await fetch(versionedUrl(`/api/customers?${params.toString()}`), { credentials: "include" });
       if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
       return res.json();
@@ -291,15 +298,36 @@ export default function CustomersPage() {
 
       <Card>
         <CardContent className="p-4 space-y-4">
-          <div className="flex items-center gap-2">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Sök kund, kundnummer, e-post eller ort..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-md"
-              data-testid="input-customer-search"
-            />
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Sök kund, kundnummer, e-post eller ort..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="max-w-md"
+                data-testid="input-customer-search"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Nivå:</span>
+              <Select value={hierarchyFilter} onValueChange={setHierarchyFilter}>
+                <SelectTrigger className="w-36 h-8" data-testid="select-hierarchy-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla</SelectItem>
+                  <SelectItem value="none">Ej satt</SelectItem>
+                  {CUSTOMER_HIERARCHY_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+              <Switch checked={rootsOnly} onCheckedChange={setRootsOnly} data-testid="switch-roots-only" />
+              Endast rotkunder
+            </label>
             {showSpinner && (
               <span className="text-xs text-muted-foreground" data-testid="text-loading-indicator">
                 Laddar...
