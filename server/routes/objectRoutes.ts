@@ -693,6 +693,15 @@ app.get("/api/objects/:id/resolved", asyncHandler(async (req, res) => {
   const processor = await createInheritanceProcessor(tenantId);
   const objectWithInheritance = await processor.getObjectWithResolvedValues(req.params.id);
   if (!objectWithInheritance) throw new NotFoundError("Objekt");
+  // Task #552 (A): composed display name baserat på per-tenant regler. Faller
+  // tillbaka till object.name om regler saknas.
+  try {
+    const { computeDisplayName } = await import("../services/display-name");
+    const displayName = await computeDisplayName(req.params.id, tenantId);
+    (objectWithInheritance as any).displayName = displayName ?? (objectWithInheritance as any).name;
+  } catch (err) {
+    (objectWithInheritance as any).displayName = (objectWithInheritance as any).name;
+  }
   res.json(objectWithInheritance);
 }));
 

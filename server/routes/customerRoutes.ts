@@ -380,19 +380,35 @@ app.get("/api/objects", asyncHandler(async (req, res) => {
   const hasFilters = objectType || hierarchyLevel || accessType || interim || issue || clusterIdFilter;
   const paginated = req.query.paginated === "true";
 
+  // Task #552 (A): Berika listsvar med composed displayName så att alla konsumenter
+  // (listor, map-popups, planner) kan visa släktnamn när tenant aktiverat det.
+  const enrichWithDisplayName = async (rows: Array<Record<string, unknown>>) => {
+    if (rows.length === 0) return rows;
+    try {
+      const { computeDisplayNamesBatch } = await import("../services/display-name");
+      const ids = rows.map(r => String(r.id)).filter(Boolean);
+      const map = await computeDisplayNamesBatch(ids, tenantId);
+      return rows.map(r => ({ ...r, displayName: map.get(String(r.id)) || (r as any).name }));
+    } catch {
+      return rows.map(r => ({ ...r, displayName: (r as any).name }));
+    }
+  };
+
   if (paginated || req.query.limit || req.query.offset || req.query.search || req.query.customerId || noCluster || hasFilters) {
     const filters = hasFilters ? { objectType, hierarchyLevel, accessType, isInterimObject: interim === "true" ? true : interim === "false" ? false : undefined, issue, clusterId: clusterIdFilter } : undefined;
     const result = await storage.getObjectsPaginated(tenantId, limit, offset, search, customerIds, filters);
+    const enriched = await enrichWithDisplayName(result.objects as Array<Record<string, unknown>>);
 
     if (noCluster) {
-      const filtered = (result.objects as Array<Record<string, unknown>>).filter(obj => !obj.clusterId);
+      const filtered = enriched.filter(obj => !(obj as any).clusterId);
       res.json(filtered);
     } else {
-      res.json(result);
+      res.json({ ...result, objects: enriched });
     }
   } else {
     const objects = await storage.getObjects(tenantId);
-    res.json(objects);
+    const enriched = await enrichWithDisplayName(objects as unknown as Array<Record<string, unknown>>);
+    res.json(enriched);
   }
 }));
 

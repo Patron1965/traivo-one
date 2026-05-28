@@ -198,14 +198,26 @@ export function ObjectHistoryArchiveTab({ objectId, isArchived }: { objectId: st
             <Button variant="outline" onClick={() => setDialogOpen(false)} data-testid="button-cancel-archive">
               Avbryt
             </Button>
-            <Button
-              variant="destructive"
-              onClick={() => archiveMut.mutate({ force: false })}
-              disabled={archiveMut.isPending || blocked}
-              data-testid="button-confirm-archive"
-            >
-              <Archive className="h-4 w-4 mr-2" /> Arkivera
-            </Button>
+            {blocked ? (
+              <Button
+                variant="destructive"
+                onClick={() => archiveMut.mutate({ force: true })}
+                disabled={archiveMut.isPending}
+                data-testid="button-force-archive"
+                title="Arkivera trots blockerande beroenden"
+              >
+                <Archive className="h-4 w-4 mr-2" /> Arkivera ändå
+              </Button>
+            ) : (
+              <Button
+                variant="destructive"
+                onClick={() => archiveMut.mutate({ force: false })}
+                disabled={archiveMut.isPending}
+                data-testid="button-confirm-archive"
+              >
+                <Archive className="h-4 w-4 mr-2" /> Arkivera
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

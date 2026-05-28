@@ -9,11 +9,14 @@
 // kluster-utvärdering efteråt.
 import { db } from "../db";
 import { workOrders } from "@shared/schema";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { storage } from "../storage";
 import { evaluateAllDynamicClusters } from "./dynamic-clusters";
 
-const ACTIVE_STATUSES = ["draft", "planned", "scheduled", "pending"];
+// Alla icke-finaliserade statusar — exkluderar bara invoiced/cancelled/completed.
+// Recalc får alltså träffa även in_progress/ongoing/on_hold etc. så att pågående
+// arbete får uppdaterade priser/totaler om metadata påverkar prisregler.
+const FINALIZED_STATUSES = ["invoiced", "cancelled", "completed"];
 
 type Pending = { tenantId: string; objectIds: Set<string>; timer: NodeJS.Timeout | null };
 const pendingByTenant = new Map<string, Pending>();
@@ -54,7 +57,7 @@ async function runMetadataChangeJob(tenantId: string, objectIds: string[]): Prom
         eq(workOrders.tenantId, tenantId),
         inArray(workOrders.objectId, objectIds),
         isNull(workOrders.deletedAt),
-        inArray(workOrders.status, ACTIVE_STATUSES),
+        notInArray(workOrders.status, FINALIZED_STATUSES),
       ));
     const ids = rows.map(r => r.id);
     if (ids.length > 0 && typeof (storage as any).recalculateWorkOrderTotalsBulk === "function") {
