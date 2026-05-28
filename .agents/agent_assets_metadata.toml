@@ -114,3 +114,9 @@ id = "RqvnHCPDCftSmwijPazBp"
 uri = "file://attached_assets/Traivo_objektimport_mall_v1.xlsx"
 type = "table"
 title = "Traivo objektimport-mall v1 (officiell att skicka till Mats)"
+
+[[outputs]]
+id = "O1pA6iviYFunyjxFy54vz"
+uri = "file://exports/Traivo_objektimport_mall_v1.xlsx"
+type = "table"
+title = "Traivo objektimport-mall v1 (för Mats)"

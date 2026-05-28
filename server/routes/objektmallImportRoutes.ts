@@ -52,7 +52,7 @@ const xlsxUpload = multer({
 // ============================================================
 // Mall-generator
 // ============================================================
-async function buildTemplateWorkbook(): Promise<Buffer> {
+export async function buildTemplateWorkbook(): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Traivo";
   wb.created = new Date();
