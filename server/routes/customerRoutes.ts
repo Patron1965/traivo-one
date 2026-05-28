@@ -196,6 +196,16 @@ app.get("/api/customers/:id/profitability", requireAdmin, asyncHandler(async (re
   const customer = await storage.getCustomer(req.params.id);
   if (!verifyTenantOwnership(customer, tenantId)) throw new NotFoundError("Kund");
 
+  const includeDescendants = req.query.includeDescendants === "true";
+  const customerIds = [req.params.id];
+  if (includeDescendants) {
+    const descendants = await storage.getCustomerDescendants(tenantId, req.params.id);
+    customerIds.push(...descendants);
+  }
+  const customerFilter = customerIds.length === 1
+    ? eq(workOrders.customerId, customerIds[0])
+    : inArray(workOrders.customerId, customerIds);
+
   const totalsRow = await db
     .select({
       orderCount: sql<number>`COUNT(*)::int`,
@@ -205,7 +215,7 @@ app.get("/api/customers/:id/profitability", requireAdmin, asyncHandler(async (re
     .from(workOrders)
     .where(and(
       eq(workOrders.tenantId, tenantId),
-      eq(workOrders.customerId, req.params.id),
+      customerFilter,
       sql`${workOrders.deletedAt} IS NULL`,
     ));
 
@@ -224,7 +234,7 @@ app.get("/api/customers/:id/profitability", requireAdmin, asyncHandler(async (re
     .from(workOrders)
     .where(and(
       eq(workOrders.tenantId, tenantId),
-      eq(workOrders.customerId, req.params.id),
+      customerFilter,
       sql`${workOrders.deletedAt} IS NULL`,
       sql`COALESCE(${workOrders.scheduledDate}, ${workOrders.createdAt}) >= NOW() - INTERVAL '12 months'`,
     ))
@@ -251,6 +261,17 @@ app.get("/api/customers/:id/profitability", requireAdmin, asyncHandler(async (re
       };
     }),
   });
+}));
+
+// Rollup-stats per koncern: aggregerar objekt, ordrar & intäkt över hela trädet
+// per direkt barn-kund (inkl. deras ättlingar) + total inkl. self. Inte requireAdmin
+// (matchar /api/customers/:id/stats — innehåller inte kostnadsdata).
+app.get("/api/customers/:id/hierarchy/stats", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const customer = await storage.getCustomer(req.params.id);
+  if (!verifyTenantOwnership(customer, tenantId)) throw new NotFoundError("Kund");
+  const stats = await storage.getCustomerHierarchyStats(tenantId, req.params.id);
+  res.json({ customerId: req.params.id, ...stats });
 }));
 
 app.get("/api/customers/:id", asyncHandler(async (req, res) => {

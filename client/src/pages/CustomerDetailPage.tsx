@@ -10,6 +10,8 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { CUSTOMER_HIERARCHY_TYPES } from "@shared/schema";
+import { formatSekFromOre } from "@/lib/format";
+import { Switch } from "@/components/ui/switch";
 import { DeliveryPreferencesEditor } from "@/components/DeliveryPreferencesEditor";
 import { PortalUsersTab } from "@/components/customer/PortalUsersTab";
 import InvoiceRecipientsCard from "@/components/InvoiceRecipientsCard";
@@ -669,6 +671,8 @@ function CustomerHierarchyTab({ customerId, isAdmin }: { customerId: string; isA
         </CardContent>
       </Card>
 
+      <CustomerHierarchyRollupCard customerId={customerId} />
+
       <Card>
         <CardHeader><CardTitle className="text-sm">Underliggande kunder ({data.children.length})</CardTitle></CardHeader>
         <CardContent>
@@ -695,11 +699,144 @@ function CustomerHierarchyTab({ customerId, isAdmin }: { customerId: string; isA
   );
 }
 
-function CustomerProfitabilityTab({ customerId }: { customerId: string }) {
-  const { data, isLoading, isError, refetch } = useQuery<ProfitabilityResponse>({
-    queryKey: ["/api/customers", customerId, "profitability"],
+interface HierarchyStatsResponse {
+  customerId: string;
+  self: { objectCount: number; activeOrders: number; ordersLast30Days: number; revenueLast30Days: number };
+  rollup: { objectCount: number; activeOrders: number; ordersLast30Days: number; revenueLast30Days: number };
+  descendantCount: number;
+  children: Array<{
+    id: string;
+    name: string;
+    hierarchyType: string | null;
+    isReseller: boolean;
+    objectCount: number;
+    activeOrders: number;
+    ordersLast30Days: number;
+    revenueLast30Days: number;
+    descendantCount: number;
+  }>;
+}
+
+function CustomerHierarchyRollupCard({ customerId }: { customerId: string }) {
+  const { data, isLoading, isError, refetch } = useQuery<HierarchyStatsResponse>({
+    queryKey: ["/api/customers", customerId, "hierarchy", "stats"],
     queryFn: async () => {
-      const r = await fetch(`/api/customers/${encodeURIComponent(customerId)}/profitability`, { credentials: "include" });
+      const r = await fetch(`/api/customers/${encodeURIComponent(customerId)}/hierarchy/stats`, { credentials: "include" });
+      if (!r.ok) throw new Error("Kunde inte hämta rollup");
+      return r.json();
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <Card><CardContent className="p-6 flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Laddar rollup-statistik…
+      </CardContent></Card>
+    );
+  }
+  if (isError || !data) {
+    return (
+      <Card><CardContent className="p-6 flex items-center gap-2 text-sm text-destructive">
+        <AlertTriangle className="h-4 w-4" /> Kunde inte hämta rollup.
+        <Button variant="ghost" size="sm" onClick={() => refetch()}>Försök igen</Button>
+      </CardContent></Card>
+    );
+  }
+
+  const hasChildren = data.children.length > 0;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Rollup-statistik (senaste 30 dagarna)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="rollup-summary">
+          <div>
+            <div className="text-xs text-muted-foreground">Aktiva objekt</div>
+            <div className="text-xl font-bold" data-testid="rollup-total-objects">{data.rollup.objectCount.toLocaleString()}</div>
+            {hasChildren && <div className="text-xs text-muted-foreground">varav egna: {data.self.objectCount.toLocaleString()}</div>}
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Aktiva ordrar</div>
+            <div className="text-xl font-bold" data-testid="rollup-total-active-orders">{data.rollup.activeOrders.toLocaleString()}</div>
+            {hasChildren && <div className="text-xs text-muted-foreground">varav egna: {data.self.activeOrders.toLocaleString()}</div>}
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Ordrar 30d</div>
+            <div className="text-xl font-bold" data-testid="rollup-total-orders-30d">{data.rollup.ordersLast30Days.toLocaleString()}</div>
+            {hasChildren && <div className="text-xs text-muted-foreground">varav egna: {data.self.ordersLast30Days.toLocaleString()}</div>}
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Intäkt 30d</div>
+            <div className="text-xl font-bold" data-testid="rollup-total-revenue-30d">{formatSekFromOre(data.rollup.revenueLast30Days)}</div>
+            {hasChildren && <div className="text-xs text-muted-foreground">varav egna: {formatSekFromOre(data.self.revenueLast30Days)}</div>}
+          </div>
+        </div>
+
+        {hasChildren && (
+          <div className="overflow-x-auto pt-2 border-t">
+            <table className="w-full text-sm" data-testid="table-hierarchy-rollup">
+              <thead>
+                <tr className="text-left text-xs text-muted-foreground border-b">
+                  <th className="py-2 pr-3">Kund</th>
+                  <th className="py-2 pr-3">Nivå</th>
+                  <th className="py-2 pr-3 text-right">Ättlingar</th>
+                  <th className="py-2 pr-3 text-right">Aktiva objekt</th>
+                  <th className="py-2 pr-3 text-right">Aktiva ordrar</th>
+                  <th className="py-2 pr-3 text-right">Ordrar 30d</th>
+                  <th className="py-2 text-right">Intäkt 30d</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.children.map((c) => (
+                  <tr key={c.id} className="border-b last:border-0" data-testid={`row-rollup-${c.id}`}>
+                    <td className="py-1.5 pr-3">
+                      <Link href={`/customers/${c.id}`}>
+                        <a className="text-primary hover:underline" data-testid={`link-rollup-child-${c.id}`}>{c.name}</a>
+                      </Link>
+                      {c.isReseller && <Badge variant="secondary" className="ml-2 text-xs">Återförsäljare</Badge>}
+                    </td>
+                    <td className="py-1.5 pr-3 text-xs text-muted-foreground">
+                      {c.hierarchyType ? (HIERARCHY_LABEL[c.hierarchyType] ?? c.hierarchyType) : "—"}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right text-xs text-muted-foreground">{c.descendantCount}</td>
+                    <td className="py-1.5 pr-3 text-right">{c.objectCount.toLocaleString()}</td>
+                    <td className="py-1.5 pr-3 text-right">{c.activeOrders.toLocaleString()}</td>
+                    <td className="py-1.5 pr-3 text-right">{c.ordersLast30Days.toLocaleString()}</td>
+                    <td className="py-1.5 text-right font-medium">{formatSekFromOre(c.revenueLast30Days)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 font-medium bg-muted/30" data-testid="row-rollup-total">
+                  <td className="py-1.5 pr-3">Totalt (inkl. egna)</td>
+                  <td className="py-1.5 pr-3"></td>
+                  <td className="py-1.5 pr-3 text-right text-xs">{data.descendantCount}</td>
+                  <td className="py-1.5 pr-3 text-right">{data.rollup.objectCount.toLocaleString()}</td>
+                  <td className="py-1.5 pr-3 text-right">{data.rollup.activeOrders.toLocaleString()}</td>
+                  <td className="py-1.5 pr-3 text-right">{data.rollup.ordersLast30Days.toLocaleString()}</td>
+                  <td className="py-1.5 text-right">{formatSekFromOre(data.rollup.revenueLast30Days)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function CustomerProfitabilityTab({ customerId }: { customerId: string }) {
+  const [includeDescendants, setIncludeDescendants] = useState(false);
+  const hierarchyQuery = useQuery<HierarchyResponse>({
+    queryKey: ["/api/customers", customerId, "hierarchy"],
+  });
+  const hasChildren = (hierarchyQuery.data?.children.length ?? 0) > 0;
+
+  const { data, isLoading, isError, refetch } = useQuery<ProfitabilityResponse>({
+    queryKey: ["/api/customers", customerId, "profitability", { includeDescendants }],
+    queryFn: async () => {
+      const qs = includeDescendants ? "?includeDescendants=true" : "";
+      const r = await fetch(`/api/customers/${encodeURIComponent(customerId)}/profitability${qs}`, { credentials: "include" });
       if (!r.ok) throw new Error("Kunde inte hämta lönsamhet");
       return r.json();
     },
@@ -729,6 +866,28 @@ function CustomerProfitabilityTab({ customerId }: { customerId: string }) {
   const positive = data.totalMargin >= 0;
   return (
     <div className="space-y-4">
+      {hasChildren && (
+        <Card>
+          <CardContent className="p-3 flex items-center justify-between gap-3" data-testid="toggle-include-descendants-card">
+            <div className="flex items-center gap-2 text-sm">
+              <GitBranch className="h-4 w-4 text-muted-foreground" />
+              <span>Inkludera ättlingar i koncernen</span>
+              {includeDescendants && data && (
+                <Badge variant="secondary" className="text-xs">{data.orderCount.toLocaleString()} ordrar</Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">{includeDescendants ? "På" : "Av"}</span>
+              <Switch
+                checked={includeDescendants}
+                onCheckedChange={setIncludeDescendants}
+                data-testid="switch-include-descendants"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <Card data-testid="card-customer-revenue">
           <CardContent className="p-4">

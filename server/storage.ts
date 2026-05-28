@@ -323,6 +323,25 @@ export interface IStorage {
   getCustomerChildren(tenantId: string, customerId: string): Promise<Customer[]>;
   /** Returnerar förfäder från närmaste förälder upp till roten (max 32 nivåer). */
   getCustomerAncestors(tenantId: string, customerId: string): Promise<Customer[]>;
+  /** Returnerar id för alla ättlingar (rekursivt, exkl. self). Max 32 nivåer, cykel-skydd via depth-limit. */
+  getCustomerDescendants(tenantId: string, customerId: string): Promise<string[]>;
+  /** Rollup-stats per direkt barn-kund inklusive deras ättlingar + self + total. ADR v3 §2.2. */
+  getCustomerHierarchyStats(tenantId: string, customerId: string): Promise<{
+    self: { objectCount: number; activeOrders: number; ordersLast30Days: number; revenueLast30Days: number };
+    rollup: { objectCount: number; activeOrders: number; ordersLast30Days: number; revenueLast30Days: number };
+    descendantCount: number;
+    children: Array<{
+      id: string;
+      name: string;
+      hierarchyType: string | null;
+      isReseller: boolean;
+      objectCount: number;
+      activeOrders: number;
+      ordersLast30Days: number;
+      revenueLast30Days: number;
+      descendantCount: number;
+    }>;
+  }>;
   /**
    * Sätter `parent_customer_id`. Kastar Error om: parent saknas, parent
    * tillhör annan tenant, eller om bytet skulle skapa en cykel.
@@ -1753,6 +1772,133 @@ export class DatabaseStorage implements IStorage {
       currentId = parent.id;
     }
     return result;
+  }
+
+  async getCustomerDescendants(tenantId: string, customerId: string): Promise<string[]> {
+    const result = await db.execute(sql`
+      WITH RECURSIVE subtree AS (
+        SELECT id, 0 as depth
+        FROM customers
+        WHERE id = ${customerId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
+        UNION ALL
+        SELECT c.id, s.depth + 1
+        FROM customers c
+        JOIN subtree s ON c.parent_customer_id = s.id
+        WHERE c.tenant_id = ${tenantId} AND c.deleted_at IS NULL AND s.depth < 32
+      )
+      SELECT id FROM subtree WHERE id != ${customerId}
+    `);
+    return (result.rows as Array<{ id: string }>).map(r => r.id);
+  }
+
+  async getCustomerHierarchyStats(tenantId: string, customerId: string): Promise<{
+    self: { objectCount: number; activeOrders: number; ordersLast30Days: number; revenueLast30Days: number };
+    rollup: { objectCount: number; activeOrders: number; ordersLast30Days: number; revenueLast30Days: number };
+    descendantCount: number;
+    children: Array<{
+      id: string;
+      name: string;
+      hierarchyType: string | null;
+      isReseller: boolean;
+      objectCount: number;
+      activeOrders: number;
+      ordersLast30Days: number;
+      revenueLast30Days: number;
+      descendantCount: number;
+    }>;
+  }> {
+    const result = await db.execute(sql`
+      WITH RECURSIVE subtree AS (
+        SELECT id as cid, id as branch_root, 0 as depth
+        FROM customers
+        WHERE id = ${customerId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
+        UNION ALL
+        SELECT c.id,
+               CASE WHEN s.depth = 0 THEN c.id ELSE s.branch_root END,
+               s.depth + 1
+        FROM customers c
+        JOIN subtree s ON c.parent_customer_id = s.cid
+        WHERE c.tenant_id = ${tenantId} AND c.deleted_at IS NULL AND s.depth < 32
+      ),
+      obj_stats AS (
+        SELECT op.customer_id, COUNT(*)::int as object_count
+        FROM object_payers op
+        JOIN objects o ON o.id = op.object_id AND o.deleted_at IS NULL
+        WHERE o.tenant_id = ${tenantId} AND op.is_primary = true
+          AND op.customer_id IN (SELECT cid FROM subtree)
+        GROUP BY op.customer_id
+      ),
+      wo_stats AS (
+        SELECT customer_id,
+               COUNT(*) FILTER (WHERE order_status NOT IN ('utford','fakturerad'))::int as active_orders,
+               COUNT(*) FILTER (WHERE COALESCE(scheduled_date, created_at::date) >= (NOW() - INTERVAL '30 days')::date)::int as orders_30d,
+               COALESCE(SUM(cached_value) FILTER (WHERE COALESCE(scheduled_date, created_at::date) >= (NOW() - INTERVAL '30 days')::date), 0)::bigint as revenue_30d
+        FROM work_orders
+        WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
+          AND customer_id IN (SELECT cid FROM subtree)
+        GROUP BY customer_id
+      )
+      SELECT s.branch_root, s.cid, s.depth,
+             COALESCE(o.object_count, 0)::int as object_count,
+             COALESCE(w.active_orders, 0)::int as active_orders,
+             COALESCE(w.orders_30d, 0)::int as orders_30d,
+             COALESCE(w.revenue_30d, 0)::bigint as revenue_30d
+        FROM subtree s
+        LEFT JOIN obj_stats o ON o.customer_id = s.cid
+        LEFT JOIN wo_stats w ON w.customer_id = s.cid
+    `);
+
+    interface Row {
+      branch_root: string; cid: string; depth: number;
+      object_count: number | string; active_orders: number | string;
+      orders_30d: number | string; revenue_30d: number | string;
+    }
+    const rows = result.rows as Row[];
+
+    const self = { objectCount: 0, activeOrders: 0, ordersLast30Days: 0, revenueLast30Days: 0 };
+    const rollup = { objectCount: 0, activeOrders: 0, ordersLast30Days: 0, revenueLast30Days: 0 };
+    const byBranch = new Map<string, { objectCount: number; activeOrders: number; ordersLast30Days: number; revenueLast30Days: number; descendantCount: number }>();
+    let descendantCount = 0;
+
+    for (const r of rows) {
+      const s = {
+        objectCount: Number(r.object_count) || 0,
+        activeOrders: Number(r.active_orders) || 0,
+        ordersLast30Days: Number(r.orders_30d) || 0,
+        revenueLast30Days: Number(r.revenue_30d) || 0,
+      };
+      rollup.objectCount += s.objectCount;
+      rollup.activeOrders += s.activeOrders;
+      rollup.ordersLast30Days += s.ordersLast30Days;
+      rollup.revenueLast30Days += s.revenueLast30Days;
+
+      if (r.depth === 0) {
+        Object.assign(self, s);
+      } else {
+        descendantCount += 1;
+        const existing = byBranch.get(r.branch_root) || { objectCount: 0, activeOrders: 0, ordersLast30Days: 0, revenueLast30Days: 0, descendantCount: 0 };
+        existing.objectCount += s.objectCount;
+        existing.activeOrders += s.activeOrders;
+        existing.ordersLast30Days += s.ordersLast30Days;
+        existing.revenueLast30Days += s.revenueLast30Days;
+        if (r.cid !== r.branch_root) existing.descendantCount += 1;
+        byBranch.set(r.branch_root, existing);
+      }
+    }
+
+    const childRows = await this.getCustomerChildren(tenantId, customerId);
+    const children = childRows.map(c => {
+      const b = byBranch.get(c.id) || { objectCount: 0, activeOrders: 0, ordersLast30Days: 0, revenueLast30Days: 0, descendantCount: 0 };
+      return {
+        id: c.id,
+        name: c.name,
+        hierarchyType: c.hierarchyType,
+        isReseller: c.isReseller,
+        ...b,
+      };
+    });
+
+    return { self, rollup, descendantCount, children };
   }
 
   async setCustomerParent(tenantId: string, customerId: string, parentId: string | null): Promise<Customer> {
