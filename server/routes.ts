@@ -731,6 +731,8 @@ export async function registerRoutes(
   // Task #552: objekt-livscykel v2 (släktnamn, arkivering, dynamiska kluster)
   const { registerObjectLifecycleRoutes } = await import("./routes/objectLifecycleRoutes");
   registerObjectLifecycleRoutes(app);
+  const { registerImportPayersRoutes } = await import("./routes/importPayersRoutes");
+  registerImportPayersRoutes(app);
   registerCustomerRoutes(app);
   registerResourceRoutes(app);
   registerWorkOrderRoutes(app);

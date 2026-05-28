@@ -34,6 +34,7 @@ import { ChildObjectImportFlow } from "@/components/import/ChildObjectImportFlow
 import { ImportTypeHistory } from "@/components/import/ImportTypeHistory";
 import { BatchDetailsDialog as SharedBatchDetailsDialog } from "@/components/import/BatchDetailsDialog";
 import { ComingSoonPanel } from "@/components/import/ComingSoonPanel";
+import { PayerOrRecipientImportFlow } from "@/components/import/PayerOrRecipientImportFlow";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import Papa from "papaparse";
 import { format } from "date-fns";
@@ -4917,29 +4918,11 @@ export default function ImportPage() {
         </TabsContent>
 
         <TabsContent value="payers" className="space-y-6">
-          <ComingSoonPanel
-            testId="panel-payers-import"
-            title="Importera betalare (object_payers)"
-            description="Massimport av betalare per objekt enligt ADR v3 — vem som betalar för ett objekt under en viss period."
-            bullets={[
-              "Kolumner: objektnummer, kundnummer (betalare), startdatum, slutdatum (valfri), prislista (valfri).",
-              "Stöder överlappskontroll (en primär betalare per period).",
-              "Genväg från objekt-detalj → Ekonomi-fliken kommer länka hit förvalt.",
-            ]}
-          />
+          <PayerOrRecipientImportFlow kind="payers" />
         </TabsContent>
 
         <TabsContent value="recipients" className="space-y-6">
-          <ComingSoonPanel
-            testId="panel-recipients-import"
-            title="Importera fakturamottagare (invoice_recipients)"
-            description="Massimport av fakturamottagare enligt ADR v3 — vart fakturan faktiskt skickas (kan skilja sig från betalaren)."
-            bullets={[
-              "Kolumner: kundnummer (betalare), fakturanivå (objekt/avtal/samling), mottagar-id, kontaktuppgifter.",
-              "Stöder samlingsfakturor (en mottagare → flera objekt).",
-              "Validerar mot befintliga betalare innan import.",
-            ]}
-          />
+          <PayerOrRecipientImportFlow kind="recipients" />
         </TabsContent>
 
         <TabsContent value="history" className="space-y-6">
