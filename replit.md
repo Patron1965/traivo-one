@@ -67,10 +67,12 @@ Aktiva, dagliga "var-uppmärksam-på"-saker. Historiska implementations-anteckni
 - **Geo & routing helpers:** Avstånd via `haversineDistanceKm` / `estimateTravelMinutes` (`client/src/lib/geo.ts`). Geoapify Routing via `server/services/routing.ts`. Geokodning via `server/services/geocoding.ts`. Tile-URL via `getMapTileConfig()`. Status-badges via `client/src/lib/status-colors.ts`. Inga ad-hoc `fetch("https://api.geoapify.com/...")` i nya routes.
 - **Tema-tokens i UI:** Använd `bg-destructive`, `bg-warning`, `chart-*`, `muted` osv — inga `bg-red-500`/`bg-amber-*`/`text-orange-*`. `warning` för varningstillstånd, `destructive` för kritiskt/blockerande, `chart-4` endast kategoriskt-neutralt. Se `docs/color-harmonization-review.md`.
 - **Bypassad mobile-yta:** `/api/mobile/*` går utanför normal tenant-middleware. Läs aldrig `req.tenantId` där — använd `req.mobileTenantId` eller härled från autentiserad mobil-resurs.
+- **Objekt-kund-koppling går via order/`object_payers`:** Objekt är neutrala (ADR v3). `objects.customer_id` är under avveckling — använd `object_payers` (primary @ tidpunkt) eller `work_orders.customer_id` (beställare) för att besvara "vem hör detta objekt till". Skriv aldrig ny logik som antar att `objects.customer_id` är auktoritativ.
 
 ## Pointers
 - **Master Implementation Guide v1.0:** For overarching sprint plans and decisions.
 - **ADR v2 (`adr-orderkoncept-v2.md`):** Fundamental architectural decision record for order concepts.
+- **ADR v3 (`docs/adr-orderkoncept-v3.md`):** Objekt-neutralitet, kund-hierarki, tre fakturanivåer, metadata-livscykel, samlingsfakturor (Session 2-principer).
 - **Zod Documentation:** For API schema validation understanding.
 - **Drizzle ORM Documentation:** For database interaction patterns.
 - **OpenAI API Documentation:** For AI integration details.
