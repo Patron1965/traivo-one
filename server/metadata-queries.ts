@@ -110,6 +110,7 @@ export async function getObjectWithAllMetadata(
         mk.beteckning as katalog_beteckning,
         mk.is_system as katalog_is_system,
         mk.is_required as katalog_is_required,
+        mk.kronologisk_visning as katalog_kronologisk_visning,
         pc.level,
         pc.name as from_objekt_namn,
         pc.blocked_katalog_ids,
@@ -195,6 +196,7 @@ export async function getObjectWithAllMetadata(
         beteckning: row.katalog_beteckning ?? null,
         isSystem: row.katalog_is_system ?? false,
         isRequired: row.katalog_is_required ?? false,
+        kronologiskVisning: row.katalog_kronologisk_visning ?? false,
         createdAt: row.created_at,
       } as any,
       source: row.source,
@@ -592,10 +594,112 @@ export async function updateMetadata(
 // RADERA METADATA
 // ============================================================================
 
-export async function deleteMetadata(metadataId: string, tenantId: string): Promise<void> {
-  await db.delete(metadataVarden).where(
-    and(eq(metadataVarden.id, metadataId), eq(metadataVarden.tenantId, tenantId))
-  );
+export async function deleteMetadata(
+  metadataId: string,
+  tenantId: string,
+  raderadAv?: string,
+  metod?: string,
+): Promise<void> {
+  // Task #579: logga radering till historik FÖRE delete så att tidslinjen
+  // ser "X → ∅"-steget. FK på metadata_varden_id är ON DELETE SET NULL —
+  // raden överlever cascade och hittas av tidslinjen via (objekt, katalog).
+  // Allt körs i samma transaktion med FOR UPDATE-lås så att samtidiga
+  // raderingar inte tappar audit-raden eller skriver dubbletter.
+  await db.transaction(async (tx) => {
+    const lockedRows = await tx.execute(sql`
+      SELECT * FROM metadata_varden
+      WHERE id = ${metadataId} AND tenant_id = ${tenantId}
+      FOR UPDATE
+    `);
+    const existing = (lockedRows.rows as any[])[0];
+    if (!existing) return; // redan raderad — idempotent
+
+    await tx.insert(metadataHistorik).values({
+      tenantId,
+      metadataVardenId: existing.id,
+      objektId: existing.objekt_id ?? existing.objektId,
+      metadataKatalogId: existing.metadata_katalog_id ?? existing.metadataKatalogId,
+      gammaltVarde: getDisplayValue({
+        vardeString: existing.varde_string ?? existing.vardeString ?? null,
+        vardeInteger: existing.varde_integer ?? existing.vardeInteger ?? null,
+        vardeDecimal: existing.varde_decimal ?? existing.vardeDecimal ?? null,
+        vardeBoolean: existing.varde_boolean ?? existing.vardeBoolean ?? null,
+        vardeDatetime: existing.varde_datetime ?? existing.vardeDatetime ?? null,
+        vardeJson: existing.varde_json ?? existing.vardeJson ?? null,
+        vardeReferens: existing.varde_referens ?? existing.vardeReferens ?? null,
+      } as any),
+      nyttVarde: null,
+      andradAv: raderadAv ?? 'system',
+      andringsMetod: metod ?? 'manuell-radering',
+    });
+
+    await tx.delete(metadataVarden).where(
+      and(eq(metadataVarden.id, metadataId), eq(metadataVarden.tenantId, tenantId))
+    );
+  });
+}
+
+// ============================================================================
+// Task #579: HÄMTA HISTORIK PER (OBJEKT, DEFINITION)
+// Kronologisk tidslinje för ett specifikt fält på ett objekt — fungerar även
+// efter att själva metadata_varden-raden har raderats (cascade), eftersom vi
+// filtrerar på katalog-id direkt och låter NULL-värden från cascade-radade
+// historik-rader filtreras bort på applikationsnivå om de förekommer.
+// ============================================================================
+
+export interface MetadataDefinitionHistoryEntry {
+  id: string;
+  metadataVardenId: string | null;
+  gammaltVarde: string | null;
+  nyttVarde: string | null;
+  andradAv: string | null;
+  andradVid: Date;
+  andringsMetod: string | null;
+}
+
+export async function getMetadataDefinitionHistory(
+  objektId: string,
+  metadataKatalogId: string,
+  tenantId: string,
+  limit: number = 200,
+): Promise<MetadataDefinitionHistoryEntry[]> {
+  const rows = await db
+    .select({
+      id: metadataHistorik.id,
+      metadataVardenId: metadataHistorik.metadataVardenId,
+      gammaltVarde: metadataHistorik.gammaltVarde,
+      nyttVarde: metadataHistorik.nyttVarde,
+      andradAv: metadataHistorik.andradAv,
+      andradVid: metadataHistorik.andradVid,
+      andringsMetod: metadataHistorik.andringsMetod,
+    })
+    .from(metadataHistorik)
+    .where(and(
+      eq(metadataHistorik.tenantId, tenantId),
+      eq(metadataHistorik.objektId, objektId),
+      eq(metadataHistorik.metadataKatalogId, metadataKatalogId),
+    ))
+    .orderBy(desc(metadataHistorik.andradVid))
+    .limit(limit);
+  return rows;
+}
+
+export async function getLatestChangedAtForObjectMetadata(
+  objektId: string,
+  tenantId: string,
+): Promise<Map<string, Date>> {
+  const rows = await db.execute(sql`
+    SELECT metadata_katalog_id, MAX(andrad_vid) AS last_changed
+    FROM metadata_historik
+    WHERE tenant_id = ${tenantId}
+      AND objekt_id = ${objektId}
+    GROUP BY metadata_katalog_id
+  `);
+  const map = new Map<string, Date>();
+  for (const row of rows.rows as Array<{ metadata_katalog_id: string; last_changed: string | Date }>) {
+    map.set(row.metadata_katalog_id, new Date(row.last_changed));
+  }
+  return map;
 }
 
 // ============================================================================

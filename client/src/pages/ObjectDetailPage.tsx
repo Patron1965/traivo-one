@@ -26,7 +26,7 @@ import {
   Clock, Package, FileText, Image, Contact, GitFork, AlertTriangle,
   Calendar, Loader2, ChevronRight, ExternalLink, Wrench, Shield,
   Hash, Truck, Timer, Info, Box, Layers, ClipboardList, Plus,
-  Trash2, Pencil, Save, X, Phone, Mail, LinkIcon, Search
+  Trash2, Pencil, Save, X, Phone, Mail, LinkIcon, Search, History
 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -1109,13 +1109,21 @@ export default function ObjectDetailPage() {
                       (m.vardeBoolean !== null && m.vardeBoolean !== undefined ? (m.vardeBoolean ? "Ja" : "Nej") : null) ??
                       (m.vardeDatetime ? new Date(m.vardeDatetime).toLocaleDateString("sv-SE") : null) ??
                       (m.vardeJson ? JSON.stringify(m.vardeJson) : null) ?? "—";
+                    const lastChanged = m.lastChangedAt ? new Date(m.lastChangedAt) : null;
+                    const showHistory = !!m.katalog?.kronologiskVisning;
                     return (
                       <div key={m.id} className="flex items-center justify-between py-3 gap-2" data-testid={`metadata-row-${m.id}`}>
                         <div className="min-w-0 flex-1">
                           <div className="text-sm font-medium">{m.katalog?.namn || "—"}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {m.katalog?.kategori && <span className="mr-2">{m.katalog.kategori}</span>}
+                          <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                            {m.katalog?.kategori && <span>{m.katalog.kategori}</span>}
                             {m.metod && <span>{m.metod}</span>}
+                            {lastChanged && (
+                              <span className="inline-flex items-center gap-1" data-testid={`text-metadata-last-changed-${m.id}`}>
+                                <Clock className="h-3 w-3" />
+                                Senast ändrad {lastChanged.toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" })}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="text-sm font-mono text-right flex items-center gap-2 shrink-0">
@@ -1129,6 +1137,13 @@ export default function ObjectDetailPage() {
                                 {m.fromObject?.name ? `Ärvd från: ${m.fromObject.name}` : "Ärvd från förälder"}
                               </TooltipContent>
                             </Tooltip>
+                          )}
+                          {showHistory && (
+                            <MetadataHistorikButton
+                              objectId={objectId}
+                              katalogId={m.metadataKatalogId}
+                              katalogNamn={m.katalog?.namn || ""}
+                            />
                           )}
                           {m.source !== "inherited" && (
                             <Button
@@ -2167,6 +2182,145 @@ function MetadataAddButton({ objectId, metadataTypes, onAdd, isPending }: {
             >
               {isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
               Lägg till
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// Task #579: Knapp + dialog som visar kronologisk historik för ett
+// specifikt metadata-fält på ett objekt. Visas endast när
+// `metadata_katalog.kronologisk_visning = true`.
+function MetadataHistorikButton({
+  objectId,
+  katalogId,
+  katalogNamn,
+}: {
+  objectId: string;
+  katalogId: string;
+  katalogNamn: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const { data, isLoading } = useQuery<{
+    katalog: { id: string; namn: string; datatyp: string; kronologiskVisning: boolean };
+    history: Array<{
+      id: string;
+      gammaltVarde: string | null;
+      nyttVarde: string | null;
+      andradAv: string | null;
+      andradVid: string;
+      andringsMetod: string | null;
+    }>;
+  }>({
+    queryKey: ["/api/metadata/objects", objectId, "definition", katalogId, "historik"],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/metadata/objects/${objectId}/definition/${katalogId}/historik`,
+      );
+      if (!res.ok) throw new Error("Kunde inte hämta historik");
+      return res.json();
+    },
+    enabled: open,
+  });
+
+  const entries = data?.history ?? [];
+
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={() => setOpen(true)}
+            data-testid={`button-metadata-history-${katalogId}`}
+          >
+            <History className="h-3.5 w-3.5" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Visa historik</TooltipContent>
+      </Tooltip>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-4 w-4" /> Historik – {katalogNamn}
+            </DialogTitle>
+            <DialogDescription>
+              Kronologisk tidslinje över alla ändringar på detta fält. Nyaste händelsen visas först.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto" data-testid="metadata-history-list">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : entries.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                Ingen historik registrerad för detta fält ännu.
+              </p>
+            ) : (
+              <ol className="relative border-l border-border ml-2 space-y-4 py-2">
+                {entries.map((e) => {
+                  const when = new Date(e.andradVid);
+                  const isDelete = e.nyttVarde === null;
+                  const isCreate = e.gammaltVarde === null;
+                  return (
+                    <li key={e.id} className="ml-4" data-testid={`metadata-history-entry-${e.id}`}>
+                      <span
+                        className={`absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border border-border ${
+                          isDelete ? "bg-destructive" : isCreate ? "bg-chart-4" : "bg-primary"
+                        }`}
+                      />
+                      <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                        <div className="text-xs text-muted-foreground">
+                          {when.toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" })}
+                          {e.andradAv && <span className="ml-2">av {e.andradAv}</span>}
+                        </div>
+                        {e.andringsMetod && (
+                          <Badge variant="outline" className="text-[10px]">
+                            {e.andringsMetod}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="mt-1 text-sm font-mono break-words">
+                        {isCreate ? (
+                          <>
+                            <span className="text-muted-foreground">∅</span>{" "}
+                            <span className="text-muted-foreground">→</span>{" "}
+                            <span>{e.nyttVarde ?? "∅"}</span>
+                          </>
+                        ) : isDelete ? (
+                          <>
+                            <span className="line-through text-muted-foreground">
+                              {e.gammaltVarde ?? "∅"}
+                            </span>{" "}
+                            <span className="text-muted-foreground">→</span>{" "}
+                            <span className="text-destructive">∅ (raderad)</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="line-through text-muted-foreground">
+                              {e.gammaltVarde ?? "∅"}
+                            </span>{" "}
+                            <span className="text-muted-foreground">→</span>{" "}
+                            <span>{e.nyttVarde}</span>
+                          </>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)} data-testid="button-close-history">
+              Stäng
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -21,6 +21,8 @@ import {
   deleteWorkOrderMetadata,
   getMetadataHistorik,
   getObjectMetadataHistorik,
+  getMetadataDefinitionHistory,
+  getLatestChangedAtForObjectMetadata,
   propagateMetadataDown,
   getPropagationPreview,
   getInheritanceTree,
@@ -94,6 +96,8 @@ const createMetadataTypeSchema = z.object({
   isRequired: z.boolean().optional(),
   isSystem: z.boolean().optional(),
   beteckning: z.string().max(30).optional(),
+  // Task #579: aktivera kronologisk tidslinje per fält (Lyftkrok, Antal, etc).
+  kronologiskVisning: z.boolean().optional().default(false),
 });
 
 metadataRouter.post("/types", async (req: Request, res: Response) => {
@@ -208,7 +212,19 @@ metadataRouter.get("/objects/:objectId", async (req: Request, res: Response) => 
       return res.status(404).json({ error: "Objekt hittades inte" });
     }
 
-    res.json(objectWithMetadata);
+    // Task #579: berika varje metadata-rad med tidsstämpeln för senaste
+    // historik-ändring per katalog-id, så att "Senast ändrad" kan visas i
+    // listor utan extra rundresor.
+    const lastChangedMap = await getLatestChangedAtForObjectMetadata(objectId, tenantId);
+    const enriched = {
+      ...objectWithMetadata,
+      metadata: objectWithMetadata.metadata.map((m: any) => ({
+        ...m,
+        lastChangedAt: lastChangedMap.get(m.metadataKatalogId) ?? m.updatedAt ?? null,
+      })),
+    };
+
+    res.json(enriched);
   } catch (error) {
     console.error("Error fetching object metadata:", error);
     res.status(500).json({ error: "Kunde inte hämta metadata" });
@@ -478,6 +494,47 @@ metadataRouter.get("/historik/:metadataId", async (req: Request, res: Response) 
     res.status(500).json({ error: "Kunde inte hämta metadata-historik" });
   }
 });
+
+// Task #579: tidslinje per (objekt, definition) — kronologisk historik
+// för ett specifikt metadata-fält på ett objekt.
+metadataRouter.get(
+  "/objects/:objectId/definition/:katalogId/historik",
+  async (req: Request, res: Response) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!tenantId) {
+        return res.status(401).json({ error: "Ingen tenant hittad" });
+      }
+
+      const { objectId, katalogId } = req.params;
+      const limitRaw = req.query.limit;
+      const limit = typeof limitRaw === "string" ? Math.max(1, Math.min(500, parseInt(limitRaw, 10) || 200)) : 200;
+
+      // Verifiera att katalog-definitionen tillhör denna tenant — annars
+      // läcker historik-poster cross-tenant via en gissad katalog-id.
+      const [katalog] = await db
+        .select({
+          id: metadataKatalog.id,
+          namn: metadataKatalog.namn,
+          datatyp: metadataKatalog.datatyp,
+          kronologiskVisning: metadataKatalog.kronologiskVisning,
+        })
+        .from(metadataKatalog)
+        .where(and(eq(metadataKatalog.id, katalogId), eq(metadataKatalog.tenantId, tenantId)))
+        .limit(1);
+
+      if (!katalog) {
+        return res.status(404).json({ error: "Metadatadefinition hittades inte" });
+      }
+
+      const history = await getMetadataDefinitionHistory(objectId, katalogId, tenantId, limit);
+      res.json({ katalog, history });
+    } catch (error) {
+      console.error("Error fetching metadata definition history:", error);
+      res.status(500).json({ error: "Kunde inte hämta historik för fältet" });
+    }
+  },
+);
 
 metadataRouter.get("/objects/:objectId/historik", async (req: Request, res: Response) => {
   try {

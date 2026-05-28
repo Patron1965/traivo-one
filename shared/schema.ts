@@ -3779,6 +3779,10 @@ export const metadataKatalog = pgTable("metadata_katalog", {
   // Tillåt flera värden på samma objekt (t.ex. flera Yta-värden 90 m² + 250 m²)
   allowDuplicates: boolean("allow_duplicates").default(false).notNull(),
 
+  // Task #579: aktivera kronologisk historik-tidslinje för detta fält
+  // (Lyftkrok, Antal, Kontakt etc — PDF §14.3 + §3.2).
+  kronologiskVisning: boolean("kronologisk_visning").default(false).notNull(),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_metadata_katalog_tenant_namn").on(table.tenantId, table.namn),
@@ -3854,7 +3858,10 @@ export const metadataVardenRelations = relations(metadataVarden, ({ one, many })
 export const metadataHistorik = pgTable("metadata_historik", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  metadataVardenId: varchar("metadata_varden_id").references(() => metadataVarden.id, { onDelete: "cascade" }).notNull(),
+  // Task #579: nullable + SET NULL så att raderings-event överlever cascade
+  // när själva metadata_varden-raden tas bort. Tidslinjen läses per
+  // (objekt, katalog) — inte per varden-id — så pekaren är icke-kritisk.
+  metadataVardenId: varchar("metadata_varden_id").references(() => metadataVarden.id, { onDelete: "set null" }),
   objektId: varchar("objekt_id").references(() => objects.id),
   metadataKatalogId: varchar("metadata_katalog_id").references(() => metadataKatalog.id),
   gammaltVarde: text("gammalt_varde"),
