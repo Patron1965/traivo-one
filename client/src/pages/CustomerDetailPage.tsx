@@ -23,6 +23,7 @@ import {
   ChevronDown, ChevronRight, Users, Home, Container, Trash2, TreePine, Map as MapIcon,
   Repeat, Receipt, GitBranch, Hash, FileText, AlertTriangle, Loader2, Search, X,
   Pyramid, DoorClosed, ArrowUp, ArrowDown, ArrowUpDown, TrendingUp, TrendingDown,
+  Send, Clock,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { MapContainer, TileLayer, Circle, Popup, useMap, useMapEvents } from "react-leaflet";
@@ -913,6 +914,78 @@ const TreeSearchInput = memo(function TreeSearchInput({ onDebouncedChange, onCle
   );
 });
 
+function CustomerInvoiceQueueRelease({ customerId }: { customerId: string }) {
+  const { toast } = useToast();
+  type QueueGroup = {
+    key: string;
+    customerId: string | null;
+    recipientId: string | null;
+    totalAmount: number;
+    workOrders: unknown[];
+  };
+  type QueueResponse = { groups: QueueGroup[]; totalWorkOrders: number };
+
+  const queueQuery = useQuery<QueueResponse>({
+    queryKey: ["/api/invoice-queue", { state: "held" }],
+  });
+
+  const customerGroups = (queueQuery.data?.groups ?? []).filter((g) => g.customerId === customerId);
+  const totalHeld = customerGroups.reduce((s, g) => s + g.workOrders.length, 0);
+  const totalAmount = customerGroups.reduce((s, g) => s + g.totalAmount, 0);
+
+  const releaseMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/invoice-queue/release", {
+        customerId,
+        reason: "Manuell släpp via kundvyn",
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Fakturor släppta",
+        description: `${data.invoicesCreated ?? 0} samlingsfakturor skapade för denna kund.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoice-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoice-queue/consolidated"] });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Kunde inte släppa",
+        description: err?.message ?? "Okänt fel",
+        variant: "destructive",
+      });
+    },
+  });
+
+  if (queueQuery.isLoading || !totalHeld) return null;
+
+  return (
+    <Card className="mb-4 border-warning/40" data-testid="card-customer-invoice-queue">
+      <CardContent className="pt-4 pb-4 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-start gap-3">
+          <Clock className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+          <div>
+            <div className="font-medium text-sm">Bromsade fakturor i kö</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {totalHeld} arbetsorder väntar på konsolidering enligt mottagarens policy.
+            </div>
+          </div>
+        </div>
+        <Button
+          size="sm"
+          onClick={() => releaseMutation.mutate()}
+          disabled={releaseMutation.isPending}
+          data-testid="button-release-customer-invoices"
+        >
+          <Send className="h-4 w-4 mr-2" />
+          Släpp fakturor nu
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function CustomerDetailPage() {
   const [, params] = useRoute("/customers/:id");
   const customerId = params?.id;
@@ -1400,6 +1473,10 @@ export default function CustomerDetailPage() {
             <div className="mb-4">
               <InvoiceRecipientsCard customerId={customerId} canEdit={isAdmin} />
             </div>
+          )}
+
+          {customerId && isAdmin && (
+            <CustomerInvoiceQueueRelease customerId={customerId} />
           )}
 
           <Tabs defaultValue="tree" onValueChange={(v) => setMapTabActive(v === "map")}>

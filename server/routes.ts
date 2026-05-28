@@ -24,6 +24,8 @@ import { carryOverNotificationScheduler } from "./services/carry-over-notificati
 import { prodHealthCheckScheduler } from "./services/prod-health-check-scheduler";
 import { registerProdHealthCheckRoutes } from "./routes/prodHealthCheckRoutes";
 import { githubMirrorScheduler } from "./services/github-mirror-scheduler";
+import { invoiceConsolidationScheduler } from "./services/invoice-consolidation-scheduler";
+import { registerInvoiceQueueRoutes } from "./routes/invoiceQueueRoutes";
 import { registerGithubMirrorRoutes } from "./routes/githubMirrorRoutes";
 import { startWeeklyReportScheduler } from "./weekly-report";
 import { metadataRouter } from "./metadata-routes";
@@ -775,6 +777,9 @@ export async function registerRoutes(
   registerCapacityForecastRoutes(app);
   registerProdHealthCheckRoutes(app);
   registerGithubMirrorRoutes(app);
+  // Task #558: Fakturakö + konsoliderings-policy
+  registerInvoiceQueueRoutes(app);
+  invoiceConsolidationScheduler.start();
 
   app.post("/api/route-geometry", async (req: ExpressRequest, res: ExpressResponse) => {
     try {

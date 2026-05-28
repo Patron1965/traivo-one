@@ -129,6 +129,8 @@ import {
   invoiceConfigurations, documentConfigurations, deliverySchedules,
   invoiceRecipients,
   type InvoiceRecipient, type InsertInvoiceRecipient, type InvoiceRecipientLevel,
+  invoiceConsolidationPolicies,
+  type InvoiceConsolidationPolicy, type InsertInvoiceConsolidationPolicy, type InvoiceConsolidationPeriod,
   customerPortalTokens, customerPortalSessions, customerBookingRequests, customerPortalMessages,
   portalUsers, portalUserObjectScopes,
   customerInvoices, customerIssueReports, customerServiceContracts, fortnoxContractSuggestions, customerNotificationSettings,
@@ -4215,6 +4217,20 @@ export class DatabaseStorage implements IStorage {
     
     const [wo] = await db.update(workOrders).set(updates).where(eq(workOrders.id, id)).returning();
     if (wo?.tenantId) invalidateWorkflowCaches(wo.tenantId);
+
+    // Task #558: när WO blir 'utford' → markera redo att fakturera.
+    // markWorkOrderReadyForInvoice resolverar policy och sätter held/pending.
+    // Fail-safe: bryter ALDRIG completion-flödet.
+    if (wo && newStatus === 'utford' && wo.tenantId) {
+      try {
+        const { markWorkOrderReadyForInvoice } = await import("./services/invoice-consolidation");
+        await markWorkOrderReadyForInvoice(wo.id, wo.tenantId).catch((err) => {
+          console.warn(`[invoice-consolidation] markReady failed for wo=${wo.id}:`, err?.message ?? err);
+        });
+      } catch (err) {
+        console.warn("[invoice-consolidation] import failed:", err);
+      }
+    }
 
     // Task #421 Fas 0: skriv post_completion ML-snapshot vid utförd order.
     // Fail-safe: bryter ALDRIG completion-flödet. Fire-and-forget.
@@ -8349,4 +8365,86 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-export const storage = new DatabaseStorage();
+// ============================================
+// ADR v3 §2.5 (Task #558): Konsoliderings-policy CRUD
+// ============================================
+(DatabaseStorage.prototype as any).listInvoiceConsolidationPolicies = async function (
+  tenantId: string,
+  opts: { customerId?: string; recipientId?: string; activeOnly?: boolean } = {},
+): Promise<InvoiceConsolidationPolicy[]> {
+  const conds = [
+    eq(invoiceConsolidationPolicies.tenantId, tenantId),
+    isNull(invoiceConsolidationPolicies.deletedAt),
+  ];
+  if (opts.activeOnly) conds.push(eq(invoiceConsolidationPolicies.active, true));
+  if (opts.customerId) conds.push(eq(invoiceConsolidationPolicies.customerId, opts.customerId));
+  if (opts.recipientId) conds.push(eq(invoiceConsolidationPolicies.invoiceRecipientId, opts.recipientId));
+  return db
+    .select()
+    .from(invoiceConsolidationPolicies)
+    .where(and(...conds))
+    .orderBy(desc(invoiceConsolidationPolicies.updatedAt));
+};
+
+(DatabaseStorage.prototype as any).getInvoiceConsolidationPolicy = async function (
+  tenantId: string,
+  id: string,
+): Promise<InvoiceConsolidationPolicy | undefined> {
+  const [row] = await db
+    .select()
+    .from(invoiceConsolidationPolicies)
+    .where(and(
+      eq(invoiceConsolidationPolicies.id, id),
+      eq(invoiceConsolidationPolicies.tenantId, tenantId),
+      isNull(invoiceConsolidationPolicies.deletedAt),
+    ));
+  return row;
+};
+
+(DatabaseStorage.prototype as any).createInvoiceConsolidationPolicy = async function (
+  data: InsertInvoiceConsolidationPolicy,
+): Promise<InvoiceConsolidationPolicy> {
+  const [row] = await db.insert(invoiceConsolidationPolicies).values(data).returning();
+  return row;
+};
+
+(DatabaseStorage.prototype as any).updateInvoiceConsolidationPolicy = async function (
+  tenantId: string,
+  id: string,
+  data: Partial<InsertInvoiceConsolidationPolicy>,
+): Promise<InvoiceConsolidationPolicy | undefined> {
+  const { tenantId: _ignoreTenant, ...patch } = data as any;
+  const [row] = await db
+    .update(invoiceConsolidationPolicies)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(and(
+      eq(invoiceConsolidationPolicies.id, id),
+      eq(invoiceConsolidationPolicies.tenantId, tenantId),
+    ))
+    .returning();
+  return row;
+};
+
+(DatabaseStorage.prototype as any).deleteInvoiceConsolidationPolicy = async function (
+  tenantId: string,
+  id: string,
+): Promise<void> {
+  // Soft-delete — historiska held WOs ska kunna länka tillbaka för audit.
+  await db
+    .update(invoiceConsolidationPolicies)
+    .set({ deletedAt: new Date(), active: false, updatedAt: new Date() })
+    .where(and(
+      eq(invoiceConsolidationPolicies.id, id),
+      eq(invoiceConsolidationPolicies.tenantId, tenantId),
+    ));
+};
+
+export interface InvoiceConsolidationPolicyStorage {
+  listInvoiceConsolidationPolicies(tenantId: string, opts?: { customerId?: string; recipientId?: string; activeOnly?: boolean }): Promise<InvoiceConsolidationPolicy[]>;
+  getInvoiceConsolidationPolicy(tenantId: string, id: string): Promise<InvoiceConsolidationPolicy | undefined>;
+  createInvoiceConsolidationPolicy(data: InsertInvoiceConsolidationPolicy): Promise<InvoiceConsolidationPolicy>;
+  updateInvoiceConsolidationPolicy(tenantId: string, id: string, data: Partial<InsertInvoiceConsolidationPolicy>): Promise<InvoiceConsolidationPolicy | undefined>;
+  deleteInvoiceConsolidationPolicy(tenantId: string, id: string): Promise<void>;
+}
+
+export const storage = new DatabaseStorage() as DatabaseStorage & InvoiceConsolidationPolicyStorage;

@@ -427,6 +427,26 @@ export async function exportWorkOrderToFortnox(
       return { success: false, error: "Work order not found" };
     }
 
+    // Task #558: Fortnox-export refuserar `held` och `consolidated` WOs.
+    // - `held`: vänta på periodstängning eller släpp via Fakturakö.
+    // - `consolidated`: redan länkad till en customer_invoice — den ska
+    //   exporteras som sammanslagen post, inte som enskild WO-rad.
+    const queueState = (workOrder as any).invoiceQueueState as string | null | undefined;
+    if (queueState === "held") {
+      return {
+        success: false,
+        error:
+          "Arbetsordern är bromsad i konsolideringskön. Släpp den via Fakturakö eller vänta tills perioden stänger.",
+      };
+    }
+    if (queueState === "consolidated") {
+      return {
+        success: false,
+        error:
+          "Arbetsordern ingår i en konsoliderad samlingsfaktura och får inte exporteras enskilt. Exportera den konsoliderade fakturan istället.",
+      };
+    }
+
     const workOrderLines = await storage.getWorkOrderLines(invoiceExport.workOrderId);
     if (!workOrderLines.length) {
       return { success: false, error: "No work order lines to invoice" };
@@ -596,6 +616,24 @@ export async function exportWorkOrderToFortnox(
       exportedAt: new Date(),
     });
 
+    // Task #558: canonical state-transition för enskild WO efter Fortnox-export.
+    // Endast pending → exported är möjlig här; held/consolidated har redan
+    // refuserats ovan, så detta är inte en gren för konsoliderade fakturor —
+    // dessa exporteras via exportConsolidatedInvoiceToFortnox.
+    try {
+      const { db } = await import("./db");
+      const { workOrders } = await import("@shared/schema");
+      const { and, eq } = await import("drizzle-orm");
+      await db.update(workOrders)
+        .set({ invoiceQueueState: "exported" })
+        .where(and(
+          eq(workOrders.id, invoiceExport.workOrderId),
+          eq(workOrders.tenantId, tenantId),
+        ));
+    } catch (err) {
+      console.warn("[invoice-queue] post-export state transition failed:", err);
+    }
+
     return { success: true, invoiceNumber: invoiceNumbers.join(", ") };
   } catch (error) {
     console.error("Export to Fortnox failed:", error);
@@ -755,4 +793,152 @@ async function exportCreditInvoiceToFortnox(
 
 export function createFortnoxClient(tenantId: string): FortnoxClient {
   return new FortnoxClient(tenantId);
+}
+
+// ============================================
+// Task #558: Export av KONSOLIDERAD samlingsfaktura
+// ============================================
+// Exporterar en customer_invoices-rad (state="consolidated") till Fortnox som
+// EN sammanslagen faktura. Iterar workOrderIds, bygger invoiceRows från varje
+// WO:s lines (med samma frozen-pris-skalning som per-WO-exporten) och postar
+// ett enda createInvoice-anrop. Vid framgång: customer_invoice.state="sent" +
+// fortnoxInvoiceId, samt alla WOs.invoiceQueueState="exported" — i en
+// transaktion så ingen halv-uppdatering blir kvar vid fel.
+export async function exportConsolidatedInvoiceToFortnox(
+  tenantId: string,
+  invoiceId: string,
+): Promise<{ success: boolean; invoiceNumber?: string; error?: string }> {
+  try {
+    const { db } = await import("./db");
+    const { customerInvoices, workOrders, invoiceRecipients } = await import("@shared/schema");
+    const { and, eq, inArray } = await import("drizzle-orm");
+
+    const [invoice] = await db
+      .select()
+      .from(customerInvoices)
+      .where(and(
+        eq(customerInvoices.id, invoiceId),
+        eq(customerInvoices.tenantId, tenantId),
+      ));
+    if (!invoice) return { success: false, error: "Konsoliderad faktura hittades inte" };
+    if (invoice.state !== "consolidated") {
+      return { success: false, error: `Fakturan har state="${invoice.state}" — endast 'consolidated' kan exporteras här.` };
+    }
+    if (invoice.fortnoxInvoiceId) {
+      return { success: false, error: "Fakturan är redan exporterad till Fortnox." };
+    }
+
+    const woIds = (invoice.workOrderIds as string[] | null) ?? [];
+    if (!woIds.length) return { success: false, error: "Inga arbetsorder kopplade till fakturan." };
+
+    // Resolva Fortnox-kundnummer: recipient.fortnoxCustomerId vinner,
+    // annars recipient.customerId-mapping, annars invoice.customerId-mapping.
+    let customerFortnoxId: string | null = null;
+    if (invoice.invoiceRecipientId) {
+      const [rec] = await db
+        .select()
+        .from(invoiceRecipients)
+        .where(and(
+          eq(invoiceRecipients.id, invoice.invoiceRecipientId),
+          eq(invoiceRecipients.tenantId, tenantId),
+        ));
+      if (rec?.fortnoxCustomerId) {
+        customerFortnoxId = rec.fortnoxCustomerId;
+      } else if (rec?.customerId) {
+        const m = await storage.getFortnoxMapping(tenantId, "customer", rec.customerId);
+        if (m) customerFortnoxId = m.fortnoxId;
+      }
+    }
+    if (!customerFortnoxId) {
+      const m = await storage.getFortnoxMapping(tenantId, "customer", invoice.customerId);
+      if (m) customerFortnoxId = m.fortnoxId;
+    }
+    if (!customerFortnoxId) {
+      return { success: false, error: "Kund/mottagare saknar Fortnox-koppling." };
+    }
+
+    const client = new FortnoxClient(tenantId);
+    if (!(await client.isConnected())) {
+      return { success: false, error: "Fortnox är inte ansluten — auktorisering krävs." };
+    }
+
+    // Bygg invoiceRows från alla WOs. Använd samma frozen-skalning som
+    // exportWorkOrderToFortnox så summan blir konsistent.
+    const invoiceRows: Array<Record<string, unknown>> = [];
+    for (const woId of woIds) {
+      const wo = await storage.getWorkOrder(woId);
+      if (!wo || wo.tenantId !== tenantId) continue;
+      const lines = await storage.getWorkOrderLines(woId);
+      if (!lines.length) continue;
+      const useFrozen =
+        (wo as any).frozenUnitPrice != null &&
+        (wo as any).frozenQuantity != null &&
+        Number((wo as any).frozenQuantity) > 0;
+      let scale = 1;
+      if (useFrozen) {
+        const currentTotal = lines.reduce(
+          (s, l) => s + Number(l.resolvedPrice ?? 0) * Number(l.quantity ?? 1),
+          0,
+        );
+        const frozenTotal =
+          Number((wo as any).frozenUnitPrice) * Number((wo as any).frozenQuantity);
+        scale = currentTotal > 0 ? frozenTotal / currentTotal : 1;
+      }
+      for (const line of lines) {
+        const articleMapping = await storage.getFortnoxMapping(tenantId, "article", line.articleId);
+        if (!articleMapping) {
+          console.warn(`[consolidated-export] artikel ${line.articleId} saknar Fortnox-mapping, hoppar`);
+          continue;
+        }
+        const basePrice = Number(line.resolvedPrice ?? 0);
+        const price = useFrozen
+          ? Math.round(basePrice * scale * 100) / 100
+          : (line.resolvedPrice || undefined);
+        invoiceRows.push({
+          ArticleNumber: articleMapping.fortnoxId,
+          DeliveredQuantity: line.quantity,
+          Description: line.notes
+            || `${wo.title ?? "Arbetsorder"} (${woId.slice(0, 8)})`
+            || (useFrozen ? "Fryst pris (audit-snapshot)" : undefined),
+          Price: price,
+        });
+      }
+    }
+    if (!invoiceRows.length) {
+      return { success: false, error: "Inga fakturarader kunde byggas från konsoliderade WOs." };
+    }
+
+    const fortnoxInvoice: FortnoxInvoice = {
+      CustomerNumber: customerFortnoxId,
+      InvoiceRows: invoiceRows,
+    };
+
+    const response = await client.createInvoice(fortnoxInvoice);
+    const fortnoxNumber = response.Invoice.DocumentNumber;
+
+    // Atomisk state-transition: invoice → sent, alla WOs → exported.
+    await db.transaction(async (tx) => {
+      await tx.update(customerInvoices)
+        .set({
+          state: "sent",
+          fortnoxInvoiceId: fortnoxNumber,
+          totalAmount: Math.round(response.Invoice.Total ?? invoice.totalAmount ?? 0),
+        })
+        .where(and(
+          eq(customerInvoices.id, invoiceId),
+          eq(customerInvoices.tenantId, tenantId),
+        ));
+      await tx.update(workOrders)
+        .set({ invoiceQueueState: "exported" })
+        .where(and(
+          inArray(workOrders.id, woIds),
+          eq(workOrders.tenantId, tenantId),
+        ));
+    });
+
+    return { success: true, invoiceNumber: fortnoxNumber };
+  } catch (error) {
+    console.error("[consolidated-export] Fortnox-export misslyckades:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Okänt fel" };
+  }
 }

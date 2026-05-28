@@ -141,6 +141,7 @@ export function getEkonomiItems(tl?: (key: string) => string): NavItem[] {
   const l = tl || svFallback;
   return [
     { title: l("nav.invoicing"), url: "/invoicing", icon: Receipt, description: l("nav.invoicing.desc") },
+    { title: "Fakturakö", url: "/invoice-queue", icon: Clock, description: "Bromsade arbetsorder + samlingsfakturor (konsoliderings-policy per mottagare)" },
     { title: l("nav.invoice-recalculation-log"), url: "/invoice-recalculation-log", icon: Receipt, description: l("nav.invoice-recalculation-log.desc") },
     { title: l("nav.economics"), url: "/economics", icon: DollarSign, description: l("nav.economics.desc") },
     { title: l("nav.reporting"), url: "/reporting", icon: BarChart3, description: l("nav.reporting.desc") },

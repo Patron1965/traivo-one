@@ -423,10 +423,19 @@ export const workOrders = pgTable("work_orders", {
   frozenInvoiceLevel: text("frozen_invoice_level"),
   frozenInvoiceSourceCustomerId: varchar("frozen_invoice_source_customer_id"),
   invoiceConflictFlag: boolean("invoice_conflict_flag").default(false),
+  // === ADR v3 §2.5 (Task #558): Konsoliderings-state ===
+  // pending = redo att exporteras direkt, held = väntar på periodens stängning,
+  // consolidated = har grupperats in i en customer_invoice, exported = skickad
+  // till Fortnox. NULL = WO är inte redo att fakturera ännu (default).
+  invoiceQueueState: text("invoice_queue_state"),
+  invoiceReadyAt: timestamp("invoice_ready_at"),
+  invoiceHeldUntil: timestamp("invoice_held_until"),
+  consolidationInvoiceId: varchar("consolidation_invoice_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
   index("idx_work_orders_tenant").on(table.tenantId),
+  index("idx_work_orders_invoice_queue").on(table.tenantId, table.invoiceQueueState),
   index("idx_work_orders_parent").on(table.parentWorkOrderId),
   index("idx_work_orders_scheduled_date").on(table.scheduledDate),
   index("idx_work_orders_order_status").on(table.orderStatus),
@@ -3512,12 +3521,66 @@ export const customerInvoices = pgTable("customer_invoices", {
   fortnoxInvoiceId: text("fortnox_invoice_id"),
   description: text("description"),
   workOrderIds: text("work_order_ids").array().default([]),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+  // === ADR v3 §2.5 (Task #558): Konsoliderings-livscykel ===
+  // Separat från payment-status: pending | held | consolidated | sent | cancelled.
+  // pending = klar att exporteras till Fortnox direkt (policy=immediate)
+  // held    = bromsad, väntar på periodens stängning
+  // consolidated = WO-batch grupperad, klar för export
+  // sent    = exporterad till Fortnox
+  // cancelled = avbruten innan export
+  state: text("state").default("pending").notNull(),
+  invoiceRecipientId: varchar("invoice_recipient_id"),
+  consolidationPolicyId: varchar("consolidation_policy_id"),
+  consolidationPeriodStart: timestamp("consolidation_period_start"),
+  consolidationPeriodEnd: timestamp("consolidation_period_end"),
+  heldUntil: timestamp("held_until"),
+  releasedBy: varchar("released_by"),
+  releasedAt: timestamp("released_at"),
+  releasedReason: text("released_reason"),
+}, (table) => [
+  index("idx_customer_invoices_tenant_state").on(table.tenantId, table.state),
+  index("idx_customer_invoices_recipient").on(table.invoiceRecipientId),
+]);
 
 export const insertCustomerInvoiceSchema = createInsertSchema(customerInvoices).omit({ id: true, createdAt: true });
 export type CustomerInvoice = typeof customerInvoices.$inferSelect;
 export type InsertCustomerInvoice = z.infer<typeof insertCustomerInvoiceSchema>;
+
+// === Konsoliderings-policy per mottagare/kund (Task #558) ===
+export const INVOICE_CONSOLIDATION_PERIODS = ["immediate", "daily", "weekly", "monthly"] as const;
+export type InvoiceConsolidationPeriod = typeof INVOICE_CONSOLIDATION_PERIODS[number];
+
+export const invoiceConsolidationPolicies = pgTable("invoice_consolidation_policies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Antingen kund eller specifik mottagare (recipient vinner om båda satta).
+  customerId: varchar("customer_id").references(() => customers.id),
+  invoiceRecipientId: varchar("invoice_recipient_id").references(() => invoiceRecipients.id),
+  period: text("period").notNull(), // immediate|daily|weekly|monthly
+  // För weekly: 0=söndag..6=lördag (anchor day). För monthly: dag-i-månaden (1..28).
+  // För daily/immediate: ignoreras.
+  periodAnchor: integer("period_anchor"),
+  // Skickar tidigast detta klockslag den dag perioden stänger ("HH:MM", 24h).
+  releaseAtHour: integer("release_at_hour").default(6),
+  active: boolean("active").default(true).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_invoice_consolidation_policies_tenant").on(table.tenantId),
+  index("idx_invoice_consolidation_policies_recipient").on(table.invoiceRecipientId),
+  index("idx_invoice_consolidation_policies_customer").on(table.customerId),
+]);
+
+export const insertInvoiceConsolidationPolicySchema = createInsertSchema(invoiceConsolidationPolicies).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  deletedAt: true,
+});
+export type InvoiceConsolidationPolicy = typeof invoiceConsolidationPolicies.$inferSelect;
+export type InsertInvoiceConsolidationPolicy = z.infer<typeof insertInvoiceConsolidationPolicySchema>;
 
 // === FELANMÄLNINGAR (Issue Reports) ===
 export const customerIssueReports = pgTable("customer_issue_reports", {
