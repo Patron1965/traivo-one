@@ -301,6 +301,36 @@ export async function createMetadata(data: {
     }
   }
 
+  // PDF §14: respektera nivå-lås från ärvda värden — om en förälder har satt
+  // niva_las=TRUE på samma metadata-katalog så får lägre nivåer inte skapa lokalt värde.
+  const lockedAncestor = await db
+    .select({ id: metadataVarden.id, objektId: metadataVarden.objektId })
+    .from(metadataVarden)
+    .innerJoin(objects, eq(objects.id, metadataVarden.objektId))
+    .where(and(
+      eq(metadataVarden.tenantId, data.tenantId),
+      eq(metadataVarden.metadataKatalogId, metadataTyp.id),
+      eq(metadataVarden.nivaLas, true),
+    ))
+    .limit(50);
+  if (lockedAncestor.length > 0) {
+    // Walk upp från objektet och se om någon förälder finns med i låsta-listan.
+    const lockedIds = new Set(lockedAncestor.map(l => l.objektId));
+    let cursorId: string | null = objekt.parentId;
+    let depth = 0;
+    while (cursorId && depth < 50) {
+      if (lockedIds.has(cursorId)) {
+        throw new Error(`Nivå-lås: värdet för "${metadataTyp.namn}" är låst av en förälder och kan inte överskridas på denna nivå.`);
+      }
+      const [parent] = await db
+        .select({ parentId: objects.parentId })
+        .from(objects)
+        .where(and(eq(objects.id, cursorId), eq(objects.tenantId, data.tenantId)));
+      cursorId = parent?.parentId ?? null;
+      depth++;
+    }
+  }
+
   // PDF §14: dubblettkontroll (allowDuplicates=false → max ett lokalt värde per objekt)
   if (!metadataTyp.allowDuplicates) {
     const [duplicate] = await db
@@ -1292,18 +1322,21 @@ export const STANDARD_METADATA_DEFINITIONS: Array<{
   referensTabell?: string;
 }> = [
   // === Grunduppgifter ===
-  { namn: 'Objektnamn', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'grunduppgifter', beskrivning: 'Objektets namn (systemfält)', sortOrder: 1, icon: 'Type', area: 'grunduppgifter', displayNumber: 1, isSystem: true, isRequired: true },
-  { namn: 'Kontakt', datatyp: 'string', arLogisk: true, standardArvs: true, kategori: 'grunduppgifter', beskrivning: 'Kontaktperson (namn/telefon/e-post)', sortOrder: 3, icon: 'User', area: 'grunduppgifter', displayNumber: 3 },
-  { namn: 'Vinjetbild', datatyp: 'image', arLogisk: false, standardArvs: false, kategori: 'grunduppgifter', beskrivning: 'Bild som representerar objektet', sortOrder: 6, icon: 'Image', area: 'grunduppgifter', displayNumber: 6 },
+  // PDF §7: displayNumber följer 1/3/6/9/12/15/18/21/24 — systemfält Objektnamn = 1000 (alltid sist).
+  { namn: 'Kontakt', datatyp: 'string', arLogisk: true, standardArvs: true, kategori: 'grunduppgifter', beskrivning: 'Kontaktperson (namn/telefon/e-post)', sortOrder: 1, icon: 'User', area: 'grunduppgifter', displayNumber: 1 },
+  { namn: 'Vinjetbild', datatyp: 'image', arLogisk: false, standardArvs: false, kategori: 'grunduppgifter', beskrivning: 'Bild som representerar objektet', sortOrder: 3, icon: 'Image', area: 'grunduppgifter', displayNumber: 3 },
 
   // === Produktion ===
-  { namn: 'Typ', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Objekttyp (kärl, miljörum, säck, container, ...)', sortOrder: 9, icon: 'Layers', area: 'produktion', displayNumber: 9, allowedValues: ['Kärl', 'Miljörum', 'Säck', 'Container', 'Underjordsbehållare', 'Övrigt'] },
-  { namn: 'Antal', datatyp: 'integer', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Antal av objektet', sortOrder: 12, icon: 'Hash', area: 'produktion', displayNumber: 12 },
-  { namn: 'Yta', datatyp: 'decimal', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Yta i m² (flera värden tillåts)', sortOrder: 15, icon: 'Square', area: 'produktion', displayNumber: 15, allowDuplicates: true },
-  { namn: 'Storlek', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Storlek (S/M/L/XL)', sortOrder: 18, icon: 'Maximize', area: 'produktion', displayNumber: 18, allowedValues: ['S', 'M', 'L', 'XL'] },
-  { namn: 'Lyftkrok', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Lyftkrokens skick', sortOrder: 21, icon: 'Anchor', area: 'produktion', displayNumber: 21, allowedValues: ['Okej', 'Inte okej'] },
-  { namn: 'Tömningsdag', datatyp: 'string', arLogisk: true, standardArvs: true, kategori: 'produktion', beskrivning: 'Veckodag för tömning', sortOrder: 24, icon: 'Calendar', area: 'produktion', displayNumber: 24, allowedValues: ['Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag', 'Söndag'] },
-  { namn: 'Färg', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Färg på objektet', sortOrder: 27, icon: 'Palette', area: 'produktion', displayNumber: 27, allowedValues: ['Grön', 'Blå', 'Brun', 'Svart', 'Vit', 'Grå', 'Röd', 'Gul'] },
+  { namn: 'Typ', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Objekttyp (kärl, miljörum, säck, container, ...)', sortOrder: 6, icon: 'Layers', area: 'produktion', displayNumber: 6, allowedValues: ['Kärl', 'Miljörum', 'Säck', 'Container', 'Underjordsbehållare', 'Övrigt'] },
+  { namn: 'Antal', datatyp: 'integer', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Antal av objektet', sortOrder: 9, icon: 'Hash', area: 'produktion', displayNumber: 9 },
+  { namn: 'Yta', datatyp: 'decimal', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Yta i m² (flera värden tillåts)', sortOrder: 12, icon: 'Square', area: 'produktion', displayNumber: 12, allowDuplicates: true },
+  { namn: 'Storlek', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Storlek (S/M/L)', sortOrder: 15, icon: 'Maximize', area: 'produktion', displayNumber: 15, allowedValues: ['S', 'M', 'L'] },
+  { namn: 'Lyftkrok', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Lyftkrokens skick', sortOrder: 18, icon: 'Anchor', area: 'produktion', displayNumber: 18, allowedValues: ['Okej', 'Inte okej'] },
+  { namn: 'Tömningsdag', datatyp: 'string', arLogisk: true, standardArvs: true, kategori: 'produktion', beskrivning: 'Veckodag för tömning (1=mån … 7=sön)', sortOrder: 21, icon: 'Calendar', area: 'produktion', displayNumber: 21, allowedValues: ['1', '2', '3', '4', '5', '6', '7'] },
+  { namn: 'Färg', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Färg på objektet', sortOrder: 24, icon: 'Palette', area: 'produktion', displayNumber: 24, allowedValues: ['Grön', 'Blå', 'Brun', 'Svart', 'Gul'] },
+
+  // === System (alltid sist) ===
+  { namn: 'Objektnamn', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'grunduppgifter', beskrivning: 'Objektets namn (systemfält)', sortOrder: 1000, icon: 'Type', area: 'grunduppgifter', displayNumber: 1000, isSystem: true, isRequired: true },
 ];
 
 export async function seedDefaultMetadataTypes(tenantId: string): Promise<{ created: string[]; existing: string[] }> {

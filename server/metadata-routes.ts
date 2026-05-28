@@ -42,7 +42,18 @@ metadataRouter.get("/types", async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Ingen tenant hittad" });
     }
 
-    const types = await getAllMetadataTypes(tenantId);
+    // PDF §7: idempotent auto-seed på första access — säkrar att standardkatalogen
+    // finns för varje tenant utan att kräva manuellt anrop till /types/seed.
+    let types = await getAllMetadataTypes(tenantId);
+    const hasStandardCatalog = types.some((t: any) => t.area != null);
+    if (!hasStandardCatalog) {
+      try {
+        await seedDefaultMetadataTypes(tenantId);
+        types = await getAllMetadataTypes(tenantId);
+      } catch (seedErr) {
+        console.warn("[metadata] auto-seed failed (kontinuerar med befintliga typer):", seedErr);
+      }
+    }
     res.json(types);
   } catch (error) {
     console.error("Error fetching metadata types:", error);
