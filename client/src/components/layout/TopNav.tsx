@@ -696,7 +696,7 @@ export function TopNav() {
             </Link>
             <FavoritesDropdown allItems={roleFilteredItems} badges={badgeCounts} favorites={favorites} toggleFavorite={toggleFavorite} />
             {menuGroups.map((menu) =>
-              menu.items.length > 0 && canAccessMenu(userRole, menu.group as NavMenuGroup) ? (
+              canAccessMenu(userRole, menu.group as NavMenuGroup) && menu.items.length > 0 ? (
                 <NavDropdown
                   key={menu.key}
                   label={menu.label}
