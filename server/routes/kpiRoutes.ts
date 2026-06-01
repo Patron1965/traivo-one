@@ -991,7 +991,7 @@ app.post("/api/system/tenant-branding/upload-logo", requireAdmin, asyncHandler(a
     const { MAX_LOGO_SIZE_BYTES, MAX_LOGO_SIZE_MB } = await import("@shared/upload-limits");
     const { contentType, size } = req.body;
     if (!contentType || !ALLOWED_UPLOAD_MIME_TYPES.has(contentType)) {
-      return res.status(400).json({ error: "File type not allowed. Only images and PDFs are permitted." });
+      throw new ValidationError("File type not allowed. Only images and PDFs are permitted.");
     }
     if (size !== undefined && size !== null && Number(size) > MAX_LOGO_SIZE_BYTES) {
       return res.status(413).json({ error: `Logotypen är för stor. Maxgräns är ${MAX_LOGO_SIZE_MB} MB.` });
@@ -1056,7 +1056,7 @@ app.get("/api/storage/serve/objects/*", asyncHandler(async (req, res) => {
       objectFile: file,
     });
     if (!canAccess) {
-      return res.status(403).json({ error: "Access denied" });
+      throw new ForbiddenError("Access denied");
     }
 
     await objectStorageService.downloadObject(file, res, 86400);
@@ -1162,7 +1162,7 @@ app.put("/api/system/sms-config", requireAdmin, asyncHandler(async (req, res) =>
     
     const parseResult = smsConfigSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: "Ogiltig förfrågan", details: parseResult.error.flatten() });
+      throw new ValidationError("Ogiltig förfrågan", { details: parseResult.error.flatten() });
     }
     
     const tenant = await storage.updateTenantSmsSettings(tenantId, parseResult.data);
@@ -2000,8 +2000,7 @@ app.delete("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (re
 
     if (usage.total > 0 && !forced) {
       // 409 + strukturerad payload — UI kan visa exakt vad som blockerar.
-      return res.status(409).json({
-        error: "metadata_definition_in_use",
+      throw new ConflictError("metadata_definition_in_use", {
         message: `Definitionen används på ${usage.total} ställen. Bekräfta med ?confirmUsage=${usage.total} för att soft-deleta ändå.`,
         usage,
       });

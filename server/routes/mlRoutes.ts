@@ -12,6 +12,7 @@ import { db } from "../db";
 import { mlFeatureSnapshots, mlModels } from "@shared/schema";
 import { sql, eq, desc } from "drizzle-orm";
 import { z } from "zod";
+import { ValidationError, ForbiddenError, ConflictError } from "../errors";
 import { runDataQualityAudit, writeBaselineReport } from "../../scripts/ml-data-quality-audit";
 import { predictDurations, type PredictionRequestRow } from "../services/mlPredictionClient";
 
@@ -59,7 +60,7 @@ export function registerMlRoutes(app: Express): void {
     asyncHandler(async (req, res) => {
       const tenantId = getTenantIdWithFallback(req);
       if (tenantId !== PLATFORM_OWNER_TENANT) {
-        return res.status(403).json({ error: "Endast platform-owner kan skriva baseline" });
+        throw new ForbiddenError("Endast platform-owner kan skriva baseline");
       }
       const report = await runDataQualityAudit({});
       const filePath = await writeBaselineReport(report);
@@ -80,7 +81,7 @@ export function registerMlRoutes(app: Express): void {
       const tenantId = getTenantIdWithFallback(req);
       const parsed = predictBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: "ogiltig payload", issues: parsed.error.issues });
+        throw new ValidationError("ogiltig payload", { issues: parsed.error.issues });
       }
       const jobs: PredictionRequestRow[] = parsed.data.jobs;
       const result = await predictDurations({ tenantId, jobs });
@@ -173,11 +174,11 @@ export function registerMlRoutes(app: Express): void {
     asyncHandler(async (req, res) => {
       const tenantId = getTenantIdWithFallback(req);
       if (tenantId !== PLATFORM_OWNER_TENANT) {
-        return res.status(403).json({ error: "Endast platform-owner kan ändra ML-modellstatus" });
+        throw new ForbiddenError("Endast platform-owner kan ändra ML-modellstatus");
       }
       const parsed = promoteSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: "ogiltig payload", issues: parsed.error.issues });
+        throw new ValidationError("ogiltig payload", { issues: parsed.error.issues });
       }
       const { targetStatus, rolloutPercentage } = parsed.data;
 
@@ -244,7 +245,7 @@ export function registerMlRoutes(app: Express): void {
         // Partial unique index kan kasta om två promote:s körs samtidigt.
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("uq_ml_models_one_active_per_type") || msg.includes("uq_ml_models_one_canary_per_type")) {
-          return res.status(409).json({ error: "konflikt: en annan modell av samma typ är redan i mål-status. Försök igen." });
+          throw new ConflictError("konflikt: en annan modell av samma typ är redan i mål-status. Försök igen.");
         }
         throw err;
       }
@@ -262,11 +263,11 @@ export function registerMlRoutes(app: Express): void {
     asyncHandler(async (req, res) => {
       const tenantId = getTenantIdWithFallback(req);
       if (tenantId !== PLATFORM_OWNER_TENANT) {
-        return res.status(403).json({ error: "Endast platform-owner kan rollback:a ML-modell" });
+        throw new ForbiddenError("Endast platform-owner kan rollback:a ML-modell");
       }
       const parsed = rollbackSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: "ogiltig payload", issues: parsed.error.issues });
+        throw new ValidationError("ogiltig payload", { issues: parsed.error.issues });
       }
       try {
         const result = await db.transaction(async (tx) => {
@@ -303,7 +304,7 @@ export function registerMlRoutes(app: Express): void {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("uq_ml_models_one_active_per_type")) {
-          return res.status(409).json({ error: "konflikt: en annan modell är redan active. Försök igen." });
+          throw new ConflictError("konflikt: en annan modell är redan active. Försök igen.");
         }
         throw err;
       }

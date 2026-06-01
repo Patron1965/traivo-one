@@ -115,7 +115,7 @@ app.get("/api/clusters/resource-match", asyncHandler(async (req, res) => {
     const objectId = req.query.objectId as string | undefined;
 
     if (!clusterId && !objectId) {
-      return res.status(400).json({ error: "clusterId eller objectId krävs" });
+      throw new ValidationError("clusterId eller objectId krävs");
     }
 
     let targetClusterId = clusterId;

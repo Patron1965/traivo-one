@@ -6,7 +6,7 @@ import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
-import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
+import { AppError, NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
 import { insertArticleSchema, insertArticleComponentSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema, insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema, insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema, insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertResourceProfileSchema, insertResourceProfileAssignmentSchema, insertWorkSessionSchema, insertWorkEntrySchema, insertFuelLogSchema, insertMaintenanceLogSchema, workSessions, workEntries, timeLogs, equipmentBookings } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { notificationService } from "../notifications";
@@ -327,7 +327,7 @@ app.post("/api/price-lists/:id/apply-index-adjustment", requireAdmin, asyncHandl
       const result = await storage.applyIndexAdjustmentToPriceList(req.params.id, tenantId, parsed.data.percentage);
       res.json(result);
     } catch (err: any) {
-      res.status(404).json({ error: err.message || "Kunde inte indexjustera" });
+      throw new AppError(err.message || "Kunde inte indexjustera", 404, { code: "ERR_NOT_FOUND" });
     }
 }));
 
@@ -1458,7 +1458,7 @@ app.post("/api/teams", asyncHandler(async (req, res) => {
       const tenantProfileIds = new Set(tenantProfiles.map(p => p.id));
       for (const pid of req.body.profileIds) {
         if (!tenantProfileIds.has(pid)) {
-          return res.status(400).json({ error: `Profilen ${pid} tillhör inte detta företag` });
+          throw new ValidationError(`Profilen ${pid} tillhör inte detta företag`);
         }
       }
     }
@@ -1478,7 +1478,7 @@ app.patch("/api/teams/:id", asyncHandler(async (req, res) => {
       const tenantProfileIds = new Set(tenantProfiles.map(p => p.id));
       for (const pid of req.body.profileIds) {
         if (!tenantProfileIds.has(pid)) {
-          return res.status(400).json({ error: `Profilen ${pid} tillhör inte detta företag` });
+          throw new ValidationError(`Profilen ${pid} tillhör inte detta företag`);
         }
       }
     }
@@ -1805,7 +1805,7 @@ app.patch("/api/break-config", asyncHandler(async (req, res) => {
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: "Ogiltig rastkonfiguration" });
+      throw new ValidationError("Ogiltig rastkonfiguration");
     }
     const tenant = await storage.getTenant(tenantId);
     const currentSettings = (tenant?.settings as Record<string, any>) || {};
@@ -1836,7 +1836,7 @@ app.patch("/api/cluster-settings", asyncHandler(async (req, res) => {
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: "Ogiltig klusterkonfiguration" });
+      throw new ValidationError("Ogiltig klusterkonfiguration");
     }
     const tenant = await storage.getTenant(tenantId);
     const currentSettings = (tenant?.settings as Record<string, any>) || {};

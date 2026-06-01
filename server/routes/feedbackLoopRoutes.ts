@@ -3,6 +3,7 @@ import { db } from "../db";
 import { sql, and, gte, lte, isNull, eq } from "drizzle-orm";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
+import { ValidationError } from "../errors";
 import { workOrders, workOrderLines, articles, resources, workEntries } from "@shared/schema";
 
 export async function registerFeedbackLoopRoutes(app: Express) {
@@ -211,7 +212,7 @@ export async function registerFeedbackLoopRoutes(app: Express) {
     const { newDuration } = req.body;
 
     if (!newDuration || typeof newDuration !== "number" || newDuration < 1 || newDuration > 480) {
-      return res.status(400).json({ error: "Ogiltig duration (1-480 min)" });
+      throw new ValidationError("Ogiltig duration (1-480 min)");
     }
 
     await db.execute(sql`

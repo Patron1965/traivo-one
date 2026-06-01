@@ -9,6 +9,7 @@
 
 import type { Express } from "express";
 import { asyncHandler } from "../asyncHandler";
+import { ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
 import {
   requireTenantWithFallback,
@@ -41,9 +42,7 @@ export function registerProdHealthCheckRoutes(app: Express): void {
       // Operatörer får köra mot sin egen tenant. Endast platform-owner får
       // köra mot andra tenants (för felsökning).
       if (targetTenant !== callerTenant && callerTenant !== PLATFORM_OWNER_TENANT) {
-        return res
-          .status(403)
-          .json({ error: "Endast platform-owner kan köra hälsokoll mot annan tenant" });
+        throw new ForbiddenError("Endast platform-owner kan köra hälsokoll mot annan tenant");
       }
       const persist = req.body?.persist !== false;
       if (persist) {
@@ -73,7 +72,7 @@ export function registerProdHealthCheckRoutes(app: Express): void {
           ? req.query.tenantId.trim()
           : callerTenant;
       if (queryTenant !== callerTenant && callerTenant !== PLATFORM_OWNER_TENANT) {
-        return res.status(403).json({ error: "Ej behörig att läsa annan tenant" });
+        throw new ForbiddenError("Ej behörig att läsa annan tenant");
       }
       const limit = Math.min(
         Math.max(parseInt(String(req.query.limit ?? "30"), 10) || 30, 1),
@@ -112,7 +111,7 @@ export function registerProdHealthCheckRoutes(app: Express): void {
           ? req.query.tenantId.trim()
           : callerTenant;
       if (queryTenant !== callerTenant && callerTenant !== PLATFORM_OWNER_TENANT) {
-        return res.status(403).json({ error: "Ej behörig att läsa annan tenant" });
+        throw new ForbiddenError("Ej behörig att läsa annan tenant");
       }
       const [latest] = await db
         .select()

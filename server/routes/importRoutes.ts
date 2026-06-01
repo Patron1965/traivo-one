@@ -8,7 +8,7 @@ import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
-import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
+import { AppError, NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
 import multer from "multer";
 import Papa from "papaparse";
 import ExcelJS from "exceljs";
@@ -353,9 +353,9 @@ export async function registerImportRoutes(app: Express) {
 app.get("/api/import/template/:type", asyncHandler(async (req, res) => {
   const def = getImportTemplate(req.params.type);
   if (!def) {
-    return res.status(404).json({
-      error: "Okänd importtyp",
-      validTypes: Object.keys(IMPORT_TEMPLATES),
+    throw new AppError("Okänd importtyp", 404, {
+      code: "ERR_NOT_FOUND",
+      details: { validTypes: Object.keys(IMPORT_TEMPLATES) },
     });
   }
   const buffer = await buildTemplateWorkbook(def);
@@ -377,7 +377,7 @@ app.post("/api/import/customers", upload.single("file"), asyncHandler(async (req
     const result = Papa.parse(csvText, { header: true, skipEmptyLines: true });
     
     if (result.errors.length > 0) {
-      return res.status(400).json({ error: "CSV-fel", details: result.errors });
+      throw new ValidationError("CSV-fel", { details: result.errors });
     }
     
     const imported: string[] = [];
@@ -422,7 +422,7 @@ app.post("/api/import/resources", upload.single("file"), asyncHandler(async (req
     const result = Papa.parse(csvText, { header: true, skipEmptyLines: true });
     
     if (result.errors.length > 0) {
-      return res.status(400).json({ error: "CSV-fel", details: result.errors });
+      throw new ValidationError("CSV-fel", { details: result.errors });
     }
     
     const imported: string[] = [];
@@ -467,7 +467,7 @@ app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, 
     const result = Papa.parse(csvText, { header: true, skipEmptyLines: true });
     
     if (result.errors.length > 0) {
-      return res.status(400).json({ error: "CSV-fel", details: result.errors });
+      throw new ValidationError("CSV-fel", { details: result.errors });
     }
     
     // First, get all customers to map names to IDs
@@ -811,7 +811,7 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
 
     const parsed = await parseModusUpload(req.file);
     if (parsed.errors.length > 0) {
-      return res.status(400).json({ error: "Filfel", details: parsed.errors });
+      throw new ValidationError("Filfel", { details: parsed.errors });
     }
 
     const rows = parsed.rows;
@@ -1146,7 +1146,7 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
 
     const parsed = await parseModusUpload(req.file);
     if (parsed.errors.length > 0) {
-      return res.status(400).json({ error: "Filfel", details: parsed.errors });
+      throw new ValidationError("Filfel", { details: parsed.errors });
     }
 
     const tenantId = getTenantIdWithFallback(req);
@@ -1660,7 +1660,7 @@ app.post("/api/import/modus/tasks/validate", upload.single("file"), asyncHandler
     }
     const parsed = await parseModusUpload(req.file);
     if (parsed.errors.length > 0) {
-      return res.status(400).json({ error: "Filfel", details: parsed.errors });
+      throw new ValidationError("Filfel", { details: parsed.errors });
     }
     const tenantId = getTenantIdWithFallback(req);
     const rows = parsed.rows;
@@ -1789,7 +1789,7 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
 
     const parsed = await parseModusUpload(req.file);
     if (parsed.errors.length > 0) {
-      return res.status(400).json({ error: "Filfel", details: parsed.errors });
+      throw new ValidationError("Filfel", { details: parsed.errors });
     }
 
     const tenantId = getTenantIdWithFallback(req);
@@ -2366,7 +2366,7 @@ app.post("/api/import/modus/events", upload.single("file"), asyncHandler(async (
 
     const parsed = await parseModusUpload(req.file);
     if (parsed.errors.length > 0) {
-      return res.status(400).json({ error: "Filfel", details: parsed.errors });
+      throw new ValidationError("Filfel", { details: parsed.errors });
     }
 
     const tenantId = getTenantIdWithFallback(req);
@@ -2507,7 +2507,7 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(
 
     const parsed = await parseModusUpload(req.file);
     if (parsed.errors.length > 0) {
-      return res.status(400).json({ error: "Filfel", details: parsed.errors });
+      throw new ValidationError("Filfel", { details: parsed.errors });
     }
 
     const tenantId = getTenantIdWithFallback(req);
@@ -2883,7 +2883,7 @@ app.post("/api/import/customers/validate", upload.single("file"), asyncHandler(a
     const result = Papa.parse(csvText, { header: true, skipEmptyLines: true, delimiter });
 
     if (result.errors.length > 0) {
-      return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+      throw new ValidationError("CSV-fel", { details: result.errors.slice(0, 10) });
     }
 
     const tenantId = getTenantIdWithFallback(req);
@@ -3784,7 +3784,7 @@ app.post("/api/import/customers/bulk", upload.single("file"), asyncHandler(async
     const result = Papa.parse(csvText, { header: true, skipEmptyLines: true, delimiter });
 
     if (result.errors.length > 0) {
-      return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+      throw new ValidationError("CSV-fel", { details: result.errors.slice(0, 10) });
     }
 
     const tenantId = getTenantIdWithFallback(req);
@@ -3897,7 +3897,7 @@ app.post("/api/import/metadata/csv", upload.single("file"), asyncHandler(async (
     const result = Papa.parse(csvText, { header: true, skipEmptyLines: true, delimiter });
 
     if (result.errors.length > 0) {
-      return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+      throw new ValidationError("CSV-fel", { details: result.errors.slice(0, 10) });
     }
 
     const tenantId = getTenantIdWithFallback(req);
@@ -4808,7 +4808,7 @@ app.post("/api/import/repair/hierarchy-csv", requireAdmin, upload.single("file")
     const result = Papa.parse(csvText, { header: true, skipEmptyLines: true, delimiter: ";" });
 
     if (result.errors.length > 0) {
-      return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+      throw new ValidationError("CSV-fel", { details: result.errors.slice(0, 10) });
     }
 
     const allObjects = await db.select({
@@ -4831,8 +4831,7 @@ app.post("/api/import/repair/hierarchy-csv", requireAdmin, upload.single("file")
 
     const firstRow = (result.data as Record<string, string>[])[0];
     if (!firstRow || !("Id" in firstRow) || !("Parent" in firstRow)) {
-      return res.status(400).json({
-        error: "CSV måste ha kolumnerna 'Id' och 'Parent'",
+      throw new ValidationError("CSV måste ha kolumnerna 'Id' och 'Parent'", {
         columns: firstRow ? Object.keys(firstRow) : [],
       });
     }
@@ -4984,20 +4983,20 @@ app.patch("/api/import/data-quality/object/:id", requireAdmin, asyncHandler(asyn
     if (latitude !== undefined) {
       const lat = latitude !== null ? Number(latitude) : null;
       if (lat !== null && (Number.isNaN(lat) || lat < -90 || lat > 90)) {
-        return res.status(400).json({ error: "Ogiltig latitud (måste vara -90 till 90)" });
+        throw new ValidationError("Ogiltig latitud (måste vara -90 till 90)");
       }
       updates.latitude = lat;
     }
     if (longitude !== undefined) {
       const lng = longitude !== null ? Number(longitude) : null;
       if (lng !== null && (Number.isNaN(lng) || lng < -180 || lng > 180)) {
-        return res.status(400).json({ error: "Ogiltig longitud (måste vara -180 till 180)" });
+        throw new ValidationError("Ogiltig longitud (måste vara -180 till 180)");
       }
       updates.longitude = lng;
     }
 
     if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ error: "Inga fält att uppdatera" });
+      throw new ValidationError("Inga fält att uppdatera");
     }
 
     await db.update(objects).set(updates).where(eq(objects.id, objectId));

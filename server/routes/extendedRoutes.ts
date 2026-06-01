@@ -6,7 +6,7 @@ import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback, assignUserToTenant, getUserTenants } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
-import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
+import { NotFoundError, ValidationError, UnauthorizedError, ForbiddenError, ConflictError } from "../errors";
 import { objects, workOrders, articles , insertDeviationReportSchema, insertProtocolSchema, apiUsageLogs, taskDependencyInstances, invitations } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { notificationService } from "../notifications";
@@ -1130,7 +1130,7 @@ app.post("/api/field-worker/tasks/:id/upload-photo", asyncHandler(async (req, re
     const { ObjectStorageService, ALLOWED_UPLOAD_MIME_TYPES } = await import("../replit_integrations/object_storage/objectStorage");
     const { MAX_FIELD_PHOTO_SIZE_BYTES, MAX_FIELD_PHOTO_SIZE_MB } = await import("@shared/upload-limits");
     if (!contentType || !ALLOWED_UPLOAD_MIME_TYPES.has(contentType)) {
-      return res.status(400).json({ error: "File type not allowed. Only images and PDFs are permitted." });
+      throw new ValidationError("File type not allowed. Only images and PDFs are permitted.");
     }
     if (size !== undefined && size !== null && Number(size) > MAX_FIELD_PHOTO_SIZE_BYTES) {
       return res.status(413).json({ error: `Bilden är för stor. Maxgräns är ${MAX_FIELD_PHOTO_SIZE_MB} MB.` });
@@ -1613,7 +1613,7 @@ app.post("/api/admin/users", requireAdminAuth, asyncHandler(async (req, res) => 
 
     const validRoles = ["owner", "admin", "planner", "technician", "user", "viewer", "customer", "reporter"];
     if (role && !validRoles.includes(role)) {
-      return res.status(400).json({ error: `Ogiltig roll: ${role}` });
+      throw new ValidationError(`Ogiltig roll: ${role}`);
     }
 
     const tenantId = (req as any).tenantId;
@@ -1688,7 +1688,7 @@ app.patch("/api/admin/users/bulk", requireAdminAuth, asyncHandler(async (req, re
     if (updates.role !== undefined) {
       const validRoles = ["owner", "admin", "planner", "technician", "user", "viewer", "customer", "reporter"];
       if (!validRoles.includes(updates.role)) {
-        return res.status(400).json({ error: `Ogiltig roll: ${updates.role}` });
+        throw new ValidationError(`Ogiltig roll: ${updates.role}`);
       }
       tenantRoleToAssign = updates.role;
     }
@@ -1720,7 +1720,7 @@ app.patch("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, res
     const tenantId = (req as any).tenantId;
     const membership = await storage.getUserTenantRole(req.params.id, tenantId);
     if (!membership) {
-      return res.status(403).json({ error: "Ej behörig", message: "Användaren tillhör inte din organisation." });
+      throw new ForbiddenError("Ej behörig", { message: "Användaren tillhör inte din organisation." });
     }
 
     const { email, firstName, lastName, password, role, resourceId, isActive } = req.body;
@@ -1728,7 +1728,7 @@ app.patch("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, res
     if (role !== undefined) {
       const validRoles = ["owner", "admin", "planner", "technician", "user", "viewer", "customer", "reporter"];
       if (!validRoles.includes(role)) {
-        return res.status(400).json({ error: `Ogiltig roll: ${role}` });
+        throw new ValidationError(`Ogiltig roll: ${role}`);
       }
     }
 
@@ -1763,12 +1763,12 @@ app.patch("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, res
 app.delete("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, res) => {
     const currentUserId = (req as any).userId;
     if (req.params.id === currentUserId) {
-      return res.status(400).json({ error: "Du kan inte ta bort ditt eget konto" });
+      throw new ValidationError("Du kan inte ta bort ditt eget konto");
     }
     const tenantId = (req as any).tenantId;
     const membership = await storage.getUserTenantRole(req.params.id, tenantId);
     if (!membership) {
-      return res.status(403).json({ error: "Ej behörig", message: "Användaren tillhör inte din organisation." });
+      throw new ForbiddenError("Ej behörig", { message: "Användaren tillhör inte din organisation." });
     }
     await storage.deleteUserTenantRole(membership.id);
     res.json({ success: true });
@@ -1787,7 +1787,7 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
     const user = await storage.getUserByUsername(email);
     if (!user || !user.passwordHash) {
       await logLoginEvent({ req, method: "password", outcome: "failed", email, reason: "unknown_user_or_no_password" });
-      return res.status(401).json({ error: "Felaktig e-post eller lösenord" });
+      throw new UnauthorizedError("Felaktig e-post eller lösenord");
     }
     if (user.isActive === false) {
       await logLoginEvent({ req, method: "password", outcome: "failed", email, userId: user.id, reason: "inactive_account" });
@@ -1797,7 +1797,7 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
     const valid = verifyPassword(password, user.passwordHash);
     if (!valid) {
       await logLoginEvent({ req, method: "password", outcome: "failed", email, userId: user.id, reason: "bad_password" });
-      return res.status(401).json({ error: "Felaktig e-post eller lösenord" });
+      throw new UnauthorizedError("Felaktig e-post eller lösenord");
     }
 
     (req.session as any).userId = user.id;
@@ -1815,11 +1815,11 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
 app.get("/api/auth/me", asyncHandler(async (req, res) => {
     const userId = (req.session as any)?.userId;
     if (!userId) {
-      return res.status(401).json({ error: "Inte inloggad" });
+      throw new UnauthorizedError("Inte inloggad");
     }
     const user = await storage.getUser(userId);
     if (!user) {
-      return res.status(401).json({ error: "Användaren hittades inte" });
+      throw new UnauthorizedError("Användaren hittades inte");
     }
     const { passwordHash: _, ...safeUser } = user;
     res.json(safeUser);

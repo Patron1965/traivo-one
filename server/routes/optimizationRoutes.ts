@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../asyncHandler";
 import { getTenantIdWithFallback } from "../tenant-middleware";
-import { ValidationError } from "../errors";
+import { AppError, ValidationError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { storage } from "../storage";
 import { notificationService } from "../notifications";
@@ -274,8 +274,7 @@ export async function registerOptimizationRoutes(app: Express) {
     const job = await getOptimizationJob(req.params.id, tenantId);
 
     if (!job) {
-      res.status(404).json({ error: "Jobb hittades inte" });
-      return;
+      throw new AppError("Jobb hittades inte", 404, { code: "ERR_NOT_FOUND" });
     }
 
     res.json({
@@ -290,13 +289,11 @@ export async function registerOptimizationRoutes(app: Express) {
     const job = await getOptimizationJob(req.params.id, tenantId);
 
     if (!job) {
-      res.status(404).json({ error: "Jobb hittades inte" });
-      return;
+      throw new AppError("Jobb hittades inte", 404, { code: "ERR_NOT_FOUND" });
     }
 
     if (job.status !== "completed") {
-      res.status(400).json({ error: "Jobb inte klart", status: job.status });
-      return;
+      throw new ValidationError("Jobb inte klart", { status: job.status });
     }
 
     notificationService.broadcastToAll({
@@ -314,13 +311,11 @@ export async function registerOptimizationRoutes(app: Express) {
     const job = await getOptimizationJob(req.params.id, tenantId);
 
     if (!job) {
-      res.status(404).json({ error: "Jobb hittades inte" });
-      return;
+      throw new AppError("Jobb hittades inte", 404, { code: "ERR_NOT_FOUND" });
     }
 
     if (job.status !== "completed" || !job.result) {
-      res.status(400).json({ error: "Jobb har inget resultat att tillämpa" });
-      return;
+      throw new ValidationError("Jobb har inget resultat att tillämpa");
     }
 
     const result = job.result as unknown as {
@@ -331,8 +326,7 @@ export async function registerOptimizationRoutes(app: Express) {
     };
 
     if (!result.routes || !Array.isArray(result.routes)) {
-      res.status(400).json({ error: "Ogiltigt resultatformat" });
-      return;
+      throw new ValidationError("Ogiltigt resultatformat");
     }
 
     let applied = 0;

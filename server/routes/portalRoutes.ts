@@ -6,7 +6,7 @@ import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
-import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
+import { AppError, NotFoundError, ValidationError, UnauthorizedError, ForbiddenError, ConflictError } from "../errors";
 import { requireAdmin, requireRole } from "../tenant-middleware";
 import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema, type InsertObject, objectMetadata } from "@shared/schema";
 import { notificationService } from "../notifications";
@@ -60,8 +60,7 @@ interface PortalSession {
 async function requirePortalAuth(req: ExpressRequest, res: ExpressResponse): Promise<PortalSession | null> {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Autentisering krävs" });
-    return null;
+    throw new UnauthorizedError("Autentisering krävs");
   }
 
   const sessionToken = authHeader.substring(7);
@@ -69,19 +68,18 @@ async function requirePortalAuth(req: ExpressRequest, res: ExpressResponse): Pro
   const session = await validateSession(sessionToken);
 
   if (!session.valid || !session.customerId || !session.tenantId) {
-    res.status(401).json({ error: "Ogiltig session" });
-    return null;
+    throw new UnauthorizedError("Ogiltig session");
   }
 
+  let portalEnabled: boolean;
   try {
-    const portalEnabled = await isModuleEnabled(session.tenantId, "customer_portal");
-    if (!portalEnabled) {
-      res.status(403).json({ error: "Kundportalen är inte aktiverad för denna organisation" });
-      return null;
-    }
+    portalEnabled = await isModuleEnabled(session.tenantId, "customer_portal");
   } catch {
     res.status(500).json({ error: "Kunde inte verifiera modulbehörighet" });
     return null;
+  }
+  if (!portalEnabled) {
+    throw new ForbiddenError("Kundportalen är inte aktiverad för denna organisation");
   }
 
   // Resolve per-objekt-scope. Bakåtkompat: portalUserId saknas eller scope tomt = full access.
@@ -90,8 +88,7 @@ async function requirePortalAuth(req: ExpressRequest, res: ExpressResponse): Pro
     // Defense-in-depth: om portal-user blivit borttagen, neka åtkomst (fail-closed).
     const portalUser = await storage.getPortalUser(session.portalUserId);
     if (!portalUser || portalUser.tenantId !== session.tenantId) {
-      res.status(401).json({ error: "Sessionen är ogiltig" });
-      return null;
+      throw new UnauthorizedError("Sessionen är ogiltig");
     }
     try {
       scopedObjectIds = await storage.resolvePortalUserScopeObjectIds(session.portalUserId, session.tenantId);
@@ -172,7 +169,7 @@ app.post("/api/portal/auth/request-link", authLimiter, asyncHandler(async (req, 
     );
 
     if (!result.success) {
-      return res.status(400).json({ error: result.error });
+      throw new ValidationError(result.error);
     }
 
     const tenant = await storage.getTenant(tenantId);
@@ -220,7 +217,7 @@ app.post("/api/portal/auth/verify", authLimiter, asyncHandler(async (req, res) =
         outcome: "failed",
         reason: result.error || "invalid_token",
       });
-      return res.status(400).json({ error: result.error });
+      throw new ValidationError(result.error);
     }
 
     await logLoginEvent({
@@ -253,7 +250,7 @@ app.post("/api/portal/auth/verify", authLimiter, asyncHandler(async (req, res) =
 app.get("/api/portal/me", asyncHandler(async (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Autentisering krävs" });
+      throw new UnauthorizedError("Autentisering krävs");
     }
 
     const sessionToken = authHeader.substring(7);
@@ -261,7 +258,7 @@ app.get("/api/portal/me", asyncHandler(async (req, res) => {
     const session = await validateSession(sessionToken);
 
     if (!session.valid) {
-      return res.status(401).json({ error: "Ogiltig session" });
+      throw new UnauthorizedError("Ogiltig session");
     }
 
     const tenant = await storage.getTenant(session.tenantId!);
@@ -530,7 +527,7 @@ app.get("/api/portal/clusters/children", asyncHandler(async (req: any, res: any)
   const parentId = parentIdRaw && parentIdRaw !== "null" && parentIdRaw !== "" ? parentIdRaw : null;
 
   if (parentId && !isObjectInScope(session, parentId)) {
-    return res.status(404).json({ error: "Hittades inte" });
+    throw new AppError("Hittades inte", 404, { code: "ERR_NOT_FOUND" });
   }
 
   const allCustomerObjects = await storage.getObjectsByCustomer(session.customerId!);
@@ -630,7 +627,7 @@ app.get("/api/portal/clusters/:objectId/ancestors", asyncHandler(async (req: any
   const { objectId } = req.params;
 
   if (!isObjectInScope(session, objectId)) {
-    return res.status(404).json({ error: "Hittades inte" });
+    throw new AppError("Hittades inte", 404, { code: "ERR_NOT_FOUND" });
   }
 
   const allCustomerObjects = await storage.getObjectsByCustomer(session.customerId!);
@@ -639,7 +636,7 @@ app.get("/api/portal/clusters/:objectId/ancestors", asyncHandler(async (req: any
     : allCustomerObjects;
 
   const targetObj = customerObjects.find(o => o.id === objectId);
-  if (!targetObj) return res.status(404).json({ error: "Hittades inte" });
+  if (!targetObj) throw new AppError("Hittades inte", 404, { code: "ERR_NOT_FOUND" });
 
   const { primaryParentMap } = await buildParentMaps(
     session.tenantId!,
@@ -682,14 +679,14 @@ app.get("/api/portal/clusters/:objectId/stats", asyncHandler(async (req: any, re
   const { objectId } = req.params;
 
   if (!isObjectInScope(session, objectId)) {
-    return res.status(404).json({ error: "Hittades inte" });
+    throw new AppError("Hittades inte", 404, { code: "ERR_NOT_FOUND" });
   }
 
   const allCustomerObjects = await storage.getObjectsByCustomer(session.customerId!);
   const inScope = (id: string) => !session.scopedObjectIds || session.scopedObjectIds.has(id);
   const customerObjects = allCustomerObjects.filter(o => inScope(o.id));
   const targetObj = customerObjects.find(o => o.id === objectId);
-  if (!targetObj) return res.status(404).json({ error: "Hittades inte" });
+  if (!targetObj) throw new AppError("Hittades inte", 404, { code: "ERR_NOT_FOUND" });
 
   const { primaryParentMap, totalParentCount } = await buildParentMaps(
     session.tenantId!,
@@ -927,7 +924,7 @@ app.post("/api/portal/booking-requests", asyncHandler(async (req, res) => {
     const parseResult = portalBookingRequestSchema.safeParse(req.body);
     if (!parseResult.success) {
       const errorMessage = parseResult.error.errors.map(e => e.message).join(", ");
-      return res.status(400).json({ error: errorMessage });
+      throw new ValidationError(errorMessage);
     }
 
     const { objectId, workOrderId, requestType, preferredDate1, preferredDate2, preferredTimeSlot, customerNotes } = parseResult.data;
@@ -1319,7 +1316,7 @@ app.get("/api/portal/completed-jobs", asyncHandler(async (req, res) => {
 
 app.post("/api/portal/auth/demo-login", authLimiter, asyncHandler(async (req, res) => {
     if (process.env.NODE_ENV === "production") {
-      return res.status(404).json({ error: "Demo-inloggning är inte tillgänglig i produktion" });
+      throw new AppError("Demo-inloggning är inte tillgänglig i produktion", 404, { code: "ERR_NOT_FOUND" });
     }
     const demoEmail = "demo@traivo.se";
     const tenantId = "kinab";
@@ -1559,7 +1556,7 @@ app.post("/api/portal/visit-confirmations", asyncHandler(async (req, res) => {
     
     const parseResult = visitConfirmationRequestSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: "Ogiltig förfrågningsdata", details: parseResult.error.flatten() });
+      throw new ValidationError("Ogiltig förfrågningsdata", { details: parseResult.error.flatten() });
     }
     
     const { workOrderId, confirmationStatus, disputeReason, customerComment, confirmedByName } = parseResult.data;
@@ -1627,7 +1624,7 @@ app.post("/api/portal/technician-ratings", asyncHandler(async (req, res) => {
     
     const parseResult = technicianRatingRequestSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: "Ogiltig förfrågningsdata", details: parseResult.error.flatten() });
+      throw new ValidationError("Ogiltig förfrågningsdata", { details: parseResult.error.flatten() });
     }
     
     const { workOrderId, rating, comment, categories, isAnonymous } = parseResult.data;
@@ -1711,7 +1708,7 @@ app.post("/api/portal/work-order-chat/:workOrderId", asyncHandler(async (req, re
     
     const parseResult = chatMessageRequestSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: "Meddelande krävs", details: parseResult.error.flatten() });
+      throw new ValidationError("Meddelande krävs", { details: parseResult.error.flatten() });
     }
     
     const { message } = parseResult.data;
@@ -1806,7 +1803,7 @@ app.post("/api/portal/self-bookings", asyncHandler(async (req, res) => {
     
     const parseResult = selfBookingRequestSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: "Tidslucka och tjänsttyp krävs", details: parseResult.error.flatten() });
+      throw new ValidationError("Tidslucka och tjänsttyp krävs", { details: parseResult.error.flatten() });
     }
     
     const { slotId, objectId, serviceType, customerNotes } = parseResult.data;
@@ -2082,11 +2079,11 @@ app.get("/api/my-reports", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const userId = req.user?.claims?.sub;
     if (!userId) {
-      return res.status(401).json({ error: "Ej autentiserad" });
+      throw new UnauthorizedError("Ej autentiserad");
     }
     const dbUser = await storage.getUser(userId);
     if (!dbUser) {
-      return res.status(401).json({ error: "Användaren hittades inte" });
+      throw new UnauthorizedError("Användaren hittades inte");
     }
     const userEmail = dbUser.email?.toLowerCase();
     const reports = await storage.getPublicIssueReports(tenantId, {});
@@ -2101,7 +2098,7 @@ app.get("/api/my-objects", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const userId = req.user?.claims?.sub;
     if (!userId) {
-      return res.status(401).json({ error: "Ej autentiserad" });
+      throw new UnauthorizedError("Ej autentiserad");
     }
     const role = req.tenantRole || "user";
     if (role === "reporter") {
@@ -2112,7 +2109,7 @@ app.get("/api/my-objects", asyncHandler(async (req, res) => {
     }
     const dbUser = await storage.getUser(userId);
     if (!dbUser) {
-      return res.status(401).json({ error: "Användaren hittades inte" });
+      throw new UnauthorizedError("Användaren hittades inte");
     }
     const customers = await storage.getCustomers(tenantId);
     const userEmail = dbUser.email;
@@ -2438,7 +2435,7 @@ app.post("/api/portal/field/upload-photo", asyncHandler(async (req, res) => {
     const { MAX_FIELD_PHOTO_SIZE_BYTES, MAX_FIELD_PHOTO_SIZE_MB } = await import("@shared/upload-limits");
 
     if (!contentType || !ALLOWED_UPLOAD_MIME_TYPES.has(contentType)) {
-      return res.status(400).json({ error: "File type not allowed. Only images and PDFs are permitted." });
+      throw new ValidationError("File type not allowed. Only images and PDFs are permitted.");
     }
     if (size !== undefined && size !== null && Number(size) > MAX_FIELD_PHOTO_SIZE_BYTES) {
       return res.status(413).json({ error: `Bilden är för stor. Maxgräns är ${MAX_FIELD_PHOTO_SIZE_MB} MB.` });
@@ -2457,11 +2454,11 @@ app.post("/api/portal/media/signed-url", asyncHandler(async (req, res) => {
 
     const { objectPath } = req.body;
     if (!objectPath || typeof objectPath !== "string") {
-      return res.status(400).json({ error: "objectPath krävs" });
+      throw new ValidationError("objectPath krävs");
     }
     const safePathRegex = /^\/objects\/[a-zA-Z0-9/_-]+$/;
     if (!safePathRegex.test(objectPath)) {
-      return res.status(400).json({ error: "Ogiltig objektsökväg" });
+      throw new ValidationError("Ogiltig objektsökväg");
     }
 
     const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
@@ -2475,7 +2472,7 @@ app.post("/api/portal/media/signed-url", asyncHandler(async (req, res) => {
     const policy = await getObjectAclPolicy(objectFile);
     const expectedOwner = `portal:${session.tenantId}:${session.customerId}`;
     if (!policy || policy.owner !== expectedOwner) {
-      return res.status(403).json({ error: "Åtkomst nekad" });
+      throw new ForbiddenError("Åtkomst nekad");
     }
 
     const signedUrl = await objectStorageService.getSignedObjectReadURL(objectPath, 300);
@@ -2642,7 +2639,7 @@ app.post("/api/customer-change-requests/:id/create-work-order", requireAdmin, as
       throw new NotFoundError("Rapport hittades inte");
     }
     if (report.status === "resolved" && report.reviewNotes?.startsWith("Arbetsorder skapad:")) {
-      return res.status(409).json({ error: "En arbetsorder har redan skapats för denna rapport." });
+      throw new ConflictError("En arbetsorder har redan skapats för denna rapport.");
     }
 
     const obj = await storage.getObject(report.objectId);

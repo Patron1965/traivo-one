@@ -3,7 +3,7 @@ import { db } from "../db";
 import { eq } from "drizzle-orm";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
-import { ValidationError } from "../errors";
+import { ValidationError, ForbiddenError } from "../errors";
 import { tenantFeatures, featureAuditLog } from "@shared/schema";
 import { getTenantFeatures, invalidateFeatureCache } from "../feature-flags";
 import { PACKAGE_DEFINITIONS, MODULE_DEFINITIONS, MODULE_KEYS, getModulesForPackage } from "@shared/modules";
@@ -90,10 +90,10 @@ export async function registerFeatureRoutes(app: Express) {
 
     const role = req.tenantRole;
     if (role !== "owner" && role !== "admin") {
-      return res.status(403).json({ error: "Otillräcklig behörighet — kräver admin eller ägare" });
+      throw new ForbiddenError("Otillräcklig behörighet — kräver admin eller ägare");
     }
     if (adminTenantId !== tenantId) {
-      return res.status(403).json({ error: "Du kan bara ändra din egen organisations moduler" });
+      throw new ForbiddenError("Du kan bara ändra din egen organisations moduler");
     }
 
     const { packageTier, enabledModules } = req.body;
@@ -114,7 +114,7 @@ export async function registerFeatureRoutes(app: Express) {
     const role = req.tenantRole;
 
     if (role !== "owner" && role !== "admin") {
-      return res.status(403).json({ error: "Bara admin kan ändra moduler" });
+      throw new ForbiddenError("Bara admin kan ändra moduler");
     }
 
     const { packageTier, enabledModules } = req.body;
@@ -135,7 +135,7 @@ export async function registerFeatureRoutes(app: Express) {
     const role = req.tenantRole;
 
     if (role !== "owner" && role !== "admin") {
-      return res.status(403).json({ error: "Otillräcklig behörighet" });
+      throw new ForbiddenError("Otillräcklig behörighet");
     }
 
     const logs = await db.select().from(featureAuditLog)

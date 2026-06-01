@@ -91,7 +91,7 @@ app.post("/api/fortnox/exports/:id/process", asyncHandler(async (req, res) => {
     if (result.success) {
       res.json({ success: true, invoiceNumber: result.invoiceNumber });
     } else {
-      res.status(400).json({ success: false, error: result.error });
+      throw new ValidationError(result.error ?? "Export misslyckades", { success: false });
     }
 }));
 

@@ -6,7 +6,7 @@
 //                 POST /api/clusters/:id/apply-dynamic-rules
 import type { Express } from "express";
 import { asyncHandler } from "../asyncHandler";
-import { NotFoundError, ValidationError } from "../errors";
+import { NotFoundError, ValidationError, ConflictError } from "../errors";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { storage } from "../storage";
 import { verifyTenantOwnership, formatZodError } from "./helpers";
@@ -94,7 +94,7 @@ export function registerObjectLifecycleRoutes(app: Express): void {
       force: parsed.data.force,
     });
     if (!result.ok) {
-      return res.status(409).json({ error: "archive_blocked", preflight: result.preflight });
+      throw new ConflictError("archive_blocked", { preflight: result.preflight });
     }
     res.json({ ok: true, preflight: result.preflight });
   }));

@@ -7,7 +7,7 @@ import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback, requirePlanner } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
-import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
+import { AppError, NotFoundError, ValidationError, ConflictError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { type ServiceObject, type WorkOrderLine } from "@shared/schema";
 import { getISOWeek } from "./helpers";
@@ -1014,7 +1014,7 @@ app.post("/api/ai/auto-schedule", requirePlanner, asyncHandler(async (req, res) 
 
     const lockAcquired = await acquireSchedulingLock(tenantId);
     if (!lockAcquired) {
-      return res.status(409).json({ error: "Auto-scheduling pågår redan", message: "En annan auto-scheduling-körning pågår för er organisation. Vänta tills den är klar." });
+      throw new ConflictError("Auto-scheduling pågår redan", { message: "En annan auto-scheduling-körning pågår för er organisation. Vänta tills den är klar." });
     }
 
     try {
@@ -1156,11 +1156,7 @@ app.post("/api/ai/optimize-vrp", requirePlanner, asyncHandler(async (req, res) =
     const teamVehicles = buildTeamVehicles(teams, teamMembersAll, resources);
     const teamMemberMap = buildTeamMemberMap(teams, teamMembersAll);
     if (teamVehicles.length === 0) {
-      res.status(400).json({
-        success: false,
-        error: "Inga aktiva team med medlemmar hittades. Skapa ett team med minst en medlem för att kunna köra ruttoptimering.",
-      });
-      return;
+      throw new ValidationError("Inga aktiva team med medlemmar hittades. Skapa ett team med minst en medlem för att kunna köra ruttoptimering.", { success: false });
     }
     
     let filteredOrders = workOrders;
@@ -1223,8 +1219,7 @@ app.get("/api/ai/optimization-job/:jobId", asyncHandler(async (req, res) => {
 
     const job = await getOptimizationJob(jobId, tenantId);
     if (!job) {
-      res.status(404).json({ error: "Optimeringsjobb hittades inte" });
-      return;
+      throw new AppError("Optimeringsjobb hittades inte", 404, { code: "ERR_NOT_FOUND" });
     }
 
     res.json({
@@ -1655,7 +1650,7 @@ app.post("/api/ai/planner-chat/execute", requirePlanner, asyncHandler(async (req
     const { action, params, workOrderIds, toResourceId, toDate } = req.body;
     
     if (!action || typeof action !== "string") {
-      return res.status(400).json({ success: false, message: "Åtgärd krävs" });
+      throw new ValidationError("Åtgärd krävs", { success: false });
     }
     
     const tenantId = getTenantIdWithFallback(req);
@@ -1666,10 +1661,7 @@ app.post("/api/ai/planner-chat/execute", requirePlanner, asyncHandler(async (req
       const tenantOrderIds = new Set(tenantOrders.map(o => o.id));
       const invalidIds = workOrderIds.filter((id: string) => !tenantOrderIds.has(id));
       if (invalidIds.length > 0) {
-        return res.status(403).json({ 
-          success: false, 
-          message: `Åtkomst nekad för ordrar: ${invalidIds.slice(0, 3).join(", ")}` 
-        });
+        throw new ForbiddenError(`Åtkomst nekad för ordrar: ${invalidIds.slice(0, 3).join(", ")}`, { success: false });
       }
     }
     
@@ -1709,7 +1701,7 @@ app.post("/api/ai/planner-chat/execute", requirePlanner, asyncHandler(async (req
       });
     }
     
-    res.status(400).json({ success: false, message: "Ogiltig åtgärd eller saknade parametrar." });
+    throw new ValidationError("Ogiltig åtgärd eller saknade parametrar.", { success: false });
 }));
 
 // AI Setup Time Insights
@@ -2876,7 +2868,7 @@ app.delete("/api/import/clear/:type", asyncHandler(async (req, res) => {
       }
       res.json({ deleted: workOrders.length });
     } else {
-      res.status(400).json({ error: "Okänd typ" });
+      throw new ValidationError("Okänd typ");
     }
 }));
 

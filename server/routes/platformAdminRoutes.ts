@@ -5,6 +5,7 @@ import { storage } from "../storage";
 import { db } from "../db";
 import { auditLogs, userTenantRoles, tenants, users } from "@shared/schema";
 import { requirePlatformOwner } from "../platform-owner-middleware";
+import { AppError, ValidationError, ConflictError } from "../errors";
 
 /**
  * Redaktera PII för audit-loggar: lagrar SHA-256-prefix + längd så att
@@ -211,7 +212,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
       const user = await storage.getUser(targetId);
       if (!user) {
         await logPlatformAccess(req, "platform.user.read.notfound", targetId, { status: 404 });
-        return res.status(404).json({ error: "Användaren hittades inte." });
+        throw new AppError("Användaren hittades inte.", 404, { code: "ERR_NOT_FOUND" });
       }
       const memberships = await db
         .select({
@@ -264,12 +265,12 @@ export function registerPlatformAdminRoutes(app: Express): void {
       const actorId = req.platformOwnerUserId!;
       if (targetId === actorId) {
         await logPlatformAccess(req, "platform.user.anonymize.rejected", targetId, { status: 400, reason: "self" });
-        return res.status(400).json({ error: "Du kan inte anonymisera dig själv." });
+        throw new ValidationError("Du kan inte anonymisera dig själv.");
       }
       const existing = await storage.getUser(targetId);
       if (!existing) {
         await logPlatformAccess(req, "platform.user.anonymize.notfound", targetId, { status: 404 });
-        return res.status(404).json({ error: "Användaren hittades inte." });
+        throw new AppError("Användaren hittades inte.", 404, { code: "ERR_NOT_FOUND" });
       }
 
       const force = req.body?.force === true;
@@ -287,8 +288,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
           blockingTenants: result.blocking,
           force: false,
         });
-        return res.status(409).json({
-          error: "Sista aktiva owner",
+        throw new ConflictError("Sista aktiva owner", {
           message: `Användaren är enda aktiva owner i ${result.blocking.length} organisation(er): ${result.blocking.join(", ")}. Skicka { "force": true } för att gå vidare.`,
           blockingTenants: result.blocking,
         });
@@ -324,19 +324,18 @@ export function registerPlatformAdminRoutes(app: Express): void {
       const actorId = req.platformOwnerUserId!;
       if (targetId === actorId) {
         await logPlatformAccess(req, "platform.user.delete.rejected", targetId, { status: 400, reason: "self" });
-        return res.status(400).json({ error: "Du kan inte radera ditt eget konto." });
+        throw new ValidationError("Du kan inte radera ditt eget konto.");
       }
       if (req.body?.confirm !== "RADERA") {
         await logPlatformAccess(req, "platform.user.delete.rejected", targetId, { status: 400, reason: "missing_confirm" });
-        return res.status(400).json({
-          error: "Bekräftelse saknas",
+        throw new ValidationError("Bekräftelse saknas", {
           message: 'Skicka { "confirm": "RADERA" } i body för att bekräfta hård radering.',
         });
       }
       const existing = await storage.getUser(targetId);
       if (!existing) {
         await logPlatformAccess(req, "platform.user.delete.notfound", targetId, { status: 404 });
-        return res.status(404).json({ error: "Användaren hittades inte." });
+        throw new AppError("Användaren hittades inte.", 404, { code: "ERR_NOT_FOUND" });
       }
 
       const force = req.body?.force === true;
@@ -379,8 +378,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
           blockingTenants: result.blocking,
           force: false,
         });
-        return res.status(409).json({
-          error: "Sista aktiva owner",
+        throw new ConflictError("Sista aktiva owner", {
           message: `Användaren är enda aktiva owner i ${result.blocking.length} organisation(er): ${result.blocking.join(", ")}. Skicka { "force": true } tillsammans med confirm för att gå vidare.`,
           blockingTenants: result.blocking,
         });
@@ -404,7 +402,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
       const user = await storage.getUser(targetId);
       if (!user) {
         await logPlatformAccess(req, "platform.user.history.notfound", targetId, { status: 404 });
-        return res.status(404).json({ error: "Användaren hittades inte." });
+        throw new AppError("Användaren hittades inte.", 404, { code: "ERR_NOT_FOUND" });
       }
 
       const parsedLimit = Number.parseInt((req.query.limit as string) || "100", 10);
@@ -506,7 +504,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
       const targetId = req.params.id;
       const format = ((req.query.format as string) || "json").toLowerCase();
       if (format !== "csv" && format !== "json") {
-        return res.status(400).json({ error: "format måste vara 'csv' eller 'json'" });
+        throw new ValidationError("format måste vara 'csv' eller 'json'");
       }
       const user = await storage.getUser(targetId);
       if (!user) {
@@ -514,7 +512,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
           status: 404,
           format,
         });
-        return res.status(404).json({ error: "Användaren hittades inte." });
+        throw new AppError("Användaren hittades inte.", 404, { code: "ERR_NOT_FOUND" });
       }
 
       // Hämta medlemskap (komplett, inkl. inaktiva).

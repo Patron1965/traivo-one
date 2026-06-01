@@ -17,7 +17,7 @@ import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type 
 import { handleWorkOrderStatusChange } from "../ai-communication";
 import { notificationService } from "../notifications";
 import { asyncHandler } from "../asyncHandler";
-import { NotFoundError, ValidationError, ConflictError, ForbiddenError } from "../errors";
+import { AppError, NotFoundError, ValidationError, ConflictError, ForbiddenError } from "../errors";
 
 /** Räknar ut outsidePreferredWindow-flaggan + priority utifrån objektets/kundens
  * effektiva leveranspreferens och plannedWindowStart/End. */
@@ -1761,7 +1761,7 @@ app.post("/api/work-orders/:id/freeze", requireAdmin, asyncHandler(async (req, r
     const result = await storage.freezeWorkOrder(req.params.id, tenantId, { force });
     res.json(result);
   } catch (err: any) {
-    res.status(404).json({ error: err.message || "Kunde inte frysa arbetsordern" });
+    throw new AppError(err.message || "Kunde inte frysa arbetsordern", 404, { code: "ERR_NOT_FOUND" });
   }
 }));
 
@@ -1773,7 +1773,7 @@ app.post("/api/work-orders/:id/recalculate", requireAdmin, asyncHandler(async (r
     const result = await storage.recalculateWorkOrder(req.params.id, tenantId, userId, reason);
     res.json(result);
   } catch (err: any) {
-    res.status(400).json({ error: err.message || "Kunde inte rakna om" });
+    throw new ValidationError(err.message || "Kunde inte rakna om");
   }
 }));
 

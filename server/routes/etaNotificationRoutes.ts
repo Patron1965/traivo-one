@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { getTenantIdWithFallback, requireAdmin, requirePlanner } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { isAuthenticated } from "../replit_integrations/auth";
+import { AppError, ValidationError, UnauthorizedError, ForbiddenError } from "../errors";
 import { storage } from "../storage";
 import { db } from "../db";
 import { eq, and, sql } from "drizzle-orm";
@@ -76,16 +77,16 @@ export async function registerETANotificationRoutes(app: Express) {
 
     const order = await storage.getWorkOrder(workOrderId);
     if (!order) {
-      return res.status(404).json({ success: false, message: "Order hittades inte" });
+      throw new AppError("Order hittades inte", 404, { code: "ERR_NOT_FOUND", details: { success: false } });
     }
 
     if (order.tenantId && order.tenantId !== tenantId) {
-      return res.status(403).json({ success: false, message: "Ej behörig" });
+      throw new ForbiddenError("Ej behörig", { success: false });
     }
 
     const resourceId = order.resourceId;
     if (!resourceId) {
-      return res.status(400).json({ success: false, message: "Ingen resurs tilldelad ordern" });
+      throw new ValidationError("Ingen resurs tilldelad ordern", { success: false });
     }
 
     const result = await triggerETANotification(workOrderId, resourceId, tenantId);
@@ -100,7 +101,7 @@ export async function registerETANotificationRoutes(app: Express) {
 
     const token = req.headers["x-portal-token"] as string;
     if (!token) {
-      return res.status(401).json({ error: "Ej autentiserad" });
+      throw new UnauthorizedError("Ej autentiserad");
     }
 
     let session: any;
@@ -110,25 +111,25 @@ export async function registerETANotificationRoutes(app: Express) {
       );
       session = sessions.rows?.[0];
     } catch {
-      return res.status(401).json({ error: "Ogiltig session" });
+      throw new UnauthorizedError("Ogiltig session");
     }
 
     if (!session) {
-      return res.status(401).json({ error: "Session utgången" });
+      throw new UnauthorizedError("Session utgången");
     }
 
     const order = await storage.getWorkOrder(workOrderId);
     if (!order || (order.tenantId && order.tenantId !== session.tenant_id)) {
-      return res.status(404).json({ error: "Order hittades inte" });
+      throw new AppError("Order hittades inte", 404, { code: "ERR_NOT_FOUND" });
     }
 
     if (session.customer_id && order.customerId && order.customerId !== session.customer_id) {
-      return res.status(403).json({ error: "Ej behörig" });
+      throw new ForbiddenError("Ej behörig");
     }
 
     const eta = await getETAForPortal(workOrderId, session.tenant_id);
     if (!eta) {
-      return res.status(404).json({ error: "ETA ej tillgänglig" });
+      throw new AppError("ETA ej tillgänglig", 404, { code: "ERR_NOT_FOUND" });
     }
 
     res.json(eta);
