@@ -39,7 +39,7 @@ app.get("/api/kpis/daily", asyncHandler(async (req, res) => {
           const resources = await storage.getResources(tenantId);
 
           // Tenant-default planning parameter (customerId=null, objectId=null) —
-          // ger dagsmål/stopp-per-timme för break-even-beräkning i Enhetsansvarig.
+          // ger dagsmål/stopp-per-timme för break-even-beräkning i Produktionsledare.
           const allParams = await storage.getPlanningParameters(tenantId);
           const tenantParam = allParams.find(p => !p.customerId && !p.objectId) ?? null;
           const tenantDefaults = tenantParam ? {

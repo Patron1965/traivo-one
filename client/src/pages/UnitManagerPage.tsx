@@ -394,7 +394,7 @@ export default function UnitManagerPage() {
       <div className="container mx-auto py-10">
         <Card>
           <CardHeader>
-            <CardTitle>Enhetsansvarig-vy</CardTitle>
+            <CardTitle>Produktionsledare-vy</CardTitle>
             <CardDescription>
               Den här vyn är begränsad till roller med planeringsansvar
               (ägare, admin, planerare).
@@ -411,7 +411,7 @@ export default function UnitManagerPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Gauge className="h-6 w-6 text-primary" />
-            Enhetsansvarig
+            Produktionsledare
           </h1>
           <p className="text-sm text-muted-foreground">
             Dagsproduktion, break-even och avvikelser på ett ställe —{" "}
