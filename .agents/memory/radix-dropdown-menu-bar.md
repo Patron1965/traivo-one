@@ -11,3 +11,8 @@ När flera Radix `DropdownMenu`-komponenter ligger som syskon i en menyrad (TopN
 - I menyrader / toolbars där flera `DropdownMenu` är syskon: sätt `modal={false}` på alla.
 - Påverkar inte enskilda fristående dropdowns (kontextmenyer, row-actions) — där är default OK.
 - Gäller även Radix `Dialog`, `Popover`, `Sheet` när de förekommer parvis bredvid varandra som triggers.
+
+## Tom dropdown ≠ modal-problemet
+Samma symptom (AI-menyn "verkar tom" / kräver extra klick) kan ha en HELT ANNAN orsak: en navgrupp vars rollkontroll (`canAccessMenu`) släpper igenom gruppen men vars alla menyposter filtreras bort av modul-gating (`isNavItemEnabled`) eller `adminOnly`/`platformOwnerOnly`. Då renderas trigger-knappen ändå men dropdownen öppnar en tom ruta.
+
+**Regel:** Rendera ALDRIG en navgrupp/dropdown vars filtrerade `items`-lista är tom. Kombinera alltid rollkontroll med `items.length > 0`. MobileNav och AppSidebar gjorde redan detta; TopNav saknade guarden tills detta upptäcktes. När du felsöker "tom meny" — kontrollera FÖRST om `modal={false}` redan finns; gör den det är orsaken sannolikt tom item-lista, inte overlay-problemet.
