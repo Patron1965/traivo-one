@@ -4,4 +4,4 @@
 - [Radix DropdownMenu i menyrad](radix-dropdown-menu-bar.md) — syskon-dropdowns kräver `modal={false}`, annars sväljs första klicket på nästa trigger och menyn verkar tom.
 - [Multi-tenant UPDATE predicates](multi-tenant-update-predicates.md) — alla UPDATE/DELETE/COUNT måste ha `tenant_id` i WHERE även när pre-check redan validerat — defense-in-depth.
 - [Metadata-definitioner livscykel](metadata-definitions-lifecycle.md) — `metadata_definitions` är "kontoplan": aldrig hard-delete; DELETE kräver `?confirmUsage=N` exakt; strukturella PATCH-fält låses när usage>0.
-- [AppError throw-migration](apperror-migration.md) — 404 använd AppError-bas (ej NotFoundError) för meddelande-bevarande; throw i try vars catch svarar sväljs → flytta ut; middleware/plain-async-routes ej asyncHandler-wrappade kan ej throwa.
+- [AppError throw-migration](apperror-migration.md) — async middleware/plain-routes: använd `next(err)` ej throw; zod-guards → throw ZodError; 404 via AppError-bas (ej NotFoundError) för meddelande-bevarande.

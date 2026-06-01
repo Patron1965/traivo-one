@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 import { z } from "zod";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { storage } from "../storage";
-import { NotFoundError } from "../errors";
+import { NotFoundError, UnauthorizedError } from "../errors";
 import type { Resource, Team, Customer, ServiceObject } from "@shared/schema";
 
 declare global {
@@ -173,14 +173,14 @@ export function validateMobileToken(token: string): { resourceId: string; tenant
 export function isMobileAuthenticated(req: ExpressRequest, res: ExpressResponse, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return next(new UnauthorizedError('Unauthorized'));
   }
   
   const token = authHeader.substring(7);
   const result = validateMobileToken(token);
   
   if (!result) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+    return next(new UnauthorizedError('Invalid or expired token'));
   }
   
   req.mobileResourceId = result.resourceId;

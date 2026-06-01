@@ -858,12 +858,12 @@ const requireSystemAdmin = async (req: Request, res: Response, next: NextFunctio
   const sessionUserId = (req.session as Record<string, string>)?.userId;
   const userId = replitUser?.claims?.sub || sessionUserId;
   if (!userId) {
-    return res.status(401).json({ error: "Ej autentiserad" });
+    return next(new UnauthorizedError("Ej autentiserad"));
   }
   try {
     const dbUser = await storage.getUser(userId);
     if (!dbUser || dbUser.role !== "admin") {
-      return res.status(403).json({ error: "Ej behörig", message: "Systemadministratörsbehörighet krävs." });
+      return next(new ForbiddenError("Systemadministratörsbehörighet krävs."));
     }
     const { users } = await import("@shared/schema");
     const isGlobalAdmin = await db.select({ id: users.id })
@@ -871,7 +871,7 @@ const requireSystemAdmin = async (req: Request, res: Response, next: NextFunctio
       .where(and(eq(users.id, userId), eq(users.role, "admin")))
       .limit(1);
     if (isGlobalAdmin.length === 0) {
-      return res.status(403).json({ error: "Ej behörig", message: "Systemadministratörsbehörighet krävs." });
+      return next(new ForbiddenError("Systemadministratörsbehörighet krävs."));
     }
     req.userId = userId;
     return next();
@@ -1570,12 +1570,12 @@ const requireAdminAuth = async (req: any, res: any, next: any) => {
   const sessionUserId = (req.session as any)?.userId;
   const userId = replitUser?.claims?.sub || sessionUserId;
   if (!userId) {
-    return res.status(401).json({ error: "Ej autentiserad", message: "Du måste logga in för att komma åt denna resurs." });
+    return next(new UnauthorizedError("Du måste logga in för att komma åt denna resurs."));
   }
   try {
     const dbUser = await storage.getUser(userId);
     if (!dbUser) {
-      return res.status(401).json({ error: "Ej autentiserad", message: "Användaren hittades inte." });
+      return next(new UnauthorizedError("Användaren hittades inte."));
     }
     req.userId = userId;
     if (!req.tenantId) {
@@ -1585,11 +1585,11 @@ const requireAdminAuth = async (req: any, res: any, next: any) => {
       }
     }
     if (!req.tenantId) {
-      return res.status(403).json({ error: "Ej behörig", message: "Ingen tenant-tillhörighet hittades." });
+      return next(new ForbiddenError("Ingen tenant-tillhörighet hittades."));
     }
     const tenantRole = await storage.getUserTenantRole(userId, req.tenantId);
     if (!tenantRole || (tenantRole.role !== "admin" && tenantRole.role !== "owner")) {
-      return res.status(403).json({ error: "Ej behörig", message: "Administratörsrättigheter inom organisationen krävs." });
+      return next(new ForbiddenError("Administratörsrättigheter inom organisationen krävs."));
     }
     return next();
   } catch {

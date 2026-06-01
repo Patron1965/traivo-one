@@ -649,20 +649,20 @@ function isAllowedTileOrigin(req: import("express").Request): boolean {
   return false;
 }
 
-app.get("/api/system/map-tiles/:z/:x/:y", mapTileLimiter, async (req, res) => {
+app.get("/api/system/map-tiles/:z/:x/:y", mapTileLimiter, async (req, res, next) => {
   if (!isAllowedTileOrigin(req)) {
-    return res.status(403).json({ error: "Tile-proxyn serverar bara våra egna domäner" });
+    return next(new ForbiddenError("Tile-proxyn serverar bara våra egna domäner"));
   }
   trackTileVolumeAndMaybeAlert();
   const z = Number.parseInt(req.params.z, 10);
   const x = Number.parseInt(req.params.x, 10);
   const y = Number.parseInt(req.params.y, 10);
   if (!Number.isFinite(z) || !Number.isFinite(x) || !Number.isFinite(y)) {
-    return res.status(400).json({ error: "Ogiltiga tile-koordinater" });
+    return next(new ValidationError("Ogiltiga tile-koordinater"));
   }
   // Begränsa zoom-spannet (Google stödjer 0–22).
   if (z < 0 || z > 22 || x < 0 || y < 0) {
-    return res.status(400).json({ error: "Tile-koordinater utanför intervall" });
+    return next(new ValidationError("Tile-koordinater utanför intervall"));
   }
 
   const { getActiveTileSession, buildGoogleTileUrl, isGoogleTileSessionAvailable } =

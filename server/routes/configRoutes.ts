@@ -1485,7 +1485,7 @@ app.patch("/api/teams/:id", asyncHandler(async (req, res) => {
     const updateSchema = insertTeamSchema.partial().omit({ tenantId: true });
     const parseResult = updateSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: parseResult.error.errors });
+      throw parseResult.error;
     }
     const team = await storage.updateTeam(req.params.id, parseResult.data);
     if (!team) throw new NotFoundError("Team hittades inte");
@@ -1603,7 +1603,7 @@ app.patch("/api/planning-parameters/:id", asyncHandler(async (req, res) => {
     const updateSchema = insertPlanningParameterSchema.partial().omit({ tenantId: true });
     const parseResult = updateSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: parseResult.error.errors });
+      throw parseResult.error;
     }
     const param = await storage.updatePlanningParameter(req.params.id, parseResult.data);
     if (!param) throw new NotFoundError("Planeringsparameter hittades inte");

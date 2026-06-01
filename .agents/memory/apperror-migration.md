@@ -15,8 +15,16 @@ Routes are wrapped in `asyncHandler` (`server/asyncHandler.ts` does `.catch(next
 A `throw` placed inside a `try {}` body whose own `catch` converts errors into an HTTP response (e.g. `res.status(500).json(...)`) is swallowed by the local catch and the status becomes whatever the catch returns — NOT the 4xx you intended. Throwing from inside a `catch` block (or with no enclosing try) propagates fine.
 **How to apply:** before converting, check the enclosing try/catch. If the catch responds, move the throw outside the try (capture the value in the try, throw after). This bit `requirePortalAuth` (portal-disabled 403 was turning into 500).
 
-## Leave-alone cases (legitimate, not deficiencies)
-- Plain Express middleware / auth gates NOT wrapped by asyncHandler (e.g. `requireSystemAdmin`, `requireAdminAuth`, `isMobileAuthenticated`): async throws aren't caught by Express 4 → they must respond directly with `res.status`.
-- Sentinel-returning helpers that `res.status(...)` then `return null` where callers check `if (!x) return` (only convert if you also fix the contract).
-- Zod validation responses (`formatZodError(...)` and raw `{ error: parseResult.error.errors }`): a separate, uniform concern — migrate them all together to `throw parsed.error` (ZodError branch handles formatting) or leave them all; don't half-convert.
-- Plain `router.post(..., async ...)` route handlers not wrapped in asyncHandler need wrapping first before throws are safe.
+## Async middleware & non-asyncHandler routes: use next(err), NOT throw
+Express 4 does not catch a `throw` from an async middleware/handler, so converting those via `throw` silently 500s. The fix is `return next(new XxxError(msg))`: it forwards to the global errorHandler and works for plain Express middleware (`requireSystemAdmin`, `requireAdminAuth`, `isMobileAuthenticated`) AND plain `app.get/router.post(..., async (req,res) => ...)` handlers — just add a `next` param (`noUnusedParameters` is off so an unused one is fine).
+**Why:** it standardizes these surfaces to typed AppError without wrapping every handler in asyncHandler.
+**Key trick:** `next(err)` does NOT throw, so a `return next(new XxxError())` placed inside a `try {}` whose `catch` responds with `res.status(500)` is NOT swallowed by that catch — safe to drop in-place.
+
+## Zod validation responses → throw the ZodError
+`{ error: parseResult.error.errors }` and `formatZodError(parsed.error)` guards in asyncHandler routes: `throw parseResult.error` / `throw parsed.error` (errorHandler's ZodError branch formats them). Migrate all uniformly; don't half-convert.
+
+## Sentinel helpers
+Helpers that `res.status(...)` then `return null` (callers do `if(!x) return`): if called inside an asyncHandler route, convert to `throw new XxxError(...)`; the caller's null-check becomes harmless dead code.
+
+## Genuinely leave alone
+Structured domain payloads with NO `error`/`message` envelope key (e.g. `{ ok:false, report/errors/preview }` validation reports — importWizard, objektmallImport): the frontend reads those fields, so converting to AppError breaks the contract. The "no ad-hoc 4xx {error/message}" criterion does not apply to them.

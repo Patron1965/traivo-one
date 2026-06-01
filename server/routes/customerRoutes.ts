@@ -942,7 +942,7 @@ app.post("/api/customers/:id/invoice-recipients", requireAdmin, asyncHandler(asy
     tenantId,
     customerId: req.params.id,
   });
-  if (!parsed.success) return res.status(400).json({ error: formatZodError(parsed.error) });
+  if (!parsed.success) throw parsed.error;
   if (!INVOICE_RECIPIENT_LEVELS.includes(parsed.data.level as InvoiceRecipientLevel)) {
     throw new ValidationError(`Ogiltig nivå (måste vara en av ${INVOICE_RECIPIENT_LEVELS.join(", ")})`);
   }
@@ -955,7 +955,7 @@ app.patch("/api/customers/:id/invoice-recipients/:recipientId", requireAdmin, as
   const existing = await storage.getInvoiceRecipient(tenantId, req.params.recipientId);
   if (!existing || existing.customerId !== req.params.id) throw new NotFoundError("Fakturamottagare");
   const parsed = invoiceRecipientPatchSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: formatZodError(parsed.error) });
+  if (!parsed.success) throw parsed.error;
   if (parsed.data.level && !INVOICE_RECIPIENT_LEVELS.includes(parsed.data.level as InvoiceRecipientLevel)) {
     throw new ValidationError(`Ogiltig nivå`);
   }

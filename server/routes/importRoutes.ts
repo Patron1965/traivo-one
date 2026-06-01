@@ -583,7 +583,7 @@ app.patch("/api/tenant", asyncHandler(async (req, res) => {
     });
     const parseResult = tenantUpdateSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: parseResult.error.errors });
+      throw parseResult.error;
     }
     const tenant = await storage.updateTenant(tenantId, parseResult.data);
     if (!tenant) {
@@ -607,7 +607,7 @@ app.patch("/api/tenant/settings", asyncHandler(async (req, res) => {
     const settingsSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(z.string())]));
     const parseResult = settingsSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: parseResult.error.errors });
+      throw parseResult.error;
     }
     const tenant = await storage.updateTenantSettings(tenantId, parseResult.data);
     if (!tenant) {

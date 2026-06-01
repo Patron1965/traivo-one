@@ -10,6 +10,7 @@ import { invitations, type InsertInvitation } from "@shared/schema";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { requireTenant, requireAdmin } from "../tenant-middleware";
 import { issueMagicLink } from "../replit_integrations/auth/magicLinkAuth";
+import { AppError, ValidationError, ConflictError } from "../errors";
 
 // Owner-rollen får inte mintras via admin-inbjudningsflödet — owner ska
 // tilldelas explicit av en befintlig owner (eller via tenant-bootstrap).
@@ -38,7 +39,7 @@ export function registerInvitationsRoutes(app: Express): void {
     isAuthenticated,
     requireTenant,
     requireAdmin,
-    async (req: any, res) => {
+    async (req: any, res, next) => {
       try {
         const tenantId = req.tenantId as string;
         const rows = await db
@@ -60,13 +61,10 @@ export function registerInvitationsRoutes(app: Express): void {
     isAuthenticated,
     requireTenant,
     requireAdmin,
-    async (req: any, res) => {
+    async (req: any, res, next) => {
       const parsed = createInvitationSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({
-          message: "Ogiltig indata",
-          errors: parsed.error.flatten(),
-        });
+        return next(new ValidationError("Ogiltig indata", parsed.error.flatten()));
       }
       const tenantId = req.tenantId as string;
       const invitedBy = req.user?.claims?.sub ?? null;
@@ -99,9 +97,7 @@ export function registerInvitationsRoutes(app: Express): void {
             .where(eq(invitations.id, existing.id))
             .returning();
         } else if (existing && existing.status === "used") {
-          return res.status(409).json({
-            message: "Användaren har redan accepterat en tidigare inbjudan",
-          });
+          return next(new ConflictError("Användaren har redan accepterat en tidigare inbjudan"));
         } else {
           const insertData: InsertInvitation = {
             email,
@@ -143,7 +139,7 @@ export function registerInvitationsRoutes(app: Express): void {
     isAuthenticated,
     requireTenant,
     requireAdmin,
-    async (req: any, res) => {
+    async (req: any, res, next) => {
       const tenantId = req.tenantId as string;
       const invitationId = req.params.id;
 
@@ -155,10 +151,10 @@ export function registerInvitationsRoutes(app: Express): void {
           .limit(1);
 
         if (!invite) {
-          return res.status(404).json({ message: "Inbjudan hittades inte" });
+          return next(new AppError("Inbjudan hittades inte", 404, { code: "ERR_NOT_FOUND" }));
         }
         if (invite.status === "used") {
-          return res.status(409).json({ message: "Inbjudan är redan accepterad" });
+          return next(new ConflictError("Inbjudan är redan accepterad"));
         }
 
         // Förläng expiry vid resend så länken kan användas.
@@ -195,7 +191,7 @@ export function registerInvitationsRoutes(app: Express): void {
     isAuthenticated,
     requireTenant,
     requireAdmin,
-    async (req: any, res) => {
+    async (req: any, res, next) => {
       const tenantId = req.tenantId as string;
       const invitationId = req.params.id;
 
@@ -207,10 +203,10 @@ export function registerInvitationsRoutes(app: Express): void {
           .limit(1);
 
         if (!invite) {
-          return res.status(404).json({ message: "Inbjudan hittades inte" });
+          return next(new AppError("Inbjudan hittades inte", 404, { code: "ERR_NOT_FOUND" }));
         }
         if (invite.status === "used") {
-          return res.status(409).json({ message: "Inbjudan är redan accepterad — kan inte återkallas" });
+          return next(new ConflictError("Inbjudan är redan accepterad — kan inte återkallas"));
         }
 
         await db

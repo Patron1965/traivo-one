@@ -7,7 +7,7 @@ import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback, requirePlanner } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
-import { AppError, NotFoundError, ValidationError, ConflictError, ForbiddenError } from "../errors";
+import { AppError, NotFoundError, ValidationError, ConflictError, ForbiddenError, UnauthorizedError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { type ServiceObject, type WorkOrderLine } from "@shared/schema";
 import { getISOWeek } from "./helpers";
@@ -1518,16 +1518,16 @@ const requireSystemAdmin = async (req: any, res: any, next: any) => {
   const sessionUserId = (req.session as any)?.userId;
   const userId = replitUser?.claims?.sub || sessionUserId;
   if (!userId) {
-    return res.status(401).json({ error: "Ej autentiserad" });
+    return next(new UnauthorizedError("Ej autentiserad"));
   }
   try {
     const dbUser = await storage.getUser(userId);
     if (!dbUser) {
-      return res.status(401).json({ error: "Ej autentiserad" });
+      return next(new UnauthorizedError("Ej autentiserad"));
     }
     const role = dbUser.role || "user";
     if (role !== "admin" && role !== "owner") {
-      return res.status(403).json({ error: "Ej behörig", message: "Systemadministratörsrättigheter krävs." });
+      return next(new ForbiddenError("Systemadministratörsrättigheter krävs."));
     }
     return next();
   } catch {

@@ -1,8 +1,9 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import { db } from "../db";
 import { invitations } from "@shared/schema";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { UnauthorizedError } from "../errors";
 
 // Resend levererar webhook-events via Svix. Signaturen verifieras enligt
 // https://docs.svix.com/receiving/verifying-payloads/how-manual:
@@ -79,11 +80,11 @@ const EVENT_STATUS_MAP: Record<string, string> = {
 };
 
 export function registerResendWebhookRoutes(app: Express): void {
-  app.post("/api/webhooks/resend", async (req: Request, res: Response) => {
+  app.post("/api/webhooks/resend", async (req: Request, res: Response, next: NextFunction) => {
     const verification = verifySignature(req);
     if (!verification.ok) {
       console.warn("[resend-webhook] Avvisad:", verification.reason);
-      return res.status(401).json({ error: verification.reason });
+      return next(new UnauthorizedError(verification.reason));
     }
 
     const payload = req.body as { type?: string; data?: { email_id?: string; id?: string; to?: string[]; bounce?: { message?: string } } };

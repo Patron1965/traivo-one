@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
@@ -6,7 +6,7 @@ import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
-import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
+import { NotFoundError, ValidationError, ForbiddenError, UnauthorizedError } from "../errors";
 import crypto from "crypto";
 import { insertIotDeviceSchema, insertIotApiKeySchema, iotApiKeys } from "@shared/schema";
 
@@ -22,24 +22,21 @@ const SIGNAL_TYPE_TO_ORDER_DESCRIPTION: Record<string, string> = {
   fire: "Brandvarning från sensor",
 };
 
-async function authenticateIotApiKey(req: ExpressRequest, res: ExpressResponse): Promise<{ tenantId: string } | null> {
+async function authenticateIotApiKey(req: Request): Promise<{ tenantId: string }> {
   const authHeader = req.headers["x-api-key"] as string | undefined;
   if (!authHeader) {
-    res.status(401).json({ error: "API-nyckel saknas. Skicka header X-Api-Key." });
-    return null;
+    throw new UnauthorizedError("API-nyckel saknas. Skicka header X-Api-Key.");
   }
   const keyRecord = await storage.getIotApiKeyByKey(authHeader);
   if (!keyRecord) {
-    res.status(401).json({ error: "Ogiltig API-nyckel." });
-    return null;
+    throw new UnauthorizedError("Ogiltig API-nyckel.");
   }
   await db.update(iotApiKeys).set({ lastUsedAt: new Date() }).where(eq(iotApiKeys.id, keyRecord.id));
   return { tenantId: keyRecord.tenantId };
 }
 
 app.post("/api/iot/signals", asyncHandler(async (req, res) => {
-    const auth = await authenticateIotApiKey(req, res);
-    if (!auth) return;
+    const auth = await authenticateIotApiKey(req);
 
     const VALID_SIGNAL_TYPES = ["full", "damaged", "low_battery", "overflow", "tilt", "fire", "heartbeat", "temperature", "weight", "gps"] as const;
     const schema = z.object({
