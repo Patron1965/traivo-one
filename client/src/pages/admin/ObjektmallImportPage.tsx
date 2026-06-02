@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { OBJEKTMALL_SHEETS, OBJEKTMALL_FILENAME } from "@shared/objektmall-template";
+import { OBJEKTMALL_FILENAME, OBJEKTMALL_FIXED_COLUMNS } from "@shared/objektmall-template";
 
 type RowAction = "create" | "update" | "repoint";
 interface ChangedField {
@@ -33,7 +33,18 @@ interface ChangedField {
   from: string;
   to: string;
 }
-interface SheetReport {
+interface ActionRow {
+  row: number;
+  action: RowAction;
+  name: string;
+  level: string;
+  levelLabel: string;
+  detail: string;
+  changed: boolean;
+  changedFields: ChangedField[];
+  metadata: Record<string, string>;
+}
+interface ImportSheetReport {
   name: string;
   totalRows: number;
   toCreate: number;
@@ -41,7 +52,14 @@ interface SheetReport {
   toRepoint: number;
   errorRows: number;
   errors: Array<{ row: number; messages: string[] }>;
-  actions: Array<{ row: number; action: RowAction; name: string; detail: string; changed: boolean; changedFields: ChangedField[] }>;
+  actions: ActionRow[];
+}
+interface ImportReport {
+  import: ImportSheetReport;
+  metadataColumns: string[];
+  warnings: string[];
+  hasBlockingErrors: boolean;
+  interimListFlag: boolean;
 }
 interface PreviewResponse {
   ok: boolean;
@@ -49,13 +67,7 @@ interface PreviewResponse {
   fileName: string;
   templateVersion: string;
   interimListFlag: boolean;
-  report: {
-    sheets: Record<string, SheetReport>;
-    warnings: string[];
-    hasBlockingErrors: boolean;
-    interimListFlag: boolean;
-    metadata: Array<{ fieldKey: string; action: string; reason?: string; changedFields?: ChangedField[] }>;
-  };
+  report: ImportReport;
 }
 interface CommitResponse {
   ok: boolean;
@@ -64,7 +76,7 @@ interface CommitResponse {
   created: Record<string, number>;
   updated: Record<string, number>;
   repointed: Record<string, number>;
-  report: PreviewResponse["report"];
+  report: ImportReport;
   message?: string;
 }
 interface HistoryItem {
@@ -80,7 +92,11 @@ interface HistoryItem {
   perLevel: { created: Record<string, number>; updated: Record<string, number>; repointed?: Record<string, number> } | null;
 }
 
-const SHEET_ORDER = ["organisation", "stores", "containers", "metadata"] as const;
+const LEVEL_LABELS: Record<string, string> = {
+  organisation: "Organisation",
+  stores: "Butik/Fastighet",
+  containers: "Kärl",
+};
 
 export default function ObjektmallImportPage() {
   const { toast } = useToast();
@@ -156,7 +172,6 @@ export default function ObjektmallImportPage() {
       setCommitResult(data);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/objektmall/history"] });
       queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/metadata-definitions"] });
       toast({
         title: "Import slutförd",
         description: `Batch-ID: ${data.batchId}`,
@@ -183,6 +198,9 @@ export default function ObjektmallImportPage() {
     setCommitResult(null);
   }
 
+  const sheet = preview?.report.import;
+  const metadataColumns = preview?.report.metadataColumns ?? [];
+
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6" data-testid="page-objektmall-import">
       <div>
@@ -194,9 +212,11 @@ export default function ObjektmallImportPage() {
           Ladda upp en ifylld <code className="text-xs bg-muted px-1 py-0.5 rounded">{OBJEKTMALL_FILENAME}</code> för
           att i ett enda svep <span className="font-medium">skapa nya</span> (via interimsnummer),{" "}
           <span className="font-medium">uppdatera befintliga</span> (via systemnummer eller butiksnummer/butiksnamn) och{" "}
-          <span className="font-medium">flytta objekt till ny förälder</span>. Endast Objektnamn och Förälder krävs
-          (förälder utelämnas bara för roten); allt annat — inklusive adress — är metadata som ärvs nedåt från
-          föräldern. Re-import av samma fil uppdaterar befintliga objekt — inga dubbletter skapas.
+          <span className="font-medium">flytta objekt till ny förälder</span>. Mallen har nu en enda{" "}
+          <span className="font-medium">Import-flik</span> — en rad per objekt oavsett nivå, där nivån härleds från
+          förälderkedjan. Endast Objektnamn krävs på varje rad (förälder för icke-rotnivå). Kolumn F och framåt är
+          dynamiska metadata-kolumner som läses in och visas nedan. Re-import av samma fil uppdaterar befintliga
+          objekt — inga dubbletter skapas.
         </p>
       </div>
 
@@ -209,7 +229,7 @@ export default function ObjektmallImportPage() {
               Steg 1 — Ladda ner mall
             </CardTitle>
             <CardDescription>
-              Den senaste mallen med fyra flikar (Steg 1, Steg 2, Steg 3, Metadatafält) och instruktioner.
+              Den senaste mallen med en enda Import-flik (plus "Läs mig först") och instruktioner.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -252,13 +272,20 @@ export default function ObjektmallImportPage() {
 
             <Separator className="my-3" />
 
-            <ul className="text-xs text-muted-foreground space-y-1 list-disc ml-5">
-              {OBJEKTMALL_SHEETS.map((s) => (
-                <li key={s.key}>
-                  <span className="font-medium">{s.name}:</span> {s.intro.split(".")[0]}.
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground">Fasta kolumner (A–E):</p>
+              <ul className="list-disc ml-5 space-y-0.5">
+                {OBJEKTMALL_FIXED_COLUMNS.map((c) => (
+                  <li key={c.key}>
+                    <span className="font-medium">{c.header}</span>
+                    {c.required ? " (obligatorisk)" : ""}
+                  </li>
+                ))}
+                <li>
+                  <span className="font-medium">Kolumn F och framåt:</span> dynamiska metadata-referensnamn (rad 1).
                 </li>
-              ))}
-            </ul>
+              </ul>
+            </div>
           </CardContent>
         </Card>
 
@@ -311,7 +338,7 @@ export default function ObjektmallImportPage() {
       </div>
 
       {/* Preview-rapport */}
-      {preview && (
+      {preview && sheet && (
         <Card data-testid="card-preview">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -323,7 +350,7 @@ export default function ObjektmallImportPage() {
               Torrkörningsrapport — {preview.fileName}
             </CardTitle>
             <CardDescription>
-              Sammanställning per flik. {preview.report.hasBlockingErrors
+              {preview.report.hasBlockingErrors
                 ? "Fixa fel innan skarp import."
                 : "Allt ser bra ut. Du kan köra skarp import nedan."}
             </CardDescription>
@@ -351,103 +378,118 @@ export default function ObjektmallImportPage() {
               </Alert>
             )}
 
+            {/* Sammanställning */}
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {SHEET_ORDER.map((k) => {
-                const s = preview.report.sheets[k];
-                if (!s) return null;
-                return (
-                  <div key={k} className="border rounded p-3 space-y-1" data-testid={`stat-${k}`}>
-                    <div className="text-xs text-muted-foreground">{s.name}</div>
-                    <div className="text-2xl font-bold">{s.totalRows}</div>
-                    <div className="flex gap-2 flex-wrap text-xs">
-                      <Badge variant="outline" className="bg-chart-2/10">Ny: {s.toCreate}</Badge>
-                      <Badge variant="outline" className="bg-chart-1/10">Uppd: {s.toUpdate}</Badge>
-                      {(s.toRepoint ?? 0) > 0 && (
-                        <Badge variant="outline" className="bg-chart-4/10">Flyttad: {s.toRepoint}</Badge>
-                      )}
-                      {s.errorRows > 0 && (
-                        <Badge variant="destructive">Fel: {s.errorRows}</Badge>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              <div className="border rounded p-3 space-y-1" data-testid="stat-import">
+                <div className="text-xs text-muted-foreground">Rader totalt</div>
+                <div className="text-2xl font-bold">{sheet.totalRows}</div>
+              </div>
+              <div className="border rounded p-3 space-y-1" data-testid="stat-create">
+                <div className="text-xs text-muted-foreground">Nya objekt</div>
+                <div className="text-2xl font-bold text-chart-2">{sheet.toCreate}</div>
+              </div>
+              <div className="border rounded p-3 space-y-1" data-testid="stat-update">
+                <div className="text-xs text-muted-foreground">Uppdateras</div>
+                <div className="text-2xl font-bold">{sheet.toUpdate}</div>
+              </div>
+              <div className="border rounded p-3 space-y-1" data-testid="stat-repoint-error">
+                <div className="text-xs text-muted-foreground">Flyttas / Fel</div>
+                <div className="flex gap-2 flex-wrap text-xs pt-1">
+                  <Badge variant="outline" className="bg-chart-4/10">Flyttad: {sheet.toRepoint}</Badge>
+                  {sheet.errorRows > 0 ? (
+                    <Badge variant="destructive">Fel: {sheet.errorRows}</Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-chart-2/10">Fel: 0</Badge>
+                  )}
+                </div>
+              </div>
             </div>
 
-            {SHEET_ORDER.some((k) => (preview.report.sheets[k]?.errors.length ?? 0) > 0) && (
+            {/* Dynamiska metadata-kolumner */}
+            {metadataColumns.length > 0 && (
               <div className="space-y-2">
                 <Separator />
-                <h3 className="text-sm font-semibold text-destructive">Valideringsfel</h3>
-                {SHEET_ORDER.map((k) => {
-                  const s = preview.report.sheets[k];
-                  if (!s || s.errors.length === 0) return null;
-                  return (
-                    <div key={k} data-testid={`errors-${k}`}>
-                      <h4 className="text-xs font-medium text-muted-foreground mb-1">{s.name}</h4>
-                      <ScrollArea className="h-40 border rounded">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="w-16">Rad</TableHead>
-                              <TableHead>Meddelande</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {s.errors.map((e) => (
-                              <TableRow key={e.row}>
-                                <TableCell className="font-mono">{e.row}</TableCell>
-                                <TableCell className="text-xs">
-                                  <ul className="list-disc ml-4">
-                                    {e.messages.map((m, i) => <li key={i}>{m}</li>)}
-                                  </ul>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </ScrollArea>
-                    </div>
-                  );
-                })}
+                <h3 className="text-sm font-semibold">Dynamiska metadata-kolumner ({metadataColumns.length})</h3>
+                <p className="text-xs text-muted-foreground">
+                  Dessa referensnamn lästes från rad 1 (kolumn F och framåt). Värdena visas per rad nedan men
+                  skrivs ännu inte till objekten — det hanteras i ett separat steg.
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {metadataColumns.map((c) => (
+                    <Badge key={c} variant="outline" className="bg-muted/40" data-testid={`meta-col-${c}`}>
+                      {c}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             )}
 
-            {SHEET_ORDER.some((k) => (preview.report.sheets[k]?.actions?.length ?? 0) > 0) && (
+            {/* Valideringsfel */}
+            {sheet.errors.length > 0 && (
+              <div className="space-y-2">
+                <Separator />
+                <h3 className="text-sm font-semibold text-destructive">Valideringsfel</h3>
+                <div data-testid="errors-import">
+                  <ScrollArea className="h-40 border rounded">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-16">Rad</TableHead>
+                          <TableHead>Meddelande</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {sheet.errors.map((e) => (
+                          <TableRow key={e.row}>
+                            <TableCell className="font-mono">{e.row}</TableCell>
+                            <TableCell className="text-xs">
+                              <ul className="list-disc ml-4">
+                                {e.messages.map((m, i) => <li key={i}>{m}</li>)}
+                              </ul>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </div>
+              </div>
+            )}
+
+            {/* Planerade åtgärder */}
+            {sheet.actions.length > 0 && (
               <div className="space-y-2">
                 <Separator />
                 <h3 className="text-sm font-semibold">Planerade åtgärder per rad</h3>
-                {SHEET_ORDER.map((k) => {
-                  const s = preview.report.sheets[k];
-                  if (!s || (s.actions?.length ?? 0) === 0) return null;
-                  return (
-                    <div key={k} data-testid={`actions-${k}`}>
-                      <h4 className="text-xs font-medium text-muted-foreground mb-1">{s.name}</h4>
-                      <ScrollArea className="h-44 border rounded">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="w-8"></TableHead>
-                              <TableHead className="w-16">Rad</TableHead>
-                              <TableHead className="w-28">Åtgärd</TableHead>
-                              <TableHead>Objekt</TableHead>
-                              <TableHead>Detalj</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {s.actions.map((a) => {
-                              const rowKey = `${k}-${a.row}`;
-                              const hasDiff = (a.changedFields?.length ?? 0) > 0;
-                              const isExpanded = !!expandedRows[rowKey];
-                              return (
-                              <Fragment key={rowKey}>
+                <div data-testid="actions-import">
+                  <ScrollArea className="h-72 border rounded">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-8"></TableHead>
+                          <TableHead className="w-16">Rad</TableHead>
+                          <TableHead className="w-28">Åtgärd</TableHead>
+                          <TableHead className="w-32">Nivå</TableHead>
+                          <TableHead>Objekt</TableHead>
+                          <TableHead>Detalj</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {sheet.actions.map((a) => {
+                          const rowKey = `import-${a.row}`;
+                          const metaEntries = Object.entries(a.metadata ?? {});
+                          const hasExpand = (a.changedFields?.length ?? 0) > 0 || metaEntries.length > 0;
+                          const isExpanded = !!expandedRows[rowKey];
+                          return (
+                            <Fragment key={rowKey}>
                               <TableRow
-                                data-testid={`action-row-${k}-${a.row}`}
+                                data-testid={`action-row-import-${a.row}`}
                                 data-changed={a.changed ? "true" : "false"}
-                                className={`${a.changed ? "border-l-4 border-l-destructive bg-destructive/5" : ""}${hasDiff ? " cursor-pointer" : ""}`}
-                                onClick={hasDiff ? () => toggleRow(rowKey) : undefined}
+                                className={`${a.changed ? "border-l-4 border-l-destructive bg-destructive/5" : ""}${hasExpand ? " cursor-pointer" : ""}`}
+                                onClick={hasExpand ? () => toggleRow(rowKey) : undefined}
                               >
                                 <TableCell className="px-1">
-                                  {hasDiff && (
+                                  {hasExpand && (
                                     <button
                                       type="button"
                                       className="text-muted-foreground hover-elevate rounded p-0.5"
@@ -455,8 +497,8 @@ export default function ObjektmallImportPage() {
                                         e.stopPropagation();
                                         toggleRow(rowKey);
                                       }}
-                                      data-testid={`button-expand-${k}-${a.row}`}
-                                      aria-label={isExpanded ? "Dölj ändringar" : "Visa ändringar"}
+                                      data-testid={`button-expand-import-${a.row}`}
+                                      aria-label={isExpanded ? "Dölj detaljer" : "Visa detaljer"}
                                     >
                                       {isExpanded ? (
                                         <ChevronDown className="h-4 w-4" />
@@ -481,6 +523,9 @@ export default function ObjektmallImportPage() {
                                     {a.action === "create" ? "Ny" : a.action === "repoint" ? "Flyttad" : "Uppdaterad"}
                                   </Badge>
                                 </TableCell>
+                                <TableCell className="text-xs text-muted-foreground">
+                                  {a.levelLabel ?? LEVEL_LABELS[a.level] ?? a.level}
+                                </TableCell>
                                 <TableCell className="text-xs">
                                   <span className="flex items-center gap-1.5">
                                     {a.name}
@@ -488,104 +533,76 @@ export default function ObjektmallImportPage() {
                                       <Badge
                                         variant="outline"
                                         className="border-destructive/40 text-destructive bg-destructive/5 text-[10px] px-1 py-0"
-                                        data-testid={`badge-changed-${k}-${a.row}`}
+                                        data-testid={`badge-changed-import-${a.row}`}
                                       >
                                         {a.action === "create" ? "Ny" : "Ändrad"}
                                       </Badge>
                                     )}
-                                    {hasDiff && (
+                                    {metaEntries.length > 0 && (
                                       <span className="text-[10px] text-muted-foreground">
-                                        ({a.changedFields.length} fält)
+                                        ({metaEntries.length} metadata)
                                       </span>
                                     )}
                                   </span>
                                 </TableCell>
                                 <TableCell className="text-xs text-muted-foreground">{a.detail}</TableCell>
                               </TableRow>
-                              {hasDiff && isExpanded && (
+                              {hasExpand && isExpanded && (
                                 <TableRow
-                                  key={`${rowKey}-diff`}
-                                  data-testid={`diff-row-${k}-${a.row}`}
+                                  key={`${rowKey}-detail`}
+                                  data-testid={`diff-row-import-${a.row}`}
                                   className="bg-muted/40"
                                 >
                                   <TableCell></TableCell>
-                                  <TableCell colSpan={4} className="py-2">
-                                    <div className="space-y-1">
-                                      {a.changedFields.map((cf) => (
-                                        <div
-                                          key={cf.field}
-                                          className="flex items-start gap-2 text-xs"
-                                          data-testid={`diff-field-${k}-${a.row}-${cf.field}`}
-                                        >
-                                          <span className="font-medium min-w-[120px] shrink-0">{cf.label}</span>
-                                          <span className="text-muted-foreground line-through whitespace-pre-wrap break-words">
-                                            {cf.from || "—"}
-                                          </span>
-                                          <ArrowRight className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
-                                          <span className="text-foreground whitespace-pre-wrap break-words">
-                                            {cf.to || "—"}
-                                          </span>
+                                  <TableCell colSpan={5} className="py-2">
+                                    <div className="space-y-2">
+                                      {a.changedFields.length > 0 && (
+                                        <div className="space-y-1">
+                                          <div className="text-[11px] font-semibold text-muted-foreground uppercase">Ändrade fält</div>
+                                          {a.changedFields.map((cf) => (
+                                            <div
+                                              key={cf.field}
+                                              className="flex items-start gap-2 text-xs"
+                                              data-testid={`diff-field-import-${a.row}-${cf.field}`}
+                                            >
+                                              <span className="font-medium min-w-[120px] shrink-0">{cf.label}</span>
+                                              <span className="text-muted-foreground line-through whitespace-pre-wrap break-words">
+                                                {cf.from || "—"}
+                                              </span>
+                                              <ArrowRight className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+                                              <span className="text-foreground whitespace-pre-wrap break-words">
+                                                {cf.to || "—"}
+                                              </span>
+                                            </div>
+                                          ))}
                                         </div>
-                                      ))}
+                                      )}
+                                      {metaEntries.length > 0 && (
+                                        <div className="space-y-1">
+                                          <div className="text-[11px] font-semibold text-muted-foreground uppercase">Metadata-värden (läses, skrivs ej än)</div>
+                                          {metaEntries.map(([k, v]) => (
+                                            <div
+                                              key={k}
+                                              className="flex items-start gap-2 text-xs"
+                                              data-testid={`meta-value-import-${a.row}-${k}`}
+                                            >
+                                              <span className="font-medium min-w-[120px] shrink-0">{k}</span>
+                                              <span className="text-foreground whitespace-pre-wrap break-words">{v || "—"}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
                                   </TableCell>
                                 </TableRow>
                               )}
-                              </Fragment>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </ScrollArea>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {preview.report.metadata.some((m) => (m.changedFields?.length ?? 0) > 0) && (
-              <div className="space-y-2">
-                <Separator />
-                <h3 className="text-sm font-semibold">Ändrade metadatafält</h3>
-                <ScrollArea className="h-44 border rounded">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-48">Fält</TableHead>
-                        <TableHead>Ändringar</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {preview.report.metadata
-                        .filter((m) => (m.changedFields?.length ?? 0) > 0)
-                        .map((m) => (
-                          <TableRow key={m.fieldKey} data-testid={`meta-diff-row-${m.fieldKey}`}>
-                            <TableCell className="text-xs font-mono align-top">{m.fieldKey}</TableCell>
-                            <TableCell className="py-2">
-                              <div className="space-y-1">
-                                {m.changedFields!.map((cf) => (
-                                  <div
-                                    key={cf.field}
-                                    className="flex items-start gap-2 text-xs"
-                                    data-testid={`meta-diff-field-${m.fieldKey}-${cf.field}`}
-                                  >
-                                    <span className="font-medium min-w-[120px] shrink-0">{cf.label}</span>
-                                    <span className="text-muted-foreground line-through whitespace-pre-wrap break-words">
-                                      {cf.from || "—"}
-                                    </span>
-                                    <ArrowRight className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
-                                    <span className="text-foreground whitespace-pre-wrap break-words">
-                                      {cf.to || "—"}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
+                            </Fragment>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </div>
               </div>
             )}
 
@@ -640,7 +657,7 @@ export default function ObjektmallImportPage() {
                 <div className="font-semibold mb-0.5">Skapade</div>
                 <ul className="ml-3">
                   {Object.entries(commitResult.created).map(([k, v]) => (
-                    <li key={k}>{k}: <span className="font-mono">{v}</span></li>
+                    <li key={k}>{LEVEL_LABELS[k] ?? k}: <span className="font-mono">{v}</span></li>
                   ))}
                 </ul>
               </div>
@@ -648,7 +665,7 @@ export default function ObjektmallImportPage() {
                 <div className="font-semibold mb-0.5">Uppdaterade</div>
                 <ul className="ml-3">
                   {Object.entries(commitResult.updated).map(([k, v]) => (
-                    <li key={k}>{k}: <span className="font-mono">{v}</span></li>
+                    <li key={k}>{LEVEL_LABELS[k] ?? k}: <span className="font-mono">{v}</span></li>
                   ))}
                 </ul>
               </div>
@@ -657,7 +674,7 @@ export default function ObjektmallImportPage() {
                   <div className="font-semibold mb-0.5">Flyttade</div>
                   <ul className="ml-3">
                     {Object.entries(commitResult.repointed).map(([k, v]) => (
-                      <li key={k}>{k}: <span className="font-mono">{v}</span></li>
+                      <li key={k}>{LEVEL_LABELS[k] ?? k}: <span className="font-mono">{v}</span></li>
                     ))}
                   </ul>
                 </div>

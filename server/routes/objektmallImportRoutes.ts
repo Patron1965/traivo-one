@@ -1,11 +1,22 @@
-// Task #603: Objektimport från Excel-mall (Steg 1-3 + metadata).
+// Task #603 / #631: Objektimport från Excel-mall (enflik-mall).
 //
 // Endpoints (alla kräver admin/owner i tenant):
 //   GET    /api/admin/objektmall/template          ladda ner aktuell mall (.xlsx)
+//   GET    /api/admin/objektmall/export            exportera befintliga objekt i mallformat
 //   POST   /api/admin/objektmall/preview           torrkörning (multipart .xlsx)
 //   POST   /api/admin/objektmall/commit            skarp atomär import (multipart .xlsx)
 //   GET    /api/admin/objektmall/history           tidigare körningar
 //   GET    /api/admin/objektmall/history/:batchId  detaljer för en körning
+//
+// Mallstruktur (Task #631): EN platt "Import"-flik (utöver "Läs mig först").
+//   • Kolumn A–E är fasta (se OBJEKTMALL_FIXED_COLUMNS).
+//   • Kolumn F+ är dynamiska metadata-kolumner — rad 1 bär referensnamn, varje
+//     rads cell är rådata-värdet. Värdena samlas i en per-rad-karta som visas i
+//     förhandsgranskningen. Att PERSISTERA metadata-värdena på objekten (med
+//     ersättande/kompletterande-beteende) görs i en separat följd-task — denna
+//     fil läser och visar dem men skriver dem inte till objekten.
+//   • Objektets nivå (organisation/butik/kärl) härleds från förälderkedjan, inte
+//     från vilken flik raden låg i.
 //
 // Re-import:
 //   Befintliga rader identifieras via (tenantId, objectNumber) där
@@ -15,7 +26,6 @@
 import type { Express } from "express";
 import multer from "multer";
 import ExcelJS from "exceljs";
-import { z } from "zod";
 import { and, eq, or, sql, desc, inArray, isNull } from "drizzle-orm";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
@@ -30,17 +40,19 @@ import {
   users,
 } from "@shared/schema";
 import {
-  OBJEKTMALL_SHEETS,
   OBJEKTMALL_VERSION,
   OBJEKTMALL_FILENAME,
   OBJEKTMALL_BATCH_PREFIX,
   OBJEKTMALL_INTERIM_PREFIX,
+  OBJEKTMALL_README_SHEET_NAME,
+  OBJEKTMALL_IMPORT_SHEET_NAME,
   OBJEKTMALL_INTERIM_FLAG_MARKER,
   OBJEKTMALL_INTERIM_FLAG_LABEL,
+  OBJEKTMALL_FIXED_COLUMNS,
+  OBJEKTMALL_EXAMPLE_METADATA_HEADERS,
   objektmallColumnHeaderAliases,
-  getObjektmallSheet,
+  objektmallFixedHeaderSet,
   type ObjektmallColumn,
-  type ObjektmallSheet,
 } from "@shared/objektmall-template";
 
 const xlsxUpload = multer({
@@ -57,6 +69,88 @@ const xlsxUpload = multer({
 });
 
 // ============================================================
+// Nivåmodell — nivå härleds från djupet i förälderkedjan.
+// ============================================================
+type ObjLevel = "organisation" | "stores" | "containers";
+
+function levelForDepth(depth: number): ObjLevel {
+  return depth <= 0 ? "organisation" : depth === 1 ? "stores" : "containers";
+}
+
+const LEVEL_META: Record<ObjLevel, { hierarchyLevel: string; objectType: string; label: string }> = {
+  organisation: { hierarchyLevel: "koncern", objectType: "omrade", label: "Organisation" },
+  stores: { hierarchyLevel: "fastighet", objectType: "fastighet", label: "Butik/Fastighet" },
+  containers: { hierarchyLevel: "karl", objectType: "karl", label: "Kärl" },
+};
+
+// Prefix per nivå för auto-genererade interimsnummer i export-interim-läge.
+const INTERIM_LEVEL_PREFIX: Record<ObjLevel, string> = {
+  organisation: "ORG",
+  stores: "BUT",
+  containers: "KARL",
+};
+
+// ============================================================
+// Kända objektfält bland de dynamiska metadata-kolumnerna.
+// ------------------------------------------------------------
+// I enflik-modellen (Task #631) ligger adress/ort/postnummer/anteckningar/antal
+// kärl som dynamiska metadata-kolumner (kolumn F+). De referensnamn som mappar
+// direkt mot riktiga `objects`-kolumner skrivs FORTSATT till objektet — detta är
+// del av objekt-skrivningen och bevarar tidigare beteende (inkl. adress-arv från
+// förälder). Övriga, helt fria metadata-värden persisteras INTE här utan hanteras
+// av den separata följd-tasken "Skriv metadata-värden vid import".
+//
+// Matchningen sker på referensnamnet (rubriken på rad 1), case-insensitivt och
+// med svenska/engelska alias. Referensnamnet motsvarar metadata-definitionens
+// fieldLabel (samma sträng som export skriver i rubrikraden), så export→reimport
+// är konsekvent.
+type KnownObjectFields = {
+  address?: string;
+  city?: string;
+  postalCode?: string;
+  notes?: string;
+  containerCount?: number;
+};
+
+const KNOWN_FIELD_ALIASES = {
+  address: ["adress", "address", "gatuadress", "besöksadress"],
+  city: ["stad", "ort", "city", "postort"],
+  postalCode: ["postnummer", "postnr", "postal code", "postalcode", "zip"],
+  notes: ["anteckningar", "notering", "noteringar", "notes", "beskrivning", "description", "kommentar"],
+  containerCount: ["antal kärl", "antal karl", "antal", "container count", "containercount", "antal behållare", "kärl", "karl"],
+} as const;
+
+function extractKnownObjectFields(metadata: Record<string, string>): KnownObjectFields {
+  const lowerMap = new Map<string, string>();
+  for (const [k, v] of Object.entries(metadata ?? {})) {
+    const val = (v ?? "").trim();
+    if (val) lowerMap.set(k.trim().toLowerCase(), val);
+  }
+  const pick = (aliases: readonly string[]): string | undefined => {
+    for (const a of aliases) {
+      const hit = lowerMap.get(a);
+      if (hit) return hit;
+    }
+    return undefined;
+  };
+  const out: KnownObjectFields = {};
+  const address = pick(KNOWN_FIELD_ALIASES.address);
+  const city = pick(KNOWN_FIELD_ALIASES.city);
+  const postalCode = pick(KNOWN_FIELD_ALIASES.postalCode);
+  const notes = pick(KNOWN_FIELD_ALIASES.notes);
+  const ccRaw = pick(KNOWN_FIELD_ALIASES.containerCount);
+  if (address !== undefined) out.address = address;
+  if (city !== undefined) out.city = city;
+  if (postalCode !== undefined) out.postalCode = postalCode;
+  if (notes !== undefined) out.notes = notes;
+  if (ccRaw !== undefined) {
+    const n = parseInt(ccRaw.replace(/[^\d-]/g, ""), 10);
+    if (!Number.isNaN(n)) out.containerCount = n;
+  }
+  return out;
+}
+
+// ============================================================
 // Mall-generator
 // ============================================================
 export async function buildTemplateWorkbook(): Promise<Buffer> {
@@ -65,7 +159,7 @@ export async function buildTemplateWorkbook(): Promise<Buffer> {
   wb.created = new Date();
 
   // Instruktionsflik
-  const readme = wb.addWorksheet("Läs mig först");
+  const readme = wb.addWorksheet(OBJEKTMALL_README_SHEET_NAME);
   readme.columns = [
     { header: "", key: "v", width: 95 },
     { header: "", key: "b", width: 14 },
@@ -73,30 +167,32 @@ export async function buildTemplateWorkbook(): Promise<Buffer> {
   const lines = [
     "TRAIVO – OBJEKTIMPORT FRÅN MALL",
     "",
-    "Mallen har fyra flikar utöver denna:",
-    "  • Steg 1 — Organisation: toppnoder (koncern/kommun/varumärke) — rotnivå, ingen förälder",
-    "  • Steg 2 — Butiker: butiker/platser/fastigheter under en organisation",
-    "  • Steg 3 — Kärl per butik: fysiska kärl under en butik",
-    "  • Metadatafält (valfri): definitioner av extra fält",
+    "Mallen har EN enda flik utöver denna: \"Import\".",
+    "En rad = ett objekt oavsett nivå (organisation, butik/fastighet eller kärl).",
+    "Hierarkin byggs via föräldrakolumnerna — nivån härleds automatiskt från förälderkedjan.",
     "",
-    "ENHETLIGT NUMMERPROTOKOLL (samma kolumner i Steg 1–3):",
+    "FASTA KOLUMNER (A–E):",
     "  • Systemnummer — fyll i för att UPPDATERA ett befintligt objekt (matchas mot",
     "    Traivos systemnummer/kundens butiksnummer, eller mot Objektnamn = butiksnamn).",
     "  • Interimsnummer — ditt eget löpnummer för NYA objekt; binder ihop nivåerna och möjliggör re-import.",
-    "  • Systemföräldranummer — peka om objektet till en BEFINTLIG förälder (system→system).",
-    "  • Interimföräldranummer — peka mot en rad i denna fil (ny eller befintlig).",
+    "  • Systemföräldranummer — peka objektet mot en BEFINTLIG förälder (system→system).",
+    "  • Interimföräldranummer — peka mot en rad i denna fil (ny eller befintlig). Lämna tomt för rotnivå.",
+    "  • Objektnamn — obligatoriskt på varje rad.",
+    "",
+    "DYNAMISKA METADATA-KOLUMNER (F och framåt):",
+    "  • Skriv metadata-referensnamnet på rad 1 (rubrikraden) och värdet på varje objektrad.",
+    "  • Du kan lägga till så många metadata-kolumner du vill. Exempelkolumnerna (Adress, Postnummer …)",
+    "    är bara förslag — byt ut eller lägg till egna referensnamn.",
     "",
     "En och samma fil kan i samma körning: skapa nya (interim), uppdatera befintliga (systemnummer)",
     "och peka om ett objekt till en ny eller befintlig förälder.",
     "",
-    "OBLIGATORISKT: endast Objektnamn + förälder (förälder ej på rotnivån, Steg 1).",
-    "Allt annat (inkl. adress) är metadata och ärvs från förälder om det lämnas tomt.",
+    "OBLIGATORISKT: Objektnamn på varje rad, samt förälder för icke-rotnivå (Interim- eller Systemföräldranummer).",
     "",
     "Re-import: samma fil med samma interimsnummer uppdaterar befintliga objekt — inga dubbletter skapas.",
     "Borttagna rader rör INTE redan importerade objekt (ingen automatisk hard-delete).",
     "",
     "Geokodning av adresser sker separat efter import.",
-    "Namnet på kärl i Steg 3 genereras automatiskt från Kärltyp + Butiknamn om Objektnamn lämnas tomt.",
   ];
   lines.forEach((l) => readme.addRow([l]));
 
@@ -121,69 +217,82 @@ export async function buildTemplateWorkbook(): Promise<Buffer> {
     row.getCell(1).alignment = { wrapText: true, vertical: row.getCell(1).alignment?.vertical ?? "top" };
   });
 
-  for (const sheet of OBJEKTMALL_SHEETS) {
-    const ws = wb.addWorksheet(sheet.name);
-    ws.columns = sheet.columns.map((c) => ({
-      header: c.header,
-      key: c.key,
-      width: Math.min(Math.max(c.header.length + 4, 16), 36),
-    }));
+  // Import-flik (platt).
+  const ws = wb.addWorksheet(OBJEKTMALL_IMPORT_SHEET_NAME);
+  const fixedHeaders = OBJEKTMALL_FIXED_COLUMNS.map((c) => c.header);
+  const allHeaders = [...fixedHeaders, ...OBJEKTMALL_EXAMPLE_METADATA_HEADERS];
+  ws.columns = allHeaders.map((h) => ({
+    header: h,
+    width: Math.min(Math.max(h.length + 4, 16), 36),
+  }));
 
-    const headerRow = ws.getRow(1);
-    headerRow.height = 22;
-    sheet.columns.forEach((c, idx) => {
-      const cell = headerRow.getCell(idx + 1);
-      cell.value = c.header;
-      cell.font = { bold: true, color: { argb: "FF1B4B6B" } };
-      cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: c.required ? "FFFDE8B4" : "FFE8F4F8" },
-      };
-      cell.border = {
-        bottom: { style: "medium", color: { argb: "FF1B4B6B" } },
-      };
-    });
-    ws.views = [{ state: "frozen", ySplit: 2 }];
+  // Rad 1 — rubriker (fasta + exempel-metadata).
+  const headerRow = ws.getRow(1);
+  headerRow.height = 22;
+  allHeaders.forEach((h, idx) => {
+    const fixedCol = OBJEKTMALL_FIXED_COLUMNS[idx];
+    const isMeta = idx >= OBJEKTMALL_FIXED_COLUMNS.length;
+    const cell = headerRow.getCell(idx + 1);
+    cell.value = h;
+    cell.font = { bold: true, color: { argb: isMeta ? "FF4A9B9B" : "FF1B4B6B" } };
+    cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: isMeta ? "FFE0F2F1" : fixedCol?.required ? "FFFDE8B4" : "FFE8F4F8" },
+    };
+    cell.border = { bottom: { style: "medium", color: { argb: "FF1B4B6B" } } };
+  });
+  ws.views = [{ state: "frozen", ySplit: 2 }];
 
-    // Beskrivningsrad (rad 2) — italiska beskrivningar per kolumn.
-    const descRow = ws.addRow(sheet.columns.map((c) => c.description));
-    descRow.eachCell({ includeEmpty: true }, (cell) => {
-      cell.font = { italic: true, size: 9, color: { argb: "FF6B7C8C" } };
-      cell.alignment = { vertical: "top", wrapText: true };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F5F2" } };
-    });
-    descRow.height = 32;
+  // Rad 2 — beskrivningar.
+  const descs = [
+    ...OBJEKTMALL_FIXED_COLUMNS.map((c) => c.description),
+    ...OBJEKTMALL_EXAMPLE_METADATA_HEADERS.map(
+      () => "Metadata-referensnamn (byt ut/lägg till egna). Värdet skrivs på varje objektrad.",
+    ),
+  ];
+  const descRow = ws.addRow(descs);
+  descRow.eachCell({ includeEmpty: true }, (cell) => {
+    cell.font = { italic: true, size: 9, color: { argb: "FF6B7C8C" } };
+    cell.alignment = { vertical: "top", wrapText: true };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F5F2" } };
+  });
+  descRow.height = 36;
 
-    // Exempelrad (rad 3) — markerad så användaren förstår att ta bort den.
-    const exampleRow = ws.addRow(
-      sheet.columns.map((c, i) => {
-        if (i === 0) return `[EXEMPEL – ta bort denna rad] ${c.example ?? ""}`.trim();
-        return c.example ?? "";
-      }),
-    );
-    exampleRow.eachCell({ includeEmpty: true }, (cell) => {
-      cell.font = { italic: true, color: { argb: "FF6B7C8C" } };
-    });
-  }
+  // Rad 3 — exempelrad (markerad så användaren förstår att ta bort den).
+  const exampleValues = [
+    "[EXEMPEL – ta bort denna rad]",
+    "ORG-1",
+    "",
+    "",
+    "KINAB Koncern",
+    "Storgatan 5",
+    "614 30",
+    "Söderköping",
+    "Anna Andersson",
+  ];
+  const exampleRow = ws.addRow(exampleValues);
+  exampleRow.eachCell({ includeEmpty: true }, (cell) => {
+    cell.font = { italic: true, color: { argb: "FF6B7C8C" } };
+  });
 
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);
 }
 
 // ============================================================
-// Export-generator (Task #621)
+// Export-generator (Task #621, enflik-format Task #631)
 // ------------------------------------------------------------
-// Exporterar BEFINTLIGA objekt i exakt samma kolumnprotokoll som mallen, så att
-// kunden kan jämföra mot sin egen lista och läsa tillbaka filen via samma import.
+// Exporterar BEFINTLIGA objekt i exakt samma enflik-kolumnprotokoll som mallen, så
+// att kunden kan jämföra mot sin egen lista och läsa tillbaka filen via samma import.
 //   mode="update":  Systemnummer fylls (= objectNumber), Systemföräldranummer
 //                   pekar på förälderns systemnummer → re-import = uppdatering.
 //   mode="interim": numren skrivs om till interim (Interimsnummer +
 //                   Interimföräldranummer) och interimslist-flaggan sätts till JA
 //                   → ren nyimport (separerad från uppdateringslistan).
-// Per-objekt-metadatavärden läggs i informativa "Metadata - <fält>"-kolumner.
-// De ignoreras av parsern (okända rubriker) men ger jämförelseunderlag.
+// Per-objekt-metadatavärden skrivs i dynamiska kolumner (referensnamn = fältets
+// visningsnamn) från kolumn F.
 // ============================================================
 export type ObjektmallExportMode = "update" | "interim";
 
@@ -204,20 +313,7 @@ type ExportObject = {
   objectNumber: string | null;
   name: string;
   parentId: string | null;
-  address: string | null;
-  city: string | null;
-  postalCode: string | null;
-  notes: string | null;
-  containerCount: number | null;
   depth: number;
-};
-
-// Prefix per nivå för auto-genererade interimsnummer i interim-läge.
-const INTERIM_LEVEL_PREFIX: Record<ObjektmallSheet["key"], string> = {
-  organisation: "ORG",
-  stores: "BUT",
-  containers: "KARL",
-  metadata: "META",
 };
 
 export async function buildExportWorkbook(
@@ -231,11 +327,6 @@ export async function buildExportWorkbook(
       objectNumber: objects.objectNumber,
       name: objects.name,
       parentId: objects.parentId,
-      address: objects.address,
-      city: objects.city,
-      postalCode: objects.postalCode,
-      notes: objects.notes,
-      containerCount: objects.containerCount,
     })
     .from(objects)
     .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
@@ -262,15 +353,12 @@ export async function buildExportWorkbook(
     objectNumber: r.objectNumber ?? null,
     name: r.name ?? "",
     parentId: r.parentId ?? null,
-    address: r.address ?? null,
-    city: r.city ?? null,
-    postalCode: r.postalCode ?? null,
-    notes: r.notes ?? null,
-    containerCount: r.containerCount ?? null,
     depth: depthOf(r.id),
   }));
+  // Stabil ordning: djup först (föräldrar före barn), sedan namn.
+  objs.sort((a, b) => a.depth - b.depth || a.name.localeCompare(b.name, "sv"));
 
-  // 2. Per-objekt-metadatavärden + definitioner (för informativa kolumner + Metadatafält-fliken).
+  // 2. Per-objekt-metadatavärden + definitioner (för dynamiska kolumner).
   const defs = await db
     .select()
     .from(metadataDefinitions)
@@ -303,36 +391,29 @@ export async function buildExportWorkbook(
     }
   }
 
-  // 3. Mappa objekt -> flik utifrån djup.
-  const sheetKeyForDepth = (depth: number): "organisation" | "stores" | "containers" =>
-    depth <= 0 ? "organisation" : depth === 1 ? "stores" : "containers";
-
-  const bySheet: Record<"organisation" | "stores" | "containers", ExportObject[]> = {
-    organisation: [],
-    stores: [],
-    containers: [],
-  };
-  for (const o of objs) bySheet[sheetKeyForDepth(o.depth)].push(o);
+  // Endast definitioner som har minst ett värde på något objekt får en kolumn.
+  const metaDefsWithValues = defs.filter((d) =>
+    objs.some((o) => valuesByObject.get(o.id)?.has(d.id)),
+  );
 
   // Interim-läge: tilldela varje objekt ett interimsnummer (stabilt per nivå).
   const interimById = new Map<string, string>();
   if (mode === "interim") {
-    const counters: Record<string, number> = { organisation: 0, stores: 0, containers: 0 };
-    for (const key of ["organisation", "stores", "containers"] as const) {
-      for (const o of bySheet[key]) {
-        counters[key]++;
-        interimById.set(o.id, `${INTERIM_LEVEL_PREFIX[key]}-${counters[key]}`);
-      }
+    const counters: Record<ObjLevel, number> = { organisation: 0, stores: 0, containers: 0 };
+    for (const o of objs) {
+      const lvl = levelForDepth(o.depth);
+      counters[lvl]++;
+      interimById.set(o.id, `${INTERIM_LEVEL_PREFIX[lvl]}-${counters[lvl]}`);
     }
   }
 
-  // 4. Bygg arbetsbok.
+  // 3. Bygg arbetsbok.
   const wb = new ExcelJS.Workbook();
   wb.creator = "Traivo";
   wb.created = new Date();
 
   // Läs-mig-flik med interimslist-flaggan (sätts till JA i interim-läge).
-  const readme = wb.addWorksheet("Läs mig först");
+  const readme = wb.addWorksheet(OBJEKTMALL_README_SHEET_NAME);
   readme.columns = [
     { header: "", key: "v", width: 95 },
     { header: "", key: "b", width: 14 },
@@ -350,7 +431,7 @@ export async function buildExportWorkbook(
       : [
           "TRAIVO – EXPORT AV BEFINTLIGA OBJEKT (FÖR UPPDATERING)",
           "",
-          "Den här filen är en kopia av era nuvarande objekt i importmallens kolumnprotokoll.",
+          "Den här filen är en kopia av era nuvarande objekt i importmallens enflik-format.",
           "Systemnummer är ifyllt på varje rad — ändra fält direkt och läs tillbaka filen via",
           "objektimporten för att UPPDATERA befintliga objekt. Lägg nya objekt i en separat",
           "interimslista (se 'Exportera som interim-mall') enligt principen att inte blanda listor.",
@@ -369,117 +450,57 @@ export async function buildExportWorkbook(
     row.getCell(1).alignment = { wrapText: true, vertical: row.getCell(1).alignment?.vertical ?? "top" };
   });
 
-  // Objektflikar (org/butiker/kärl).
-  for (const sheetDef of OBJEKTMALL_SHEETS) {
-    if (sheetDef.key === "metadata") continue;
-    const list = bySheet[sheetDef.key];
-
-    // Metadata-kolumner: endast definitioner som har minst ett värde på fliken.
-    const metaDefsForSheet = defs.filter((d) =>
-      list.some((o) => valuesByObject.get(o.id)?.has(d.id)),
-    );
-
-    const ws = wb.addWorksheet(sheetDef.name);
-    const allCols = [
-      ...sheetDef.columns.map((c) => ({ header: c.header, key: c.key })),
-      ...metaDefsForSheet.map((d) => ({ header: `Metadata - ${d.fieldLabel}`, key: `meta_${d.id}` })),
-    ];
-    ws.columns = allCols.map((c) => ({
-      header: c.header,
-      key: c.key,
-      width: Math.min(Math.max(c.header.length + 4, 16), 36),
-    }));
-
-    const headerRow = ws.getRow(1);
-    headerRow.height = 22;
-    allCols.forEach((c, idx) => {
-      const colDef = sheetDef.columns.find((sc) => sc.key === c.key);
-      const cell = headerRow.getCell(idx + 1);
-      cell.value = c.header;
-      cell.font = { bold: true, color: { argb: "FF1B4B6B" } };
-      cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: colDef?.required ? "FFFDE8B4" : "FFE8F4F8" },
-      };
-      cell.border = { bottom: { style: "medium", color: { argb: "FF1B4B6B" } } };
-    });
-    ws.views = [{ state: "frozen", ySplit: 1 }];
-
-    for (const o of list) {
-      const rowObj: Record<string, string> = {};
-      // Nummerprotokoll
-      if (mode === "interim") {
-        rowObj.systemNumber = "";
-        rowObj.interim = interimById.get(o.id) ?? "";
-        if (sheetDef.key !== "organisation") {
-          rowObj.systemParentNumber = "";
-          rowObj.parentInterim = o.parentId ? interimById.get(o.parentId) ?? "" : "";
-        }
-      } else {
-        rowObj.systemNumber = safeExportCell(o.objectNumber);
-        rowObj.interim = "";
-        if (sheetDef.key !== "organisation") {
-          const parent = o.parentId ? byId.get(o.parentId) : undefined;
-          rowObj.systemParentNumber = safeExportCell(parent?.objectNumber ?? "");
-          rowObj.parentInterim = "";
-        }
-      }
-      // Gemensamma fält
-      rowObj.name = safeExportCell(o.name);
-      if (sheetDef.key === "organisation") {
-        rowObj.description = safeExportCell(o.notes);
-      } else if (sheetDef.key === "stores") {
-        rowObj.address = safeExportCell(o.address);
-        rowObj.postalCode = safeExportCell(o.postalCode);
-        rowObj.city = safeExportCell(o.city);
-      } else if (sheetDef.key === "containers") {
-        rowObj.count = o.containerCount != null && o.containerCount > 0 ? String(o.containerCount) : "";
-        rowObj.notes = safeExportCell(o.notes);
-      }
-      // Informativa metadata-värden
-      const vals = valuesByObject.get(o.id);
-      if (vals) {
-        for (const d of metaDefsForSheet) {
-          const v = vals.get(d.id);
-          if (v) rowObj[`meta_${d.id}`] = safeExportCell(v);
-        }
-      }
-      ws.addRow(rowObj);
-    }
-  }
-
-  // Metadatafält-flik: nuvarande definitioner (round-trippar via samma import).
-  const metaSheetDef = getObjektmallSheet("metadata");
-  const metaWs = wb.addWorksheet(metaSheetDef.name);
-  metaWs.columns = metaSheetDef.columns.map((c) => ({
-    header: c.header,
-    key: c.key,
-    width: Math.min(Math.max(c.header.length + 4, 16), 36),
+  // Import-flik (platt): fasta kolumner A–E + dynamiska metadata-kolumner.
+  const ws = wb.addWorksheet(OBJEKTMALL_IMPORT_SHEET_NAME);
+  const fixedHeaders = OBJEKTMALL_FIXED_COLUMNS.map((c) => c.header);
+  const metaHeaders = metaDefsWithValues.map((d) => d.fieldLabel);
+  const allHeaders = [...fixedHeaders, ...metaHeaders];
+  ws.columns = allHeaders.map((h) => ({
+    header: h,
+    width: Math.min(Math.max((h ?? "").length + 4, 16), 36),
   }));
-  const metaHeader = metaWs.getRow(1);
-  metaHeader.height = 22;
-  metaSheetDef.columns.forEach((c, idx) => {
-    const cell = metaHeader.getCell(idx + 1);
-    cell.value = c.header;
-    cell.font = { bold: true, color: { argb: "FF1B4B6B" } };
+
+  const headerRow = ws.getRow(1);
+  headerRow.height = 22;
+  allHeaders.forEach((h, idx) => {
+    const fixedCol = OBJEKTMALL_FIXED_COLUMNS[idx];
+    const isMeta = idx >= OBJEKTMALL_FIXED_COLUMNS.length;
+    const cell = headerRow.getCell(idx + 1);
+    cell.value = h;
+    cell.font = { bold: true, color: { argb: isMeta ? "FF4A9B9B" : "FF1B4B6B" } };
     cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: c.required ? "FFFDE8B4" : "FFE8F4F8" } };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: isMeta ? "FFE0F2F1" : fixedCol?.required ? "FFFDE8B4" : "FFE8F4F8" },
+    };
     cell.border = { bottom: { style: "medium", color: { argb: "FF1B4B6B" } } };
   });
-  metaWs.views = [{ state: "frozen", ySplit: 1 }];
-  for (const d of defs) {
-    metaWs.addRow({
-      fieldKey: safeExportCell(d.fieldKey),
-      fieldLabel: safeExportCell(d.fieldLabel),
-      dataType: safeExportCell(d.dataType ?? "text"),
-      propagationType: safeExportCell(d.propagationType ?? "falling"),
-      applicableLevels: safeExportCell((d.applicableLevels ?? []).join(",")),
-      defaultValue: safeExportCell(d.defaultValue ?? ""),
-      isRequired: d.isRequired ? "ja" : "nej",
-      sortOrder: d.sortOrder != null ? String(d.sortOrder) : "",
-    });
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+
+  for (const o of objs) {
+    const cells: string[] = [];
+    // Nummerprotokoll (A–D)
+    if (mode === "interim") {
+      cells.push(""); // Systemnummer
+      cells.push(interimById.get(o.id) ?? ""); // Interimsnummer
+      cells.push(""); // Systemföräldranummer
+      cells.push(o.parentId ? interimById.get(o.parentId) ?? "" : ""); // Interimföräldranummer
+    } else {
+      cells.push(safeExportCell(o.objectNumber)); // Systemnummer
+      cells.push(""); // Interimsnummer
+      const parent = o.parentId ? byId.get(o.parentId) : undefined;
+      cells.push(safeExportCell(parent?.objectNumber ?? "")); // Systemföräldranummer
+      cells.push(""); // Interimföräldranummer
+    }
+    // Objektnamn (E)
+    cells.push(safeExportCell(o.name));
+    // Dynamiska metadata-kolumner (F+)
+    const vals = valuesByObject.get(o.id);
+    for (const d of metaDefsWithValues) {
+      cells.push(safeExportCell(vals?.get(d.id) ?? ""));
+    }
+    ws.addRow(cells);
   }
 
   const buf = await wb.xlsx.writeBuffer();
@@ -489,13 +510,6 @@ export async function buildExportWorkbook(
 // ============================================================
 // Parser
 // ============================================================
-type ParsedSheets = {
-  organisation: Array<Record<string, string>>;
-  stores: Array<Record<string, string>>;
-  containers: Array<Record<string, string>>;
-  metadata: Array<Record<string, string>>;
-};
-
 function cellToStr(val: unknown): string {
   if (val === null || val === undefined) return "";
   if (val instanceof Date) return val.toISOString().split("T")[0];
@@ -511,10 +525,17 @@ function cellToStr(val: unknown): string {
   return String(val).trim();
 }
 
+// En rad i den platta Import-fliken.
+type FlatRow = {
+  rowNumber: number; // 1-indexerat radnummer (efter rubrikrad)
+  data: Record<string, string>; // fasta kolumnvärden per key
+  metadata: Record<string, string>; // dynamiska metadata-värden (referensnamn -> värde)
+};
+
 // Läs interimslist-flaggan ("ren nyimport") från instruktionsfliken. Vi letar
 // efter markör-cellen och läser cellen direkt till höger om den.
 function readInterimListFlag(wb: ExcelJS.Workbook): boolean {
-  const readme = wb.getWorksheet("Läs mig först");
+  const readme = wb.getWorksheet(OBJEKTMALL_README_SHEET_NAME);
   if (!readme) return false;
   let flag = false;
   readme.eachRow((row) => {
@@ -531,24 +552,21 @@ function readInterimListFlag(wb: ExcelJS.Workbook): boolean {
 
 async function parseWorkbook(
   buffer: Buffer,
-): Promise<{ sheets: ParsedSheets; warnings: string[]; interimListFlag: boolean }> {
+): Promise<{ rows: FlatRow[]; metadataColumns: string[]; warnings: string[]; interimListFlag: boolean }> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer as any);
   const warnings: string[] = [];
-  const result: ParsedSheets = { organisation: [], stores: [], containers: [], metadata: [] };
 
-  for (const sheetDef of OBJEKTMALL_SHEETS) {
-    const ws = wb.getWorksheet(sheetDef.name);
-    if (!ws) {
-      if (sheetDef.key === "metadata") {
-        warnings.push(`Flik "${sheetDef.name}" saknas — hoppar över (valfri).`);
-        continue;
-      }
-      throw new ValidationError(`Obligatorisk flik saknas: "${sheetDef.name}"`);
-    }
-    const rows = parseSheet(ws, sheetDef);
-    result[sheetDef.key] = rows;
+  // Hitta Import-fliken (efter namn, annars första icke-readme-fliken).
+  let ws = wb.getWorksheet(OBJEKTMALL_IMPORT_SHEET_NAME);
+  if (!ws) {
+    ws = wb.worksheets.find((w) => w.name !== OBJEKTMALL_README_SHEET_NAME);
   }
+  if (!ws) {
+    throw new ValidationError(`Obligatorisk flik saknas: "${OBJEKTMALL_IMPORT_SHEET_NAME}"`);
+  }
+
+  const { rows, metadataColumns } = parseImportSheet(ws);
 
   const interimListFlag = readInterimListFlag(wb);
   if (interimListFlag) {
@@ -557,23 +575,21 @@ async function parseWorkbook(
     );
   }
 
-  return { sheets: result, warnings, interimListFlag };
+  return { rows, metadataColumns, warnings, interimListFlag };
 }
 
-function parseSheet(ws: ExcelJS.Worksheet, def: ObjektmallSheet): Array<Record<string, string>> {
-  // Hitta header-raden (matcha rubrikerna). Tillåt rad 1-5.
-  let headerRowIdx = -1;
-  // Matchar en cell-rubrik mot en kolumndefinition (huvudrubrik eller alias).
-  const matchColumn = (txt: string): ObjektmallColumn | undefined =>
-    def.columns.find((c) => objektmallColumnHeaderAliases(c).includes(txt));
+function parseImportSheet(ws: ExcelJS.Worksheet): { rows: FlatRow[]; metadataColumns: string[] } {
+  const fixedHeaderSet = objektmallFixedHeaderSet();
+  const matchFixed = (txt: string): ObjektmallColumn | undefined =>
+    OBJEKTMALL_FIXED_COLUMNS.find((c) => objektmallColumnHeaderAliases(c).includes(txt));
 
-  const firstColAliases = objektmallColumnHeaderAliases(def.columns[0]);
+  // Hitta rubrikraden (rad 1–5). Kräv att den obligatoriska "Objektnamn"-kolumnen finns.
+  const requiredCols = OBJEKTMALL_FIXED_COLUMNS.filter((c) => c.required);
+  let headerRowIdx = -1;
   for (let r = 1; r <= Math.min(5, ws.rowCount); r++) {
     const row = ws.getRow(r);
     const got: string[] = [];
     row.eachCell({ includeEmpty: true }, (cell) => got.push(cellToStr(cell.value).toLowerCase()));
-    // Kräv att minst de obligatoriska kolumnerna finns (huvudrubrik eller alias).
-    const requiredCols = def.columns.filter((c) => c.required);
     const allRequiredFound = requiredCols.every((c) =>
       objektmallColumnHeaderAliases(c).some((h) => got.includes(h)),
     );
@@ -581,50 +597,77 @@ function parseSheet(ws: ExcelJS.Worksheet, def: ObjektmallSheet): Array<Record<s
       headerRowIdx = r;
       break;
     }
-    // Fallback: matcha åtminstone första kolumnen (huvudrubrik eller alias).
-    if (firstColAliases.includes(got[0] ?? "")) {
-      headerRowIdx = r;
-      break;
-    }
   }
   if (headerRowIdx === -1) {
     throw new ValidationError(
-      `Hittade ingen rubrikrad i flik "${def.name}". Förväntade kolumner: ${def.columns.map((c) => c.header).join(", ")}`,
+      `Hittade ingen rubrikrad i flik "${ws.name}". Förväntade minst kolumnen "Objektnamn" samt nummerkolumnerna A–D.`,
     );
   }
 
-  // Bygg kolumn-index-map baserat på header-raden.
+  // Bygg kolumn-index-map: fasta kolumner (per key) + dynamiska metadata-kolumner
+  // (per referensnamn på rubrikraden).
   const headerRow = ws.getRow(headerRowIdx);
-  const headerByCol: Record<number, string> = {};
+  const fixedByCol: Record<number, string> = {}; // col -> fast key
+  const metaByCol: Record<number, string> = {}; // col -> referensnamn
+  const metadataColumns: string[] = [];
+  const seenMeta = new Set<string>();
   headerRow.eachCell({ includeEmpty: true }, (cell, col) => {
-    const txt = cellToStr(cell.value).toLowerCase();
-    const colDef = matchColumn(txt);
-    if (colDef) headerByCol[col] = colDef.key;
+    const raw = cellToStr(cell.value);
+    if (!raw) return;
+    const lower = raw.toLowerCase();
+    const fixed = matchFixed(lower);
+    if (fixed) {
+      fixedByCol[col] = fixed.key;
+      return;
+    }
+    // Dynamisk metadata-kolumn — bevara referensnamnet exakt som skrivet.
+    if (fixedHeaderSet.has(lower)) return; // skydd: alias som ej fångats ovan
+    const refName = raw.trim();
+    if (!refName) return;
+    metaByCol[col] = refName;
+    if (!seenMeta.has(refName.toLowerCase())) {
+      seenMeta.add(refName.toLowerCase());
+      metadataColumns.push(refName);
+    }
   });
 
-  const firstKey = def.columns[0].key;
-  const firstDesc = def.columns[0].description;
-  const rows: Array<Record<string, string>> = [];
+  const firstFixedKey = OBJEKTMALL_FIXED_COLUMNS[0].key;
+  const firstDesc = (OBJEKTMALL_FIXED_COLUMNS[0].description ?? "").trim();
+  const rows: FlatRow[] = [];
+  let dataRowNo = 0;
   for (let r = headerRowIdx + 1; r <= ws.rowCount; r++) {
     const row = ws.getRow(r);
-    const obj: Record<string, string> = {};
+    const data: Record<string, string> = {};
+    const metadata: Record<string, string> = {};
     let anyValue = false;
     row.eachCell({ includeEmpty: true }, (cell, col) => {
-      const key = headerByCol[col];
-      if (!key) return;
       const val = cellToStr(cell.value);
-      if (val) anyValue = true;
-      obj[key] = val;
+      const fixedKey = fixedByCol[col];
+      if (fixedKey) {
+        if (val) anyValue = true;
+        data[fixedKey] = val;
+        return;
+      }
+      const metaName = metaByCol[col];
+      if (metaName) {
+        if (val) {
+          anyValue = true;
+          metadata[metaName] = val;
+        }
+      }
     });
     if (!anyValue) continue;
     // Hoppa över exempel-raden (markerad i första kolumnen).
-    const firstVal = (obj[firstKey] ?? "").trim();
+    const firstVal = (data[firstFixedKey] ?? "").trim();
     if (firstVal.startsWith("[EXEMPEL")) continue;
-    // Skippa rad som ser ut som beskrivnings-raden vi själva skriver.
-    if (firstDesc && obj[firstKey] === firstDesc) continue;
-    rows.push(obj);
+    // Skippa beskrivnings-raden vi själva skriver (rad 2 i tom mall): dess
+    // första cell är exakt den fasta kolumnens beskrivningstext.
+    if (firstDesc && firstVal === firstDesc) continue;
+    dataRowNo++;
+    rows.push({ rowNumber: dataRowNo, data, metadata });
   }
-  return rows;
+
+  return { rows, metadataColumns };
 }
 
 // ============================================================
@@ -634,39 +677,33 @@ type ParentRef =
   | { mode: "interim"; key: string }
   | { mode: "system"; objectId: string };
 
+// Task #627: per-fält-diff på en uppdaterad rad (gammalt → nytt).
+type ChangedField = { field: string; label: string; from: string; to: string };
+
 // Per-rad upplöst åtgärd som commit-steget återanvänder utan att räkna om.
 type RowResolution = {
   action: "create" | "update" | "repoint";
   targetObjectId: string | null; // för update/repoint
   interimNo: string; // "" om ingen
   systemNumber: string; // "" om ingen
-  parentRef: ParentRef | null; // null = förälder ej angiven (bevaras vid update)
-  name: string; // upplöst namn (Objektnamn eller genererat för kärl)
-  // Task #621: true om raden faktiskt ändrar databasen (ny, ompekad, eller
-  // uppdatering där minst ett angivet fält skiljer sig). Används för röd-markering.
+  parentRef: ParentRef | null; // null = ingen förälder (rot) / bevaras vid update
+  name: string;
+  level: ObjLevel; // härledd från djupet i förälderkedjan
+  depth: number;
   changed: boolean;
-  // Task #627: per-fält-diff för uppdaterade/ompekade rader (tom för nya objekt).
   changedFields: ChangedField[];
+  metadata: Record<string, string>; // dynamiska metadata-värden (för förhandsvisning)
 };
 
 type ValRow = {
-  sheet: ObjektmallSheet["key"];
-  rowNumber: number; // 1-indexerat radnummer i fliken (efter header)
-  data: Record<string, string>;
-  errors: string[];
-  res?: RowResolution;
-};
-
-type InterimEntry = {
-  level: "organisation" | "stores" | "containers";
-  interim: string;
-  name: string;
   rowNumber: number;
-  address: string | null;
-  city: string | null;
-  postalCode: string | null;
-  // Befintligt objekt-id om interimet pekar på en uppdatering/re-import, annars null (skapas).
-  targetObjectId: string | null;
+  data: Record<string, string>;
+  metadata: Record<string, string>;
+  errors: string[];
+  // Mellanlagring under upplösning.
+  target?: ExistingObject;
+  parentRef?: ParentRef | null;
+  res?: RowResolution;
 };
 
 // Lättviktig vy av ett befintligt objekt vi slår upp för matchning.
@@ -679,48 +716,37 @@ type ExistingObject = {
   city: string | null;
   postalCode: string | null;
   notes: string | null;
-  containerCount: number;
+  containerCount: number | null;
 };
 
-// Task #627: per-fält-diff på en uppdaterad rad (gammalt → nytt).
-type ChangedField = { field: string; label: string; from: string; to: string };
-
-type MetaDefDecision = {
-  fieldKey: string;
-  fieldLabel: string;
-  dataType: string;
-  propagationType: string;
-  applicableLevels: string[];
-  defaultValue: string | null;
-  isRequired: boolean;
-  sortOrder: number;
-  action: "create" | "update" | "skip" | "blocked";
-  reason?: string;
-  existingId?: string;
-  // Task #627: per-fält-diff för uppdaterade metadatadefinitioner.
-  changedFields?: ChangedField[];
-};
+interface ImportSheetReport {
+  name: string;
+  totalRows: number;
+  toCreate: number;
+  toUpdate: number;
+  toRepoint: number;
+  errorRows: number;
+  errors: Array<{ row: number; messages: string[] }>;
+  actions: Array<{
+    row: number;
+    action: "create" | "update" | "repoint";
+    name: string;
+    level: ObjLevel;
+    levelLabel: string;
+    detail: string;
+    changed: boolean;
+    changedFields: ChangedField[];
+    metadata: Record<string, string>;
+  }>;
+}
 
 interface ValidationReport {
-  sheets: Record<string, {
-    name: string;
-    totalRows: number;
-    toCreate: number;
-    toUpdate: number;
-    toRepoint: number;
-    errorRows: number;
-    errors: Array<{ row: number; messages: string[] }>;
-    actions: Array<{ row: number; action: "create" | "update" | "repoint"; name: string; detail: string; changed: boolean; changedFields: ChangedField[] }>;
-  }>;
+  import: ImportSheetReport;
+  metadataColumns: string[];
   warnings: string[];
   hasBlockingErrors: boolean;
   interimListFlag: boolean;
-  metadata: MetaDefDecision[];
 }
-
-const VALID_DATA_TYPES = ["text", "number", "date", "boolean", "json"] as const;
-const VALID_PROPAGATIONS = ["fixed", "falling", "dynamic"] as const;
-const VALID_LEVELS = ["koncern", "brf", "fastighet", "rum", "karl"] as const;
 
 function parseBool(v: string | undefined): boolean {
   if (!v) return false;
@@ -728,91 +754,50 @@ function parseBool(v: string | undefined): boolean {
   return s === "ja" || s === "yes" || s === "true" || s === "1" || s === "x";
 }
 
-function parseInt0(v: string | undefined): number {
-  if (!v) return 0;
-  const n = parseInt(v.trim(), 10);
-  return Number.isFinite(n) ? n : 0;
-}
-
-// Task #627: bygg de sammansatta notes-fälten på ETT ställe så att både
-// valideringens diff och commit-steget alltid härleder samma värde.
-function buildOrgNotes(data: Record<string, string>): string {
-  return (data.description ?? "").trim();
-}
-function buildStoreNotes(data: Record<string, string>): string {
-  return [
-    data.contactName && `Kontakt: ${data.contactName}`,
-    data.contactPhone && `Tel: ${data.contactPhone}`,
-    data.contactEmail && `E-post: ${data.contactEmail}`,
-  ].filter(Boolean).join("\n");
-}
-function buildContainerNotes(data: Record<string, string>): string {
-  return [
-    data.volumeLiters && `Volym: ${data.volumeLiters} L`,
-    data.emptyingDay && `Tömningsdag: ${data.emptyingDay}`,
-    data.notes,
-  ].filter(Boolean).join("\n");
-}
-
 async function validateAll(
-  sheets: ParsedSheets,
+  flatRows: FlatRow[],
+  metadataColumns: string[],
   tenantId: string,
   warnings: string[],
   interimListFlag: boolean = false,
-): Promise<{ report: ValidationReport; rows: Map<string, ValRow[]>; interim: Map<string, InterimEntry>; metaDecisions: MetaDefDecision[] }> {
-  const interim = new Map<string, InterimEntry>();
-  const allRows = new Map<string, ValRow[]>();
-  const errorsBySheet: Record<string, Array<{ row: number; messages: string[] }>> = {};
-  const actionsBySheet: Record<string, Array<{ row: number; action: "create" | "update" | "repoint"; name: string; detail: string; changed: boolean; changedFields: ChangedField[] }>> = {};
-  const countersBySheet: Record<string, { toCreate: number; toUpdate: number; toRepoint: number; errorRows: number; totalRows: number }> = {};
+): Promise<{ report: ValidationReport; rows: ValRow[] }> {
+  const trim = (data: Record<string, string>, key: string) => (data[key] ?? "").trim();
 
-  for (const def of OBJEKTMALL_SHEETS) {
-    countersBySheet[def.key] = { toCreate: 0, toUpdate: 0, toRepoint: 0, errorRows: 0, totalRows: 0 };
-    errorsBySheet[def.key] = [];
-    actionsBySheet[def.key] = [];
-    allRows.set(def.key, []);
-  }
+  const valRows: ValRow[] = flatRows.map((r) => ({
+    rowNumber: r.rowNumber,
+    data: r.data,
+    metadata: r.metadata,
+    errors: [],
+  }));
 
-  const objectSheetKeys = ["organisation", "stores", "containers"] as const;
-  const trimVal = (data: Record<string, string>, key: string) => (data[key] ?? "").trim();
-
-  // 1. Bygg ValRow-poster + interim-unikhet per flik (ingen tung validering än).
-  for (const def of OBJEKTMALL_SHEETS) {
-    if (def.key === "metadata") continue;
-    const rows = sheets[def.key];
-    countersBySheet[def.key].totalRows = rows.length;
+  // 1. Interim-unikhet över hela fliken.
+  const interimToRow = new Map<string, ValRow>();
+  {
     const seen = new Set<string>();
-    for (let i = 0; i < rows.length; i++) {
-      const data = rows[i];
-      const rowNumber = i + 1;
-      const errs: string[] = [];
-
-      const localInterim = trimVal(data, "interim");
-      if (localInterim) {
-        if (seen.has(localInterim)) {
-          errs.push(`Dubblett av interimsnummer "${localInterim}" inom samma flik`);
-        }
-        seen.add(localInterim);
+    for (const row of valRows) {
+      const interimNo = trim(row.data, "interim");
+      if (!interimNo) continue;
+      if (seen.has(interimNo)) {
+        row.errors.push(`Dubblett av interimsnummer "${interimNo}"`);
+        continue;
       }
-
-      allRows.get(def.key)!.push({ sheet: def.key as any, rowNumber, data, errors: errs });
+      seen.add(interimNo);
+      interimToRow.set(interimNo, row);
     }
   }
 
-  // 2. Förladda befintliga objekt för matchning (systemnummer/butiksnummer + butiksnamn).
+  // 2. Förladda befintliga objekt för matchning (systemnummer/butiksnummer + namn).
   const numberLookup = new Set<string>();
   const nameLookup = new Set<string>();
-  for (const key of objectSheetKeys) {
-    for (const row of allRows.get(key)!) {
-      const sysNo = interimListFlag ? "" : trimVal(row.data, "systemNumber");
-      const sysParent = interimListFlag ? "" : trimVal(row.data, "systemParentNumber");
-      const interimNo = trimVal(row.data, "interim");
-      const name = trimVal(row.data, "name");
-      if (sysNo) numberLookup.add(sysNo);
-      if (sysParent) numberLookup.add(sysParent);
-      if (interimNo) numberLookup.add(OBJEKTMALL_INTERIM_PREFIX + interimNo);
-      if (sysNo && name) nameLookup.add(name.toLowerCase());
-    }
+  for (const row of valRows) {
+    const sysNo = interimListFlag ? "" : trim(row.data, "systemNumber");
+    const sysParent = interimListFlag ? "" : trim(row.data, "systemParentNumber");
+    const interimNo = trim(row.data, "interim");
+    const name = trim(row.data, "name");
+    if (sysNo) numberLookup.add(sysNo);
+    if (sysParent) numberLookup.add(sysParent);
+    if (interimNo) numberLookup.add(OBJEKTMALL_INTERIM_PREFIX + interimNo);
+    if (sysNo && name) nameLookup.add(name.toLowerCase());
   }
 
   const byObjNum = new Map<string, ExistingObject>();
@@ -850,7 +835,7 @@ async function validateAll(
         city: e.city ?? null,
         postalCode: e.postalCode ?? null,
         notes: e.notes ?? null,
-        containerCount: e.containerCount ?? 0,
+        containerCount: e.containerCount ?? null,
       };
       if (obj.objectNumber) byObjNum.set(obj.objectNumber, obj);
       const nl = obj.name.toLowerCase();
@@ -862,390 +847,290 @@ async function validateAll(
     }
   }
 
-  // 3. Lös upp varje rad: klassificera skapa/uppdatera/peka-om + förälder.
-  //    Bearbetas i nivåordning så att interim-map är komplett uppåt när barn löses.
-  for (const def of OBJEKTMALL_SHEETS) {
-    if (def.key === "metadata") continue;
-    const isRoot = def.key === "organisation";
-    for (const row of allRows.get(def.key)!) {
-      if (row.errors.length) continue;
-      const data = row.data;
-      const interimNo = trimVal(data, "interim");
-      const sysNo = interimListFlag ? "" : trimVal(data, "systemNumber");
-      const sysParent = interimListFlag ? "" : trimVal(data, "systemParentNumber");
-      const parentInterim = trimVal(data, "parentInterim");
-      const rawName = trimVal(data, "name");
-
-      // 3a. Nummer-krav
-      if (!sysNo && !interimNo) {
-        row.errors.push(
-          interimListFlag
-            ? "Interimsnummer krävs i interimslist-läge (ren nyimport)."
-            : "Raden saknar både Systemnummer (uppdatering) och Interimsnummer (nytt objekt).",
-        );
-        continue;
-      }
-
-      // 3b. Namn-krav (kärl får auto-genereras från Kärltyp)
-      const containerType = trimVal(data, "containerType");
-      if (def.key !== "containers" && !rawName) {
-        row.errors.push('Saknat värde: "Objektnamn"');
-        continue;
-      }
-      if (def.key === "containers" && !rawName && !containerType) {
-        row.errors.push('Kärl kräver antingen "Objektnamn" eller "Kärltyp" (för auto-genererat namn).');
-        continue;
-      }
-
-      // 3c. Matcha mot befintligt objekt (uppdatering) eller skapa nytt.
-      let target: ExistingObject | undefined;
-      if (sysNo) {
-        target = byObjNum.get(sysNo);
-        if (!target) {
-          const matches = byNameLower.get(rawName.toLowerCase()) ?? [];
-          if (matches.length === 1) {
-            target = matches[0];
-          } else if (matches.length > 1) {
-            row.errors.push(
-              `Flera befintliga objekt har namnet "${rawName}". Ange ett exakt Systemnummer för att peka ut rätt objekt.`,
-            );
-            continue;
-          } else {
-            row.errors.push(
-              `Systemnummer "${sysNo}"${rawName ? ` (eller namn "${rawName}")` : ""} matchade inget befintligt objekt.`,
-            );
-            continue;
-          }
-        }
-      } else {
-        // Endast interim → re-import uppdaterar om MALL-<interim> redan finns.
-        target = byObjNum.get(OBJEKTMALL_INTERIM_PREFIX + interimNo);
-      }
-      let action: RowResolution["action"] = target ? "update" : "create";
-
-      // 3d. Förälder-upplösning (utom rotnivå).
-      let parentRef: ParentRef | null = null;
-      let parentNameForGen: string | null = null;
-      let inheritedAddress: { address: string | null; city: string | null; postalCode: string | null } = {
-        address: null,
-        city: null,
-        postalCode: null,
-      };
-
-      if (isRoot) {
-        if (parentInterim || sysParent) {
-          warnings.push(
-            `Steg 1 rad ${row.rowNumber}: förälder anges på rotnivå (organisation) och ignoreras.`,
-          );
-        }
-      } else if (parentInterim) {
-        const pe = interim.get(parentInterim);
-        if (!pe) {
-          row.errors.push(
-            `Interimföräldranummer "${parentInterim}" hittades inte tidigare i filen (måste vara en rad ovanför i Steg 1${def.key === "containers" ? "/2" : ""}).`,
-          );
-          continue;
-        }
-        if (def.key === "stores" && pe.level !== "organisation") {
-          row.errors.push(`Interimföräldranummer "${parentInterim}" är inte en organisation (Steg 1).`);
-          continue;
-        }
-        if (def.key === "containers" && pe.level === "containers") {
-          row.errors.push(`Interimföräldranummer "${parentInterim}" är ett kärl — välj en butik eller organisation.`);
-          continue;
-        }
-        parentRef = { mode: "interim", key: parentInterim };
-        parentNameForGen = pe.name;
-        inheritedAddress = { address: pe.address, city: pe.city, postalCode: pe.postalCode };
-      } else if (sysParent) {
-        const pObj = byObjNum.get(sysParent);
-        if (!pObj) {
-          row.errors.push(`Systemföräldranummer "${sysParent}" matchade inget befintligt objekt.`);
-          continue;
-        }
-        parentRef = { mode: "system", objectId: pObj.id };
-        parentNameForGen = pObj.name;
-        inheritedAddress = { address: pObj.address, city: pObj.city, postalCode: pObj.postalCode };
-      }
-
-      // Nya objekt (utom rot) måste ha en förälder.
-      if (!isRoot && action === "create" && !parentRef) {
-        row.errors.push("Förälder krävs för nytt objekt — ange Interimföräldranummer eller Systemföräldranummer.");
-        continue;
-      }
-
-      // 3e. Repekning: uppdatering där angiven förälder skiljer sig från nuvarande.
-      if (action === "update" && parentRef && target) {
-        let newParentId: string | null;
-        if (parentRef.mode === "interim") {
-          const pe = interim.get(parentRef.key);
-          newParentId = pe?.targetObjectId ?? `NEW:${parentRef.key}`;
-        } else {
-          newParentId = parentRef.objectId;
-        }
-        if (newParentId !== target.parentId) action = "repoint";
-      }
-
-      // 3f. Upplöst namn (kärl auto-genereras vid behov).
-      const resolvedName =
-        rawName ||
-        (def.key === "containers"
-          ? `${containerType || "Kärl"} — ${parentNameForGen ?? "okänd"}`
-          : rawName);
-
-      // Task #621/#627: avgör om raden faktiskt ändrar databasen + bygg per-fält-diff.
-      // create ändrar alltid (inget mål att jämföra mot). update/repoint jämför varje
-      // angivet fält mot målet — tomma fält bevaras och räknas inte som ändring.
-      // Diffen speglar exakt vad commit-steget skriver (namn/adress/notes/antal).
-      const changedFields: ChangedField[] = [];
-      if (target && (action === "update" || action === "repoint")) {
-        if (!!rawName && rawName !== (target.name ?? "")) {
-          changedFields.push({ field: "name", label: "Namn", from: target.name ?? "", to: rawName });
-        }
-        if (def.key === "organisation") {
-          const newNotes = buildOrgNotes(data);
-          if (!!newNotes && newNotes !== (target.notes ?? "")) {
-            changedFields.push({ field: "notes", label: "Beskrivning", from: target.notes ?? "", to: newNotes });
-          }
-        } else if (def.key === "stores") {
-          const upAddr = trimVal(data, "address");
-          const upCity = trimVal(data, "city");
-          const upPostal = trimVal(data, "postalCode");
-          if (!!upAddr && upAddr !== (target.address ?? "")) {
-            changedFields.push({ field: "address", label: "Adress", from: target.address ?? "", to: upAddr });
-          }
-          if (!!upCity && upCity !== (target.city ?? "")) {
-            changedFields.push({ field: "city", label: "Stad", from: target.city ?? "", to: upCity });
-          }
-          if (!!upPostal && upPostal !== (target.postalCode ?? "")) {
-            changedFields.push({ field: "postalCode", label: "Postnummer", from: target.postalCode ?? "", to: upPostal });
-          }
-          const newNotes = buildStoreNotes(data);
-          if (!!newNotes && newNotes !== (target.notes ?? "")) {
-            changedFields.push({ field: "notes", label: "Kontaktuppgifter", from: target.notes ?? "", to: newNotes });
-          }
-        } else if (def.key === "containers") {
-          const newNotes = buildContainerNotes(data);
-          if (!!newNotes && newNotes !== (target.notes ?? "")) {
-            changedFields.push({ field: "notes", label: "Anteckningar", from: target.notes ?? "", to: newNotes });
-          }
-          const newCount = parseInt0(data.count);
-          if (newCount > 0 && newCount !== (target.containerCount ?? 0)) {
-            changedFields.push({ field: "containerCount", label: "Antal", from: String(target.containerCount ?? 0), to: String(newCount) });
-          }
-        }
-      }
-      // repoint ändrar alltid (förälder byts), create skapar nytt — annars styr diffen.
-      const changed = action === "create" || action === "repoint" || changedFields.length > 0;
-
-      row.res = {
-        action,
-        targetObjectId: target?.id ?? null,
-        interimNo,
-        systemNumber: sysNo,
-        parentRef,
-        name: resolvedName,
-        changed,
-        changedFields,
-      };
-
-      // 3g. Registrera interim-entry så barn kan referera detta som förälder.
-      if (interimNo) {
-        const entryAddress =
-          def.key === "stores"
-            ? { address: trimVal(data, "address") || target?.address || null, city: trimVal(data, "city") || target?.city || null, postalCode: trimVal(data, "postalCode") || target?.postalCode || null }
-            : def.key === "containers"
-              ? inheritedAddress
-              : { address: null, city: null, postalCode: null };
-        interim.set(interimNo, {
-          level: def.key as InterimEntry["level"],
-          interim: interimNo,
-          name: resolvedName,
-          rowNumber: row.rowNumber,
-          address: entryAddress.address,
-          city: entryAddress.city,
-          postalCode: entryAddress.postalCode,
-          targetObjectId: target?.id ?? null,
-        });
-      }
+  // Lättvikts id->parentId-karta för hela tenant — används för att räkna djup på
+  // system-föräldrar (som kan ligga utanför filen).
+  const parentIdMap = new Map<string, string | null>();
+  {
+    const all = await db
+      .select({ id: objects.id, parentId: objects.parentId })
+      .from(objects)
+      .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
+    for (const r of all) parentIdMap.set(r.id, r.parentId ?? null);
+  }
+  const systemDepthCache = new Map<string, number>();
+  function systemDepth(id: string): number {
+    if (systemDepthCache.has(id)) return systemDepthCache.get(id)!;
+    let d = 0;
+    let cur: string = id;
+    const seen = new Set<string>();
+    while (!seen.has(cur)) {
+      seen.add(cur);
+      const p: string | null = parentIdMap.get(cur) ?? null;
+      if (!p) break;
+      d++;
+      cur = p;
+      if (d > 50) break;
     }
+    systemDepthCache.set(id, d);
+    return d;
   }
 
-  // 4. Räkna och bygg per-rad-åtgärdslista per flik.
-  for (const def of OBJEKTMALL_SHEETS) {
-    if (def.key === "metadata") continue;
-    for (const row of allRows.get(def.key)!) {
-      if (row.errors.length || !row.res) {
-        if (row.errors.length) {
-          countersBySheet[def.key].errorRows++;
-          errorsBySheet[def.key].push({ row: row.rowNumber, messages: row.errors });
-        }
-        continue;
-      }
-      const res = row.res;
-      if (res.action === "create") {
-        countersBySheet[def.key].toCreate++;
-      } else if (res.action === "repoint") {
-        countersBySheet[def.key].toRepoint++;
-      } else {
-        countersBySheet[def.key].toUpdate++;
-      }
-      if (actionsBySheet[def.key].length < 200) {
-        const detail =
-          res.action === "create"
-            ? "Skapar nytt objekt"
-            : res.action === "repoint"
-              ? "Uppdaterar + pekar om till ny förälder"
-              : "Uppdaterar befintligt objekt";
-        actionsBySheet[def.key].push({ row: row.rowNumber, action: res.action, name: res.name, detail, changed: res.changed, changedFields: res.changedFields });
-      }
-    }
-  }
+  // 3. Klassificera varje rad (skapa/uppdatera) + matcha mot befintligt objekt.
+  for (const row of valRows) {
+    if (row.errors.length) continue;
+    const data = row.data;
+    const interimNo = trim(data, "interim");
+    const sysNo = interimListFlag ? "" : trim(data, "systemNumber");
+    const name = trim(data, "name");
 
-  // 5. Metadata-validering
-  const metaDecisions: MetaDefDecision[] = [];
-  const metaRows = sheets.metadata;
-  countersBySheet.metadata.totalRows = metaRows.length;
-
-  const existingDefs = metaRows.length
-    ? await db
-        .select()
-        .from(metadataDefinitions)
-        .where(and(eq(metadataDefinitions.tenantId, tenantId)))
-    : [];
-  const existingByKey = new Map(existingDefs.map((d) => [d.fieldKey, d]));
-
-  for (let i = 0; i < metaRows.length; i++) {
-    const r = metaRows[i];
-    const rowNumber = i + 1;
-    const errs: string[] = [];
-    const fieldKey = (r.fieldKey ?? "").trim();
-    const fieldLabel = (r.fieldLabel ?? "").trim();
-    if (!fieldKey) errs.push('Saknat värde: "Fältnyckel"');
-    if (!fieldLabel) errs.push('Saknat värde: "Visningsnamn"');
-    if (fieldKey && !/^[a-z0-9_]+$/i.test(fieldKey)) {
-      errs.push(`Fältnyckel "${fieldKey}" får endast innehålla bokstäver, siffror och understreck`);
+    if (!sysNo && !interimNo) {
+      row.errors.push(
+        interimListFlag
+          ? "Interimsnummer krävs i interimslist-läge (ren nyimport)."
+          : "Raden saknar både Systemnummer (uppdatering) och Interimsnummer (nytt objekt).",
+      );
+      continue;
     }
-
-    const dataType = ((r.dataType ?? "text").trim() || "text").toLowerCase();
-    if (!VALID_DATA_TYPES.includes(dataType as any)) {
-      errs.push(`Ogiltig datatyp "${r.dataType}". Tillåtna: ${VALID_DATA_TYPES.join(", ")}`);
-    }
-    const propagationType = ((r.propagationType ?? "falling").trim() || "falling").toLowerCase();
-    if (!VALID_PROPAGATIONS.includes(propagationType as any)) {
-      errs.push(`Ogiltig propagering "${r.propagationType}". Tillåtna: ${VALID_PROPAGATIONS.join(", ")}`);
-    }
-    const levelsRaw = (r.applicableLevels ?? "").trim();
-    const applicableLevels = levelsRaw
-      ? levelsRaw.split(/[,;]/).map((s) => s.trim().toLowerCase()).filter(Boolean)
-      : [];
-    const invalidLevels = applicableLevels.filter((l) => !VALID_LEVELS.includes(l as any));
-    if (invalidLevels.length > 0) {
-      errs.push(`Okända nivåer: ${invalidLevels.join(", ")}. Tillåtna: ${VALID_LEVELS.join(", ")}`);
-    }
-
-    if (errs.length > 0) {
-      countersBySheet.metadata.errorRows++;
-      errorsBySheet.metadata.push({ row: rowNumber, messages: errs });
+    if (!name) {
+      row.errors.push('Saknat värde: "Objektnamn"');
       continue;
     }
 
-    const decision: MetaDefDecision = {
-      fieldKey,
-      fieldLabel,
-      dataType,
-      propagationType,
-      applicableLevels,
-      defaultValue: (r.defaultValue ?? "").trim() || null,
-      isRequired: parseBool(r.isRequired),
-      sortOrder: parseInt0(r.sortOrder),
-      action: "create",
-    };
-
-    const existing = existingByKey.get(fieldKey);
-    if (existing) {
-      // Strukturella fält får ej ändras om definition redan finns och används.
-      // För enkelhet: tillåt PATCH av icke-strukturella fält (label, default, required, sortOrder).
-      // Om strukturella fält ändras flaggar vi varning men ändrar inte dem.
-      const structuralChanged =
-        (existing.dataType ?? "text") !== dataType ||
-        (existing.propagationType ?? "falling") !== propagationType ||
-        JSON.stringify((existing.applicableLevels ?? []).slice().sort()) !==
-          JSON.stringify(applicableLevels.slice().sort());
-      decision.existingId = existing.id;
-      decision.action = "update";
-      // Task #627: bygg per-fält-diff mot befintlig definition. Visa ENDAST de
-      // fält commit-steget faktiskt skriver (fieldLabel/defaultValue/isRequired/
-      // sortOrder) — strukturella fält (dataType/propagering/nivåer) persisteras
-      // aldrig vid import (de blockeras vid usage>0 och ignoreras annars), så att
-      // diffa dem skulle lova en ändring som commit inte gör.
-      const metaChanges: ChangedField[] = [];
-      if (fieldLabel !== (existing.fieldLabel ?? "")) {
-        metaChanges.push({ field: "fieldLabel", label: "Visningsnamn", from: existing.fieldLabel ?? "", to: fieldLabel });
-      }
-      const newDefault = (r.defaultValue ?? "").trim() || null;
-      if ((newDefault ?? "") !== (existing.defaultValue ?? "")) {
-        metaChanges.push({ field: "defaultValue", label: "Standardvärde", from: existing.defaultValue ?? "", to: newDefault ?? "" });
-      }
-      const newRequired = parseBool(r.isRequired);
-      if (newRequired !== !!existing.isRequired) {
-        metaChanges.push({ field: "isRequired", label: "Obligatoriskt", from: existing.isRequired ? "Ja" : "Nej", to: newRequired ? "Ja" : "Nej" });
-      }
-      const newSort = parseInt0(r.sortOrder);
-      if (newSort !== (existing.sortOrder ?? 0)) {
-        metaChanges.push({ field: "sortOrder", label: "Sorteringsordning", from: String(existing.sortOrder ?? 0), to: String(newSort) });
-      }
-      decision.changedFields = metaChanges;
-      if (structuralChanged) {
-        // Använd central usage-räknare för att veta om vi får blockera ändringen.
-        const { storage } = await import("../storage");
-        const usage = await storage.getMetadataDefinitionUsage(existing.id);
-        if (usage.total > 0) {
-          decision.action = "blocked";
-          decision.reason = `Strukturell ändring blockerad — fältet används på ${usage.total} ställen. Ändra dataType/propagering/nivåer via metadata-vyn.`;
-          countersBySheet.metadata.errorRows++;
-          errorsBySheet.metadata.push({ row: rowNumber, messages: [decision.reason] });
-          metaDecisions.push(decision);
+    let target: ExistingObject | undefined;
+    if (sysNo) {
+      target = byObjNum.get(sysNo);
+      if (!target) {
+        const matches = byNameLower.get(name.toLowerCase()) ?? [];
+        if (matches.length === 1) {
+          target = matches[0];
+        } else if (matches.length > 1) {
+          row.errors.push(
+            `Flera befintliga objekt har namnet "${name}". Ange ett exakt Systemnummer för att peka ut rätt objekt.`,
+          );
+          continue;
+        } else {
+          row.errors.push(
+            `Systemnummer "${sysNo}" (eller namn "${name}") matchade inget befintligt objekt.`,
+          );
           continue;
         }
       }
-      countersBySheet.metadata.toUpdate++;
     } else {
-      countersBySheet.metadata.toCreate++;
+      // Endast interim → re-import uppdaterar om MALL-<interim> redan finns.
+      target = byObjNum.get(OBJEKTMALL_INTERIM_PREFIX + interimNo);
     }
-    metaDecisions.push(decision);
+    row.target = target;
   }
 
-  const reportSheets: ValidationReport["sheets"] = {};
-  let blocking = false;
-  for (const def of OBJEKTMALL_SHEETS) {
-    const c = countersBySheet[def.key];
-    if (c.errorRows > 0) blocking = true;
-    reportSheets[def.key] = {
-      name: def.name,
-      totalRows: c.totalRows,
-      toCreate: c.toCreate,
-      toUpdate: c.toUpdate,
-      toRepoint: c.toRepoint,
-      errorRows: c.errorRows,
-      errors: errorsBySheet[def.key].slice(0, 200),
-      actions: actionsBySheet[def.key] ?? [],
+  // 4. Lös upp förälder per rad (ordnings-oberoende).
+  for (const row of valRows) {
+    if (row.errors.length) continue;
+    const data = row.data;
+    const sysParent = interimListFlag ? "" : trim(data, "systemParentNumber");
+    const parentInterim = trim(data, "parentInterim");
+    let parentRef: ParentRef | null = null;
+
+    if (parentInterim) {
+      const pr = interimToRow.get(parentInterim);
+      if (!pr) {
+        row.errors.push(`Interimföräldranummer "${parentInterim}" hittades inte i filen.`);
+        continue;
+      }
+      if (pr === row) {
+        row.errors.push("En rad kan inte vara sin egen förälder.");
+        continue;
+      }
+      parentRef = { mode: "interim", key: parentInterim };
+    } else if (sysParent) {
+      const pObj = byObjNum.get(sysParent);
+      if (!pObj) {
+        row.errors.push(`Systemföräldranummer "${sysParent}" matchade inget befintligt objekt.`);
+        continue;
+      }
+      parentRef = { mode: "system", objectId: pObj.id };
+    }
+    row.parentRef = parentRef;
+  }
+
+  // 5. Härled djup (och därmed nivå) per rad via förälderkedjan. Cykler flaggas.
+  const depthCache = new Map<ValRow, number>();
+  function rowDepth(row: ValRow, stack: Set<ValRow>): number | null {
+    if (depthCache.has(row)) return depthCache.get(row)!;
+    const parentRef = row.parentRef ?? null;
+    if (!parentRef) {
+      depthCache.set(row, 0);
+      return 0;
+    }
+    if (parentRef.mode === "system") {
+      const d = systemDepth(parentRef.objectId) + 1;
+      depthCache.set(row, d);
+      return d;
+    }
+    // interim-förälder i filen
+    const pr = interimToRow.get(parentRef.key);
+    if (!pr) {
+      // Bör redan ha flaggats i steg 4, men var defensiv.
+      return null;
+    }
+    if (stack.has(pr)) {
+      return null; // cykel
+    }
+    stack.add(pr);
+    const pd = rowDepth(pr, stack);
+    stack.delete(pr);
+    if (pd === null) return null;
+    const d = pd + 1;
+    depthCache.set(row, d);
+    return d;
+  }
+
+  for (const row of valRows) {
+    if (row.errors.length) continue;
+    const d = rowDepth(row, new Set([row]));
+    if (d === null) {
+      row.errors.push("Cyklisk förälderkedja upptäckt (en rad är förälder till sig själv via interimsnummer).");
+    }
+  }
+
+  // 6. Bygg RowResolution: nivå, repekning, namn-diff, metadata-karta.
+  for (const row of valRows) {
+    if (row.errors.length) continue;
+    const data = row.data;
+    const interimNo = trim(data, "interim");
+    const sysNo = interimListFlag ? "" : trim(data, "systemNumber");
+    const name = trim(data, "name");
+    const target = row.target;
+    const parentRef = row.parentRef ?? null;
+    const depth = depthCache.get(row) ?? 0;
+    const level = levelForDepth(depth);
+
+    let action: RowResolution["action"] = target ? "update" : "create";
+
+    // Repekning: uppdatering där angiven förälder skiljer sig från nuvarande.
+    if (action === "update" && parentRef && target) {
+      let newParentId: string | null;
+      if (parentRef.mode === "interim") {
+        const pr = interimToRow.get(parentRef.key);
+        newParentId = pr?.target?.id ?? `NEW:${parentRef.key}`;
+      } else {
+        newParentId = parentRef.objectId;
+      }
+      if (newParentId !== target.parentId) action = "repoint";
+    }
+
+    // Diffen speglar exakt vad commit-steget skriver: namn samt de kända
+    // objektfält (adress/ort/postnummer/anteckningar/antal kärl) som ligger bland
+    // de dynamiska metadata-kolumnerna. Helt fria metadata-värden persisteras inte
+    // i denna task (separat följd-task) och visas enbart i metadata-kartan.
+    const changedFields: ChangedField[] = [];
+    if (target && (action === "update" || action === "repoint")) {
+      if (name && name !== (target.name ?? "")) {
+        changedFields.push({ field: "name", label: "Namn", from: target.name ?? "", to: name });
+      }
+      const known = extractKnownObjectFields(row.metadata);
+      if (known.address !== undefined && known.address !== (target.address ?? "")) {
+        changedFields.push({ field: "address", label: "Adress", from: target.address ?? "", to: known.address });
+      }
+      if (known.city !== undefined && known.city !== (target.city ?? "")) {
+        changedFields.push({ field: "city", label: "Ort", from: target.city ?? "", to: known.city });
+      }
+      if (known.postalCode !== undefined && known.postalCode !== (target.postalCode ?? "")) {
+        changedFields.push({ field: "postalCode", label: "Postnummer", from: target.postalCode ?? "", to: known.postalCode });
+      }
+      if (known.notes !== undefined && known.notes !== (target.notes ?? "")) {
+        changedFields.push({ field: "notes", label: "Anteckningar", from: target.notes ?? "", to: known.notes });
+      }
+      if (known.containerCount !== undefined && known.containerCount !== (target.containerCount ?? 0)) {
+        changedFields.push({
+          field: "containerCount",
+          label: "Antal kärl",
+          from: String(target.containerCount ?? 0),
+          to: String(known.containerCount),
+        });
+      }
+    }
+    const changed = action === "create" || action === "repoint" || changedFields.length > 0;
+
+    row.res = {
+      action,
+      targetObjectId: target?.id ?? null,
+      interimNo,
+      systemNumber: sysNo,
+      parentRef,
+      name,
+      level,
+      depth,
+      changed,
+      changedFields,
+      metadata: row.metadata,
     };
   }
 
-  return {
-    report: { sheets: reportSheets, warnings, hasBlockingErrors: blocking, interimListFlag, metadata: metaDecisions },
-    rows: allRows,
-    interim,
-    metaDecisions,
+  // 7. Bygg rapport.
+  const errors: Array<{ row: number; messages: string[] }> = [];
+  const actions: ImportSheetReport["actions"] = [];
+  let toCreate = 0;
+  let toUpdate = 0;
+  let toRepoint = 0;
+  let errorRows = 0;
+  for (const row of valRows) {
+    if (row.errors.length || !row.res) {
+      if (row.errors.length) {
+        errorRows++;
+        errors.push({ row: row.rowNumber, messages: row.errors });
+      }
+      continue;
+    }
+    const res = row.res;
+    if (res.action === "create") toCreate++;
+    else if (res.action === "repoint") toRepoint++;
+    else toUpdate++;
+
+    if (actions.length < 500) {
+      const detail =
+        res.action === "create"
+          ? "Skapar nytt objekt"
+          : res.action === "repoint"
+            ? "Uppdaterar + pekar om till ny förälder"
+            : "Uppdaterar befintligt objekt";
+      actions.push({
+        row: row.rowNumber,
+        action: res.action,
+        name: res.name,
+        level: res.level,
+        levelLabel: LEVEL_META[res.level].label,
+        detail,
+        changed: res.changed,
+        changedFields: res.changedFields,
+        metadata: res.metadata,
+      });
+    }
+  }
+
+  const report: ValidationReport = {
+    import: {
+      name: OBJEKTMALL_IMPORT_SHEET_NAME,
+      totalRows: valRows.length,
+      toCreate,
+      toUpdate,
+      toRepoint,
+      errorRows,
+      errors: errors.slice(0, 500),
+      actions,
+    },
+    metadataColumns,
+    warnings,
+    hasBlockingErrors: errorRows > 0,
+    interimListFlag,
   };
+
+  return { report, rows: valRows };
 }
 
 // ============================================================
 // Commit
 // ============================================================
 async function commitImport(
-  parsedSheets: ParsedSheets,
   tenantId: string,
   userId: string | null,
   fileName: string,
@@ -1255,10 +1140,15 @@ async function commitImport(
     throw new ValidationError("Importen har valideringsfel — fixa fel och kör torrkörning igen innan skarp import.");
   }
   const batchId = `${OBJEKTMALL_BATCH_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const created: Record<string, number> = { organisation: 0, stores: 0, containers: 0, metadata: 0 };
-  const updated: Record<string, number> = { organisation: 0, stores: 0, containers: 0, metadata: 0 };
-  const repointed: Record<string, number> = { organisation: 0, stores: 0, containers: 0, metadata: 0 };
-  const interim = validation.interim;
+  const created: Record<ObjLevel, number> = { organisation: 0, stores: 0, containers: 0 };
+  const updated: Record<ObjLevel, number> = { organisation: 0, stores: 0, containers: 0 };
+  const repointed: Record<ObjLevel, number> = { organisation: 0, stores: 0, containers: 0 };
+
+  // Bearbeta rader i djup-ordning så att en interim-förälder alltid finns
+  // (skapas/upplöses) innan dess barn.
+  const ordered = validation.rows
+    .filter((r) => !r.errors.length && r.res)
+    .sort((a, b) => (a.res!.depth - b.res!.depth));
 
   await db.transaction(async (tx) => {
     // Behöver en kund att hänga objekten på. Objekt-tabellen kräver customer_id NOT NULL.
@@ -1273,9 +1163,25 @@ async function commitImport(
 
     const interimToObjectId = new Map<string, string>();
 
-    // Lös upp en RowResolution.parentRef till ett faktiskt objekt-id.
-    //   undefined  = förälder ej angiven (bevaras vid uppdatering)
-    //   string|null = upplöst förälder (eller rot)
+    // Cache av (resolverad) adress-triplett per objekt-id, så att barn som skapas
+    // senare i samma körning kan ärva förälderns adress utan extra DB-frågor.
+    const addrCache = new Map<string, { address: string | null; city: string | null; postalCode: string | null }>();
+
+    async function getInheritedAddress(
+      parentId: string | null | undefined,
+    ): Promise<{ address: string | null; city: string | null; postalCode: string | null }> {
+      if (!parentId) return { address: null, city: null, postalCode: null };
+      const cached = addrCache.get(parentId);
+      if (cached) return cached;
+      const [p] = await tx
+        .select({ address: objects.address, city: objects.city, postalCode: objects.postalCode })
+        .from(objects)
+        .where(and(eq(objects.id, parentId), eq(objects.tenantId, tenantId)));
+      const v = { address: p?.address ?? null, city: p?.city ?? null, postalCode: p?.postalCode ?? null };
+      addrCache.set(parentId, v);
+      return v;
+    }
+
     function resolveParentId(parentRef: ParentRef | null): string | null | undefined {
       if (!parentRef) return undefined;
       if (parentRef.mode === "interim") return interimToObjectId.get(parentRef.key) ?? null;
@@ -1283,10 +1189,6 @@ async function commitImport(
     }
 
     // Task #619: håll object_parents i synk med objektets primära förälder.
-    // Importen sätter alltid den primära relationen (parallellt med parentId)
-    // så att multi-förälder-UI:t och släktnamns-genereringen ser föräldern.
-    // Idempotent: re-import/peka-om uppdaterar befintlig primärrad istället för
-    // att skapa dubbletter. Ytterligare (icke-primära) föräldrar hanteras via UI.
     async function syncPrimaryObjectParent(objectId: string, parentId: string | null) {
       if (!parentId) return; // rot/ingen förälder → ingen relation
       const existing = await tx
@@ -1303,7 +1205,6 @@ async function commitImport(
         }
         return;
       }
-      // Ev. befintlig icke-primär rad mot samma förälder → uppgradera till primär.
       const sameParent = await tx
         .select({ id: objectParents.id })
         .from(objectParents)
@@ -1321,205 +1222,83 @@ async function commitImport(
       });
     }
 
-    // Skapar nytt objekt (objectNumber = MALL-<interim>).
-    async function createObject(
-      level: "organisation" | "stores" | "containers",
-      interimKey: string,
-      values: {
-        name: string;
-        parentObjectId: string | null;
-        address: string | null;
-        city: string | null;
-        postalCode: string | null;
-        hierarchyLevel: string;
-        objectType: string;
-        notes: string | null;
-        containerCount: number;
-      },
-    ) {
-      const [inserted] = await tx
-        .insert(objects)
-        .values({
-          tenantId,
-          customerId,
-          parentId: values.parentObjectId,
-          name: values.name,
-          objectNumber: OBJEKTMALL_INTERIM_PREFIX + interimKey,
-          objectType: values.objectType,
-          hierarchyLevel: values.hierarchyLevel,
-          address: values.address,
-          city: values.city,
-          postalCode: values.postalCode,
-          notes: values.notes,
-          containerCount: values.containerCount,
-          importBatchId: batchId,
-        } as any)
-        .returning({ id: objects.id });
-      if (interimKey) interimToObjectId.set(interimKey, inserted.id);
-      await syncPrimaryObjectParent(inserted.id, values.parentObjectId);
-      created[level]++;
-    }
-
-    // Partiell uppdatering: sätter endast angivna fält + namn. Förälder sätts
-    // enbart när den uttryckligen angetts (peka-om), annars bevaras nuvarande.
-    async function updateObject(
-      level: "organisation" | "stores" | "containers",
-      targetId: string,
-      interimKey: string,
-      patch: Record<string, unknown>,
-      parentObjectId: string | null | undefined,
-      isRepoint: boolean,
-    ) {
-      const set: Record<string, unknown> = { ...patch, importBatchId: batchId };
-      if (parentObjectId !== undefined) set.parentId = parentObjectId;
-      await tx
-        .update(objects)
-        .set(set)
-        .where(and(eq(objects.id, targetId), eq(objects.tenantId, tenantId)));
-      if (interimKey) interimToObjectId.set(interimKey, targetId);
-      // Synka primär object_parents endast när förälder uttryckligen angetts.
-      if (parentObjectId !== undefined) await syncPrimaryObjectParent(targetId, parentObjectId);
-      if (isRepoint) repointed[level]++;
-      else updated[level]++;
-    }
-
-    // Steg 1: Organisation (rotnivå)
-    for (const row of validation.rows.get("organisation")!) {
-      if (row.errors.length || !row.res) continue;
-      const res = row.res;
-      const description = buildOrgNotes(row.data);
-      if (res.action === "create") {
-        await createObject("organisation", res.interimNo, {
-          name: res.name,
-          parentObjectId: null,
-          address: null,
-          city: null,
-          postalCode: null,
-          hierarchyLevel: "koncern",
-          objectType: "omrade",
-          notes: description || null,
-          containerCount: 0,
-        });
-      } else if (res.targetObjectId) {
-        const patch: Record<string, unknown> = { name: res.name };
-        if (description) patch.notes = description;
-        await updateObject("organisation", res.targetObjectId, res.interimNo, patch, undefined, false);
-      }
-    }
-
-    // Steg 2: Butiker
-    for (const row of validation.rows.get("stores")!) {
-      if (row.errors.length || !row.res) continue;
-      const res = row.res;
+    for (const row of ordered) {
+      const res = row.res!;
+      const level = res.level;
+      const meta = LEVEL_META[level];
       const parentObjectId = resolveParentId(res.parentRef);
-      const contactNotes = buildStoreNotes(row.data);
-      const address = (row.data.address ?? "").trim();
-      const city = (row.data.city ?? "").trim();
-      const postalCode = (row.data.postalCode ?? "").trim();
+
+      // Kända objektfält bland de dynamiska metadata-kolumnerna (adress m.fl.).
+      const known = extractKnownObjectFields(res.metadata);
 
       if (res.action === "create") {
-        await createObject("stores", res.interimNo, {
-          name: res.name,
-          parentObjectId: parentObjectId ?? null,
-          address: address || null,
-          city: city || null,
-          postalCode: postalCode || null,
-          hierarchyLevel: "fastighet",
-          objectType: "fastighet",
-          notes: contactNotes || null,
-          containerCount: 0,
-        });
-      } else if (res.targetObjectId) {
-        const patch: Record<string, unknown> = { name: res.name };
-        if (address) patch.address = address;
-        if (city) patch.city = city;
-        if (postalCode) patch.postalCode = postalCode;
-        if (contactNotes) patch.notes = contactNotes;
-        await updateObject(
-          "stores",
-          res.targetObjectId,
-          res.interimNo,
-          patch,
-          parentObjectId,
-          res.action === "repoint",
-        );
-      }
-    }
-
-    // Steg 3: Kärl
-    for (const row of validation.rows.get("containers")!) {
-      if (row.errors.length || !row.res) continue;
-      const res = row.res;
-      const parentObjectId = resolveParentId(res.parentRef);
-      const entry = res.interimNo ? interim.get(res.interimNo) : undefined;
-      const notesParts = buildContainerNotes(row.data);
-      const containerCount = parseInt0(row.data.count);
-      // Adressärv från förälder (butik) — beräknad i valideringen.
-      const inh = { address: entry?.address ?? null, city: entry?.city ?? null, postalCode: entry?.postalCode ?? null };
-
-      if (res.action === "create") {
-        await createObject("containers", res.interimNo, {
-          name: res.name,
-          parentObjectId: parentObjectId ?? null,
-          address: inh.address,
-          city: inh.city,
-          postalCode: inh.postalCode,
-          hierarchyLevel: "karl",
-          objectType: "karl",
-          notes: notesParts || null,
-          containerCount,
-        });
-      } else if (res.targetObjectId) {
-        const patch: Record<string, unknown> = { name: res.name };
-        if (notesParts) patch.notes = notesParts;
-        if (containerCount > 0) patch.containerCount = containerCount;
-        // Vid peka-om ärvs adressen från den nya föräldern.
-        if (res.action === "repoint" && (inh.address || inh.city || inh.postalCode)) {
-          patch.address = inh.address;
-          patch.city = inh.city;
-          patch.postalCode = inh.postalCode;
+        let address = known.address ?? null;
+        let city = known.city ?? null;
+        let postalCode = known.postalCode ?? null;
+        // Ärv adress från förälder när raden saknar egen adress (t.ex. kärl).
+        if (!address && !city && !postalCode && parentObjectId) {
+          const inh = await getInheritedAddress(parentObjectId);
+          address = inh.address;
+          city = inh.city;
+          postalCode = inh.postalCode;
         }
-        await updateObject(
-          "containers",
-          res.targetObjectId,
-          res.interimNo,
-          patch,
-          parentObjectId,
-          res.action === "repoint",
-        );
-      }
-    }
-
-    // Metadata-definitioner
-    for (const dec of validation.metaDecisions) {
-      if (dec.action === "blocked" || dec.action === "skip") continue;
-      if (dec.action === "create") {
-        await tx.insert(metadataDefinitions).values({
-          tenantId,
-          fieldKey: dec.fieldKey,
-          fieldLabel: dec.fieldLabel,
-          dataType: dec.dataType,
-          propagationType: dec.propagationType,
-          applicableLevels: dec.applicableLevels,
-          defaultValue: dec.defaultValue,
-          isRequired: dec.isRequired,
-          sortOrder: dec.sortOrder,
-        } as any);
-        created.metadata++;
-      } else if (dec.action === "update" && dec.existingId) {
+        const [inserted] = await tx
+          .insert(objects)
+          .values({
+            tenantId,
+            customerId,
+            parentId: parentObjectId ?? null,
+            name: res.name,
+            objectNumber: OBJEKTMALL_INTERIM_PREFIX + res.interimNo,
+            objectType: meta.objectType,
+            hierarchyLevel: meta.hierarchyLevel,
+            address,
+            city,
+            postalCode,
+            notes: known.notes ?? null,
+            ...(known.containerCount !== undefined ? { containerCount: known.containerCount } : {}),
+            importBatchId: batchId,
+          } as any)
+          .returning({ id: objects.id });
+        if (res.interimNo) interimToObjectId.set(res.interimNo, inserted.id);
+        addrCache.set(inserted.id, { address, city, postalCode });
+        await syncPrimaryObjectParent(inserted.id, parentObjectId ?? null);
+        created[level]++;
+      } else if (res.targetObjectId) {
+        const set: Record<string, unknown> = { name: res.name, importBatchId: batchId };
+        // Förälder sätts enbart när den uttryckligen angetts (peka-om), annars bevaras.
+        if (parentObjectId !== undefined) set.parentId = parentObjectId;
+        // Partiell uppdatering av kända objektfält — utelämnade fält bevaras.
+        if (known.address !== undefined) set.address = known.address;
+        if (known.city !== undefined) set.city = known.city;
+        if (known.postalCode !== undefined) set.postalCode = known.postalCode;
+        if (known.notes !== undefined) set.notes = known.notes;
+        if (known.containerCount !== undefined) set.containerCount = known.containerCount;
+        // Vid peka-om: ärv adress från den nya föräldern om raden inte själv anger adress.
+        if (
+          res.action === "repoint" &&
+          parentObjectId &&
+          known.address === undefined &&
+          known.city === undefined &&
+          known.postalCode === undefined
+        ) {
+          const inh = await getInheritedAddress(parentObjectId);
+          if (inh.address || inh.city || inh.postalCode) {
+            set.address = inh.address;
+            set.city = inh.city;
+            set.postalCode = inh.postalCode;
+          }
+        }
         await tx
-          .update(metadataDefinitions)
-          .set({
-            fieldLabel: dec.fieldLabel,
-            defaultValue: dec.defaultValue,
-            isRequired: dec.isRequired,
-            sortOrder: dec.sortOrder,
-          })
-          .where(and(
-            eq(metadataDefinitions.id, dec.existingId),
-            eq(metadataDefinitions.tenantId, tenantId),
-          ));
-        updated.metadata++;
+          .update(objects)
+          .set(set)
+          .where(and(eq(objects.id, res.targetObjectId), eq(objects.tenantId, tenantId)));
+        if (res.interimNo) interimToObjectId.set(res.interimNo, res.targetObjectId);
+        // Invalidera adress-cachen så ev. barn senare i körningen ärver färska värden.
+        addrCache.delete(res.targetObjectId);
+        if (parentObjectId !== undefined) await syncPrimaryObjectParent(res.targetObjectId, parentObjectId);
+        if (res.action === "repoint") repointed[level]++;
+        else updated[level]++;
       }
     }
 
@@ -1527,16 +1306,12 @@ async function commitImport(
     const totalCreated = Object.values(created).reduce((a, b) => a + b, 0);
     const totalUpdated = Object.values(updated).reduce((a, b) => a + b, 0);
     const totalRepointed = Object.values(repointed).reduce((a, b) => a + b, 0);
-    const totalRows = ["organisation", "stores", "containers", "metadata"].reduce(
-      (sum, k) => sum + (validation.report.sheets[k]?.totalRows ?? 0),
-      0,
-    );
     await tx.insert(importBatches).values({
       tenantId,
       batchId,
-      totalRows,
-      // Repekningar räknas som uppdateringar i batch-sammandraget.
+      totalRows: validation.report.import.totalRows,
       created: totalCreated,
+      // Repekningar räknas som uppdateringar i batch-sammandraget.
       updated: totalUpdated + totalRepointed,
       errors: 0,
       metadata: {
@@ -1545,12 +1320,12 @@ async function commitImport(
         userId,
         createdBy: userId,
         interimListFlag: validation.report.interimListFlag,
+        metadataColumns: validation.report.metadataColumns,
         perLevel: {
           created,
           updated,
           repointed,
         },
-        sheetSummary: validation.report.sheets,
       } as any,
     } as any);
   });
@@ -1611,8 +1386,8 @@ export function registerObjektmallImportRoutes(app: Express): void {
       const file = (req as any).file as { buffer: Buffer; originalname: string } | undefined;
       if (!file?.buffer) throw new ValidationError("Ingen fil bifogad. Ladda upp en ifylld mall (.xlsx).");
 
-      const { sheets, warnings, interimListFlag } = await parseWorkbook(file.buffer);
-      const validation = await validateAll(sheets, tenantId, warnings, interimListFlag);
+      const { rows, metadataColumns, warnings, interimListFlag } = await parseWorkbook(file.buffer);
+      const validation = await validateAll(rows, metadataColumns, tenantId, warnings, interimListFlag);
       res.json({
         ok: !validation.report.hasBlockingErrors,
         dryRun: true,
@@ -1636,8 +1411,8 @@ export function registerObjektmallImportRoutes(app: Express): void {
       const file = (req as any).file as { buffer: Buffer; originalname: string } | undefined;
       if (!file?.buffer) throw new ValidationError("Ingen fil bifogad. Ladda upp en ifylld mall (.xlsx).");
 
-      const { sheets, warnings, interimListFlag } = await parseWorkbook(file.buffer);
-      const validation = await validateAll(sheets, tenantId, warnings, interimListFlag);
+      const { rows, metadataColumns, warnings, interimListFlag } = await parseWorkbook(file.buffer);
+      const validation = await validateAll(rows, metadataColumns, tenantId, warnings, interimListFlag);
       if (validation.report.hasBlockingErrors) {
         return res.status(400).json({
           ok: false,
@@ -1647,7 +1422,7 @@ export function registerObjektmallImportRoutes(app: Express): void {
         });
       }
 
-      const result = await commitImport(sheets, tenantId, userId, file.originalname, validation);
+      const result = await commitImport(tenantId, userId, file.originalname, validation);
       res.json({
         ok: true,
         fileName: file.originalname,
