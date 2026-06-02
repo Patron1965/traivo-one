@@ -740,6 +740,20 @@ app.get("/api/objects/:id/resolved", asyncHandler(async (req, res) => {
   res.json(objectWithInheritance);
 }));
 
+// Task #619: alla släktnamn (ett per förälderkedja via object_parents).
+// Primär kedja först; UI visar den som default och övriga som alternativ.
+app.get("/api/objects/:id/display-names", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const { computeObjectDisplayNames } = await import("../services/display-name");
+  const result = await computeObjectDisplayNames(req.params.id, tenantId);
+  res.set("Cache-Control", "no-cache, must-revalidate");
+  res.json(result);
+}));
+
 app.get("/api/objects/:id/ancestors", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const existing = await storage.getObject(req.params.id);

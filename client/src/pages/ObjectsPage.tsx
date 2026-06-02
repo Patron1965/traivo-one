@@ -28,7 +28,7 @@ import {
   Map as MapIcon, List, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, XCircle,
   Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, Layers, FileUp, Pyramid,
-  ArrowUp, ArrowDown, ArrowUpDown
+  ArrowUp, ArrowDown, ArrowUpDown, Network
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -37,6 +37,7 @@ import { AICard } from "@/components/AICard";
 import { ObjectMetadataPanel } from "@/components/ObjectMetadataPanel";
 import { ObjectPayersPanel } from "@/components/ObjectPayersPanel";
 import { ObjectParentsPanel } from "@/components/ObjectParentsPanel";
+import { ObjectDisplayNames } from "@/components/ObjectDisplayNames";
 import { ObjectApplicableArticlesPanel } from "@/components/ObjectApplicableArticlesPanel";
 import { ObjectContactsDialog } from "@/components/ObjectContactsPanel";
 import { ObjectImagesDialog } from "@/components/ObjectImagesGallery";
@@ -167,6 +168,14 @@ export default function ObjectsPage() {
   const [clusterDialog, setClusterDialog] = useState<{ open: boolean; loading: boolean; data?: { suggestions?: { suggestedName: string; objectCount: number; postalCodes: string[]; rationale: string }[]; message?: string } }>({ open: false, loading: false });
   const [maintenanceDialog, setMaintenanceDialog] = useState<{ open: boolean; loading: boolean; data?: { overdue: { objectName: string; predictedDate: string; daysUntil: number; confidence: number }[]; upcoming: { objectName: string; predictedDate: string; daysUntil: number; confidence: number }[]; summary: string; totalPredicted: number } }>({ open: false, loading: false });
   const [overflowPanel, setOverflowPanel] = useState<{ objectId: string; panel: "images" | "payers" | "parents" | "articles" } | null>(null);
+  const [expandedDisplayNames, setExpandedDisplayNames] = useState<Set<string>>(new Set());
+  const toggleDisplayNames = (id: string) => {
+    setExpandedDisplayNames(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
   const [batchGeoOpen, setBatchGeoOpen] = useState(false);
   const [batchGeoCity, setBatchGeoCity] = useState("");
   const [batchGeoCluster, setBatchGeoCluster] = useState("");
@@ -1023,6 +1032,19 @@ export default function ObjectsPage() {
               {obj.objectNumber && obj.name && obj.name !== "0" && (
                 <span className="text-xs text-muted-foreground font-mono">{obj.objectNumber}</span>
               )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); toggleDisplayNames(obj.id); }}
+                    className={`flex items-center rounded p-0.5 hover-elevate ${expandedDisplayNames.has(obj.id) ? "text-chart-3" : "text-muted-foreground"}`}
+                    data-testid={`button-display-names-${obj.id}`}
+                  >
+                    <Network className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Visa släktnamn & hierarkisökväg</TooltipContent>
+              </Tooltip>
               {obj.hierarchyLevel && hierarchyLevelLabels[obj.hierarchyLevel] && (
                 <Badge className={`text-xs ${hierarchyLevelLabels[obj.hierarchyLevel].color}`}>
                   {hierarchyLevelLabels[obj.hierarchyLevel].label}
@@ -1294,6 +1316,16 @@ export default function ObjectsPage() {
             </Badge>
           )}
         </div>
+
+        {expandedDisplayNames.has(obj.id) && (
+          <div
+            className="px-4 pb-3 pt-1 bg-muted/20 border-t"
+            style={{ paddingLeft: `${12 + level * 24 + 32}px` }}
+            data-testid={`display-names-panel-${obj.id}`}
+          >
+            <ObjectDisplayNames objectId={obj.id} enabled />
+          </div>
+        )}
 
         {isExpanded && hasChildren && (
           <div>

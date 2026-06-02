@@ -1,3 +1,12 @@
+// Arv & konflikt vid flera föräldrar (task #619 — fastställt beslut):
+// När ett objekt har flera föräldrar (`object_parents`) ärvs metadata och
+// hård-kodade arvsfält (portkod, nyckel, access-info, önskad tid) ALLTID från
+// den PRIMÄRA föräldern. Den primära relationen (`object_parents.isPrimary`)
+// speglas till `objects.parentId` via storage.setPrimaryParent, så denna
+// processor — som följer `parentId` — använder per definition den primära
+// hierarkin. Icke-primära föräldrar (billing/operational/ownership) påverkar
+// inte arvet; de finns för relations-/släktnamns-syften. Vill man arv via en
+// annan relation används `contextParentId`/getContextualAncestorChain explicit.
 import { db } from "./db";
 import { objects, clusters, objectParents } from "@shared/schema";
 import { eq, and, isNull, desc } from "drizzle-orm";

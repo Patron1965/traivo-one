@@ -16,6 +16,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { ObjectDisplayNames } from "@/components/ObjectDisplayNames";
 
 interface ObjectParentRelation {
   id: string;
@@ -136,6 +137,11 @@ export function ObjectParentsPanel({ object, controlled, open: controlledOpen, o
         </SheetHeader>
 
         <div className="mt-4 space-y-3">
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium">Släktnamn</h3>
+            <ObjectDisplayNames objectId={object.id} enabled={open} />
+          </div>
+
           {object.parentId && (
             <div className="p-3 rounded-lg border bg-muted/50">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">

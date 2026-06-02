@@ -10,7 +10,7 @@ import {
   HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X,
   Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
   User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share,
-  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText, ListTodo, Eye, EyeOff, Settings
+  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText, ListTodo, Eye, EyeOff, Settings, Network
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -31,6 +31,7 @@ import { SignatureCapture } from "@/components/SignatureCapture";
 import { generateJobProtocol, downloadBlob } from "@/components/JobProtocolGenerator";
 import { MaterialLog, type MaterialItem } from "@/components/MaterialLog";
 import { OrderChecklist } from "@/components/OrderChecklist";
+import { ObjectDisplayNames } from "@/components/ObjectDisplayNames";
 import { SigningValidationModal } from "@/components/SigningValidationModal";
 import type { WorkOrderWithObject, Customer } from "@shared/schema";
 import { IMPOSSIBLE_REASONS, IMPOSSIBLE_REASON_LABELS, REQUIRED_FIELDS_BY_ORDER_TYPE } from "@shared/schema";
@@ -202,6 +203,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [showProblemPanel, setShowProblemPanel] = useState(false);
+  const [showLineagePanel, setShowLineagePanel] = useState(false);
   const [showSignaturePanel, setShowSignaturePanel] = useState(false);
   const [currentSignature, setCurrentSignature] = useState<string | null>(null);
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
@@ -1394,6 +1396,30 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                   <span className="text-xs font-medium text-chart-1">Meddelande från planerare</span>
                 </div>
                 <p className="text-sm text-chart-1">{selectedJob.plannedNotes}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {selectedJob.objectId && (
+            <Card data-testid="card-lineage">
+              <CardContent className="py-3">
+                <button
+                  type="button"
+                  onClick={() => setShowLineagePanel(v => !v)}
+                  className="flex items-center justify-between w-full"
+                  data-testid="button-toggle-lineage"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Network className="h-4 w-4 text-chart-3" />
+                    <span className="text-xs font-medium">Släktnamn & hierarki</span>
+                  </div>
+                  <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${showLineagePanel ? "rotate-90" : ""}`} />
+                </button>
+                {showLineagePanel && (
+                  <div className="mt-3">
+                    <ObjectDisplayNames objectId={selectedJob.objectId} enabled />
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

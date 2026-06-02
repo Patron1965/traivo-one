@@ -23,6 +23,7 @@ import { getTenantIdWithFallback, requireAdmin, requireTenantWithFallback } from
 import { db } from "../db";
 import {
   objects,
+  objectParents,
   metadataDefinitions,
   importBatches,
   users,
@@ -861,6 +862,45 @@ async function commitImport(
       return parentRef.objectId;
     }
 
+    // Task #619: håll object_parents i synk med objektets primära förälder.
+    // Importen sätter alltid den primära relationen (parallellt med parentId)
+    // så att multi-förälder-UI:t och släktnamns-genereringen ser föräldern.
+    // Idempotent: re-import/peka-om uppdaterar befintlig primärrad istället för
+    // att skapa dubbletter. Ytterligare (icke-primära) föräldrar hanteras via UI.
+    async function syncPrimaryObjectParent(objectId: string, parentId: string | null) {
+      if (!parentId) return; // rot/ingen förälder → ingen relation
+      const existing = await tx
+        .select({ id: objectParents.id, parentId: objectParents.parentId })
+        .from(objectParents)
+        .where(and(eq(objectParents.objectId, objectId), eq(objectParents.isPrimary, true)));
+      const primary = existing[0];
+      if (primary) {
+        if (primary.parentId !== parentId) {
+          await tx
+            .update(objectParents)
+            .set({ parentId, relationContext: "primary" })
+            .where(eq(objectParents.id, primary.id));
+        }
+        return;
+      }
+      // Ev. befintlig icke-primär rad mot samma förälder → uppgradera till primär.
+      const sameParent = await tx
+        .select({ id: objectParents.id })
+        .from(objectParents)
+        .where(and(eq(objectParents.objectId, objectId), eq(objectParents.parentId, parentId)));
+      if (sameParent[0]) {
+        await tx.update(objectParents).set({ isPrimary: true }).where(eq(objectParents.id, sameParent[0].id));
+        return;
+      }
+      await tx.insert(objectParents).values({
+        tenantId,
+        objectId,
+        parentId,
+        isPrimary: true,
+        relationContext: "primary",
+      });
+    }
+
     // Skapar nytt objekt (objectNumber = MALL-<interim>).
     async function createObject(
       level: "organisation" | "stores" | "containers",
@@ -896,6 +936,7 @@ async function commitImport(
         } as any)
         .returning({ id: objects.id });
       if (interimKey) interimToObjectId.set(interimKey, inserted.id);
+      await syncPrimaryObjectParent(inserted.id, values.parentObjectId);
       created[level]++;
     }
 
@@ -916,6 +957,8 @@ async function commitImport(
         .set(set)
         .where(and(eq(objects.id, targetId), eq(objects.tenantId, tenantId)));
       if (interimKey) interimToObjectId.set(interimKey, targetId);
+      // Synka primär object_parents endast när förälder uttryckligen angetts.
+      if (parentObjectId !== undefined) await syncPrimaryObjectParent(targetId, parentObjectId);
       if (isRepoint) repointed[level]++;
       else updated[level]++;
     }
