@@ -16,7 +16,7 @@ import type { Express } from "express";
 import multer from "multer";
 import ExcelJS from "exceljs";
 import { z } from "zod";
-import { and, eq, or, sql, desc, inArray } from "drizzle-orm";
+import { and, eq, or, sql, desc, inArray, isNull } from "drizzle-orm";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { getTenantIdWithFallback, requireAdmin, requireTenantWithFallback } from "../tenant-middleware";
@@ -24,6 +24,7 @@ import { db } from "../db";
 import {
   objects,
   objectParents,
+  objectMetadata,
   metadataDefinitions,
   importBatches,
   users,
@@ -164,6 +165,320 @@ export async function buildTemplateWorkbook(): Promise<Buffer> {
     );
     exampleRow.eachCell({ includeEmpty: true }, (cell) => {
       cell.font = { italic: true, color: { argb: "FF6B7C8C" } };
+    });
+  }
+
+  const buf = await wb.xlsx.writeBuffer();
+  return Buffer.from(buf);
+}
+
+// ============================================================
+// Export-generator (Task #621)
+// ------------------------------------------------------------
+// Exporterar BEFINTLIGA objekt i exakt samma kolumnprotokoll som mallen, så att
+// kunden kan jämföra mot sin egen lista och läsa tillbaka filen via samma import.
+//   mode="update":  Systemnummer fylls (= objectNumber), Systemföräldranummer
+//                   pekar på förälderns systemnummer → re-import = uppdatering.
+//   mode="interim": numren skrivs om till interim (Interimsnummer +
+//                   Interimföräldranummer) och interimslist-flaggan sätts till JA
+//                   → ren nyimport (separerad från uppdateringslistan).
+// Per-objekt-metadatavärden läggs i informativa "Metadata - <fält>"-kolumner.
+// De ignoreras av parsern (okända rubriker) men ger jämförelseunderlag.
+// ============================================================
+export type ObjektmallExportMode = "update" | "interim";
+
+// Neutralisera formula-injection (memory: csv-export-hardening).
+function safeExportCell(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  if (s.length === 0) return s;
+  const first = s.charAt(0);
+  if (first === "=" || first === "+" || first === "-" || first === "@" || first === "\t" || first === "\r") {
+    return "'" + s;
+  }
+  return s;
+}
+
+type ExportObject = {
+  id: string;
+  objectNumber: string | null;
+  name: string;
+  parentId: string | null;
+  address: string | null;
+  city: string | null;
+  postalCode: string | null;
+  notes: string | null;
+  containerCount: number | null;
+  depth: number;
+};
+
+// Prefix per nivå för auto-genererade interimsnummer i interim-läge.
+const INTERIM_LEVEL_PREFIX: Record<ObjektmallSheet["key"], string> = {
+  organisation: "ORG",
+  stores: "BUT",
+  containers: "KARL",
+  metadata: "META",
+};
+
+export async function buildExportWorkbook(
+  tenantId: string,
+  mode: ObjektmallExportMode,
+): Promise<Buffer> {
+  // 1. Ladda alla icke-raderade objekt för tenant.
+  const raw = await db
+    .select({
+      id: objects.id,
+      objectNumber: objects.objectNumber,
+      name: objects.name,
+      parentId: objects.parentId,
+      address: objects.address,
+      city: objects.city,
+      postalCode: objects.postalCode,
+      notes: objects.notes,
+      containerCount: objects.containerCount,
+    })
+    .from(objects)
+    .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
+
+  const byId = new Map<string, (typeof raw)[number]>();
+  for (const r of raw) byId.set(r.id, r);
+
+  // Djup = antal förälder-hopp upp till roten (med skydd mot cykler).
+  function depthOf(id: string): number {
+    let d = 0;
+    let cur = byId.get(id);
+    const seen = new Set<string>();
+    while (cur?.parentId && byId.has(cur.parentId) && !seen.has(cur.parentId)) {
+      seen.add(cur.parentId);
+      d++;
+      cur = byId.get(cur.parentId);
+      if (d > 50) break;
+    }
+    return d;
+  }
+
+  const objs: ExportObject[] = raw.map((r) => ({
+    id: r.id,
+    objectNumber: r.objectNumber ?? null,
+    name: r.name ?? "",
+    parentId: r.parentId ?? null,
+    address: r.address ?? null,
+    city: r.city ?? null,
+    postalCode: r.postalCode ?? null,
+    notes: r.notes ?? null,
+    containerCount: r.containerCount ?? null,
+    depth: depthOf(r.id),
+  }));
+
+  // 2. Per-objekt-metadatavärden + definitioner (för informativa kolumner + Metadatafält-fliken).
+  const defs = await db
+    .select()
+    .from(metadataDefinitions)
+    .where(and(eq(metadataDefinitions.tenantId, tenantId), isNull(metadataDefinitions.deletedAt)))
+    .orderBy(metadataDefinitions.sortOrder);
+  const defById = new Map(defs.map((d) => [d.id, d]));
+
+  // objectId -> (definitionId -> värde)
+  const valuesByObject = new Map<string, Map<string, string>>();
+  if (objs.length > 0) {
+    const metaRows = await db
+      .select({
+        objectId: objectMetadata.objectId,
+        definitionId: objectMetadata.definitionId,
+        value: objectMetadata.value,
+        valueJson: objectMetadata.valueJson,
+      })
+      .from(objectMetadata)
+      .where(eq(objectMetadata.tenantId, tenantId));
+    for (const m of metaRows) {
+      if (!defById.has(m.definitionId)) continue;
+      const val = m.value ?? (m.valueJson != null ? JSON.stringify(m.valueJson) : "");
+      if (!val) continue;
+      let inner = valuesByObject.get(m.objectId);
+      if (!inner) {
+        inner = new Map();
+        valuesByObject.set(m.objectId, inner);
+      }
+      inner.set(m.definitionId, val);
+    }
+  }
+
+  // 3. Mappa objekt -> flik utifrån djup.
+  const sheetKeyForDepth = (depth: number): "organisation" | "stores" | "containers" =>
+    depth <= 0 ? "organisation" : depth === 1 ? "stores" : "containers";
+
+  const bySheet: Record<"organisation" | "stores" | "containers", ExportObject[]> = {
+    organisation: [],
+    stores: [],
+    containers: [],
+  };
+  for (const o of objs) bySheet[sheetKeyForDepth(o.depth)].push(o);
+
+  // Interim-läge: tilldela varje objekt ett interimsnummer (stabilt per nivå).
+  const interimById = new Map<string, string>();
+  if (mode === "interim") {
+    const counters: Record<string, number> = { organisation: 0, stores: 0, containers: 0 };
+    for (const key of ["organisation", "stores", "containers"] as const) {
+      for (const o of bySheet[key]) {
+        counters[key]++;
+        interimById.set(o.id, `${INTERIM_LEVEL_PREFIX[key]}-${counters[key]}`);
+      }
+    }
+  }
+
+  // 4. Bygg arbetsbok.
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Traivo";
+  wb.created = new Date();
+
+  // Läs-mig-flik med interimslist-flaggan (sätts till JA i interim-läge).
+  const readme = wb.addWorksheet("Läs mig först");
+  readme.columns = [
+    { header: "", key: "v", width: 95 },
+    { header: "", key: "b", width: 14 },
+  ];
+  const introLines =
+    mode === "interim"
+      ? [
+          "TRAIVO – EXPORT AV BEFINTLIGA OBJEKT (INTERIM / REN NYIMPORT)",
+          "",
+          "Den här filen är en kopia av era nuvarande objekt OMSKRIVEN till interimsnummer.",
+          "Den är avsedd för ren nyimport (t.ex. till en ny tenant) — interimslist-flaggan är PÅ.",
+          "VARNING: läses filen tillbaka i SAMMA tenant skapas NYA objekt (MALL-<interim>) — dubbletter.",
+          "Använd 'Exportera för uppdatering' om ni vill ändra befintliga objekt.",
+        ]
+      : [
+          "TRAIVO – EXPORT AV BEFINTLIGA OBJEKT (FÖR UPPDATERING)",
+          "",
+          "Den här filen är en kopia av era nuvarande objekt i importmallens kolumnprotokoll.",
+          "Systemnummer är ifyllt på varje rad — ändra fält direkt och läs tillbaka filen via",
+          "objektimporten för att UPPDATERA befintliga objekt. Lägg nya objekt i en separat",
+          "interimslista (se 'Exportera som interim-mall') enligt principen att inte blanda listor.",
+          "Rader utan systemnummer kan inte matchas automatiskt — ge dem ett interimsnummer.",
+        ];
+  introLines.forEach((l) => readme.addRow([l]));
+  readme.addRow([]);
+  const flagRow = readme.addRow([OBJEKTMALL_INTERIM_FLAG_LABEL, mode === "interim" ? "JA" : "NEJ"]);
+  flagRow.getCell(1).font = { bold: true, color: { argb: "FF1B4B6B" } };
+  flagRow.getCell(1).alignment = { wrapText: true, vertical: "middle" };
+  flagRow.getCell(2).font = { bold: true, color: { argb: "FFB45309" } };
+  flagRow.getCell(2).alignment = { horizontal: "center", vertical: "middle" };
+  flagRow.getCell(2).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFDE8B4" } };
+  readme.getRow(1).font = { bold: true, size: 14, color: { argb: "FF1B4B6B" } };
+  readme.eachRow((row) => {
+    row.getCell(1).alignment = { wrapText: true, vertical: row.getCell(1).alignment?.vertical ?? "top" };
+  });
+
+  // Objektflikar (org/butiker/kärl).
+  for (const sheetDef of OBJEKTMALL_SHEETS) {
+    if (sheetDef.key === "metadata") continue;
+    const list = bySheet[sheetDef.key];
+
+    // Metadata-kolumner: endast definitioner som har minst ett värde på fliken.
+    const metaDefsForSheet = defs.filter((d) =>
+      list.some((o) => valuesByObject.get(o.id)?.has(d.id)),
+    );
+
+    const ws = wb.addWorksheet(sheetDef.name);
+    const allCols = [
+      ...sheetDef.columns.map((c) => ({ header: c.header, key: c.key })),
+      ...metaDefsForSheet.map((d) => ({ header: `Metadata - ${d.fieldLabel}`, key: `meta_${d.id}` })),
+    ];
+    ws.columns = allCols.map((c) => ({
+      header: c.header,
+      key: c.key,
+      width: Math.min(Math.max(c.header.length + 4, 16), 36),
+    }));
+
+    const headerRow = ws.getRow(1);
+    headerRow.height = 22;
+    allCols.forEach((c, idx) => {
+      const colDef = sheetDef.columns.find((sc) => sc.key === c.key);
+      const cell = headerRow.getCell(idx + 1);
+      cell.value = c.header;
+      cell.font = { bold: true, color: { argb: "FF1B4B6B" } };
+      cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: colDef?.required ? "FFFDE8B4" : "FFE8F4F8" },
+      };
+      cell.border = { bottom: { style: "medium", color: { argb: "FF1B4B6B" } } };
+    });
+    ws.views = [{ state: "frozen", ySplit: 1 }];
+
+    for (const o of list) {
+      const rowObj: Record<string, string> = {};
+      // Nummerprotokoll
+      if (mode === "interim") {
+        rowObj.systemNumber = "";
+        rowObj.interim = interimById.get(o.id) ?? "";
+        if (sheetDef.key !== "organisation") {
+          rowObj.systemParentNumber = "";
+          rowObj.parentInterim = o.parentId ? interimById.get(o.parentId) ?? "" : "";
+        }
+      } else {
+        rowObj.systemNumber = safeExportCell(o.objectNumber);
+        rowObj.interim = "";
+        if (sheetDef.key !== "organisation") {
+          const parent = o.parentId ? byId.get(o.parentId) : undefined;
+          rowObj.systemParentNumber = safeExportCell(parent?.objectNumber ?? "");
+          rowObj.parentInterim = "";
+        }
+      }
+      // Gemensamma fält
+      rowObj.name = safeExportCell(o.name);
+      if (sheetDef.key === "organisation") {
+        rowObj.description = safeExportCell(o.notes);
+      } else if (sheetDef.key === "stores") {
+        rowObj.address = safeExportCell(o.address);
+        rowObj.postalCode = safeExportCell(o.postalCode);
+        rowObj.city = safeExportCell(o.city);
+      } else if (sheetDef.key === "containers") {
+        rowObj.count = o.containerCount != null && o.containerCount > 0 ? String(o.containerCount) : "";
+        rowObj.notes = safeExportCell(o.notes);
+      }
+      // Informativa metadata-värden
+      const vals = valuesByObject.get(o.id);
+      if (vals) {
+        for (const d of metaDefsForSheet) {
+          const v = vals.get(d.id);
+          if (v) rowObj[`meta_${d.id}`] = safeExportCell(v);
+        }
+      }
+      ws.addRow(rowObj);
+    }
+  }
+
+  // Metadatafält-flik: nuvarande definitioner (round-trippar via samma import).
+  const metaSheetDef = getObjektmallSheet("metadata");
+  const metaWs = wb.addWorksheet(metaSheetDef.name);
+  metaWs.columns = metaSheetDef.columns.map((c) => ({
+    header: c.header,
+    key: c.key,
+    width: Math.min(Math.max(c.header.length + 4, 16), 36),
+  }));
+  const metaHeader = metaWs.getRow(1);
+  metaHeader.height = 22;
+  metaSheetDef.columns.forEach((c, idx) => {
+    const cell = metaHeader.getCell(idx + 1);
+    cell.value = c.header;
+    cell.font = { bold: true, color: { argb: "FF1B4B6B" } };
+    cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: c.required ? "FFFDE8B4" : "FFE8F4F8" } };
+    cell.border = { bottom: { style: "medium", color: { argb: "FF1B4B6B" } } };
+  });
+  metaWs.views = [{ state: "frozen", ySplit: 1 }];
+  for (const d of defs) {
+    metaWs.addRow({
+      fieldKey: safeExportCell(d.fieldKey),
+      fieldLabel: safeExportCell(d.fieldLabel),
+      dataType: safeExportCell(d.dataType ?? "text"),
+      propagationType: safeExportCell(d.propagationType ?? "falling"),
+      applicableLevels: safeExportCell((d.applicableLevels ?? []).join(",")),
+      defaultValue: safeExportCell(d.defaultValue ?? ""),
+      isRequired: d.isRequired ? "ja" : "nej",
+      sortOrder: d.sortOrder != null ? String(d.sortOrder) : "",
     });
   }
 
@@ -327,6 +642,9 @@ type RowResolution = {
   systemNumber: string; // "" om ingen
   parentRef: ParentRef | null; // null = förälder ej angiven (bevaras vid update)
   name: string; // upplöst namn (Objektnamn eller genererat för kärl)
+  // Task #621: true om raden faktiskt ändrar databasen (ny, ompekad, eller
+  // uppdatering där minst ett angivet fält skiljer sig). Används för röd-markering.
+  changed: boolean;
 };
 
 type ValRow = {
@@ -383,7 +701,7 @@ interface ValidationReport {
     toRepoint: number;
     errorRows: number;
     errors: Array<{ row: number; messages: string[] }>;
-    actions: Array<{ row: number; action: "create" | "update" | "repoint"; name: string; detail: string }>;
+    actions: Array<{ row: number; action: "create" | "update" | "repoint"; name: string; detail: string; changed: boolean }>;
   }>;
   warnings: string[];
   hasBlockingErrors: boolean;
@@ -416,7 +734,7 @@ async function validateAll(
   const interim = new Map<string, InterimEntry>();
   const allRows = new Map<string, ValRow[]>();
   const errorsBySheet: Record<string, Array<{ row: number; messages: string[] }>> = {};
-  const actionsBySheet: Record<string, Array<{ row: number; action: "create" | "update" | "repoint"; name: string; detail: string }>> = {};
+  const actionsBySheet: Record<string, Array<{ row: number; action: "create" | "update" | "repoint"; name: string; detail: string; changed: boolean }>> = {};
   const countersBySheet: Record<string, { toCreate: number; toUpdate: number; toRepoint: number; errorRows: number; totalRows: number }> = {};
 
   for (const def of OBJEKTMALL_SHEETS) {
@@ -642,6 +960,25 @@ async function validateAll(
           ? `${containerType || "Kärl"} — ${parentNameForGen ?? "okänd"}`
           : rawName);
 
+      // Task #621: avgör om raden faktiskt ändrar databasen (för röd-markering).
+      // create/repoint ändrar alltid. update ändrar om något angivet fält skiljer
+      // sig från målet (tomma fält bevaras och räknas inte som ändring).
+      let changed: boolean;
+      if (action === "create" || action === "repoint") {
+        changed = true;
+      } else if (target) {
+        const upAddr = trimVal(data, "address");
+        const upCity = trimVal(data, "city");
+        const upPostal = trimVal(data, "postalCode");
+        changed =
+          (!!rawName && rawName !== (target.name ?? "")) ||
+          (!!upAddr && upAddr !== (target.address ?? "")) ||
+          (!!upCity && upCity !== (target.city ?? "")) ||
+          (!!upPostal && upPostal !== (target.postalCode ?? ""));
+      } else {
+        changed = false;
+      }
+
       row.res = {
         action,
         targetObjectId: target?.id ?? null,
@@ -649,6 +986,7 @@ async function validateAll(
         systemNumber: sysNo,
         parentRef,
         name: resolvedName,
+        changed,
       };
 
       // 3g. Registrera interim-entry så barn kan referera detta som förälder.
@@ -699,7 +1037,7 @@ async function validateAll(
             : res.action === "repoint"
               ? "Uppdaterar + pekar om till ny förälder"
               : "Uppdaterar befintligt objekt";
-        actionsBySheet[def.key].push({ row: row.rowNumber, action: res.action, name: res.name, detail });
+        actionsBySheet[def.key].push({ row: row.rowNumber, action: res.action, name: res.name, detail, changed: res.changed });
       }
     }
   }
@@ -1162,6 +1500,27 @@ export function registerObjektmallImportRoutes(app: Express): void {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       );
       res.setHeader("Content-Disposition", `attachment; filename="${OBJEKTMALL_FILENAME}"`);
+      res.setHeader("Cache-Control", "no-cache, must-revalidate");
+      res.send(buf);
+    }),
+  );
+
+  // === Export befintliga objekt (Task #621) =================================
+  app.get(
+    "/api/admin/objektmall/export",
+    requireTenantWithFallback,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const mode: ObjektmallExportMode = req.query.mode === "interim" ? "interim" : "update";
+      const buf = await buildExportWorkbook(tenantId, mode);
+      const datestamp = new Date().toISOString().slice(0, 10);
+      const fileName = `traivo-objektexport-${mode === "interim" ? "interim" : "uppdatering"}-${datestamp}.xlsx`;
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      );
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
       res.setHeader("Cache-Control", "no-cache, must-revalidate");
       res.send(buf);
     }),

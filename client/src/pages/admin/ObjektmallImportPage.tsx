@@ -17,6 +17,7 @@ import {
   History as HistoryIcon,
   PlayCircle,
   RotateCcw,
+  FileDown,
 } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -31,7 +32,7 @@ interface SheetReport {
   toRepoint: number;
   errorRows: number;
   errors: Array<{ row: number; messages: string[] }>;
-  actions: Array<{ row: number; action: RowAction; name: string; detail: string }>;
+  actions: Array<{ row: number; action: RowAction; name: string; detail: string; changed: boolean }>;
 }
 interface PreviewResponse {
   ok: boolean;
@@ -203,10 +204,43 @@ export default function ObjektmallImportPage() {
             <Button asChild variant="outline" data-testid="button-download-template">
               <a href="/api/admin/objektmall/template" download={OBJEKTMALL_FILENAME}>
                 <Download className="h-4 w-4 mr-2" />
-                Ladda ner mall ({OBJEKTMALL_FILENAME})
+                Ladda ner tom mall ({OBJEKTMALL_FILENAME})
               </a>
             </Button>
-            <ul className="mt-3 text-xs text-muted-foreground space-y-1 list-disc ml-5">
+
+            <Separator className="my-3" />
+
+            <div className="space-y-2">
+              <p className="text-xs font-medium">
+                Exportera <span className="font-semibold">befintliga objekt</span> i samma kolumnformat
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Få ut nuvarande objekt med metadata för att jämföra mot din egen lista, redigera och
+                läsa tillbaka via importen.
+              </p>
+              <div className="flex flex-col gap-2">
+                <Button asChild variant="outline" size="sm" data-testid="button-export-update">
+                  <a href="/api/admin/objektmall/export?mode=update">
+                    <FileDown className="h-4 w-4 mr-2" />
+                    Exportera för uppdatering (systemnummer)
+                  </a>
+                </Button>
+                <Button asChild variant="outline" size="sm" data-testid="button-export-interim">
+                  <a href="/api/admin/objektmall/export?mode=interim">
+                    <FileDown className="h-4 w-4 mr-2" />
+                    Exportera som interim-mall (ny lista)
+                  </a>
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Tips: håll uppdaterings- och nyimportlistor åtskilda — blanda inte befintliga
+                (systemnummer) med helt nya rader (interimsnummer) i samma fil.
+              </p>
+            </div>
+
+            <Separator className="my-3" />
+
+            <ul className="text-xs text-muted-foreground space-y-1 list-disc ml-5">
               {OBJEKTMALL_SHEETS.map((s) => (
                 <li key={s.key}>
                   <span className="font-medium">{s.name}:</span> {s.intro.split(".")[0]}.
@@ -388,7 +422,12 @@ export default function ObjektmallImportPage() {
                           </TableHeader>
                           <TableBody>
                             {s.actions.map((a) => (
-                              <TableRow key={a.row} data-testid={`action-row-${k}-${a.row}`}>
+                              <TableRow
+                                key={a.row}
+                                data-testid={`action-row-${k}-${a.row}`}
+                                data-changed={a.changed ? "true" : "false"}
+                                className={a.changed ? "border-l-4 border-l-destructive bg-destructive/5" : undefined}
+                              >
                                 <TableCell className="font-mono text-xs">{a.row}</TableCell>
                                 <TableCell>
                                   <Badge
@@ -404,7 +443,20 @@ export default function ObjektmallImportPage() {
                                     {a.action === "create" ? "Ny" : a.action === "repoint" ? "Flyttad" : "Uppdaterad"}
                                   </Badge>
                                 </TableCell>
-                                <TableCell className="text-xs">{a.name}</TableCell>
+                                <TableCell className="text-xs">
+                                  <span className="flex items-center gap-1.5">
+                                    {a.name}
+                                    {a.changed && (
+                                      <Badge
+                                        variant="outline"
+                                        className="border-destructive/40 text-destructive bg-destructive/5 text-[10px] px-1 py-0"
+                                        data-testid={`badge-changed-${k}-${a.row}`}
+                                      >
+                                        {a.action === "create" ? "Ny" : "Ändrad"}
+                                      </Badge>
+                                    )}
+                                  </span>
+                                </TableCell>
                                 <TableCell className="text-xs text-muted-foreground">{a.detail}</TableCell>
                               </TableRow>
                             ))}
