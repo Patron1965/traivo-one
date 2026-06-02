@@ -1127,7 +1127,7 @@ export default function UserManagementPage() {
                                 variant={inv.status === "pending" ? "default" : inv.status === "used" ? "secondary" : "outline"}
                                 className="text-xs"
                               >
-                                {inv.status === "pending" ? "Väntande" : inv.status === "used" ? "Använd" : inv.status === "expired" ? "Utgången" : inv.status}
+                                {inv.status === "pending" ? "Väntande" : inv.status === "used" ? "Använd" : inv.status === "expired" ? "Utgången" : inv.status === "revoked" ? "Återkallad" : inv.status}
                               </Badge>
                             </TableCell>
                             <TableCell>
@@ -1145,7 +1145,7 @@ export default function UserManagementPage() {
                               {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString("sv-SE") : "-"}
                             </TableCell>
                             <TableCell>
-                              {inv.status === "pending" && (
+                              {inv.status !== "used" && (
                                 <div className="flex items-center justify-end gap-1">
                                   <Button
                                     variant="ghost"

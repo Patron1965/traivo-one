@@ -2565,15 +2565,16 @@ app.post("/api/invitations/:id/resend", requireAdmin, asyncHandler(async (req, r
     if (!existing || existing.tenantId !== tenantId) {
       throw new NotFoundError("Inbjudan hittades inte");
     }
-    if (existing.status !== "pending") {
-      throw new ValidationError("Kan bara skicka om väntande inbjudningar");
+    if (existing.status === "used") {
+      throw new ValidationError("Inbjudan är redan accepterad");
     }
 
-    // Förläng giltighetstiden så magic-link-flödet ser raden som "eligible".
+    // Förläng giltighetstiden + återställ till "pending" så magic-link-flödet
+    // ser raden som "eligible" (gäller även utgångna/återkallade inbjudningar).
     const newExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const [refreshed] = await db
       .update(invitations)
-      .set({ expiresAt: newExpiry })
+      .set({ expiresAt: newExpiry, status: "pending" })
       .where(eq(invitations.id, existing.id))
       .returning();
 
@@ -2634,8 +2635,8 @@ app.delete("/api/invitations/:id", requireAdmin, asyncHandler(async (req, res) =
       throw new NotFoundError("Inbjudan hittades inte");
     }
 
-    if (invitation.status !== "pending") {
-      throw new ValidationError("Kan bara ta bort väntande inbjudningar");
+    if (invitation.status === "used") {
+      throw new ValidationError("Kan inte ta bort en accepterad inbjudan");
     }
 
     await db.delete(invitations).where(eq(invitations.id, id));
