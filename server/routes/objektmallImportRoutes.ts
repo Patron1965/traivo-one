@@ -115,6 +115,31 @@ const INTERIM_LEVEL_PREFIX: Record<ObjLevel, string> = {
 // med svenska/engelska alias. Referensnamnet motsvarar metadata-definitionens
 // fieldLabel (samma sträng som export skriver i rubrikraden), så export→reimport
 // är konsekvent.
+// Task #634: ett metadata-referensnamn på rad 1 kan vara
+//   • klartext            "Gatuadress"
+//   • generisk kod         "22"            (beteckning ELLER visningsnummer)
+//   • hybrid               "22:Gatuadress"
+// Vi delar på FÖRSTA kolon: vänster = kod, höger = namn. Saknas kolon är hela
+// strängen "namnet" (men kan ändå provas som ren kod nedan).
+export function parseMetadataRef(refName: string): { raw: string; code: string | null; name: string } {
+  const raw = (refName ?? "").trim();
+  const idx = raw.indexOf(":");
+  if (idx > 0) {
+    const code = raw.slice(0, idx).trim();
+    const name = raw.slice(idx + 1).trim();
+    if (code && name) return { raw, code, name };
+  }
+  return { raw, code: null, name: raw };
+}
+
+// Task #634: språkmärkt namnkolumn, t.ex. "namn_sv", "name-en", "objektnamn fi".
+// Returnerar gemen språkkod (2–3 bokstäver) eller null. En enkel "Namn"/"Name"
+// utan språk-suffix matchar INTE (det är kolumn E:s rubrik).
+export function parseLanguageNameRef(refName: string): string | null {
+  const m = (refName ?? "").trim().match(/^(?:namn|name|objektnamn)[ _\-]?([a-z]{2,3})$/i);
+  return m ? m[1].toLowerCase() : null;
+}
+
 type KnownObjectFields = {
   address?: string;
   city?: string;
@@ -135,7 +160,8 @@ function extractKnownObjectFields(metadata: Record<string, string>): KnownObject
   const lowerMap = new Map<string, string>();
   for (const [k, v] of Object.entries(metadata ?? {})) {
     const val = (v ?? "").trim();
-    if (val) lowerMap.set(k.trim().toLowerCase(), val);
+    // Task #634: matcha kända fält mot namn-delen även i hybridform "22:Gatuadress".
+    if (val) lowerMap.set(parseMetadataRef(k).name.toLowerCase(), val);
   }
   const pick = (aliases: readonly string[]): string | undefined => {
     for (const a of aliases) {
@@ -169,7 +195,8 @@ const KNOWN_FIELD_ALIAS_SET = new Set<string>(
 );
 
 function isKnownObjectFieldRef(refName: string): boolean {
-  return KNOWN_FIELD_ALIAS_SET.has(refName.trim().toLowerCase());
+  // Task #634: bedöm namn-delen så hybrid "22:Gatuadress" känns igen som känt fält.
+  return KNOWN_FIELD_ALIAS_SET.has(parseMetadataRef(refName).name.toLowerCase());
 }
 
 // ============================================================
@@ -205,6 +232,14 @@ export async function buildTemplateWorkbook(): Promise<Buffer> {
     "  • Skriv metadata-referensnamnet på rad 1 (rubrikraden) och värdet på varje objektrad.",
     "  • Du kan lägga till så många metadata-kolumner du vill. Exempelkolumnerna (Adress, Postnummer …)",
     "    är bara förslag — byt ut eller lägg till egna referensnamn.",
+    "  • Referensnamnet kan skrivas på tre sätt: klartext (Gatuadress), generisk kod (22 = beteckning",
+    "    eller visningsnummer) eller hybrid (22:Gatuadress). Alla tre mappas till samma definition;",
+    "    okända koder rapporteras som varning i torrkörningen.",
+    "",
+    "SPRÅKMÄRKTA NAMN (valfritt):",
+    "  • Lägg till kolumner som namn_sv, namn_en, namn_fi för att ge objektet visningsnamn per språk.",
+    "  • Dessa påverkar INTE kolumn E (det interna namnet) eller släktnamnen — de används bara som",
+    "    lokaliserat visningsnamn med fallback till det interna namnet.",
     "",
     "En och samma fil kan i samma körning: skapa nya (interim), uppdatera befintliga (systemnummer)",
     "och peka om ett objekt till en ny eller befintlig förälder.",
@@ -707,9 +742,12 @@ type ChangedField = { field: string; label: string; from: string; to: string };
 //                objekt-skrivningen, inte som dynamiskt metadatavärde.
 //   definition → matchar en metadata_katalog-definition (på namn eller beteckning).
 //   unknown    → ingen matchning; värdena hoppas över (varnas i valideringen).
+//   nameTranslation → språkmärkt namnkolumn (namn_sv …); skrivs till
+//                objects.nameTranslations, aldrig kolumn E eller som EAV-värde.
 type MetaColumnResolution =
   | { kind: "known" }
   | { kind: "definition"; katalog: MetadataKatalog }
+  | { kind: "nameTranslation"; lang: string }
   | { kind: "unknown" };
 
 // Task #632: per-rad-status för ett dynamiskt metadatavärde i förhandsvisningen.
@@ -736,6 +774,7 @@ type RowResolution = {
   changedFields: ChangedField[];
   metadata: Record<string, string>; // dynamiska metadata-värden (för förhandsvisning)
   metadataChanges: MetadataChange[]; // Task #632: per-värde-status (create/replace/add)
+  nameTranslations: Record<string, string>; // Task #634: lang → namn (objects.nameTranslations)
 };
 
 type ValRow = {
@@ -760,6 +799,7 @@ type ExistingObject = {
   postalCode: string | null;
   notes: string | null;
   containerCount: number | null;
+  nameTranslations: Record<string, string> | null; // Task #634
 };
 
 interface ImportSheetReport {
@@ -829,21 +869,56 @@ async function validateAll(
       : [];
     const katByNamn = new Map<string, MetadataKatalog>();
     const katByBeteckning = new Map<string, MetadataKatalog>();
+    const katByDisplayNumber = new Map<string, MetadataKatalog>();
     for (const k of katalogDefs) {
       katByNamn.set(k.namn.trim().toLowerCase(), k);
       if (k.beteckning) katByBeteckning.set(k.beteckning.trim().toLowerCase(), k);
+      if (k.displayNumber !== null && k.displayNumber !== undefined) {
+        katByDisplayNumber.set(String(k.displayNumber), k);
+      }
     }
     for (const refName of metadataColumns) {
+      // Task #634: språkmärkt namnkolumn (namn_sv …) — skrivs till objects.nameTranslations.
+      const lang = parseLanguageNameRef(refName);
+      if (lang) {
+        metaResolution.set(refName, { kind: "nameTranslation", lang });
+        continue;
+      }
+      // Kända objektfält (adress m.fl.) — även i hybridform "22:Gatuadress".
       if (isKnownObjectFieldRef(refName)) {
         metaResolution.set(refName, { kind: "known" });
         continue;
       }
-      const lower = refName.trim().toLowerCase();
-      const kat = katByNamn.get(lower) ?? katByBeteckning.get(lower);
+      // Task #634: klartext / generisk kod / hybrid → metadata-definition.
+      // Koden matchas mot beteckning ELLER visningsnummer; namnet mot namn/beteckning
+      // (och, utan kod, även visningsnummer). Koden vinner om båda matchar.
+      const parsed = parseMetadataRef(refName);
+      const codeMatch = parsed.code
+        ? (katByBeteckning.get(parsed.code.toLowerCase()) ?? katByDisplayNumber.get(parsed.code))
+        : undefined;
+      const nameMatch =
+        katByNamn.get(parsed.name.toLowerCase()) ??
+        katByBeteckning.get(parsed.name.toLowerCase()) ??
+        (parsed.code ? undefined : katByDisplayNumber.get(parsed.name));
+      const kat = codeMatch ?? nameMatch;
       if (kat) {
         metaResolution.set(refName, { kind: "definition", katalog: kat });
+        if (codeMatch && nameMatch && codeMatch.id !== nameMatch.id) {
+          warnings.push(
+            `Metadata-kolumnen "${refName}": koden "${parsed.code}" och namnet "${parsed.name}" pekar på olika definitioner — använder koden (${codeMatch.namn}).`,
+          );
+        }
+        continue;
+      }
+      // Ingen matchning — skilj okänd kod från okänt namn i varningen.
+      metaResolution.set(refName, { kind: "unknown" });
+      const looksLikeCode = parsed.code !== null || /^\d+$/.test(parsed.name);
+      if (looksLikeCode) {
+        const codeToken = parsed.code ?? parsed.name;
+        warnings.push(
+          `Metadata-kolumnen "${refName}": koden "${codeToken}" matchar ingen metadata-definition (varken beteckning eller visningsnummer) — dess värden hoppas över. Kontrollera koden eller skapa en definition i metadata-katalogen.`,
+        );
       } else {
-        metaResolution.set(refName, { kind: "unknown" });
         warnings.push(
           `Metadata-kolumnen "${refName}" matchar ingen metadata-definition (varken namn eller beteckning) — dess värden hoppas över. Skapa en definition i metadata-katalogen för att importera värdena.`,
         );
@@ -903,6 +978,7 @@ async function validateAll(
         postalCode: objects.postalCode,
         notes: objects.notes,
         containerCount: objects.containerCount,
+        nameTranslations: objects.nameTranslations,
       })
       .from(objects)
       .where(and(eq(objects.tenantId, tenantId), cond));
@@ -917,6 +993,7 @@ async function validateAll(
         postalCode: e.postalCode ?? null,
         notes: e.notes ?? null,
         containerCount: e.containerCount ?? null,
+        nameTranslations: (e.nameTranslations as Record<string, string> | null) ?? null,
       };
       if (obj.objectNumber) byObjNum.set(obj.objectNumber, obj);
       const nl = obj.name.toLowerCase();
@@ -1145,10 +1222,26 @@ async function validateAll(
     // objektfält (adress/ort/postnummer/anteckningar/antal kärl) som ligger bland
     // de dynamiska metadata-kolumnerna. Fria metadata-värden (definitions-kolumner)
     // persisteras via metadataChanges nedan.
+    // Task #634: samla språkmärkta visningsnamn (namn_sv …) → objects.nameTranslations.
+    // Påverkar aldrig kolumn E (interna namnet) eller släktnamns-genereringen.
+    const nameTranslations: Record<string, string> = {};
+    for (const [refName, rawVal] of Object.entries(row.metadata)) {
+      const resn = metaResolution.get(refName);
+      if (!resn || resn.kind !== "nameTranslation") continue;
+      const v = (rawVal ?? "").trim();
+      if (v) nameTranslations[resn.lang] = v;
+    }
+
     const changedFields: ChangedField[] = [];
     if (target && (action === "update" || action === "repoint")) {
       if (name && name !== (target.name ?? "")) {
         changedFields.push({ field: "name", label: "Namn", from: target.name ?? "", to: name });
+      }
+      for (const [lang, v] of Object.entries(nameTranslations)) {
+        const cur = target.nameTranslations?.[lang] ?? "";
+        if (v !== cur) {
+          changedFields.push({ field: `nameTranslation:${lang}`, label: `Namn (${lang})`, from: cur, to: v });
+        }
       }
       const known = extractKnownObjectFields(row.metadata);
       if (known.address !== undefined && known.address !== (target.address ?? "")) {
@@ -1229,6 +1322,7 @@ async function validateAll(
       changedFields,
       metadata: row.metadata,
       metadataChanges,
+      nameTranslations,
     };
   }
 
@@ -1454,6 +1548,8 @@ async function commitImport(
             postalCode,
             notes: known.notes ?? null,
             ...(known.containerCount !== undefined ? { containerCount: known.containerCount } : {}),
+            // Task #634: språkmärkta visningsnamn (om angivna) — aldrig kolumn E.
+            ...(Object.keys(res.nameTranslations).length ? { nameTranslations: res.nameTranslations } : {}),
             importBatchId: batchId,
           } as any)
           .returning({ id: objects.id });
@@ -1472,6 +1568,11 @@ async function commitImport(
         if (known.postalCode !== undefined) set.postalCode = known.postalCode;
         if (known.notes !== undefined) set.notes = known.notes;
         if (known.containerCount !== undefined) set.containerCount = known.containerCount;
+        // Task #634: merge språkmärkta visningsnamn — endast angivna språk skrivs över,
+        // övriga befintliga bevaras (partiell uppdatering).
+        if (Object.keys(res.nameTranslations).length) {
+          set.nameTranslations = { ...(row.target?.nameTranslations ?? {}), ...res.nameTranslations };
+        }
         // Vid peka-om: ärv adress från den nya föräldern om raden inte själv anger adress.
         if (
           res.action === "repoint" &&

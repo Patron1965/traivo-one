@@ -25,3 +25,11 @@ metadata-kartan och ingår inte i diffen. Tomma importceller bevaras och räknas
 ändring (matchar commitens partiella patch). Adress-arv från förälder sker på create när raden
 saknar egen adress och på repoint från ny förälder — den deriverade arvs-adressen syns inte i
 diffen (bara explicita fältändringar gör det).
+
+## Metadata-referensnamn: tre format (klartext/kod/hybrid)
+Rad-1-referensnamn kan vara klartext (`Gatuadress`), generisk kod (`22` = beteckning ELLER
+visningsnummer) eller hybrid (`22:Gatuadress`). `parseMetadataRef()` delar på FÖRSTA kolon
+(vänster=kod, höger=namn). Resolvern matchar kod mot katalog (beteckning→displayNumber); vid
+konflikt mellan kod och namn VINNER koden (med varning). Okända koder/namn ger varning i
+torrkörningen, blockerar inte. `extractKnownObjectFields` använder namn-delen även i hybridform.
+Språkmärkta namnkolumner diffas som "Namn (lang)" och skrivs till `objects.nameTranslations`.

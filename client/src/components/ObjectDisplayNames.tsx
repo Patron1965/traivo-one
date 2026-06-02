@@ -2,9 +2,13 @@
 // förälderkedja. Visar primär kedja som default och alternativa släktnamn när
 // objektet har flera föräldrar (object_parents). Sökvägen visas i sin helhet
 // (rot → objekt) utan hård avkortning när användaren expanderar.
+// Task #634: språkväljare — välj visningsspråk (namn_sv/namn_en/…) med fallback
+// till det interna namnet. Påverkar enbart visningen, aldrig kolumn E.
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Network, Star } from "lucide-react";
+import { ChevronRight, Languages, Network, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 interface DisplayNameChain {
   parentId: string | null;
@@ -17,6 +21,9 @@ interface DisplayNameChain {
 interface ObjectDisplayNamesData {
   primary: string;
   chains: DisplayNameChain[];
+  language?: string;
+  translations?: Record<string, string>;
+  languages?: string[];
 }
 
 const CONTEXT_LABELS: Record<string, string> = {
@@ -25,6 +32,20 @@ const CONTEXT_LABELS: Record<string, string> = {
   operational: "Drift",
   ownership: "Ägare",
 };
+
+// Visningsnamn för en ISO-språkkod (faller tillbaka till versal kod).
+const LANGUAGE_LABELS: Record<string, string> = {
+  sv: "Svenska",
+  en: "English",
+  fi: "Suomi",
+  no: "Norsk",
+  da: "Dansk",
+  de: "Deutsch",
+};
+
+function languageLabel(code: string): string {
+  return LANGUAGE_LABELS[code] ?? code.toUpperCase();
+}
 
 function PathBreadcrumb({ path }: { path: { id: string; name: string; level: string }[] }) {
   return (
@@ -50,10 +71,14 @@ export function ObjectDisplayNames({
   objectId: string;
   enabled?: boolean;
 }) {
+  // "" = internt namn (kolumn E); annars vald språkkod.
+  const [language, setLanguage] = useState<string>("");
+
   const { data, isLoading } = useQuery<ObjectDisplayNamesData>({
-    queryKey: ["/api/objects", objectId, "display-names"],
+    queryKey: ["/api/objects", objectId, "display-names", language],
     queryFn: async () => {
-      const res = await fetch(`/api/objects/${objectId}/display-names`);
+      const qs = language ? `?language=${encodeURIComponent(language)}` : "";
+      const res = await fetch(`/api/objects/${objectId}/display-names${qs}`);
       if (!res.ok) return { primary: "", chains: [] };
       return res.json();
     },
@@ -73,9 +98,42 @@ export function ObjectDisplayNames({
 
   const primary = data.chains.find(c => c.isPrimary) ?? data.chains[0];
   const alternatives = data.chains.filter(c => c !== primary);
+  const availableLanguages = data.languages ?? [];
 
   return (
     <div className="space-y-3" data-testid={`display-names-${objectId}`}>
+      {availableLanguages.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5" data-testid="language-selector">
+          <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground mr-1">
+            <Languages className="h-3 w-3" />
+            Visningsspråk
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant={language === "" ? "default" : "outline"}
+            className="h-6 px-2 text-xs"
+            onClick={() => setLanguage("")}
+            data-testid="button-language-internal"
+          >
+            Internt
+          </Button>
+          {availableLanguages.map((lang) => (
+            <Button
+              key={lang}
+              type="button"
+              size="sm"
+              variant={language === lang ? "default" : "outline"}
+              className="h-6 px-2 text-xs"
+              onClick={() => setLanguage(lang)}
+              data-testid={`button-language-${lang}`}
+            >
+              {languageLabel(lang)}
+            </Button>
+          ))}
+        </div>
+      )}
+
       <div className="rounded-lg border border-chart-3/40 bg-chart-3/10 p-3 space-y-1">
         <div className="flex items-center gap-1.5 text-xs font-medium text-chart-3">
           <Star className="h-3 w-3" />

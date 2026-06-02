@@ -732,7 +732,8 @@ app.get("/api/objects/:id/resolved", asyncHandler(async (req, res) => {
   // tillbaka till object.name om regler saknas.
   try {
     const { computeDisplayName } = await import("../services/display-name");
-    const displayName = await computeDisplayName(req.params.id, tenantId);
+    const language = typeof req.query.language === "string" ? req.query.language : undefined;
+    const displayName = await computeDisplayName(req.params.id, tenantId, undefined, language);
     (objectWithInheritance as any).displayName = displayName ?? (objectWithInheritance as any).name;
   } catch (err) {
     (objectWithInheritance as any).displayName = (objectWithInheritance as any).name;
@@ -749,7 +750,8 @@ app.get("/api/objects/:id/display-names", asyncHandler(async (req, res) => {
     throw new NotFoundError("Objekt");
   }
   const { computeObjectDisplayNames } = await import("../services/display-name");
-  const result = await computeObjectDisplayNames(req.params.id, tenantId);
+  const language = typeof req.query.language === "string" ? req.query.language : undefined;
+  const result = await computeObjectDisplayNames(req.params.id, tenantId, undefined, language);
   res.set("Cache-Control", "no-cache, must-revalidate");
   res.json(result);
 }));

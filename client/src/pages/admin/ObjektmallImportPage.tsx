@@ -302,6 +302,14 @@ export default function ObjektmallImportPage() {
                 <li>
                   <span className="font-medium">Kolumn F och framåt:</span> dynamiska metadata-referensnamn (rad 1).
                 </li>
+                <li>
+                  <span className="font-medium">Referensnamn (3 format):</span> klartext (<span className="font-mono">Gatuadress</span>),
+                  kod (<span className="font-mono">22</span>) eller hybrid (<span className="font-mono">22:Gatuadress</span>). Okända koder varnas.
+                </li>
+                <li>
+                  <span className="font-medium">Språkmärkta namn:</span> kolumner som <span className="font-mono">namn_sv</span>,{" "}
+                  <span className="font-mono">namn_en</span> ger visningsnamn per språk — påverkar inte det interna namnet (kolumn E).
+                </li>
               </ul>
             </div>
           </CardContent>

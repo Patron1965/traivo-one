@@ -138,6 +138,11 @@ export const objects = pgTable("objects", {
   clusterId: varchar("cluster_id"),
   parentId: varchar("parent_id").references((): any => objects.id),
   name: text("name").notNull(),
+  // Task #634: språkmärkta visningsnamn (t.ex. {sv,en,fi}) parallellt med det
+  // interna namnet ovan. Påverkar ALDRIG `name` (kolumn E) eller släktnamns-
+  // genereringen — används enbart för lokaliserat visningsnamn med fallback till
+  // `name`. Skrivs av objektmall-importen via `namn_<lang>`-kolumner.
+  nameTranslations: jsonb("name_translations"),
   objectNumber: text("object_number"),
   objectType: text("object_type").default("omrade").notNull(),
   // Hierarkinivå: koncern, brf, fastighet, rum, karl
@@ -1408,7 +1413,11 @@ export const insertCustomerRelationshipSchema = createInsertSchema(customerRelat
     validTo: z.coerce.date().nullish(),
   });
 export const insertObjectSchema = createInsertSchema(objects).omit({ id: true, createdAt: true })
-  .extend({ deliveryPreferences: deliveryPreferencesSchema.nullish() });
+  .extend({
+    deliveryPreferences: deliveryPreferencesSchema.nullish(),
+    // Task #634: språkmärkta visningsnamn (lang → namn), aldrig kolumn E.
+    nameTranslations: z.record(z.string(), z.string()).nullish(),
+  });
 export const insertResourceSchema = createInsertSchema(resources).omit({ id: true, createdAt: true });
 export const insertWorkOrderSchema = createInsertSchema(workOrders).omit({ id: true, createdAt: true });
 export const insertWorkOrderLineSchema = createInsertSchema(workOrderLines).omit({ id: true, createdAt: true, completedAt: true });

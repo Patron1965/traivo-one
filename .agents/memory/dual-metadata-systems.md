@@ -42,3 +42,16 @@ synkade. En framtida task bör ena dem (eller spegla export mot svenska systemet
   → ren preview-status (`create|replace|add|unchanged`).
 - `writeImportedMetadataValue(exec, {...})` — tx-medveten (`MetadataExecutor` = db|tx),
   utför post-it-skrivningen atomärt i importens transaktion.
+
+## Tredje vägen: språkmärkta visningsnamn (objects.nameTranslations)
+Sedan språkmärkta namnkolumner (`namn_sv`/`namn_en`/`namn_fi`) infördes finns en TREDJE
+plats där "metadata"-liknande namn kan hamna: `objects.nameTranslations` (jsonb, lang→namn).
+Detta är INTE något av EAV-systemen — importen skriver det direkt på objekt-raden (merge på
+update). Det påverkar ALDRIG kolumn E (`objects.name`) eller släktnamn (släktnamn byggs alltid
+från internt namn). Visning sker via `display-name`-tjänstens `language`-param (fallback till
+internt namn). Parsern känner igen språkkolumn via regex `^(namn|name|objektnamn)[ _-]?([a-z]{2,3})$`.
+
+**Why:** Kravet var lokaliserade visningsnamn utan att röra det auktoritativa interna namnet
+eller släktnamns-genereringen. EAV passade inte (namn är inte ett fritt metadatafält).
+**How to apply:** Skriv aldrig språknamn till EAV. Läs visningsnamn via display-name-tjänsten
+med `?language=`, aldrig direkt från nameTranslations i UI utan fallback.

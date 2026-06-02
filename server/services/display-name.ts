@@ -44,36 +44,87 @@ type MinimalObject = {
   name: string;
   parentId: string | null;
   hierarchyLevel: string | null;
+  nameTranslations: Record<string, string> | null;
 };
+
+// Task #634: normalisera språkkod (2–3 bokstäver, gemener) — annars ignoreras.
+export function normalizeLanguage(lang: string | null | undefined): string | undefined {
+  if (!lang) return undefined;
+  const l = lang.trim().toLowerCase();
+  return /^[a-z]{2,3}$/.test(l) ? l : undefined;
+}
+
+function coerceTranslations(raw: unknown): Record<string, string> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string" && v.trim()) out[k.trim().toLowerCase()] = v;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+// Task #634: lokaliserat namn för en nod — väljer språk-metadatat om satt,
+// annars det interna namnet (kolumn E). Aldrig tomt-strängar om internt finns.
+function localizedName(o: MinimalObject, language?: string): string {
+  if (language && o.nameTranslations) {
+    const hit = o.nameTranslations[language];
+    if (hit && hit.trim()) return hit;
+  }
+  return o.name ?? "";
+}
+
+const OBJECT_NAME_COLUMNS = {
+  id: objects.id,
+  name: objects.name,
+  parentId: objects.parentId,
+  hierarchyLevel: objects.hierarchyLevel,
+  nameTranslations: objects.nameTranslations,
+} as const;
+
+function toMinimal(o: {
+  id: string; name: string | null; parentId: string | null; hierarchyLevel: string | null; nameTranslations: unknown;
+}): MinimalObject {
+  return {
+    id: o.id,
+    name: o.name ?? "",
+    parentId: o.parentId ?? null,
+    hierarchyLevel: o.hierarchyLevel ?? null,
+    nameTranslations: coerceTranslations(o.nameTranslations),
+  };
+}
 
 export async function computeDisplayName(
   objectId: string,
   tenantId: string,
   rules?: DisplayNameRules,
+  language?: string,
 ): Promise<string> {
   const r = rules ?? (await getDisplayNameRules(tenantId));
-  const [obj] = await db
-    .select({ id: objects.id, name: objects.name, parentId: objects.parentId, hierarchyLevel: objects.hierarchyLevel })
+  const lang = normalizeLanguage(language);
+  const [objRaw] = await db
+    .select(OBJECT_NAME_COLUMNS)
     .from(objects)
     .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));
-  if (!obj) return "";
-  if (!r.enabled) return obj.name ?? "";
+  if (!objRaw) return "";
+  const obj = toMinimal(objRaw);
+  if (!r.enabled) return localizedName(obj, lang);
 
-  const chain: MinimalObject[] = [obj as MinimalObject];
+  const chain: MinimalObject[] = [obj];
   let cursor: string | null = obj.parentId;
   let guard = 0;
   while (cursor && guard < 8) {
-    const [parent] = await db
-      .select({ id: objects.id, name: objects.name, parentId: objects.parentId, hierarchyLevel: objects.hierarchyLevel })
+    const [parentRaw] = await db
+      .select(OBJECT_NAME_COLUMNS)
       .from(objects)
       .where(and(eq(objects.id, cursor), eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
-    if (!parent) break;
-    chain.push(parent as MinimalObject);
+    if (!parentRaw) break;
+    const parent = toMinimal(parentRaw);
+    chain.push(parent);
     cursor = parent.parentId;
     guard++;
   }
   // chain[0] = barnet, chain[n] = roten. Bygg uppifrån.
-  let parts = chain.slice().reverse().map(o => ({ name: o.name ?? "", level: o.hierarchyLevel ?? "" }));
+  let parts = chain.slice().reverse().map(o => ({ name: localizedName(o, lang), level: o.hierarchyLevel ?? "" }));
   if (r.includeLevels.length > 0) {
     parts = parts.filter((p, idx) => idx === parts.length - 1 || r.includeLevels.includes(p.level));
   }
@@ -123,6 +174,13 @@ export type ObjectDisplayNames = {
   primary: string;
   // Alla släktnamn, ett per direkt förälder. Primär kedja först.
   chains: DisplayNameChain[];
+  // Task #634: vilket språk som detta svar lokaliserades mot (undefined = internt).
+  language?: string;
+  // Task #634: objektets egna språkmärkta visningsnamn (lang → namn) — för UI:s
+  // språkväljare. Påverkar aldrig kolumn E.
+  translations?: Record<string, string>;
+  // Task #634: tillgängliga språk i kedjan (objektets + föräldrarnas), sorterade.
+  languages?: string[];
 };
 
 // Multi-förälder (task #619): bygg ett släktnamn per direkt förälder via
@@ -133,19 +191,22 @@ export async function computeObjectDisplayNames(
   objectId: string,
   tenantId: string,
   rules?: DisplayNameRules,
+  language?: string,
 ): Promise<ObjectDisplayNames> {
   const r = rules ?? (await getDisplayNameRules(tenantId));
+  const lang = normalizeLanguage(language);
 
   const all = await db
-    .select({ id: objects.id, name: objects.name, parentId: objects.parentId, hierarchyLevel: objects.hierarchyLevel })
+    .select(OBJECT_NAME_COLUMNS)
     .from(objects)
     .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
-  const byId = new Map<string, MinimalObject>(all.map(o => [o.id, o as MinimalObject]));
+  const byId = new Map<string, MinimalObject>(all.map(o => [o.id, toMinimal(o)]));
 
   const start = byId.get(objectId);
-  if (!start) return { primary: "", chains: [] };
-  const selfName = start.name ?? "";
-  if (!r.enabled) return { primary: selfName, chains: [] };
+  if (!start) return { primary: "", chains: [], language: lang };
+  const selfName = localizedName(start, lang);
+  const translations = start.nameTranslations ?? undefined;
+  if (!r.enabled) return { primary: selfName, chains: [], language: lang, translations };
 
   // object_parents per barn → relationer.
   const relRows = await db
@@ -201,8 +262,8 @@ export async function computeObjectDisplayNames(
       parentId: firstParentId,
       relationContext,
       isPrimary,
-      name: formatChain(rootToChild.map(o => ({ name: o.name ?? "", level: o.hierarchyLevel ?? "" })), r),
-      path: rootToChild.map(o => ({ id: o.id, name: o.name ?? "", level: o.hierarchyLevel ?? "" })),
+      name: formatChain(rootToChild.map(o => ({ name: localizedName(o, lang), level: o.hierarchyLevel ?? "" })), r),
+      path: rootToChild.map(o => ({ id: o.id, name: localizedName(o, lang), level: o.hierarchyLevel ?? "" })),
     };
   };
 
@@ -223,7 +284,21 @@ export async function computeObjectDisplayNames(
   // Primär kedja först, övriga efter.
   chains.sort((a, b) => (a.isPrimary === b.isPrimary ? 0 : a.isPrimary ? -1 : 1));
   const primaryChain = chains.find(c => c.isPrimary) ?? chains[0];
-  return { primary: primaryChain?.name || selfName, chains };
+
+  // Task #634: samla tillgängliga språk i hela primärkedjan så UI:t kan erbjuda val.
+  const langSet = new Set<string>();
+  Array.from(byId.values()).forEach((o) => {
+    if (o.nameTranslations) Object.keys(o.nameTranslations).forEach((k) => langSet.add(k));
+  });
+  const languages = Array.from(langSet).sort();
+
+  return {
+    primary: primaryChain?.name || selfName,
+    chains,
+    language: lang,
+    translations,
+    languages: languages.length ? languages : undefined,
+  };
 }
 
 // Batch-variant för listor — undviker N+1 genom att hämta alla objekt en gång.
@@ -231,20 +306,22 @@ export async function computeDisplayNamesBatch(
   objectIds: string[],
   tenantId: string,
   rules?: DisplayNameRules,
+  language?: string,
 ): Promise<Map<string, string>> {
   const result = new Map<string, string>();
   if (objectIds.length === 0) return result;
   const r = rules ?? (await getDisplayNameRules(tenantId));
+  const lang = normalizeLanguage(language);
   const all = await db
-    .select({ id: objects.id, name: objects.name, parentId: objects.parentId, hierarchyLevel: objects.hierarchyLevel })
+    .select(OBJECT_NAME_COLUMNS)
     .from(objects)
     .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
-  const byId = new Map<string, MinimalObject>(all.map(o => [o.id, o as MinimalObject]));
+  const byId = new Map<string, MinimalObject>(all.map(o => [o.id, toMinimal(o)]));
 
   for (const id of objectIds) {
     const start = byId.get(id);
     if (!start) { result.set(id, ""); continue; }
-    if (!r.enabled) { result.set(id, start.name ?? ""); continue; }
+    if (!r.enabled) { result.set(id, localizedName(start, lang)); continue; }
     const chain: MinimalObject[] = [start];
     let cursor = start.parentId;
     let guard = 0;
@@ -255,7 +332,7 @@ export async function computeDisplayNamesBatch(
       cursor = p.parentId;
       guard++;
     }
-    let parts = chain.slice().reverse().map(o => ({ name: o.name ?? "", level: o.hierarchyLevel ?? "" }));
+    let parts = chain.slice().reverse().map(o => ({ name: localizedName(o, lang), level: o.hierarchyLevel ?? "" }));
     if (r.includeLevels.length > 0) {
       parts = parts.filter((p, idx) => idx === parts.length - 1 || r.includeLevels.includes(p.level));
     }

@@ -49,16 +49,17 @@ export function registerObjectLifecycleRoutes(app: Express): void {
     const tenantId = getTenantIdWithFallback(req);
     const obj = await storage.getObject(req.params.id);
     if (!verifyTenantOwnership(obj, tenantId)) throw new NotFoundError("Objekt");
-    const name = await computeDisplayName(req.params.id, tenantId);
+    const language = typeof req.query.language === "string" ? req.query.language : undefined;
+    const name = await computeDisplayName(req.params.id, tenantId, undefined, language);
     res.json({ id: req.params.id, displayName: name });
   }));
 
   app.post("/api/objects/display-names/batch", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const schema = z.object({ ids: z.array(z.string()).min(1).max(500) });
+    const schema = z.object({ ids: z.array(z.string()).min(1).max(500), language: z.string().optional() });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).message ?? "Ogiltig input");
-    const map = await computeDisplayNamesBatch(parsed.data.ids, tenantId);
+    const map = await computeDisplayNamesBatch(parsed.data.ids, tenantId, undefined, parsed.data.language);
     res.json(Object.fromEntries(map));
   }));
 
