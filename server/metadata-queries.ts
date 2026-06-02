@@ -13,7 +13,7 @@ import {
   GeographicPosition
 } from "@shared/schema";
 
-function getDisplayValue(existing: MetadataVarden): string | null {
+export function getDisplayValue(existing: MetadataVarden): string | null {
   return existing.vardeString ?? 
     (existing.vardeInteger != null ? String(existing.vardeInteger) : null) ??
     (existing.vardeDecimal != null ? String(existing.vardeDecimal) : null) ??
@@ -21,6 +21,220 @@ function getDisplayValue(existing: MetadataVarden): string | null {
     (existing.vardeDatetime ? existing.vardeDatetime.toISOString() : null) ??
     (existing.vardeJson ? JSON.stringify(existing.vardeJson) : null) ??
     existing.vardeReferens ?? null;
+}
+
+// ============================================================================
+// IMPORT-SKRIVHJÄLPARE (Task #632)
+// Transaktionssäkra hjälpare för att skriva per-objekt-metadatavärden under
+// Excel-objektimporten (post-it-modellen §6.12): ersättande (allowDuplicates=
+// false) ersätter befintligt värde + arkiverar gamla till historik;
+// kompletterande (allowDuplicates=true) lägger till värdet parallellt.
+// ============================================================================
+
+// En exekverare som antingen är den globala db-anslutningen eller en pågående
+// transaktion (commitImport kör allt i db.transaction). Båda exponerar samma
+// query-builder-API som dessa hjälpare använder (select/insert/update).
+export type MetadataExecutor =
+  | typeof db
+  | Parameters<Parameters<typeof db["transaction"]>[0]>[0];
+
+export type ImportMetadataWriteStatus = "create" | "replace" | "add" | "unchanged";
+
+type VardeFields = {
+  vardeString: string | null;
+  vardeInteger: number | null;
+  vardeDecimal: number | null;
+  vardeBoolean: boolean | null;
+  vardeDatetime: Date | null;
+  vardeJson: unknown | null;
+  vardeReferens: string | null;
+};
+
+// Coerca ett rådata-strängvärde till typade värdefält enligt datatyp.
+// Kastar Error (svenskt meddelande) vid ogiltigt värde. Speglar valideringen i
+// createMetadata/updateMetadata så import och manuell inmatning är konsekventa.
+function coerceVardeFields(datatyp: string, raw: string): VardeFields {
+  const fields: VardeFields = {
+    vardeString: null,
+    vardeInteger: null,
+    vardeDecimal: null,
+    vardeBoolean: null,
+    vardeDatetime: null,
+    vardeJson: null,
+    vardeReferens: null,
+  };
+  const v = raw;
+  switch (datatyp) {
+    case "string":
+      fields.vardeString = String(v);
+      break;
+    case "integer": {
+      const n = parseInt(String(v), 10);
+      if (isNaN(n)) throw new Error(`Ogiltigt heltal: "${v}"`);
+      fields.vardeInteger = n;
+      break;
+    }
+    case "decimal": {
+      const n = parseFloat(String(v).replace(",", "."));
+      if (isNaN(n)) throw new Error(`Ogiltigt decimaltal: "${v}"`);
+      fields.vardeDecimal = n;
+      break;
+    }
+    case "boolean": {
+      const s = String(v).trim().toLowerCase();
+      if (s === "true" || s === "1" || s === "ja" || s === "yes" || s === "x") {
+        fields.vardeBoolean = true;
+      } else if (s === "false" || s === "0" || s === "nej" || s === "no") {
+        fields.vardeBoolean = false;
+      } else {
+        throw new Error(`Ogiltigt ja/nej-värde: "${v}"`);
+      }
+      break;
+    }
+    case "datetime": {
+      const d = new Date(v);
+      if (isNaN(d.getTime())) throw new Error(`Ogiltigt datum/tid-värde: "${v}"`);
+      fields.vardeDatetime = d;
+      break;
+    }
+    case "json":
+    case "location":
+      try {
+        fields.vardeJson = JSON.parse(v);
+      } catch {
+        throw new Error(`Ogiltigt JSON-värde: "${v}"`);
+      }
+      break;
+    case "referens":
+      fields.vardeReferens = String(v);
+      break;
+    case "image":
+    case "file":
+    case "code":
+    case "interval":
+      fields.vardeString = String(v);
+      break;
+    default:
+      throw new Error(`Okänd datatyp: ${datatyp}`);
+  }
+  return fields;
+}
+
+// Validera + coerca ett rådata-strängvärde mot en katalog-definition.
+// Returnerar de typade värdefälten samt det normaliserade visningsvärdet
+// (samma representation som getDisplayValue ger för en sparad rad), så att
+// förhandsgranskning och commit jämför äpplen med äpplen. Kastar vid ogiltigt
+// värde eller värde utanför allowedValues.
+export function coerceMetadataVardeFromRaw(
+  katalog: Pick<MetadataKatalog, "datatyp" | "allowedValues" | "namn">,
+  raw: string,
+): { vardeFields: VardeFields; displayValue: string } {
+  if (katalog.allowedValues && katalog.allowedValues.length > 0) {
+    if (!katalog.allowedValues.includes(raw)) {
+      throw new Error(
+        `Ogiltigt värde "${raw}" för "${katalog.namn}". Tillåtna värden: ${katalog.allowedValues.join(", ")}`,
+      );
+    }
+  }
+  const vardeFields = coerceVardeFields(katalog.datatyp, raw);
+  const displayValue = getDisplayValue(vardeFields as MetadataVarden) ?? raw;
+  return { vardeFields, displayValue };
+}
+
+// Räkna ut förhandsstatus (skapa/ersätt/lägg till/oförändrad) för ett
+// importerat värde, givet de befintliga lokala visningsvärdena på objektet.
+// Ren funktion utan DB-anrop — används i förhandsgranskningen.
+export function computeImportMetadataStatus(
+  allowDuplicates: boolean,
+  existingDisplayValues: string[],
+  newDisplayValue: string,
+): ImportMetadataWriteStatus {
+  if (allowDuplicates) {
+    return existingDisplayValues.includes(newDisplayValue) ? "unchanged" : "add";
+  }
+  if (existingDisplayValues.length === 0) return "create";
+  return existingDisplayValues[0] === newDisplayValue ? "unchanged" : "replace";
+}
+
+// Skriv ett importerat metadatavärde på ett objekt med post-it-modellens
+// beteende. Körs med medskickad exekverare (transaktion) så hela importen
+// förblir atomär. Returnerar vad som hände (för räkning/loggning).
+export async function writeImportedMetadataValue(
+  exec: MetadataExecutor,
+  args: {
+    tenantId: string;
+    objektId: string;
+    katalog: MetadataKatalog;
+    rawValue: string;
+    andradAv?: string | null;
+  },
+): Promise<ImportMetadataWriteStatus> {
+  const { tenantId, objektId, katalog } = args;
+  const andradAv = args.andradAv ?? "import";
+  const { vardeFields, displayValue } = coerceMetadataVardeFromRaw(katalog, args.rawValue);
+
+  const existing = await exec
+    .select()
+    .from(metadataVarden)
+    .where(and(
+      eq(metadataVarden.objektId, objektId),
+      eq(metadataVarden.metadataKatalogId, katalog.id),
+      eq(metadataVarden.tenantId, tenantId),
+    ));
+
+  const insertValue = async (): Promise<string> => {
+    const [inserted] = await exec.insert(metadataVarden).values({
+      tenantId,
+      objektId,
+      metadataKatalogId: katalog.id,
+      ...vardeFields,
+      arvsNedat: katalog.standardArvs,
+      skapadAv: andradAv ?? undefined,
+      metod: "import",
+    }).returning();
+    return inserted.id;
+  };
+  const writeHistorik = async (
+    vardenId: string | null,
+    gammaltVarde: string | null,
+  ): Promise<void> => {
+    await exec.insert(metadataHistorik).values({
+      tenantId,
+      metadataVardenId: vardenId,
+      objektId,
+      metadataKatalogId: katalog.id,
+      gammaltVarde,
+      nyttVarde: displayValue,
+      andradAv: andradAv ?? "import",
+      andringsMetod: "import",
+    });
+  };
+
+  // Kompletterande (post-it bredvid): lägg till parallellt, men hoppa över om
+  // ett identiskt värde redan finns (gör re-import idempotent).
+  if (katalog.allowDuplicates) {
+    const identical = existing.some((e) => getDisplayValue(e) === displayValue);
+    if (identical) return "unchanged";
+    const vardenId = await insertValue();
+    await writeHistorik(vardenId, null);
+    return "add";
+  }
+
+  // Ersättande (post-it ovanpå): max ett lokalt värde — ersätt och arkivera.
+  if (existing.length === 0) {
+    const vardenId = await insertValue();
+    await writeHistorik(vardenId, null);
+    return "create";
+  }
+  const current = existing[0];
+  const oldDisplay = getDisplayValue(current);
+  if (oldDisplay === displayValue) return "unchanged";
+  await exec
+    .update(metadataVarden)
+    .set({ ...vardeFields, uppdateradAv: andradAv ?? undefined, metod: "import", updatedAt: new Date() })
+    .where(and(eq(metadataVarden.id, current.id), eq(metadataVarden.tenantId, tenantId)));
+  await writeHistorik(current.id, oldDisplay);
+  return "replace";
 }
 
 // ============================================================================

@@ -27,11 +27,20 @@ import { useToast } from "@/hooks/use-toast";
 import { OBJEKTMALL_FILENAME, OBJEKTMALL_FIXED_COLUMNS } from "@shared/objektmall-template";
 
 type RowAction = "create" | "update" | "repoint";
+type MetadataWriteStatus = "create" | "replace" | "add" | "unchanged";
 interface ChangedField {
   field: string;
   label: string;
   from: string;
   to: string;
+}
+interface MetadataChange {
+  refName: string;
+  label: string;
+  beteckning: string | null;
+  value: string;
+  status: MetadataWriteStatus;
+  allowDuplicates: boolean;
 }
 interface ActionRow {
   row: number;
@@ -43,6 +52,7 @@ interface ActionRow {
   changed: boolean;
   changedFields: ChangedField[];
   metadata: Record<string, string>;
+  metadataChanges: MetadataChange[];
 }
 interface ImportSheetReport {
   name: string;
@@ -76,6 +86,7 @@ interface CommitResponse {
   created: Record<string, number>;
   updated: Record<string, number>;
   repointed: Record<string, number>;
+  metadataValuesWritten?: number;
   report: ImportReport;
   message?: string;
 }
@@ -96,6 +107,13 @@ const LEVEL_LABELS: Record<string, string> = {
   organisation: "Organisation",
   stores: "Butik/Fastighet",
   containers: "Kärl",
+};
+
+const META_STATUS_META: Record<MetadataWriteStatus, { label: string; className: string }> = {
+  create: { label: "Skapas", className: "bg-chart-2/10" },
+  add: { label: "Lägg till", className: "bg-chart-1/10" },
+  replace: { label: "Ersätter", className: "bg-warning/10 text-warning border-warning/40" },
+  unchanged: { label: "Oförändrad", className: "bg-muted text-muted-foreground" },
 };
 
 export default function ObjektmallImportPage() {
@@ -411,8 +429,9 @@ export default function ObjektmallImportPage() {
                 <Separator />
                 <h3 className="text-sm font-semibold">Dynamiska metadata-kolumner ({metadataColumns.length})</h3>
                 <p className="text-xs text-muted-foreground">
-                  Dessa referensnamn lästes från rad 1 (kolumn F och framåt). Värdena visas per rad nedan men
-                  skrivs ännu inte till objekten — det hanteras i ett separat steg.
+                  Dessa referensnamn lästes från rad 1 (kolumn F och framåt). Referensnamn som matchar en
+                  metadata-definition (på namn eller beteckning) skrivs till objekten vid skarp import — status per
+                  värde visas per rad nedan. Kolumner utan matchande definition hoppas över (se varningar).
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {metadataColumns.map((c) => (
@@ -478,7 +497,9 @@ export default function ObjektmallImportPage() {
                         {sheet.actions.map((a) => {
                           const rowKey = `import-${a.row}`;
                           const metaEntries = Object.entries(a.metadata ?? {});
-                          const hasExpand = (a.changedFields?.length ?? 0) > 0 || metaEntries.length > 0;
+                          const metaChanges = a.metadataChanges ?? [];
+                          const hasExpand =
+                            (a.changedFields?.length ?? 0) > 0 || metaEntries.length > 0 || metaChanges.length > 0;
                           const isExpanded = !!expandedRows[rowKey];
                           return (
                             <Fragment key={rowKey}>
@@ -538,9 +559,9 @@ export default function ObjektmallImportPage() {
                                         {a.action === "create" ? "Ny" : "Ändrad"}
                                       </Badge>
                                     )}
-                                    {metaEntries.length > 0 && (
+                                    {metaChanges.length > 0 && (
                                       <span className="text-[10px] text-muted-foreground">
-                                        ({metaEntries.length} metadata)
+                                        ({metaChanges.length} metadata)
                                       </span>
                                     )}
                                   </span>
@@ -577,19 +598,29 @@ export default function ObjektmallImportPage() {
                                           ))}
                                         </div>
                                       )}
-                                      {metaEntries.length > 0 && (
+                                      {metaChanges.length > 0 && (
                                         <div className="space-y-1">
-                                          <div className="text-[11px] font-semibold text-muted-foreground uppercase">Metadata-värden (läses, skrivs ej än)</div>
-                                          {metaEntries.map(([k, v]) => (
-                                            <div
-                                              key={k}
-                                              className="flex items-start gap-2 text-xs"
-                                              data-testid={`meta-value-import-${a.row}-${k}`}
-                                            >
-                                              <span className="font-medium min-w-[120px] shrink-0">{k}</span>
-                                              <span className="text-foreground whitespace-pre-wrap break-words">{v || "—"}</span>
-                                            </div>
-                                          ))}
+                                          <div className="text-[11px] font-semibold text-muted-foreground uppercase">Metadata-värden (skrivs vid skarp import)</div>
+                                          {metaChanges.map((mc) => {
+                                            const sm = META_STATUS_META[mc.status];
+                                            return (
+                                              <div
+                                                key={mc.refName}
+                                                className="flex items-start gap-2 text-xs"
+                                                data-testid={`meta-value-import-${a.row}-${mc.refName}`}
+                                              >
+                                                <Badge
+                                                  variant="outline"
+                                                  className={`${sm.className} text-[10px] px-1 py-0 shrink-0`}
+                                                  data-testid={`meta-status-import-${a.row}-${mc.refName}`}
+                                                >
+                                                  {sm.label}
+                                                </Badge>
+                                                <span className="font-medium min-w-[120px] shrink-0">{mc.label}</span>
+                                                <span className="text-foreground whitespace-pre-wrap break-words">{mc.value || "—"}</span>
+                                              </div>
+                                            );
+                                          })}
                                         </div>
                                       )}
                                     </div>
@@ -652,6 +683,11 @@ export default function ObjektmallImportPage() {
             <div className="text-sm">
               Batch-ID: <span className="font-mono">{commitResult.batchId}</span>
             </div>
+            {typeof commitResult.metadataValuesWritten === "number" && (
+              <div className="text-xs mt-1" data-testid="text-metadata-written">
+                Metadata-värden skrivna: <span className="font-mono">{commitResult.metadataValuesWritten}</span>
+              </div>
+            )}
             <div className="mt-2 grid sm:grid-cols-3 gap-2 text-xs">
               <div>
                 <div className="font-semibold mb-0.5">Skapade</div>

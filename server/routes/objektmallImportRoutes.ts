@@ -36,9 +36,20 @@ import {
   objectParents,
   objectMetadata,
   metadataDefinitions,
+  metadataKatalog,
+  metadataVarden,
   importBatches,
   users,
+  type MetadataKatalog,
 } from "@shared/schema";
+import {
+  coerceMetadataVardeFromRaw,
+  computeImportMetadataStatus,
+  writeImportedMetadataValue,
+  getDisplayValue,
+  type ImportMetadataWriteStatus,
+} from "../metadata-queries";
+import { enqueueMetadataChange } from "../services/metadata-change-jobs";
 import {
   OBJEKTMALL_VERSION,
   OBJEKTMALL_FILENAME,
@@ -148,6 +159,17 @@ function extractKnownObjectFields(metadata: Record<string, string>): KnownObject
     if (!Number.isNaN(n)) out.containerCount = n;
   }
   return out;
+}
+
+// Alla alias som mappar mot riktiga `objects`-kolumner. Sådana kolumner skrivs
+// via objekt-skrivningen (extractKnownObjectFields) och ska INTE dubbel-skrivas
+// som dynamiska metadatavärden.
+const KNOWN_FIELD_ALIAS_SET = new Set<string>(
+  Object.values(KNOWN_FIELD_ALIASES).flat().map((a) => a.toLowerCase()),
+);
+
+function isKnownObjectFieldRef(refName: string): boolean {
+  return KNOWN_FIELD_ALIAS_SET.has(refName.trim().toLowerCase());
 }
 
 // ============================================================
@@ -680,6 +702,26 @@ type ParentRef =
 // Task #627: per-fält-diff på en uppdaterad rad (gammalt → nytt).
 type ChangedField = { field: string; label: string; from: string; to: string };
 
+// Task #632: hur en metadata-kolumn (referensnamn på rad 1) tolkas.
+//   known      → mappar mot en riktig objects-kolumn (adress m.fl.), skrivs via
+//                objekt-skrivningen, inte som dynamiskt metadatavärde.
+//   definition → matchar en metadata_katalog-definition (på namn eller beteckning).
+//   unknown    → ingen matchning; värdena hoppas över (varnas i valideringen).
+type MetaColumnResolution =
+  | { kind: "known" }
+  | { kind: "definition"; katalog: MetadataKatalog }
+  | { kind: "unknown" };
+
+// Task #632: per-rad-status för ett dynamiskt metadatavärde i förhandsvisningen.
+type MetadataChange = {
+  refName: string;
+  label: string; // katalog.namn
+  beteckning: string | null;
+  value: string; // rådata-värdet
+  status: ImportMetadataWriteStatus; // create | replace | add | unchanged
+  allowDuplicates: boolean;
+};
+
 // Per-rad upplöst åtgärd som commit-steget återanvänder utan att räkna om.
 type RowResolution = {
   action: "create" | "update" | "repoint";
@@ -693,6 +735,7 @@ type RowResolution = {
   changed: boolean;
   changedFields: ChangedField[];
   metadata: Record<string, string>; // dynamiska metadata-värden (för förhandsvisning)
+  metadataChanges: MetadataChange[]; // Task #632: per-värde-status (create/replace/add)
 };
 
 type ValRow = {
@@ -737,6 +780,7 @@ interface ImportSheetReport {
     changed: boolean;
     changedFields: ChangedField[];
     metadata: Record<string, string>;
+    metadataChanges: MetadataChange[];
   }>;
 }
 
@@ -760,7 +804,11 @@ async function validateAll(
   tenantId: string,
   warnings: string[],
   interimListFlag: boolean = false,
-): Promise<{ report: ValidationReport; rows: ValRow[] }> {
+): Promise<{
+  report: ValidationReport;
+  rows: ValRow[];
+  metaResolution: Map<string, MetaColumnResolution>;
+}> {
   const trim = (data: Record<string, string>, key: string) => (data[key] ?? "").trim();
 
   const valRows: ValRow[] = flatRows.map((r) => ({
@@ -769,6 +817,39 @@ async function validateAll(
     metadata: r.metadata,
     errors: [],
   }));
+
+  // Task #632: lös upp varje dynamisk metadata-kolumn (referensnamn på rad 1)
+  // mot en metadata_katalog-definition (match på namn ELLER beteckning, case-
+  // insensitivt). Kända objektfält (adress m.fl.) skrivs via objekt-skrivningen
+  // och klassas som "known". Okända referensnamn varnas och hoppas över.
+  const metaResolution = new Map<string, MetaColumnResolution>();
+  {
+    const katalogDefs = metadataColumns.length
+      ? await db.select().from(metadataKatalog).where(eq(metadataKatalog.tenantId, tenantId))
+      : [];
+    const katByNamn = new Map<string, MetadataKatalog>();
+    const katByBeteckning = new Map<string, MetadataKatalog>();
+    for (const k of katalogDefs) {
+      katByNamn.set(k.namn.trim().toLowerCase(), k);
+      if (k.beteckning) katByBeteckning.set(k.beteckning.trim().toLowerCase(), k);
+    }
+    for (const refName of metadataColumns) {
+      if (isKnownObjectFieldRef(refName)) {
+        metaResolution.set(refName, { kind: "known" });
+        continue;
+      }
+      const lower = refName.trim().toLowerCase();
+      const kat = katByNamn.get(lower) ?? katByBeteckning.get(lower);
+      if (kat) {
+        metaResolution.set(refName, { kind: "definition", katalog: kat });
+      } else {
+        metaResolution.set(refName, { kind: "unknown" });
+        warnings.push(
+          `Metadata-kolumnen "${refName}" matchar ingen metadata-definition (varken namn eller beteckning) — dess värden hoppas över. Skapa en definition i metadata-katalogen för att importera värdena.`,
+        );
+      }
+    }
+  }
 
   // 1. Interim-unikhet över hela fliken.
   const interimToRow = new Map<string, ValRow>();
@@ -992,6 +1073,48 @@ async function validateAll(
     }
   }
 
+  // Task #632: förladda befintliga metadatavärden för alla mål-objekt (update/
+  // repoint) per definitions-katalog, så att förhandsvisningens status (ersätt vs
+  // lägg-till vs oförändrad) matchar exakt vad commit-steget gör.
+  const existingMetaValues = new Map<string, Map<string, string[]>>(); // objektId -> katalogId -> displayValues
+  {
+    const definitionKatalogIds = Array.from(
+      new Set(
+        Array.from(metaResolution.values())
+          .filter((r): r is { kind: "definition"; katalog: MetadataKatalog } => r.kind === "definition")
+          .map((r) => r.katalog.id),
+      ),
+    );
+    const targetIds = Array.from(
+      new Set(valRows.filter((r) => r.target).map((r) => r.target!.id)),
+    );
+    if (definitionKatalogIds.length && targetIds.length) {
+      const existingRows = await db
+        .select()
+        .from(metadataVarden)
+        .where(
+          and(
+            eq(metadataVarden.tenantId, tenantId),
+            inArray(metadataVarden.objektId, targetIds),
+            inArray(metadataVarden.metadataKatalogId, definitionKatalogIds),
+          ),
+        );
+      for (const ev of existingRows) {
+        if (!ev.objektId) continue;
+        const dv = getDisplayValue(ev);
+        if (dv === null) continue;
+        let perObj = existingMetaValues.get(ev.objektId);
+        if (!perObj) {
+          perObj = new Map<string, string[]>();
+          existingMetaValues.set(ev.objektId, perObj);
+        }
+        const arr = perObj.get(ev.metadataKatalogId) ?? [];
+        arr.push(dv);
+        perObj.set(ev.metadataKatalogId, arr);
+      }
+    }
+  }
+
   // 6. Bygg RowResolution: nivå, repekning, namn-diff, metadata-karta.
   for (const row of valRows) {
     if (row.errors.length) continue;
@@ -1020,8 +1143,8 @@ async function validateAll(
 
     // Diffen speglar exakt vad commit-steget skriver: namn samt de kända
     // objektfält (adress/ort/postnummer/anteckningar/antal kärl) som ligger bland
-    // de dynamiska metadata-kolumnerna. Helt fria metadata-värden persisteras inte
-    // i denna task (separat följd-task) och visas enbart i metadata-kartan.
+    // de dynamiska metadata-kolumnerna. Fria metadata-värden (definitions-kolumner)
+    // persisteras via metadataChanges nedan.
     const changedFields: ChangedField[] = [];
     if (target && (action === "update" || action === "repoint")) {
       if (name && name !== (target.name ?? "")) {
@@ -1049,7 +1172,49 @@ async function validateAll(
         });
       }
     }
-    const changed = action === "create" || action === "repoint" || changedFields.length > 0;
+    // Task #632: validera och statusbedöm dynamiska metadata-värden (definitions-
+    // kolumner). Ogiltiga värden (datatyp/allowedValues) blockerar raden.
+    const metadataChanges: MetadataChange[] = [];
+    for (const [refName, rawVal] of Object.entries(row.metadata)) {
+      const value = (rawVal ?? "").trim();
+      if (!value) continue;
+      const resn = metaResolution.get(refName);
+      if (!resn || resn.kind !== "definition") continue; // known/unknown hanteras separat
+      const kat = resn.katalog;
+      let displayValue: string;
+      try {
+        displayValue = coerceMetadataVardeFromRaw(kat, value).displayValue;
+      } catch (e) {
+        row.errors.push(
+          `Ogiltigt metadata-värde i kolumnen "${refName}": ${(e as Error).message}`,
+        );
+        continue;
+      }
+      const existingForObj = target
+        ? existingMetaValues.get(target.id)?.get(kat.id) ?? []
+        : [];
+      const status = computeImportMetadataStatus(
+        kat.allowDuplicates ?? false,
+        existingForObj,
+        displayValue,
+      );
+      metadataChanges.push({
+        refName,
+        label: kat.namn,
+        beteckning: kat.beteckning ?? null,
+        value,
+        status,
+        allowDuplicates: kat.allowDuplicates ?? false,
+      });
+    }
+    // Ogiltiga metadata-värden ska blockera raden från commit.
+    if (row.errors.length) continue;
+
+    const changed =
+      action === "create" ||
+      action === "repoint" ||
+      changedFields.length > 0 ||
+      metadataChanges.some((m) => m.status !== "unchanged");
 
     row.res = {
       action,
@@ -1063,6 +1228,7 @@ async function validateAll(
       changed,
       changedFields,
       metadata: row.metadata,
+      metadataChanges,
     };
   }
 
@@ -1103,6 +1269,7 @@ async function validateAll(
         changed: res.changed,
         changedFields: res.changedFields,
         metadata: res.metadata,
+        metadataChanges: res.metadataChanges,
       });
     }
   }
@@ -1124,7 +1291,7 @@ async function validateAll(
     interimListFlag,
   };
 
-  return { report, rows: valRows };
+  return { report, rows: valRows, metaResolution };
 }
 
 // ============================================================
@@ -1135,7 +1302,7 @@ async function commitImport(
   userId: string | null,
   fileName: string,
   validation: Awaited<ReturnType<typeof validateAll>>,
-): Promise<{ batchId: string; created: Record<string, number>; updated: Record<string, number>; repointed: Record<string, number> }> {
+): Promise<{ batchId: string; created: Record<string, number>; updated: Record<string, number>; repointed: Record<string, number>; metadataValuesWritten: number }> {
   if (validation.report.hasBlockingErrors) {
     throw new ValidationError("Importen har valideringsfel — fixa fel och kör torrkörning igen innan skarp import.");
   }
@@ -1143,6 +1310,12 @@ async function commitImport(
   const created: Record<ObjLevel, number> = { organisation: 0, stores: 0, containers: 0 };
   const updated: Record<ObjLevel, number> = { organisation: 0, stores: 0, containers: 0 };
   const repointed: Record<ObjLevel, number> = { organisation: 0, stores: 0, containers: 0 };
+
+  // Task #632: dynamiska metadata-värden som skrivs i samma transaktion.
+  const metaResolution = validation.metaResolution;
+  let metadataValuesWritten = 0;
+  // Objekt vars metadata ändrats — efter commit triggar vi prisräkning/kluster.
+  const metadataAffectedObjectIds = new Set<string>();
 
   // Bearbeta rader i djup-ordning så att en interim-förälder alltid finns
   // (skapas/upplöses) innan dess barn.
@@ -1186,6 +1359,30 @@ async function commitImport(
       if (!parentRef) return undefined;
       if (parentRef.mode === "interim") return interimToObjectId.get(parentRef.key) ?? null;
       return parentRef.objectId;
+    }
+
+    // Task #632: skriv dynamiska metadata-värden (definitions-kolumner) för ett
+    // objekt enligt post-it-modellen (§6.12): Ersättande (allowDuplicates=false)
+    // uppdaterar + arkiverar gammalt värde i historiken; Kompletterande
+    // (allowDuplicates=true) lägger till parallellt. Identiska värden = oförändrat.
+    async function writeRowMetadata(objId: string, res: RowResolution): Promise<void> {
+      for (const [refName, rawVal] of Object.entries(res.metadata)) {
+        const value = (rawVal ?? "").trim();
+        if (!value) continue;
+        const resn = metaResolution.get(refName);
+        if (!resn || resn.kind !== "definition") continue; // known/unknown skrivs ej här
+        const status = await writeImportedMetadataValue(tx, {
+          tenantId,
+          objektId: objId,
+          katalog: resn.katalog,
+          rawValue: value,
+          andradAv: userId,
+        });
+        if (status !== "unchanged") {
+          metadataValuesWritten++;
+          metadataAffectedObjectIds.add(objId);
+        }
+      }
     }
 
     // Task #619: håll object_parents i synk med objektets primära förälder.
@@ -1263,6 +1460,7 @@ async function commitImport(
         if (res.interimNo) interimToObjectId.set(res.interimNo, inserted.id);
         addrCache.set(inserted.id, { address, city, postalCode });
         await syncPrimaryObjectParent(inserted.id, parentObjectId ?? null);
+        await writeRowMetadata(inserted.id, res);
         created[level]++;
       } else if (res.targetObjectId) {
         const set: Record<string, unknown> = { name: res.name, importBatchId: batchId };
@@ -1297,6 +1495,7 @@ async function commitImport(
         // Invalidera adress-cachen så ev. barn senare i körningen ärver färska värden.
         addrCache.delete(res.targetObjectId);
         if (parentObjectId !== undefined) await syncPrimaryObjectParent(res.targetObjectId, parentObjectId);
+        await writeRowMetadata(res.targetObjectId, res);
         if (res.action === "repoint") repointed[level]++;
         else updated[level]++;
       }
@@ -1321,6 +1520,7 @@ async function commitImport(
         createdBy: userId,
         interimListFlag: validation.report.interimListFlag,
         metadataColumns: validation.report.metadataColumns,
+        metadataValuesWritten,
         perLevel: {
           created,
           updated,
@@ -1330,7 +1530,13 @@ async function commitImport(
     } as any);
   });
 
-  return { batchId, created, updated, repointed };
+  // Efter commit: trigga prisräkning/kluster-utvärdering för objekt vars metadata
+  // ändrats (debouncad, fire-and-forget). force=true för bulk-import.
+  metadataAffectedObjectIds.forEach((objId) => {
+    enqueueMetadataChange(tenantId, objId, { force: true });
+  });
+
+  return { batchId, created, updated, repointed, metadataValuesWritten };
 }
 
 // ============================================================
@@ -1431,6 +1637,7 @@ export function registerObjektmallImportRoutes(app: Express): void {
         created: result.created,
         updated: result.updated,
         repointed: result.repointed,
+        metadataValuesWritten: result.metadataValuesWritten,
         report: validation.report,
       });
     }),

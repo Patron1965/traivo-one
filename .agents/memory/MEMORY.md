@@ -8,3 +8,4 @@
 - [vitest 4 oxc JSX](vitest4-oxc-jsx.md) — vitest 4 bundlar rolldown-vite (oxc) som ignorerar `esbuild`; client `.tsx` parse-fail tills `oxc: { jsx: "automatic" }` sätts i vitest.config.
 - [Mobile-app uses cookie-auth objects endpoints](mobile-app-cookie-auth.md) — SimpleFieldApp körs i webbsession med cookie-auth; `/api/objects*` (ej `/api/mobile/*`) funkar direkt i mobil-UI.
 - [Objektmall-import diff/preview](objektmall-import-diff.md) — förhandsvisningens fält-diff måste spegla exakt vad commit skriver; notes byggs via delade helpers anropade från både validering och commit.
+- [Två metadata-system](dual-metadata-systems.md) — engelskt (metadataDefinitions/objectMetadata) vs svenskt (metadataKatalog/Varden/Historik); import skriver svenskt, export läser engelskt → round-trip-drift.
