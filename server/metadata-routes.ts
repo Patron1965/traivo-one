@@ -89,10 +89,10 @@ const createMetadataTypeSchema = z.object({
   sortOrder: z.number().optional().default(0),
   icon: z.string().optional(),
   // PDF §7/§14
-  area: z.enum(METADATA_AREAS).optional(),
-  displayNumber: z.number().int().optional(),
+  area: z.enum(METADATA_AREAS).nullish(),
+  displayNumber: z.number().int().nullish(),
   allowDuplicates: z.boolean().optional().default(false),
-  allowedValues: z.array(z.string()).optional(),
+  allowedValues: z.array(z.string()).nullish(),
   isRequired: z.boolean().optional(),
   isSystem: z.boolean().optional(),
   beteckning: z.string().max(30).optional(),

@@ -81,6 +81,10 @@ interface MetadataType {
   id?: string;
   namn: string;
   kategori?: string;
+  datatyp?: string;
+  allowedValues?: string[] | null;
+  area?: string | null;
+  displayNumber?: number | null;
 }
 
 interface ObjectContact {
@@ -2217,12 +2221,22 @@ function MetadataAddButton({ objectId, metadataTypes, onAdd, isPending }: {
   const [selectedType, setSelectedType] = useState("");
   const [value, setValue] = useState("");
 
+  const selectedMetaType = metadataTypes.find((t) => t.namn === selectedType || t.id === selectedType);
+  const allowedValues = selectedMetaType?.allowedValues ?? null;
+  const hasAllowedValues = !!allowedValues && allowedValues.length > 0;
+
+  const sortedTypes = [...metadataTypes].sort((a, b) => {
+    const an = a.displayNumber ?? 9999;
+    const bn = b.displayNumber ?? 9999;
+    if (an !== bn) return an - bn;
+    return a.namn.localeCompare(b.namn, "sv");
+  });
+
   const handleAdd = () => {
     if (!selectedType) return;
-    const metaType = metadataTypes.find((t) => t.namn === selectedType || t.id === selectedType);
     onAdd({
       objektId: objectId,
-      metadataTypNamn: metaType?.namn || selectedType,
+      metadataTypNamn: selectedMetaType?.namn || selectedType,
       varde: value,
     });
     setOpen(false);
@@ -2250,16 +2264,20 @@ function MetadataAddButton({ objectId, metadataTypes, onAdd, isPending }: {
             <div className="space-y-2">
               <Label>Metadatatyp *</Label>
               {metadataTypes.length > 0 ? (
-                <Select value={selectedType} onValueChange={setSelectedType}>
+                <Select value={selectedType} onValueChange={(v) => { setSelectedType(v); setValue(""); }}>
                   <SelectTrigger data-testid="select-metadata-type">
                     <SelectValue placeholder="Välj typ..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {metadataTypes.map((t) => (
-                      <SelectItem key={t.id || t.namn} value={t.namn}>
-                        {t.namn} {t.kategori ? `(${t.kategori})` : ""}
-                      </SelectItem>
-                    ))}
+                    {sortedTypes.map((t) => {
+                      const prefix = t.displayNumber != null ? `${t.displayNumber}. ` : "";
+                      const dropdownHint = t.allowedValues && t.allowedValues.length > 0 ? " · fasta val" : "";
+                      return (
+                        <SelectItem key={t.id || t.namn} value={t.namn}>
+                          {prefix}{t.namn} {t.kategori ? `(${t.kategori})` : ""}{dropdownHint}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               ) : (
@@ -2273,12 +2291,27 @@ function MetadataAddButton({ objectId, metadataTypes, onAdd, isPending }: {
             </div>
             <div className="space-y-2">
               <Label>Värde *</Label>
-              <Input
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                placeholder="Ange värde"
-                data-testid="input-metadata-value"
-              />
+              {hasAllowedValues ? (
+                <Select value={value} onValueChange={setValue} disabled={!selectedType}>
+                  <SelectTrigger data-testid="select-metadata-value">
+                    <SelectValue placeholder="Välj värde..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allowedValues!.map((opt) => (
+                      <SelectItem key={opt} value={opt}>
+                        {opt}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  placeholder="Ange värde"
+                  data-testid="input-metadata-value"
+                />
+              )}
             </div>
           </div>
           <DialogFooter>

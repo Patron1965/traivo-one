@@ -28,6 +28,14 @@ const kategoriLabels: Record<string, { label: string; color: string }> = {
   annat: { label: "Annat", color: "bg-muted text-muted-foreground border border-border" },
 };
 
+const areaOptions = [
+  { value: "grunduppgifter", label: "Grunduppgifter" },
+  { value: "produktion", label: "Produktion" },
+  { value: "status", label: "Status" },
+  { value: "ekonomi", label: "Ekonomi" },
+];
+const AREA_ORDER = ["grunduppgifter", "produktion", "status", "ekonomi"];
+
 const datatypLabels: Record<string, string> = {
   string: "Text",
   integer: "Heltal",
@@ -69,6 +77,10 @@ export function MetadataLabelsTab() {
     standardArvs: false,
     isRequired: false,
     allowedValues: "",
+    area: "",
+    displayNumber: "",
+    allowDuplicates: false,
+    kronologiskVisning: false,
   });
 
   const { data: labels = [], isLoading } = useQuery<MetadataKatalog[]>({
@@ -104,15 +116,17 @@ export function MetadataLabelsTab() {
     onError: (error: Error) => toast({ title: "Kunde inte radera etikett", description: error.message, variant: "destructive" }),
   });
 
+  const emptyForm = { namn: "", beteckning: "", beskrivning: "", datatyp: "string", kategori: "annat", icon: "Tag", standardArvs: false, isRequired: false, allowedValues: "", area: "", displayNumber: "", allowDuplicates: false, kronologiskVisning: false };
+
   const closeDialog = () => {
     setDialogOpen(false);
     setEditingLabel(null);
-    setFormData({ namn: "", beteckning: "", beskrivning: "", datatyp: "string", kategori: "annat", icon: "Tag", standardArvs: false, isRequired: false, allowedValues: "" });
+    setFormData(emptyForm);
   };
 
   const openCreate = () => {
     setEditingLabel(null);
-    setFormData({ namn: "", beteckning: "", beskrivning: "", datatyp: "string", kategori: "annat", icon: "Tag", standardArvs: false, isRequired: false, allowedValues: "" });
+    setFormData(emptyForm);
     setDialogOpen(true);
   };
 
@@ -128,11 +142,16 @@ export function MetadataLabelsTab() {
       standardArvs: label.standardArvs,
       isRequired: label.isRequired,
       allowedValues: label.allowedValues?.join(", ") || "",
+      area: label.area || "",
+      displayNumber: label.displayNumber != null ? String(label.displayNumber) : "",
+      allowDuplicates: label.allowDuplicates,
+      kronologiskVisning: label.kronologiskVisning,
     });
     setDialogOpen(true);
   };
 
   const handleSubmit = () => {
+    const parsedDisplayNumber = formData.displayNumber.trim() === "" ? null : parseInt(formData.displayNumber, 10);
     const payload: Partial<InsertMetadataKatalog> = {
       namn: formData.namn,
       beteckning: formData.beteckning || null,
@@ -143,6 +162,10 @@ export function MetadataLabelsTab() {
       standardArvs: formData.standardArvs,
       isRequired: formData.isRequired,
       allowedValues: formData.allowedValues.trim() ? formData.allowedValues.split(",").map(v => v.trim()).filter(Boolean) : null,
+      area: formData.area || null,
+      displayNumber: parsedDisplayNumber != null && Number.isFinite(parsedDisplayNumber) ? parsedDisplayNumber : null,
+      allowDuplicates: formData.allowDuplicates,
+      kronologiskVisning: formData.kronologiskVisning,
     };
 
     if (editingLabel) {
@@ -162,11 +185,27 @@ export function MetadataLabelsTab() {
   });
 
   const grouped = filtered.reduce<Record<string, MetadataKatalog[]>>((acc, label) => {
-    const cat = label.kategori || "annat";
+    const cat = label.area || label.kategori || "annat";
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(label);
     return acc;
   }, {});
+
+  Object.values(grouped).forEach((items) => {
+    items.sort((a, b) => {
+      const an = a.displayNumber ?? Number.MAX_SAFE_INTEGER;
+      const bn = b.displayNumber ?? Number.MAX_SAFE_INTEGER;
+      if (an !== bn) return an - bn;
+      return a.namn.localeCompare(b.namn, "sv");
+    });
+  });
+
+  const groupRank = (key: string) => {
+    const ai = AREA_ORDER.indexOf(key);
+    return ai === -1 ? 999 : ai;
+  };
+  const groupLabel = (key: string) =>
+    areaOptions.find((a) => a.value === key)?.label || kategoriLabels[key]?.label || key;
 
   if (isLoading) {
     return <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>;
@@ -221,12 +260,15 @@ export function MetadataLabelsTab() {
             {labels.length} etiketter totalt, {labels.filter(l => l.isSystem).length} systemmetadata
           </div>
 
-          {Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0])).map(([cat, items]) => {
+          {Object.entries(grouped).sort((a, b) => {
+            const rankDiff = groupRank(a[0]) - groupRank(b[0]);
+            return rankDiff !== 0 ? rankDiff : a[0].localeCompare(b[0]);
+          }).map(([cat, items]) => {
             const catInfo = kategoriLabels[cat] || kategoriLabels.annat;
             return (
               <div key={cat} className="mb-6">
                 <h3 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-2">
-                  <Badge className={catInfo.color}>{catInfo.label}</Badge>
+                  <Badge className={catInfo.color}>{groupLabel(cat)}</Badge>
                   <span className="text-xs">({items.length})</span>
                 </h3>
                 <div className="grid gap-2">
@@ -261,6 +303,18 @@ export function MetadataLabelsTab() {
                               )}
                               {label.standardArvs && (
                                 <Badge variant="outline" className="text-xs text-chart-1 border-chart-1/30">Ärver</Badge>
+                              )}
+                              {label.allowedValues?.length ? (
+                                <Badge variant="secondary" className="text-xs">Dropdown</Badge>
+                              ) : null}
+                              {label.allowDuplicates && (
+                                <Badge variant="outline" className="text-xs">Dubbletter</Badge>
+                              )}
+                              {label.kronologiskVisning && (
+                                <Badge variant="outline" className="text-xs gap-1"><Clock className="h-3 w-3" />Historik</Badge>
+                              )}
+                              {label.displayNumber != null && (
+                                <Badge variant="outline" className="text-xs font-mono">#{label.displayNumber}</Badge>
                               )}
                             </div>
                             <p className="text-xs text-muted-foreground mt-0.5">
@@ -375,6 +429,33 @@ export function MetadataLabelsTab() {
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Område</Label>
+                <Select value={formData.area || "none"} onValueChange={(v) => setFormData({ ...formData, area: v === "none" ? "" : v })}>
+                  <SelectTrigger data-testid="select-label-area">
+                    <SelectValue placeholder="Välj område" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Inget område</SelectItem>
+                    {areaOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Presentationsnummer</Label>
+                <Input
+                  type="number"
+                  value={formData.displayNumber}
+                  onChange={(e) => setFormData({ ...formData, displayNumber: e.target.value })}
+                  placeholder="t.ex. 1, 3, 6"
+                  data-testid="input-label-displaynumber"
+                />
+              </div>
+            </div>
+
             <div>
               <Label>Tillåtna värden (kommaseparerade, lämna tomt för fritext)</Label>
               <Input
@@ -385,7 +466,7 @@ export function MetadataLabelsTab() {
               />
             </div>
 
-            <div className="flex items-center gap-6">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
               <div className="flex items-center gap-2">
                 <Switch
                   checked={formData.standardArvs}
@@ -401,6 +482,22 @@ export function MetadataLabelsTab() {
                   data-testid="switch-label-required"
                 />
                 <Label className="text-sm">Obligatorisk</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={formData.allowDuplicates}
+                  onCheckedChange={(v) => setFormData({ ...formData, allowDuplicates: v })}
+                  data-testid="switch-label-duplicates"
+                />
+                <Label className="text-sm">Tillåt dubbletter</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={formData.kronologiskVisning}
+                  onCheckedChange={(v) => setFormData({ ...formData, kronologiskVisning: v })}
+                  data-testid="switch-label-kronologisk"
+                />
+                <Label className="text-sm">Kronologisk visning</Label>
               </div>
             </div>
           </div>

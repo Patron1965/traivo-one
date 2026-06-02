@@ -81,8 +81,21 @@ interface MetadataKatalog {
   kategori: string | null;
   sortOrder: number;
   icon: string | null;
+  area: string | null;
+  displayNumber: number | null;
+  allowedValues: string[] | null;
+  allowDuplicates: boolean;
+  kronologiskVisning: boolean;
   createdAt: string;
 }
+
+const areaOptions = [
+  { value: 'grunduppgifter', label: 'Grunduppgifter' },
+  { value: 'produktion', label: 'Produktion' },
+  { value: 'status', label: 'Status' },
+  { value: 'ekonomi', label: 'Ekonomi' },
+];
+const AREA_ORDER = ['grunduppgifter', 'produktion', 'status', 'ekonomi'];
 
 const iconOptions = [
   { value: 'MapPin', label: 'Kartpinne' },
@@ -213,11 +226,26 @@ export default function MetadataSettingsPage() {
   });
 
   const groupedTypes = metadataTypes?.reduce((acc, type) => {
-    const kategori = type.kategori || 'annat';
-    if (!acc[kategori]) acc[kategori] = [];
-    acc[kategori].push(type);
+    const groupKey = type.area || type.kategori || 'annat';
+    if (!acc[groupKey]) acc[groupKey] = [];
+    acc[groupKey].push(type);
     return acc;
   }, {} as Record<string, MetadataKatalog[]>) || {};
+
+  Object.values(groupedTypes).forEach((types) => {
+    types.sort((a, b) => {
+      const an = a.displayNumber ?? Number.MAX_SAFE_INTEGER;
+      const bn = b.displayNumber ?? Number.MAX_SAFE_INTEGER;
+      if (an !== bn) return an - bn;
+      if ((a.sortOrder ?? 0) !== (b.sortOrder ?? 0)) return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+      return a.namn.localeCompare(b.namn, 'sv');
+    });
+  });
+
+  const groupLabel = (key: string) =>
+    areaOptions.find((a) => a.value === key)?.label ||
+    categoryOptions.find((c) => c.value === key)?.label ||
+    key;
 
   return (
     <div className="container py-6 space-y-6">
@@ -278,14 +306,16 @@ export default function MetadataSettingsPage() {
       ) : (
         Object.entries(groupedTypes)
           .sort(([a], [b]) => {
-            const order = ['geografi', 'kontakt', 'administrativ', 'kvantitet', 'artikel', 'tid', 'klassificering', 'atkomst', 'betyg', 'beskrivning', 'bilagor', 'annat'];
-            return order.indexOf(a) - order.indexOf(b);
+            const order = [...AREA_ORDER, 'geografi', 'kontakt', 'administrativ', 'kvantitet', 'artikel', 'tid', 'klassificering', 'atkomst', 'betyg', 'beskrivning', 'bilagor', 'annat'];
+            const ia = order.indexOf(a);
+            const ib = order.indexOf(b);
+            return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
           })
           .map(([kategori, types]) => (
             <Card key={kategori}>
               <CardHeader>
                 <CardTitle className="text-lg">
-                  {categoryOptions.find(c => c.value === kategori)?.label || kategori}
+                  {groupLabel(kategori)}
                 </CardTitle>
                 <CardDescription>
                   {types.length} typ{types.length !== 1 ? 'er' : ''}
@@ -295,6 +325,7 @@ export default function MetadataSettingsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">Nr</TableHead>
                       <TableHead>Namn</TableHead>
                       <TableHead>Datatyp</TableHead>
                       <TableHead>Logisk</TableHead>
@@ -307,6 +338,9 @@ export default function MetadataSettingsPage() {
                       const Icon = getIcon(type.icon);
                       return (
                         <TableRow key={type.id} data-testid={`metadata-type-row-${type.namn}`}>
+                          <TableCell className="text-muted-foreground tabular-nums" data-testid={`text-displaynumber-${type.namn}`}>
+                            {type.displayNumber ?? '–'}
+                          </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Icon className="h-4 w-4 text-muted-foreground" />
@@ -315,6 +349,23 @@ export default function MetadataSettingsPage() {
                                 {type.beskrivning && (
                                   <p className="text-xs text-muted-foreground">{type.beskrivning}</p>
                                 )}
+                                <div className="flex items-center gap-1 mt-1 flex-wrap">
+                                  {type.allowedValues && type.allowedValues.length > 0 && (
+                                    <Badge variant="secondary" className="text-[10px]" data-testid={`badge-dropdown-${type.namn}`}>
+                                      {type.allowedValues.length} fasta val
+                                    </Badge>
+                                  )}
+                                  {type.allowDuplicates && (
+                                    <Badge variant="outline" className="text-[10px]" data-testid={`badge-duplicates-${type.namn}`}>
+                                      Dubbletter
+                                    </Badge>
+                                  )}
+                                  {type.kronologiskVisning && (
+                                    <Badge variant="outline" className="text-[10px]" data-testid={`badge-kronologisk-${type.namn}`}>
+                                      <Clock className="h-2.5 w-2.5 mr-0.5" />Historik
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </TableCell>
@@ -417,6 +468,15 @@ function MetadataTypeForm({ initialData, onSubmit, isPending }: MetadataTypeForm
   const [kategori, setKategori] = useState(initialData?.kategori || 'annat');
   const [sortOrder, setSortOrder] = useState(initialData?.sortOrder || 0);
   const [icon, setIcon] = useState(initialData?.icon || 'FileText');
+  const [area, setArea] = useState(initialData?.area || '');
+  const [displayNumber, setDisplayNumber] = useState<string>(
+    initialData?.displayNumber != null ? String(initialData.displayNumber) : '',
+  );
+  const [allowedValuesText, setAllowedValuesText] = useState(
+    initialData?.allowedValues?.join(', ') || '',
+  );
+  const [allowDuplicates, setAllowDuplicates] = useState(initialData?.allowDuplicates ?? false);
+  const [kronologiskVisning, setKronologiskVisning] = useState(initialData?.kronologiskVisning ?? false);
 
   const handleLabelChange = (value: string) => {
     setDisplayLabel(value);
@@ -427,6 +487,11 @@ function MetadataTypeForm({ initialData, onSubmit, isPending }: MetadataTypeForm
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const allowedValues = allowedValuesText
+      .split(',')
+      .map((v) => v.trim())
+      .filter((v) => v.length > 0);
+    const parsedDisplayNumber = displayNumber.trim() === '' ? undefined : parseInt(displayNumber, 10);
     onSubmit({
       namn,
       beskrivning: beskrivning || null,
@@ -437,6 +502,11 @@ function MetadataTypeForm({ initialData, onSubmit, isPending }: MetadataTypeForm
       kategori,
       sortOrder,
       icon,
+      area: (area || null) as MetadataKatalog['area'],
+      displayNumber: (Number.isFinite(parsedDisplayNumber as number) ? parsedDisplayNumber : null) as MetadataKatalog['displayNumber'],
+      allowedValues: allowedValues.length > 0 ? allowedValues : null,
+      allowDuplicates,
+      kronologiskVisning,
     });
   };
 
@@ -544,6 +614,48 @@ function MetadataTypeForm({ initialData, onSubmit, isPending }: MetadataTypeForm
 
       <div className="grid grid-cols-2 gap-4">
         <div>
+          <Label>Område</Label>
+          <Select value={area || 'none'} onValueChange={(v) => setArea(v === 'none' ? '' : v)}>
+            <SelectTrigger data-testid="select-type-area">
+              <SelectValue placeholder="Välj område" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Inget område</SelectItem>
+              {areaOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground mt-1">Grupperar fältet i objektets metadata-vy</p>
+        </div>
+        <div>
+          <Label>Presentationsnummer</Label>
+          <Input
+            type="number"
+            value={displayNumber}
+            onChange={(e) => setDisplayNumber(e.target.value)}
+            placeholder="T.ex. 1, 3, 6, 9"
+            data-testid="input-type-displaynumber"
+          />
+          <p className="text-xs text-muted-foreground mt-1">Ordning inom området (lämna luft för insättning)</p>
+        </div>
+      </div>
+
+      <div>
+        <Label>Fasta värden (dropdown)</Label>
+        <Input
+          value={allowedValuesText}
+          onChange={(e) => setAllowedValuesText(e.target.value)}
+          placeholder="T.ex. Liten, Mellan, Stor"
+          data-testid="input-type-allowedvalues"
+        />
+        <p className="text-xs text-muted-foreground mt-1">Kommaseparerade värden. Tomt = fritext.</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
           <Label>Sorteringsordning</Label>
           <Input
             type="number"
@@ -578,6 +690,30 @@ function MetadataTypeForm({ initialData, onSubmit, isPending }: MetadataTypeForm
             checked={standardArvs}
             onCheckedChange={setStandardArvs}
             data-testid="switch-type-arvs"
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <Label>Tillåt dubbletter</Label>
+            <p className="text-xs text-muted-foreground">Flera värden av samma fält på ett objekt (t.ex. flera ytor)</p>
+          </div>
+          <Switch
+            checked={allowDuplicates}
+            onCheckedChange={setAllowDuplicates}
+            data-testid="switch-type-duplicates"
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <Label>Kronologisk visning</Label>
+            <p className="text-xs text-muted-foreground">Visa ändringshistorik som tidslinje på objektet</p>
+          </div>
+          <Switch
+            checked={kronologiskVisning}
+            onCheckedChange={setKronologiskVisning}
+            data-testid="switch-type-kronologisk"
           />
         </div>
       </div>

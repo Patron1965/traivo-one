@@ -2081,6 +2081,10 @@ app.patch("/api/metadata-labels/:id", requireAdmin, asyncHandler(async (req, res
       editableByLevel: z.string().nullable().optional(),
       standardArvs: z.boolean().optional(),
       arLogisk: z.boolean().optional(),
+      area: z.string().nullable().optional(),
+      displayNumber: z.number().int().nullable().optional(),
+      allowDuplicates: z.boolean().optional(),
+      kronologiskVisning: z.boolean().optional(),
     });
     const parsed = updateSchema.parse(req.body);
     
