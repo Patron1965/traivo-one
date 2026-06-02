@@ -42,6 +42,18 @@ interface MetadataChange {
   status: MetadataWriteStatus;
   allowDuplicates: boolean;
 }
+interface CompositeChange {
+  prefix: string;
+  label: string;
+  beteckning: string | null;
+  subfields: Array<{ key: string; value: string }>;
+  status: MetadataWriteStatus;
+  allowDuplicates: boolean;
+}
+interface CompositeColumn {
+  prefix: string;
+  subfields: string[];
+}
 interface ActionRow {
   row: number;
   action: RowAction;
@@ -53,6 +65,7 @@ interface ActionRow {
   changedFields: ChangedField[];
   metadata: Record<string, string>;
   metadataChanges: MetadataChange[];
+  compositeChanges: CompositeChange[];
 }
 interface ImportSheetReport {
   name: string;
@@ -67,6 +80,7 @@ interface ImportSheetReport {
 interface ImportReport {
   import: ImportSheetReport;
   metadataColumns: string[];
+  compositeColumns: CompositeColumn[];
   warnings: string[];
   hasBlockingErrors: boolean;
   interimListFlag: boolean;
@@ -218,6 +232,7 @@ export default function ObjektmallImportPage() {
 
   const sheet = preview?.report.import;
   const metadataColumns = preview?.report.metadataColumns ?? [];
+  const compositeColumns = preview?.report.compositeColumns ?? [];
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6" data-testid="page-objektmall-import">
@@ -451,6 +466,31 @@ export default function ObjektmallImportPage() {
               </div>
             )}
 
+            {compositeColumns.length > 0 && (
+              <div className="space-y-2">
+                <Separator />
+                <h3 className="text-sm font-semibold">Sammansatta metadata-kolumner ({compositeColumns.length})</h3>
+                <p className="text-xs text-muted-foreground">
+                  Kolumner med punktnotation (t.ex. <code>adress.gata</code>, <code>adress.ort</code>) grupperas till ett
+                  logiskt fält och lagras strukturerat (JSON). Prefixet (t.ex. <code>adress</code>) måste matcha en
+                  metadata-definition på namn eller beteckning — annars hoppas hela gruppen över (se varningar).
+                </p>
+                <div className="flex flex-col gap-2">
+                  {compositeColumns.map((c) => (
+                    <div key={c.prefix} className="flex flex-wrap items-center gap-1.5" data-testid={`composite-col-${c.prefix}`}>
+                      <Badge variant="outline" className="bg-muted/60 font-semibold">{c.prefix}</Badge>
+                      <span className="text-xs text-muted-foreground">→</span>
+                      {c.subfields.map((s) => (
+                        <Badge key={s} variant="outline" className="bg-muted/30" data-testid={`composite-sub-${c.prefix}-${s}`}>
+                          {s}
+                        </Badge>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Valideringsfel */}
             {sheet.errors.length > 0 && (
               <div className="space-y-2">
@@ -506,8 +546,9 @@ export default function ObjektmallImportPage() {
                           const rowKey = `import-${a.row}`;
                           const metaEntries = Object.entries(a.metadata ?? {});
                           const metaChanges = a.metadataChanges ?? [];
+                          const compChanges = a.compositeChanges ?? [];
                           const hasExpand =
-                            (a.changedFields?.length ?? 0) > 0 || metaEntries.length > 0 || metaChanges.length > 0;
+                            (a.changedFields?.length ?? 0) > 0 || metaEntries.length > 0 || metaChanges.length > 0 || compChanges.length > 0;
                           const isExpanded = !!expandedRows[rowKey];
                           return (
                             <Fragment key={rowKey}>
@@ -572,6 +613,11 @@ export default function ObjektmallImportPage() {
                                         ({metaChanges.length} metadata)
                                       </span>
                                     )}
+                                    {compChanges.length > 0 && (
+                                      <span className="text-[10px] text-muted-foreground">
+                                        ({compChanges.length} sammansatt)
+                                      </span>
+                                    )}
                                   </span>
                                 </TableCell>
                                 <TableCell className="text-xs text-muted-foreground">{a.detail}</TableCell>
@@ -626,6 +672,45 @@ export default function ObjektmallImportPage() {
                                                 </Badge>
                                                 <span className="font-medium min-w-[120px] shrink-0">{mc.label}</span>
                                                 <span className="text-foreground whitespace-pre-wrap break-words">{mc.value || "—"}</span>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                      {compChanges.length > 0 && (
+                                        <div className="space-y-2">
+                                          <div className="text-[11px] font-semibold text-muted-foreground uppercase">Sammansatta fält (skrivs som strukturerad JSON)</div>
+                                          {compChanges.map((cc) => {
+                                            const sm = META_STATUS_META[cc.status];
+                                            return (
+                                              <div
+                                                key={cc.prefix}
+                                                className="space-y-1 rounded border border-border/60 bg-background/40 p-2"
+                                                data-testid={`composite-value-import-${a.row}-${cc.prefix}`}
+                                              >
+                                                <div className="flex items-center gap-2 text-xs">
+                                                  <Badge
+                                                    variant="outline"
+                                                    className={`${sm.className} text-[10px] px-1 py-0 shrink-0`}
+                                                    data-testid={`composite-status-import-${a.row}-${cc.prefix}`}
+                                                  >
+                                                    {sm.label}
+                                                  </Badge>
+                                                  <span className="font-medium">{cc.label}</span>
+                                                  <span className="text-[10px] text-muted-foreground font-mono">({cc.prefix})</span>
+                                                </div>
+                                                <div className="ml-2 space-y-0.5">
+                                                  {cc.subfields.map((sf) => (
+                                                    <div
+                                                      key={sf.key}
+                                                      className="flex items-start gap-2 text-xs"
+                                                      data-testid={`composite-sub-import-${a.row}-${cc.prefix}-${sf.key}`}
+                                                    >
+                                                      <span className="text-muted-foreground min-w-[120px] shrink-0">{sf.key}</span>
+                                                      <span className="text-foreground whitespace-pre-wrap break-words">{sf.value || "—"}</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
                                               </div>
                                             );
                                           })}

@@ -63,6 +63,7 @@ import {
   OBJEKTMALL_EXAMPLE_METADATA_HEADERS,
   objektmallColumnHeaderAliases,
   objektmallFixedHeaderSet,
+  parseCompositeRef,
   type ObjektmallColumn,
 } from "@shared/objektmall-template";
 
@@ -241,6 +242,13 @@ export async function buildTemplateWorkbook(): Promise<Buffer> {
     "  • Dessa påverkar INTE kolumn E (det interna namnet) eller släktnamnen — de används bara som",
     "    lokaliserat visningsnamn med fallback till det interna namnet.",
     "",
+    "SAMMANSATTA METADATAFÄLT (punktnotation \"fält.underfält\"):",
+    "  • Vissa fält har underfält. Skriv dem som \"fält.underfält\" så grupperas kolumner med",
+    "    samma prefix (delen före punkten) ihop till ETT logiskt fält som lagras strukturerat.",
+    "  • Exempel adress: kolumnerna \"adress.gata\", \"adress.gatunummer\", \"adress.postnummer\"",
+    "    och \"adress.ort\" slås ihop till ett sammansatt värde på fältet \"adress\".",
+    "  • Prefixet (t.ex. \"adress\") måste matcha en metadata-definition precis som vanliga kolumner.",
+    "",
     "En och samma fil kan i samma körning: skapa nya (interim), uppdatera befintliga (systemnummer)",
     "och peka om ett objekt till en ny eller befintlig förälder.",
     "",
@@ -305,9 +313,12 @@ export async function buildTemplateWorkbook(): Promise<Buffer> {
   // Rad 2 — beskrivningar.
   const descs = [
     ...OBJEKTMALL_FIXED_COLUMNS.map((c) => c.description),
-    ...OBJEKTMALL_EXAMPLE_METADATA_HEADERS.map(
-      () => "Metadata-referensnamn (byt ut/lägg till egna). Värdet skrivs på varje objektrad.",
-    ),
+    ...OBJEKTMALL_EXAMPLE_METADATA_HEADERS.map((h) => {
+      const composite = parseCompositeRef(h);
+      return composite
+        ? `Underfält "${composite.subfield}" till det sammansatta fältet "${composite.prefix}" (punktnotation). Grupperas ihop med övriga "${composite.prefix}.*"-kolumner.`
+        : "Metadata-referensnamn (byt ut/lägg till egna). Värdet skrivs på varje objektrad.";
+    }),
   ];
   const descRow = ws.addRow(descs);
   descRow.eachCell({ includeEmpty: true }, (cell) => {
@@ -324,7 +335,8 @@ export async function buildTemplateWorkbook(): Promise<Buffer> {
     "",
     "",
     "KINAB Koncern",
-    "Storgatan 5",
+    "Storgatan",
+    "5",
     "614 30",
     "Söderköping",
     "Anna Andersson",
@@ -587,7 +599,13 @@ type FlatRow = {
   rowNumber: number; // 1-indexerat radnummer (efter rubrikrad)
   data: Record<string, string>; // fasta kolumnvärden per key
   metadata: Record<string, string>; // dynamiska metadata-värden (referensnamn -> värde)
+  // Sammansatta metadatafält (Task #633): prefix -> { underfält -> värde }.
+  // Kolumner med punktnotation ("adress.gata") grupperas hit, ALDRIG i `metadata`.
+  composite: Record<string, Record<string, string>>;
 };
+
+// En sammansatt metadata-kolumngrupp som hittats i rubrikraden (Task #633).
+type CompositeColumn = { prefix: string; subfields: string[] };
 
 // Läs interimslist-flaggan ("ren nyimport") från instruktionsfliken. Vi letar
 // efter markör-cellen och läser cellen direkt till höger om den.
@@ -609,7 +627,13 @@ function readInterimListFlag(wb: ExcelJS.Workbook): boolean {
 
 async function parseWorkbook(
   buffer: Buffer,
-): Promise<{ rows: FlatRow[]; metadataColumns: string[]; warnings: string[]; interimListFlag: boolean }> {
+): Promise<{
+  rows: FlatRow[];
+  metadataColumns: string[];
+  compositeColumns: CompositeColumn[];
+  warnings: string[];
+  interimListFlag: boolean;
+}> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer as any);
   const warnings: string[] = [];
@@ -623,7 +647,7 @@ async function parseWorkbook(
     throw new ValidationError(`Obligatorisk flik saknas: "${OBJEKTMALL_IMPORT_SHEET_NAME}"`);
   }
 
-  const { rows, metadataColumns } = parseImportSheet(ws);
+  const { rows, metadataColumns, compositeColumns } = parseImportSheet(ws);
 
   const interimListFlag = readInterimListFlag(wb);
   if (interimListFlag) {
@@ -632,10 +656,14 @@ async function parseWorkbook(
     );
   }
 
-  return { rows, metadataColumns, warnings, interimListFlag };
+  return { rows, metadataColumns, compositeColumns, warnings, interimListFlag };
 }
 
-function parseImportSheet(ws: ExcelJS.Worksheet): { rows: FlatRow[]; metadataColumns: string[] } {
+function parseImportSheet(ws: ExcelJS.Worksheet): {
+  rows: FlatRow[];
+  metadataColumns: string[];
+  compositeColumns: CompositeColumn[];
+} {
   const fixedHeaderSet = objektmallFixedHeaderSet();
   const matchFixed = (txt: string): ObjektmallColumn | undefined =>
     OBJEKTMALL_FIXED_COLUMNS.find((c) => objektmallColumnHeaderAliases(c).includes(txt));
@@ -666,8 +694,12 @@ function parseImportSheet(ws: ExcelJS.Worksheet): { rows: FlatRow[]; metadataCol
   const headerRow = ws.getRow(headerRowIdx);
   const fixedByCol: Record<number, string> = {}; // col -> fast key
   const metaByCol: Record<number, string> = {}; // col -> referensnamn
+  // Sammansatta kolumner: col -> { prefix, subfield } (punktnotation, Task #633).
+  const compositeByCol: Record<number, { prefix: string; subfield: string }> = {};
   const metadataColumns: string[] = [];
   const seenMeta = new Set<string>();
+  // prefix (gemener) -> { prefix (orig), subfields i kolumnordning }
+  const compositeGroups = new Map<string, { prefix: string; subfields: string[]; seen: Set<string> }>();
   headerRow.eachCell({ includeEmpty: true }, (cell, col) => {
     const raw = cellToStr(cell.value);
     if (!raw) return;
@@ -681,12 +713,33 @@ function parseImportSheet(ws: ExcelJS.Worksheet): { rows: FlatRow[]; metadataCol
     if (fixedHeaderSet.has(lower)) return; // skydd: alias som ej fångats ovan
     const refName = raw.trim();
     if (!refName) return;
+    // Sammansatt kolumn (punktnotation) grupperas separat — aldrig som platt metadata.
+    const composite = parseCompositeRef(refName);
+    if (composite) {
+      compositeByCol[col] = composite;
+      const groupKey = composite.prefix.toLowerCase();
+      let group = compositeGroups.get(groupKey);
+      if (!group) {
+        group = { prefix: composite.prefix, subfields: [], seen: new Set() };
+        compositeGroups.set(groupKey, group);
+      }
+      const subKey = composite.subfield.toLowerCase();
+      if (!group.seen.has(subKey)) {
+        group.seen.add(subKey);
+        group.subfields.push(composite.subfield);
+      }
+      return;
+    }
     metaByCol[col] = refName;
     if (!seenMeta.has(refName.toLowerCase())) {
       seenMeta.add(refName.toLowerCase());
       metadataColumns.push(refName);
     }
   });
+  const compositeColumns: CompositeColumn[] = Array.from(compositeGroups.values()).map((g) => ({
+    prefix: g.prefix,
+    subfields: g.subfields,
+  }));
 
   const firstFixedKey = OBJEKTMALL_FIXED_COLUMNS[0].key;
   const firstDesc = (OBJEKTMALL_FIXED_COLUMNS[0].description ?? "").trim();
@@ -696,6 +749,7 @@ function parseImportSheet(ws: ExcelJS.Worksheet): { rows: FlatRow[]; metadataCol
     const row = ws.getRow(r);
     const data: Record<string, string> = {};
     const metadata: Record<string, string> = {};
+    const composite: Record<string, Record<string, string>> = {};
     let anyValue = false;
     row.eachCell({ includeEmpty: true }, (cell, col) => {
       const val = cellToStr(cell.value);
@@ -703,6 +757,15 @@ function parseImportSheet(ws: ExcelJS.Worksheet): { rows: FlatRow[]; metadataCol
       if (fixedKey) {
         if (val) anyValue = true;
         data[fixedKey] = val;
+        return;
+      }
+      const comp = compositeByCol[col];
+      if (comp) {
+        if (val) {
+          anyValue = true;
+          const groupKey = comp.prefix.toLowerCase();
+          (composite[groupKey] ??= {})[comp.subfield] = val;
+        }
         return;
       }
       const metaName = metaByCol[col];
@@ -721,10 +784,10 @@ function parseImportSheet(ws: ExcelJS.Worksheet): { rows: FlatRow[]; metadataCol
     // första cell är exakt den fasta kolumnens beskrivningstext.
     if (firstDesc && firstVal === firstDesc) continue;
     dataRowNo++;
-    rows.push({ rowNumber: dataRowNo, data, metadata });
+    rows.push({ rowNumber: dataRowNo, data, metadata, composite });
   }
 
-  return { rows, metadataColumns };
+  return { rows, metadataColumns, compositeColumns };
 }
 
 // ============================================================
@@ -760,6 +823,17 @@ type MetadataChange = {
   allowDuplicates: boolean;
 };
 
+// Task #633: per-rad-status för ett sammansatt metadatavärde i förhandsvisningen.
+// Underfälten visas grupperade under huvudfältet (prefixet).
+type CompositeChange = {
+  prefix: string; // referensnamn-prefixet, t.ex. "adress"
+  label: string; // katalog.namn
+  beteckning: string | null;
+  subfields: Array<{ key: string; value: string }>; // ifyllda underfält i kolumnordning
+  status: ImportMetadataWriteStatus; // create | replace | add | unchanged
+  allowDuplicates: boolean;
+};
+
 // Per-rad upplöst åtgärd som commit-steget återanvänder utan att räkna om.
 type RowResolution = {
   action: "create" | "update" | "repoint";
@@ -775,12 +849,16 @@ type RowResolution = {
   metadata: Record<string, string>; // dynamiska metadata-värden (för förhandsvisning)
   metadataChanges: MetadataChange[]; // Task #632: per-värde-status (create/replace/add)
   nameTranslations: Record<string, string>; // Task #634: lang → namn (objects.nameTranslations)
+  // Task #633: sammansatta värden (prefix -> { underfält -> värde }) + per-värde-status.
+  composite: Record<string, Record<string, string>>;
+  compositeChanges: CompositeChange[];
 };
 
 type ValRow = {
   rowNumber: number;
   data: Record<string, string>;
   metadata: Record<string, string>;
+  composite: Record<string, Record<string, string>>; // Task #633
   errors: string[];
   // Mellanlagring under upplösning.
   target?: ExistingObject;
@@ -821,12 +899,14 @@ interface ImportSheetReport {
     changedFields: ChangedField[];
     metadata: Record<string, string>;
     metadataChanges: MetadataChange[];
+    compositeChanges: CompositeChange[]; // Task #633
   }>;
 }
 
 interface ValidationReport {
   import: ImportSheetReport;
   metadataColumns: string[];
+  compositeColumns: CompositeColumn[]; // Task #633
   warnings: string[];
   hasBlockingErrors: boolean;
   interimListFlag: boolean;
@@ -838,16 +918,37 @@ function parseBool(v: string | undefined): boolean {
   return s === "ja" || s === "yes" || s === "true" || s === "1" || s === "x";
 }
 
+// Task #633: bygg ett strukturerat objekt av ett sammansatt fälts underfält.
+// Tomma underfält utelämnas; nyckelordningen följer kolumnordningen (insättning).
+function buildCompositeObject(subvals: Record<string, string>): Record<string, string> {
+  const obj: Record<string, string> = {};
+  for (const [k, v] of Object.entries(subvals ?? {})) {
+    const val = (v ?? "").trim();
+    if (val) obj[k] = val;
+  }
+  return obj;
+}
+
+// Task #633: sammansatta fält lagras ALLTID strukturerat i `varde_json`. Vi tvingar
+// därför JSON-datatyp (och nollar allowedValues) oavsett definitionens deklarerade
+// datatyp, så att den befintliga skriv-/coerce-vägen lägger värdet i varde_json.
+function asJsonKatalog(kat: MetadataKatalog): MetadataKatalog {
+  return { ...kat, datatyp: "json", allowedValues: null } as MetadataKatalog;
+}
+
 async function validateAll(
   flatRows: FlatRow[],
   metadataColumns: string[],
   tenantId: string,
   warnings: string[],
   interimListFlag: boolean = false,
+  compositeColumns: CompositeColumn[] = [],
 ): Promise<{
   report: ValidationReport;
   rows: ValRow[];
   metaResolution: Map<string, MetaColumnResolution>;
+  // Task #633: prefix (gemener) -> upplöst sammansatt-definition.
+  compositeResolution: Map<string, MetaColumnResolution>;
 }> {
   const trim = (data: Record<string, string>, key: string) => (data[key] ?? "").trim();
 
@@ -855,6 +956,7 @@ async function validateAll(
     rowNumber: r.rowNumber,
     data: r.data,
     metadata: r.metadata,
+    composite: r.composite,
     errors: [],
   }));
 
@@ -863,8 +965,12 @@ async function validateAll(
   // insensitivt). Kända objektfält (adress m.fl.) skrivs via objekt-skrivningen
   // och klassas som "known". Okända referensnamn varnas och hoppas över.
   const metaResolution = new Map<string, MetaColumnResolution>();
+  // Task #633: prefix (gemener) -> upplöst sammansatt-definition. Sammansatta
+  // kolumner ("adress.gata") går ALLTID via metadata-skrivvägen — aldrig som
+  // kända objektfält — och lagras strukturerat (JSON).
+  const compositeResolution = new Map<string, MetaColumnResolution>();
   {
-    const katalogDefs = metadataColumns.length
+    const katalogDefs = metadataColumns.length || compositeColumns.length
       ? await db.select().from(metadataKatalog).where(eq(metadataKatalog.tenantId, tenantId))
       : [];
     const katByNamn = new Map<string, MetadataKatalog>();
@@ -921,6 +1027,20 @@ async function validateAll(
       } else {
         warnings.push(
           `Metadata-kolumnen "${refName}" matchar ingen metadata-definition (varken namn eller beteckning) — dess värden hoppas över. Skapa en definition i metadata-katalogen för att importera värdena.`,
+        );
+      }
+    }
+    // Lös upp sammansatta prefix (t.ex. "adress" från "adress.gata"/"adress.ort").
+    for (const comp of compositeColumns) {
+      const lower = comp.prefix.trim().toLowerCase();
+      const kat = katByNamn.get(lower) ?? katByBeteckning.get(lower);
+      const subList = comp.subfields.map((s) => `${comp.prefix}.${s}`).join(", ");
+      if (kat) {
+        compositeResolution.set(lower, { kind: "definition", katalog: kat });
+      } else {
+        compositeResolution.set(lower, { kind: "unknown" });
+        warnings.push(
+          `Det sammansatta fältet "${comp.prefix}" (kolumnerna ${subList}) matchar ingen metadata-definition (varken namn eller beteckning) — dess värden hoppas över. Skapa en definition i metadata-katalogen för att importera värdena.`,
         );
       }
     }
@@ -1157,7 +1277,7 @@ async function validateAll(
   {
     const definitionKatalogIds = Array.from(
       new Set(
-        Array.from(metaResolution.values())
+        [...Array.from(metaResolution.values()), ...Array.from(compositeResolution.values())]
           .filter((r): r is { kind: "definition"; katalog: MetadataKatalog } => r.kind === "definition")
           .map((r) => r.katalog.id),
       ),
@@ -1300,6 +1420,43 @@ async function validateAll(
         allowDuplicates: kat.allowDuplicates ?? false,
       });
     }
+    // Task #633: validera och statusbedöm sammansatta fält (punktnotation). Varje
+    // grupp byggs till ett strukturerat JSON-värde och skrivs via samma väg som
+    // vanliga definitions-kolumner men tvingad till JSON-lagring (varde_json).
+    const compositeChanges: CompositeChange[] = [];
+    for (const [prefix, subvals] of Object.entries(row.composite ?? {})) {
+      const obj = buildCompositeObject(subvals);
+      const subfields = Object.entries(obj).map(([key, value]) => ({ key, value }));
+      if (subfields.length === 0) continue; // inga ifyllda underfält
+      const resn = compositeResolution.get(prefix);
+      if (!resn || resn.kind !== "definition") continue; // okänt prefix hanteras via varning
+      const kat = asJsonKatalog(resn.katalog);
+      let displayValue: string;
+      try {
+        displayValue = coerceMetadataVardeFromRaw(kat, JSON.stringify(obj)).displayValue;
+      } catch (e) {
+        row.errors.push(
+          `Ogiltigt sammansatt värde i fältet "${resn.katalog.namn}" (${prefix}.*): ${(e as Error).message}`,
+        );
+        continue;
+      }
+      const existingForObj = target
+        ? existingMetaValues.get(target.id)?.get(kat.id) ?? []
+        : [];
+      const status = computeImportMetadataStatus(
+        kat.allowDuplicates ?? false,
+        existingForObj,
+        displayValue,
+      );
+      compositeChanges.push({
+        prefix,
+        label: resn.katalog.namn,
+        beteckning: resn.katalog.beteckning ?? null,
+        subfields,
+        status,
+        allowDuplicates: kat.allowDuplicates ?? false,
+      });
+    }
     // Ogiltiga metadata-värden ska blockera raden från commit.
     if (row.errors.length) continue;
 
@@ -1307,7 +1464,8 @@ async function validateAll(
       action === "create" ||
       action === "repoint" ||
       changedFields.length > 0 ||
-      metadataChanges.some((m) => m.status !== "unchanged");
+      metadataChanges.some((m) => m.status !== "unchanged") ||
+      compositeChanges.some((m) => m.status !== "unchanged");
 
     row.res = {
       action,
@@ -1323,6 +1481,8 @@ async function validateAll(
       metadata: row.metadata,
       metadataChanges,
       nameTranslations,
+      composite: row.composite,
+      compositeChanges,
     };
   }
 
@@ -1364,6 +1524,7 @@ async function validateAll(
         changedFields: res.changedFields,
         metadata: res.metadata,
         metadataChanges: res.metadataChanges,
+        compositeChanges: res.compositeChanges,
       });
     }
   }
@@ -1380,12 +1541,13 @@ async function validateAll(
       actions,
     },
     metadataColumns,
+    compositeColumns,
     warnings,
     hasBlockingErrors: errorRows > 0,
     interimListFlag,
   };
 
-  return { report, rows: valRows, metaResolution };
+  return { report, rows: valRows, metaResolution, compositeResolution };
 }
 
 // ============================================================
@@ -1407,6 +1569,7 @@ async function commitImport(
 
   // Task #632: dynamiska metadata-värden som skrivs i samma transaktion.
   const metaResolution = validation.metaResolution;
+  const compositeResolution = validation.compositeResolution;
   let metadataValuesWritten = 0;
   // Objekt vars metadata ändrats — efter commit triggar vi prisräkning/kluster.
   const metadataAffectedObjectIds = new Set<string>();
@@ -1470,6 +1633,25 @@ async function commitImport(
           objektId: objId,
           katalog: resn.katalog,
           rawValue: value,
+          andradAv: userId,
+        });
+        if (status !== "unchanged") {
+          metadataValuesWritten++;
+          metadataAffectedObjectIds.add(objId);
+        }
+      }
+      // Task #633: skriv sammansatta fält (punktnotation) som strukturerad JSON
+      // via samma post-it-modell, men tvinga JSON-lagring (varde_json).
+      for (const [prefix, subvals] of Object.entries(res.composite ?? {})) {
+        const obj = buildCompositeObject(subvals);
+        if (Object.keys(obj).length === 0) continue; // inga ifyllda underfält
+        const resn = compositeResolution.get(prefix);
+        if (!resn || resn.kind !== "definition") continue; // okänt prefix skrivs ej här
+        const status = await writeImportedMetadataValue(tx, {
+          tenantId,
+          objektId: objId,
+          katalog: asJsonKatalog(resn.katalog),
+          rawValue: JSON.stringify(obj),
           andradAv: userId,
         });
         if (status !== "unchanged") {
@@ -1693,8 +1875,8 @@ export function registerObjektmallImportRoutes(app: Express): void {
       const file = (req as any).file as { buffer: Buffer; originalname: string } | undefined;
       if (!file?.buffer) throw new ValidationError("Ingen fil bifogad. Ladda upp en ifylld mall (.xlsx).");
 
-      const { rows, metadataColumns, warnings, interimListFlag } = await parseWorkbook(file.buffer);
-      const validation = await validateAll(rows, metadataColumns, tenantId, warnings, interimListFlag);
+      const { rows, metadataColumns, compositeColumns, warnings, interimListFlag } = await parseWorkbook(file.buffer);
+      const validation = await validateAll(rows, metadataColumns, tenantId, warnings, interimListFlag, compositeColumns);
       res.json({
         ok: !validation.report.hasBlockingErrors,
         dryRun: true,
@@ -1718,8 +1900,8 @@ export function registerObjektmallImportRoutes(app: Express): void {
       const file = (req as any).file as { buffer: Buffer; originalname: string } | undefined;
       if (!file?.buffer) throw new ValidationError("Ingen fil bifogad. Ladda upp en ifylld mall (.xlsx).");
 
-      const { rows, metadataColumns, warnings, interimListFlag } = await parseWorkbook(file.buffer);
-      const validation = await validateAll(rows, metadataColumns, tenantId, warnings, interimListFlag);
+      const { rows, metadataColumns, compositeColumns, warnings, interimListFlag } = await parseWorkbook(file.buffer);
+      const validation = await validateAll(rows, metadataColumns, tenantId, warnings, interimListFlag, compositeColumns);
       if (validation.report.hasBlockingErrors) {
         return res.status(400).json({
           ok: false,

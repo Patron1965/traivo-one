@@ -100,12 +100,39 @@ export const OBJEKTMALL_FIXED_COLUMNS: ObjektmallColumn[] = [
 
 // Illustrativa metadata-referensnamn som visas i den tomma mallens kolumn F+.
 // De är BARA exempel — användaren byter ut/lägger till egna referensnamn.
+// Task #633: exemplet visar punktnotation för ett sammansatt fält (adress med
+// underfälten gata/gatunummer/postnummer/ort) plus ett vanligt enkelt fält.
 export const OBJEKTMALL_EXAMPLE_METADATA_HEADERS: string[] = [
-  "Adress",
-  "Postnummer",
-  "Stad",
+  "adress.gata",
+  "adress.gatunummer",
+  "adress.postnummer",
+  "adress.ort",
   "Kontaktperson",
 ];
+
+// ============================================================
+// Sammansatta metadatafält — punktnotation `fält.underfält` (Task #633).
+// ------------------------------------------------------------
+// Kolumner som delar prefix före punkten hör ihop som ETT logiskt fält och
+// lagras strukturerat (JSON) på objektet. Ex: "adress.gata", "adress.ort" →
+// fältet "adress" med underfälten { gata, ort }. Backend-parser och UI delar
+// dessa hjälpare så konventionen tolkas likadant överallt.
+// ============================================================
+export const OBJEKTMALL_COMPOSITE_SEPARATOR = ".";
+
+// Dela upp ett referensnamn i { prefix, subfield } om det använder punktnotation.
+// Returnerar null för enkla (icke-sammansatta) kolumner. Punkt först/sist eller
+// tomma delar räknas inte som giltig punktnotation.
+export function parseCompositeRef(
+  refName: string,
+): { prefix: string; subfield: string } | null {
+  const idx = refName.indexOf(OBJEKTMALL_COMPOSITE_SEPARATOR);
+  if (idx <= 0) return null;
+  const prefix = refName.slice(0, idx).trim();
+  const subfield = refName.slice(idx + OBJEKTMALL_COMPOSITE_SEPARATOR.length).trim();
+  if (!prefix || !subfield) return null;
+  return { prefix, subfield };
+}
 
 // Alla giltiga rubriknamn för en kolumn (huvudrubrik + alias), gemena.
 export function objektmallColumnHeaderAliases(col: ObjektmallColumn): string[] {

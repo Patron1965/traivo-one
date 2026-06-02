@@ -114,6 +114,80 @@ function getRawValue(entry: MetadataEntry): any {
   return "";
 }
 
+// Task #633: sammansatta fält lagras som strukturerad JSON (varde_json) — ett platt
+// objekt av { underfält: textvärde }. Returnerar nyckel/värde-paren om värdet är ett
+// sådant objekt, annars null (då faller vi tillbaka till vanlig visning/redigering).
+function parseCompositeSubfields(raw: any): Array<{ key: string; value: string }> | null {
+  if (raw == null) return null;
+  let obj: any = raw;
+  if (typeof raw === "string") {
+    const s = raw.trim();
+    if (!s.startsWith("{")) return null;
+    try {
+      obj = JSON.parse(s);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof obj !== "object" || obj === null || Array.isArray(obj)) return null;
+  const entries = Object.entries(obj);
+  if (entries.length === 0) return null;
+  // Endast platta primitiva värden räknas som sammansatt fält (inga nästlade objekt).
+  if (entries.some(([, v]) => v != null && typeof v === "object")) return null;
+  return entries.map(([key, value]) => ({ key, value: value == null ? "" : String(value) }));
+}
+
+function getCompositeSubfields(entry: MetadataEntry): Array<{ key: string; value: string }> | null {
+  if (entry.katalog.datatyp !== "json") return null;
+  if (entry.vardeJson == null) return null;
+  return parseCompositeSubfields(entry.vardeJson);
+}
+
+// Task #633: redigerare för sammansatta fält — en text-input per underfält. Vi håller
+// tillståndet som en JSON-sträng (samma som vanlig json-redigering) så att den befintliga
+// handleSave-vägen (JSON.parse) fungerar oförändrad.
+function CompositeEditor({
+  value,
+  onChange,
+  testIdBase,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  testIdBase: string;
+}) {
+  let obj: Record<string, string> = {};
+  try {
+    const parsed = JSON.parse(value || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      for (const [k, v] of Object.entries(parsed)) {
+        obj[k] = v == null ? "" : String(v);
+      }
+    }
+  } catch {
+    obj = {};
+  }
+  const keys = Object.keys(obj);
+  const setSub = (key: string, v: string) => {
+    const next = { ...obj, [key]: v };
+    onChange(JSON.stringify(next));
+  };
+  return (
+    <div className="space-y-1.5" data-testid={testIdBase}>
+      {keys.map((key) => (
+        <div key={key} className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground min-w-[110px] shrink-0">{key}</span>
+          <Input
+            value={obj[key]}
+            onChange={(e) => setSub(key, e.target.value)}
+            className="h-8"
+            data-testid={`${testIdBase}-${key}`}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function getSourceBadge(entry: MetadataEntry) {
   if (entry.nivaLas) {
     return (
@@ -911,6 +985,7 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                   {entries.map((entry) => {
                     const isEditing = editingId === entry.id;
                     const DatatypeIcon = DATA_TYPE_ICONS[entry.katalog.datatyp] || Type;
+                    const compositeSubfields = getCompositeSubfields(entry);
 
                     return (
                       <Card 
@@ -1012,9 +1087,17 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                           </div>
 
                           {isEditing ? (
-                            <div className="flex items-center gap-2 mt-2">
+                            <div className="flex items-start gap-2 mt-2">
                               <div className="flex-1">
-                                {renderInput(entry.katalog.datatyp, editValue, setEditValue, `input-edit-${entry.id}`, entry.katalog.allowedValues)}
+                                {compositeSubfields ? (
+                                  <CompositeEditor
+                                    value={editValue}
+                                    onChange={setEditValue}
+                                    testIdBase={`composite-edit-${entry.id}`}
+                                  />
+                                ) : (
+                                  renderInput(entry.katalog.datatyp, editValue, setEditValue, `input-edit-${entry.id}`, entry.katalog.allowedValues)
+                                )}
                               </div>
                               <Button 
                                 size="icon" 
@@ -1034,6 +1117,24 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                               >
                                 <X className="h-3.5 w-3.5" />
                               </Button>
+                            </div>
+                          ) : compositeSubfields ? (
+                            <div
+                              className={`mt-1 space-y-0.5 ${entry.source === 'inherited' ? 'italic text-muted-foreground' : ''}`}
+                              data-testid={`composite-display-${entry.id}`}
+                            >
+                              {compositeSubfields.map((sf) => (
+                                <div
+                                  key={sf.key}
+                                  className="flex items-start gap-2 text-sm"
+                                  data-testid={`composite-subfield-${entry.id}-${sf.key}`}
+                                >
+                                  <span className="text-xs text-muted-foreground min-w-[110px] shrink-0">{sf.key}</span>
+                                  <span className={entry.source === 'inherited' ? '' : 'font-medium'}>
+                                    {sf.value || <span className="text-muted-foreground">—</span>}
+                                  </span>
+                                </div>
+                              ))}
                             </div>
                           ) : (
                             <div className="mt-1 text-sm">

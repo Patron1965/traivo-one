@@ -9,3 +9,4 @@
 - [Mobile-app uses cookie-auth objects endpoints](mobile-app-cookie-auth.md) — SimpleFieldApp körs i webbsession med cookie-auth; `/api/objects*` (ej `/api/mobile/*`) funkar direkt i mobil-UI.
 - [Objektmall-import diff/preview](objektmall-import-diff.md) — förhandsvisningens fält-diff måste spegla exakt vad commit skriver; notes byggs via delade helpers anropade från både validering och commit.
 - [Två metadata-system](dual-metadata-systems.md) — engelskt (metadataDefinitions/objectMetadata) vs svenskt (metadataKatalog/Varden/Historik); import skriver svenskt, export läser engelskt → round-trip-drift.
+- [Sammansatta metadatafält (punktnotation)](composite-metadata-import.md) — `fält.underfält`-kolumner grupperas till ETT JSON-fält; skrivs via vanlig metadata-väg men tvingad json-datatyp (asJsonKatalog) → varde_json.
