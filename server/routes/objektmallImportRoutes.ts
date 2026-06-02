@@ -19,7 +19,7 @@ import { z } from "zod";
 import { and, eq, sql, desc, inArray } from "drizzle-orm";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
-import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
+import { getTenantIdWithFallback, requireAdmin, requireTenantWithFallback } from "../tenant-middleware";
 import { db } from "../db";
 import {
   objects,
@@ -797,6 +797,7 @@ export function registerObjektmallImportRoutes(app: Express): void {
   // === Template download ====================================================
   app.get(
     "/api/admin/objektmall/template",
+    requireTenantWithFallback,
     requireAdmin,
     asyncHandler(async (_req, res) => {
       const buf = await buildTemplateWorkbook();
@@ -813,6 +814,7 @@ export function registerObjektmallImportRoutes(app: Express): void {
   // === Preview (dry-run) ====================================================
   app.post(
     "/api/admin/objektmall/preview",
+    requireTenantWithFallback,
     requireAdmin,
     xlsxUpload.single("file"),
     asyncHandler(async (req, res) => {
@@ -835,6 +837,7 @@ export function registerObjektmallImportRoutes(app: Express): void {
   // === Commit ===============================================================
   app.post(
     "/api/admin/objektmall/commit",
+    requireTenantWithFallback,
     requireAdmin,
     xlsxUpload.single("file"),
     asyncHandler(async (req, res) => {
@@ -869,6 +872,7 @@ export function registerObjektmallImportRoutes(app: Express): void {
   // === History (lista) ======================================================
   app.get(
     "/api/admin/objektmall/history",
+    requireTenantWithFallback,
     requireAdmin,
     asyncHandler(async (req, res) => {
       const tenantId = getTenantIdWithFallback(req);
@@ -921,6 +925,7 @@ export function registerObjektmallImportRoutes(app: Express): void {
   // === History detail =======================================================
   app.get(
     "/api/admin/objektmall/history/:batchId",
+    requireTenantWithFallback,
     requireAdmin,
     asyncHandler(async (req, res) => {
       const tenantId = getTenantIdWithFallback(req);
