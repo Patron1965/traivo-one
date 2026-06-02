@@ -645,6 +645,8 @@ type RowResolution = {
   // Task #621: true om raden faktiskt ändrar databasen (ny, ompekad, eller
   // uppdatering där minst ett angivet fält skiljer sig). Används för röd-markering.
   changed: boolean;
+  // Task #627: per-fält-diff för uppdaterade/ompekade rader (tom för nya objekt).
+  changedFields: ChangedField[];
 };
 
 type ValRow = {
@@ -676,7 +678,12 @@ type ExistingObject = {
   address: string | null;
   city: string | null;
   postalCode: string | null;
+  notes: string | null;
+  containerCount: number;
 };
+
+// Task #627: per-fält-diff på en uppdaterad rad (gammalt → nytt).
+type ChangedField = { field: string; label: string; from: string; to: string };
 
 type MetaDefDecision = {
   fieldKey: string;
@@ -690,6 +697,8 @@ type MetaDefDecision = {
   action: "create" | "update" | "skip" | "blocked";
   reason?: string;
   existingId?: string;
+  // Task #627: per-fält-diff för uppdaterade metadatadefinitioner.
+  changedFields?: ChangedField[];
 };
 
 interface ValidationReport {
@@ -701,7 +710,7 @@ interface ValidationReport {
     toRepoint: number;
     errorRows: number;
     errors: Array<{ row: number; messages: string[] }>;
-    actions: Array<{ row: number; action: "create" | "update" | "repoint"; name: string; detail: string; changed: boolean }>;
+    actions: Array<{ row: number; action: "create" | "update" | "repoint"; name: string; detail: string; changed: boolean; changedFields: ChangedField[] }>;
   }>;
   warnings: string[];
   hasBlockingErrors: boolean;
@@ -725,6 +734,26 @@ function parseInt0(v: string | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+// Task #627: bygg de sammansatta notes-fälten på ETT ställe så att både
+// valideringens diff och commit-steget alltid härleder samma värde.
+function buildOrgNotes(data: Record<string, string>): string {
+  return (data.description ?? "").trim();
+}
+function buildStoreNotes(data: Record<string, string>): string {
+  return [
+    data.contactName && `Kontakt: ${data.contactName}`,
+    data.contactPhone && `Tel: ${data.contactPhone}`,
+    data.contactEmail && `E-post: ${data.contactEmail}`,
+  ].filter(Boolean).join("\n");
+}
+function buildContainerNotes(data: Record<string, string>): string {
+  return [
+    data.volumeLiters && `Volym: ${data.volumeLiters} L`,
+    data.emptyingDay && `Tömningsdag: ${data.emptyingDay}`,
+    data.notes,
+  ].filter(Boolean).join("\n");
+}
+
 async function validateAll(
   sheets: ParsedSheets,
   tenantId: string,
@@ -734,7 +763,7 @@ async function validateAll(
   const interim = new Map<string, InterimEntry>();
   const allRows = new Map<string, ValRow[]>();
   const errorsBySheet: Record<string, Array<{ row: number; messages: string[] }>> = {};
-  const actionsBySheet: Record<string, Array<{ row: number; action: "create" | "update" | "repoint"; name: string; detail: string; changed: boolean }>> = {};
+  const actionsBySheet: Record<string, Array<{ row: number; action: "create" | "update" | "repoint"; name: string; detail: string; changed: boolean; changedFields: ChangedField[] }>> = {};
   const countersBySheet: Record<string, { toCreate: number; toUpdate: number; toRepoint: number; errorRows: number; totalRows: number }> = {};
 
   for (const def of OBJEKTMALL_SHEETS) {
@@ -806,6 +835,8 @@ async function validateAll(
         address: objects.address,
         city: objects.city,
         postalCode: objects.postalCode,
+        notes: objects.notes,
+        containerCount: objects.containerCount,
       })
       .from(objects)
       .where(and(eq(objects.tenantId, tenantId), cond));
@@ -818,6 +849,8 @@ async function validateAll(
         address: e.address ?? null,
         city: e.city ?? null,
         postalCode: e.postalCode ?? null,
+        notes: e.notes ?? null,
+        containerCount: e.containerCount ?? 0,
       };
       if (obj.objectNumber) byObjNum.set(obj.objectNumber, obj);
       const nl = obj.name.toLowerCase();
@@ -960,24 +993,50 @@ async function validateAll(
           ? `${containerType || "Kärl"} — ${parentNameForGen ?? "okänd"}`
           : rawName);
 
-      // Task #621: avgör om raden faktiskt ändrar databasen (för röd-markering).
-      // create/repoint ändrar alltid. update ändrar om något angivet fält skiljer
-      // sig från målet (tomma fält bevaras och räknas inte som ändring).
-      let changed: boolean;
-      if (action === "create" || action === "repoint") {
-        changed = true;
-      } else if (target) {
-        const upAddr = trimVal(data, "address");
-        const upCity = trimVal(data, "city");
-        const upPostal = trimVal(data, "postalCode");
-        changed =
-          (!!rawName && rawName !== (target.name ?? "")) ||
-          (!!upAddr && upAddr !== (target.address ?? "")) ||
-          (!!upCity && upCity !== (target.city ?? "")) ||
-          (!!upPostal && upPostal !== (target.postalCode ?? ""));
-      } else {
-        changed = false;
+      // Task #621/#627: avgör om raden faktiskt ändrar databasen + bygg per-fält-diff.
+      // create ändrar alltid (inget mål att jämföra mot). update/repoint jämför varje
+      // angivet fält mot målet — tomma fält bevaras och räknas inte som ändring.
+      // Diffen speglar exakt vad commit-steget skriver (namn/adress/notes/antal).
+      const changedFields: ChangedField[] = [];
+      if (target && (action === "update" || action === "repoint")) {
+        if (!!rawName && rawName !== (target.name ?? "")) {
+          changedFields.push({ field: "name", label: "Namn", from: target.name ?? "", to: rawName });
+        }
+        if (def.key === "organisation") {
+          const newNotes = buildOrgNotes(data);
+          if (!!newNotes && newNotes !== (target.notes ?? "")) {
+            changedFields.push({ field: "notes", label: "Beskrivning", from: target.notes ?? "", to: newNotes });
+          }
+        } else if (def.key === "stores") {
+          const upAddr = trimVal(data, "address");
+          const upCity = trimVal(data, "city");
+          const upPostal = trimVal(data, "postalCode");
+          if (!!upAddr && upAddr !== (target.address ?? "")) {
+            changedFields.push({ field: "address", label: "Adress", from: target.address ?? "", to: upAddr });
+          }
+          if (!!upCity && upCity !== (target.city ?? "")) {
+            changedFields.push({ field: "city", label: "Stad", from: target.city ?? "", to: upCity });
+          }
+          if (!!upPostal && upPostal !== (target.postalCode ?? "")) {
+            changedFields.push({ field: "postalCode", label: "Postnummer", from: target.postalCode ?? "", to: upPostal });
+          }
+          const newNotes = buildStoreNotes(data);
+          if (!!newNotes && newNotes !== (target.notes ?? "")) {
+            changedFields.push({ field: "notes", label: "Kontaktuppgifter", from: target.notes ?? "", to: newNotes });
+          }
+        } else if (def.key === "containers") {
+          const newNotes = buildContainerNotes(data);
+          if (!!newNotes && newNotes !== (target.notes ?? "")) {
+            changedFields.push({ field: "notes", label: "Anteckningar", from: target.notes ?? "", to: newNotes });
+          }
+          const newCount = parseInt0(data.count);
+          if (newCount > 0 && newCount !== (target.containerCount ?? 0)) {
+            changedFields.push({ field: "containerCount", label: "Antal", from: String(target.containerCount ?? 0), to: String(newCount) });
+          }
+        }
       }
+      // repoint ändrar alltid (förälder byts), create skapar nytt — annars styr diffen.
+      const changed = action === "create" || action === "repoint" || changedFields.length > 0;
 
       row.res = {
         action,
@@ -987,6 +1046,7 @@ async function validateAll(
         parentRef,
         name: resolvedName,
         changed,
+        changedFields,
       };
 
       // 3g. Registrera interim-entry så barn kan referera detta som förälder.
@@ -1037,7 +1097,7 @@ async function validateAll(
             : res.action === "repoint"
               ? "Uppdaterar + pekar om till ny förälder"
               : "Uppdaterar befintligt objekt";
-        actionsBySheet[def.key].push({ row: row.rowNumber, action: res.action, name: res.name, detail, changed: res.changed });
+        actionsBySheet[def.key].push({ row: row.rowNumber, action: res.action, name: res.name, detail, changed: res.changed, changedFields: res.changedFields });
       }
     }
   }
@@ -1114,6 +1174,28 @@ async function validateAll(
           JSON.stringify(applicableLevels.slice().sort());
       decision.existingId = existing.id;
       decision.action = "update";
+      // Task #627: bygg per-fält-diff mot befintlig definition. Visa ENDAST de
+      // fält commit-steget faktiskt skriver (fieldLabel/defaultValue/isRequired/
+      // sortOrder) — strukturella fält (dataType/propagering/nivåer) persisteras
+      // aldrig vid import (de blockeras vid usage>0 och ignoreras annars), så att
+      // diffa dem skulle lova en ändring som commit inte gör.
+      const metaChanges: ChangedField[] = [];
+      if (fieldLabel !== (existing.fieldLabel ?? "")) {
+        metaChanges.push({ field: "fieldLabel", label: "Visningsnamn", from: existing.fieldLabel ?? "", to: fieldLabel });
+      }
+      const newDefault = (r.defaultValue ?? "").trim() || null;
+      if ((newDefault ?? "") !== (existing.defaultValue ?? "")) {
+        metaChanges.push({ field: "defaultValue", label: "Standardvärde", from: existing.defaultValue ?? "", to: newDefault ?? "" });
+      }
+      const newRequired = parseBool(r.isRequired);
+      if (newRequired !== !!existing.isRequired) {
+        metaChanges.push({ field: "isRequired", label: "Obligatoriskt", from: existing.isRequired ? "Ja" : "Nej", to: newRequired ? "Ja" : "Nej" });
+      }
+      const newSort = parseInt0(r.sortOrder);
+      if (newSort !== (existing.sortOrder ?? 0)) {
+        metaChanges.push({ field: "sortOrder", label: "Sorteringsordning", from: String(existing.sortOrder ?? 0), to: String(newSort) });
+      }
+      decision.changedFields = metaChanges;
       if (structuralChanged) {
         // Använd central usage-räknare för att veta om vi får blockera ändringen.
         const { storage } = await import("../storage");
@@ -1305,7 +1387,7 @@ async function commitImport(
     for (const row of validation.rows.get("organisation")!) {
       if (row.errors.length || !row.res) continue;
       const res = row.res;
-      const description = (row.data.description ?? "").trim();
+      const description = buildOrgNotes(row.data);
       if (res.action === "create") {
         await createObject("organisation", res.interimNo, {
           name: res.name,
@@ -1330,11 +1412,7 @@ async function commitImport(
       if (row.errors.length || !row.res) continue;
       const res = row.res;
       const parentObjectId = resolveParentId(res.parentRef);
-      const contactNotes = [
-        row.data.contactName && `Kontakt: ${row.data.contactName}`,
-        row.data.contactPhone && `Tel: ${row.data.contactPhone}`,
-        row.data.contactEmail && `E-post: ${row.data.contactEmail}`,
-      ].filter(Boolean).join("\n");
+      const contactNotes = buildStoreNotes(row.data);
       const address = (row.data.address ?? "").trim();
       const city = (row.data.city ?? "").trim();
       const postalCode = (row.data.postalCode ?? "").trim();
@@ -1374,11 +1452,7 @@ async function commitImport(
       const res = row.res;
       const parentObjectId = resolveParentId(res.parentRef);
       const entry = res.interimNo ? interim.get(res.interimNo) : undefined;
-      const notesParts = [
-        row.data.volumeLiters && `Volym: ${row.data.volumeLiters} L`,
-        row.data.emptyingDay && `Tömningsdag: ${row.data.emptyingDay}`,
-        row.data.notes,
-      ].filter(Boolean).join("\n");
+      const notesParts = buildContainerNotes(row.data);
       const containerCount = parseInt0(row.data.count);
       // Adressärv från förälder (butik) — beräknad i valideringen.
       const inh = { address: entry?.address ?? null, city: entry?.city ?? null, postalCode: entry?.postalCode ?? null };

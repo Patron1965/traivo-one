@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,12 +18,21 @@ import {
   PlayCircle,
   RotateCcw,
   FileDown,
+  ChevronRight,
+  ChevronDown,
+  ArrowRight,
 } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { OBJEKTMALL_SHEETS, OBJEKTMALL_FILENAME } from "@shared/objektmall-template";
 
 type RowAction = "create" | "update" | "repoint";
+interface ChangedField {
+  field: string;
+  label: string;
+  from: string;
+  to: string;
+}
 interface SheetReport {
   name: string;
   totalRows: number;
@@ -32,7 +41,7 @@ interface SheetReport {
   toRepoint: number;
   errorRows: number;
   errors: Array<{ row: number; messages: string[] }>;
-  actions: Array<{ row: number; action: RowAction; name: string; detail: string; changed: boolean }>;
+  actions: Array<{ row: number; action: RowAction; name: string; detail: string; changed: boolean; changedFields: ChangedField[] }>;
 }
 interface PreviewResponse {
   ok: boolean;
@@ -45,7 +54,7 @@ interface PreviewResponse {
     warnings: string[];
     hasBlockingErrors: boolean;
     interimListFlag: boolean;
-    metadata: Array<{ fieldKey: string; action: string; reason?: string }>;
+    metadata: Array<{ fieldKey: string; action: string; reason?: string; changedFields?: ChangedField[] }>;
   };
 }
 interface CommitResponse {
@@ -79,6 +88,9 @@ export default function ObjektmallImportPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [commitResult, setCommitResult] = useState<CommitResponse | null>(null);
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+  const toggleRow = (key: string) =>
+    setExpandedRows((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const historyQuery = useQuery<HistoryItem[]>({
     queryKey: ["/api/admin/objektmall/history"],
@@ -414,6 +426,7 @@ export default function ObjektmallImportPage() {
                         <Table>
                           <TableHeader>
                             <TableRow>
+                              <TableHead className="w-8"></TableHead>
                               <TableHead className="w-16">Rad</TableHead>
                               <TableHead className="w-28">Åtgärd</TableHead>
                               <TableHead>Objekt</TableHead>
@@ -421,13 +434,38 @@ export default function ObjektmallImportPage() {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {s.actions.map((a) => (
+                            {s.actions.map((a) => {
+                              const rowKey = `${k}-${a.row}`;
+                              const hasDiff = (a.changedFields?.length ?? 0) > 0;
+                              const isExpanded = !!expandedRows[rowKey];
+                              return (
+                              <Fragment key={rowKey}>
                               <TableRow
-                                key={a.row}
                                 data-testid={`action-row-${k}-${a.row}`}
                                 data-changed={a.changed ? "true" : "false"}
-                                className={a.changed ? "border-l-4 border-l-destructive bg-destructive/5" : undefined}
+                                className={`${a.changed ? "border-l-4 border-l-destructive bg-destructive/5" : ""}${hasDiff ? " cursor-pointer" : ""}`}
+                                onClick={hasDiff ? () => toggleRow(rowKey) : undefined}
                               >
+                                <TableCell className="px-1">
+                                  {hasDiff && (
+                                    <button
+                                      type="button"
+                                      className="text-muted-foreground hover-elevate rounded p-0.5"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleRow(rowKey);
+                                      }}
+                                      data-testid={`button-expand-${k}-${a.row}`}
+                                      aria-label={isExpanded ? "Dölj ändringar" : "Visa ändringar"}
+                                    >
+                                      {isExpanded ? (
+                                        <ChevronDown className="h-4 w-4" />
+                                      ) : (
+                                        <ChevronRight className="h-4 w-4" />
+                                      )}
+                                    </button>
+                                  )}
+                                </TableCell>
                                 <TableCell className="font-mono text-xs">{a.row}</TableCell>
                                 <TableCell>
                                   <Badge
@@ -455,17 +493,99 @@ export default function ObjektmallImportPage() {
                                         {a.action === "create" ? "Ny" : "Ändrad"}
                                       </Badge>
                                     )}
+                                    {hasDiff && (
+                                      <span className="text-[10px] text-muted-foreground">
+                                        ({a.changedFields.length} fält)
+                                      </span>
+                                    )}
                                   </span>
                                 </TableCell>
                                 <TableCell className="text-xs text-muted-foreground">{a.detail}</TableCell>
                               </TableRow>
-                            ))}
+                              {hasDiff && isExpanded && (
+                                <TableRow
+                                  key={`${rowKey}-diff`}
+                                  data-testid={`diff-row-${k}-${a.row}`}
+                                  className="bg-muted/40"
+                                >
+                                  <TableCell></TableCell>
+                                  <TableCell colSpan={4} className="py-2">
+                                    <div className="space-y-1">
+                                      {a.changedFields.map((cf) => (
+                                        <div
+                                          key={cf.field}
+                                          className="flex items-start gap-2 text-xs"
+                                          data-testid={`diff-field-${k}-${a.row}-${cf.field}`}
+                                        >
+                                          <span className="font-medium min-w-[120px] shrink-0">{cf.label}</span>
+                                          <span className="text-muted-foreground line-through whitespace-pre-wrap break-words">
+                                            {cf.from || "—"}
+                                          </span>
+                                          <ArrowRight className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+                                          <span className="text-foreground whitespace-pre-wrap break-words">
+                                            {cf.to || "—"}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                              </Fragment>
+                              );
+                            })}
                           </TableBody>
                         </Table>
                       </ScrollArea>
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {preview.report.metadata.some((m) => (m.changedFields?.length ?? 0) > 0) && (
+              <div className="space-y-2">
+                <Separator />
+                <h3 className="text-sm font-semibold">Ändrade metadatafält</h3>
+                <ScrollArea className="h-44 border rounded">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-48">Fält</TableHead>
+                        <TableHead>Ändringar</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {preview.report.metadata
+                        .filter((m) => (m.changedFields?.length ?? 0) > 0)
+                        .map((m) => (
+                          <TableRow key={m.fieldKey} data-testid={`meta-diff-row-${m.fieldKey}`}>
+                            <TableCell className="text-xs font-mono align-top">{m.fieldKey}</TableCell>
+                            <TableCell className="py-2">
+                              <div className="space-y-1">
+                                {m.changedFields!.map((cf) => (
+                                  <div
+                                    key={cf.field}
+                                    className="flex items-start gap-2 text-xs"
+                                    data-testid={`meta-diff-field-${m.fieldKey}-${cf.field}`}
+                                  >
+                                    <span className="font-medium min-w-[120px] shrink-0">{cf.label}</span>
+                                    <span className="text-muted-foreground line-through whitespace-pre-wrap break-words">
+                                      {cf.from || "—"}
+                                    </span>
+                                    <ArrowRight className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+                                    <span className="text-foreground whitespace-pre-wrap break-words">
+                                      {cf.to || "—"}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
               </div>
             )}
 
