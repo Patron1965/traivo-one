@@ -80,9 +80,9 @@ const METADATA_AREAS = ['grunduppgifter', 'produktion', 'status', 'ekonomi'] as 
 
 const createMetadataTypeSchema = z.object({
   namn: z.string().min(1),
-  beskrivning: z.string().optional(),
+  beskrivning: z.string().nullish(),
   datatyp: z.enum(['string', 'integer', 'decimal', 'boolean', 'datetime', 'json', 'referens', 'image', 'file', 'code', 'location', 'interval']),
-  referensTabell: z.string().optional(),
+  referensTabell: z.string().nullish(),
   arLogisk: z.boolean().optional().default(true),
   standardArvs: z.boolean().optional().default(false),
   kategori: z.string().optional().default('annat'),
