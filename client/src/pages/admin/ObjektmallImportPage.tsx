@@ -22,23 +22,28 @@ import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { OBJEKTMALL_SHEETS, OBJEKTMALL_FILENAME } from "@shared/objektmall-template";
 
+type RowAction = "create" | "update" | "repoint";
 interface SheetReport {
   name: string;
   totalRows: number;
   toCreate: number;
   toUpdate: number;
+  toRepoint: number;
   errorRows: number;
   errors: Array<{ row: number; messages: string[] }>;
+  actions: Array<{ row: number; action: RowAction; name: string; detail: string }>;
 }
 interface PreviewResponse {
   ok: boolean;
   dryRun: boolean;
   fileName: string;
   templateVersion: string;
+  interimListFlag: boolean;
   report: {
     sheets: Record<string, SheetReport>;
     warnings: string[];
     hasBlockingErrors: boolean;
+    interimListFlag: boolean;
     metadata: Array<{ fieldKey: string; action: string; reason?: string }>;
   };
 }
@@ -48,6 +53,7 @@ interface CommitResponse {
   batchId: string;
   created: Record<string, number>;
   updated: Record<string, number>;
+  repointed: Record<string, number>;
   report: PreviewResponse["report"];
   message?: string;
 }
@@ -61,7 +67,7 @@ interface HistoryItem {
   createdAt: string;
   fileName: string | null;
   userName: string | null;
-  perLevel: { created: Record<string, number>; updated: Record<string, number> } | null;
+  perLevel: { created: Record<string, number>; updated: Record<string, number>; repointed?: Record<string, number> } | null;
 }
 
 const SHEET_ORDER = ["organisation", "stores", "containers", "metadata"] as const;
@@ -173,8 +179,11 @@ export default function ObjektmallImportPage() {
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
           Ladda upp en ifylld <code className="text-xs bg-muted px-1 py-0.5 rounded">{OBJEKTMALL_FILENAME}</code> för
-          att skapa eller uppdatera organisationer, butiker och kärl i ett svep. Re-import av samma fil uppdaterar
-          befintliga objekt via interimsnummer — inga dubbletter skapas.
+          att i ett enda svep <span className="font-medium">skapa nya</span> (via interimsnummer),{" "}
+          <span className="font-medium">uppdatera befintliga</span> (via systemnummer eller butiksnummer/butiksnamn) och{" "}
+          <span className="font-medium">flytta objekt till ny förälder</span>. Endast Objektnamn och Förälder krävs
+          (förälder utelämnas bara för roten); allt annat — inklusive adress — är metadata som ärvs nedåt från
+          föräldern. Re-import av samma fil uppdaterar befintliga objekt — inga dubbletter skapas.
         </p>
       </div>
 
@@ -274,6 +283,16 @@ export default function ObjektmallImportPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {preview.interimListFlag && (
+              <Alert className="bg-chart-4/10 border-chart-4/40" data-testid="alert-interim-list">
+                <FileSpreadsheet className="h-4 w-4 text-chart-4" />
+                <AlertTitle>Interimslista</AlertTitle>
+                <AlertDescription className="text-xs">
+                  Den här filen är markerad som en ren interimslista. Nummerkolumnerna tolkas som interimsnummer och
+                  rader matchas mot tidigare interim-import — befintliga systemobjekt uppdateras inte av misstag.
+                </AlertDescription>
+              </Alert>
+            )}
             {preview.report.warnings.length > 0 && (
               <Alert variant="default" className="bg-warning/10 border-warning/40">
                 <AlertTriangle className="h-4 w-4 text-warning" />
@@ -297,6 +316,9 @@ export default function ObjektmallImportPage() {
                     <div className="flex gap-2 flex-wrap text-xs">
                       <Badge variant="outline" className="bg-chart-2/10">Ny: {s.toCreate}</Badge>
                       <Badge variant="outline" className="bg-chart-1/10">Uppd: {s.toUpdate}</Badge>
+                      {(s.toRepoint ?? 0) > 0 && (
+                        <Badge variant="outline" className="bg-chart-4/10">Flyttad: {s.toRepoint}</Badge>
+                      )}
                       {s.errorRows > 0 && (
                         <Badge variant="destructive">Fel: {s.errorRows}</Badge>
                       )}
@@ -333,6 +355,57 @@ export default function ObjektmallImportPage() {
                                     {e.messages.map((m, i) => <li key={i}>{m}</li>)}
                                   </ul>
                                 </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </ScrollArea>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {SHEET_ORDER.some((k) => (preview.report.sheets[k]?.actions?.length ?? 0) > 0) && (
+              <div className="space-y-2">
+                <Separator />
+                <h3 className="text-sm font-semibold">Planerade åtgärder per rad</h3>
+                {SHEET_ORDER.map((k) => {
+                  const s = preview.report.sheets[k];
+                  if (!s || (s.actions?.length ?? 0) === 0) return null;
+                  return (
+                    <div key={k} data-testid={`actions-${k}`}>
+                      <h4 className="text-xs font-medium text-muted-foreground mb-1">{s.name}</h4>
+                      <ScrollArea className="h-44 border rounded">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-16">Rad</TableHead>
+                              <TableHead className="w-28">Åtgärd</TableHead>
+                              <TableHead>Objekt</TableHead>
+                              <TableHead>Detalj</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {s.actions.map((a) => (
+                              <TableRow key={a.row} data-testid={`action-row-${k}-${a.row}`}>
+                                <TableCell className="font-mono text-xs">{a.row}</TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant="outline"
+                                    className={
+                                      a.action === "create"
+                                        ? "bg-chart-2/10"
+                                        : a.action === "repoint"
+                                          ? "bg-chart-4/10"
+                                          : "bg-chart-1/10"
+                                    }
+                                  >
+                                    {a.action === "create" ? "Ny" : a.action === "repoint" ? "Flyttad" : "Uppdaterad"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-xs">{a.name}</TableCell>
+                                <TableCell className="text-xs text-muted-foreground">{a.detail}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -390,7 +463,7 @@ export default function ObjektmallImportPage() {
             <div className="text-sm">
               Batch-ID: <span className="font-mono">{commitResult.batchId}</span>
             </div>
-            <div className="mt-2 grid sm:grid-cols-2 gap-2 text-xs">
+            <div className="mt-2 grid sm:grid-cols-3 gap-2 text-xs">
               <div>
                 <div className="font-semibold mb-0.5">Skapade</div>
                 <ul className="ml-3">
@@ -407,6 +480,16 @@ export default function ObjektmallImportPage() {
                   ))}
                 </ul>
               </div>
+              {commitResult.repointed && (
+                <div>
+                  <div className="font-semibold mb-0.5">Flyttade</div>
+                  <ul className="ml-3">
+                    {Object.entries(commitResult.repointed).map(([k, v]) => (
+                      <li key={k}>{k}: <span className="font-mono">{v}</span></li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </AlertDescription>
         </Alert>
