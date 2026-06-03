@@ -1,14 +1,17 @@
 import { Pool } from "pg";
 import * as schema from "../shared/schema";
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
-import { getTableName, is } from "drizzle-orm";
+import { is } from "drizzle-orm";
 
 // När `--warn` anges (eller SCHEMA_DRIFT_WARN_ONLY=true) loggas drift men exit-koden
 // förblir 0 så att den inte blockerar. Utan flaggan ger drift (missing > 0) exit-kod 1
 // så att den kan användas som blockerande validation-step / post-merge-gate.
-const WARN_ONLY =
-  process.argv.includes("--warn") ||
-  process.env.SCHEMA_DRIFT_WARN_ONLY === "true";
+export function isWarnOnly(
+  argv: string[] = process.argv,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return argv.includes("--warn") || env.SCHEMA_DRIFT_WARN_ONLY === "true";
+}
 
 // Infra-tabeller som hanteras utanför shared/schema.ts (migrations etc.) och
 // därför inte ska flaggas som "extra" objekt i DB.
@@ -21,7 +24,7 @@ const IGNORED_DB_TABLES = new Set<string>([
 // en gemensam kanonisk token så att uppenbara mismatchar kan jämföras.
 // Returnerar null för typer som inte säkert kan jämföras (arrays, enums/
 // USER-DEFINED, okända typer) — dessa hoppas över för att undvika false positives.
-function canonicalizeType(raw: string): string | null {
+export function canonicalizeType(raw: string): string | null {
   let t = raw.trim().toLowerCase();
   // Arrays kan inte jämföras tillförlitligt (element-typ vs "ARRAY").
   if (t === "array" || t.endsWith("[]")) return null;
@@ -77,47 +80,45 @@ function canonicalizeType(raw: string): string | null {
   return map[t] ?? null;
 }
 
-async function main() {
-  if (!process.env.DATABASE_URL) {
-    console.error(
-      "[schema-drift] DATABASE_URL är inte satt — hoppar över drift-kontroll.",
-    );
-    process.exit(0);
-    return;
-  }
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Minimal query-interface så att kontrollen kan köras mot en injicerad databas
+// (riktig pg.Pool i prod/post-merge, en fake i tester).
+export interface DriftQuerier {
+  query<T extends Record<string, unknown>>(
+    sql: string,
+  ): Promise<{ rows: T[] }>;
+  end?: () => Promise<void>;
+}
 
-  const tables: PgTable[] = Object.values(schema).filter((v) =>
-    is(v, PgTable),
-  ) as PgTable[];
+export interface DriftCounts {
+  // Blockerande (saknas i DB jämfört med schema.ts).
+  missingTableCount: number;
+  missingColCount: number;
+  missingIdxCount: number;
+  // Informativt (blockerar ej): finns i DB men inte i schema.ts, samt typavvikelser.
+  extraTableCount: number;
+  extraColCount: number;
+  typeMismatchCount: number;
+}
 
-  const dbColsRes = await pool.query<{
-    table_name: string;
-    column_name: string;
-    data_type: string;
-  }>(
-    `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema='public'`,
-  );
-  // table -> column -> data_type
-  const dbCols = new Map<string, Set<string>>();
-  const dbColTypes = new Map<string, Map<string, string>>();
-  for (const r of dbColsRes.rows) {
-    if (!dbCols.has(r.table_name)) {
-      dbCols.set(r.table_name, new Set());
-      dbColTypes.set(r.table_name, new Map());
-    }
-    dbCols.get(r.table_name)!.add(r.column_name);
-    dbColTypes.get(r.table_name)!.set(r.column_name, r.data_type);
-  }
+export function collectSchemaTables(): PgTable[] {
+  return Object.values(schema).filter((v) => is(v, PgTable)) as PgTable[];
+}
 
-  const dbIdxRes = await pool.query<{ indexname: string; tablename: string }>(
-    `SELECT indexname, tablename FROM pg_indexes WHERE schemaname='public'`,
-  );
-  const dbIdx = new Set(dbIdxRes.rows.map((r) => r.indexname));
-  const dbTablesSet = new Set(
-    [...dbCols.keys()],
-  );
-
+/**
+ * Jämför Drizzle-schemat mot databasens faktiska kolumner/index och loggar drift.
+ * Returnerar antal saknade tabeller/kolumner/index (blockerande) samt informativa
+ * räknare för omvänd drift (extra objekt i DB) och typavvikelser. Ingen process.exit
+ * här — det sköts av anroparen baserat på counts + warn-only.
+ *
+ * `dbColTypes` (table -> column -> data_type) är valfri; utan den hoppas typjämförelser
+ * över (t.ex. i tester som inte simulerar data_type).
+ */
+export function evaluateDrift(
+  tables: PgTable[],
+  dbCols: Map<string, Set<string>>,
+  dbIdx: Set<string>,
+  dbColTypes?: Map<string, Map<string, string>>,
+): DriftCounts {
   let missingColCount = 0;
   let missingIdxCount = 0;
   let missingTableCount = 0;
@@ -132,7 +133,7 @@ async function main() {
     const cfg = getTableConfig(t);
     const tableName = cfg.name;
     const colsInDb = dbCols.get(tableName);
-    const typesInDb = dbColTypes.get(tableName);
+    const typesInDb = dbColTypes?.get(tableName);
     const schemaCols = new Set<string>(cfg.columns.map((c) => c.name));
     schemaTableCols.set(tableName, schemaCols);
     if (!colsInDb) {
@@ -144,7 +145,9 @@ async function main() {
     const typeMismatches: string[] = [];
     for (const col of cfg.columns) {
       if (!colsInDb.has(col.name)) {
-        missingCols.push(`${col.name} (${col.getSQLType()}${col.notNull ? " NOT NULL" : ""}${col.hasDefault ? " has-default" : ""})`);
+        missingCols.push(
+          `${col.name} (${col.getSQLType()}${col.notNull ? " NOT NULL" : ""}${col.hasDefault ? " has-default" : ""})`,
+        );
         continue;
       }
       // Typjämförelse för kolumner som finns på båda sidor.
@@ -177,7 +180,9 @@ async function main() {
         const colNames = idx.config.columns
           .map((c: any) => c.name ?? "(expr)")
           .join(", ");
-        missingIdx.push(`${name} [${colNames}]${idx.config.unique ? " UNIQUE" : ""}`);
+        missingIdx.push(
+          `${name} [${colNames}]${idx.config.unique ? " UNIQUE" : ""}`,
+        );
       }
     }
     if (missingIdx.length) {
@@ -200,7 +205,7 @@ async function main() {
   const extraColsByTable = new Map<string, string[]>();
   for (const [tableName, schemaCols] of schemaTableCols) {
     const colsInDb = dbCols.get(tableName);
-    const typesInDb = dbColTypes.get(tableName);
+    const typesInDb = dbColTypes?.get(tableName);
     if (!colsInDb) continue;
     const extras: string[] = [];
     for (const dbCol of colsInDb) {
@@ -234,40 +239,129 @@ async function main() {
     );
   }
 
-  console.log(`\n\n=== SUMMARY ===`);
-  console.log(`Schema tables: ${tables.length}, DB public tables: ${dbTablesSet.size}`);
-  console.log(`Missing tables: ${missingTableCount}`);
-  console.log(`Missing columns: ${missingColCount}`);
-  console.log(`Missing indexes: ${missingIdxCount}`);
-  console.log(`--- informativt (blockerar ej) ---`);
-  console.log(`Extra tables i DB: ${extraTables.length}`);
-  console.log(`Extra columns i DB: ${extraColCount}`);
-  console.log(`Type mismatches: ${typeMismatchCount}`);
+  return {
+    missingTableCount,
+    missingColCount,
+    missingIdxCount,
+    extraTableCount: extraTables.length,
+    extraColCount,
+    typeMismatchCount,
+  };
+}
 
-  await pool.end();
+/**
+ * Kör hela drift-kontrollen och returnerar en exit-kod (0 = ok/skip, 1 = drift).
+ * Ingen process.exit — så den kan köras i tester. CLI-wrappern nedan applicerar koden.
+ */
+export async function runSchemaDriftCheck(opts?: {
+  databaseUrl?: string;
+  warnOnly?: boolean;
+  tables?: PgTable[];
+  createQuerier?: (databaseUrl: string) => DriftQuerier;
+}): Promise<number> {
+  const databaseUrl =
+    opts?.databaseUrl ?? process.env.DATABASE_URL ?? undefined;
+  const warnOnly = opts?.warnOnly ?? isWarnOnly();
 
-  const totalMissing = missingTableCount + missingColCount + missingIdxCount;
-  if (totalMissing > 0) {
+  if (!databaseUrl) {
     console.error(
-      `\n[schema-drift] ⚠ Schema-drift upptäckt: ${totalMissing} saknade ` +
-        `objekt (${missingTableCount} tabeller, ${missingColCount} kolumner, ` +
-        `${missingIdxCount} index). DB är inte i synk med shared/schema.ts. ` +
-        `Kör 'npm run db:push' och tillämpa relevanta migrations i scripts/post-merge.sh.`,
+      "[schema-drift] DATABASE_URL är inte satt — hoppar över drift-kontroll.",
     );
-    if (!WARN_ONLY) {
-      process.exit(1);
+    return 0;
+  }
+
+  const createQuerier =
+    opts?.createQuerier ??
+    ((url: string) => new Pool({ connectionString: url }) as DriftQuerier);
+  const pool = createQuerier(databaseUrl);
+
+  const tables = opts?.tables ?? collectSchemaTables();
+
+  try {
+    const dbColsRes = await pool.query<{
+      table_name: string;
+      column_name: string;
+      data_type: string;
+    }>(
+      `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema='public'`,
+    );
+    // table -> column-set, samt table -> column -> data_type
+    const dbCols = new Map<string, Set<string>>();
+    const dbColTypes = new Map<string, Map<string, string>>();
+    for (const r of dbColsRes.rows) {
+      if (!dbCols.has(r.table_name)) {
+        dbCols.set(r.table_name, new Set());
+        dbColTypes.set(r.table_name, new Map());
+      }
+      dbCols.get(r.table_name)!.add(r.column_name);
+      if (r.data_type !== undefined && r.data_type !== null) {
+        dbColTypes.get(r.table_name)!.set(r.column_name, r.data_type);
+      }
     }
-    console.error(
-      "[schema-drift] (--warn) Drift ignoreras för exit-kod, men måste åtgärdas före merge.",
-    );
-  } else {
+
+    const dbIdxRes = await pool.query<{
+      indexname: string;
+      tablename: string;
+    }>(`SELECT indexname, tablename FROM pg_indexes WHERE schemaname='public'`);
+    const dbIdx = new Set(dbIdxRes.rows.map((r) => r.indexname));
+    const dbTablesSet = new Set([...dbCols.keys()]);
+
+    const {
+      missingTableCount,
+      missingColCount,
+      missingIdxCount,
+      extraTableCount,
+      extraColCount,
+      typeMismatchCount,
+    } = evaluateDrift(tables, dbCols, dbIdx, dbColTypes);
+
+    console.log(`\n\n=== SUMMARY ===`);
     console.log(
-      "\n[schema-drift] ✓ Ingen drift — DB matchar shared/schema.ts.",
+      `Schema tables: ${tables.length}, DB public tables: ${dbTablesSet.size}`,
     );
+    console.log(`Missing tables: ${missingTableCount}`);
+    console.log(`Missing columns: ${missingColCount}`);
+    console.log(`Missing indexes: ${missingIdxCount}`);
+    console.log(`--- informativt (blockerar ej) ---`);
+    console.log(`Extra tables i DB: ${extraTableCount}`);
+    console.log(`Extra columns i DB: ${extraColCount}`);
+    console.log(`Type mismatches: ${typeMismatchCount}`);
+
+    const totalMissing = missingTableCount + missingColCount + missingIdxCount;
+    if (totalMissing > 0) {
+      console.error(
+        `\n[schema-drift] ⚠ Schema-drift upptäckt: ${totalMissing} saknade ` +
+          `objekt (${missingTableCount} tabeller, ${missingColCount} kolumner, ` +
+          `${missingIdxCount} index). DB är inte i synk med shared/schema.ts. ` +
+          `Kör 'npm run db:push' och tillämpa relevanta migrations i scripts/post-merge.sh.`,
+      );
+      if (!warnOnly) {
+        return 1;
+      }
+      console.error(
+        "[schema-drift] (--warn) Drift ignoreras för exit-kod, men måste åtgärdas före merge.",
+      );
+    } else {
+      console.log(
+        "\n[schema-drift] ✓ Ingen drift — DB matchar shared/schema.ts.",
+      );
+    }
+    return 0;
+  } finally {
+    if (pool.end) await pool.end();
   }
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+// Kör endast som CLI när filen exekveras direkt (inte vid import i tester).
+const isDirectRun =
+  typeof process.argv[1] === "string" &&
+  /schema-drift-check\.(ts|js|cjs|mjs)$/.test(process.argv[1]);
+
+if (isDirectRun) {
+  runSchemaDriftCheck()
+    .then((code) => process.exit(code))
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    });
+}
