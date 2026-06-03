@@ -168,7 +168,10 @@ function renderValueInput(
 export function MetadataFieldBuilder({ customerId, inheritedFields, onChange }: Props) {
   const [rows, setRows] = useState<BuilderRow[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const seededRef = useRef(false);
+  // Task #681: signaturen av den senast seedade ärvda uppsättningen. I barn-läge
+  // är inheritedFields tom på första render (förälderns metadata laddas async) och
+  // fylls därefter — vi måste seeda vid den övergången, inte ge upp på första tom.
+  const seededSigRef = useRef<string | null>(null);
 
   const typesUrl = customerId
     ? `/api/metadata/types?customerId=${encodeURIComponent(customerId)}`
@@ -200,17 +203,19 @@ export function MetadataFieldBuilder({ customerId, inheritedFields, onChange }: 
 
   const familyParentIds = useMemo(() => new Set(childrenByParent.keys()), [childrenByParent]);
 
-  // Seed inherited rows once (and re-seed if the inherited set identity changes).
+  // Seed inherited rows when the inherited set becomes available (empty→loaded)
+  // and re-seed if the parent's inherited set actually changes. Keyed by a content
+  // signature so an async-arriving set still seeds, but the same set never re-seeds
+  // (which would wipe user edits).
   useEffect(() => {
-    if (!inheritedFields || inheritedFields.length === 0) {
-      seededRef.current = true;
-      return;
-    }
-    if (seededRef.current) return;
-    seededRef.current = true;
+    const fields = inheritedFields ?? [];
+    if (fields.length === 0) return;
+    const sig = fields.map((f) => `${f.namn}=${f.value}`).join("|");
+    if (seededSigRef.current === sig) return;
+    seededSigRef.current = sig;
     setRows((prev) => {
       const existing = new Set(prev.map((r) => r.namn));
-      const seeded: BuilderRow[] = inheritedFields
+      const seeded: BuilderRow[] = fields
         .filter((f) => !existing.has(f.namn))
         .map((f) => ({
           namn: f.namn,
