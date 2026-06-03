@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { metadataKatalog, metadataKatalogKunder, metadataVarden, articles, customers } from "@shared/schema";
 import { inArray } from "drizzle-orm";
 import { getErrorMessage } from "./routes/helpers";
+import { parseFormula } from "./metadata-formula";
 import {
   getObjectWithAllMetadata,
   getMetadataValue,
@@ -120,6 +121,20 @@ const createMetadataTypeSchema = z.object({
     .transform((v) => (v === undefined ? undefined : v.length > 0 ? v : null)),
   // Task #579: aktivera kronologisk tidslinje per fält (Lyftkrok, Antal, etc).
   kronologiskVisning: z.boolean().optional().default(false),
+  // Task #666: beräknat fält. När arBeraknad=true måste fältet ha en formel som
+  // refererar syskonfält inom samma familj (kräver parentMetadataId). Formeln
+  // tillåter endast de fyra räknesätten + parenteser. Tom/blank formel → null.
+  arBeraknad: z.boolean().optional(),
+  formel: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const t = v.trim();
+      return t.length > 0 ? t : null;
+    }),
   // Task #663: kundlås. Lista av customerId:n som fältet begränsas till. Tom array
   // = generellt fält (gäller alla kunder). undefined = orört (partiella PUT rör
   // inte kopplingarna). Hanteras separat (m2m), inte en kolumn på metadata_katalog.
@@ -151,6 +166,36 @@ async function validateParentMetadata(
   selfId: string | null,
 ): Promise<string | null> {
   return validateParentMetadataLink(tenantId, parentId, selfId);
+}
+
+// Task #666: validerar ett (potentiellt) beräknat fält. Ett beräknat fält måste
+// tillhöra en familj (formeln refererar syskonfält) och ha en syntaktiskt giltig
+// formel (endast de fyra räknesätten + parenteser). Självreferens blockeras direkt
+// (säker cirkelreferens). Okända fält och division med noll surfar vid beräkning
+// (läsning) eftersom syskon kan tillkomma senare. Returnerar svenskt fel eller null.
+function validateComputedFieldFormula(opts: {
+  arBeraknad: boolean;
+  formel: string | null | undefined;
+  parentMetadataId: string | null | undefined;
+  namn: string;
+}): string | null {
+  if (!opts.arBeraknad) return null;
+  if (!opts.parentMetadataId) {
+    return "Ett beräknat fält måste tillhöra en familj (ha ett överordnat fält) eftersom formeln refererar syskonfält.";
+  }
+  if (!opts.formel || opts.formel.trim() === "") {
+    return "Ett beräknat fält måste ha en formel.";
+  }
+  let refs: string[];
+  try {
+    refs = parseFormula(opts.formel).refs;
+  } catch (e) {
+    return `Ogiltig formel: ${e instanceof Error ? e.message : "okänt fel"}`;
+  }
+  if (refs.includes(opts.namn)) {
+    return "Formeln får inte referera fältet självt (cirkelreferens).";
+  }
+  return null;
 }
 
 // Task #663: validerar att alla angivna customerId:n finns i denna tenant.
@@ -247,6 +292,17 @@ metadataRouter.post("/types", async (req: Request, res: Response) => {
       if (parentError) {
         return res.status(400).json({ error: parentError });
       }
+    }
+
+    // Task #666: validera beräknat fält (kräver familj + giltig formel, ej self-ref).
+    const formulaError = validateComputedFieldFormula({
+      arBeraknad: validated.arBeraknad ?? false,
+      formel: validated.formel,
+      parentMetadataId: validated.parentMetadataId,
+      namn: validated.namn,
+    });
+    if (formulaError) {
+      return res.status(400).json({ error: formulaError });
     }
 
     // Task #663: kundlås hanteras i en separat m2m-tabell, inte som en kolumn.
@@ -391,6 +447,21 @@ metadataRouter.put("/types/:id", async (req: Request, res: Response) => {
           return res.status(400).json({ error: parentError });
         }
       }
+    }
+
+    // Task #666: validera beräknat fält mot de effektiva värdena efter merge med
+    // befintlig rad (partiell PUT). Kräver familj + giltig formel, ingen self-ref.
+    const formulaError = validateComputedFieldFormula({
+      arBeraknad: validated.arBeraknad ?? existing.arBeraknad,
+      formel: validated.formel !== undefined ? validated.formel : existing.formel,
+      parentMetadataId:
+        validated.parentMetadataId !== undefined
+          ? validated.parentMetadataId
+          : existing.parentMetadataId,
+      namn: validated.namn ?? existing.namn,
+    });
+    if (formulaError) {
+      return res.status(400).json({ error: formulaError });
     }
 
     // Task #663: kundlås hanteras i en separat m2m-tabell. Lyft ut customerIds ur

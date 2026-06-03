@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   Loader2, Database, Lock, Plus, Save, X, History, Edit2, 
   ArrowDown, ExternalLink, Trash2, Image, FileText, MapPin, Clock, Hash, Type, ToggleLeft,
-  Share2, ChevronRight, ChevronDown, TreeDeciduous, RotateCcw, Pencil
+  Share2, ChevronRight, ChevronDown, TreeDeciduous, RotateCcw, Pencil, Calculator, AlertTriangle
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ServiceObject, MetadataKatalog, MetadataHistorik } from "@shared/schema";
@@ -41,12 +41,16 @@ interface MetadataEntry {
   createdAt: string;
   updatedAt: string;
   katalog: MetadataKatalog;
-  source: 'local' | 'inherited';
+  source: 'local' | 'inherited' | 'computed';
   fromObject?: {
     id: string;
     namn: string;
     level: number;
   };
+  // Task #666: beräknat fält. computed=true för syntetiska beräknade rader; värdet
+  // finns i vardeInteger/vardeDecimal eller — om formeln var ogiltig — i computedError.
+  computed?: boolean;
+  computedError?: string | null;
 }
 
 interface ObjectWithMetadata {
@@ -189,6 +193,21 @@ function CompositeEditor({
 }
 
 function getSourceBadge(entry: MetadataEntry) {
+  if (entry.source === 'computed') {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 border-chart-4/50 text-chart-4 cursor-help" data-testid={`badge-computed-${entry.id}`}>
+            <Calculator className="h-3 w-3" />
+            Beräknat
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{(entry.katalog as any).formel ? `Beräknas automatiskt: ${(entry.katalog as any).formel}` : "Beräknat fält (readonly)"}</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
   if (entry.nivaLas) {
     return (
       <Badge variant="destructive" className="text-[10px] px-1.5 py-0 gap-1" data-testid={`badge-nivalas-${entry.id}`}>
@@ -228,6 +247,7 @@ function getSourceBadge(entry: MetadataEntry) {
 }
 
 function getSourceColor(entry: MetadataEntry): string {
+  if (entry.source === 'computed') return entry.computedError ? "border-l-warning" : "border-l-chart-4";
   if (entry.nivaLas) return "border-l-destructive";
   if (entry.source === 'inherited') return "border-l-chart-2";
   return "border-l-chart-1";
@@ -865,7 +885,9 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
   };
 
   // PDF §14: katalogtyper med allowDuplicates får dyka upp flera gånger i "Lägg till".
+  // Task #666: beräknade fält är readonly och kan aldrig sättas manuellt — uteslut dem.
   const availableTypesForAdd = metadataTypes
+    .filter(t => (t as any).arBeraknad !== true)
     .filter(t =>
       (t as any).allowDuplicates === true ||
       !metadata.some(m => m.source === 'local' && m.katalog.namn === t.namn)
@@ -1021,8 +1043,12 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                               {getSourceBadge(entry)}
                             </div>
                             <div className="flex items-center gap-0.5 shrink-0">
-                              <MetadataHistoryModal metadataId={entry.id} metadataName={entry.katalog.namn} />
-                              <InheritanceTreeDialog objectId={object.id} metadataKatalogId={entry.metadataKatalogId} metadataName={entry.katalog.namn} />
+                              {entry.source !== 'computed' && (
+                                <>
+                                  <MetadataHistoryModal metadataId={entry.id} metadataName={entry.katalog.namn} />
+                                  <InheritanceTreeDialog objectId={object.id} metadataKatalogId={entry.metadataKatalogId} metadataName={entry.katalog.namn} />
+                                </>
+                              )}
                               {entry.source === 'local' && entry.arvsNedat && (
                                 <PropagationPreviewDialog
                                   objectId={object.id}
@@ -1137,6 +1163,19 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                                   </span>
                                 </div>
                               ))}
+                            </div>
+                          ) : entry.source === 'computed' ? (
+                            <div className="mt-1 text-sm" data-testid={`computed-value-${entry.id}`}>
+                              {entry.computedError ? (
+                                <span className="flex items-center gap-1 text-warning" data-testid={`computed-error-${entry.id}`}>
+                                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                  {entry.computedError}
+                                </span>
+                              ) : (
+                                <span className="font-medium text-chart-4">
+                                  {getDisplayValue(entry) || <span className="text-muted-foreground">—</span>}
+                                </span>
+                              )}
                             </div>
                           ) : (
                             <div className="mt-1 text-sm">

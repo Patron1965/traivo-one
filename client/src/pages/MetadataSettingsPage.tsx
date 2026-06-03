@@ -67,6 +67,7 @@ import {
   FileSearch,
   StickyNote,
   Badge as BadgeIcon,
+  Calculator,
 } from "lucide-react";
 
 interface MetadataKatalog {
@@ -87,6 +88,10 @@ interface MetadataKatalog {
   allowDuplicates: boolean;
   kronologiskVisning: boolean;
   parentMetadataId: string | null;
+  // Task #666: beräknat fält — när true räknas värdet ut från en formel som
+  // refererar syskonfält i samma familj. Lagrar inget eget värde.
+  arBeraknad?: boolean;
+  formel?: string | null;
   // Task #663: kundlås — tom array = generellt fält (alla kunder); en eller flera
   // customerId:n = fältet visas endast för dessa kunder och deras underkunder.
   customerIds?: string[];
@@ -463,6 +468,12 @@ export default function MetadataSettingsPage() {
                                       <Clock className="h-2.5 w-2.5 mr-0.5" />Historik
                                     </Badge>
                                   )}
+                                  {type.arBeraknad && (
+                                    <Badge variant="outline" className="text-[10px]" data-testid={`badge-computed-${type.namn}`}>
+                                      <Calculator className="h-2.5 w-2.5 mr-0.5" />
+                                      {type.formel ? type.formel : 'Beräknat'}
+                                    </Badge>
+                                  )}
                                   {type.customerIds && type.customerIds.length > 0 && (
                                     <Badge variant="outline" className="text-[10px] border-warning text-warning" data-testid={`badge-customerlock-${type.namn}`}>
                                       <Key className="h-2.5 w-2.5 mr-0.5" />
@@ -588,6 +599,10 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
   const [allowDuplicates, setAllowDuplicates] = useState(initialData?.allowDuplicates ?? false);
   const [kronologiskVisning, setKronologiskVisning] = useState(initialData?.kronologiskVisning ?? false);
   const [parentMetadataId, setParentMetadataId] = useState(initialData?.parentMetadataId || '');
+  // Task #666: beräknat fält. Ett beräknat fält tillhör en familj och har en formel
+  // som refererar syskonfält (t.ex. "langd * bredd"). Värdet räknas ut readonly.
+  const [arBeraknad, setArBeraknad] = useState(initialData?.arBeraknad ?? false);
+  const [formel, setFormel] = useState(initialData?.formel || '');
   // Task #663: kundlås. Tom = generellt fält (alla kunder). Annars begränsas fältet
   // till valda kunder (och deras underkunder via hierarkin på serversidan).
   const [customerLockEnabled, setCustomerLockEnabled] = useState(
@@ -613,6 +628,14 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
   const parentCandidates = allTypes
     .filter((t) => !t.parentMetadataId && t.id !== initialData?.id)
     .sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
+
+  // Task #666: syskonfält i samma familj (samma förälder, exkl. sig själv) — dessa
+  // är de fält en formel får referera. Visas som hjälptext under formelfältet.
+  const siblingFields = parentMetadataId
+    ? allTypes
+        .filter((t) => t.parentMetadataId === parentMetadataId && t.id !== initialData?.id)
+        .sort((a, b) => a.namn.localeCompare(b.namn, 'sv'))
+    : [];
 
   const handleLabelChange = (value: string) => {
     setDisplayLabel(value);
@@ -644,6 +667,8 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
       allowDuplicates,
       kronologiskVisning,
       parentMetadataId: parentMetadataId || null,
+      arBeraknad: parentMetadataId ? arBeraknad : false,
+      formel: parentMetadataId && arBeraknad ? (formel.trim() || null) : null,
       customerIds: customerLockEnabled ? selectedCustomerIds : [],
     });
   };
@@ -806,6 +831,60 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
             : 'Gör fältet till ett underfält i en metadatafamilj (t.ex. kontakt → kontakt.fornamn). Endast en nivå tillåts.'}
         </p>
       </div>
+
+      {parentMetadataId && (
+        <div className="space-y-3 rounded-md border p-3" data-testid="section-computed-field">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Beräknat fält</Label>
+              <p className="text-xs text-muted-foreground">
+                Värdet räknas ut automatiskt från syskonfält i samma familj och visas
+                readonly på objektet (t.ex. <code>langd * bredd</code>).
+              </p>
+            </div>
+            <Switch
+              checked={arBeraknad}
+              onCheckedChange={setArBeraknad}
+              data-testid="switch-type-computed"
+            />
+          </div>
+
+          {arBeraknad && (
+            <div className="space-y-1">
+              <Label>Formel</Label>
+              <Input
+                value={formel}
+                onChange={(e) => setFormel(e.target.value)}
+                placeholder="T.ex. langd * bredd"
+                data-testid="input-type-formel"
+              />
+              <p className="text-xs text-muted-foreground">
+                Endast de fyra räknesätten (<code>+ - * /</code>) och parenteser. Referera
+                syskonfält med deras kod.
+              </p>
+              {siblingFields.length > 0 ? (
+                <div className="flex flex-wrap gap-1 pt-1" data-testid="list-sibling-fields">
+                  {siblingFields.map((s) => (
+                    <Badge
+                      key={s.id}
+                      variant="outline"
+                      className="cursor-pointer text-[10px] hover-elevate"
+                      onClick={() => setFormel((f) => (f ? `${f} ${s.namn}` : s.namn))}
+                      data-testid={`badge-sibling-${s.namn}`}
+                    >
+                      {s.namn}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground" data-testid="text-no-siblings">
+                  Inga syskonfält ännu — lägg till fler underfält i familjen att referera.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <Separator />
 

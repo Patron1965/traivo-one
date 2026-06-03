@@ -8,6 +8,7 @@
 - [vitest 4 oxc JSX](vitest4-oxc-jsx.md) — vitest 4 bundlar rolldown-vite (oxc) som ignorerar `esbuild`; client `.tsx` parse-fail tills `oxc: { jsx: "automatic" }` sätts i vitest.config.
 - [Mobile-app uses cookie-auth objects endpoints](mobile-app-cookie-auth.md) — SimpleFieldApp körs i webbsession med cookie-auth; `/api/objects*` (ej `/api/mobile/*`) funkar direkt i mobil-UI.
 - [Objektmall-import diff/preview](objektmall-import-diff.md) — förhandsvisningens fält-diff måste spegla exakt vad commit skriver; notes byggs via delade helpers anropade från både validering och commit.
+- [Computed metadata fields](computed-metadata-fields.md) — derive-on-read fält måste både blockera writes OCH strippa lagrade rader vid läsning, annars överskuggas/förorenas formeln.
 - [WO-metadata edit + query-key encoding](wo-metadata-edit-and-query-encoding.md) — WO-metadata POST insertar alltid (edit=POST-före-DELETE); default react-query-fetchern URL-kodar ej key-segment (fri sträng → custom queryFn med encodeURIComponent).
 - [Importmall-headers ↔ import-matchning](import-template-headers.md) — genererade Excel-mall-headers måste härledas med samma regel (`deriveMetadataDotKey ?? namn`) som `buildMetadataTypeLookup` matchar mot vid import, annars matchar inte kolumnerna.
 - [Metadata kundlås read-paths](metadata-customer-lock.md) — kundlåsta katalogfält måste filtreras på ALLA objekt-vända läsningar (objekt-scoped endpoint, server-härledd kund), ej bara admin /types.

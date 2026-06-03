@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { sql, eq, and, inArray, desc } from "drizzle-orm";
+import { computeFamilyValues } from "./metadata-formula";
 import { 
   objects, 
   customers,
@@ -589,6 +590,130 @@ export async function getObjectWithAllMetadata(
     );
   }
 
+  // Task #666: injicera beräknade fält (derive-on-read). Ett beräknat katalogfält
+  // lagrar inget eget värde — det räknas ut per familj från syskonfältens numeriska
+  // värden vid läsning, så det alltid speglar aktuella indata och visas readonly.
+  // Ogiltiga formler (okänt fält, division med noll, cirkelreferens) ger ett tydligt
+  // felmeddelande på fältet utan att krascha övriga fält (se computeFamilyValues).
+  const allTypes = await getAllMetadataTypes(tenantId);
+  // Alla katalogtyper som är markerade beräknade (även de med ogiltig/tom formel).
+  // Eventuella lagrade värden för dessa (t.ex. fält som var vanligt och senare
+  // gjordes beräknat) ska aldrig visas eller mata syskonformler — derive-on-read
+  // är auktoritativt. Strippa dem ur filteredMetadata innan vi bygger baseValues.
+  const computedTypeIds = new Set(
+    allTypes.filter((t) => t.arBeraknad).map((t) => t.id),
+  );
+  if (computedTypeIds.size > 0) {
+    filteredMetadata = filteredMetadata.filter(
+      (m) => !computedTypeIds.has(m.metadataKatalogId),
+    );
+  }
+  const computedTypes = allTypes.filter(
+    (t) => t.arBeraknad && t.formel && t.formel.trim() !== "" && t.parentMetadataId,
+  );
+  if (computedTypes.length > 0) {
+    // SQL-frågan ovan selekterar inte arBeraknad/formel/parentMetadataId — berika
+    // redan upplösta entries så klienten kan visa formel-info och familjegruppering.
+    const typeById = new Map(allTypes.map((t) => [t.id, t]));
+    for (const entry of filteredMetadata) {
+      const t = typeById.get(entry.metadataKatalogId);
+      if (t) {
+        (entry.katalog as any).arBeraknad = t.arBeraknad;
+        (entry.katalog as any).formel = t.formel;
+        (entry.katalog as any).parentMetadataId = t.parentMetadataId;
+      }
+    }
+
+    // Kundlås-scope för beräknade fält (samma regel som för lagrade fält ovan).
+    const computedScope = objekt.customerId
+      ? await getCustomerSelfAndAncestorIds(tenantId, objekt.customerId)
+      : new Set<string>();
+
+    // Numeriska syskonvärden per familj (parentMetadataId → { fältnamn: nummer }).
+    const baseValuesByFamily = new Map<string, Record<string, number>>();
+    const familiesPresent = new Set<string>();
+    const existingKatalogIds = new Set(filteredMetadata.map((m) => m.metadataKatalogId));
+    for (const entry of filteredMetadata) {
+      const parentId = (entry.katalog as any).parentMetadataId as string | null;
+      if (!parentId) continue;
+      familiesPresent.add(parentId);
+      let values = baseValuesByFamily.get(parentId);
+      if (!values) {
+        values = {};
+        baseValuesByFamily.set(parentId, values);
+      }
+      const num = entry.vardeInteger ?? entry.vardeDecimal;
+      if (typeof num === "number" && Number.isFinite(num)) {
+        values[entry.katalog.namn] = num;
+      }
+    }
+
+    // Gruppera beräknade fält per familj. Objektvyn är värdedriven: vi injicerar
+    // bara beräknade fält i familjer som faktiskt har minst ett värde på objektet.
+    const computedByFamily = new Map<string, MetadataKatalog[]>();
+    for (const t of computedTypes) {
+      const pid = t.parentMetadataId!;
+      if (!familiesPresent.has(pid)) continue;
+      if (hasAnyLock && !isMetadataAllowedForCustomerScope(customerLinks.get(t.id), computedScope)) {
+        continue;
+      }
+      const arr = computedByFamily.get(pid) ?? [];
+      arr.push(t);
+      computedByFamily.set(pid, arr);
+    }
+
+    for (const entry of Array.from(computedByFamily.entries())) {
+      const [parentId, fields] = entry;
+      const baseValues = baseValuesByFamily.get(parentId) ?? {};
+      // Beräknade syskon skickas in som beräknade fält så formler kan referera
+      // varandra (t.ex. volym = yta * hojd). computeFamilyValues löser ordningen
+      // och detekterar cirkelreferenser.
+      const results = computeFamilyValues(
+        baseValues,
+        fields.map((f) => ({ namn: f.namn, formel: f.formel })),
+      );
+      for (const f of fields) {
+        // Hoppa över om ett riktigt lagrat värde redan finns för fältet.
+        if (existingKatalogIds.has(f.id)) continue;
+        const res = results[f.namn];
+        const isInteger = f.datatyp === "integer";
+        let vardeInteger: number | null = null;
+        let vardeDecimal: number | null = null;
+        if (res && res.value !== null) {
+          if (isInteger) vardeInteger = Math.round(res.value);
+          else vardeDecimal = res.value;
+        }
+        filteredMetadata.push({
+          id: `computed-${f.id}`,
+          tenantId,
+          objektId,
+          workOrderId: null,
+          metadataKatalogId: f.id,
+          vardeString: null,
+          vardeInteger,
+          vardeDecimal,
+          vardeBoolean: null,
+          vardeDatetime: null,
+          vardeJson: null,
+          vardeReferens: null,
+          arvsNedat: false,
+          stoppaVidareArvning: false,
+          nivaLas: false,
+          koppladTillMetadataId: null,
+          skapadAv: null,
+          uppdateradAv: null,
+          metod: "berakning",
+          createdAt: f.createdAt,
+          updatedAt: f.createdAt,
+          katalog: f as any,
+          source: "computed",
+          computed: true,
+          computedError: res ? res.error : "Kunde inte beräkna",
+        });
+      }
+    }
+  }
+
   return {
     id: objekt.id,
     name: objekt.name,
@@ -674,6 +799,13 @@ export async function createMetadata(data: {
 
   if (!metadataTyp) {
     throw new Error(`Metadata type "${data.metadataTypNamn}" not found for this tenant`);
+  }
+
+  // Task #666: beräknade fält är readonly — värdet härleds vid läsning från
+  // formeln och får aldrig lagras manuellt (skulle annars permanent överskugga
+  // beräkningen i läs-vägen).
+  if (metadataTyp.arBeraknad) {
+    throw new Error(`"${metadataTyp.namn}" är ett beräknat fält och kan inte sättas manuellt — värdet räknas ut automatiskt från formeln.`);
   }
 
   // PDF §7/§14: dropdown-validering (allowedValues)
@@ -858,6 +990,12 @@ export async function updateMetadata(
 
   if (!metadataTyp) {
     throw new Error(`Metadata type not found for this tenant`);
+  }
+
+  // Task #666: beräknade fält är readonly — värdet härleds vid läsning från
+  // formeln och får aldrig lagras manuellt.
+  if (metadataTyp.arBeraknad) {
+    throw new Error(`"${metadataTyp.namn}" är ett beräknat fält och kan inte ändras manuellt — värdet räknas ut automatiskt från formeln.`);
   }
 
   // PDF §7/§14: dropdown-validering (allowedValues) — gäller även uppdatering

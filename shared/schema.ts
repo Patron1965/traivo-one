@@ -3844,6 +3844,13 @@ export const metadataKatalog = pgTable("metadata_katalog", {
   // FK hanteras separat (jfr koppladTillMetadataId) via migrations/0056.
   parentMetadataId: varchar("parent_metadata_id"),
 
+  // Task #666: Beräknade metadatafält. Ett fält kan markeras som beräknat och ges
+  // en formel som refererar syskonfält inom samma familj (t.ex. "langd * bredd").
+  // Endast de fyra räknesätten + parenteser. Värdet härleds vid läsning (lagras
+  // ej) och visas readonly. Nullable/default = back-compat (expand-contract).
+  arBeraknad: boolean("ar_beraknad").default(false).notNull(),
+  formel: text("formel"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_metadata_katalog_tenant_namn").on(table.tenantId, table.namn),
@@ -4048,12 +4055,18 @@ export type InsertMetadataHistorik = z.infer<typeof insertMetadataHistorikSchema
 // Utökade typer för metadata med ärvningsinformation
 export interface MetadataVardenWithKatalog extends MetadataVarden {
   katalog: MetadataKatalog;
-  source: 'local' | 'inherited';
+  source: 'local' | 'inherited' | 'computed';
   fromObject?: {
     id: string;
     namn: string;
     level: number;
   };
+  // Task #666: beräknade fält. För syntetiska computed-rader sätts `computed` och
+  // antingen ett räknat värde (i vardeInteger/vardeDecimal) eller `computedError`
+  // (svenskt felmeddelande) när formeln inte kunde utvärderas (okänt fält,
+  // division med noll, cirkelreferens). Ordinarie rader lämnar fälten odefinierade.
+  computed?: boolean;
+  computedError?: string | null;
 }
 
 export interface ObjectWithAllMetadataEAV {
