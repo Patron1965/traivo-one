@@ -18,6 +18,7 @@ import type { Resource } from "@shared/schema";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useLocalizedObjectName } from "@/lib/object-name";
 import { useToast } from "@/hooks/use-toast";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
@@ -193,6 +194,7 @@ interface SimpleFieldAppProps {
 
 export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const { toast } = useToast();
+  const localizedObjectName = useLocalizedObjectName();
   const { focusMode, setFocusMode } = useFocusMode();
   const [view, setView] = useState<View>("jobs");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -1324,7 +1326,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               {getPriorityBadge(selectedJob.priority)}
               <OrderStatusBadge status={selectedJob.orderStatus} />
             </div>
-            <p className="text-sm text-muted-foreground truncate">{selectedJob.objectName}</p>
+            <p className="text-sm text-muted-foreground truncate">{localizedObjectName(selectedJob.objectName, selectedJob.objectNameTranslations)}</p>
           </div>
           <div className="flex items-center gap-2">
             {isOnBreak && (
@@ -2958,7 +2960,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                     </div>
                     <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
                       <MapPin className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{job.objectAddress || job.objectName}</span>
+                      <span className="truncate">{job.objectAddress || localizedObjectName(job.objectName, job.objectNameTranslations)}</span>
                     </div>
                     {job.plannedNotes && (
                       <div className="flex items-start gap-1.5 mt-1.5 p-1.5 rounded bg-chart-1/10 dark:bg-chart-1/15 border border-chart-1/20 dark:border-chart-1/80" data-testid={`planned-notes-preview-${job.id}`}>

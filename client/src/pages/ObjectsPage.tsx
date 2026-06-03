@@ -38,6 +38,7 @@ import { ObjectMetadataPanel } from "@/components/ObjectMetadataPanel";
 import { ObjectPayersPanel } from "@/components/ObjectPayersPanel";
 import { ObjectParentsPanel } from "@/components/ObjectParentsPanel";
 import { ObjectDisplayNames } from "@/components/ObjectDisplayNames";
+import { useLocalizedObjectName } from "@/lib/object-name";
 import { ObjectApplicableArticlesPanel } from "@/components/ObjectApplicableArticlesPanel";
 import { ObjectContactsDialog } from "@/components/ObjectContactsPanel";
 import { ObjectImagesDialog } from "@/components/ObjectImagesGallery";
@@ -112,6 +113,7 @@ export default function ObjectsPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { t } = useTerminology();
+  const localizedObjectName = useLocalizedObjectName();
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [typeFilter, setTypeFilterRaw] = useState("all");
   const [accessFilter, setAccessFilterRaw] = useState("all");
@@ -1025,9 +1027,12 @@ export default function ObjectsPage() {
                 onClick={(e) => { e.stopPropagation(); navigate(`/objects/${obj.id}`); }}
                 data-testid={`link-object-detail-${obj.id}`}
               >
-                {((obj as any).displayName && (obj as any).displayName !== obj.name)
-                  ? (obj as any).displayName
-                  : (obj.name && obj.name !== "0" ? obj.name : obj.objectNumber || obj.name)}
+                {(() => {
+                  const localName = localizedObjectName(obj.name, (obj as any).nameTranslations);
+                  if (localName && localName !== obj.name) return localName;
+                  if ((obj as any).displayName && (obj as any).displayName !== obj.name) return (obj as any).displayName;
+                  return localName && localName !== "0" ? localName : obj.objectNumber || localName;
+                })()}
               </span>
               {obj.objectNumber && obj.name && obj.name !== "0" && (
                 <span className="text-xs text-muted-foreground font-mono">{obj.objectNumber}</span>

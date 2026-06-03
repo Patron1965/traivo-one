@@ -14,6 +14,7 @@ import {
 } from "./types";
 import { SubStepsExpander } from "./DndComponents";
 import { WorkOrderMetadataPanel } from "../WorkOrderMetadataPanel";
+import { useLocalizedObjectName } from "@/lib/object-name";
 
 interface JobCardProps {
   job: WorkOrderWithObject;
@@ -40,6 +41,7 @@ export const JobCard = memo(function JobCard({
   timewindowMap, expandedSubSteps, onJobClick, onUnschedule, onToggleSubStep, onOpenDepChain,
   selectedJobIds, onToggleSelection, onEscalateUrgent,
 }: JobCardProps) {
+  const localizedObjectName = useLocalizedObjectName();
   const execStatus = (job as { executionStatus?: string }).executionStatus || "not_planned";
   const execIndex = executionStatusOrder.indexOf(execStatus);
   const execProgress = ((execIndex + 1) / executionStatusOrder.length) * 100;
@@ -134,7 +136,7 @@ export const JobCard = memo(function JobCard({
                 </Tooltip>
               )}
             </div>
-            <div className="text-xs text-muted-foreground truncate">{job.objectName || "Okänt objekt"}</div>
+            <div className="text-xs text-muted-foreground truncate">{localizedObjectName(job.objectName, job.objectNameTranslations) || "Okänt objekt"}</div>
             {(job.metadata as Record<string, string> | null)?.teamName && (
               <Badge variant="outline" className="text-[9px] h-4 gap-0.5 mt-0.5" style={{ borderColor: "#3B82F6" }} data-testid={`team-badge-${job.id}`}>
                 <UsersRound className="h-2.5 w-2.5" />

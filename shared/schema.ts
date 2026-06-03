@@ -1458,6 +1458,9 @@ export type WorkOrder = typeof workOrders.$inferSelect;
 export type InsertWorkOrder = z.infer<typeof insertWorkOrderSchema>;
 export type WorkOrderWithObject = WorkOrder & {
   objectName: string | null;
+  // Task #638: språkmärkta visningsnamn för objektet (lang → namn). Påverkar
+  // aldrig kolumn E — endast hur namnet renderas i valt UI-språk.
+  objectNameTranslations?: Record<string, string> | null;
   objectAddress: string | null;
   // Åtkomstinformation från objektet
   objectAccessCode: string | null;
