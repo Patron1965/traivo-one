@@ -24,6 +24,9 @@ interface FeatureSection {
   features: { name: string; description: string }[];
 }
 
+// Uppdatera detta datum när funktionslistan nedan ändras.
+const LAST_UPDATED = new Date(2026, 5, 3);
+
 const systemFeatures: FeatureSection[] = [
   {
     title: "Kluster - Kärnkoncept",
@@ -51,11 +54,29 @@ const systemFeatures: FeatureSection[] = [
     title: "Objekthantering",
     icon: Building2,
     features: [
-      { name: "Hierarkisk struktur", description: "Område → Fastighet → Rum med obegränsad nästning" },
+      { name: "Hierarkisk struktur", description: "Område → Fastighet → Rum med obegränsad nästning och flera föräldrar per objekt" },
+      { name: "Skapa objekt v2", description: "Guidat objektskapande med automatiskt systemnummer och inbyggd metadata-byggare" },
+      { name: "Barnobjekt med arv", description: "Skapa underobjekt som ärver metadata och tillgångsinfo från primär förälder" },
+      { name: "Kopiera objekt", description: "Klona ett objekt med nytt systemnummer och kopierad metadata (utan barn)" },
+      { name: "Släktnamn & multi-förälder", description: "Hierarkiska visningsnamn; ett objekt kan ha flera föräldrar med en primär" },
+      { name: "Detaljpanel i listan", description: "Snabbvy med metadata, arbetsordrar, avvikelser och historik direkt från objektlistan" },
       { name: "Tillgångsinformation", description: "Öppet, kod, nyckel/bricka, personligt möte med detaljerad info" },
       { name: "Kärlhantering", description: "K1 (standard), K2 (pant), K3 (matavfall), K4 (övrigt)" },
-      { name: "Kundkoppling", description: "Länkning till bostadsbolag och serviceboenden" },
       { name: "Ställtidsstatistik", description: "Historik och genomsnitt per objekt" },
+    ]
+  },
+  {
+    title: "Metadata & egenskaper",
+    icon: Layers,
+    features: [
+      { name: "Metadatakatalog", description: "Definierbara fälttyper per tenant med datatyp, tillåtna värden och områdesindelning" },
+      { name: "Områdeshantering", description: "Gruppera metadatafält i kategorier med drag-omordning" },
+      { name: "Sammansatta fält", description: "Fält med underfält (punktnotation) som lagras som ett strukturerat värde" },
+      { name: "Beräknade fält", description: "Formelbaserade fält som räknas ut automatiskt vid läsning" },
+      { name: "Ursprungsmärkning", description: "Värden märks som eget, ärvt, system eller tjänst — auto-genererade är skrivskyddade" },
+      { name: "Systemgenererad metadata", description: "Livshändelser (skapad/slutförd/inställd/fakturerad order, felanmälan) skrivs automatiskt till objektet" },
+      { name: "Koppling till ordertyper & artiklar", description: "Fält kopplas till ordertyper och artiklar med varning vid dubbelkoppling" },
+      { name: "Import-matchning", description: "Katalognamn fungerar som stabila nycklar för Excel-import och filter" },
     ]
   },
   {
@@ -83,6 +104,8 @@ const systemFeatures: FeatureSection[] = [
     icon: ClipboardList,
     features: [
       { name: "Statusflöde", description: "Skapad → Förplanerad → Resurs → Låst → Utförd → Fakturerad" },
+      { name: "Arbetsorder-detaljvy", description: "Egen sida per arbetsorder med period/SLA, anteckningar, material, historik och fältbilder" },
+      { name: "Ordertyp-kopplade fält", description: "Metadatafält per ordertyp visas och redigeras i både ny order och redigering" },
       { name: "Orderrader", description: "Artiklar med automatisk prisupplösning" },
       { name: "Team-tilldelning", description: "Förplanering till team innan resurstilldelning" },
       { name: "Orderlåsning", description: "Lås order innan utförande för stabilitet" },
@@ -107,6 +130,17 @@ const systemFeatures: FeatureSection[] = [
       { name: "Prislistehierarki", description: "Generell → Kundunik → Rabattbrev (3 nivåer)" },
       { name: "Automatisk prisupplösning", description: "Rätt pris väljs automatiskt baserat på hierarki" },
       { name: "Artikeltyper", description: "Kategorisering för filtrering och rapportering" },
+    ]
+  },
+  {
+    title: "Kundhierarki & fakturering",
+    icon: Receipt,
+    features: [
+      { name: "Kundhierarki", description: "Central → område → lokal kund med arv uppåt via förälderkund" },
+      { name: "Tre fakturanivåer", description: "Fakturamottagare på central/område/lokal nivå med konfliktdetektering" },
+      { name: "Frysta priser & mottagare", description: "Pris och fakturamottagare fryses på arbetsordern vid utförande" },
+      { name: "Samlingsfakturor", description: "Köa och gruppera klara arbetsordrar per mottagare till en samlad faktura" },
+      { name: "Indexjustering", description: "Justera prislistor med index per datum och procent" },
     ]
   },
   {
@@ -276,7 +310,7 @@ export default function SystemOverviewPage() {
       
       doc.setFontSize(10);
       doc.setTextColor(100);
-      doc.text(`Systemöversikt för Traivo - ${new Date().toLocaleDateString("sv-SE")}`, pageWidth / 2, yPos, { align: "center" });
+      doc.text(`Systemöversikt för Traivo - ${LAST_UPDATED.toLocaleDateString("sv-SE")}`, pageWidth / 2, yPos, { align: "center" });
       doc.setTextColor(0);
       yPos += 15;
 
@@ -402,7 +436,7 @@ export default function SystemOverviewPage() {
           <p className="text-muted-foreground">Komplett funktionslista för Traivo</p>
           <div className="flex items-center gap-2 mt-2">
             <Badge variant="outline" className="text-xs">
-              Uppdaterad: {format(new Date(), "d MMM yyyy", { locale: sv })}
+              Uppdaterad: {format(LAST_UPDATED, "d MMM yyyy", { locale: sv })}
             </Badge>
             <Badge variant="secondary" className="text-xs bg-chart-2/15 text-chart-2">
               {systemFeatures.reduce((acc, s) => acc + s.features.length, 0)} funktioner live
