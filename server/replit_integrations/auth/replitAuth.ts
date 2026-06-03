@@ -28,6 +28,12 @@ export function getSession() {
     ttl: sessionTtl,
     tableName: "sessions",
   });
+  // I den inbäddade Workspace-förhandsvisningen körs appen i en cross-site iframe
+  // (topp-ramen är replit.com). Med default SameSite=Lax skickas aldrig session-
+  // cookien i den kontexten, så användaren förblir utloggad i preview. I dev sätter
+  // vi därför SameSite=None (kräver Secure, redan satt) så cookien följer med i
+  // iframen. I produktion behålls "lax" för att inte vidga CSRF-ytan.
+  const isProd = process.env.NODE_ENV === "production";
   return session({
     secret: process.env.SESSION_SECRET!,
     store: sessionStore,
@@ -36,6 +42,7 @@ export function getSession() {
     cookie: {
       httpOnly: true,
       secure: true,
+      sameSite: isProd ? "lax" : "none",
       maxAge: sessionTtl,
     },
   });

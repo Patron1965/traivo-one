@@ -18,3 +18,4 @@
 - [Två metadata-system](dual-metadata-systems.md) — engelskt (metadataDefinitions/objectMetadata) vs svenskt (metadataKatalog/Varden/Historik); import skriver svenskt, export läser engelskt → round-trip-drift.
 - [Sammansatta metadatafält (punktnotation)](composite-metadata-import.md) — `fält.underfält`-kolumner grupperas till ETT JSON-fält; skrivs via vanlig metadata-väg men tvingad json-datatyp (asJsonKatalog) → varde_json.
 - [Metadata värde-ursprung](metadata-origin-model.md) — `metod` bär ursprung (system/tjanst/utforande=read-only); guards+badges måste behandla auto-origin på server OCH frontend; artiklar kopplar metadata via namn ej id.
+- [Replit Auth i preview-iframe](replit-auth-preview-iframe.md) — login failar i inbäddad preview (cross-site iframe): dev-cookie `SameSite=None` + bryt ut ur iframen via `goToLogin()`; prod oförändrad (Lax).

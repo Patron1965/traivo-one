@@ -1,11 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Truck } from "lucide-react";
+import { goToLogin } from "@/lib/auth-utils";
 
 export default function FieldLoginPage() {
   const handleLogin = () => {
     sessionStorage.setItem("field_login_redirect", "/mobile");
-    window.location.href = "/api/login";
+    goToLogin("/mobile");
   };
 
   return (

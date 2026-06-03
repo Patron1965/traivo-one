@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { UrgentJobDialog } from "@/components/UrgentJobDialog";
+import { goToLogin } from "@/lib/auth-utils";
 
 export default function PlannerMapPage() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -40,7 +41,7 @@ export default function PlannerMapPage() {
   }, [sessionExpired]);
 
   const startRelogin = () => {
-    window.location.href = "/api/login?returnTo=" + encodeURIComponent("/planner-map");
+    goToLogin("/planner-map");
   };
 
   const openPopout = () => {

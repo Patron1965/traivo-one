@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { goToLogin } from "@/lib/auth-utils";
 import traivoLogo from "@assets/traivo_logo_dark_mode.png";
 import {
   ArrowRight,
@@ -175,7 +176,13 @@ export default function LoginPage() {
                 asChild
                 data-testid="button-login-replit"
               >
-                <a href="/api/login">
+                <a
+                  href="/api/login"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    goToLogin();
+                  }}
+                >
                   Logga in med Replit
                   <ArrowRight className="h-4 w-4" />
                 </a>
