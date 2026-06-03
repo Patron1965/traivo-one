@@ -1,0 +1,346 @@
+Analys av KINAB:s input för Traivo
+Det här är en mycket viktig diskussion eftersom den egentligen definierar Traivos kärnmodell för data, arbetsflöden och ärendehantering.
+
+Min tolkning är att Mats beskriver en arkitektur som kan bli betydligt starkare än ett traditionellt arbetsordersystem.
+
+Kärninsikten
+Allting i systemet kan delas upp i fyra lager:
+
+Objekt
+Metadata
+Orderkoncept
+Uppgifter / Ärenden
+Detta är egentligen den modell som framträder genom hela samtalet.
+
+Lager 1 – Objekt
+Objekt är allt som existerar i verkligheten.
+
+Exempel:
+
+Matavfallskärl
+Restavfallskärl
+Återvinningsrum
+Nedgrävd container
+Gatlykta
+Lekplats
+Fastighet
+Kranbil
+Objektet är alltid grundbäraren av information.
+
+Varje objekt har:
+
+Objekt-ID
+Position
+Tillhörande kluster
+Metadata
+Lager 2 – Metadata
+Här kommer den första viktiga designprincipen.
+
+Mats delar metadata i tre kategorier.
+
+Utifrån materialet skulle jag formulera dem som:
+
+Typ A – Beskrivande metadata
+Exempel:
+
+Adress
+GPS-position
+Storlek
+Antal
+Serienummer
+Foto
+Dokumentlänk
+Kontaktperson
+Detta är objektets "sanning".
+
+Typ B – Operativ metadata
+Exempel:
+
+Tvättintervall
+Servicenivå
+SLA
+Kundavtal
+Utförandekod
+Prioritet
+Denna metadata används för att generera arbete.
+
+Typ C – Händelsemetadata
+Den tredje typen nämns inte explicit men framträder tydligt.
+
+Exempel:
+
+Felanmälningar
+Avvikelser
+Ratings
+Kundfeedback
+Interna observationer
+Detta är egentligen inte egenskaper hos objektet.
+
+Det är information om objektet.
+
+Det är en mycket viktig skillnad.
+
+Lager 3 – Orderkoncept
+Det här är kanske den starkaste idén i hela mötet.
+
+Mats skiljer på:
+
+Kundens beställning
+
+och
+
+Traivos interna orderkoncept.
+
+Exempel:
+
+Kunden beställer:
+
+"Tvättavtal"
+
+Traivo översätter detta till:
+
+Orderkoncept:
+
+Tvätta matavfallskärl
+Tvätta restavfallskärl
+Ta förebild
+Ta efterbild
+Uppdatera antal
+Orderkonceptet blir alltså en mall.
+
+Jag skulle kalla detta:
+
+"Service Blueprint"
+
+eller
+
+"Service Template"
+
+i systemdesignen.
+
+Lager 4 – Uppgifter
+Orderkonceptet genererar uppgifter.
+
+Exempel:
+
+Objekt:
+
+4 matavfallskärl
+
+Genererad uppgift:
+
+Tvätta kärl 1
+Tvätta kärl 2
+Tvätta kärl 3
+Tvätta kärl 4
+eller
+
+Tvätta 4 matavfallskärl
+beroende på detaljnivå.
+
+Det här är det som faktiskt planeras.
+
+Viktig ny funktion: Beroendeuppgifter
+Detta är något många FM-system missar.
+
+Exempel:
+
+Huvuduppgift:
+
+Byta klistermärke
+Beroendeuppgifter:
+
+Hämta klistermärke från lager
+Packa klistermärke i bilen
+eller
+
+Huvuduppgift:
+
+Besöka kund
+Beroendeuppgift:
+
+Ring kund två timmar innan
+Detta innebär att Traivo behöver ett dependency-system.
+
+Exempel:
+
+text
+Copy
+Uppgift A
+    ↓
+Uppgift B
+    ↓
+Uppgift C
+B får inte startas innan A är klar.
+
+Utförandekoder
+Här kommer en mycket stark planeringsfunktion.
+
+Varje uppgift får:
+
+Utförandekod
+Kompetenskod
+Resurskod
+Exempel:
+
+Kod	Resurs
+SMALL_BIN	Småkärlsteam
+LARGE_BIN	Kranbil
+CALL_CUSTOMER	Kundservice
+STICKER	Lagerpersonal
+Detta gör att samma uppgiftsmotor kan planera allt.
+
+Feedback som första klassens objekt
+Det här är kanske den viktigaste insikten i hela dokumentet.
+
+Normala system gör felanmälan till en arbetsorder direkt.
+
+Mats vill istället att:
+
+Felanmälan först blir ett ärende.
+
+Mycket klokt.
+
+Föreslagen modell
+Feedback
+Innehåller:
+
+Text
+Bilder
+Avsändare
+GPS
+Objektreferens
+Status:
+
+Inkommen
+Mottagen
+Under behandling
+Avslutad
+Arkiverad
+Först därefter
+Planeraren kan:
+
+"Skapa order"
+
+vilket leder till:
+
+Orderkoncept → Uppgifter
+
+Detta separerar:
+
+Information
+
+från
+
+Arbete
+
+vilket är helt rätt arkitektur.
+
+QR-kod-konceptet
+Det här kan bli mycket starkt kommersiellt.
+
+Två lägen:
+
+Objekt-specifik QR
+QR → direkt till objekt
+
+Exempel:
+
+Återvinningsrum A
+
+Dynamisk QR
+QR → GPS-sökning
+
+Systemet visar:
+
+Soprum A
+Soprum B
+Gatlykta C
+inom exempelvis 50 meter.
+
+Användaren väljer objekt.
+
+Detta gör att samma QR-kod kan användas överallt.
+
+AI-agent för felanmälningar
+Här finns stor potential.
+
+Användaren skriver:
+
+"Locket på den bruna tunnan är trasigt"
+
+AI tolkar:
+
+json
+Copy
+{
+  "objekttyp": "Matavfallskärl",
+  "problem": "Trasigt lock",
+  "prioritet": "Normal"
+}
+och skapar strukturerad metadata.
+
+Det passar perfekt in i Traivos AI-strategi.
+
+Rekommenderad domänmodell för Traivo
+Jag skulle idag definiera följande huvudentiteter:
+
+text
+Copy
+Organisation
+    ↓
+Kluster
+    ↓
+Objekt
+    ↓
+Metadata
+Separat:
+
+text
+Copy
+Beställning
+    ↓
+Orderkoncept
+    ↓
+Uppgifter
+Parallellt:
+
+text
+Copy
+Feedback
+    ↓
+Ärende
+    ↓
+Orderkoncept (valfritt)
+    ↓
+Uppgifter
+Det viktigaste beslutet för Traivo
+Efter att ha läst hela sessionen tycker jag att den mest avgörande designprincipen är:
+
+Allt arbete i Traivo ska utföras via Uppgifter, men alla uppgifter behöver inte komma från Beställningar.
+
+Uppgifter kan komma från:
+
+Kundorder
+Abonnemang
+Felanmälningar
+Avvikelser
+AI-genererade rekommendationer
+Interna observationer
+Detta gör Traivo till en generell operativ plattform snarare än ett traditionellt arbetsordersystem.
+
+Rekommendation till nästa arkitekturmöte
+Jag skulle prioritera att definiera följande datamodell i detalj:
+
+Objekt
+Metadata
+Feedback/Ärende
+Orderkoncept
+Uppgift
+Beroendeuppgift
+Utförandekod
+Statusmaskiner för:
+Ärenden
+Order
+Uppgifter
+När dessa åtta delar är definierade har ni i princip kärnan i hela Traivos operativa motor.
