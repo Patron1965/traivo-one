@@ -3,7 +3,21 @@ import * as schema from "../shared/schema";
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import { getTableName, is } from "drizzle-orm";
 
+// När `--warn` anges (eller SCHEMA_DRIFT_WARN_ONLY=true) loggas drift men exit-koden
+// förblir 0 så att den inte blockerar. Utan flaggan ger drift (missing > 0) exit-kod 1
+// så att den kan användas som blockerande validation-step / post-merge-gate.
+const WARN_ONLY =
+  process.argv.includes("--warn") ||
+  process.env.SCHEMA_DRIFT_WARN_ONLY === "true";
+
 async function main() {
+  if (!process.env.DATABASE_URL) {
+    console.error(
+      "[schema-drift] DATABASE_URL är inte satt — hoppar över drift-kontroll.",
+    );
+    process.exit(0);
+    return;
+  }
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
   const tables: PgTable[] = Object.values(schema).filter((v) =>
@@ -78,6 +92,26 @@ async function main() {
   console.log(`Missing indexes: ${missingIdxCount}`);
 
   await pool.end();
+
+  const totalMissing = missingTableCount + missingColCount + missingIdxCount;
+  if (totalMissing > 0) {
+    console.error(
+      `\n[schema-drift] ⚠ Schema-drift upptäckt: ${totalMissing} saknade ` +
+        `objekt (${missingTableCount} tabeller, ${missingColCount} kolumner, ` +
+        `${missingIdxCount} index). DB är inte i synk med shared/schema.ts. ` +
+        `Kör 'npm run db:push' och tillämpa relevanta migrations i scripts/post-merge.sh.`,
+    );
+    if (!WARN_ONLY) {
+      process.exit(1);
+    }
+    console.error(
+      "[schema-drift] (--warn) Drift ignoreras för exit-kod, men måste åtgärdas före merge.",
+    );
+  } else {
+    console.log(
+      "\n[schema-drift] ✓ Ingen drift — DB matchar shared/schema.ts.",
+    );
+  }
 }
 
 main().catch((e) => {

@@ -23,3 +23,14 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
 else
   echo "[post-merge] psql not available or DATABASE_URL unset — skipping raw SQL index migrations"
 fi
+
+# Verify the live DB matches shared/schema.ts after push + raw migrations.
+# Fails the post-merge run (exit != 0) if any tables/columns/indexes are missing,
+# so schema-drift is caught here instead of surfacing as "Kunde inte hämta data"
+# in production. See scripts/schema-drift-check.ts (registered validation: schema-drift).
+if [ -n "$DATABASE_URL" ]; then
+  echo "[post-merge] Running schema-drift check"
+  npx tsx scripts/schema-drift-check.ts
+else
+  echo "[post-merge] DATABASE_URL unset — skipping schema-drift check"
+fi
