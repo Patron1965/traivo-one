@@ -11,6 +11,16 @@ import { useToast } from "@/hooks/use-toast";
 import { ChevronRight, Languages, Network, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface DisplayNameChain {
   parentId: string | null;
@@ -80,6 +90,8 @@ export function ObjectDisplayNames({
   const { toast } = useToast();
   // "" = internt namn (kolumn E); annars vald språkkod.
   const [language, setLanguage] = useState<string>("");
+  // Task #669: bekräfta innan primär förälder byts (påverkar metadata-/fält-arv).
+  const [pendingPrimary, setPendingPrimary] = useState<DisplayNameChain | null>(null);
 
   const { data, isLoading } = useQuery<ObjectDisplayNamesData>({
     queryKey: ["/api/objects", objectId, "display-names", language],
@@ -101,6 +113,7 @@ export function ObjectDisplayNames({
       queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "parents"] });
       queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
       toast({ title: "Primär förälder uppdaterad" });
+      setPendingPrimary(null);
     },
     onError: () => {
       toast({ title: "Kunde inte byta primär förälder", variant: "destructive" });
@@ -188,7 +201,7 @@ export function ObjectDisplayNames({
                     size="sm"
                     variant="outline"
                     className="h-6 shrink-0 px-2 text-xs"
-                    onClick={() => setPrimaryMutation.mutate(c.parentId!)}
+                    onClick={() => setPendingPrimary(c)}
                     disabled={setPrimaryMutation.isPending}
                     data-testid={`button-set-primary-display-${idx}`}
                   >
@@ -202,6 +215,46 @@ export function ObjectDisplayNames({
           ))}
         </div>
       )}
+
+      <AlertDialog
+        open={pendingPrimary !== null}
+        onOpenChange={(open) => {
+          if (!open && !setPrimaryMutation.isPending) setPendingPrimary(null);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-confirm-set-primary">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Byta primär förälder?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Du är på väg att göra{" "}
+              <span className="font-medium text-foreground">{pendingPrimary?.name || "—"}</span>{" "}
+              till objektets primära förälder. Metadata- och fältarv (t.ex. portkod, nyckel
+              och access-info) räknas alltid om från den primära föräldern och kommer att
+              uppdateras enligt den nya kedjan. Tidigare nedärvda värden kan ändras.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={setPrimaryMutation.isPending}
+              data-testid="button-cancel-set-primary"
+            >
+              Avbryt
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (pendingPrimary?.parentId) {
+                  setPrimaryMutation.mutate(pendingPrimary.parentId);
+                }
+              }}
+              disabled={setPrimaryMutation.isPending}
+              data-testid="button-confirm-set-primary"
+            >
+              {setPrimaryMutation.isPending ? "Byter…" : "Gör till primär"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
