@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useMetadataAreas } from "@/hooks/use-metadata-areas";
 import { MetadataAreaSelect } from "@/components/MetadataAreaSelect";
+import { MetadataAreaManagerDialog } from "@/components/MetadataAreaManager";
 import {
   Dialog,
   DialogContent,
@@ -161,6 +162,8 @@ export default function MetadataSettingsPage() {
   const { toast } = useToast();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingType, setEditingType] = useState<MetadataKatalog | null>(null);
+  // Task #678: dedikerad områdeshantering (rymlig panel) öppnas från headern.
+  const [areaManagerOpen, setAreaManagerOpen] = useState(false);
 
   // Task #663: filtrera listan på kund. 'all' = visa alla typer. Annars visas
   // generella fält (utan kundlås) + fält låsta till vald kund eller någon av dess
@@ -327,6 +330,14 @@ export default function MetadataSettingsPage() {
             Lägg till standardtyper
           </Button>
         )}
+        <Button
+          variant="outline"
+          onClick={() => setAreaManagerOpen(true)}
+          data-testid="button-open-area-manager"
+        >
+          <Layers className="h-4 w-4 mr-2" />
+          Hantera områden
+        </Button>
         <Select value={customerFilter} onValueChange={setCustomerFilter}>
           <SelectTrigger className="w-56" data-testid="select-customer-filter">
             <SelectValue placeholder="Filtrera på kund" />
@@ -518,6 +529,8 @@ export default function MetadataSettingsPage() {
             </Card>
           ))
       )}
+
+      <MetadataAreaManagerDialog open={areaManagerOpen} onOpenChange={setAreaManagerOpen} />
 
       <Dialog open={!!editingType} onOpenChange={(open) => !open && setEditingType(null)}>
         <DialogContent className="max-w-lg">
