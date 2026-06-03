@@ -3604,7 +3604,7 @@ export const customerInvoices = pgTable("customer_invoices", {
   index("idx_customer_invoices_recipient").on(table.invoiceRecipientId),
 ]);
 
-export const insertCustomerInvoiceSchema = createInsertSchema(customerInvoices).omit({ id: true, createdAt: true });
+export const insertCustomerInvoiceSchema = createInsertSchema(customerInvoices).omit({ id: true });
 export type CustomerInvoice = typeof customerInvoices.$inferSelect;
 export type InsertCustomerInvoice = z.infer<typeof insertCustomerInvoiceSchema>;
 
