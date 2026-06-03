@@ -11,6 +11,7 @@ import { eq, and, isNull, sql, or, inArray } from "drizzle-orm";
 import { primaryPayerCustomerIdSql, objectHasPrimaryCustomerSql } from "../services/object-customer";
 import { ensureClusterAndAssign } from "../auto-cluster";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
+import { copyObjectLocalMetadata } from "../metadata-queries";
 
 export async function registerCustomerRoutes(app: Express) {
 
@@ -733,12 +734,75 @@ app.get("/api/objects/:id/work-orders", asyncHandler(async (req, res) => {
   res.json(objectOrders);
 }));
 
+// Task #681: read-only förhandsvisning av nästa systemnummer för skapa-dialogen.
+// Måste ligga FÖRE "/api/objects/:id" annars matchar :id "next-number".
+app.get("/api/objects/next-number", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const objectNumber = await storage.previewNextObjectNumber(tenantId);
+  res.json({ objectNumber });
+}));
+
 app.get("/api/objects/:id", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const object = await storage.getObject(req.params.id);
   const verified = verifyTenantOwnership(object, tenantId);
   if (!verified) throw new NotFoundError("Objekt");
   res.json(verified);
+}));
+
+// Task #681: klona ett objekt — nytt systemnummer, "(kopia)"-namn och alla
+// lokala metadatavärden kopierade. Barnobjekt kopieras INTE.
+app.post("/api/objects/:id/copy", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const source = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(source, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const src = source!;
+  const requestedName = typeof req.body?.name === "string" && req.body.name.trim() !== ""
+    ? req.body.name.trim()
+    : `${src.name} (kopia)`;
+  const clone = await storage.createObject({
+    tenantId,
+    customerId: src.customerId ?? undefined,
+    parentId: src.parentId ?? undefined,
+    name: requestedName,
+    objectType: src.objectType,
+    objectLevel: src.objectLevel,
+    hierarchyLevel: src.hierarchyLevel ?? undefined,
+    address: src.address ?? undefined,
+    city: src.city ?? undefined,
+    postalCode: src.postalCode ?? undefined,
+    latitude: src.latitude ?? undefined,
+    longitude: src.longitude ?? undefined,
+    accessType: src.accessType ?? undefined,
+    accessCode: src.accessCode ?? undefined,
+    keyNumber: src.keyNumber ?? undefined,
+    accessInfo: src.accessInfo ?? undefined,
+    containerCount: src.containerCount ?? undefined,
+    avgSetupTime: src.avgSetupTime ?? undefined,
+    status: "active",
+  } as any);
+
+  let copiedMetadata = 0;
+  let metadataCopyError: string | null = null;
+  try {
+    copiedMetadata = await copyObjectLocalMetadata(src.id, clone.id, tenantId);
+  } catch (err) {
+    metadataCopyError = err instanceof Error ? err.message : "Okänt fel";
+    console.error("Kunde inte kopiera metadata vid objektkopiering:", err);
+  }
+
+  if (clone.customerId) {
+    try {
+      await ensureClusterAndAssign(tenantId, clone.customerId, clone.id);
+    } catch (err) {
+      console.error("Auto-cluster error on object copy:", err);
+    }
+  }
+
+  const updated = await storage.getObject(clone.id);
+  res.status(201).json({ ...(updated || clone), copiedMetadata, metadataCopyError });
 }));
 
 app.get("/api/customers/:customerId/objects", asyncHandler(async (req, res) => {
@@ -839,6 +903,22 @@ app.post("/api/objects/coordinates", asyncHandler(async (req, res) => {
 app.post("/api/objects", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const data = insertObjectSchema.parse({ ...req.body, tenantId });
+
+  // Task #681: defense-in-depth — verifiera att refererad förälder/kund
+  // tillhör samma tenant innan objektet skapas (cross-tenant-skydd).
+  if (data.parentId) {
+    const parent = await storage.getObject(data.parentId);
+    if (!verifyTenantOwnership(parent, tenantId)) {
+      throw new NotFoundError("Förälderobjekt");
+    }
+  }
+  if (data.customerId) {
+    const customer = await storage.getCustomer(data.customerId);
+    if (!verifyTenantOwnership(customer, tenantId)) {
+      throw new NotFoundError("Kund");
+    }
+  }
+
   const object = await storage.createObject(data);
   
   if (object.customerId) {

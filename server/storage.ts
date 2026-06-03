@@ -2584,9 +2584,45 @@ export class DatabaseStorage implements IStorage {
     return { mode: "aggregates", aggregates, total };
   }
 
+  // Task #681: härled nästa lediga sekventiella systemnummer (`OBJ-NNN`) per
+  // tenant. Räknar in soft-deletade rader så nummer aldrig återanvänds. Använt
+  // både för read-only förhandsvisning i skapa-dialogen och vid faktisk
+  // generering (under advisory-lås) i createObject.
+  private async computeNextObjectNumber(
+    tenantId: string,
+    executor: { execute: typeof db.execute } = db,
+  ): Promise<string> {
+    const result = await executor.execute(sql`
+      SELECT COALESCE(MAX(CAST(substring(object_number FROM '^OBJ-([0-9]+)$') AS INTEGER)), 0) AS max_num
+      FROM objects
+      WHERE tenant_id = ${tenantId} AND object_number ~ '^OBJ-[0-9]+$'
+    `);
+    const maxNum = Number(rowsOf<{ max_num: number | string }>(result)[0]?.max_num ?? 0);
+    const next = maxNum + 1;
+    return `OBJ-${String(next).padStart(3, "0")}`;
+  }
+
+  async previewNextObjectNumber(tenantId: string): Promise<string> {
+    return this.computeNextObjectNumber(tenantId);
+  }
+
   async createObject(insertObject: InsertObject): Promise<ServiceObject> {
-    const [object] = await db.insert(objects).values(insertObject).returning();
-    return object;
+    // Explicit nummer (import, kopiering med eget nr) respekteras oförändrat.
+    if (insertObject.objectNumber && String(insertObject.objectNumber).trim() !== "") {
+      const [object] = await db.insert(objects).values(insertObject).returning();
+      return object;
+    }
+    // Auto-generera sekventiellt systemnummer concurrency-safe: ett advisory-lås
+    // per tenant serialiserar MAX+1-beräkningen så två samtidiga skapanden inte
+    // kan landa på samma nummer.
+    return await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext('object_number'), hashtext(${insertObject.tenantId}))`,
+      );
+      const objectNumber = await this.computeNextObjectNumber(insertObject.tenantId, tx);
+      const [object] = await tx.insert(objects).values({ ...insertObject, objectNumber }).returning();
+      return object;
+    });
   }
 
   async updateObject(id: string, data: Partial<InsertObject>): Promise<ServiceObject | undefined> {

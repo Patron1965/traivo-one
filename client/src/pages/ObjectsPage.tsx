@@ -9,7 +9,7 @@
 import { useState, useMemo, useCallback, useEffect, memo } from "react";
 import { useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, versionedUrl } from "@/lib/queryClient";
 import { useTerminology } from "@/hooks/use-terminology";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -28,9 +28,14 @@ import {
   Map as MapIcon, List, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, XCircle,
   Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, Layers, FileUp, Pyramid,
-  ArrowUp, ArrowDown, ArrowUpDown, Network
+  ArrowUp, ArrowDown, ArrowUpDown, Network, Pencil, FolderPlus
 } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { MetadataFieldBuilder, type BuilderFieldValue, type InheritedFieldSeed } from "@/components/MetadataFieldBuilder";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryState } from "@/components/QueryState";
 import { AICard } from "@/components/AICard";
@@ -219,6 +224,19 @@ export default function ObjectsPage() {
     entranceLongitude: null as number | null,
     addressDescriptor: "",
   });
+  // Task #681: barn-läge för skapa-dialogen + metadata-byggarens utdata.
+  const [createParentId, setCreateParentId] = useState<string | null>(null);
+  const [createParentName, setCreateParentName] = useState<string>("");
+  const [metadataFields, setMetadataFields] = useState<BuilderFieldValue[]>([]);
+  const [builderKey, setBuilderKey] = useState(0);
+  // Task #681: full-redigering + radering via radens kontextmeny.
+  const [editObjectOpen, setEditObjectOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    id: "", name: "", objectType: "fastighet", accessType: "open", accessCode: "",
+    address: "", city: "", postalCode: "",
+    latitude: null as number | null, longitude: null as number | null,
+  });
+  const [deleteTarget, setDeleteTarget] = useState<ServiceObject | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -465,20 +483,124 @@ export default function ObjectsPage() {
     },
   });
 
+  // Task #681: förhandsvisa nästa systemnummer i skapa-dialogen.
+  const { data: nextNumberData } = useQuery<{ objectNumber: string }>({
+    queryKey: ["/api/objects/next-number"],
+    queryFn: async () => {
+      const res = await fetch(versionedUrl("/api/objects/next-number"), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: createDialogOpen,
+    staleTime: 0,
+  });
+
+  // Task #681: ärvda metadatavärden från föräldern (barn-läge) → förifyll byggaren.
+  const { data: parentMetadata } = useQuery<{ metadata: any[] }>({
+    queryKey: ["/api/metadata/objects", createParentId],
+    queryFn: async () => {
+      const res = await fetch(versionedUrl(`/api/metadata/objects/${createParentId}`), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!createParentId && createDialogOpen,
+    staleTime: 30000,
+  });
+
+  const inheritedSeeds = useMemo<InheritedFieldSeed[]>(() => {
+    if (!createParentId || !parentMetadata?.metadata) return [];
+    const entryValue = (e: any): string => {
+      if (e.vardeString != null) return String(e.vardeString);
+      if (e.vardeInteger != null) return String(e.vardeInteger);
+      if (e.vardeDecimal != null) return String(e.vardeDecimal);
+      if (e.vardeBoolean != null) return e.vardeBoolean ? "true" : "false";
+      if (e.vardeDatetime != null) return String(e.vardeDatetime);
+      if (e.vardeJson != null) return typeof e.vardeJson === "string" ? e.vardeJson : JSON.stringify(e.vardeJson);
+      return "";
+    };
+    return parentMetadata.metadata
+      .filter((e: any) => e.source !== "computed")
+      .filter((e: any) => (e.source === "local" && e.arvsNedat) || e.source === "inherited")
+      .map((e: any) => ({
+        namn: e.katalog?.namn as string,
+        datatyp: (e.katalog?.datatyp as string) || "text",
+        value: entryValue(e),
+        sourceName: e.fromObject?.namn ?? createParentName,
+        allowedValues: e.katalog?.allowedValues ?? null,
+        area: e.katalog?.area ?? null,
+      }))
+      .filter((s: InheritedFieldSeed) => !!s.namn);
+  }, [createParentId, parentMetadata, createParentName]);
+
+  const resetCreateForm = () => {
+    setNewObject({ name: "", objectType: "fastighet", accessType: "open", accessCode: "", address: "", customerId: "", latitude: null, longitude: null, city: "", postalCode: "", entranceLatitude: null, entranceLongitude: null, addressDescriptor: "" });
+    setCreateParentId(null);
+    setCreateParentName("");
+    setMetadataFields([]);
+    setBuilderKey((k) => k + 1);
+  };
+
   const createObjectMutation = useMutation({
-    mutationFn: async (data: Partial<ServiceObject>) => {
-      return apiRequest("POST", "/api/objects", data);
+    mutationFn: async (payload: { data: Partial<ServiceObject>; metadata: BuilderFieldValue[] }) => {
+      const res = await apiRequest("POST", "/api/objects", payload.data);
+      const created = await res.json();
+      // Task #681: skriv valda metadatavärden på det nyskapade objektet.
+      for (const field of payload.metadata) {
+        if (field.varde === "" || field.varde == null) continue;
+        await apiRequest("POST", "/api/metadata/", {
+          objektId: created.id,
+          metadataTypNamn: field.namn,
+          varde: field.varde,
+        });
+      }
+      return created;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects/next-number"] });
       toast({ title: "Objekt skapat" });
-      setCopyDialogOpen(false);
-      setObjectToCopy(null);
       setCreateDialogOpen(false);
-      setNewObject({ name: "", objectType: "fastighet", accessType: "open", accessCode: "", address: "", customerId: "", latitude: null, longitude: null, city: "", postalCode: "", entranceLatitude: null, entranceLongitude: null, addressDescriptor: "" });
+      resetCreateForm();
     },
     onError: (error: Error) => {
       toast({ title: "Kunde inte skapa objektet", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Task #681: klona objekt via dedikerad server-endpoint (nytt nr + kopierad metadata).
+  const copyObjectMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const res = await apiRequest("POST", `/api/objects/${id}/copy`, { name });
+      return res.json();
+    },
+    onSuccess: (created: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
+      const n = created?.copiedMetadata ?? 0;
+      if (created?.metadataCopyError) {
+        toast({ title: "Objekt kopierat – men metadata misslyckades", description: `Objektet skapades, men metadata kunde inte kopieras: ${created.metadataCopyError}`, variant: "destructive" });
+      } else {
+        toast({ title: "Objekt kopierat", description: n > 0 ? `${n} metadatafält kopierade.` : undefined });
+      }
+      setCopyDialogOpen(false);
+      setObjectToCopy(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte kopiera objektet", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Task #681: radera objekt (soft/hard hanteras serverside).
+  const deleteObjectMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/objects/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
+      toast({ title: "Objekt borttaget" });
+      setDeleteTarget(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort objektet", description: error.message, variant: "destructive" });
     },
   });
 
@@ -548,6 +670,20 @@ export default function ObjectsPage() {
 
   const getChildren = useCallback((parentId: string) =>
     sortObjects(childrenMap.get(parentId) || []), [childrenMap, sortObjects]);
+
+  // Task #681 (T007): vid sökning, expandera vägen till träffarna så att
+  // matchande barnobjekt blir synliga under sina föräldrar i radvyn.
+  useEffect(() => {
+    if (!debouncedSearch) return;
+    if (childrenMap.size === 0) return;
+    setExpandedAreas(prev => {
+      const next = new Set(prev);
+      for (const parentId of childrenMap.keys()) {
+        next.add(parentId);
+      }
+      return next;
+    });
+  }, [debouncedSearch, childrenMap]);
 
   const toggleSort = useCallback((field: SortField) => {
     setSortConfig(prev => {
@@ -669,30 +805,41 @@ export default function ObjectsPage() {
 
   const executeCopy = () => {
     if (!objectToCopy) return;
-    const newObj = {
-      tenantId: objectToCopy.tenantId,
-      customerId: objectToCopy.customerId,
-      parentId: objectToCopy.parentId,
-      name: copyName,
-      objectNumber: `${objectToCopy.objectNumber}-COPY`,
-      objectType: objectToCopy.objectType,
-      objectLevel: objectToCopy.objectLevel,
-      hierarchyLevel: objectToCopy.hierarchyLevel,
-      address: objectToCopy.address,
-      city: objectToCopy.city,
-      postalCode: objectToCopy.postalCode,
-      latitude: objectToCopy.latitude,
-      longitude: objectToCopy.longitude,
-      accessType: objectToCopy.accessType,
-      accessCode: objectToCopy.accessCode,
-      keyNumber: objectToCopy.keyNumber,
-      accessInfo: objectToCopy.accessInfo,
-      containerCount: objectToCopy.containerCount,
-      avgSetupTime: objectToCopy.avgSetupTime,
-      status: "active",
-    };
-    createObjectMutation.mutate(newObj);
+    copyObjectMutation.mutate({ id: objectToCopy.id, name: copyName });
   };
+
+  // Task #681: öppna skapa-dialogen i barn-läge under valt objekt.
+  const handleAddChild = useCallback((parent: ServiceObject) => {
+    resetCreateForm();
+    setCreateParentId(parent.id);
+    setCreateParentName(parent.name || parent.objectNumber || "");
+    setNewObject((p) => ({
+      ...p,
+      name: "",
+      objectType: parent.objectType,
+      customerId: parent.customerId || "",
+    }));
+    setBuilderKey((k) => k + 1);
+    setCreateDialogOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Task #681: öppna full-redigeringsdialogen för ett objekt.
+  const handleEditObject = useCallback((obj: ServiceObject) => {
+    setEditForm({
+      id: obj.id,
+      name: obj.name || "",
+      objectType: obj.objectType,
+      accessType: obj.accessType || "open",
+      accessCode: obj.accessCode || "",
+      address: obj.address || "",
+      city: obj.city || "",
+      postalCode: obj.postalCode || "",
+      latitude: obj.latitude ?? null,
+      longitude: obj.longitude ?? null,
+    });
+    setEditObjectOpen(true);
+  }, []);
 
   const handleCsvFile = useCallback(async (file: File) => {
     const name = file.name.toLowerCase();
@@ -1260,6 +1407,14 @@ export default function ObjectsPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleEditObject(obj)} data-testid={`menu-edit-${obj.id}`}>
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Redigera
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleAddChild(obj)} data-testid={`menu-add-child-${obj.id}`}>
+                      <FolderPlus className="h-4 w-4 mr-2" />
+                      Lägg till underordnat objekt
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleCopyObject(obj)} data-testid={`menu-copy-${obj.id}`}>
                       <Copy className="h-4 w-4 mr-2" />
                       Kopiera
@@ -1309,6 +1464,15 @@ export default function ObjectsPage() {
                         Rensa "saknas i fastighetslista"
                       </DropdownMenuItem>
                     )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => setDeleteTarget(obj)}
+                      className="text-destructive focus:text-destructive"
+                      data-testid={`menu-delete-${obj.id}`}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Ta bort
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </>
@@ -1788,8 +1952,8 @@ export default function ObjectsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCopyDialogOpen(false)}>Avbryt</Button>
-            <Button onClick={executeCopy} disabled={createObjectMutation.isPending} data-testid="button-confirm-copy">
-              {createObjectMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+            <Button onClick={executeCopy} disabled={copyObjectMutation.isPending} data-testid="button-confirm-copy">
+              {copyObjectMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
               Kopiera
             </Button>
           </DialogFooter>
@@ -1952,15 +2116,30 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
 
 
       {/* Create object dialog */}
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent>
+      <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) resetCreateForm(); }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Skapa nytt {t("object_singular").toLowerCase()}</DialogTitle>
+            <DialogTitle>
+              {createParentId ? "Lägg till underordnat objekt" : `Skapa nytt ${t("object_singular").toLowerCase()}`}
+            </DialogTitle>
             <DialogDescription>
-              Fyll i uppgifterna för det nya objektet.
+              {createParentId
+                ? <>Nytt objekt under <span className="font-medium text-foreground">{createParentName}</span>. Ärvda metadatavärden är förifyllda nedan.</>
+                : "Fyll i uppgifterna för det nya objektet."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div>
+              <Label>Systemnummer</Label>
+              <Input
+                value={nextNumberData?.objectNumber ?? "—"}
+                readOnly
+                disabled
+                className="font-mono bg-muted"
+                data-testid="input-new-object-number"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Genereras automatiskt vid skapande.</p>
+            </div>
             <div>
               <Label>Namn</Label>
               <Input
@@ -2036,24 +2215,37 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                 testId="select-new-customer"
               />
             </div>
+            <div className="border-t pt-4">
+              <Label className="mb-2 block">Metadata</Label>
+              <MetadataFieldBuilder
+                key={builderKey}
+                customerId={newObject.customerId || null}
+                inheritedFields={createParentId ? inheritedSeeds : undefined}
+                onChange={setMetadataFields}
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>Avbryt</Button>
+            <Button variant="outline" onClick={() => { setCreateDialogOpen(false); resetCreateForm(); }}>Avbryt</Button>
             <Button 
               onClick={() => createObjectMutation.mutate({
-                name: newObject.name,
-                objectType: newObject.objectType,
-                accessType: newObject.accessType,
-                accessCode: newObject.accessCode || undefined,
-                address: newObject.address || undefined,
-                customerId: newObject.customerId || undefined,
-                latitude: newObject.latitude || undefined,
-                longitude: newObject.longitude || undefined,
-                city: newObject.city || undefined,
-                postalCode: newObject.postalCode || undefined,
-                entranceLatitude: newObject.entranceLatitude || undefined,
-                entranceLongitude: newObject.entranceLongitude || undefined,
-                addressDescriptor: newObject.addressDescriptor || undefined,
+                data: {
+                  name: newObject.name,
+                  parentId: createParentId || undefined,
+                  objectType: newObject.objectType,
+                  accessType: newObject.accessType,
+                  accessCode: newObject.accessCode || undefined,
+                  address: newObject.address || undefined,
+                  customerId: newObject.customerId || undefined,
+                  latitude: newObject.latitude || undefined,
+                  longitude: newObject.longitude || undefined,
+                  city: newObject.city || undefined,
+                  postalCode: newObject.postalCode || undefined,
+                  entranceLatitude: newObject.entranceLatitude || undefined,
+                  entranceLongitude: newObject.entranceLongitude || undefined,
+                  addressDescriptor: newObject.addressDescriptor || undefined,
+                },
+                metadata: metadataFields,
               })} 
               disabled={!newObject.name || createObjectMutation.isPending}
               data-testid="button-create-object"
@@ -2064,6 +2256,128 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Task #681: full-redigeringsdialog */}
+      <Dialog open={editObjectOpen} onOpenChange={setEditObjectOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Redigera objekt</DialogTitle>
+            <DialogDescription>Uppdatera objektets grunduppgifter.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Namn</Label>
+              <Input
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                data-testid="input-edit-object-name"
+              />
+            </div>
+            <div>
+              <Label>{t("asset_type")}</Label>
+              <Select value={editForm.objectType} onValueChange={(v) => setEditForm({ ...editForm, objectType: v })}>
+                <SelectTrigger data-testid="select-edit-object-type"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(objectTypeLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Tillgångstyp</Label>
+              <Select value={editForm.accessType} onValueChange={(v) => setEditForm({ ...editForm, accessType: v })}>
+                <SelectTrigger data-testid="select-edit-access-type"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(accessTypeLabels).map(([value, { label }]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {(editForm.accessType === "code" || editForm.accessType === "key") && (
+              <div>
+                <Label>{editForm.accessType === "code" ? "Kod" : "Nyckelnummer"}</Label>
+                <Input
+                  value={editForm.accessCode}
+                  onChange={(e) => setEditForm({ ...editForm, accessCode: e.target.value })}
+                  data-testid="input-edit-access-code"
+                />
+              </div>
+            )}
+            <div>
+              <Label>Adress</Label>
+              <AddressSearch
+                defaultValue={editForm.address}
+                placeholder="Sök gatuadress..."
+                onSelect={(result) => setEditForm({
+                  ...editForm,
+                  address: result.address,
+                  latitude: result.lat,
+                  longitude: result.lon,
+                  city: result.city || editForm.city,
+                  postalCode: result.postalCode || editForm.postalCode,
+                })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditObjectOpen(false)}>Avbryt</Button>
+            <Button
+              onClick={() => updateObjectMutation.mutate(
+                {
+                  id: editForm.id,
+                  data: {
+                    name: editForm.name,
+                    objectType: editForm.objectType,
+                    accessType: editForm.accessType,
+                    accessCode: editForm.accessCode || undefined,
+                    address: editForm.address || undefined,
+                    city: editForm.city || undefined,
+                    postalCode: editForm.postalCode || undefined,
+                    latitude: editForm.latitude ?? undefined,
+                    longitude: editForm.longitude ?? undefined,
+                  },
+                },
+                { onSuccess: () => setEditObjectOpen(false) },
+              )}
+              disabled={!editForm.name || updateObjectMutation.isPending}
+              data-testid="button-save-edit-object"
+            >
+              {updateObjectMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
+              Spara
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Task #681: bekräfta radering */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ta bort objekt?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget && (childrenMap.get(deleteTarget.id)?.length ?? 0) > 0 ? (
+                <>Objektet <span className="font-medium">{deleteTarget?.name}</span> har {childrenMap.get(deleteTarget.id)?.length} underordnade objekt. Ta bort eller flytta dessa först.</>
+              ) : (
+                <>Detta tar bort <span className="font-medium">{deleteTarget?.name}</span>. Åtgärden kan inte ångras.</>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={(deleteTarget ? (childrenMap.get(deleteTarget.id)?.length ?? 0) > 0 : false) || deleteObjectMutation.isPending}
+              onClick={() => { if (deleteTarget) deleteObjectMutation.mutate(deleteTarget.id); }}
+              data-testid="button-confirm-delete"
+            >
+              {deleteObjectMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Ta bort
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={batchGeoOpen} onOpenChange={(v) => { if (!batchGeoRunning) { setBatchGeoOpen(v); setBatchGeoShowMap(false); } }}>
         <DialogContent className={(batchGeoShowMap || (exploreData?.objects?.length ?? 0) > 0) ? "max-w-5xl max-h-[90vh] overflow-y-auto" : "max-w-2xl"}>

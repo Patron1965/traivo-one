@@ -767,6 +767,46 @@ export async function getMetadataValue(
 // SKAPA METADATA
 // ============================================================================
 
+// Task #681: kopiera ett objekts LOKALA (direkta) metadatavärden till ett annat
+// objekt. Endast rader som faktiskt ligger på källobjektet kopieras — ärvda
+// värden hoppas över eftersom de ärvs naturligt via hierarkin på målobjektet.
+// Beräknade fält finns aldrig i metadata_varden (derive-on-read) och kopieras
+// därför aldrig. Alla värdekolumner och ärvningsflaggor bevaras 1:1.
+export async function copyObjectLocalMetadata(
+  sourceObjectId: string,
+  targetObjectId: string,
+  tenantId: string,
+): Promise<number> {
+  const rows = await db
+    .select()
+    .from(metadataVarden)
+    .where(and(
+      eq(metadataVarden.objektId, sourceObjectId),
+      eq(metadataVarden.tenantId, tenantId),
+    ));
+  if (rows.length === 0) return 0;
+  const toInsert = rows.map((r) => ({
+    tenantId,
+    objektId: targetObjectId,
+    metadataKatalogId: r.metadataKatalogId,
+    vardeString: r.vardeString,
+    vardeInteger: r.vardeInteger,
+    vardeDecimal: r.vardeDecimal,
+    vardeBoolean: r.vardeBoolean,
+    vardeDatetime: r.vardeDatetime,
+    vardeJson: r.vardeJson,
+    vardeReferens: r.vardeReferens,
+    arvsNedat: r.arvsNedat,
+    stoppaVidareArvning: r.stoppaVidareArvning,
+    nivaLas: r.nivaLas,
+    koppladTillMetadataId: r.koppladTillMetadataId,
+    skapadAv: r.skapadAv,
+    metod: r.metod,
+  }));
+  await db.insert(metadataVarden).values(toInsert);
+  return toInsert.length;
+}
+
 export async function createMetadata(data: {
   tenantId: string;
   objektId: string;
