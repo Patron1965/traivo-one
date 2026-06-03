@@ -21,6 +21,7 @@ import { TaskTimewindowsEditor } from "@/components/TaskTimewindowsEditor";
 import { CancelOrderDialog } from "@/components/orders/CancelOrderDialog";
 import { workOrderStatusBadge } from "@/lib/status-colors";
 import type { WorkOrder, ServiceObject, Customer, Resource, WorkOrderObject, MetadataKatalog, WorkOrderLine, CustomerCommunication } from "@shared/schema";
+import { CoupledFieldInput, type OrderTypeMetadataField } from "./CoupledFieldInput";
 
 interface JobDetailModalProps {
   open: boolean;
@@ -68,16 +69,8 @@ interface WorkOrderLineWithDetails extends WorkOrderLine {
   articleDescription?: string;
 }
 
-// Task #665: fält kopplat till orderns ordertyp (familjer expanderade till underfält).
-interface OrderTypeMetadataField {
-  id: string;
-  namn: string;
-  beskrivning: string | null;
-  datatyp: string;
-  kategori: string | null;
-  dotKey: string | null;
-  linkSortOrder: number;
-}
+// Task #665/#689: fält kopplat till orderns ordertyp (familjer expanderade till
+// underfält). Typ + enskild fält-rendering delas via CoupledFieldInput med create-vyn.
 
 export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = [] }: JobDetailModalProps) {
   const { toast } = useToast();
@@ -981,43 +974,16 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                     const draft = coupledDrafts[field.id];
                     const currentValue = draft !== undefined ? draft : savedValue;
                     const isDirty = draft !== undefined && draft !== savedValue;
-                    const label = field.dotKey ?? field.namn;
                     const setVal = (v: string) =>
                       setCoupledDrafts((prev) => ({ ...prev, [field.id]: v }));
                     return (
-                      <div key={field.id} className="space-y-1" data-testid={`coupled-field-${field.id}`}>
-                        <label className="text-sm font-medium flex items-center gap-2">
-                          {label}
-                          {field.beskrivning && (
-                            <span className="text-xs text-muted-foreground font-normal">- {field.beskrivning}</span>
-                          )}
-                        </label>
-                        <div className="flex gap-2">
-                          {field.datatyp === 'boolean' ? (
-                            <Select value={currentValue} onValueChange={setVal}>
-                              <SelectTrigger className="flex-1" data-testid={`input-coupled-field-${field.id}`}>
-                                <SelectValue placeholder="Välj värde..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="true">Ja</SelectItem>
-                                <SelectItem value="false">Nej</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <Input
-                              className="flex-1"
-                              type={field.datatyp === 'integer' || field.datatyp === 'decimal' ? 'number' : field.datatyp === 'datetime' ? 'date' : 'text'}
-                              step={field.datatyp === 'decimal' ? '0.01' : undefined}
-                              placeholder={
-                                field.datatyp === 'integer' ? 'Ange heltal...' :
-                                field.datatyp === 'decimal' ? 'Ange decimaltal...' :
-                                'Ange värde...'
-                              }
-                              value={currentValue}
-                              onChange={(e) => setVal(e.target.value)}
-                              data-testid={`input-coupled-field-${field.id}`}
-                            />
-                          )}
+                      <CoupledFieldInput
+                        key={field.id}
+                        field={field}
+                        value={currentValue}
+                        onChange={setVal}
+                        controlClassName="flex-1"
+                        action={
                           <Button
                             size="sm"
                             variant="outline"
@@ -1037,8 +1003,8 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                             )}
                             Spara
                           </Button>
-                        </div>
-                      </div>
+                        }
+                      />
                     );
                   })}
                 </div>

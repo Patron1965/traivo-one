@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Customer, ServiceObject, Article, PriceList } from "@shared/schema";
 import { ARTICLE_HOOK_LEVEL_LABELS } from "@shared/schema";
+import { CoupledFieldInput, type OrderTypeMetadataField } from "./CoupledFieldInput";
 import { BillingCustomerDialog } from "@/components/BillingCustomerDialog";
 
 interface JobModalProps {
@@ -68,17 +69,8 @@ const EMPTY_FORM: JobFormData = {
   priceListId: "",
 };
 
-// Task #670: fält kopplade till orderns ordertyp (familjer expanderade till underfält).
-// Spegel av OrderTypeMetadataField i JobDetailModal — visas även i create-formuläret.
-interface OrderTypeMetadataField {
-  id: string;
-  namn: string;
-  beskrivning: string | null;
-  datatyp: string;
-  kategori: string | null;
-  dotKey: string | null;
-  linkSortOrder: number;
-}
+// Task #670/#689: fält kopplade till orderns ordertyp (familjer expanderade till
+// underfält). Typ + enskild fält-rendering delas via CoupledFieldInput med edit-vyn.
 
 export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
   const { toast } = useToast();
@@ -903,43 +895,16 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                 Fält för ordertypen "{formData.orderType}"
               </div>
               {coupledFields.map((field) => {
-                const label = field.dotKey ?? field.namn;
                 const currentValue = coupledValues[field.id] ?? "";
                 const setVal = (v: string) =>
                   setCoupledValues((prev) => ({ ...prev, [field.id]: v }));
                 return (
-                  <div key={field.id} className="space-y-1" data-testid={`coupled-field-${field.id}`}>
-                    <label className="text-sm font-medium flex items-center gap-2">
-                      {label}
-                      {field.beskrivning && (
-                        <span className="text-xs text-muted-foreground font-normal">- {field.beskrivning}</span>
-                      )}
-                    </label>
-                    {field.datatyp === 'boolean' ? (
-                      <Select value={currentValue} onValueChange={setVal}>
-                        <SelectTrigger data-testid={`input-coupled-field-${field.id}`}>
-                          <SelectValue placeholder="Välj värde..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="true">Ja</SelectItem>
-                          <SelectItem value="false">Nej</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input
-                        type={field.datatyp === 'integer' || field.datatyp === 'decimal' ? 'number' : field.datatyp === 'datetime' ? 'date' : 'text'}
-                        step={field.datatyp === 'decimal' ? '0.01' : undefined}
-                        placeholder={
-                          field.datatyp === 'integer' ? 'Ange heltal...' :
-                          field.datatyp === 'decimal' ? 'Ange decimaltal...' :
-                          'Ange värde...'
-                        }
-                        value={currentValue}
-                        onChange={(e) => setVal(e.target.value)}
-                        data-testid={`input-coupled-field-${field.id}`}
-                      />
-                    )}
-                  </div>
+                  <CoupledFieldInput
+                    key={field.id}
+                    field={field}
+                    value={currentValue}
+                    onChange={setVal}
+                  />
                 );
               })}
             </div>
