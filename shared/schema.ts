@@ -3886,6 +3886,36 @@ export const insertMetadataKatalogKundSchema = createInsertSchema(metadataKatalo
 });
 export type InsertMetadataKatalogKund = z.infer<typeof insertMetadataKatalogKundSchema>;
 
+// Task #675: Redigerbara metadata-kategorier ("områden"). Område är det enda
+// grupperingsfältet i det svenska metadata-systemet (metadataKatalog.area). Tidigare
+// var listan hårdkodad och gemensam för alla tenants (shared/metadata-areas.ts).
+// Denna tenant-scopade tabell gör den redigerbar per kund: standardlistan seedas
+// (isSystem=true, kan ej tas bort), kunder kan lägga till egna kategorier
+// (isSystem=false) och ta bort dem så länge inget metadatafält använder dem. De
+// hårdkodade konstanterna behålls som fallback (expand-contract).
+export const metadataAreas = pgTable("metadata_areas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Stabil nyckel som lagras i metadata_katalog.area (slug, t.ex. "grunduppgifter").
+  value: varchar("value", { length: 50 }).notNull(),
+  // Visningsetikett (t.ex. "Grunduppgifter").
+  label: varchar("label", { length: 100 }).notNull(),
+  // Visnings-/väljarordning.
+  sortOrder: integer("sort_order").default(0).notNull(),
+  // Standardkategori seedad från konstantlistan — kan inte tas bort av användaren.
+  isSystem: boolean("is_system").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_metadata_areas_tenant_value").on(table.tenantId, table.value),
+  index("idx_metadata_areas_tenant").on(table.tenantId),
+]);
+export type MetadataArea = typeof metadataAreas.$inferSelect;
+export const insertMetadataAreaSchema = createInsertSchema(metadataAreas).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertMetadataArea = z.infer<typeof insertMetadataAreaSchema>;
+
 // Task #664: Namngivna importmallar (Excel-mall-builder). Admin bockar i vilka
 // metadata-katalogfält som ska ingå → en namngiven, tenant-scopad mall som
 // genererar en Excel-fil med de fasta systemkolumnerna (A–E enligt

@@ -2,10 +2,11 @@ import { Router, Request, Response } from "express";
 import { z, ZodError } from "zod";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
-import { metadataKatalog, metadataKatalogKunder, metadataVarden, articles, customers } from "@shared/schema";
+import { metadataKatalog, metadataKatalogKunder, metadataAreas, metadataVarden, articles, customers } from "@shared/schema";
 import { inArray } from "drizzle-orm";
 import { getErrorMessage } from "./routes/helpers";
 import { parseFormula } from "./metadata-formula";
+import { slugifyMetadataAreaValue } from "@shared/metadata-areas";
 import {
   getObjectWithAllMetadata,
   getMetadataValue,
@@ -35,8 +36,11 @@ import {
   getAllMetadataTypesWithCustomers,
   getAvailableMetadataTypesForObject,
   getMetadataCustomerLinks,
+  seedDefaultMetadataAreas,
+  getMetadataAreas,
+  getMetadataAreaUsage,
 } from "./metadata-queries";
-import { getTenantIdWithFallback } from "./tenant-middleware";
+import { getTenantIdWithFallback, requireAdmin } from "./tenant-middleware";
 
 export const metadataRouter = Router();
 
@@ -88,6 +92,139 @@ metadataRouter.post("/types/seed", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error seeding metadata types:", error);
     res.status(500).json({ error: "Kunde inte skapa metadatatyper" });
+  }
+});
+
+// ============================================================================
+// METADATA-OMRÅDEN (REDIGERBARA KATEGORIER) — Task #675
+// ----------------------------------------------------------------------------
+// Område är det enda grupperingsfältet (metadata_katalog.area) och är nu tenant-
+// scopad data. GET seedar standardlistan idempotent. POST/DELETE kräver admin.
+// DELETE blockeras om området är i bruk (usage-guard, svenskt fel + antal) eller
+// är en standardkategori (isSystem).
+// ============================================================================
+
+metadataRouter.get("/areas", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+    try {
+      await seedDefaultMetadataAreas(tenantId);
+    } catch (seedErr) {
+      console.warn("[metadata] auto-seed av områden misslyckades (fortsätter):", seedErr);
+    }
+    const areas = await getMetadataAreas(tenantId);
+    res.json(areas);
+  } catch (error) {
+    console.error("Error fetching metadata areas:", error);
+    res.status(500).json({ error: "Kunde inte hämta områden" });
+  }
+});
+
+const createMetadataAreaSchema = z.object({
+  label: z.string().trim().min(1).max(100),
+});
+
+metadataRouter.post("/areas", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const { label } = createMetadataAreaSchema.parse(req.body);
+
+    // Säkerställ att standardlistan finns (så ordningsnummer/dubblettkoll är korrekt).
+    await seedDefaultMetadataAreas(tenantId);
+
+    const baseValue = slugifyMetadataAreaValue(label);
+    if (!baseValue) {
+      return res.status(400).json({
+        error: "Kategorinamnet måste innehålla minst en bokstav eller siffra.",
+      });
+    }
+
+    const existingAreas = await db
+      .select()
+      .from(metadataAreas)
+      .where(eq(metadataAreas.tenantId, tenantId));
+
+    // Dubblettkoll på etikett (case-insensitive) — tydligt fel istället för två
+    // kategorier som ser lika ut.
+    const labelLower = label.toLowerCase();
+    if (existingAreas.some((a) => a.label.toLowerCase() === labelLower)) {
+      return res.status(409).json({ error: `Kategorin "${label}" finns redan.` });
+    }
+
+    // Garantera unik nyckel: lägg på suffix om slugen krockar.
+    const usedValues = new Set(existingAreas.map((a) => a.value));
+    let value = baseValue;
+    let suffix = 2;
+    while (usedValues.has(value)) {
+      value = `${baseValue.slice(0, 47)}_${suffix}`;
+      suffix += 1;
+    }
+
+    const maxOrder = existingAreas.reduce((m, a) => Math.max(m, a.sortOrder ?? 0), 0);
+
+    const [created] = await db
+      .insert(metadataAreas)
+      .values({ tenantId, value, label, sortOrder: maxOrder + 1, isSystem: false })
+      .returning();
+
+    res.status(201).json(created);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return res.status(400).json({ error: "Valideringsfel", details: error.errors });
+    }
+    console.error("Error creating metadata area:", error);
+    res.status(500).json({ error: "Kunde inte skapa kategorin" });
+  }
+});
+
+metadataRouter.delete("/areas/:id", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const [area] = await db
+      .select()
+      .from(metadataAreas)
+      .where(and(eq(metadataAreas.id, req.params.id), eq(metadataAreas.tenantId, tenantId)))
+      .limit(1);
+
+    if (!area) {
+      return res.status(404).json({ error: "Kategorin hittades inte" });
+    }
+
+    if (area.isSystem) {
+      return res.status(403).json({
+        error: `Standardkategorin "${area.label}" kan inte tas bort.`,
+      });
+    }
+
+    const usage = await getMetadataAreaUsage(tenantId, area.value);
+    if (usage > 0) {
+      return res.status(409).json({
+        error:
+          `Kan inte ta bort kategorin "${area.label}" — ${usage} ` +
+          `metadatafält använder den. Flytta fälten till en annan kategori först.`,
+        usage,
+      });
+    }
+
+    await db
+      .delete(metadataAreas)
+      .where(and(eq(metadataAreas.id, req.params.id), eq(metadataAreas.tenantId, tenantId)));
+
+    res.status(204).send();
+  } catch (error) {
+    console.error("Error deleting metadata area:", error);
+    res.status(500).json({ error: "Kunde inte ta bort kategorin" });
   }
 });
 

@@ -1,14 +1,17 @@
 import { db } from "./db";
-import { sql, eq, and, inArray, desc } from "drizzle-orm";
+import { sql, eq, and, inArray, desc, asc } from "drizzle-orm";
 import { computeFamilyValues } from "./metadata-formula";
+import { METADATA_AREA_OPTIONS } from "@shared/metadata-areas";
 import { 
   objects, 
   customers,
   metadataKatalog, 
   metadataKatalogKunder,
+  metadataAreas,
   metadataVarden,
   metadataHistorik,
   orderTypeMetadataLinks,
+  MetadataArea,
   MetadataKatalog,
   MetadataVarden,
   MetadataHistorik,
@@ -2163,6 +2166,78 @@ export const STANDARD_METADATA_DEFINITIONS: Array<{
   // === System (alltid sist) ===
   { namn: 'Objektnamn', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'grunduppgifter', beskrivning: 'Objektets namn (systemfält)', sortOrder: 1000, icon: 'Type', area: 'grunduppgifter', displayNumber: 1000, isSystem: true, isRequired: true },
 ];
+
+// ============================================================================
+// METADATA-OMRÅDEN (REDIGERBARA KATEGORIER) — Task #675
+// ----------------------------------------------------------------------------
+// Område är det enda grupperingsfältet (metadata_katalog.area). Listan är nu
+// tenant-scopad data (metadata_areas). seedDefaultMetadataAreas seedar standard-
+// listan (isSystem=true) idempotent och backfillar dessutom eventuella område-
+// värden som redan används av katalogfält men saknar en rad (så inget i bruk
+// hamnar utanför väljaren). De hårdkodade konstanterna behålls som fallback i UI.
+// ============================================================================
+
+export async function seedDefaultMetadataAreas(tenantId: string): Promise<void> {
+  const existing = await db
+    .select({ value: metadataAreas.value })
+    .from(metadataAreas)
+    .where(eq(metadataAreas.tenantId, tenantId));
+  const existingValues = new Set(existing.map((e) => e.value));
+
+  const toInsert: {
+    tenantId: string;
+    value: string;
+    label: string;
+    sortOrder: number;
+    isSystem: boolean;
+  }[] = [];
+
+  // 1. Standardlistan från konstanterna (isSystem=true, kan ej tas bort).
+  METADATA_AREA_OPTIONS.forEach((opt, i) => {
+    if (!existingValues.has(opt.value)) {
+      toInsert.push({ tenantId, value: opt.value, label: opt.label, sortOrder: i, isSystem: true });
+      existingValues.add(opt.value);
+    }
+  });
+
+  // 2. Backfill: områdesvärden som redan finns på katalogfält men saknar en rad
+  //    (t.ex. legacy-värden). Markeras som icke-system; de skyddas ändå av
+  //    usage-guarden vid radering eftersom de är i bruk.
+  const usedAreas = await db
+    .select({ area: metadataKatalog.area })
+    .from(metadataKatalog)
+    .where(eq(metadataKatalog.tenantId, tenantId));
+  let nextOrder = METADATA_AREA_OPTIONS.length;
+  for (const row of usedAreas) {
+    const a = (row.area ?? "").trim();
+    if (!a || existingValues.has(a)) continue;
+    toInsert.push({ tenantId, value: a, label: a, sortOrder: nextOrder++, isSystem: false });
+    existingValues.add(a);
+  }
+
+  if (toInsert.length > 0) {
+    await db.insert(metadataAreas).values(toInsert).onConflictDoNothing();
+  }
+}
+
+export async function getMetadataAreas(tenantId: string): Promise<MetadataArea[]> {
+  return db
+    .select()
+    .from(metadataAreas)
+    .where(eq(metadataAreas.tenantId, tenantId))
+    .orderBy(asc(metadataAreas.sortOrder), asc(metadataAreas.label));
+}
+
+// Räknar hur många metadatafält (katalogposter) som använder ett område. Används
+// som usage-guard innan radering, i linje med övriga livscykel-guards.
+export async function getMetadataAreaUsage(tenantId: string, value: string): Promise<number> {
+  const res = await db.execute(sql`
+    SELECT COUNT(*)::int AS c
+    FROM metadata_katalog
+    WHERE tenant_id = ${tenantId} AND area = ${value}
+  `);
+  return Number((res.rows[0] as { c: number } | undefined)?.c ?? 0);
+}
 
 export async function seedDefaultMetadataTypes(tenantId: string): Promise<{ created: string[]; existing: string[] }> {
   const existing = await db

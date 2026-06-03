@@ -48,3 +48,25 @@ export function metadataAreaLabel(key: string | null | undefined): string {
   if (!key) return "Övrigt";
   return METADATA_AREA_LABELS[key] ?? key;
 }
+
+// Task #675: Härleder en stabil nyckel (slug) för en ny användardefinierad
+// kategori från dess etikett. Svenska tecken translittereras (å/ä→a, ö→o, é→e,
+// ü→u), allt annat icke-alfanumeriskt blir "_", kantande "_" trimmas och längden
+// kapas till 50 (samma som kolumnen). Tom sträng om etiketten saknar användbara
+// tecken (anroparen får då validera och avvisa).
+export function slugifyMetadataAreaValue(label: string): string {
+  return label
+    .toLowerCase()
+    .trim()
+    .replace(/[åäáàâãª]/g, "a")
+    .replace(/[öóòôõº]/g, "o")
+    .replace(/[éèêë]/g, "e")
+    .replace(/[üúùû]/g, "u")
+    .replace(/[íìîï]/g, "i")
+    .replace(/[ç]/g, "c")
+    .replace(/[ñ]/g, "n")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 50)
+    .replace(/_+$/g, "");
+}

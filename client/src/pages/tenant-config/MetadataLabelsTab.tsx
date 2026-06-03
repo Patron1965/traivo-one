@@ -17,11 +17,8 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { MetadataKatalog, InsertMetadataKatalog } from "@shared/schema";
-import {
-  METADATA_AREA_OPTIONS as areaOptions,
-  METADATA_AREA_ORDER as AREA_ORDER,
-  metadataAreaLabel,
-} from "@shared/metadata-areas";
+import { useMetadataAreas } from "@/hooks/use-metadata-areas";
+import { MetadataAreaSelect } from "@/components/MetadataAreaSelect";
 
 // Task #674: Område är det enda grupperingsfältet. Områdena är många, så grupp-
 // badges använder ett enhetligt neutralt tema-token istället för per-område-färg.
@@ -54,6 +51,8 @@ function getIcon(iconName: string | null): LucideIcon {
 
 export function MetadataLabelsTab() {
   const { toast } = useToast();
+  // Task #675: tenant-scopade, redigerbara områden.
+  const { options: areaOptions, order: AREA_ORDER, areaLabel } = useMetadataAreas();
   const [searchQuery, setSearchQuery] = useState("");
   const [areaFilter, setAreaFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -192,7 +191,7 @@ export function MetadataLabelsTab() {
     const ai = AREA_ORDER.indexOf(key);
     return ai === -1 ? 999 : ai;
   };
-  const groupLabel = (key: string) => metadataAreaLabel(key);
+  const groupLabel = (key: string) => areaLabel(key);
 
   if (isLoading) {
     return <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>;
@@ -403,17 +402,11 @@ export function MetadataLabelsTab() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Område</Label>
-                <Select value={formData.area || "none"} onValueChange={(v) => setFormData({ ...formData, area: v === "none" ? "" : v })}>
-                  <SelectTrigger data-testid="select-label-area">
-                    <SelectValue placeholder="Välj område" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Inget område</SelectItem>
-                    {areaOptions.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MetadataAreaSelect
+                  value={formData.area}
+                  onChange={(v) => setFormData({ ...formData, area: v })}
+                  testId="select-label-area"
+                />
               </div>
               <div>
                 <Label>Presentationsnummer</Label>

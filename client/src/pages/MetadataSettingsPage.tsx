@@ -9,11 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  METADATA_AREA_OPTIONS as areaOptions,
-  METADATA_AREA_ORDER as AREA_ORDER,
-  metadataAreaLabel,
-} from "@shared/metadata-areas";
+import { useMetadataAreas } from "@/hooks/use-metadata-areas";
+import { MetadataAreaSelect } from "@/components/MetadataAreaSelect";
 import {
   Dialog,
   DialogContent,
@@ -174,6 +171,9 @@ export default function MetadataSettingsPage() {
     queryKey: ['/api/metadata/types'],
   });
 
+  // Task #675: läs tenantens (redigerbara) områden för gruppering/etiketter.
+  const { order: AREA_ORDER, areaLabel } = useMetadataAreas();
+
   const { data: customers } = useQuery<CustomerOption[]>({
     queryKey: ['/api/customers'],
   });
@@ -278,7 +278,7 @@ export default function MetadataSettingsPage() {
     });
   });
 
-  const groupLabel = (key: string) => metadataAreaLabel(key);
+  const groupLabel = (key: string) => areaLabel(key);
 
   // Task #662: rendera familjer hierarkiskt — rotfält följs direkt av sina
   // underfält. Underfält vars förälder ligger i en annan grupp renderas på plats
@@ -741,19 +741,7 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label>Område</Label>
-          <Select value={area || 'none'} onValueChange={(v) => setArea(v === 'none' ? '' : v)}>
-            <SelectTrigger data-testid="select-type-area">
-              <SelectValue placeholder="Välj område" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Inget område</SelectItem>
-              {areaOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <MetadataAreaSelect value={area} onChange={setArea} />
           <p className="text-xs text-muted-foreground mt-1">Grupperar fältet i objektets metadata-vy</p>
         </div>
         <div>

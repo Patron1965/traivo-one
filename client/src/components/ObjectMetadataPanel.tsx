@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ServiceObject, MetadataKatalog, MetadataHistorik } from "@shared/schema";
-import { METADATA_AREA_ORDER, METADATA_AREA_LABELS } from "@shared/metadata-areas";
+import { useMetadataAreas } from "@/hooks/use-metadata-areas";
 
 interface MetadataEntry {
   id: string;
@@ -760,9 +760,10 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
 
   const metadata = objectWithMetadata?.metadata || [];
 
-  // Task #674: Område (area) är det enda grupperingsfältet — fall bara tillbaka
-  // till "annat" för fält helt utan område.
-  const AREA_ORDER = METADATA_AREA_ORDER;
+  // Task #674/#675: Område (area) är det enda grupperingsfältet — läs tenantens
+  // (redigerbara) områden för ordning/etiketter, fall tillbaka till "annat" för
+  // fält helt utan område.
+  const { order: AREA_ORDER, labels: areaLabels } = useMetadataAreas();
   const groupedMetadata = useMemo(() => {
     const groups: Record<string, MetadataEntry[]> = {};
     for (const m of metadata) {
@@ -784,9 +785,9 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
     for (const k of AREA_ORDER) if (groups[k]) ordered[k] = groups[k];
     for (const k of Object.keys(groups).sort()) if (!ordered[k]) ordered[k] = groups[k];
     return ordered;
-  }, [metadata]);
+  }, [metadata, AREA_ORDER]);
 
-  const categoryLabels: Record<string, string> = METADATA_AREA_LABELS;
+  const categoryLabels: Record<string, string> = areaLabels;
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, varde }: { id: string; varde: any }) => {
