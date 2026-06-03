@@ -3,6 +3,7 @@ import { parseCompositeRef } from "../../shared/objektmall-template";
 import {
   coerceMetadataVardeFromRaw,
   computeImportMetadataStatus,
+  mergeCompositeJsonValues,
 } from "../../server/metadata-queries";
 import type { MetadataKatalog } from "../../shared/schema";
 
@@ -63,5 +64,90 @@ describe("sammansatt JSON-lagring via coerceMetadataVardeFromRaw", () => {
     const a = coerceMetadataVardeFromRaw(jsonKat(), JSON.stringify({ gata: "Storgatan" })).displayValue;
     const b = coerceMetadataVardeFromRaw(jsonKat(), JSON.stringify({ gata: "Lillgatan" })).displayValue;
     expect(computeImportMetadataStatus(false, [a], b)).toBe("replace");
+  });
+});
+
+// Task #644: per-underfält-arv för sammansatta (json) fält. Värdelistan ges
+// närmast-först (level 0 = lokalt objekt, högre index = längre upp i kedjan).
+describe("mergeCompositeJsonValues", () => {
+  it("ärver underfält uppifrån när närmaste objekt bara sätter ett", () => {
+    // Rum sätter bara gata; fastigheten ovanför har postnummer + ort.
+    const merged = mergeCompositeJsonValues([
+      { gata: "Storgatan 5" },
+      { gata: "Fastighetsvägen 1", postnummer: "614 30", ort: "Söderköping" },
+    ]);
+    expect(merged).toEqual({
+      gata: "Storgatan 5",
+      postnummer: "614 30",
+      ort: "Söderköping",
+    });
+  });
+
+  it("närmaste definierade underfält vinner över förälderns", () => {
+    const merged = mergeCompositeJsonValues([
+      { gata: "Lillgatan 2" },
+      { gata: "Storgatan 5", ort: "Norrköping" },
+    ]);
+    expect(merged).toEqual({ gata: "Lillgatan 2", ort: "Norrköping" });
+  });
+
+  it("mergar över flera nivåer (rum → fastighet → koncern)", () => {
+    const merged = mergeCompositeJsonValues([
+      { gatunummer: "5B" },
+      { gata: "Storgatan" },
+      { postnummer: "614 30", ort: "Söderköping" },
+    ]);
+    expect(merged).toEqual({
+      gatunummer: "5B",
+      gata: "Storgatan",
+      postnummer: "614 30",
+      ort: "Söderköping",
+    });
+  });
+
+  it("hanterar olika underfält (kontaktperson) per nivå", () => {
+    const merged = mergeCompositeJsonValues([
+      { telefon: "070-1234567" },
+      { namn: "Anna Andersson", epost: "anna@example.com" },
+    ]);
+    expect(merged).toEqual({
+      telefon: "070-1234567",
+      namn: "Anna Andersson",
+      epost: "anna@example.com",
+    });
+  });
+
+  it("behandlar arrayer som atomära — närmaste värdet vinner utan merge", () => {
+    const merged = mergeCompositeJsonValues([
+      ["a", "b"],
+      ["c", "d", "e"],
+    ]);
+    expect(merged).toEqual(["a", "b"]);
+  });
+
+  it("behandlar primitiver som atomära", () => {
+    expect(mergeCompositeJsonValues(["lokalt", "ärvt"])).toBe("lokalt");
+  });
+
+  it("returnerar null för tom värdelista", () => {
+    expect(mergeCompositeJsonValues([])).toBeNull();
+  });
+
+  it("hoppar över null/icke-objekt-nivåer vid merge när närmaste är objekt", () => {
+    const merged = mergeCompositeJsonValues([
+      { gata: "Storgatan" },
+      null,
+      { postnummer: "614 30" },
+    ]);
+    expect(merged).toEqual({ gata: "Storgatan", postnummer: "614 30" });
+  });
+
+  it("bevarar inte underfält med falsy men definierade värden felaktigt", () => {
+    // Ett uttryckligen satt underfält (även 0/"") på närmaste nivå ska vinna.
+    const merged = mergeCompositeJsonValues([
+      { vaning: 0 },
+      { vaning: 3, hiss: true },
+    ]);
+    expect(merged).toEqual({ vaning: 0, hiss: true });
   });
 });

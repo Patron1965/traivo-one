@@ -238,6 +238,46 @@ export async function writeImportedMetadataValue(
 }
 
 // ============================================================================
+// SAMMANSATTA (JSON) FÄLT — PER-UNDERFÄLT-ARV (Task #644)
+// ----------------------------------------------------------------------------
+// Sammansatta metadatafält (punktnotation `adress.gata`, `kontaktperson.namn`
+// osv) lagras som EN katalog-post med datatyp "json" där underfälten ligger i
+// `varde_json` (se objektmall-importens buildCompositeObject/asJsonKatalog).
+//
+// Vid resolvning längs den primära förälderkedjan mergas underfält per
+// underfält: närmaste objekt som definierar ett underfält vinner det, övriga
+// underfält ärvs från längre upp i kedjan. Exempel: ett rum som bara sätter
+// `adress.gata` behåller ärvt `postnummer`/`ort` från fastigheten ovanför.
+//
+// Endast objekt-formade json-värden mergas. Arrayer och primitiver behandlas
+// som atomära — då används närmaste värdet oförändrat, så icke-sammansatta
+// json-fält bevarar sin tidigare "närmaste-vinner"-semantik (allt-eller-inget).
+// Vanlig arvskontroll (arvs_nedat / stoppa_vidare_arvning / niva_las) styr
+// fortfarande VILKA nivåer som finns med i `valuesNearestFirst` — den filtreras
+// i den rekursiva CTE:n innan denna merge körs — så breaks_inheritance/fixed
+// kapar kedjan på vanligt sätt även för sammansatta fält.
+export function mergeCompositeJsonValues(valuesNearestFirst: unknown[]): unknown {
+  const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+    v !== null && typeof v === "object" && !Array.isArray(v);
+
+  const nearest = valuesNearestFirst.length > 0 ? valuesNearestFirst[0] : null;
+  if (!isPlainObject(nearest)) {
+    return nearest ?? null;
+  }
+
+  const merged: Record<string, unknown> = {};
+  for (const value of valuesNearestFirst) {
+    if (!isPlainObject(value)) continue;
+    for (const key of Object.keys(value)) {
+      if (!(key in merged)) {
+        merged[key] = value[key];
+      }
+    }
+  }
+  return merged;
+}
+
+// ============================================================================
 // HÄMTA OBJEKT MED ALL METADATA (INKL. ÄRVD)
 // Rekursiv CTE som går uppåt i hierarkin och samlar metadata
 // ============================================================================
@@ -349,75 +389,99 @@ export async function getObjectWithAllMetadata(
         AND mv.tenant_id = ${tenantId}
         AND mk.tenant_id = ${tenantId}
     )
+    -- Task #644: behåll ALLA berättigade nivåer (ej bara rn=1). Skalära fält tar
+    -- fortfarande närmaste värdet (rn=1) i JS nedan, men sammansatta json-fält
+    -- behöver hela nivåkedjan för att kunna mergas per underfält. Sortering på
+    -- metadata_katalog_id + rn samlar varje katalog kontiguöst, närmast först.
     SELECT * FROM metadata_with_context
-    WHERE rn = 1  -- Only take the nearest value for each metadata type
     ORDER BY
       katalog_kategori,
       katalog_sort_order,
-      CASE WHEN source = 'local' THEN 0 ELSE 1 END
+      metadata_katalog_id,
+      rn
   `;
 
   const metadataResults = await db.execute(parentChainQuery);
 
-  const seenMetadataKatalogIds = new Set<string>();
+  // Task #644: gruppera rader per katalog (raderna är redan ordnade närmast-först
+  // inom varje katalog via ORDER BY ... metadata_katalog_id, rn). För skalära fält
+  // används närmaste raden (den första) precis som tidigare; för sammansatta
+  // json-fält mergas underfälten per underfält längs kedjan (närmaste vinner).
+  const rowsByKatalog = new Map<string, any[]>();
+  const katalogOrder: string[] = [];
+  for (const row of metadataResults.rows as any[]) {
+    // Dedup/gruppera på katalog_id (inte namn) för korrekt tenant-isolering.
+    let group = rowsByKatalog.get(row.katalog_id);
+    if (!group) {
+      group = [];
+      rowsByKatalog.set(row.katalog_id, group);
+      katalogOrder.push(row.katalog_id);
+    }
+    group.push(row);
+  }
+
   const metadataWithKatalog: MetadataVardenWithKatalog[] = [];
 
-  for (const row of metadataResults.rows as any[]) {
-    // Use katalog_id for deduplication (not namn) to handle tenant isolation correctly
-    if (seenMetadataKatalogIds.has(row.katalog_id)) {
-      continue;
-    }
-    seenMetadataKatalogIds.add(row.katalog_id);
+  for (const katalogId of katalogOrder) {
+    const group = rowsByKatalog.get(katalogId)!;
+    const nearest = group[0];
+
+    // Sammansatta json-fält: merga underfält över alla nivåer (närmaste först).
+    // Övriga datatyper: använd närmaste värdet oförändrat.
+    const resolvedVardeJson =
+      nearest.katalog_datatyp === "json"
+        ? mergeCompositeJsonValues(group.map((r) => r.varde_json))
+        : nearest.varde_json;
 
     metadataWithKatalog.push({
-      id: row.id,
+      id: nearest.id,
       tenantId: tenantId,
-      objektId: row.objekt_id,
+      objektId: nearest.objekt_id,
       workOrderId: null, // Object metadata doesn't have workOrderId
-      metadataKatalogId: row.metadata_katalog_id,
-      vardeString: row.varde_string,
-      vardeInteger: row.varde_integer,
-      vardeDecimal: row.varde_decimal,
-      vardeBoolean: row.varde_boolean,
-      vardeDatetime: row.varde_datetime,
-      vardeJson: row.varde_json,
-      vardeReferens: row.varde_referens,
-      arvsNedat: row.arvs_nedat,
-      stoppaVidareArvning: row.stoppa_vidare_arvning,
-      nivaLas: row.niva_las ?? false,
-      koppladTillMetadataId: row.kopplad_till_metadata_id,
-      skapadAv: row.skapad_av,
-      uppdateradAv: row.uppdaterad_av,
-      metod: row.metod ?? 'manuell',
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      metadataKatalogId: nearest.metadata_katalog_id,
+      vardeString: nearest.varde_string,
+      vardeInteger: nearest.varde_integer,
+      vardeDecimal: nearest.varde_decimal,
+      vardeBoolean: nearest.varde_boolean,
+      vardeDatetime: nearest.varde_datetime,
+      vardeJson: resolvedVardeJson,
+      vardeReferens: nearest.varde_referens,
+      arvsNedat: nearest.arvs_nedat,
+      stoppaVidareArvning: nearest.stoppa_vidare_arvning,
+      nivaLas: nearest.niva_las ?? false,
+      koppladTillMetadataId: nearest.kopplad_till_metadata_id,
+      skapadAv: nearest.skapad_av,
+      uppdateradAv: nearest.uppdaterad_av,
+      metod: nearest.metod ?? 'manuell',
+      createdAt: nearest.created_at,
+      updatedAt: nearest.updated_at,
       katalog: {
-        id: row.katalog_id,
+        id: nearest.katalog_id,
         tenantId: tenantId,
-        namn: row.katalog_namn,
-        beskrivning: row.katalog_beskrivning,
-        datatyp: row.katalog_datatyp,
-        referensTabell: row.katalog_referens_tabell,
-        arLogisk: row.katalog_ar_logisk,
-        standardArvs: row.katalog_standard_arvs,
-        kategori: row.katalog_kategori,
-        sortOrder: row.katalog_sort_order,
-        icon: row.katalog_icon,
-        area: row.katalog_area ?? null,
-        displayNumber: row.katalog_display_number ?? null,
-        allowDuplicates: row.katalog_allow_duplicates ?? false,
-        allowedValues: row.katalog_allowed_values ?? null,
-        beteckning: row.katalog_beteckning ?? null,
-        isSystem: row.katalog_is_system ?? false,
-        isRequired: row.katalog_is_required ?? false,
-        kronologiskVisning: row.katalog_kronologisk_visning ?? false,
-        createdAt: row.created_at,
+        namn: nearest.katalog_namn,
+        beskrivning: nearest.katalog_beskrivning,
+        datatyp: nearest.katalog_datatyp,
+        referensTabell: nearest.katalog_referens_tabell,
+        arLogisk: nearest.katalog_ar_logisk,
+        standardArvs: nearest.katalog_standard_arvs,
+        kategori: nearest.katalog_kategori,
+        sortOrder: nearest.katalog_sort_order,
+        icon: nearest.katalog_icon,
+        area: nearest.katalog_area ?? null,
+        displayNumber: nearest.katalog_display_number ?? null,
+        allowDuplicates: nearest.katalog_allow_duplicates ?? false,
+        allowedValues: nearest.katalog_allowed_values ?? null,
+        beteckning: nearest.katalog_beteckning ?? null,
+        isSystem: nearest.katalog_is_system ?? false,
+        isRequired: nearest.katalog_is_required ?? false,
+        kronologiskVisning: nearest.katalog_kronologisk_visning ?? false,
+        createdAt: nearest.created_at,
       } as any,
-      source: row.source,
-      fromObject: row.source === 'inherited' ? {
-        id: row.objekt_id,
-        namn: row.from_objekt_namn,
-        level: row.level,
+      source: nearest.source,
+      fromObject: nearest.source === 'inherited' ? {
+        id: nearest.objekt_id,
+        namn: nearest.from_objekt_namn,
+        level: nearest.level,
       } : undefined,
     });
   }
