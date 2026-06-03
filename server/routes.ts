@@ -192,7 +192,7 @@ export async function registerRoutes(
   });
 
   app.use("/api", (req, res, next) => {
-    if (req.path.startsWith("/portal") || req.path.startsWith("/mobile") || req.path.startsWith("/admin") || req.path.startsWith("/platform") || req.path.startsWith("/auth") || req.path.startsWith("/webhooks/") || (req.path === "/iot/signals" && req.method === "POST")) {
+    if (req.path.startsWith("/public/") || req.path.startsWith("/portal") || req.path.startsWith("/mobile") || req.path.startsWith("/admin") || req.path.startsWith("/platform") || req.path.startsWith("/auth") || req.path.startsWith("/webhooks/") || (req.path === "/iot/signals" && req.method === "POST")) {
       return next();
     }
     return requireTenantWithFallback(req, res, next);

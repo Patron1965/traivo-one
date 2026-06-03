@@ -14,6 +14,7 @@ import { sendEmail } from "../replit_integrations/resend";
 import { requireAdmin, requirePlanner } from "../tenant-middleware";
 import { hashPassword } from "../password";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject, createMetadata, getAllMetadataTypes } from "../metadata-queries";
+import { signDynamicQrToken, verifyDynamicQrToken } from "../dynamic-qr-token";
 
 export async function registerExtendedRoutes(app: Express) {
 // ============================================
@@ -511,6 +512,437 @@ app.get("/api/objects/:id/issue-history", asyncHandler(async (req, res) => {
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([month, count]) => ({ month, count })),
       timeline: timeline.slice(0, 50),
+    });
+}));
+
+// ============================================
+// ENHETLIGT ÄRENDE-LAGER (Task #648)
+// ============================================
+// Aggregerar de tre rapport-tabellerna (deviation_reports, customer_issue_reports,
+// public_issue_reports) till ETT ärende-lager för planeraren. Tabellerna förblir
+// separata — detta är en vy/abstraktion, inte en schema-migrering.
+//
+// Gemensam status-livscykel (ADR-vision): inkommen → mottagen → under_behandling
+// → avslutad → arkiverad. Varje källtabell mappas in i denna modell.
+
+type CaseSource = "deviation" | "customer" | "public";
+
+const UNIFIED_STATUS = ["inkommen", "mottagen", "under_behandling", "avslutad", "arkiverad"] as const;
+type UnifiedStatus = typeof UNIFIED_STATUS[number];
+
+// Mappa per-tabell-status → enhetlig status
+function toUnifiedStatus(source: CaseSource, raw: string | null | undefined): UnifiedStatus {
+  const s = (raw || "").toLowerCase();
+  if (source === "deviation") {
+    // reported, acknowledged, in_progress, resolved, cancelled
+    if (s === "acknowledged") return "mottagen";
+    if (s === "in_progress") return "under_behandling";
+    if (s === "resolved") return "avslutad";
+    if (s === "cancelled") return "arkiverad";
+    return "inkommen";
+  }
+  if (source === "customer") {
+    // open, in_progress, resolved, closed
+    if (s === "in_progress") return "under_behandling";
+    if (s === "resolved") return "avslutad";
+    if (s === "closed") return "arkiverad";
+    return "inkommen";
+  }
+  // public: new, reviewed, converted, rejected
+  if (s === "reviewed") return "mottagen";
+  if (s === "converted") return "under_behandling";
+  if (s === "resolved") return "avslutad";
+  if (s === "rejected") return "arkiverad";
+  return "inkommen";
+}
+
+// Mappa enhetlig status → per-tabell-status (för PATCH)
+function fromUnifiedStatus(source: CaseSource, unified: UnifiedStatus): string {
+  if (source === "deviation") {
+    return { inkommen: "reported", mottagen: "acknowledged", under_behandling: "in_progress", avslutad: "resolved", arkiverad: "cancelled" }[unified];
+  }
+  if (source === "customer") {
+    return { inkommen: "open", mottagen: "open", under_behandling: "in_progress", avslutad: "resolved", arkiverad: "closed" }[unified];
+  }
+  return { inkommen: "new", mottagen: "reviewed", under_behandling: "converted", avslutad: "resolved", arkiverad: "rejected" }[unified];
+}
+
+// GET /api/cases — enhetlig lista över alla ärenden
+app.get("/api/cases", requirePlanner, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { status, objectId, source } = req.query as { status?: string; objectId?: string; source?: string };
+
+    const [deviations, publicReports, objects] = await Promise.all([
+      storage.getDeviationReports(tenantId, { objectId: objectId as string | undefined }),
+      storage.getPublicIssueReports(tenantId, { objectId: objectId as string | undefined }),
+      storage.getObjects(tenantId),
+    ]);
+
+    // customer_issue_reports hämtas per kund — iterera kunder
+    const customers = await storage.getCustomers(tenantId);
+    const customerReportsNested = await Promise.all(
+      customers.map((c) => storage.getCustomerIssueReports(tenantId, c.id))
+    );
+    const customerReports = customerReportsNested.flat();
+
+    const objectMap = new Map(objects.map((o) => [o.id, o]));
+
+    type UnifiedCase = {
+      caseId: string;
+      source: CaseSource;
+      sourceId: string;
+      objectId: string | null;
+      objectName: string | null;
+      objectAddress: string | null;
+      title: string;
+      description: string | null;
+      category: string | null;
+      priority: string | null;
+      severityLevel: string | null;
+      status: UnifiedStatus;
+      rawStatus: string | null;
+      reporter: string | null;
+      latitude: number | null;
+      longitude: number | null;
+      photos: string[] | null;
+      linkedWorkOrderId: string | null;
+      createdAt: Date | string | null;
+    };
+
+    const cases: UnifiedCase[] = [];
+
+    for (const d of deviations) {
+      const obj = d.objectId ? objectMap.get(d.objectId) : undefined;
+      cases.push({
+        caseId: `deviation:${d.id}`,
+        source: "deviation",
+        sourceId: d.id,
+        objectId: d.objectId,
+        objectName: obj?.name ?? null,
+        objectAddress: obj?.address ?? null,
+        title: d.title,
+        description: d.description ?? null,
+        category: d.category,
+        priority: null,
+        severityLevel: d.severityLevel,
+        status: toUnifiedStatus("deviation", d.status),
+        rawStatus: d.status,
+        reporter: d.reportedByName ?? null,
+        latitude: d.latitude ?? null,
+        longitude: d.longitude ?? null,
+        photos: d.photos ?? null,
+        linkedWorkOrderId: d.linkedActionOrderId ?? null,
+        createdAt: d.reportedAt ?? d.createdAt,
+      });
+    }
+
+    for (const p of publicReports) {
+      const obj = p.objectId ? objectMap.get(p.objectId) : undefined;
+      cases.push({
+        caseId: `public:${p.id}`,
+        source: "public",
+        sourceId: p.id,
+        objectId: p.objectId,
+        objectName: obj?.name ?? null,
+        objectAddress: obj?.address ?? null,
+        title: p.title,
+        description: p.description ?? null,
+        category: p.category,
+        priority: null,
+        severityLevel: null,
+        status: toUnifiedStatus("public", p.status),
+        rawStatus: p.status,
+        reporter: p.reporterName ?? null,
+        latitude: p.latitude ?? null,
+        longitude: p.longitude ?? null,
+        photos: p.photos ?? null,
+        linkedWorkOrderId: p.linkedWorkOrderId ?? null,
+        createdAt: p.createdAt,
+      });
+    }
+
+    for (const c of customerReports) {
+      const obj = c.objectId ? objectMap.get(c.objectId) : undefined;
+      cases.push({
+        caseId: `customer:${c.id}`,
+        source: "customer",
+        sourceId: c.id,
+        objectId: c.objectId,
+        objectName: obj?.name ?? null,
+        objectAddress: obj?.address ?? null,
+        title: c.title,
+        description: c.description ?? null,
+        category: c.issueType,
+        priority: c.priority,
+        severityLevel: null,
+        status: toUnifiedStatus("customer", c.status),
+        rawStatus: c.status,
+        reporter: c.customerContact ?? null,
+        latitude: null,
+        longitude: null,
+        photos: c.imageUrls ?? null,
+        linkedWorkOrderId: null,
+        createdAt: c.createdAt,
+      });
+    }
+
+    let filtered = cases;
+    if (source && ["deviation", "customer", "public"].includes(source)) {
+      filtered = filtered.filter((c) => c.source === source);
+    }
+    if (status && (UNIFIED_STATUS as readonly string[]).includes(status)) {
+      filtered = filtered.filter((c) => c.status === status);
+    }
+
+    filtered.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+    res.json(filtered);
+}));
+
+// Hjälpare: hämta ett ärende från valfri källa + verifiera tenant
+async function loadCase(source: CaseSource, id: string, tenantId: string) {
+  if (source === "deviation") {
+    const d = await storage.getDeviationReport(id);
+    return d && verifyTenantOwnership(d, tenantId) ? d : undefined;
+  }
+  if (source === "public") {
+    const p = await storage.getPublicIssueReport(id);
+    return p && verifyTenantOwnership(p, tenantId) ? p : undefined;
+  }
+  // customer
+  const customers = await storage.getCustomers(tenantId);
+  for (const c of customers) {
+    const reports = await storage.getCustomerIssueReports(tenantId, c.id);
+    const found = reports.find((r) => r.id === id);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+// GET /api/cases/dynamic-qr-token — signerad token för objektoberoende QR (planerare)
+app.get("/api/cases/dynamic-qr-token", requirePlanner, asyncHandler(async (req, res) => {
+    const tenantId = (req as any).tenantId as string;
+    if (!tenantId) throw new UnauthorizedError("Ingen tenant");
+    res.json({ token: signDynamicQrToken(tenantId) });
+}));
+
+// PATCH /api/cases/:source/:id/status — uppdatera enhetlig status
+app.patch("/api/cases/:source/:id/status", requirePlanner, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const source = req.params.source as CaseSource;
+    if (!["deviation", "customer", "public"].includes(source)) {
+      throw new ValidationError("Ogiltig ärendekälla");
+    }
+    const { status } = req.body as { status?: string };
+    if (!status || !(UNIFIED_STATUS as readonly string[]).includes(status)) {
+      throw new ValidationError(`Ogiltig status. Tillåtna: ${UNIFIED_STATUS.join(", ")}`);
+    }
+
+    const existing = await loadCase(source, req.params.id, tenantId);
+    if (!existing) {
+      throw new NotFoundError("Ärende hittades inte");
+    }
+
+    const rawStatus = fromUnifiedStatus(source, status as UnifiedStatus);
+    if (source === "deviation") {
+      await storage.updateDeviationReport(req.params.id, tenantId, { status: rawStatus });
+    } else if (source === "public") {
+      await storage.updatePublicIssueReport(req.params.id, tenantId, { status: rawStatus });
+    } else {
+      await storage.updateCustomerIssueReport(req.params.id, tenantId, { status: rawStatus });
+    }
+
+    res.json({ success: true, source, id: req.params.id, status, rawStatus });
+}));
+
+// POST /api/cases/:source/:id/create-order — skapa arbetsorder (uppgift) från ärende
+// Bygger på samma princip som /api/deviation-reports/:id/create-order: en uppgift
+// skapas direkt och länkas tillbaka till ärendet. Kund härleds via object_payers
+// (primär), annars body.customerId.
+app.post("/api/cases/:source/:id/create-order", requirePlanner, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const source = req.params.source as CaseSource;
+    if (!["deviation", "customer", "public"].includes(source)) {
+      throw new ValidationError("Ogiltig ärendekälla");
+    }
+
+    const existing = await loadCase(source, req.params.id, tenantId) as any;
+    if (!existing) {
+      throw new NotFoundError("Ärende hittades inte");
+    }
+
+    const objectId: string | null = existing.objectId ?? null;
+    if (!objectId) {
+      throw new ValidationError("Ärendet saknar kopplat objekt — koppla ett objekt innan order skapas");
+    }
+    const object = await storage.getObject(objectId);
+    if (!object || !verifyTenantOwnership(object, tenantId)) {
+      throw new ValidationError("Kopplat objekt hittades inte");
+    }
+
+    // Härled kund: body → object_payers (primär) → legacy objects.customerId
+    let customerId: string | null = req.body?.customerId ?? null;
+    if (!customerId) {
+      const payers = await storage.getObjectPayers(objectId);
+      const primary = payers.find((p) => p.isPrimary) || payers[0];
+      customerId = primary?.customerId ?? object.customerId ?? null;
+    }
+    if (!customerId) {
+      throw new ValidationError("Kunde inte härleda kund för objektet. Ange customerId.");
+    }
+
+    const { DEVIATION_CATEGORY_LABELS } = await import("@shared/schema");
+    const catLabel = (DEVIATION_CATEGORY_LABELS as Record<string, string>)[existing.category] || existing.category || "Ärende";
+
+    const workOrder = await storage.createWorkOrder({
+      tenantId,
+      customerId,
+      objectId,
+      taskCategory: "field",
+      title: existing.title || catLabel,
+      description: [
+        `Åtgärd från ärende (${source}): ${existing.title || ""}`,
+        existing.description ? `\nBeskrivning: ${existing.description}` : "",
+        existing.suggestedAction ? `\nFöreslagen åtgärd: ${existing.suggestedAction}` : "",
+      ].join(""),
+      orderStatus: "skapad",
+      priority: existing.priority || (existing.severityLevel === "critical" || existing.severityLevel === "high" ? "high" : "normal"),
+      creationMethod: "case_create_order",
+      taskLatitude: existing.latitude ?? object.latitude ?? null,
+      taskLongitude: existing.longitude ?? object.longitude ?? null,
+    } as any);
+
+    // Länka tillbaka + flytta ärendet till "under behandling"
+    if (source === "deviation") {
+      await storage.updateDeviationReport(existing.id, tenantId, { linkedActionOrderId: workOrder.id, status: "in_progress" });
+    } else if (source === "public") {
+      await storage.updatePublicIssueReport(existing.id, tenantId, { linkedWorkOrderId: workOrder.id, status: "converted" });
+    } else {
+      await storage.updateCustomerIssueReport(existing.id, tenantId, { status: "in_progress" });
+    }
+
+    res.status(201).json({ workOrder, message: "Arbetsorder skapad från ärende" });
+}));
+
+// ============================================
+// DYNAMISK GPS-QR (Task #648)
+// ============================================
+// Befintlig objekt-specifik QR (/api/public/report/:code) lämnas oförändrad.
+// Här tillkommer ett tenant-scopat, objekt-oberoende flöde: användaren scannar
+// EN generell QR → GPS-position → systemet listar närliggande objekt → välj →
+// felanmälan skapas mot valt objekt. Ingen schema-migrering (objektoberoende QR
+// kräver ingen qr_code_links-rad eftersom objektet väljs i efterhand).
+
+// GET /api/public/nearby-objects?t=:token&lat=&lng=&radius= (meter)
+app.get("/api/public/nearby-objects", asyncHandler(async (req, res) => {
+    const tenantId = verifyDynamicQrToken(req.query.t as string);
+    const lat = parseFloat(req.query.lat as string);
+    const lng = parseFloat(req.query.lng as string);
+    const radiusMeters = Math.min(Math.max(parseInt((req.query.radius as string) || "150", 10) || 150, 10), 2000);
+
+    if (!tenantId) throw new NotFoundError("Ogiltig kod");
+    if (!isFinite(lat) || !isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      throw new ValidationError("Giltig position (lat/lng) krävs");
+    }
+
+    const tenant = await storage.getTenant(tenantId);
+    if (!tenant) throw new NotFoundError("Ogiltig kod");
+
+    const { haversineDistanceKm } = await import("../distance-matrix-service");
+    const objects = await storage.getObjects(tenantId);
+
+    const nearby = objects
+      .filter((o) => typeof o.latitude === "number" && typeof o.longitude === "number")
+      .map((o) => ({
+        id: o.id,
+        name: o.name,
+        address: o.address,
+        objectType: o.objectType,
+        distanceMeters: Math.round(haversineDistanceKm(lat, lng, o.latitude as number, o.longitude as number) * 1000),
+      }))
+      .filter((o) => o.distanceMeters <= radiusMeters)
+      .sort((a, b) => a.distanceMeters - b.distanceMeters)
+      .slice(0, 25);
+
+    res.json({ tenantId, radiusMeters, objects: nearby });
+}));
+
+// GET /api/public/dynamic-info?t=:token — branding + kategorier för dynamisk QR
+app.get("/api/public/dynamic-info", asyncHandler(async (req, res) => {
+    const tenantId = verifyDynamicQrToken(req.query.t as string);
+    if (!tenantId) throw new NotFoundError("Ogiltig kod");
+    const tenant = await storage.getTenant(tenantId);
+    if (!tenant) throw new NotFoundError("Ogiltig kod");
+
+    const { tenantBranding, DEVIATION_CATEGORIES, DEVIATION_CATEGORY_LABELS } = await import("@shared/schema");
+    const [branding] = await db.select().from(tenantBranding).where(eq(tenantBranding.tenantId, tenantId));
+
+    res.json({
+      tenantId,
+      companyName: branding?.companyName || "Fältservice",
+      primaryColor: branding?.primaryColor || "#3B82F6",
+      categories: (DEVIATION_CATEGORIES as readonly string[]).map((id) => ({
+        id,
+        label: (DEVIATION_CATEGORY_LABELS as Record<string, string>)[id] || id,
+      })),
+    });
+}));
+
+// POST /api/public/report-dynamic — felanmälan mot valt objekt (objektoberoende QR)
+app.post("/api/public/report-dynamic", asyncHandler(async (req, res) => {
+    const { DEVIATION_CATEGORIES } = await import("@shared/schema");
+    const dynamicReportSchema = z.object({
+      t: z.string().min(1),
+      objectId: z.string().min(1),
+      category: z.enum(DEVIATION_CATEGORIES as unknown as [string, ...string[]]),
+      title: z.string().min(1).max(200),
+      description: z.string().max(4000).optional().nullable(),
+      reporterName: z.string().max(200).optional().nullable(),
+      reporterEmail: z.string().max(200).optional().nullable(),
+      reporterPhone: z.string().max(50).optional().nullable(),
+      photos: z.array(z.string().max(2048)).max(10).optional(),
+      latitude: z.number().min(-90).max(90).optional().nullable(),
+      longitude: z.number().min(-180).max(180).optional().nullable(),
+    });
+    const parsed = dynamicReportSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const formatted = formatZodError(parsed.error);
+      throw new ValidationError(formatted.error, formatted.details);
+    }
+    const { t, objectId, category, title, description, reporterName, reporterEmail, reporterPhone, photos, latitude, longitude } = parsed.data;
+
+    const tenantId = verifyDynamicQrToken(t);
+    if (!tenantId) throw new NotFoundError("Ogiltig kod");
+
+    const tenant = await storage.getTenant(tenantId);
+    if (!tenant) throw new NotFoundError("Ogiltig kod");
+
+    const object = await storage.getObject(objectId);
+    if (!object || object.tenantId !== tenantId) {
+      throw new NotFoundError("Objekt hittades inte");
+    }
+
+    const report = await storage.createPublicIssueReport({
+      tenantId,
+      objectId,
+      category,
+      title,
+      description: description || undefined,
+      reporterName: reporterName || undefined,
+      reporterEmail: reporterEmail || undefined,
+      reporterPhone: reporterPhone || undefined,
+      photos: photos || undefined,
+      latitude: latitude ?? undefined,
+      longitude: longitude ?? undefined,
+      ipAddress: req.ip || undefined,
+      userAgent: req.headers["user-agent"] || undefined,
+      status: "new",
+    });
+
+    res.status(201).json({
+      success: true,
+      reportId: report.id,
+      message: "Tack för din anmälan! Vi har tagit emot den och kommer att hantera ärendet.",
     });
 }));
 

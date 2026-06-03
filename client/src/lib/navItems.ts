@@ -38,6 +38,7 @@ import {
   Gauge,
   Globe,
   Palette,
+  Inbox,
   type LucideIcon,
 } from "lucide-react";
 import { translate } from "./i18n";
@@ -92,6 +93,7 @@ export function getGrunddataItems(t: (key: string, fallback: string) => string, 
 export function getOrdrarItems(t: (key: string, fallback: string) => string, tl?: (key: string) => string): NavItem[] {
   const l = tl || svFallback;
   return [
+    { title: "Ärenden", url: "/cases", icon: Inbox, description: "Samlad vy: avvikelser, kund- och allmänhetens felanmälningar" },
     { title: l("nav.order-stock"), url: "/order-stock", icon: ClipboardList, description: l("nav.order-stock.desc") },
     { title: l("nav.assignments"), url: "/assignments", icon: UserCheck, description: l("nav.assignments.desc") },
     { title: l("nav.subscriptions"), url: "/subscriptions", icon: RefreshCw, description: l("nav.subscriptions.desc") },

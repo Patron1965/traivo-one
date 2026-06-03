@@ -8,5 +8,7 @@
 - [vitest 4 oxc JSX](vitest4-oxc-jsx.md) — vitest 4 bundlar rolldown-vite (oxc) som ignorerar `esbuild`; client `.tsx` parse-fail tills `oxc: { jsx: "automatic" }` sätts i vitest.config.
 - [Mobile-app uses cookie-auth objects endpoints](mobile-app-cookie-auth.md) — SimpleFieldApp körs i webbsession med cookie-auth; `/api/objects*` (ej `/api/mobile/*`) funkar direkt i mobil-UI.
 - [Objektmall-import diff/preview](objektmall-import-diff.md) — förhandsvisningens fält-diff måste spegla exakt vad commit skriver; notes byggs via delade helpers anropade från både validering och commit.
+- [wouter useParams outside Route](wouter-direct-render-params.md) — pages rendered via App.tsx `location.startsWith` branches get `{}` from useParams; parse the param from the pathname instead.
+- [Public endpoint tenant token](public-endpoint-tenant-token.md) — `/api/public/*` får aldrig ta rå tenant-slug (enumeration); resolva tenant server-side via QR-code eller HMAC-signed token (`server/dynamic-qr-token.ts`).
 - [Två metadata-system](dual-metadata-systems.md) — engelskt (metadataDefinitions/objectMetadata) vs svenskt (metadataKatalog/Varden/Historik); import skriver svenskt, export läser engelskt → round-trip-drift.
 - [Sammansatta metadatafält (punktnotation)](composite-metadata-import.md) — `fält.underfält`-kolumner grupperas till ETT JSON-fält; skrivs via vanlig metadata-väg men tvingad json-datatyp (asJsonKatalog) → varde_json.

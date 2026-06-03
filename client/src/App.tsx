@@ -58,6 +58,8 @@ const PredictivePlanningPage = lazy(() => import("@/pages/PredictivePlanningPage
 const AutoClusterPage = lazy(() => import("@/pages/AutoClusterPage"));
 const CustomerPortalPage = lazy(() => import("@/pages/CustomerPortalPage"));
 const CustomerReportsPage = lazy(() => import("@/pages/CustomerReportsPage"));
+const CasesPage = lazy(() => import("@/pages/CasesPage"));
+const DynamicReportPage = lazy(() => import("@/pages/DynamicReportPage"));
 const PortalMessagesPage = lazy(() => import("@/pages/PortalMessagesPage"));
 const BookingSlotsAdminPage = lazy(() => import("@/pages/BookingSlotsAdminPage"));
 const SystemDashboardPage = lazy(() => import("@/pages/SystemDashboardPage"));
@@ -172,6 +174,7 @@ function Router() {
         <Route path="/auto-cluster">{() => <ProtectedRoute component={AutoClusterPage} path="/auto-cluster" />}</Route>
         <Route path="/customer-portal">{() => <ProtectedRoute component={CustomerPortalPage} path="/customer-portal" />}</Route>
         <Route path="/customer-reports">{() => <ProtectedRoute component={CustomerReportsPage} path="/customer-reports" />}</Route>
+        <Route path="/cases">{() => <ProtectedRoute component={CasesPage} path="/cases" />}</Route>
         <Route path="/portal-messages">{() => <ProtectedRoute component={PortalMessagesPage} path="/portal-messages" />}</Route>
         <Route path="/booking-slots">{() => <ProtectedRoute component={BookingSlotsAdminPage} path="/booking-slots" />}</Route>
         <Route path="/import">{() => <ProtectedRoute component={ImportPage} path="/import" />}</Route>
@@ -306,6 +309,16 @@ function AppContent() {
     return (
       <ErrorBoundary>
         <PortalRouter />
+      </ErrorBoundary>
+    );
+  }
+
+  if (location.startsWith("/report/near/")) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <DynamicReportPage />
+        </Suspense>
       </ErrorBoundary>
     );
   }

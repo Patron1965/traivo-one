@@ -491,6 +491,96 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     });
 }));
 
+// ============================================
+// AI FELANMÄLAN-TOLK (fritext → strukturerat ärende)
+// ============================================
+// Tar emot en fritextbeskrivning ("Locket på den bruna tunnan är trasigt")
+// och returnerar strukturerade förslagsfält som planeraren kan redigera
+// innan ärendet sparas. Bygger på samma OpenAI-integration som övriga AI-rutter.
+app.post("/api/ai/parse-issue-report", asyncHandler(async (req, res) => {
+    const { text, objectName, objectType } = req.body;
+    if (!text || typeof text !== "string" || text.trim().length < 3) {
+      throw new ValidationError("Beskrivning krävs (minst 3 tecken)");
+    }
+
+    const guard = await aiBudgetGuard(req, res, "analysis");
+    if (guard.blocked) return;
+    const { tenantId, model: aiModel } = guard;
+
+    const { DEVIATION_CATEGORIES, DEVIATION_CATEGORY_LABELS, SEVERITY_LEVELS } = await import("@shared/schema");
+    const categoryList = DEVIATION_CATEGORIES.map(
+      (c) => `${c} (${DEVIATION_CATEGORY_LABELS[c]})`
+    ).join(", ");
+
+    const OpenAI = (await import("openai")).default;
+    const openai = new OpenAI({
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
+
+    const systemPrompt = `Du är en assistent som tolkar felanmälningar för ett fältservice-/avfallshanteringssystem.
+Användaren skriver en felanmälan med egna ord på svenska. Din uppgift är att extrahera strukturerad information.
+
+Svara ENDAST med ett JSON-objekt med följande fält:
+- "category": EXAKT en av dessa koder: ${categoryList}. Välj den som passar bäst, annars "other".
+- "title": en kort, tydlig sammanfattning på svenska (max 80 tecken).
+- "description": en rensad, fullständig beskrivning på svenska baserad på texten.
+- "severityLevel": en av ${SEVERITY_LEVELS.join(", ")} (low=kan vänta, medium=bör åtgärdas snart, high=åtgärdas inom kort, critical=omedelbar fara).
+- "priority": en av low, normal, high, urgent.
+- "objectTypeGuess": en kort gissning av objekttyp på svenska (t.ex. "Matavfallskärl", "Belysning", "Container"), eller null.
+- "suggestedAction": ett kort förslag på åtgärd på svenska, eller null.
+
+Var konservativ med severity/priority — sätt bara high/critical vid tydlig fara eller akut driftstörning.`;
+
+    const userContent = `Felanmälan: "${text.trim()}"` +
+      (objectName ? `\nKänt objekt: ${objectName}` : "") +
+      (objectType ? `\nObjekttyp: ${objectType}` : "");
+
+    const { trackOpenAIResponse: trackOAIResponse } = await import("../api-usage-tracker");
+
+    const response = await withRetry(
+      () => openai.chat.completions.create({
+        model: aiModel,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent },
+        ],
+        response_format: { type: "json_object" },
+        max_tokens: 400,
+        temperature: 0.2,
+      }),
+      { label: "parse-issue-report" }
+    );
+
+    trackOAIResponse(response, tenantId);
+
+    const raw = response.choices[0]?.message?.content || "{}";
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new AppError("AI-svaret kunde inte tolkas. Försök igen.", 502);
+    }
+
+    const validCategories = DEVIATION_CATEGORIES as readonly string[];
+    const validSeverities = SEVERITY_LEVELS as readonly string[];
+    const validPriorities = ["low", "normal", "high", "urgent"];
+
+    const category = validCategories.includes(String(parsed.category)) ? String(parsed.category) : "other";
+    const severityLevel = validSeverities.includes(String(parsed.severityLevel)) ? String(parsed.severityLevel) : "medium";
+    const priority = validPriorities.includes(String(parsed.priority)) ? String(parsed.priority) : "normal";
+
+    res.json({
+      category,
+      title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title.trim().slice(0, 120) : text.trim().slice(0, 80),
+      description: typeof parsed.description === "string" ? parsed.description.trim() : text.trim(),
+      severityLevel,
+      priority,
+      objectTypeGuess: typeof parsed.objectTypeGuess === "string" && parsed.objectTypeGuess.trim() ? parsed.objectTypeGuess.trim() : null,
+      suggestedAction: typeof parsed.suggestedAction === "string" && parsed.suggestedAction.trim() ? parsed.suggestedAction.trim() : null,
+    });
+}));
+
 // AI Predictive Maintenance - analyze order history to predict service needs
 const handlePredictiveMaintenance = async (req: any, res: any) => {
   try {

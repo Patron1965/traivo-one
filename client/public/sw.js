@@ -2,8 +2,8 @@
 // Vid bump tömmer `activate`-handlern alla gamla cachar och nya SW tar över via
 // skipWaiting + clients.claim — annars sitter användarna kvar med gammal HTML,
 // gammalt JS-bundle och gamla cachade API-svar tills de manuellt rensar storage.
-const CACHE_NAME = 'unicorn-field-v11';
-const API_CACHE_NAME = 'unicorn-api-v3';
+const CACHE_NAME = 'unicorn-field-v12';
+const API_CACHE_NAME = 'unicorn-api-v4';
 
 // Routes som ALDRIG ska gå genom SW-cache eller offline-fallback — tenant-
 // branding, terminologi och övriga konfigurationsendpoints måste alltid hämtas
@@ -14,6 +14,7 @@ const ALWAYS_BYPASS_PREFIXES = [
   '/api/me',
   '/api/auth/',
   '/api/telink/',
+  '/api/public/',
 ];
 
 const STATIC_ASSETS = [
