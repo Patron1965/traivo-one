@@ -24,7 +24,9 @@ const NO_CACHE = "no-cache, no-store, must-revalidate";
 export function registerOrderTypeMetadataRoutes(app: Express): void {
   // Kända ordertyper: distinkta order_type i work_orders + statiska nycklar ur
   // REQUIRED_FIELDS_BY_ORDER_TYPE. Fri sträng, så admin kan även skriva egen.
-  app.get("/api/order-types", requireAdmin, async (req: Request, res: Response) => {
+  // Tillgänglig för alla tenant-användare (planerare väljer ordertyp i create-
+  // formuläret) — listan är icke-känslig och tenant-scopad.
+  app.get("/api/order-types", async (req: Request, res: Response) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
       if (!tenantId) return res.status(401).json({ error: "Ingen tenant hittad" });

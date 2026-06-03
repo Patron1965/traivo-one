@@ -47,6 +47,7 @@ interface JobFormData {
   customerId: string;
   objectId: string;
   priority: string;
+  orderType: string;
   desiredDeliveryStart: Date | undefined;
   desiredDeliveryEnd: Date | undefined;
   timeOfDayPreference: TimeOfDayPreference;
@@ -60,11 +61,24 @@ const EMPTY_FORM: JobFormData = {
   customerId: "",
   objectId: "",
   priority: "normal",
+  orderType: "service",
   desiredDeliveryStart: undefined,
   desiredDeliveryEnd: undefined,
   timeOfDayPreference: "any",
   priceListId: "",
 };
+
+// Task #670: fält kopplade till orderns ordertyp (familjer expanderade till underfält).
+// Spegel av OrderTypeMetadataField i JobDetailModal — visas även i create-formuläret.
+interface OrderTypeMetadataField {
+  id: string;
+  namn: string;
+  beskrivning: string | null;
+  datatyp: string;
+  kategori: string | null;
+  dotKey: string | null;
+  linkSortOrder: number;
+}
 
 export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
   const { toast } = useToast();
@@ -84,8 +98,32 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
   const [autoSelectedPriceListId, setAutoSelectedPriceListId] = useState<string>("");
   const [pendingPriceListId, setPendingPriceListId] = useState<string | null>(null);
 
+  // Task #670: värden för fält kopplade till vald ordertyp, keyade på fält-id.
+  const [coupledValues, setCoupledValues] = useState<Record<string, string>>({});
+
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
+  });
+
+  // Task #670: kända ordertyper för select (planerare väljer typ vid skapande).
+  const { data: orderTypes = [] } = useQuery<string[]>({
+    queryKey: ["/api/order-types"],
+    enabled: open,
+  });
+
+  // Task #670: fält kopplade till vald ordertyp. Kundlås (#663) tillämpas server-
+  // side via ?customerId så irrelevanta fält aldrig dyker upp i formuläret.
+  const { data: coupledFields = [], isLoading: coupledLoading } = useQuery<OrderTypeMetadataField[]>({
+    queryKey: ["/api/order-type-metadata", formData.orderType, formData.customerId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (formData.customerId) params.set("customerId", formData.customerId);
+      const qs = params.toString();
+      const res = await fetch(`/api/order-type-metadata/${encodeURIComponent(formData.orderType)}${qs ? `?${qs}` : ""}`);
+      if (!res.ok) throw new Error("Failed to fetch coupled fields");
+      return res.json();
+    },
+    enabled: open && !!formData.orderType,
   });
 
   const filteredCustomers = useMemo(() => {
@@ -235,13 +273,15 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       customerId: string;
       objectId: string;
       priority: string;
+      orderType: string;
       desiredDeliveryStart: Date | null;
       desiredDeliveryEnd: Date | null;
       articlesToAdd: Array<{ id: string; name: string; price: number | null }>;
       priceListId: string;
       metadata?: Record<string, unknown>;
+      coupledFieldsToSave: Array<{ namn: string; varde: string }>;
     }) => {
-      const { articlesToAdd, priceListId, metadata, ...orderData } = data;
+      const { articlesToAdd, priceListId, metadata, coupledFieldsToSave, ...orderData } = data;
       const payload: Record<string, unknown> = {
         ...orderData,
         plannedNotes: orderData.plannedNotes || null,
@@ -265,7 +305,20 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
         }
       }
 
-      return { workOrder, articleCount: articlesToAdd.length };
+      // Task #670: spara ifyllda kopplade fält som work-order-metadata (samma väg
+      // som JobDetailModal). Körs efter att ordern skapats så vi har dess id.
+      let coupledSaved = 0;
+      if (workOrder.id && coupledFieldsToSave.length > 0) {
+        for (const field of coupledFieldsToSave) {
+          await apiRequest("POST", `/api/metadata/work-orders/${workOrder.id}`, {
+            metadataTypNamn: field.namn,
+            varde: field.varde,
+          });
+          coupledSaved += 1;
+        }
+      }
+
+      return { workOrder, articleCount: articlesToAdd.length, coupledSaved };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
@@ -290,6 +343,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     setPendingPriceListId(null);
     setFromPopoverOpen(false);
     setToPopoverOpen(false);
+    setCoupledValues({});
     onClose();
   };
 
@@ -327,6 +381,12 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       metadata.timeOfDayPreference = formData.timeOfDayPreference;
     }
 
+    // Task #670: ifyllda kopplade fält — spara namn (inte dotKey, så samma väg som
+    // JobDetailModal) och endast icke-tomma värden.
+    const coupledFieldsToSave = coupledFields
+      .map((field) => ({ namn: field.namn, varde: (coupledValues[field.id] ?? "").trim() }))
+      .filter((f) => f.varde !== "");
+
     createWorkOrderMutation.mutate({
       title: formData.title,
       description: formData.description,
@@ -334,11 +394,13 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       customerId: formData.customerId,
       objectId: formData.objectId,
       priority: formData.priority,
+      orderType: formData.orderType,
       desiredDeliveryStart: start,
       desiredDeliveryEnd: end,
       articlesToAdd,
       priceListId: formData.priceListId,
       metadata,
+      coupledFieldsToSave,
     });
 
     onSubmit?.(formData);
@@ -561,6 +623,29 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                 <SelectItem value="normal">Normal</SelectItem>
                 <SelectItem value="high">Hög</SelectItem>
                 <SelectItem value="urgent">Akut</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Task #670: ordertyp styr vilka kopplade metadatafält som visas nedan */}
+          <div className="space-y-2">
+            <Label>Ordertyp</Label>
+            <Select
+              value={formData.orderType}
+              onValueChange={(v) => setFormData({ ...formData, orderType: v })}
+            >
+              <SelectTrigger data-testid="select-order-type">
+                <SelectValue placeholder="Välj ordertyp..." />
+              </SelectTrigger>
+              <SelectContent>
+                {(orderTypes.includes(formData.orderType)
+                  ? orderTypes
+                  : [formData.orderType, ...orderTypes]
+                ).map((ot) => (
+                  <SelectItem key={ot} value={ot} data-testid={`option-order-type-${ot}`}>
+                    {ot}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -806,6 +891,59 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
               rows={2}
             />
           </div>
+
+          {/* Task #670: fält kopplade till vald ordertyp — visas för inmatning vid skapande */}
+          {coupledLoading ? (
+            <div className="flex items-center justify-center py-3">
+              <Loader2 className="h-4 w-4 animate-spin" />
+            </div>
+          ) : coupledFields.length > 0 ? (
+            <div className="border rounded-md p-3 space-y-3 bg-muted/20" data-testid="section-coupled-fields">
+              <div className="text-xs font-medium text-muted-foreground">
+                Fält för ordertypen "{formData.orderType}"
+              </div>
+              {coupledFields.map((field) => {
+                const label = field.dotKey ?? field.namn;
+                const currentValue = coupledValues[field.id] ?? "";
+                const setVal = (v: string) =>
+                  setCoupledValues((prev) => ({ ...prev, [field.id]: v }));
+                return (
+                  <div key={field.id} className="space-y-1" data-testid={`coupled-field-${field.id}`}>
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      {label}
+                      {field.beskrivning && (
+                        <span className="text-xs text-muted-foreground font-normal">- {field.beskrivning}</span>
+                      )}
+                    </label>
+                    {field.datatyp === 'boolean' ? (
+                      <Select value={currentValue} onValueChange={setVal}>
+                        <SelectTrigger data-testid={`input-coupled-field-${field.id}`}>
+                          <SelectValue placeholder="Välj värde..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="true">Ja</SelectItem>
+                          <SelectItem value="false">Nej</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        type={field.datatyp === 'integer' || field.datatyp === 'decimal' ? 'number' : field.datatyp === 'datetime' ? 'date' : 'text'}
+                        step={field.datatyp === 'decimal' ? '0.01' : undefined}
+                        placeholder={
+                          field.datatyp === 'integer' ? 'Ange heltal...' :
+                          field.datatyp === 'decimal' ? 'Ange decimaltal...' :
+                          'Ange värde...'
+                        }
+                        value={currentValue}
+                        onChange={(e) => setVal(e.target.value)}
+                        data-testid={`input-coupled-field-${field.id}`}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
 
           <Alert>
             <AlertDescription className="text-xs">

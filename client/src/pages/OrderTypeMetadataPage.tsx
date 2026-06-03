@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { MetadataKatalog } from "@shared/schema";
@@ -18,7 +18,24 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Link2, Search, Layers, Tag } from "lucide-react";
+import { Link2, Search, Layers, Tag, GripVertical, ChevronUp, ChevronDown, ListOrdered, X } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 // Task #665: Admin-sida för att koppla metadatafält/familjer till en ordertyp.
 // Kopplingsnyckel = work_orders.order_type (fri sträng). Familj-förälder kan kopplas
@@ -74,6 +91,81 @@ export default function OrderTypeMetadataPage() {
     (links || []).forEach((l) => map.set(l.metadataKatalogId, l.id));
     return map;
   }, [links]);
+
+  // Lokal, optimistisk ordning för de kopplade fälten. Synkas från servern (som
+  // redan returnerar links i sortOrder/createdAt-ordning) när vi inte håller på
+  // att spara om ordningen.
+  const [orderedLinkIds, setOrderedLinkIds] = useState<string[]>([]);
+
+  const linkById = useMemo(() => {
+    const map = new Map<string, OrderTypeMetadataLink>();
+    (links || []).forEach((l) => map.set(l.id, l));
+    return map;
+  }, [links]);
+
+  const reorderMutation = useMutation({
+    mutationFn: async (orderedKatalogIds: string[]) => {
+      // Persistera hela ordningen via befintlig upsert (onConflictDoUpdate sätter
+      // sortOrder). sortOrder = index ger en stabil, lucklös sekvens.
+      await Promise.all(
+        orderedKatalogIds.map((katalogId, idx) =>
+          apiRequest("POST", "/api/order-type-metadata-links", {
+            orderType: effectiveOrderType,
+            metadataKatalogId: katalogId,
+            sortOrder: idx,
+          }),
+        ),
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/order-type-metadata-links", effectiveOrderType] });
+      // Invalidera även orderformulärets fält-källa så ordningen slår igenom där.
+      queryClient.invalidateQueries({ queryKey: ["/api/order-type-metadata"] });
+    },
+    onError: (err: any) => {
+      // Återställ till serverns ordning vid fel.
+      setOrderedLinkIds((links || []).map((l) => l.id));
+      toast({ title: "Kunde inte spara ordningen", description: err?.message ?? "Okänt fel", variant: "destructive" });
+    },
+  });
+
+  useEffect(() => {
+    if (reorderMutation.isPending) return;
+    setOrderedLinkIds((links || []).map((l) => l.id));
+  }, [links, reorderMutation.isPending]);
+
+  const orderedLinks = useMemo(
+    () =>
+      orderedLinkIds
+        .map((id) => linkById.get(id))
+        .filter((l): l is OrderTypeMetadataLink => !!l),
+    [orderedLinkIds, linkById],
+  );
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const applyOrder = (next: OrderTypeMetadataLink[]) => {
+    setOrderedLinkIds(next.map((l) => l.id));
+    reorderMutation.mutate(next.map((l) => l.metadataKatalogId));
+  };
+
+  const handleMove = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= orderedLinks.length) return;
+    applyOrder(arrayMove(orderedLinks, index, target));
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = orderedLinks.findIndex((l) => l.id === active.id);
+    const newIndex = orderedLinks.findIndex((l) => l.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    applyOrder(arrayMove(orderedLinks, oldIndex, newIndex));
+  };
 
   const createMutation = useMutation({
     mutationFn: async (metadataKatalogId: string) => {
@@ -235,6 +327,52 @@ export default function OrderTypeMetadataPage() {
       {effectiveOrderType && (
         <Card>
           <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ListOrdered className="h-4 w-4" />
+              Kopplade fält i ordning
+            </CardTitle>
+            <CardDescription>
+              Dra fälten eller använd pilarna för att bestämma i vilken ordning de visas i orderformuläret.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {linksLoading ? (
+              <div className="space-y-2">
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
+                ))}
+              </div>
+            ) : orderedLinks.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-2" data-testid="text-no-linked-fields">
+                Inga fält kopplade ännu. Bocka i fält nedan för att koppla dem.
+              </div>
+            ) : (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={orderedLinks.map((l) => l.id)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-1">
+                    {orderedLinks.map((link, index) => (
+                      <SortableLinkRow
+                        key={link.id}
+                        link={link}
+                        index={index}
+                        total={orderedLinks.length}
+                        isBusy={reorderMutation.isPending}
+                        isRemoving={deleteMutation.isPending}
+                        onMove={handleMove}
+                        onRemove={() => deleteMutation.mutate(link.id)}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {effectiveOrderType && (
+        <Card>
+          <CardHeader>
             <CardTitle className="text-base">Tillgängliga metadatafält</CardTitle>
             <CardDescription>
               Bocka i fält eller familjer att koppla till ordertypen. En familj expanderas till
@@ -367,5 +505,110 @@ function FieldRow({
         )}
       </div>
     </label>
+  );
+}
+
+// En dragbar rad i ordnings-listan. Drag-handtaget (GripVertical) bär dnd-kit-
+// lyssnarna; upp/ned-knapparna är tangentbordstillgänglig fallback.
+function SortableLinkRow({
+  link,
+  index,
+  total,
+  isBusy,
+  isRemoving,
+  onMove,
+  onRemove,
+}: {
+  link: OrderTypeMetadataLink;
+  index: number;
+  total: number;
+  isBusy: boolean;
+  isRemoving: boolean;
+  onMove: (index: number, direction: -1 | 1) => void;
+  onRemove: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: link.id,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  };
+  const label = link.katalog?.namn ?? "(okänt fält)";
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-2 rounded-md border px-3 py-2 bg-background hover-elevate"
+      data-testid={`linked-field-row-${link.metadataKatalogId}`}
+    >
+      <button
+        type="button"
+        className="shrink-0 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50"
+        aria-label={`Dra för att flytta ${label}`}
+        data-testid={`drag-handle-linked-field-${link.metadataKatalogId}`}
+        disabled={isBusy && !isDragging}
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <div className="flex flex-col shrink-0">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-4 w-6"
+          aria-label={`Flytta upp ${label}`}
+          data-testid={`button-move-up-linked-field-${link.metadataKatalogId}`}
+          disabled={index === 0 || isBusy}
+          onClick={() => onMove(index, -1)}
+        >
+          <ChevronUp className="h-3 w-3" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-4 w-6"
+          aria-label={`Flytta ned ${label}`}
+          data-testid={`button-move-down-linked-field-${link.metadataKatalogId}`}
+          disabled={index === total - 1 || isBusy}
+          onClick={() => onMove(index, 1)}
+        >
+          <ChevronDown className="h-3 w-3" />
+        </Button>
+      </div>
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+        {index + 1}
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium truncate">{label}</span>
+          {link.katalog?.beteckning && (
+            <Badge variant="outline" className="text-[10px]">
+              {link.katalog.beteckning}
+            </Badge>
+          )}
+          {link.katalog && (
+            <span className="text-xs text-muted-foreground">{link.katalog.datatyp}</span>
+          )}
+        </div>
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 shrink-0"
+        aria-label={`Ta bort ${label}`}
+        data-testid={`button-remove-linked-field-${link.metadataKatalogId}`}
+        disabled={isRemoving}
+        onClick={onRemove}
+      >
+        <X className="h-4 w-4 text-destructive" />
+      </Button>
+    </div>
   );
 }
