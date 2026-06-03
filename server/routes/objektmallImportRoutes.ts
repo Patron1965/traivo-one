@@ -222,8 +222,9 @@ export async function buildTemplateWorkbook(): Promise<Buffer> {
     "Hierarkin byggs via föräldrakolumnerna — nivån härleds automatiskt från förälderkedjan.",
     "",
     "FASTA KOLUMNER (A–E):",
-    "  • Systemnummer — fyll i för att UPPDATERA ett befintligt objekt (matchas mot",
-    "    Traivos systemnummer/kundens butiksnummer, eller mot Objektnamn = butiksnamn).",
+    "  • Systemnummer — Traivos eget systemnummer för ett BEFINTLIGT objekt (unikt ID som",
+    "    systemet skapar). Fyll i för att UPPDATERA. Kundens egna butiksnummer läggs i en",
+    "    separat metadata-kolumn (t.ex. 'externt_id') — inte i kolumn A.",
     "  • Interimsnummer — ditt eget löpnummer för NYA objekt; binder ihop nivåerna och möjliggör re-import.",
     "  • Systemföräldranummer — peka objektet mot en BEFINTLIG förälder (system→system).",
     "  • Interimföräldranummer — peka mot en rad i denna fil (ny eller befintlig). Lämna tomt för rotnivå.",
@@ -247,7 +248,14 @@ export async function buildTemplateWorkbook(): Promise<Buffer> {
     "    samma prefix (delen före punkten) ihop till ETT logiskt fält som lagras strukturerat.",
     "  • Exempel adress: kolumnerna \"adress.gata\", \"adress.gatunummer\", \"adress.postnummer\"",
     "    och \"adress.ort\" slås ihop till ett sammansatt värde på fältet \"adress\".",
+    "  • Samma logik gäller kontaktpersoner: \"kontaktperson.namn\", \"kontaktperson.titel\",",
+    "    \"kontaktperson.telefon\" slås ihop till ett sammansatt fält \"kontaktperson\".",
     "  • Prefixet (t.ex. \"adress\") måste matcha en metadata-definition precis som vanliga kolumner.",
+    "",
+    "PROPAGERING AV SAMMANSATTA FÄLT:",
+    "  • Om ett sammansatt fält (t.ex. \"adress\") flödar nedåt i hierarkin kan enskilda underfält",
+    "    överskuggas på lägre nivåer. T.ex. postnummer och ort ärvs nedåt, medan gatuadress sätts",
+    "    per objekt. Ett underfält som har eget värde på en lägre nivå vinner över det ärvda.",
     "",
     "En och samma fil kan i samma körning: skapa nya (interim), uppdatera befintliga (systemnummer)",
     "och peka om ett objekt till en ny eller befintlig förälder.",
@@ -340,6 +348,9 @@ export async function buildTemplateWorkbook(): Promise<Buffer> {
     "614 30",
     "Söderköping",
     "Anna Andersson",
+    "Platschef",
+    "070-123 45 67",
+    "BUTIK-4711",
   ];
   const exampleRow = ws.addRow(exampleValues);
   exampleRow.eachCell({ includeEmpty: true }, (cell) => {
@@ -1062,7 +1073,7 @@ async function validateAll(
     }
   }
 
-  // 2. Förladda befintliga objekt för matchning (systemnummer/butiksnummer + namn).
+  // 2. Förladda befintliga objekt för matchning (systemnummer + namn).
   const numberLookup = new Set<string>();
   const nameLookup = new Set<string>();
   for (const row of valRows) {

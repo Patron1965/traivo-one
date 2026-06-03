@@ -14,8 +14,9 @@
 //   referensnamn (variabelt antal), och varje rads cell under är det rådata-värdet.
 //
 // Task #618 — Enhetligt nummerprotokoll (fyra nummer):
-//   • Systemnummer fyllt        → UPPDATERA befintligt objekt (matchas mot
-//     objectNumber = systemnummer/butiksnummer, eller mot objektnamn = butiksnamn).
+//   • Systemnummer fyllt        → UPPDATERA befintligt objekt. Kolumn A är ALLTID
+//     Traivos eget systemnummer (objectNumber); kundens egna butiksnummer hör hemma
+//     i en metadata-kolumn (t.ex. externt_id), inte i kolumn A.
 //   • enbart Interimsnummer      → SKAPA nytt objekt (objectNumber = MALL-<interim>),
 //     re-import via samma interim uppdaterar i stället för att duplicera.
 //   • Systemföräldranummer       → peka mot BEFINTLIG förälder (existing→existing).
@@ -58,9 +59,9 @@ export const OBJEKTMALL_FIXED_COLUMNS: ObjektmallColumn[] = [
     header: "Systemnummer",
     required: false,
     description:
-      "Traivos systemnummer (eller kundens butiksnummer) för ett BEFINTLIGT objekt. Fyll i för att UPPDATERA. Lämna tomt för nytt objekt.",
+      "Traivos systemnummer för ett BEFINTLIGT objekt. Unikt ID som systemet själv skapar. Fyll i för att UPPDATERA, lämna tomt för nytt objekt. Kundens egna butiksnummer läggs i en separat metadata-kolumn (t.ex. 'externt_id') — inte här.",
     example: "",
-    aliases: ["Systemnr", "Butiksnummer"],
+    aliases: ["Systemnr"],
   },
   {
     key: "interim",
@@ -101,13 +102,19 @@ export const OBJEKTMALL_FIXED_COLUMNS: ObjektmallColumn[] = [
 // Illustrativa metadata-referensnamn som visas i den tomma mallens kolumn F+.
 // De är BARA exempel — användaren byter ut/lägger till egna referensnamn.
 // Task #633: exemplet visar punktnotation för ett sammansatt fält (adress med
-// underfälten gata/gatunummer/postnummer/ort) plus ett vanligt enkelt fält.
+// underfälten gata/gatunummer/postnummer/ort).
+// Task #642 (session 4): kontaktperson visas också som sammansatt fält
+// (kontaktperson.namn/titel/telefon) och externt_id som exempel på var kundens
+// egna butiksnummer hör hemma (en vanlig metadata-kolumn, inte kolumn A).
 export const OBJEKTMALL_EXAMPLE_METADATA_HEADERS: string[] = [
   "adress.gata",
   "adress.gatunummer",
   "adress.postnummer",
   "adress.ort",
-  "Kontaktperson",
+  "kontaktperson.namn",
+  "kontaktperson.titel",
+  "kontaktperson.telefon",
+  "externt_id",
 ];
 
 // ============================================================

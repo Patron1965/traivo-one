@@ -244,7 +244,7 @@ export default function ObjektmallImportPage() {
         <p className="text-muted-foreground text-sm mt-1">
           Ladda upp en ifylld <code className="text-xs bg-muted px-1 py-0.5 rounded">{OBJEKTMALL_FILENAME}</code> för
           att i ett enda svep <span className="font-medium">skapa nya</span> (via interimsnummer),{" "}
-          <span className="font-medium">uppdatera befintliga</span> (via systemnummer eller butiksnummer/butiksnamn) och{" "}
+          <span className="font-medium">uppdatera befintliga</span> (via systemnummer) och{" "}
           <span className="font-medium">flytta objekt till ny förälder</span>. Mallen har nu en enda{" "}
           <span className="font-medium">Import-flik</span> — en rad per objekt oavsett nivå, där nivån härleds från
           förälderkedjan. Endast Objektnamn krävs på varje rad (förälder för icke-rotnivå). Kolumn F och framåt är
@@ -324,6 +324,16 @@ export default function ObjektmallImportPage() {
                 <li>
                   <span className="font-medium">Språkmärkta namn:</span> kolumner som <span className="font-mono">namn_sv</span>,{" "}
                   <span className="font-mono">namn_en</span> ger visningsnamn per språk — påverkar inte det interna namnet (kolumn E).
+                </li>
+                <li>
+                  <span className="font-medium">Sammansatta fält (punktnotation):</span> kolumner som{" "}
+                  <span className="font-mono">adress.gata</span>/<span className="font-mono">adress.ort</span> eller{" "}
+                  <span className="font-mono">kontaktperson.namn</span>/<span className="font-mono">kontaktperson.telefon</span> grupperas
+                  till ett logiskt fält. Underfält kan ärvas nedåt och överskuggas per objekt (t.ex. postnummer ärvs, gatuadress sätts per objekt).
+                </li>
+                <li>
+                  <span className="font-medium">Kundens egna butiksnummer:</span> kolumn A är alltid Traivos systemnummer —
+                  lägg kundens ID i en egen metadata-kolumn (t.ex. <span className="font-mono">externt_id</span>).
                 </li>
               </ul>
             </div>
