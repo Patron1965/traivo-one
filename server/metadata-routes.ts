@@ -28,6 +28,7 @@ import {
   getInheritanceTree,
   getArticleMetadataForObject,
   writeArticleMetadataOnObject,
+  getMetadataKatalogUsage,
 } from "./metadata-queries";
 import { getTenantIdWithFallback } from "./tenant-middleware";
 
@@ -95,7 +96,15 @@ const createMetadataTypeSchema = z.object({
   allowedValues: z.array(z.string()).nullish(),
   isRequired: z.boolean().optional(),
   isSystem: z.boolean().optional(),
-  beteckning: z.string().max(30).optional(),
+  // Task #645: beteckning är en stabil universell nyckel. Normalisera tom/blank
+  // sträng till null (= "ingen beteckning") så att "" aldrig lagras som en
+  // dubblett-känslig nyckel. undefined bevaras så partiella PUT inte rör fältet.
+  beteckning: z
+    .string()
+    .trim()
+    .max(30)
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v.length > 0 ? v : null)),
   // Task #579: aktivera kronologisk tidslinje per fält (Lyftkrok, Antal, etc).
   kronologiskVisning: z.boolean().optional().default(false),
 });
@@ -119,6 +128,22 @@ metadataRouter.post("/types", async (req: Request, res: Response) => {
 
     if (existing.length > 0) {
       return res.status(409).json({ error: `Metadatatyp med kod '${validated.namn}' finns redan` });
+    }
+
+    // Referensnamnet (beteckning) är en stabil universell nyckel — säkerställ
+    // unikhet per tenant redan vid skapande så import/order/sök inte kopplas fel.
+    if (validated.beteckning) {
+      const existingBeteckning = await db.select({ id: metadataKatalog.id })
+        .from(metadataKatalog)
+        .where(and(
+          eq(metadataKatalog.tenantId, tenantId),
+          eq(metadataKatalog.beteckning, validated.beteckning)
+        ))
+        .limit(1);
+
+      if (existingBeteckning.length > 0) {
+        return res.status(409).json({ error: `Metadatatyp med beteckning '${validated.beteckning}' finns redan` });
+      }
     }
 
     const [newType] = await db.insert(metadataKatalog).values({
@@ -148,6 +173,70 @@ metadataRouter.put("/types/:id", async (req: Request, res: Response) => {
 
     const { id } = req.params;
     const validated = createMetadataTypeSchema.partial().parse(req.body);
+
+    const [existing] = await db
+      .select()
+      .from(metadataKatalog)
+      .where(and(eq(metadataKatalog.id, id), eq(metadataKatalog.tenantId, tenantId)))
+      .limit(1);
+
+    if (!existing) {
+      return res.status(404).json({ error: "Metadatatyp hittades inte" });
+    }
+
+    // Task #645: referensnamnet (namn/beteckning) är en stabil universell nyckel.
+    // Ett namnbyte på en typ som redan ANVÄNDS (har metadatavärden eller refereras
+    // av koncept-filter) bryter tyst import-/order-/sök-kopplingar. Blockera därför
+    // omdöpning när typen är i bruk — byt via en ny typ istället (ersättningsväg).
+    const renamesNamn = validated.namn !== undefined && validated.namn !== existing.namn;
+    const renamesBeteckning =
+      validated.beteckning !== undefined && (validated.beteckning ?? null) !== (existing.beteckning ?? null);
+
+    if (renamesNamn || renamesBeteckning) {
+      const usage = await getMetadataKatalogUsage(id, tenantId);
+      if (usage.total > 0) {
+        const changed = [
+          renamesNamn ? "namn" : null,
+          renamesBeteckning ? "beteckning" : null,
+        ].filter(Boolean).join(", ");
+        return res.status(409).json({
+          error:
+            `Kan inte ändra referensnamnet (${changed}) — metadatatypen används ` +
+            `(${usage.valueCount} värden, ${usage.conceptFilterCount} koncept-filter). ` +
+            `Referensnamnet är en stabil universell nyckel för import, order och sök/filter. ` +
+            `Skapa en ny metadatatyp och migrera värden istället för att döpa om en typ i bruk.`,
+          usage,
+        });
+      }
+    }
+
+    // Bekräfta unikhet per tenant innan skrivning (befintliga index respekteras)
+    // så en kollision ger ett tydligt svenskt fel istället för dubbletter/DB-krasch.
+    if (renamesNamn && validated.namn) {
+      const dupNamn = await db.select({ id: metadataKatalog.id })
+        .from(metadataKatalog)
+        .where(and(
+          eq(metadataKatalog.tenantId, tenantId),
+          eq(metadataKatalog.namn, validated.namn),
+        ))
+        .limit(1);
+      if (dupNamn.length > 0 && dupNamn[0].id !== id) {
+        return res.status(409).json({ error: `Metadatatyp med kod '${validated.namn}' finns redan` });
+      }
+    }
+
+    if (renamesBeteckning && validated.beteckning) {
+      const dupBeteckning = await db.select({ id: metadataKatalog.id })
+        .from(metadataKatalog)
+        .where(and(
+          eq(metadataKatalog.tenantId, tenantId),
+          eq(metadataKatalog.beteckning, validated.beteckning),
+        ))
+        .limit(1);
+      if (dupBeteckning.length > 0 && dupBeteckning[0].id !== id) {
+        return res.status(409).json({ error: `Metadatatyp med beteckning '${validated.beteckning}' finns redan` });
+      }
+    }
 
     const [updated] = await db
       .update(metadataKatalog)

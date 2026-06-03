@@ -238,6 +238,85 @@ export async function writeImportedMetadataValue(
 }
 
 // ============================================================================
+// METADATAREFERENS SOM STABIL UNIVERSELL NYCKEL (Task #645)
+// ----------------------------------------------------------------------------
+// Referensnamnet på en metadatatyp (`metadata_katalog.namn` + den korta
+// `beteckning`) är inte bara en Excel-header vid import — det är en universell,
+// stabil nyckel som binder ihop import-matchning, order-/koncept-filter
+// (`concept_filters.metadata_key`) och sök/filter. Den fungerar som en API-
+// nyckel snarare än en etikett. Därför får referensen inte tyst döpas om när
+// typen redan ANVÄNDS, eftersom det skulle bryta dessa kopplingar.
+//
+// "Används" räknas här som: (a) det finns metadatavärden (objekt eller WO,
+// inkl. importerade) som pekar på katalogposten, eller (b) ett koncept-filter
+// matchar referensen via `metadata_key` (namn eller beteckning). Räkningen
+// centraliseras här så att samma definition av "i bruk" används i route-
+// blockeringen och kan återanvändas av UI/scheduler.
+export interface MetadataKatalogUsage {
+  katalogId: string;
+  namn: string | null;
+  beteckning: string | null;
+  valueCount: number;        // rader i metadata_varden (objekt + WO, inkl. import)
+  conceptFilterCount: number; // concept_filters som matchar namn/beteckning
+  total: number;
+}
+
+export async function getMetadataKatalogUsage(
+  katalogId: string,
+  tenantId: string,
+): Promise<MetadataKatalogUsage> {
+  const [katalog] = await db
+    .select({ namn: metadataKatalog.namn, beteckning: metadataKatalog.beteckning })
+    .from(metadataKatalog)
+    .where(and(eq(metadataKatalog.id, katalogId), eq(metadataKatalog.tenantId, tenantId)));
+
+  if (!katalog) {
+    return {
+      katalogId,
+      namn: null,
+      beteckning: null,
+      valueCount: 0,
+      conceptFilterCount: 0,
+      total: 0,
+    };
+  }
+
+  const valuesRes = await db.execute(sql`
+    SELECT COUNT(*)::int AS c
+    FROM metadata_varden
+    WHERE tenant_id = ${tenantId} AND metadata_katalog_id = ${katalogId}
+  `);
+  const valueCount = Number((valuesRes.rows[0] as { c: number } | undefined)?.c ?? 0);
+
+  // concept_filters saknar tenant_id — scopas via order_concepts. Referensen kan
+  // anges som antingen namn eller den korta beteckningen, så vi matchar båda.
+  const refKeys = [katalog.namn, katalog.beteckning].filter(
+    (k): k is string => typeof k === "string" && k.length > 0,
+  );
+  let conceptFilterCount = 0;
+  if (refKeys.length > 0) {
+    const filtersRes = await db.execute(sql`
+      SELECT COUNT(*)::int AS c
+      FROM concept_filters cf
+      JOIN order_concepts oc ON oc.id = cf.order_concept_id
+      WHERE oc.tenant_id = ${tenantId}
+        AND oc.deleted_at IS NULL
+        AND cf.metadata_key IN (${sql.join(refKeys, sql`, `)})
+    `);
+    conceptFilterCount = Number((filtersRes.rows[0] as { c: number } | undefined)?.c ?? 0);
+  }
+
+  return {
+    katalogId,
+    namn: katalog.namn ?? null,
+    beteckning: katalog.beteckning ?? null,
+    valueCount,
+    conceptFilterCount,
+    total: valueCount + conceptFilterCount,
+  };
+}
+
+// ============================================================================
 // SAMMANSATTA (JSON) FÄLT — PER-UNDERFÄLT-ARV (Task #644)
 // ----------------------------------------------------------------------------
 // Sammansatta metadatafält (punktnotation `adress.gata`, `kontaktperson.namn`
