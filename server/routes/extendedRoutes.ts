@@ -13,7 +13,7 @@ import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
 import { requireAdmin, requirePlanner } from "../tenant-middleware";
 import { hashPassword } from "../password";
-import { getArticleMetadataForObject, writeArticleMetadataOnObject, createMetadata, getAllMetadataTypes } from "../metadata-queries";
+import { getArticleMetadataForObject, writeArticleMetadataOnObject, createMetadata, getAllMetadataTypes, writeSystemMetadataOnObject } from "../metadata-queries";
 import { signDynamicQrToken, verifyDynamicQrToken } from "../dynamic-qr-token";
 import { checkPublicReportRateLimit, getClientKeyForRequest } from "../public-report-rate-limit";
 import { RateLimitError } from "../errors";
@@ -1023,6 +1023,21 @@ app.post("/api/public/report-dynamic", asyncHandler(async (req, res) => {
       userAgent: req.headers["user-agent"] || undefined,
       status: "new",
     });
+
+    // Task #682: skriv systemgenererad, read-only metadata på objektet — "senaste
+    // felanmälan". Best-effort; ett fel får aldrig stoppa kvittensen till anmälaren.
+    try {
+      const when = new Date().toISOString().slice(0, 10);
+      await writeSystemMetadataOnObject(
+        objectId,
+        "Senaste felanmälan",
+        `${title} (${when})`,
+        tenantId,
+        `system:public-issue-report:${report.id}`,
+      );
+    } catch (e) {
+      console.error("[task-682] writeSystemMetadataOnObject (Senaste felanmälan) failed:", e);
+    }
 
     res.status(201).json({
       success: true,

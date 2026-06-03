@@ -14,7 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   Loader2, Database, Lock, Plus, Save, X, History, Edit2, 
   ArrowDown, ExternalLink, Trash2, Image, FileText, MapPin, Clock, Hash, Type, ToggleLeft,
-  Share2, ChevronRight, ChevronDown, TreeDeciduous, RotateCcw, Pencil, Calculator, AlertTriangle
+  Share2, ChevronRight, ChevronDown, TreeDeciduous, RotateCcw, Pencil, Calculator, AlertTriangle,
+  Server, Wrench
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ServiceObject, MetadataKatalog, MetadataHistorik } from "@shared/schema";
@@ -193,6 +194,18 @@ function CompositeEditor({
   );
 }
 
+// Task #682: ursprungsmodell i UI. Värden satta av systemet ('system') eller en
+// tjänst ('tjanst'/legacy 'utforande') är read-only och visas med eget märke.
+function isSystemOrigin(entry: MetadataEntry): boolean {
+  return entry.metod === 'system' || entry.katalog?.isSystem === true;
+}
+function isServiceOrigin(entry: MetadataEntry): boolean {
+  return entry.metod === 'tjanst' || entry.metod === 'utforande';
+}
+function isReadonlyOrigin(entry: MetadataEntry): boolean {
+  return isSystemOrigin(entry) || isServiceOrigin(entry);
+}
+
 function getSourceBadge(entry: MetadataEntry) {
   if (entry.source === 'computed') {
     return (
@@ -232,6 +245,36 @@ function getSourceBadge(entry: MetadataEntry) {
       </Tooltip>
     );
   }
+  if (isSystemOrigin(entry)) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 border-chart-4/50 text-chart-4 cursor-help" data-testid={`badge-system-${entry.id}`}>
+            <Server className="h-3 w-3" />
+            [system]
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Sattes automatiskt av systemet{entry.uppdateradAv ? ` (${entry.uppdateradAv})` : ""}{entry.updatedAt ? ` ${new Date(entry.updatedAt).toLocaleDateString("sv-SE")}` : ""}. Kan inte redigeras manuellt.</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+  if (isServiceOrigin(entry)) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 border-chart-2/50 text-chart-2 cursor-help" data-testid={`badge-tjanst-${entry.id}`}>
+            <Wrench className="h-3 w-3" />
+            [tjanst]
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Skrevs av en utford tjanst{entry.uppdateradAv ? ` (${entry.uppdateradAv})` : ""}{entry.updatedAt ? ` ${new Date(entry.updatedAt).toLocaleDateString("sv-SE")}` : ""}. Inte fritt redigerbart.</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -251,6 +294,8 @@ function getSourceColor(entry: MetadataEntry): string {
   if (entry.source === 'computed') return entry.computedError ? "border-l-warning" : "border-l-chart-4";
   if (entry.nivaLas) return "border-l-destructive";
   if (entry.source === 'inherited') return "border-l-chart-2";
+  if (isSystemOrigin(entry)) return "border-l-chart-4";
+  if (isServiceOrigin(entry)) return "border-l-chart-2";
   return "border-l-chart-1";
 }
 
@@ -880,6 +925,7 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
   // Task #666: beräknade fält är readonly och kan aldrig sättas manuellt — uteslut dem.
   const availableTypesForAdd = metadataTypes
     .filter(t => (t as any).arBeraknad !== true)
+    .filter(t => (t as any).isSystem !== true)
     .filter(t =>
       (t as any).allowDuplicates === true ||
       !metadata.some(m => m.source === 'local' && m.katalog.namn === t.namn)
@@ -1041,7 +1087,7 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                                   <InheritanceTreeDialog objectId={object.id} metadataKatalogId={entry.metadataKatalogId} metadataName={entry.katalog.namn} />
                                 </>
                               )}
-                              {entry.source === 'local' && entry.arvsNedat && (
+                              {entry.source === 'local' && entry.arvsNedat && !isReadonlyOrigin(entry) && (
                                 <PropagationPreviewDialog
                                   objectId={object.id}
                                   metadataKatalogId={entry.metadataKatalogId}
@@ -1050,7 +1096,7 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                                   isPropagating={propagateMutation.isPending}
                                 />
                               )}
-                              {entry.source === 'local' && (
+                              {entry.source === 'local' && !isReadonlyOrigin(entry) && (
                                 <>
                                   <Tooltip>
                                     <TooltipTrigger asChild>

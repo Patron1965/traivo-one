@@ -75,6 +75,7 @@ import {
   ChevronRight,
   LinkIcon,
   Beaker,
+  AlertTriangle,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -243,6 +244,37 @@ export default function ArticlesPage() {
   const { data: metadataTypes = [] } = useQuery<{ id: string; namn: string; datatyp: string }[]>({
     queryKey: ["/api/metadata/types"],
   });
+
+  // Task #682: varna när en metadatareferens redan är kopplad till en annan
+  // ordertyp/artikel (undvik generiska fältkollisioner, t.ex. antal vs antal_matavfall).
+  const [metadataLinkWarnings, setMetadataLinkWarnings] = useState<{ fetch: string | null; leave: string | null }>({ fetch: null, leave: null });
+
+  const checkMetadataReferenceUsage = useCallback(async (namn: string, which: "fetch" | "leave") => {
+    if (!namn) {
+      setMetadataLinkWarnings(prev => ({ ...prev, [which]: null }));
+      return;
+    }
+    const katalog = metadataTypes.find(t => t.namn === namn);
+    if (!katalog) {
+      setMetadataLinkWarnings(prev => ({ ...prev, [which]: null }));
+      return;
+    }
+    try {
+      const res = await fetch(`/api/metadata-link-usage/${encodeURIComponent(katalog.id)}`, { credentials: "include" });
+      if (!res.ok) return;
+      const usage = await res.json();
+      const articleUsage = (usage.articles || []).filter((a: any) => a.id !== editingArticle?.id);
+      const parts: string[] = [];
+      if (usage.orderTypes?.length) parts.push(`ordertyp(er): ${usage.orderTypes.join(", ")}`);
+      if (articleUsage.length) parts.push(`artikel(ar): ${articleUsage.map((a: any) => a.name).join(", ")}`);
+      setMetadataLinkWarnings(prev => ({
+        ...prev,
+        [which]: parts.length ? `Referensen "${namn}" används redan av ${parts.join("; ")}. Risk för generiska fältkollisioner — överväg en mer specifik referens.` : null,
+      }));
+    } catch {
+      // best-effort
+    }
+  }, [metadataTypes, editingArticle?.id]);
 
   const { data: metadataLabels = [] } = useQuery<{ id: string; namn: string; beteckning: string | null; datatyp: string }[]>({
     queryKey: ["/api/metadata-labels"],
@@ -1295,7 +1327,11 @@ export default function ArticlesPage() {
                   <Label>Hämta metadata (fetchMetadataCode)</Label>
                   <Select
                     value={formData.fetchMetadataCode || "_none"}
-                    onValueChange={(v) => setFormData({ ...formData, fetchMetadataCode: v === "_none" ? "" : v })}
+                    onValueChange={(v) => {
+                      const next = v === "_none" ? "" : v;
+                      setFormData({ ...formData, fetchMetadataCode: next });
+                      checkMetadataReferenceUsage(next, "fetch");
+                    }}
                   >
                     <SelectTrigger data-testid="select-fetch-metadata">
                       <SelectValue placeholder="Ingen" />
@@ -1308,12 +1344,22 @@ export default function ArticlesPage() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">Metadata som visas för utföraren vid start</p>
+                  {metadataLinkWarnings.fetch && (
+                    <p className="text-xs text-warning flex items-start gap-1" data-testid="warning-fetch-metadata-link">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                      <span>{metadataLinkWarnings.fetch}</span>
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Lämna metadata (leaveMetadataCode)</Label>
                   <Select
                     value={formData.leaveMetadataCode || "_none"}
-                    onValueChange={(v) => setFormData({ ...formData, leaveMetadataCode: v === "_none" ? "" : v })}
+                    onValueChange={(v) => {
+                      const next = v === "_none" ? "" : v;
+                      setFormData({ ...formData, leaveMetadataCode: next });
+                      checkMetadataReferenceUsage(next, "leave");
+                    }}
                   >
                     <SelectTrigger data-testid="select-leave-metadata">
                       <SelectValue placeholder="Ingen" />
@@ -1326,6 +1372,12 @@ export default function ArticlesPage() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">Metadata som skrivs tillbaka efter utförande</p>
+                  {metadataLinkWarnings.leave && (
+                    <p className="text-xs text-warning flex items-start gap-1" data-testid="warning-leave-metadata-link">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                      <span>{metadataLinkWarnings.leave}</span>
+                    </p>
+                  )}
                 </div>
               </div>
 

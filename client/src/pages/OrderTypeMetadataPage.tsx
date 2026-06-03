@@ -18,7 +18,17 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Link2, Search, Layers, Tag, GripVertical, ChevronUp, ChevronDown, ListOrdered, X } from "lucide-react";
+import { Link2, Search, Layers, Tag, AlertTriangle, GripVertical, ChevronUp, ChevronDown, ListOrdered, X } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   DndContext,
   closestCenter,
@@ -36,6 +46,12 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+
+interface MetadataLinkUsage {
+  field: { id: string; namn: string } | null;
+  orderTypes: string[];
+  articles: Array<{ id: string; name: string; articleNumber: string; relation: "leave" | "fetch" }>;
+}
 
 // Task #665: Admin-sida för att koppla metadatafält/familjer till en ordertyp.
 // Kopplingsnyckel = work_orders.order_type (fri sträng). Familj-förälder kan kopplas
@@ -194,7 +210,11 @@ export default function OrderTypeMetadataPage() {
     },
   });
 
-  const toggleLink = (katalogId: string) => {
+  // Task #682: varning innan en referens kopplas till ytterligare en ordertyp/artikel.
+  const [pendingLink, setPendingLink] = useState<{ katalogId: string; usage: MetadataLinkUsage } | null>(null);
+  const [checkingUsage, setCheckingUsage] = useState(false);
+
+  const toggleLink = async (katalogId: string) => {
     if (!effectiveOrderType) {
       toast({ title: "Välj ordertyp först", variant: "destructive" });
       return;
@@ -202,9 +222,28 @@ export default function OrderTypeMetadataPage() {
     const existing = linkedIds.get(katalogId);
     if (existing) {
       deleteMutation.mutate(existing);
-    } else {
-      createMutation.mutate(katalogId);
+      return;
     }
+
+    // Kontrollera om referensen redan används av en annan ordertyp/artikel.
+    setCheckingUsage(true);
+    try {
+      const res = await fetch(
+        `/api/metadata-link-usage/${encodeURIComponent(katalogId)}?excludeOrderType=${encodeURIComponent(effectiveOrderType)}`,
+      );
+      if (res.ok) {
+        const usage: MetadataLinkUsage = await res.json();
+        if (usage.orderTypes.length > 0 || usage.articles.length > 0) {
+          setPendingLink({ katalogId, usage });
+          return;
+        }
+      }
+    } catch {
+      // Vid fel: fall tillbaka till att skapa direkt — varningen är best-effort.
+    } finally {
+      setCheckingUsage(false);
+    }
+    createMutation.mutate(katalogId);
   };
 
   // Gruppera katalogen: familje-föräldrar med sina underfält, sedan fristående fält.
@@ -257,7 +296,7 @@ export default function OrderTypeMetadataPage() {
     return { visibleFamilies, visibleStandalone };
   }, [metadataTypes, search]);
 
-  const mutating = createMutation.isPending || deleteMutation.isPending;
+  const mutating = createMutation.isPending || deleteMutation.isPending || checkingUsage;
 
   return (
     <div className="space-y-6">
@@ -457,6 +496,62 @@ export default function OrderTypeMetadataPage() {
           </CardContent>
         </Card>
       )}
+
+      <AlertDialog open={!!pendingLink} onOpenChange={(open) => { if (!open) setPendingLink(null); }}>
+        <AlertDialogContent data-testid="dialog-duplicate-link-warning">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-warning" />
+              Referensen används redan
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  Metadatareferensen{" "}
+                  <span className="font-medium">{pendingLink?.usage.field?.namn}</span>{" "}
+                  är redan kopplad på andra ställen. Att koppla samma referens till flera
+                  ordertyper/artiklar kan ge generiska fältkollisioner (t.ex. <code>antal</code>{" "}
+                  som krockar med <code>antal_matavfall</code>). Överväg en mer specifik referens.
+                </p>
+                {pendingLink && pendingLink.usage.orderTypes.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium">Ordertyper:</p>
+                    <ul className="list-disc pl-5 text-sm text-muted-foreground">
+                      {pendingLink.usage.orderTypes.map((ot) => (
+                        <li key={ot} data-testid={`usage-order-type-${ot}`}>{ot}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {pendingLink && pendingLink.usage.articles.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium">Artiklar:</p>
+                    <ul className="list-disc pl-5 text-sm text-muted-foreground">
+                      {pendingLink.usage.articles.map((a) => (
+                        <li key={a.id} data-testid={`usage-article-${a.id}`}>
+                          {a.articleNumber} – {a.name} ({a.relation === "leave" ? "lämna" : "hämta"})
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-link">Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="button-confirm-link"
+              onClick={() => {
+                if (pendingLink) createMutation.mutate(pendingLink.katalogId);
+                setPendingLink(null);
+              }}
+            >
+              Koppla ändå
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

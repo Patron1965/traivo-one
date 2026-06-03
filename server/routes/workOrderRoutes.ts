@@ -34,7 +34,7 @@ async function computeOutsidePreferredWindow(
     deliveryPreferencePriority: effective.priority ?? "preferred",
   };
 }
-import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "../metadata-queries";
+import { getArticleMetadataForObject, writeArticleMetadataOnObject, writeSystemMetadataOnObject } from "../metadata-queries";
 
 export async function registerWorkOrderRoutes(app: Express) {
 
@@ -681,6 +681,23 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
     deliveryPreferencePriority: prefFlags.deliveryPreferencePriority,
   };
   const workOrder = await storage.createWorkOrder(dataWithFlag);
+
+  // Task #682: skriv systemgenererad, read-only metadata på objektet — "senaste
+  // arbetsorder". Best-effort; ett misslyckande får aldrig blockera order-skapandet.
+  if (workOrder.objectId) {
+    try {
+      const scheduled = workOrder.scheduledDate ? ` (${new Date(workOrder.scheduledDate).toISOString().slice(0, 10)})` : "";
+      await writeSystemMetadataOnObject(
+        workOrder.objectId,
+        "Senaste arbetsorder",
+        `${workOrder.title}${scheduled}`,
+        tenantId,
+        `system:wo-create:${workOrder.id}`,
+      );
+    } catch (e) {
+      console.error("[task-682] writeSystemMetadataOnObject (Senaste arbetsorder) failed:", e);
+    }
+  }
 
   if (workOrder.resourceId) {
     notificationService.notifyJobAssigned(workOrder, workOrder.resourceId);

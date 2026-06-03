@@ -5,6 +5,7 @@ import { METADATA_AREA_OPTIONS } from "@shared/metadata-areas";
 import { 
   objects, 
   customers,
+  articles,
   metadataKatalog, 
   metadataKatalogKunder,
   metadataAreas,
@@ -24,6 +25,22 @@ import {
 // Task #663: katalogtyp berikad med dess kundlås-kopplingar (tom array = generellt
 // fält, gäller alla kunder; en eller flera customerIds = kundlåst).
 export type MetadataKatalogWithCustomers = MetadataKatalog & { customerIds: string[] };
+
+// Task #682: ursprungsmodell. `metod` på metadata_varden bär ursprunget för
+// VEM/VAD som satte värdet. Automatiska ursprung (system/tjänst/import/beräkning/
+// arv/auto) skrivs av systemet och får aldrig sättas eller överskrivas manuellt.
+// 'utforande' är legacy-ursprung för tjänst-skrivningar och behandlas som tjänst.
+export const AUTOMATIC_ORIGIN_METHODS = new Set([
+  'system', 'tjanst', 'utforande', 'import', 'berakning', 'arvd', 'auto', 'automatisk',
+]);
+export function isAutomaticOrigin(metod?: string | null): boolean {
+  return metod != null && AUTOMATIC_ORIGIN_METHODS.has(metod);
+}
+// Skrivskyddade ursprung som inte får överskrivas av en manuell ändring.
+export const READONLY_ORIGIN_METHODS = new Set(['system', 'tjanst', 'utforande']);
+export function isReadonlyOrigin(metod?: string | null): boolean {
+  return metod != null && READONLY_ORIGIN_METHODS.has(metod);
+}
 
 export function getDisplayValue(existing: MetadataVarden): string | null {
   return existing.vardeString ?? 
@@ -851,6 +868,13 @@ export async function createMetadata(data: {
     throw new Error(`"${metadataTyp.namn}" är ett beräknat fält och kan inte sättas manuellt — värdet räknas ut automatiskt från formeln.`);
   }
 
+  // Task #682: systemfält (isSystem) sätts enbart av systemet via auto-ursprung
+  // (system/tjänst/import/beräkning/arv/auto). En manuell skrivning (metod=manuell
+  // eller utelämnad) avvisas så att read-only-garantin håller även på API-nivån.
+  if (metadataTyp.isSystem && !isAutomaticOrigin(data.metod)) {
+    throw new Error(`"${metadataTyp.namn}" är ett systemfält och sätts automatiskt — det kan inte anges manuellt.`);
+  }
+
   // PDF §7/§14: dropdown-validering (allowedValues)
   if (metadataTyp.allowedValues && metadataTyp.allowedValues.length > 0) {
     const asString = data.varde === null || data.varde === undefined ? '' : String(data.varde);
@@ -1039,6 +1063,16 @@ export async function updateMetadata(
   // formeln och får aldrig lagras manuellt.
   if (metadataTyp.arBeraknad) {
     throw new Error(`"${metadataTyp.namn}" är ett beräknat fält och kan inte ändras manuellt — värdet räknas ut automatiskt från formeln.`);
+  }
+
+  // Task #682: systemfält och värden med system-/tjänst-ursprung är read-only och
+  // får inte överskrivas av en manuell ändring. Systemet uppdaterar dem själv genom
+  // att skicka ett auto-ursprung (metod=system/tjanst), vilket släpps igenom här.
+  if (metadataTyp.isSystem && !isAutomaticOrigin(metod)) {
+    throw new Error(`"${metadataTyp.namn}" är ett systemfält och sätts automatiskt — det kan inte ändras manuellt.`);
+  }
+  if (isReadonlyOrigin(existing.metod) && !isAutomaticOrigin(metod)) {
+    throw new Error(`"${metadataTyp.namn}" sattes av ${existing.metod === 'system' ? 'systemet' : 'en tjänst'} och kan inte redigeras manuellt.`);
   }
 
   // PDF §7/§14: dropdown-validering (allowedValues) — gäller även uppdatering
@@ -1683,7 +1717,7 @@ export async function writeArticleMetadataOnObject(
     .limit(1);
 
   if (existing) {
-    return updateMetadata(existing.id, value, tenantId, executedBy, 'utforande');
+    return updateMetadata(existing.id, value, tenantId, executedBy, 'tjanst');
   } else {
     return createMetadata({
       tenantId,
@@ -1691,9 +1725,56 @@ export async function writeArticleMetadataOnObject(
       metadataTypNamn: leaveMetadataCode,
       varde: value,
       skapadAv: executedBy,
-      metod: 'utforande',
+      metod: 'tjanst',
     });
   }
+}
+
+// Task #682: skriv ett systemgenererat metadatavärde på ett objekt (metod='system').
+// Används av händelse-hooks (t.ex. WO skapad, felanmälan inkommen) för att fylla
+// read-only systemfält. Skapar värdet om det saknas, annars uppdaterar det.
+// `setBy` blir VAD/VEM som satte värdet (t.ex. `system:wo-create`). Tyst no-op om
+// systemfältet inte finns i tenantens katalog (alla tenants har inte seeded det).
+export async function writeSystemMetadataOnObject(
+  objektId: string,
+  systemMetadataCode: string,
+  value: any,
+  tenantId: string,
+  setBy: string = 'system',
+): Promise<MetadataVarden | null> {
+  const [metadataTyp] = await db
+    .select()
+    .from(metadataKatalog)
+    .where(and(
+      eq(metadataKatalog.namn, systemMetadataCode),
+      eq(metadataKatalog.tenantId, tenantId),
+    ));
+
+  if (!metadataTyp) {
+    return null;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(metadataVarden)
+    .where(and(
+      eq(metadataVarden.objektId, objektId),
+      eq(metadataVarden.metadataKatalogId, metadataTyp.id),
+      eq(metadataVarden.tenantId, tenantId),
+    ))
+    .limit(1);
+
+  if (existing) {
+    return updateMetadata(existing.id, value, tenantId, setBy, 'system');
+  }
+  return createMetadata({
+    tenantId,
+    objektId,
+    metadataTypNamn: systemMetadataCode,
+    varde: value,
+    skapadAv: setBy,
+    metod: 'system',
+  });
 }
 
 // ============================================================================
@@ -2204,6 +2285,10 @@ export const STANDARD_METADATA_DEFINITIONS: Array<{
   { namn: 'Färg', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'produktion', beskrivning: 'Färg på objektet', sortOrder: 24, icon: 'Palette', area: 'produktion', displayNumber: 24, allowedValues: ['Grön', 'Blå', 'Brun', 'Svart', 'Gul'] },
 
   // === System (alltid sist) ===
+  // Task #682: systemgenererade, read-only fält som skrivs automatiskt vid
+  // relevant händelse (metod='system'). De kan aldrig sättas/ändras manuellt.
+  { namn: 'Senaste arbetsorder', datatyp: 'string', arLogisk: false, standardArvs: false, kategori: 'status', beskrivning: 'Senast skapade arbetsorder på objektet (systemfält, sätts automatiskt)', sortOrder: 990, icon: 'ClipboardList', area: 'status', displayNumber: 990, isSystem: true },
+  { namn: 'Senaste felanmälan', datatyp: 'string', arLogisk: false, standardArvs: false, kategori: 'status', beskrivning: 'Senast inkomna felanmälan på objektet (systemfält, sätts automatiskt)', sortOrder: 992, icon: 'AlertTriangle', area: 'status', displayNumber: 992, isSystem: true },
   { namn: 'Objektnamn', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'grunduppgifter', beskrivning: 'Objektets namn (systemfält)', sortOrder: 1000, icon: 'Type', area: 'grunduppgifter', displayNumber: 1000, isSystem: true, isRequired: true },
 ];
 
@@ -2712,6 +2797,74 @@ export async function deleteOrderTypeMetadataLink(
   if (deleted.length === 0) {
     throw new Error("Kopplingen hittades inte");
   }
+}
+
+// Task #682: var används en metadatareferens redan? Returnerar vilka andra
+// ordertyper och artiklar som redan är kopplade till samma katalogfält, så att UI
+// kan varna innan en ny koppling skapas (undviker generiska fältkollisioner, t.ex.
+// `antal_matavfall` vs `antal`). `excludeOrderType` filtrerar bort den ordertyp som
+// just nu redigeras. Tenant-scopad.
+export async function getMetadataReferenceLinkUsage(
+  tenantId: string,
+  metadataKatalogId: string,
+  excludeOrderType?: string,
+): Promise<{
+  field: { id: string; namn: string } | null;
+  orderTypes: string[];
+  articles: Array<{ id: string; name: string; articleNumber: string; relation: 'leave' | 'fetch' }>;
+}> {
+  const [field] = await db
+    .select({ id: metadataKatalog.id, namn: metadataKatalog.namn })
+    .from(metadataKatalog)
+    .where(and(
+      eq(metadataKatalog.id, metadataKatalogId),
+      eq(metadataKatalog.tenantId, tenantId),
+    ))
+    .limit(1);
+
+  if (!field) {
+    return { field: null, orderTypes: [], articles: [] };
+  }
+
+  const linkRows = await db
+    .select({ orderType: orderTypeMetadataLinks.orderType })
+    .from(orderTypeMetadataLinks)
+    .where(and(
+      eq(orderTypeMetadataLinks.tenantId, tenantId),
+      eq(orderTypeMetadataLinks.metadataKatalogId, metadataKatalogId),
+    ));
+
+  const orderTypes = Array.from(
+    new Set(
+      linkRows
+        .map((r) => r.orderType)
+        .filter((ot) => !excludeOrderType || ot !== excludeOrderType),
+    ),
+  );
+
+  // Artiklar kopplar via katalogfältets NAMN (text-kolumner), inte via id.
+  const articleRows = await db
+    .select({
+      id: articles.id,
+      name: articles.name,
+      articleNumber: articles.articleNumber,
+      leaveMetadataCode: articles.leaveMetadataCode,
+      fetchMetadataCode: articles.fetchMetadataCode,
+    })
+    .from(articles)
+    .where(and(
+      eq(articles.tenantId, tenantId),
+      sql`(${articles.leaveMetadataCode} = ${field.namn} OR ${articles.fetchMetadataCode} = ${field.namn})`,
+    ));
+
+  const articleUsage = articleRows.map((a) => ({
+    id: a.id,
+    name: a.name,
+    articleNumber: a.articleNumber,
+    relation: (a.leaveMetadataCode === field.namn ? 'leave' : 'fetch') as 'leave' | 'fetch',
+  }));
+
+  return { field: { id: field.id, namn: field.namn }, orderTypes, articles: articleUsage };
 }
 
 // Task #665 + #663: löser ut de metadatafält som ska visas i orderformuläret för

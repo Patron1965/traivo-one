@@ -9,6 +9,7 @@ import {
   getOrderTypeMetadataLinksWithField,
   createOrderTypeMetadataLink,
   deleteOrderTypeMetadataLink,
+  getMetadataReferenceLinkUsage,
 } from "../metadata-queries";
 import { getErrorMessage } from "./helpers";
 
@@ -86,6 +87,27 @@ export function registerOrderTypeMetadataRoutes(app: Express): void {
     } catch (error) {
       console.error("Error fetching order-type metadata links:", error);
       res.status(500).json({ error: "Kunde inte hämta kopplingar" });
+    }
+  });
+
+  // Task #682: var används en metadatareferens redan? Används av koppling-UI
+  // (ordertyp + artikel) för att varna innan en referens kopplas till ytterligare
+  // en ordertyp/artikel (undviker generiska fältkollisioner).
+  app.get("/api/metadata-link-usage/:metadataKatalogId", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!tenantId) return res.status(401).json({ error: "Ingen tenant hittad" });
+
+      const excludeOrderType = typeof req.query.excludeOrderType === "string" && req.query.excludeOrderType.length > 0
+        ? req.query.excludeOrderType
+        : undefined;
+
+      const usage = await getMetadataReferenceLinkUsage(tenantId, req.params.metadataKatalogId, excludeOrderType);
+      res.setHeader("Cache-Control", NO_CACHE);
+      res.json(usage);
+    } catch (error) {
+      console.error("Error fetching metadata link usage:", error);
+      res.status(500).json({ error: "Kunde inte hämta användning av metadatareferensen" });
     }
   });
 
