@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { RouteMap } from "@/components/RouteMap";
 import { OptimizedRouteMap } from "@/components/OptimizedRouteMap";
@@ -100,6 +100,7 @@ export default function RoutesPage() {
   const [currentRoutes, setCurrentRoutes] = useState<CurrentRouteJob[]>([]);
   const [selectedRouteForMap, setSelectedRouteForMap] = useState<VRPRoute | null>(null);
   const [mapExpanded, setMapExpanded] = useState(false);
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
 
   const { data: clusters = [] } = useQuery<Cluster[]>({
@@ -610,7 +611,7 @@ export default function RoutesPage() {
           )}
       
       <div className="flex-1">
-        <RouteMap initialDate={selectedDate} />
+        <RouteMap initialDate={selectedDate} onNavigate={(jobId) => setLocation(`/work-orders/${jobId}`)} />
       </div>
     </div>
   );

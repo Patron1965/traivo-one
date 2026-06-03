@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { Link } from "wouter";
 import { Marker, Polyline, Popup, CircleMarker } from "react-leaflet";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -254,6 +255,13 @@ export function OptimizedRouteMap({
                             <MapPin className="h-3 w-3" />
                             {route.resourceName}
                           </div>
+                          <Link
+                            href={`/work-orders/${stop.orderId}`}
+                            className="inline-flex items-center gap-1 font-medium text-chart-1 hover:underline"
+                            data-testid={`link-open-order-${stop.orderId}`}
+                          >
+                            Öppna order
+                          </Link>
                         </div>
                       </Popup>
                     </Marker>
@@ -280,7 +288,20 @@ export function OptimizedRouteMap({
                     idx + 1,
                     getRouteSegmentColor(idx, legacyValidStops.length)
                   )}
-                />
+                >
+                  <Popup>
+                    <div className="text-xs space-y-1">
+                      <div className="font-medium">{stop.objectName || stop.workOrderId}</div>
+                      <Link
+                        href={`/work-orders/${stop.workOrderId}`}
+                        className="inline-flex items-center gap-1 font-medium text-chart-1 hover:underline"
+                        data-testid={`link-open-order-${stop.workOrderId}`}
+                      >
+                        Öppna order
+                      </Link>
+                    </div>
+                  </Popup>
+                </Marker>
               ))}
             </>
           )}

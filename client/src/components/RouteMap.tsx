@@ -589,9 +589,6 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                   <Marker
                     position={[obj.latitude, obj.longitude]}
                     icon={createNumberedIcon(index + 1, markerColor, stackCount)}
-                    eventHandlers={{
-                      click: () => onNavigate?.(job.id),
-                    }}
                   >
                     <Popup>
                       <div className="p-1 min-w-[220px] max-w-[320px]">
@@ -660,6 +657,14 @@ export function RouteMap({ onNavigate, initialDate }: RouteMapProps) {
                                         </div>
                                       )}
                                     </div>
+                                    <Link
+                                      href={`/work-orders/${cj.id}`}
+                                      className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-chart-1 hover:underline"
+                                      data-testid={`link-open-order-${cj.id}`}
+                                    >
+                                      <ArrowRight className="h-3 w-3" />
+                                      Öppna order
+                                    </Link>
                                   </div>
                                 );
                               })}
