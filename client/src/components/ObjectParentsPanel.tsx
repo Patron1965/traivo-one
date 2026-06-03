@@ -139,7 +139,7 @@ export function ObjectParentsPanel({ object, controlled, open: controlledOpen, o
         <div className="mt-4 space-y-3">
           <div className="space-y-2">
             <h3 className="text-sm font-medium">Släktnamn</h3>
-            <ObjectDisplayNames objectId={object.id} enabled={open} />
+            <ObjectDisplayNames objectId={object.id} enabled={open} allowSetPrimary />
           </div>
 
           {object.parentId && (

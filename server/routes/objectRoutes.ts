@@ -719,6 +719,26 @@ app.patch("/api/objects/:id/parents/:parentRelationId/primary", asyncHandler(asy
   res.json(result);
 }));
 
+// Task #626: sätt primär förälder direkt från släktnamn-vyn, som bara känner
+// till förälderns objekt-id (parentId) — inte relations-id:t. Speglar
+// objects.parentId så arvet (inheritance-processor följer parentId) räknas om
+// från den nya primära föräldern.
+app.patch("/api/objects/:id/primary-parent", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const parentId = typeof req.body?.parentId === "string" ? req.body.parentId : null;
+  if (!parentId) throw new ValidationError("parentId krävs");
+  const parents = await storage.getObjectParents(req.params.id);
+  const relation = parents.find(p => p.parentId === parentId);
+  if (!relation) throw new NotFoundError("Föräldrarelation");
+  const result = await storage.setPrimaryParent(req.params.id, parentId, tenantId);
+  if (!result) throw new NotFoundError("Föräldrarelation");
+  res.json(result);
+}));
+
 app.get("/api/objects/:id/resolved", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const existing = await storage.getObject(req.params.id);

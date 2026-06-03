@@ -5,7 +5,9 @@
 // Task #634: språkväljare — välj visningsspråk (namn_sv/namn_en/…) med fallback
 // till det interna namnet. Påverkar enbart visningen, aldrig kolumn E.
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { ChevronRight, Languages, Network, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,10 +69,15 @@ function PathBreadcrumb({ path }: { path: { id: string; name: string; level: str
 export function ObjectDisplayNames({
   objectId,
   enabled = true,
+  allowSetPrimary = false,
 }: {
   objectId: string;
   enabled?: boolean;
+  // Task #626: visa "Gör till primär"-åtgärd på alternativa släktnamn. Av som
+  // standard (t.ex. i mobilvyn) — slås på i web-vyer där byte är önskvärt.
+  allowSetPrimary?: boolean;
 }) {
+  const { toast } = useToast();
   // "" = internt namn (kolumn E); annars vald språkkod.
   const [language, setLanguage] = useState<string>("");
 
@@ -83,6 +90,21 @@ export function ObjectDisplayNames({
       return res.json();
     },
     enabled,
+  });
+
+  const setPrimaryMutation = useMutation({
+    mutationFn: async (parentId: string) => {
+      await apiRequest("PATCH", `/api/objects/${objectId}/primary-parent`, { parentId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "display-names"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "parents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+      toast({ title: "Primär förälder uppdaterad" });
+    },
+    onError: () => {
+      toast({ title: "Kunde inte byta primär förälder", variant: "destructive" });
+    },
   });
 
   if (isLoading) {
@@ -151,12 +173,28 @@ export function ObjectDisplayNames({
           </div>
           {alternatives.map((c, idx) => (
             <div key={`${c.parentId}-${idx}`} className="rounded-lg border bg-muted/40 p-3 space-y-1" data-testid={`alt-display-name-${idx}`}>
-              <div className="flex items-center gap-2">
-                <span className="text-sm">{c.name || "—"}</span>
-                {c.relationContext && (
-                  <Badge variant="secondary" className="text-xs">
-                    {CONTEXT_LABELS[c.relationContext] ?? c.relationContext}
-                  </Badge>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">{c.name || "—"}</span>
+                  {c.relationContext && (
+                    <Badge variant="secondary" className="text-xs">
+                      {CONTEXT_LABELS[c.relationContext] ?? c.relationContext}
+                    </Badge>
+                  )}
+                </div>
+                {allowSetPrimary && c.parentId && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-6 shrink-0 px-2 text-xs"
+                    onClick={() => setPrimaryMutation.mutate(c.parentId!)}
+                    disabled={setPrimaryMutation.isPending}
+                    data-testid={`button-set-primary-display-${idx}`}
+                  >
+                    <Star className="mr-1 h-3 w-3" />
+                    Gör till primär
+                  </Button>
                 )}
               </div>
               <PathBreadcrumb path={c.path} />

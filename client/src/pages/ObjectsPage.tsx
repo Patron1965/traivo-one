@@ -1328,7 +1328,7 @@ export default function ObjectsPage() {
             style={{ paddingLeft: `${12 + level * 24 + 32}px` }}
             data-testid={`display-names-panel-${obj.id}`}
           >
-            <ObjectDisplayNames objectId={obj.id} enabled />
+            <ObjectDisplayNames objectId={obj.id} enabled allowSetPrimary />
           </div>
         )}
 
