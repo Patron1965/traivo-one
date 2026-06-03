@@ -77,6 +77,32 @@ interface MetadataResponse {
   metadata?: MetadataEntry[];
 }
 
+// Task #682 introducerade systemfälten nedan (skrivs read-only vid WO-skapande /
+// inkommen felanmälan). Vi lyfter fram dem på objektkortet.
+const LATEST_WORKORDER_FIELD = "Senaste arbetsorder";
+const LATEST_ISSUE_FIELD = "Senaste felanmälan";
+
+function getMetadataDisplayValue(entry: MetadataEntry | undefined): string | null {
+  if (!entry) return null;
+  if (entry.vardeString != null && entry.vardeString !== "") return entry.vardeString;
+  if (entry.vardeInteger != null) return String(entry.vardeInteger);
+  if (entry.vardeDecimal != null) return String(entry.vardeDecimal);
+  if (entry.vardeBoolean != null) return entry.vardeBoolean ? "Ja" : "Nej";
+  if (entry.vardeDatetime) return new Date(entry.vardeDatetime).toLocaleDateString("sv-SE");
+  return null;
+}
+
+function findSystemMetadata(metadata: MetadataEntry[], namn: string): MetadataEntry | undefined {
+  return metadata.find((m) => m.katalog?.namn === namn);
+}
+
+function formatChangedAt(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("sv-SE");
+}
+
 interface MetadataType {
   id?: string;
   namn: string;
@@ -276,6 +302,7 @@ export default function ObjectDetailPage() {
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [restrictionDialogOpen, setRestrictionDialogOpen] = useState(false);
   const [workOrderDialogOpen, setWorkOrderDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
 
   const [editForm, setEditForm] = useState<ObjectEditForm>({});
   const [contactForm, setContactForm] = useState({ name: "", contactType: "primary", phone: "", email: "", role: "" });
@@ -822,7 +849,7 @@ export default function ObjectDetailPage() {
         </div>
       )}
 
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1" data-testid="object-detail-tabs">
           <TabsTrigger value="overview" data-testid="tab-overview">Översikt</TabsTrigger>
           <TabsTrigger value="location" data-testid="tab-location">Plats & Karta</TabsTrigger>
@@ -863,6 +890,84 @@ export default function ObjectDetailPage() {
 
         {/* ==================== ÖVERSIKT ==================== */}
         <TabsContent value="overview">
+          {/* Task #692: lyft fram systemfälten "Senaste arbetsorder"/"Senaste
+              felanmälan" (skrivs read-only av systemet, Task #682) direkt på kortet. */}
+          {(() => {
+            const latestWoEntry = findSystemMetadata(metadata, LATEST_WORKORDER_FIELD);
+            const latestIssueEntry = findSystemMetadata(metadata, LATEST_ISSUE_FIELD);
+            const latestWoValue = getMetadataDisplayValue(latestWoEntry);
+            const latestIssueValue = getMetadataDisplayValue(latestIssueEntry);
+            const latestWoChanged = formatChangedAt(latestWoEntry?.lastChangedAt);
+            const latestIssueChanged = formatChangedAt(latestIssueEntry?.lastChangedAt);
+            return (
+              <Card className="mb-4" data-testid="card-latest-activity">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Clock className="h-4 w-4" /> Senaste aktivitet
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="rounded-lg border p-3" data-testid="block-latest-workorder">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
+                        <ClipboardList className="h-3.5 w-3.5" /> Senaste arbetsorder
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">system</Badge>
+                      </div>
+                      {latestWoValue ? (
+                        <>
+                          <div className="text-sm font-medium break-words" data-testid="text-latest-workorder">{latestWoValue}</div>
+                          {latestWoChanged && (
+                            <div className="text-xs text-muted-foreground mt-0.5">Uppdaterad {latestWoChanged}</div>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-auto p-0 mt-1 text-xs text-primary hover:bg-transparent"
+                            onClick={() => setActiveTab("workorders")}
+                            data-testid="link-latest-workorder"
+                          >
+                            Visa arbetsordrar <ChevronRight className="h-3 w-3 ml-0.5" />
+                          </Button>
+                        </>
+                      ) : (
+                        <div className="text-sm text-muted-foreground" data-testid="empty-latest-workorder">
+                          Ingen arbetsorder registrerad ännu
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-lg border p-3" data-testid="block-latest-issue">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
+                        <AlertTriangle className="h-3.5 w-3.5" /> Senaste felanmälan
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">system</Badge>
+                      </div>
+                      {latestIssueValue ? (
+                        <>
+                          <div className="text-sm font-medium break-words" data-testid="text-latest-issue">{latestIssueValue}</div>
+                          {latestIssueChanged && (
+                            <div className="text-xs text-muted-foreground mt-0.5">Uppdaterad {latestIssueChanged}</div>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-auto p-0 mt-1 text-xs text-primary hover:bg-transparent"
+                            onClick={() => navigate("/cases")}
+                            data-testid="link-latest-issue"
+                          >
+                            Visa felanmälningar <ChevronRight className="h-3 w-3 ml-0.5" />
+                          </Button>
+                        </>
+                      ) : (
+                        <div className="text-sm text-muted-foreground" data-testid="empty-latest-issue">
+                          Ingen felanmälan registrerad ännu
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardHeader className="pb-3">
