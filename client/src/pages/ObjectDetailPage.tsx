@@ -68,6 +68,8 @@ interface MetadataEntry {
   vardeDatetime?: string | null;
   vardeJson?: unknown;
   metod?: string | null;
+  skapadAv?: string | null;
+  uppdateradAv?: string | null;
   lastChangedAt?: string | null;
   source?: "inherited" | "direct" | string;
   fromObject?: { name?: string } | null;
@@ -94,6 +96,24 @@ function getMetadataDisplayValue(entry: MetadataEntry | undefined): string | nul
 
 function findSystemMetadata(metadata: MetadataEntry[], namn: string): MetadataEntry | undefined {
   return metadata.find((m) => m.katalog?.namn === namn);
+}
+
+// Task #694: systemfälten "Senaste arbetsorder"/"Senaste felanmälan" skrivs av
+// systemet (Task #682) med setBy-strängen `system:<typ>:<id>` lagrad i skapadAv
+// (första skrivningen) resp. uppdateradAv (senare uppdateringar). Vi läser ut
+// id:t därifrån så att kortet kan djuplänka till exakt arbetsorder/felanmälan.
+// Bakåtkompatibelt: saknas ett tolkbart id (äldre rena strängvärden) returneras
+// null och länken faller tillbaka på den gamla list-navigeringen.
+function parseSystemRefId(
+  entry: MetadataEntry | undefined,
+  marker: string,
+): string | null {
+  const raw = entry?.uppdateradAv ?? entry?.skapadAv;
+  if (!raw) return null;
+  const prefix = `system:${marker}:`;
+  if (!raw.startsWith(prefix)) return null;
+  const id = raw.slice(prefix.length).trim();
+  return id.length > 0 ? id : null;
 }
 
 function formatChangedAt(value: string | null | undefined): string | null {
@@ -303,6 +323,9 @@ export default function ObjectDetailPage() {
   const [restrictionDialogOpen, setRestrictionDialogOpen] = useState(false);
   const [workOrderDialogOpen, setWorkOrderDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
+  // Task #694: id på den arbetsorder som ska markeras/scrollas fram efter att
+  // användaren klickat "Visa arbetsorder" i kortet "Senaste aktivitet".
+  const [highlightedWorkOrderId, setHighlightedWorkOrderId] = useState<string | null>(null);
 
   const [editForm, setEditForm] = useState<ObjectEditForm>({});
   const [contactForm, setContactForm] = useState({ name: "", contactType: "primary", phone: "", email: "", role: "" });
@@ -330,6 +353,20 @@ export default function ObjectDetailPage() {
     setSearchInput("");
     setSearchQuery("");
     setSearchOpen(false);
+  }, [objectId]);
+
+  // Task #694: scrolla fram den markerade arbetsordern i "Arbetsordrar"-fliken
+  // när användaren djuplänkat dit från kortet "Senaste aktivitet". Körs en gång
+  // per id/tab-byte (querySelector i stället för inline-ref => ingen re-scroll).
+  useEffect(() => {
+    if (!highlightedWorkOrderId || activeTab !== "workorders") return;
+    const el = document.querySelector(`[data-testid="workorder-row-${highlightedWorkOrderId}"]`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightedWorkOrderId, activeTab]);
+
+  // Rensa markeringen när objektet byts så den inte hänger kvar mellan objekt.
+  useEffect(() => {
+    setHighlightedWorkOrderId(null);
   }, [objectId]);
 
   const { data: resolvedObject, isLoading: loadingObject } = useQuery<ResolvedObjectResponse>({
@@ -899,6 +936,9 @@ export default function ObjectDetailPage() {
             const latestIssueValue = getMetadataDisplayValue(latestIssueEntry);
             const latestWoChanged = formatChangedAt(latestWoEntry?.lastChangedAt);
             const latestIssueChanged = formatChangedAt(latestIssueEntry?.lastChangedAt);
+            // Task #694: id för djuplänk (om systemfältet har ett inbäddat id).
+            const latestWoId = parseSystemRefId(latestWoEntry, "wo-create");
+            const latestIssueId = parseSystemRefId(latestIssueEntry, "public-issue-report");
             return (
               <Card className="mb-4" data-testid="card-latest-activity">
                 <CardHeader className="pb-3">
@@ -923,10 +963,13 @@ export default function ObjectDetailPage() {
                             variant="ghost"
                             size="sm"
                             className="h-auto p-0 mt-1 text-xs text-primary hover:bg-transparent"
-                            onClick={() => setActiveTab("workorders")}
+                            onClick={() => {
+                              setHighlightedWorkOrderId(latestWoId);
+                              setActiveTab("workorders");
+                            }}
                             data-testid="link-latest-workorder"
                           >
-                            Visa arbetsordrar <ChevronRight className="h-3 w-3 ml-0.5" />
+                            {latestWoId ? "Öppna arbetsorder" : "Visa arbetsordrar"} <ChevronRight className="h-3 w-3 ml-0.5" />
                           </Button>
                         </>
                       ) : (
@@ -951,10 +994,10 @@ export default function ObjectDetailPage() {
                             variant="ghost"
                             size="sm"
                             className="h-auto p-0 mt-1 text-xs text-primary hover:bg-transparent"
-                            onClick={() => navigate("/cases")}
+                            onClick={() => navigate(latestIssueId ? `/cases?case=public:${latestIssueId}` : "/cases")}
                             data-testid="link-latest-issue"
                           >
-                            Visa felanmälningar <ChevronRight className="h-3 w-3 ml-0.5" />
+                            {latestIssueId ? "Öppna felanmälan" : "Visa felanmälningar"} <ChevronRight className="h-3 w-3 ml-0.5" />
                           </Button>
                         </>
                       ) : (
@@ -1538,8 +1581,14 @@ export default function ObjectDetailPage() {
             <CardContent>
               {workOrders.length > 0 ? (
                 <div className="divide-y">
-                  {workOrders.map((wo) => (
-                    <div key={wo.id} className="flex items-center justify-between py-3 gap-4" data-testid={`workorder-row-${wo.id}`}>
+                  {workOrders.map((wo) => {
+                    const isHighlighted = highlightedWorkOrderId === wo.id;
+                    return (
+                    <div
+                      key={wo.id}
+                      className={`flex items-center justify-between py-3 gap-4 transition-colors ${isHighlighted ? "-mx-2 px-2 rounded-md bg-primary/10 ring-1 ring-primary/40" : ""}`}
+                      data-testid={`workorder-row-${wo.id}`}
+                    >
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-medium truncate">{wo.title || `Order ${wo.id.slice(0, 8)}`}</div>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -1564,7 +1613,8 @@ export default function ObjectDetailPage() {
                          wo.orderStatus === "fakturerad" ? "Fakturerad" : "Skapad"}
                       </Badge>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">Inga arbetsordrar kopplade till detta objekt.</p>

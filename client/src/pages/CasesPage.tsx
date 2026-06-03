@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -104,6 +105,15 @@ export default function CasesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
 
+  // Task #694: djuplänk från objektkortet ("Senaste felanmälan") — ?case=<caseId>
+  // markerar och scrollar fram exakt ärende i listan. caseId-formatet är
+  // `<källa>:<id>` (t.ex. `public:<rapportId>`) och matchar UnifiedCase.caseId.
+  const searchString = useSearch();
+  const highlightedCaseId = useMemo(
+    () => new URLSearchParams(searchString || "").get("case"),
+    [searchString],
+  );
+
   const casesQuery = useQuery<UnifiedCase[]>({
     queryKey: ["/api/cases", sourceFilter, statusFilter],
     queryFn: async () => {
@@ -121,6 +131,13 @@ export default function CasesPage() {
   });
 
   const cases = casesQuery.data ?? [];
+
+  // Scrolla fram det djuplänkade ärendet när listan laddats.
+  useEffect(() => {
+    if (!highlightedCaseId || cases.length === 0) return;
+    const el = document.querySelector(`[data-testid="row-case-${highlightedCaseId}"]`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightedCaseId, cases.length]);
 
   const statusMutation = useMutation({
     mutationFn: async ({ c, status }: { c: UnifiedCase; status: string }) => {
@@ -279,7 +296,11 @@ export default function CasesPage() {
               </TableHeader>
               <TableBody>
                 {cases.map((c) => (
-                  <TableRow key={c.caseId} data-testid={`row-case-${c.caseId}`}>
+                  <TableRow
+                    key={c.caseId}
+                    data-testid={`row-case-${c.caseId}`}
+                    className={highlightedCaseId === c.caseId ? "bg-primary/10 ring-1 ring-primary/40" : undefined}
+                  >
                     <TableCell>
                       <Badge variant="outline" data-testid={`badge-source-${c.caseId}`}>
                         {SOURCE_LABELS[c.source]}
