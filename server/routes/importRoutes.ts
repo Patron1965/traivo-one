@@ -1547,6 +1547,7 @@ async function runModusObjectsImportJob(params: {
                 arLogisk: true,
                 standardArvs: false,
                 kategori: 'importerad',
+                area: 'importerad',
                 beskrivning: `Importerad fran Modus CSV (${csvColumn})`,
                 sortOrder: 100,
               }).returning();
@@ -3942,6 +3943,7 @@ app.post("/api/import/metadata/csv", upload.single("file"), asyncHandler(async (
               arLogisk: true,
               standardArvs: false,
               kategori: "importerad",
+              area: "importerad",
               beskrivning: `Importerad via metadata-CSV`,
               sortOrder: 100,
             }).returning();

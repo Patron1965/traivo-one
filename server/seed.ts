@@ -982,7 +982,7 @@ async function seedSystemMetadataLabels() {
     // bara matchade på beteckning skulle vi skapa en andra "Antal"-rad (Task
     // #672). Hittar vi en namn-match utan beteckning kompletterar vi den i
     // stället för att duplicera.
-    const existing = await db.select({ id: metadataKatalog.id, beteckning: metadataKatalog.beteckning })
+    const existing = await db.select({ id: metadataKatalog.id, beteckning: metadataKatalog.beteckning, area: metadataKatalog.area })
       .from(metadataKatalog)
       .where(and(
         eq(metadataKatalog.tenantId, DEFAULT_TENANT_ID),
@@ -997,13 +997,16 @@ async function seedSystemMetadataLabels() {
       await db.insert(metadataKatalog).values({
         tenantId: DEFAULT_TENANT_ID,
         ...label,
+        // Task #674: Område är grupperingsfältet — sätt det från kategorin.
+        area: label.kategori,
       });
       created++;
     } else if (label.isSystem) {
       const row = existing[0];
-      // Markera som system och backfill:a beteckning om den saknas.
-      const patch: { isSystem: boolean; beteckning?: string } = { isSystem: true };
+      // Markera som system och backfill:a beteckning + område (Task #674) om de saknas.
+      const patch: { isSystem: boolean; beteckning?: string; area?: string } = { isSystem: true };
       if (!row.beteckning || !row.beteckning.trim()) patch.beteckning = label.beteckning;
+      if (!row.area || !row.area.trim()) patch.area = label.kategori;
       await db.update(metadataKatalog)
         .set(patch)
         .where(and(

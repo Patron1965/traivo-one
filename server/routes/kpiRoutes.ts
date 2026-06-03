@@ -2026,7 +2026,7 @@ app.get("/api/metadata-labels", asyncHandler(async (req, res) => {
     
     const results = await db.select().from(metadataKatalog)
       .where(eq(metadataKatalog.tenantId, tenantId))
-      .orderBy(metadataKatalog.kategori, metadataKatalog.sortOrder, metadataKatalog.namn);
+      .orderBy(metadataKatalog.area, metadataKatalog.sortOrder, metadataKatalog.namn);
     
     let filtered = results;
     if (kategori) {
@@ -2056,6 +2056,8 @@ app.get("/api/metadata-labels/:id", asyncHandler(async (req, res) => {
 app.post("/api/metadata-labels", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertMetadataKatalogSchema.parse({ ...req.body, tenantId, isSystem: false });
+    // Task #674: Område är grupperingsfältet — håll legacy `kategori` i synk.
+    data.kategori = (data.area as string | null | undefined) || 'annat';
     // Task #662: validera överordnat metadata-fält även på denna skriv-yta så att
     // en-nivå-invarianten och tenant-isoleringen inte kan kringgås här.
     if (data.parentMetadataId) {
@@ -2080,7 +2082,6 @@ app.patch("/api/metadata-labels/:id", requireAdmin, asyncHandler(async (req, res
       beskrivning: z.string().nullable().optional(),
       datatyp: z.string().optional(),
       beteckning: z.string().nullable().optional(),
-      kategori: z.string().optional(),
       sortOrder: z.number().optional(),
       icon: z.string().nullable().optional(),
       isRequired: z.boolean().optional(),
@@ -2095,7 +2096,10 @@ app.patch("/api/metadata-labels/:id", requireAdmin, asyncHandler(async (req, res
     });
     const parsed = updateSchema.parse(req.body);
     
-    const protectedFields = ['namn', 'beteckning', 'datatyp', 'kategori', 'isRequired'] as const;
+    // Task #674: Grupperingsfältet är nu `area` (Område) — skydda det (inte den
+    // utfasade `kategori`) på systemmetadata. Migrering sker direkt i DB, förbi
+    // detta API-skydd.
+    const protectedFields = ['namn', 'beteckning', 'datatyp', 'area', 'isRequired'] as const;
     let updateData: Record<string, string | number | boolean | string[] | null | undefined> = { ...parsed };
     
     if (existing.isSystem) {
@@ -2103,8 +2107,13 @@ app.patch("/api/metadata-labels/:id", requireAdmin, asyncHandler(async (req, res
         delete updateData[field];
       }
       if (Object.keys(updateData).length === 0) {
-        throw new ForbiddenError("Systemmetadata: skyddade fält kan inte ändras (namn, beteckning, datatyp, kategori, isRequired)");
+        throw new ForbiddenError("Systemmetadata: skyddade fält kan inte ändras (namn, beteckning, datatyp, område, isRequired)");
       }
+    }
+    // Task #674: Område är grupperingsfältet — håll legacy `kategori` i synk när
+    // området ändras (efter system-skyddet, så systemfält aldrig driftar).
+    if (updateData.area !== undefined) {
+      updateData.kategori = (updateData.area as string | null) || 'annat';
     }
     
     const [updated] = await db.update(metadataKatalog)

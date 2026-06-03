@@ -17,24 +17,15 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { MetadataKatalog, InsertMetadataKatalog } from "@shared/schema";
+import {
+  METADATA_AREA_OPTIONS as areaOptions,
+  METADATA_AREA_ORDER as AREA_ORDER,
+  metadataAreaLabel,
+} from "@shared/metadata-areas";
 
-const kategoriLabels: Record<string, { label: string; color: string }> = {
-  administrativ: { label: "Administrativ", color: "bg-muted text-muted-foreground border border-border" },
-  geografi: { label: "Geografi", color: "bg-chart-2/15 text-chart-2 border border-chart-2/30" },
-  produktion: { label: "Produktion", color: "bg-chart-1/15 text-chart-1 border border-chart-1/30" },
-  leverans: { label: "Leverans", color: "bg-chart-3/15 text-chart-3 border border-chart-3/30" },
-  kundreferens: { label: "Kundreferens", color: "bg-chart-5/15 text-chart-5 border border-chart-5/30" },
-  artikel: { label: "Artikel", color: "bg-chart-4/15 text-chart-4 border border-chart-4/30" },
-  annat: { label: "Annat", color: "bg-muted text-muted-foreground border border-border" },
-};
-
-const areaOptions = [
-  { value: "grunduppgifter", label: "Grunduppgifter" },
-  { value: "produktion", label: "Produktion" },
-  { value: "status", label: "Status" },
-  { value: "ekonomi", label: "Ekonomi" },
-];
-const AREA_ORDER = ["grunduppgifter", "produktion", "status", "ekonomi"];
+// Task #674: Område är det enda grupperingsfältet. Områdena är många, så grupp-
+// badges använder ett enhetligt neutralt tema-token istället för per-område-färg.
+const AREA_BADGE_CLASS = "bg-muted text-muted-foreground border border-border";
 
 const datatypLabels: Record<string, string> = {
   string: "Text",
@@ -64,7 +55,7 @@ function getIcon(iconName: string | null): LucideIcon {
 export function MetadataLabelsTab() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const [kategoriFilter, setKategoriFilter] = useState("all");
+  const [areaFilter, setAreaFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingLabel, setEditingLabel] = useState<MetadataKatalog | null>(null);
   const [formData, setFormData] = useState({
@@ -72,7 +63,6 @@ export function MetadataLabelsTab() {
     beteckning: "",
     beskrivning: "",
     datatyp: "string",
-    kategori: "annat",
     icon: "Tag",
     standardArvs: false,
     isRequired: false,
@@ -116,7 +106,7 @@ export function MetadataLabelsTab() {
     onError: (error: Error) => toast({ title: "Kunde inte radera etikett", description: error.message, variant: "destructive" }),
   });
 
-  const emptyForm = { namn: "", beteckning: "", beskrivning: "", datatyp: "string", kategori: "annat", icon: "Tag", standardArvs: false, isRequired: false, allowedValues: "", area: "", displayNumber: "", allowDuplicates: false, kronologiskVisning: false };
+  const emptyForm = { namn: "", beteckning: "", beskrivning: "", datatyp: "string", icon: "Tag", standardArvs: false, isRequired: false, allowedValues: "", area: "", displayNumber: "", allowDuplicates: false, kronologiskVisning: false };
 
   const closeDialog = () => {
     setDialogOpen(false);
@@ -137,7 +127,6 @@ export function MetadataLabelsTab() {
       beteckning: label.beteckning || "",
       beskrivning: label.beskrivning || "",
       datatyp: label.datatyp,
-      kategori: label.kategori || "annat",
       icon: label.icon || "Tag",
       standardArvs: label.standardArvs,
       isRequired: label.isRequired,
@@ -157,7 +146,6 @@ export function MetadataLabelsTab() {
       beteckning: formData.beteckning || null,
       beskrivning: formData.beskrivning || null,
       datatyp: formData.datatyp,
-      kategori: formData.kategori,
       icon: formData.icon || null,
       standardArvs: formData.standardArvs,
       isRequired: formData.isRequired,
@@ -176,7 +164,7 @@ export function MetadataLabelsTab() {
   };
 
   const filtered = labels.filter(l => {
-    if (kategoriFilter !== "all" && l.kategori !== kategoriFilter) return false;
+    if (areaFilter !== "all" && (l.area || "annat") !== areaFilter) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       return (l.namn.toLowerCase().includes(q) || (l.beteckning || "").toLowerCase().includes(q));
@@ -185,7 +173,7 @@ export function MetadataLabelsTab() {
   });
 
   const grouped = filtered.reduce<Record<string, MetadataKatalog[]>>((acc, label) => {
-    const cat = label.area || label.kategori || "annat";
+    const cat = label.area || "annat";
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(label);
     return acc;
@@ -204,8 +192,7 @@ export function MetadataLabelsTab() {
     const ai = AREA_ORDER.indexOf(key);
     return ai === -1 ? 999 : ai;
   };
-  const groupLabel = (key: string) =>
-    areaOptions.find((a) => a.value === key)?.label || kategoriLabels[key]?.label || key;
+  const groupLabel = (key: string) => metadataAreaLabel(key);
 
   if (isLoading) {
     return <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>;
@@ -243,14 +230,14 @@ export function MetadataLabelsTab() {
                 data-testid="input-search-labels"
               />
             </div>
-            <Select value={kategoriFilter} onValueChange={setKategoriFilter}>
-              <SelectTrigger className="w-48" data-testid="select-category-filter">
-                <SelectValue placeholder="Alla kategorier" />
+            <Select value={areaFilter} onValueChange={setAreaFilter}>
+              <SelectTrigger className="w-48" data-testid="select-area-filter">
+                <SelectValue placeholder="Alla områden" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Alla kategorier</SelectItem>
-                {Object.entries(kategoriLabels).map(([key, { label }]) => (
-                  <SelectItem key={key} value={key}>{label}</SelectItem>
+                <SelectItem value="all">Alla områden</SelectItem>
+                {areaOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -264,11 +251,10 @@ export function MetadataLabelsTab() {
             const rankDiff = groupRank(a[0]) - groupRank(b[0]);
             return rankDiff !== 0 ? rankDiff : a[0].localeCompare(b[0]);
           }).map(([cat, items]) => {
-            const catInfo = kategoriLabels[cat] || kategoriLabels.annat;
             return (
               <div key={cat} className="mb-6">
                 <h3 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-2">
-                  <Badge className={catInfo.color}>{groupLabel(cat)}</Badge>
+                  <Badge className={AREA_BADGE_CLASS}>{groupLabel(cat)}</Badge>
                   <span className="text-xs">({items.length})</span>
                 </h3>
                 <div className="grid gap-2">
@@ -400,33 +386,18 @@ export function MetadataLabelsTab() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Datatyp</Label>
-                <Select value={formData.datatyp} onValueChange={(v) => setFormData({ ...formData, datatyp: v })}>
-                  <SelectTrigger data-testid="select-label-datatyp">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(datatypLabels).map(([key, label]) => (
-                      <SelectItem key={key} value={key}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Kategori</Label>
-                <Select value={formData.kategori} onValueChange={(v) => setFormData({ ...formData, kategori: v })}>
-                  <SelectTrigger data-testid="select-label-kategori">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(kategoriLabels).map(([key, { label }]) => (
-                      <SelectItem key={key} value={key}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label>Datatyp</Label>
+              <Select value={formData.datatyp} onValueChange={(v) => setFormData({ ...formData, datatyp: v })}>
+                <SelectTrigger data-testid="select-label-datatyp">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(datatypLabels).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

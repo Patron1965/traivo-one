@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ServiceObject, MetadataKatalog, MetadataHistorik } from "@shared/schema";
+import { METADATA_AREA_ORDER, METADATA_AREA_LABELS } from "@shared/metadata-areas";
 
 interface MetadataEntry {
   id: string;
@@ -759,12 +760,13 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
 
   const metadata = objectWithMetadata?.metadata || [];
 
-  // PDF §7: gruppera primärt per område (area), fall tillbaka till kategori för legacy-typer.
-  const AREA_ORDER = ["grunduppgifter", "produktion", "status", "ekonomi"];
+  // Task #674: Område (area) är det enda grupperingsfältet — fall bara tillbaka
+  // till "annat" för fält helt utan område.
+  const AREA_ORDER = METADATA_AREA_ORDER;
   const groupedMetadata = useMemo(() => {
     const groups: Record<string, MetadataEntry[]> = {};
     for (const m of metadata) {
-      const key = (m.katalog as any).area || m.katalog.kategori || "annat";
+      const key = (m.katalog as any).area || "annat";
       if (!groups[key]) groups[key] = [];
       groups[key].push(m);
     }
@@ -784,18 +786,7 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
     return ordered;
   }, [metadata]);
 
-  const categoryLabels: Record<string, string> = {
-    grunduppgifter: "Grunduppgifter",
-    produktion: "Produktion",
-    status: "Status",
-    ekonomi: "Ekonomi",
-    geografi: "Geografi",
-    kontakt: "Kontakt",
-    artikel: "Artikel",
-    administrativ: "Administrativ",
-    beskrivning: "Beskrivning",
-    annat: "Övrigt",
-  };
+  const categoryLabels: Record<string, string> = METADATA_AREA_LABELS;
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, varde }: { id: string; varde: any }) => {

@@ -91,8 +91,6 @@ metadataRouter.post("/types/seed", async (req: Request, res: Response) => {
   }
 });
 
-const METADATA_AREAS = ['grunduppgifter', 'produktion', 'status', 'ekonomi'] as const;
-
 const createMetadataTypeSchema = z.object({
   namn: z.string().min(1),
   beskrivning: z.string().nullish(),
@@ -103,8 +101,9 @@ const createMetadataTypeSchema = z.object({
   kategori: z.string().optional().default('annat'),
   sortOrder: z.number().optional().default(0),
   icon: z.string().optional(),
-  // PDF §7/§14
-  area: z.enum(METADATA_AREAS).nullish(),
+  // PDF §7/§14 — Task #674: Område är det enda grupperingsfältet och är ett öppet
+  // fält (absorberar de gamla kategori-värdena), inte längre en fast 4-värdes-enum.
+  area: z.string().trim().max(50).nullish(),
   displayNumber: z.number().int().nullish(),
   allowDuplicates: z.boolean().optional().default(false),
   allowedValues: z.array(z.string()).nullish(),
@@ -318,6 +317,9 @@ metadataRouter.post("/types", async (req: Request, res: Response) => {
     const [newType] = await db.insert(metadataKatalog).values({
       tenantId,
       ...katalogValues,
+      // Task #674: Område är grupperingsfältet — håll legacy `kategori` i synk så
+      // att den utfasade kolumnen aldrig driftar isär från området.
+      kategori: (katalogValues.area as string | null | undefined) || 'annat',
     }).returning();
 
     if (customerIds !== undefined && customerIds.length > 0) {
@@ -473,6 +475,14 @@ metadataRouter.put("/types/:id", async (req: Request, res: Response) => {
         return res.status(400).json({ error: customerError });
       }
     }
+
+    // Task #674: Område är det enda grupperingsfältet. `kategori` får aldrig
+    // skrivas direkt av klienten — härled den alltid från det effektiva området
+    // (klientens ev. `kategori` skrivs över; legacy-drift självläker vid varje PUT).
+    const effectiveArea =
+      katalogValues.area !== undefined ? katalogValues.area : existing.area;
+    (katalogValues as Record<string, unknown>).kategori =
+      (effectiveArea as string | null) || 'annat';
 
     const [updated] = await db
       .update(metadataKatalog)

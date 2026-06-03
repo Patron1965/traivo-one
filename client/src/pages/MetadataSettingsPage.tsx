@@ -10,6 +10,11 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  METADATA_AREA_OPTIONS as areaOptions,
+  METADATA_AREA_ORDER as AREA_ORDER,
+  metadataAreaLabel,
+} from "@shared/metadata-areas";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -105,14 +110,6 @@ interface CustomerOption {
   parentCustomerId: string | null;
 }
 
-const areaOptions = [
-  { value: 'grunduppgifter', label: 'Grunduppgifter' },
-  { value: 'produktion', label: 'Produktion' },
-  { value: 'status', label: 'Status' },
-  { value: 'ekonomi', label: 'Ekonomi' },
-];
-const AREA_ORDER = ['grunduppgifter', 'produktion', 'status', 'ekonomi'];
-
 const iconOptions = [
   { value: 'MapPin', label: 'Kartpinne' },
   { value: 'Navigation', label: 'Navigation' },
@@ -135,21 +132,6 @@ const iconOptions = [
   { value: 'Square', label: 'Kvadrat' },
   { value: 'DollarSign', label: 'Valuta' },
   { value: 'RefreshCw', label: 'Upprepa' },
-];
-
-const categoryOptions = [
-  { value: 'geografi', label: 'Geografi' },
-  { value: 'kontakt', label: 'Kontaktinformation' },
-  { value: 'artikel', label: 'Artiklar & Priser' },
-  { value: 'administrativ', label: 'Administration' },
-  { value: 'beskrivning', label: 'Beskrivningar' },
-  { value: 'kvantitet', label: 'Kvantiteter' },
-  { value: 'tid', label: 'Tid & Schemaläggning' },
-  { value: 'klassificering', label: 'Klassificering' },
-  { value: 'atkomst', label: 'Åtkomst' },
-  { value: 'betyg', label: 'Betyg' },
-  { value: 'bilagor', label: 'Bilagor' },
-  { value: 'annat', label: 'Övrigt' },
 ];
 
 const datatypOptions = [
@@ -280,7 +262,7 @@ export default function MetadataSettingsPage() {
   );
 
   const groupedTypes = visibleTypes.reduce((acc, type) => {
-    const groupKey = type.area || type.kategori || 'annat';
+    const groupKey = type.area || 'annat';
     if (!acc[groupKey]) acc[groupKey] = [];
     acc[groupKey].push(type);
     return acc;
@@ -296,10 +278,7 @@ export default function MetadataSettingsPage() {
     });
   });
 
-  const groupLabel = (key: string) =>
-    areaOptions.find((a) => a.value === key)?.label ||
-    categoryOptions.find((c) => c.value === key)?.label ||
-    key;
+  const groupLabel = (key: string) => metadataAreaLabel(key);
 
   // Task #662: rendera familjer hierarkiskt — rotfält följs direkt av sina
   // underfält. Underfält vars förälder ligger i en annan grupp renderas på plats
@@ -404,9 +383,8 @@ export default function MetadataSettingsPage() {
       ) : (
         Object.entries(groupedTypes)
           .sort(([a], [b]) => {
-            const order = [...AREA_ORDER, 'geografi', 'kontakt', 'administrativ', 'kvantitet', 'artikel', 'tid', 'klassificering', 'atkomst', 'betyg', 'beskrivning', 'bilagor', 'annat'];
-            const ia = order.indexOf(a);
-            const ib = order.indexOf(b);
+            const ia = AREA_ORDER.indexOf(a);
+            const ib = AREA_ORDER.indexOf(b);
             return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
           })
           .map(([kategori, types]) => (
@@ -586,7 +564,6 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
   const [referensTabell, setReferensTabell] = useState(initialData?.referensTabell || '');
   const [arLogisk, setArLogisk] = useState(initialData?.arLogisk ?? true);
   const [standardArvs, setStandardArvs] = useState(initialData?.standardArvs ?? false);
-  const [kategori, setKategori] = useState(initialData?.kategori || 'annat');
   const [sortOrder, setSortOrder] = useState(initialData?.sortOrder || 0);
   const [icon, setIcon] = useState(initialData?.icon || 'FileText');
   const [area, setArea] = useState(initialData?.area || '');
@@ -658,7 +635,10 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
       referensTabell: datatyp === 'referens' ? referensTabell : null,
       arLogisk,
       standardArvs,
-      kategori,
+      // Task #674: Område är det enda grupperingsfältet. Vi behåller `kategori`-
+      // kolumnen (expand-contract) men håller den i synk med området så att ev.
+      // kvarvarande legacy-läsare grupperar konsekvent.
+      kategori: area || 'annat',
       sortOrder,
       icon,
       area: (area || null) as MetadataKatalog['area'],
@@ -730,37 +710,20 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customer
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label>Datatyp</Label>
-          <Select value={datatyp} onValueChange={setDatatyp}>
-            <SelectTrigger data-testid="select-type-datatyp">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {datatypOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label>Kategori</Label>
-          <Select value={kategori} onValueChange={setKategori}>
-            <SelectTrigger data-testid="select-type-kategori">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {categoryOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <div>
+        <Label>Datatyp</Label>
+        <Select value={datatyp} onValueChange={setDatatyp}>
+          <SelectTrigger data-testid="select-type-datatyp">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {datatypOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {datatyp === 'referens' && (

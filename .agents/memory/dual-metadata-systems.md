@@ -69,3 +69,22 @@ internt namn). Parsern känner igen språkkolumn via regex `^(namn|name|objektna
 eller släktnamns-genereringen. EAV passade inte (namn är inte ett fritt metadatafält).
 **How to apply:** Skriv aldrig språknamn till EAV. Läs visningsnamn via display-name-tjänsten
 med `?language=`, aldrig direkt från nameTranslations i UI utan fallback.
+
+## Område är ENDA grupperingsfältet; `kategori` är härledd legacy-spegel (svenska systemet)
+`metadataKatalog` hade två konkurrerande grupperingsfält: `kategori` (gamla tekniska
+värden) och `area`/Område. Område är nu det ENDA grupperingsfältet. `kategori`-kolumnen
+behålls (expand-contract, ingen drop) men används aldrig för gruppering/sortering/filter
+— alla läs-vägar grupperar på `area || 'annat'` (UI + `orderBy(metadataKatalog.area, …)`).
+
+**Invariant:** `kategori = area || 'annat'` tvingas server-side på ALLA skriv-ytor —
+klienten kan aldrig sätta `kategori` fritt:
+- `POST/PUT /api/metadata/types` (metadata-routes): insert/`.set` skriver över `kategori`
+  från effektivt område EFTER schema-parse (PUT härleder `area ?? existing.area`, självläker).
+- `POST/PATCH /api/metadata-labels` (kpiRoutes): POST sätter `kategori=data.area||'annat'`;
+  PATCH har tagit bort `kategori` ur updateSchema och härleder från `area` (efter system-strip).
+Källa till områdesvärden/ordning/etiketter: `shared/metadata-areas.ts` (delas av alla vyer).
+
+**Why:** Två fack för samma syfte gav dubbel logik (`område || kategori`) och drift.
+**How to apply:** Lägg aldrig nya beroenden mot `kategori` och gruppera/filtrera aldrig på
+den. Lägg nya områdesvärden i `shared/metadata-areas.ts`. OBS: detta gäller ENBART svenska
+systemet — engelska `metadataDefinitions` har sitt eget `category`-fält, orört.

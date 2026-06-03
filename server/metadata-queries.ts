@@ -1913,7 +1913,7 @@ export async function getAllMetadataTypes(tenantId: string): Promise<MetadataKat
     .select()
     .from(metadataKatalog)
     .where(eq(metadataKatalog.tenantId, tenantId))
-    .orderBy(metadataKatalog.kategori, metadataKatalog.sortOrder);
+    .orderBy(metadataKatalog.area, metadataKatalog.sortOrder);
 }
 
 // ============================================================================
@@ -2236,6 +2236,9 @@ async function seedLegacyDefaultMetadataTypes(tenantId: string, skipNames: Set<s
     await db.insert(metadataKatalog).values({
       tenantId,
       ...type,
+      // Task #674: Område är grupperingsfältet — sätt det från kategorin så att
+      // nya tenants får rätt gruppering direkt utan att köra migreringsskriptet.
+      area: (type as any).area ?? type.kategori,
     });
   }
 }
@@ -2278,7 +2281,8 @@ export async function seedKarlMetadataTypes(tenantId: string): Promise<{ created
       skipped.push(def.namn);
       continue;
     }
-    await db.insert(metadataKatalog).values({ tenantId, ...def });
+    // Task #674: Område är grupperingsfältet — sätt det från kategorin.
+    await db.insert(metadataKatalog).values({ tenantId, ...def, area: def.kategori });
     created.push(def.namn);
   }
   return { created, existing: skipped };
@@ -2350,7 +2354,7 @@ export async function getWorkOrderMetadata(
       eq(metadataVarden.workOrderId, workOrderId),
       eq(metadataVarden.tenantId, tenantId)
     ))
-    .orderBy(metadataKatalog.kategori, metadataKatalog.sortOrder);
+    .orderBy(metadataKatalog.area, metadataKatalog.sortOrder);
 
   return results.map(row => ({
     id: row.id,
