@@ -36,6 +36,7 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { MetadataFieldBuilder, type BuilderFieldValue, type InheritedFieldSeed } from "@/components/MetadataFieldBuilder";
+import { ObjectDetailSheet } from "@/components/ObjectDetailSheet";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryState } from "@/components/QueryState";
 import { AICard } from "@/components/AICard";
@@ -228,6 +229,8 @@ export default function ObjectsPage() {
   const [createParentId, setCreateParentId] = useState<string | null>(null);
   const [createParentName, setCreateParentName] = useState<string>("");
   const [metadataFields, setMetadataFields] = useState<BuilderFieldValue[]>([]);
+  // Task #681: in-page detaljpanel (ersätter navigering bort från listan).
+  const [detailObject, setDetailObject] = useState<ServiceObject | null>(null);
   const [builderKey, setBuilderKey] = useState(0);
   // Task #681: full-redigering + radering via radens kontextmeny.
   const [editObjectOpen, setEditObjectOpen] = useState(false);
@@ -541,24 +544,41 @@ export default function ObjectsPage() {
   };
 
   const createObjectMutation = useMutation({
+    // Task #681: objektet skapas först (1 anrop), därefter skrivs metadatavärden.
+    // Eftersom detta inte är atomiskt (full atomicitet = uppföljning #687) skiljer
+    // vi tydligt på "objektet kunde inte skapas" och "objektet skapades men något
+    // metadatafält misslyckades" — annars riskerar användaren att försöka igen och
+    // skapa ett dubblettobjekt.
     mutationFn: async (payload: { data: Partial<ServiceObject>; metadata: BuilderFieldValue[] }) => {
       const res = await apiRequest("POST", "/api/objects", payload.data);
       const created = await res.json();
-      // Task #681: skriv valda metadatavärden på det nyskapade objektet.
+      const metadataErrors: string[] = [];
       for (const field of payload.metadata) {
         if (field.varde === "" || field.varde == null) continue;
-        await apiRequest("POST", "/api/metadata/", {
-          objektId: created.id,
-          metadataTypNamn: field.namn,
-          varde: field.varde,
-        });
+        try {
+          await apiRequest("POST", "/api/metadata/", {
+            objektId: created.id,
+            metadataTypNamn: field.namn,
+            varde: field.varde,
+          });
+        } catch (e) {
+          metadataErrors.push(`${field.namn}: ${e instanceof Error ? e.message : "okänt fel"}`);
+        }
       }
-      return created;
+      return { created, metadataErrors };
     },
-    onSuccess: () => {
+    onSuccess: ({ metadataErrors }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["/api/objects/next-number"] });
-      toast({ title: "Objekt skapat" });
+      if (metadataErrors.length > 0) {
+        toast({
+          title: "Objekt skapat – vissa metadatafält misslyckades",
+          description: `Objektet skapades, men ${metadataErrors.length} fält kunde inte sparas: ${metadataErrors.join("; ")}. Skapa inte objektet igen — komplettera fälten i detaljvyn.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Objekt skapat" });
+      }
       setCreateDialogOpen(false);
       resetCreateForm();
     },
@@ -1171,7 +1191,7 @@ export default function ObjectsPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <span
                 className="font-medium text-primary hover:underline cursor-pointer"
-                onClick={(e) => { e.stopPropagation(); navigate(`/objects/${obj.id}`); }}
+                onClick={(e) => { e.stopPropagation(); setDetailObject(obj); }}
                 data-testid={`link-object-detail-${obj.id}`}
               >
                 {(() => {
@@ -2114,6 +2134,13 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
         </DialogContent>
       </Dialog>
 
+
+      {/* Task #681: in-page detaljpanel */}
+      <ObjectDetailSheet
+        object={detailObject}
+        open={!!detailObject}
+        onOpenChange={(open) => { if (!open) setDetailObject(null); }}
+      />
 
       {/* Create object dialog */}
       <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) resetCreateForm(); }}>

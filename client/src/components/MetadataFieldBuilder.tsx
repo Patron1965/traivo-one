@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, X, Search, ChevronDown } from "lucide-react";
+import { Plus, X, Search, ChevronDown, Upload, Loader2, FileCheck2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { versionedUrl } from "@/lib/queryClient";
+import { useUpload } from "@/hooks/use-upload";
 import { metadataAreaLabel, METADATA_AREA_ORDER } from "@shared/metadata-areas";
 
 export interface BuilderFieldValue {
@@ -35,6 +36,7 @@ interface MetadataType {
   area?: string | null;
   allowedValues?: string[] | null;
   arBeraknad?: boolean;
+  parentMetadataId?: string | null;
 }
 
 interface BuilderRow {
@@ -46,12 +48,73 @@ interface BuilderRow {
   origin: "own" | "inherited";
   originalValue?: string;
   sourceName?: string | null;
+  // Task #681: sammansatt familj — rader som hör till samma familj delar
+  // familyParent (förälderns namn). subKey är underfältets katalognamn (JSON-nyckel).
+  familyParent?: string | null;
+  subKey?: string | null;
 }
 
 interface Props {
   customerId?: string | null;
   inheritedFields?: InheritedFieldSeed[];
   onChange: (fields: BuilderFieldValue[]) => void;
+}
+
+// Task #681: bild/fil = riktig filuppladdning via presignerad URL. Värdet som
+// sparas är objektets lagringssökväg (objectPath) som returneras vid bekräftelse.
+function MetadataFileInput({
+  value,
+  onChange,
+  testId,
+  accept,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  testId: string;
+  accept?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { uploadFile, isUploading, error } = useUpload({
+    onSuccess: (res) => onChange(res.objectPath),
+  });
+  const handlePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) await uploadFile(file);
+    e.target.value = "";
+  };
+  return (
+    <div className="space-y-1.5">
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        className="hidden"
+        onChange={handlePick}
+        data-testid={`${testId}-file`}
+      />
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-9 gap-2"
+          disabled={isUploading}
+          onClick={() => inputRef.current?.click()}
+          data-testid={testId}
+        >
+          {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          {isUploading ? "Laddar upp..." : value ? "Byt fil" : "Ladda upp fil"}
+        </Button>
+        {value && !isUploading && (
+          <span className="flex items-center gap-1 text-xs text-chart-2 min-w-0" data-testid={`${testId}-status`}>
+            <FileCheck2 className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{value.split("/").pop()}</span>
+          </span>
+        )}
+      </div>
+      {error && <p className="text-xs text-destructive" data-testid={`${testId}-error`}>{error.message}</p>}
+    </div>
+  );
 }
 
 function renderValueInput(
@@ -92,8 +155,9 @@ function renderValueInput(
     case "datetime":
       return <Input type="datetime-local" value={value} onChange={(e) => onChange(e.target.value)} className="h-9" data-testid={testId} />;
     case "image":
+      return <MetadataFileInput value={value} onChange={onChange} testId={testId} accept="image/*" />;
     case "file":
-      return <Input type="url" placeholder="URL till fil/bild..." value={value} onChange={(e) => onChange(e.target.value)} className="h-9" data-testid={testId} />;
+      return <MetadataFileInput value={value} onChange={onChange} testId={testId} />;
     case "location":
       return <Input placeholder="Lat, Long" value={value} onChange={(e) => onChange(e.target.value)} className="h-9" data-testid={testId} />;
     default:
@@ -118,6 +182,23 @@ export function MetadataFieldBuilder({ customerId, inheritedFields, onChange }: 
     },
     staleTime: 60000,
   });
+
+  // Task #681: familjer (Task #662) — föräldrar (json-gruppfält) och deras
+  // underfält. childrenByParent: förälder-id -> underfält. En familj-förälder
+  // expanderas i formuläret till en input per underfält och skrivs som ETT
+  // strukturerat json-värde på förälderns namn.
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string, MetadataType[]>();
+    for (const t of types) {
+      if (t.parentMetadataId) {
+        const arr = map.get(t.parentMetadataId);
+        if (arr) arr.push(t); else map.set(t.parentMetadataId, [t]);
+      }
+    }
+    return map;
+  }, [types]);
+
+  const familyParentIds = useMemo(() => new Set(childrenByParent.keys()), [childrenByParent]);
 
   // Seed inherited rows once (and re-seed if the inherited set identity changes).
   useEffect(() => {
@@ -147,19 +228,45 @@ export function MetadataFieldBuilder({ customerId, inheritedFields, onChange }: 
 
   // Emit the values that should actually be written on the new object:
   // every "own" field plus any inherited field whose value was overridden.
+  // Family rows are grouped per parent and emitted as a single json value.
   useEffect(() => {
-    const out: BuilderFieldValue[] = rows
-      .filter((r) => r.origin === "own" || (r.origin === "inherited" && r.value !== r.originalValue))
-      .map((r) => ({ namn: r.namn, varde: r.value, datatyp: r.datatyp }));
+    const out: BuilderFieldValue[] = [];
+    const familyAcc = new Map<string, Record<string, string>>();
+    for (const r of rows) {
+      const overridden = r.origin === "inherited" && r.value !== r.originalValue;
+      if (r.origin !== "own" && !overridden) continue;
+      if (r.familyParent && r.subKey) {
+        const obj = familyAcc.get(r.familyParent) ?? {};
+        if (r.value !== "" && r.value != null) obj[r.subKey] = r.value;
+        familyAcc.set(r.familyParent, obj);
+        continue;
+      }
+      out.push({ namn: r.namn, varde: r.value, datatyp: r.datatyp });
+    }
+    for (const [parent, obj] of familyAcc.entries()) {
+      if (Object.keys(obj).length === 0) continue;
+      out.push({ namn: parent, varde: JSON.stringify(obj), datatyp: "json" });
+    }
     onChange(out);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows]);
 
   const addedNames = useMemo(() => new Set(rows.map((r) => r.namn)), [rows]);
+  const addedFamilies = useMemo(
+    () => new Set(rows.filter((r) => r.familyParent).map((r) => r.familyParent as string)),
+    [rows],
+  );
 
   const availableTypes = useMemo(
-    () => types.filter((t) => !t.arBeraknad && !addedNames.has(t.namn)),
-    [types, addedNames],
+    () =>
+      types.filter((t) => {
+        if (t.arBeraknad) return false;
+        // underfält adderas endast via sin familj-förälder
+        if (t.parentMetadataId) return false;
+        if (t.id && familyParentIds.has(t.id)) return !addedFamilies.has(t.namn);
+        return !addedNames.has(t.namn);
+      }),
+    [types, addedNames, addedFamilies, familyParentIds],
   );
 
   const grouped = useMemo(() => {
@@ -176,6 +283,25 @@ export function MetadataFieldBuilder({ customerId, inheritedFields, onChange }: 
   }, [availableTypes]);
 
   const addField = (t: MetadataType) => {
+    const children = t.id ? childrenByParent.get(t.id) : undefined;
+    if (children && children.length > 0) {
+      // Task #681: familj vald → expandera alla underfält som egna inputs.
+      setRows((prev) => [
+        ...prev,
+        ...children.map((c) => ({
+          namn: `${t.namn}.${c.namn}`,
+          datatyp: c.datatyp,
+          allowedValues: c.allowedValues,
+          area: t.area,
+          value: "",
+          origin: "own" as const,
+          familyParent: t.namn,
+          subKey: c.namn,
+        })),
+      ]);
+      setPickerOpen(false);
+      return;
+    }
     setRows((prev) => [
       ...prev,
       {
@@ -198,15 +324,31 @@ export function MetadataFieldBuilder({ customerId, inheritedFields, onChange }: 
     setRows((prev) => prev.filter((r) => r.namn !== namn));
   };
 
+  const removeFamily = (parent: string) => {
+    setRows((prev) => prev.filter((r) => r.familyParent !== parent));
+  };
+
   const resetInherited = (namn: string) => {
     setRows((prev) => prev.map((r) => (r.namn === namn ? { ...r, value: r.originalValue ?? "" } : r)));
   };
 
+  // Gruppera rader för rendering: familjer som block, övriga som enskilda rader.
+  const standaloneRows = rows.filter((r) => !r.familyParent);
+  const familyGroups = useMemo(() => {
+    const map = new Map<string, BuilderRow[]>();
+    for (const r of rows) {
+      if (!r.familyParent) continue;
+      const arr = map.get(r.familyParent);
+      if (arr) arr.push(r); else map.set(r.familyParent, [r]);
+    }
+    return Array.from(map.entries());
+  }, [rows]);
+
   return (
     <div className="space-y-3" data-testid="metadata-field-builder">
-      {rows.length > 0 && (
+      {(standaloneRows.length > 0 || familyGroups.length > 0) && (
         <div className="space-y-3">
-          {rows.map((r) => {
+          {standaloneRows.map((r) => {
             const overridden = r.origin === "inherited" && r.value !== r.originalValue;
             const isOwn = r.origin === "own" || overridden;
             return (
@@ -256,6 +398,41 @@ export function MetadataFieldBuilder({ customerId, inheritedFields, onChange }: 
               </div>
             );
           })}
+
+          {familyGroups.map(([parent, childRows]) => (
+            <div key={`family-${parent}`} className="rounded-md border p-3 space-y-3" data-testid={`metadata-builder-family-${parent}`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Label className="truncate">{parent}</Label>
+                  <Badge variant="secondary" className="text-xs bg-chart-4/15 text-chart-4 border border-chart-4/30 shrink-0">familj</Badge>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  onClick={() => removeFamily(parent)}
+                  data-testid={`button-remove-family-${parent}`}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="space-y-2 pl-2 border-l-2 border-chart-4/30">
+                {childRows.map((r) => (
+                  <div key={r.namn} className="space-y-1" data-testid={`metadata-builder-subfield-${r.namn}`}>
+                    <Label className="text-xs text-muted-foreground">{r.subKey}</Label>
+                    {renderValueInput(
+                      r.datatyp,
+                      r.value,
+                      (v) => updateValue(r.namn, v),
+                      `input-metadata-value-${r.namn}`,
+                      r.allowedValues,
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -277,17 +454,20 @@ export function MetadataFieldBuilder({ customerId, inheritedFields, onChange }: 
               <CommandEmpty>Inga fält hittades.</CommandEmpty>
               {grouped.map(([area, typesInArea]) => (
                 <CommandGroup key={area} heading={metadataAreaLabel(area)}>
-                  {typesInArea.map((t) => (
-                    <CommandItem
-                      key={t.id || t.namn}
-                      value={`${t.namn} ${t.beteckning || ""} ${metadataAreaLabel(area)}`}
-                      onSelect={() => addField(t)}
-                      data-testid={`option-metadata-type-${t.namn}`}
-                    >
-                      <span className="truncate">{t.namn}</span>
-                      <span className="ml-auto text-xs text-muted-foreground">{t.datatyp}</span>
-                    </CommandItem>
-                  ))}
+                  {typesInArea.map((t) => {
+                    const isFamily = !!(t.id && familyParentIds.has(t.id));
+                    return (
+                      <CommandItem
+                        key={t.id || t.namn}
+                        value={`${t.namn} ${t.beteckning || ""} ${metadataAreaLabel(area)}`}
+                        onSelect={() => addField(t)}
+                        data-testid={`option-metadata-type-${t.namn}`}
+                      >
+                        <span className="truncate">{t.namn}</span>
+                        <span className="ml-auto text-xs text-muted-foreground">{isFamily ? "familj" : t.datatyp}</span>
+                      </CommandItem>
+                    );
+                  })}
                 </CommandGroup>
               ))}
             </CommandList>

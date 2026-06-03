@@ -798,6 +798,18 @@ app.get("/api/objects/:id/descendants", asyncHandler(async (req, res) => {
   res.json(descendants);
 }));
 
+// Task #681: avvikelser kopplade till objektet — driver detaljpanelens
+// Avvikelser-flik. Tenant- och objektägarskap verifieras innan läsning.
+app.get("/api/objects/:id/deviations", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const deviations = await storage.getDeviationReports(tenantId, { objectId: req.params.id });
+  res.json(deviations);
+}));
+
 // ============================================
 // VINJETBILD (task #580 — PDF §14.5)
 // Flow: klient hämtar signerad URL via POST /api/uploads/request-url, laddar
