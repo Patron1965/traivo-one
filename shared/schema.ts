@@ -3656,6 +3656,7 @@ export const customerIssueReports = pgTable("customer_issue_reports", {
   imageUrls: text("image_urls").array().default([]),
   staffNotes: text("staff_notes"),
   assignedTo: varchar("assigned_to").references(() => users.id, { onDelete: 'set null' }),
+  linkedWorkOrderId: varchar("linked_work_order_id"),
   resolvedAt: timestamp("resolved_at"),
   resolvedBy: varchar("resolved_by").references(() => users.id, { onDelete: 'set null' }),
   resolution: text("resolution"),

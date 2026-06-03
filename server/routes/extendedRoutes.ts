@@ -681,7 +681,7 @@ app.get("/api/cases", requirePlanner, asyncHandler(async (req, res) => {
         latitude: null,
         longitude: null,
         photos: c.imageUrls ?? null,
-        linkedWorkOrderId: null,
+        linkedWorkOrderId: c.linkedWorkOrderId ?? null,
         createdAt: c.createdAt,
       });
     }
@@ -771,6 +771,12 @@ app.post("/api/cases/:source/:id/create-order", requirePlanner, asyncHandler(asy
       throw new NotFoundError("Ärende hittades inte");
     }
 
+    // Förhindra dubbel-konvertering: ett ärende får bara ge upphov till en order.
+    const alreadyLinked = source === "deviation" ? existing.linkedActionOrderId : existing.linkedWorkOrderId;
+    if (alreadyLinked) {
+      throw new ValidationError("Ärendet har redan en kopplad order");
+    }
+
     const objectId: string | null = existing.objectId ?? null;
     if (!objectId) {
       throw new ValidationError("Ärendet saknar kopplat objekt — koppla ett objekt innan order skapas");
@@ -840,7 +846,7 @@ app.post("/api/cases/:source/:id/create-order", requirePlanner, asyncHandler(asy
     } else if (source === "public") {
       await storage.updatePublicIssueReport(existing.id, tenantId, { linkedWorkOrderId: assignment.id, status: "converted" });
     } else {
-      await storage.updateCustomerIssueReport(existing.id, tenantId, { status: "in_progress" });
+      await storage.updateCustomerIssueReport(existing.id, tenantId, { linkedWorkOrderId: assignment.id, status: "in_progress" });
     }
 
     res.status(201).json({ orderConcept: concept, assignment, message: "Order skapad från ärende via orderkoncept" });
