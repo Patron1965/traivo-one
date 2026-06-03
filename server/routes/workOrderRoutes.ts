@@ -128,6 +128,11 @@ async function validateWorkOrderScheduleChange(params: {
   return { hard, soft };
 }
 
+/** Plockar fram inloggad användares id från request (web-session claims eller id). */
+function getRequestUserId(req: any): string | null {
+  return req?.user?.claims?.sub ?? req?.user?.id ?? null;
+}
+
 export async function registerWorkOrderRoutes(app: Express) {
 
 app.get("/api/work-orders", asyncHandler(async (req, res) => {
@@ -214,7 +219,14 @@ app.get("/api/work-orders", asyncHandler(async (req, res) => {
 
 app.get("/api/work-orders/:id", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
-  const workOrder = await storage.getWorkOrder(req.params.id);
+  let workOrder = await storage.getWorkOrder(req.params.id);
+  // getWorkOrder filtrerar bort soft-deleted (avbrutna) ordrar. Detaljsidan ska
+  // ändå kunna visa en avbruten order med "Avbruten"-markering + återställning,
+  // så vi läser raden direkt om den inte hittades via den vanliga vägen.
+  if (!workOrder) {
+    const [deleted] = await db.select().from(workOrders).where(eq(workOrders.id, req.params.id));
+    if (deleted) workOrder = deleted;
+  }
   const verified = verifyTenantOwnership(workOrder, tenantId);
   if (!verified) throw new NotFoundError("Arbetsorder");
 
@@ -223,6 +235,8 @@ app.get("/api/work-orders/:id", asyncHandler(async (req, res) => {
     verified.objectId ? storage.getObject(verified.objectId) : null,
   ]);
 
+  const cancellation = (verified.metadata as any)?.cancellation ?? null;
+
   res.json({
     ...verified,
     customerName: customer?.name,
@@ -230,7 +244,52 @@ app.get("/api/work-orders/:id", asyncHandler(async (req, res) => {
     customerEmail: customer?.email,
     objectName: object?.name,
     objectAddress: object?.address,
+    isCancelled: !!verified.deletedAt,
+    cancellation,
   });
+}));
+
+// Aktivitetslogg för en arbetsorder: statusbyten, redigeringar, avbeställningar
+// och återställningar med tidpunkt, användare och ev. orsak. Fungerar även för
+// avbrutna (soft-deleted) ordrar.
+app.get("/api/work-orders/:id/activity", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  let workOrder = await storage.getWorkOrder(req.params.id);
+  if (!workOrder) {
+    const [deleted] = await db.select().from(workOrders).where(eq(workOrders.id, req.params.id));
+    if (deleted) workOrder = deleted;
+  }
+  const verified = verifyTenantOwnership(workOrder, tenantId);
+  if (!verified) throw new NotFoundError("Arbetsorder");
+
+  const logs = await storage.getAuditLogs(tenantId, {
+    resourceType: "work_order",
+    resourceId: req.params.id,
+    limit: 100,
+  });
+
+  // Lös upp användarnamn i en batch.
+  const userIds = Array.from(new Set(logs.map(l => l.userId).filter(Boolean) as string[]));
+  const userMap = new Map<string, string>();
+  await Promise.all(userIds.map(async (uid) => {
+    const u = await storage.getUser(uid);
+    if (u) {
+      const name = [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email || uid;
+      userMap.set(uid, name);
+    }
+  }));
+
+  const activity = logs.map(l => ({
+    id: l.id,
+    action: l.action,
+    createdAt: l.createdAt,
+    userId: l.userId,
+    userName: l.userId ? (userMap.get(l.userId) ?? "Okänd användare") : "System",
+    changes: l.changes ?? null,
+    metadata: l.metadata ?? null,
+  }));
+
+  res.json({ activity });
 }));
 
 app.get("/api/work-orders/:id/expand", asyncHandler(async (req, res) => {
@@ -951,6 +1010,42 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
   const workOrder = await storage.updateWorkOrder(req.params.id, updateData);
   if (!workOrder) throw new NotFoundError("Arbetsorder");
 
+  // Audit-spår: logga vilka fält som ändrades (för aktivitetslistan på detaljsidan).
+  try {
+    const TRACKED_FIELDS: Array<keyof typeof workOrder> = [
+      "title", "description", "priority", "orderStatus", "executionStatus",
+      "scheduledDate", "scheduledStartTime", "notes", "plannedNotes",
+      "resourceId", "teamId", "estimatedDuration",
+    ];
+    const normalize = (v: unknown): unknown => {
+      if (v instanceof Date) return v.toISOString();
+      return v ?? null;
+    };
+    const before: Record<string, unknown> = {};
+    const after: Record<string, unknown> = {};
+    for (const field of TRACKED_FIELDS) {
+      if (!(field in updateData)) continue;
+      const b = normalize((existingOrder as Record<string, unknown>)[field as string]);
+      const a = normalize((workOrder as Record<string, unknown>)[field as string]);
+      if (JSON.stringify(b) !== JSON.stringify(a)) {
+        before[field as string] = b;
+        after[field as string] = a;
+      }
+    }
+    if (Object.keys(after).length > 0) {
+      await storage.createAuditLog({
+        tenantId,
+        userId: getRequestUserId(req),
+        action: "updated",
+        resourceType: "work_order",
+        resourceId: req.params.id,
+        changes: { before, after },
+      });
+    }
+  } catch (auditErr) {
+    console.error(`[work-orders] failed to write update audit log for ${req.params.id}:`, auditErr);
+  }
+
   const newResourceId = workOrder.resourceId;
   const oldResourceId = existingOrder.resourceId;
 
@@ -1318,10 +1413,34 @@ app.post("/api/work-orders/:id/status", asyncHandler(async (req, res) => {
   if (!ORDER_STATUSES.includes(status)) {
     throw new ValidationError(`Invalid status. Must be one of: ${ORDER_STATUSES.join(", ")}`);
   }
+  const reason = typeof req.body?.reason === "string"
+    ? req.body.reason.trim().slice(0, 500) || null
+    : null;
 
   try {
+    const previousStatus = existing!.orderStatus;
     const workOrder = await storage.updateWorkOrderStatus(req.params.id, status);
     if (!workOrder) throw new NotFoundError("Arbetsorder");
+
+    if (previousStatus !== status) {
+      try {
+        await storage.createAuditLog({
+          tenantId,
+          userId: getRequestUserId(req),
+          action: "status_changed",
+          resourceType: "work_order",
+          resourceId: req.params.id,
+          changes: {
+            before: { orderStatus: previousStatus },
+            after: { orderStatus: status },
+            reason,
+          },
+        });
+      } catch (auditErr) {
+        console.error(`[work-orders] failed to write status-change audit log for ${req.params.id}:`, auditErr);
+      }
+    }
+
     res.json(workOrder);
   } catch (error) {
     if (error instanceof Error && error.message.includes("Ogiltig statusövergång")) {

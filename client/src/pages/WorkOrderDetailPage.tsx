@@ -36,6 +36,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryErrorState } from "@/components/ErrorBoundary";
 import { apiRequest, ApiError } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { formatSekFromOre } from "@/lib/format";
 import { workOrderStatusBadge, priorityBadgeClasses, priorityLabels } from "@/lib/status-colors";
 import {
@@ -58,8 +59,18 @@ import {
   Mail,
   Pencil,
   Ban,
+  RotateCcw,
+  Activity,
+  PencilLine,
+  ArrowRightLeft,
 } from "lucide-react";
 import type { WorkOrder } from "@shared/schema";
+
+type CancellationInfo = {
+  reason?: string | null;
+  cancelledAt?: string | null;
+  cancelledBy?: string | null;
+};
 
 type WorkOrderDetail = WorkOrder & {
   customerName?: string | null;
@@ -67,7 +78,23 @@ type WorkOrderDetail = WorkOrder & {
   customerEmail?: string | null;
   objectName?: string | null;
   objectAddress?: string | null;
+  isCancelled?: boolean;
+  cancellation?: CancellationInfo | null;
 };
+
+interface ActivityItem {
+  id: string;
+  action: string;
+  createdAt?: string | null;
+  userId?: string | null;
+  userName: string;
+  changes?: {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+    reason?: string | null;
+  } | null;
+  metadata?: Record<string, unknown> | null;
+}
 
 interface ExpandPeriod {
   desiredDeliveryStart?: string | null;
@@ -194,6 +221,38 @@ function fmtDateTime(value?: string | Date | null): string | null {
   return d.toLocaleString("sv-SE", { dateStyle: "medium", timeStyle: "short" });
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  title: "Titel",
+  description: "Beskrivning",
+  priority: "Prioritet",
+  orderStatus: "Status",
+  executionStatus: "Utförandestatus",
+  scheduledDate: "Schemalagt datum",
+  scheduledStartTime: "Starttid",
+  notes: "Anteckningar",
+  plannedNotes: "Planeringsanteckning",
+  resourceId: "Resurs",
+  teamId: "Team",
+  estimatedDuration: "Beräknad tid",
+};
+
+function fmtFieldValue(field: string, value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (field === "orderStatus") return ORDER_STATUS_LABELS[String(value)] || String(value);
+  if (field === "executionStatus") return EXECUTION_STATUS_LABELS[String(value)] || String(value);
+  if (field === "priority") return priorityLabels[String(value)] || String(value);
+  if (field === "scheduledDate") return fmtDate(String(value)) ?? String(value);
+  if (typeof value === "string" && value.length > 60) return value.slice(0, 60) + "…";
+  return String(value);
+}
+
+const ACTION_META: Record<string, { label: string; icon: typeof Activity }> = {
+  status_changed: { label: "Status ändrad", icon: ArrowRightLeft },
+  updated: { label: "Order redigerad", icon: PencilLine },
+  cancelled: { label: "Order avbruten", icon: Ban },
+  restored: { label: "Order återställd", icon: RotateCcw },
+};
+
 function InfoRow({ label, value, icon: Icon }: { label: string; value: React.ReactNode; icon?: typeof Building2 }) {
   return (
     <div className="flex items-start justify-between gap-3 py-1.5 text-sm">
@@ -226,8 +285,15 @@ export default function WorkOrderDetailPage() {
     enabled: !!workOrderId,
   });
 
+  const { data: activityData } = useQuery<{ activity: ActivityItem[] }>({
+    queryKey: ["/api/work-orders", workOrderId, "activity"],
+    enabled: !!workOrderId,
+  });
+
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "owner";
 
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -249,11 +315,26 @@ export default function WorkOrderDetailPage() {
   const invalidateOrder = (objectId?: string | null) => {
     queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId] });
     queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId, "expand"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId, "activity"] });
     queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
     if (objectId) {
       queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "work-orders"] });
     }
   };
+
+  const restoreMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/work-orders/${workOrderId}/restore`, {});
+      return res.json();
+    },
+    onSuccess: (restored: WorkOrderDetail) => {
+      invalidateOrder(restored?.objectId ?? order?.objectId);
+      toast({ title: "Order återställd", description: "Arbetsordern är aktiv igen." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Kunde inte återställa", description: err.message, variant: "destructive" });
+    },
+  });
 
   const editMutation = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
@@ -309,11 +390,9 @@ export default function WorkOrderDetailPage() {
       await apiRequest("DELETE", url, reason ? { reason } : undefined);
     },
     onSuccess: () => {
-      const objectId = order?.objectId;
-      invalidateOrder(objectId);
+      invalidateOrder(order?.objectId);
       setCancelOpen(false);
       toast({ title: "Order avbruten", description: "Arbetsordern har avbeställts." });
-      navigate(objectId ? `/objects/${objectId}` : "/objects");
     },
     onError: (err: Error) => {
       const msg = err.message || "";
@@ -390,6 +469,7 @@ export default function WorkOrderDetailPage() {
   const comms = expand?.communications ?? [];
   const images = expand?.images ?? [];
   const notes = expand?.notes;
+  const activity = activityData?.activity ?? [];
 
   const objectAddress = order.objectAddress;
 
@@ -405,9 +485,15 @@ export default function WorkOrderDetailPage() {
         description={order.description || undefined}
         testId="text-workorder-title"
       >
-        <Badge className={statusBadgeClass(order.orderStatus)} data-testid="badge-order-status">
-          {ORDER_STATUS_LABELS[order.orderStatus || "skapad"] || order.orderStatus || "Skapad"}
-        </Badge>
+        {order.isCancelled ? (
+          <Badge className="bg-destructive/15 text-destructive border border-destructive/30" data-testid="badge-order-status">
+            Avbruten
+          </Badge>
+        ) : (
+          <Badge className={statusBadgeClass(order.orderStatus)} data-testid="badge-order-status">
+            {ORDER_STATUS_LABELS[order.orderStatus || "skapad"] || order.orderStatus || "Skapad"}
+          </Badge>
+        )}
         {order.priority && (
           <Badge className={priorityBadgeClasses[order.priority] || priorityBadgeClasses.normal} data-testid="badge-priority">
             {priorityLabels[order.priority] || order.priority}
@@ -420,7 +506,42 @@ export default function WorkOrderDetailPage() {
         )}
       </PageHeader>
 
-      {(() => {
+      {order.isCancelled ? (
+        <div className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3" data-testid="cancelled-banner">
+          <div className="flex flex-wrap items-start gap-3">
+            <Ban className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1 space-y-0.5 text-sm">
+              <div className="font-medium text-destructive">Den här ordern är avbruten</div>
+              {order.cancellation?.cancelledAt && (
+                <div className="text-muted-foreground" data-testid="text-cancelled-at">
+                  Avbruten {fmtDateTime(order.cancellation.cancelledAt)}
+                </div>
+              )}
+              {order.cancellation?.reason && (
+                <div className="text-muted-foreground" data-testid="text-cancelled-reason">
+                  Orsak: {order.cancellation.reason}
+                </div>
+              )}
+            </div>
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => restoreMutation.mutate()}
+                disabled={restoreMutation.isPending}
+                data-testid="button-restore-workorder"
+              >
+                {restoreMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-4 w-4 mr-1.5" />
+                )}
+                Återställ order
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : (() => {
         const nextStatuses = allowedNextStatuses(order.orderStatus || "skapad");
         const isTerminal = TERMINAL_STATUSES.includes(order.orderStatus || "");
         const canCancel = order.orderStatus !== "utford" && order.orderStatus !== "fakturerad";
@@ -865,6 +986,77 @@ export default function WorkOrderDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Aktivitet / ändringslogg */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Activity className="h-4 w-4" /> Aktivitet
+            {activity.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{activity.length}</Badge>}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {activity.length > 0 ? (
+            <div className="space-y-4">
+              {activity.map((item) => {
+                const meta = ACTION_META[item.action] ?? { label: item.action, icon: Activity };
+                const Icon = meta.icon;
+                const reason = item.changes?.reason ?? null;
+                const before = item.changes?.before ?? {};
+                const after = item.changes?.after ?? {};
+                const changedFields = Object.keys(after);
+                return (
+                  <div key={item.id} className="flex gap-3" data-testid={`activity-row-${item.id}`}>
+                    <div className="flex flex-col items-center">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-muted-foreground shrink-0">
+                        <Icon className="h-3.5 w-3.5" />
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-1 pb-1">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                        <span className="text-sm font-medium">{meta.label}</span>
+                        <span className="text-xs text-muted-foreground" data-testid={`activity-time-${item.id}`}>
+                          {fmtDateTime(item.createdAt)}
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground" data-testid={`activity-user-${item.id}`}>
+                        {item.userName}
+                      </div>
+                      {item.action === "status_changed" && (
+                        <div className="text-sm">
+                          {fmtFieldValue("orderStatus", before.orderStatus)}{" "}
+                          <span className="text-muted-foreground">→</span>{" "}
+                          <span className="font-medium">{fmtFieldValue("orderStatus", after.orderStatus)}</span>
+                        </div>
+                      )}
+                      {item.action === "updated" && changedFields.length > 0 && (
+                        <ul className="text-sm space-y-0.5">
+                          {changedFields.map((f) => (
+                            <li key={f}>
+                              <span className="text-muted-foreground">{FIELD_LABELS[f] || f}:</span>{" "}
+                              {fmtFieldValue(f, before[f])} <span className="text-muted-foreground">→</span>{" "}
+                              <span className="font-medium">{fmtFieldValue(f, after[f])}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {reason && (
+                        <div className="text-sm" data-testid={`activity-reason-${item.id}`}>
+                          <span className="text-muted-foreground">Orsak:</span> {reason}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground" data-testid="empty-activity">
+              Ingen registrerad aktivitet ännu. Statusbyten, redigeringar och avbeställningar visas här.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Kommunikation */}
       {comms.length > 0 && (

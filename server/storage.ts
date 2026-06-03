@@ -583,7 +583,7 @@ export interface IStorage {
   isOwner(userId: string, tenantId: string): Promise<boolean>;
   
   // System Dashboard - Audit Logs
-  getAuditLogs(tenantId: string, options?: { limit?: number; offset?: number; action?: string; userId?: string }): Promise<AuditLog[]>;
+  getAuditLogs(tenantId: string, options?: { limit?: number; offset?: number; action?: string; userId?: string; resourceType?: string; resourceId?: string }): Promise<AuditLog[]>;
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
   deleteOldAuditLogs(opts: { loginOlderThanDays: number; otherOlderThanDays: number }): Promise<{ loginDeleted: number; otherDeleted: number }>;
   
@@ -5115,7 +5115,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // System Dashboard - Audit Logs
-  async getAuditLogs(tenantId: string, options?: { limit?: number; offset?: number; action?: string; userId?: string }): Promise<AuditLog[]> {
+  async getAuditLogs(tenantId: string, options?: { limit?: number; offset?: number; action?: string; userId?: string; resourceType?: string; resourceId?: string }): Promise<AuditLog[]> {
     const conditions = [eq(auditLogs.tenantId, tenantId)];
     
     if (options?.action) {
@@ -5123,6 +5123,12 @@ export class DatabaseStorage implements IStorage {
     }
     if (options?.userId) {
       conditions.push(eq(auditLogs.userId, options.userId));
+    }
+    if (options?.resourceType) {
+      conditions.push(eq(auditLogs.resourceType, options.resourceType));
+    }
+    if (options?.resourceId) {
+      conditions.push(eq(auditLogs.resourceId, options.resourceId));
     }
     
     let query = db.select()
