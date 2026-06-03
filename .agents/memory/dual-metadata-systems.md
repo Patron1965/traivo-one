@@ -33,6 +33,20 @@ faktiskt träffar. Matcha katalog-kolumner mot `metadataKatalog` på `namn` ELLE
 `beteckning` (case-insensitivt). Skriv aldrig logik som antar att de två systemen är
 synkade. En framtida task bör ena dem (eller spegla export mot svenska systemet).
 
+## metadataKatalog-dubbletter: dedup-nyckeln måste vara enhetlig
+Alla skapande-vägar för `metadataKatalog` MÅSTE deduplicera på samma nyckel — annars
+uppstår flera rader med samma `namn` (visas dubbelt i importmallar/fält-väljare).
+De tre vägarna: `seedDefaultMetadataTypes` (dedup på `namn`), `seedSystemMetadataLabels`
+(dedup på `beteckning`) och import-auto-create (`buildMetadataTypeLookup`).
+
+**Why:** Historiskt deduplicerade de på OLIKA nycklar → "Antal" fick 3 rader.
+**How to apply:** Matcha alltid på `beteckning` ELLER `lower(namn)` innan insert; lägg
+nya lookup-nycklar (namn/punktnyckel/beteckning) i `buildMetadataTypeLookup`. Engångs-
+städning av befintliga dubbletter: `scripts/dedupe-metadata-katalog.ts` (per tenant,
+väljer kanonisk: is_system → har beteckning → äldst, pekar om ALLA refs inkl.
+`import_templates.field_ids[]` + `parent_metadata_id`, sedan delete). `concept_filters.metadata_key`
+matchar på namn-sträng → kanonisk måste behålla namnet.
+
 ## Återanvändbara hjälpare (server/metadata-queries.ts)
 - `coerceMetadataVardeFromRaw(katalog, raw)` → `{vardeFields, displayValue}`,
   validerar `datatyp` + `allowedValues` (kastar svenskt fel). `displayValue` =

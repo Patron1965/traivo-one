@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { tenants, customers, objects, resources, workOrders, brandingTemplates, tenantBranding, userTenantRoles, users, metadataKatalog, clusters, teams, tenantFeatures, featureAuditLog } from "@shared/schema";
-import { sql, eq, and } from "drizzle-orm";
+import { sql, eq, and, or } from "drizzle-orm";
 import { getModulesForPackage } from "@shared/modules";
 
 const DEFAULT_TENANT_ID = "kinab";
@@ -977,11 +977,19 @@ async function seedSystemMetadataLabels() {
 
   let created = 0;
   for (const label of systemLabels) {
-    const existing = await db.select({ id: metadataKatalog.id })
+    // Matcha på beteckning ELLER namn (case-insensitivt). Standardfälten
+    // (seedDefaultMetadataTypes) skapar t.ex. "Antal" UTAN beteckning — om vi
+    // bara matchade på beteckning skulle vi skapa en andra "Antal"-rad (Task
+    // #672). Hittar vi en namn-match utan beteckning kompletterar vi den i
+    // stället för att duplicera.
+    const existing = await db.select({ id: metadataKatalog.id, beteckning: metadataKatalog.beteckning })
       .from(metadataKatalog)
       .where(and(
         eq(metadataKatalog.tenantId, DEFAULT_TENANT_ID),
-        eq(metadataKatalog.beteckning, label.beteckning)
+        or(
+          eq(metadataKatalog.beteckning, label.beteckning),
+          sql`lower(${metadataKatalog.namn}) = lower(${label.namn})`,
+        ),
       ))
       .limit(1);
 
@@ -992,11 +1000,15 @@ async function seedSystemMetadataLabels() {
       });
       created++;
     } else if (label.isSystem) {
+      const row = existing[0];
+      // Markera som system och backfill:a beteckning om den saknas.
+      const patch: { isSystem: boolean; beteckning?: string } = { isSystem: true };
+      if (!row.beteckning || !row.beteckning.trim()) patch.beteckning = label.beteckning;
       await db.update(metadataKatalog)
-        .set({ isSystem: true })
+        .set(patch)
         .where(and(
           eq(metadataKatalog.tenantId, DEFAULT_TENANT_ID),
-          eq(metadataKatalog.beteckning, label.beteckning)
+          eq(metadataKatalog.id, row.id),
         ));
     }
   }

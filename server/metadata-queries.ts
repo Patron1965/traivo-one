@@ -2086,6 +2086,13 @@ export function buildMetadataTypeLookup(
       if (!map.has(key)) map.set(key, t);
     }
   }
+  // Matcha även på beteckning så att en import-kolumn som råkar bära beteckningen
+  // hittar befintligt fält i stället för att auto-skapa en dubblett (Task #672).
+  // Namn/punktnyckel har företräde — beteckning fyller bara luckor.
+  for (const t of types) {
+    const bet = t.beteckning?.trim().toLowerCase();
+    if (bet && !map.has(bet)) map.set(bet, t);
+  }
   return map;
 }
 
