@@ -89,6 +89,12 @@ export class ConflictError extends AppError {
   }
 }
 
+export class RateLimitError extends AppError {
+  constructor(message: string = "För många förfrågningar", details?: unknown) {
+    super(message, 429, { code: "ERR_RATE_LIMITED", details });
+  }
+}
+
 /**
  * Översätter Postgres unique-constraint-fel (kod 23505) på fortnox_mappings till
  * ett tydligt svenskt meddelande. Returnerar null om felet inte är en sådan kollision.

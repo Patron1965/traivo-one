@@ -15,6 +15,8 @@ import { requireAdmin, requirePlanner } from "../tenant-middleware";
 import { hashPassword } from "../password";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject, createMetadata, getAllMetadataTypes } from "../metadata-queries";
 import { signDynamicQrToken, verifyDynamicQrToken } from "../dynamic-qr-token";
+import { checkPublicReportRateLimit, getClientKeyForRequest } from "../public-report-rate-limit";
+import { RateLimitError } from "../errors";
 
 export async function registerExtendedRoutes(app: Express) {
 // ============================================
@@ -71,6 +73,14 @@ app.get("/api/public/report/:code", asyncHandler(async (req, res) => {
 
 // Submit public issue report (no auth)
 app.post("/api/public/report/:code", asyncHandler(async (req, res) => {
+    const rateCheck = checkPublicReportRateLimit(getClientKeyForRequest(req));
+    if (!rateCheck.allowed) {
+      res.set("Retry-After", String(rateCheck.retryAfterSeconds || 60));
+      throw new RateLimitError(
+        "För många felanmälningar från denna enhet. Vänta en stund och försök igen.",
+      );
+    }
+
     const { code } = req.params;
     const { category, title, description, reporterName, reporterEmail, reporterPhone, photos, latitude, longitude } = req.body;
     
@@ -957,6 +967,14 @@ app.post("/api/public/parse-issue-report", asyncHandler(async (req, res) => {
 
 // POST /api/public/report-dynamic — felanmälan mot valt objekt (objektoberoende QR)
 app.post("/api/public/report-dynamic", asyncHandler(async (req, res) => {
+    const rateCheck = checkPublicReportRateLimit(getClientKeyForRequest(req));
+    if (!rateCheck.allowed) {
+      res.set("Retry-After", String(rateCheck.retryAfterSeconds || 60));
+      throw new RateLimitError(
+        "För många felanmälningar från denna enhet. Vänta en stund och försök igen.",
+      );
+    }
+
     const { DEVIATION_CATEGORIES } = await import("@shared/schema");
     const dynamicReportSchema = z.object({
       t: z.string().min(1),
