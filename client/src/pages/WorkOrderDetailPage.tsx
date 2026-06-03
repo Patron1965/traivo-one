@@ -1,10 +1,41 @@
+import { useState } from "react";
 import { useRoute, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryErrorState } from "@/components/ErrorBoundary";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { formatSekFromOre } from "@/lib/format";
 import { workOrderStatusBadge, priorityBadgeClasses, priorityLabels } from "@/lib/status-colors";
 import {
@@ -25,6 +56,8 @@ import {
   MapPin,
   Phone,
   Mail,
+  Pencil,
+  Ban,
 } from "lucide-react";
 import type { WorkOrder } from "@shared/schema";
 
@@ -107,7 +140,27 @@ const ORDER_STATUS_LABELS: Record<string, string> = {
   planerad_las: "Låst",
   utford: "Klar",
   fakturerad: "Fakturerad",
+  omojlig: "Omöjlig",
+  avbruten: "Avbruten",
 };
+
+const STATUS_FLOW = ["skapad", "planerad_pre", "planerad_resurs", "planerad_las", "utford", "fakturerad"];
+const TERMINAL_STATUSES = ["avbruten", "omojlig"];
+
+const PRIORITY_OPTIONS = ["urgent", "high", "normal", "low"] as const;
+
+/** Speglar serverns transitionsregler (storage.updateWorkOrderStatus):
+ * från ett icke-terminalt läge kan man gå ett steg framåt i flödet, återgå
+ * till "skapad", eller sätta "omöjlig". "avbruten" sker via Avbryt-knappen. */
+function allowedNextStatuses(current: string): string[] {
+  if (TERMINAL_STATUSES.includes(current)) return [];
+  const idx = STATUS_FLOW.indexOf(current);
+  const allowed = new Set<string>();
+  if (current !== "skapad") allowed.add("skapad");
+  if (idx >= 0 && idx + 1 < STATUS_FLOW.length) allowed.add(STATUS_FLOW[idx + 1]);
+  allowed.add("omojlig");
+  return Array.from(allowed);
+}
 
 const EXECUTION_STATUS_LABELS: Record<string, string> = {
   not_planned: "Ej planerad",
@@ -173,6 +226,111 @@ export default function WorkOrderDetailPage() {
     enabled: !!workOrderId,
   });
 
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    description: "",
+    scheduledDate: "",
+    priority: "normal",
+  });
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [forceCancel, setForceCancel] = useState(false);
+
+  const invalidateOrder = (objectId?: string | null) => {
+    queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId] });
+    queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId, "expand"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    if (objectId) {
+      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "work-orders"] });
+    }
+  };
+
+  const editMutation = useMutation({
+    mutationFn: async (payload: Record<string, unknown>) => {
+      const res = await apiRequest("PATCH", `/api/work-orders/${workOrderId}`, payload);
+      return res.json();
+    },
+    onSuccess: (updated: WorkOrderDetail) => {
+      invalidateOrder(updated?.objectId ?? order?.objectId);
+      setEditOpen(false);
+      toast({ title: "Sparat", description: "Arbetsordern uppdaterades." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Kunde inte spara", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: async (status: string) => {
+      const res = await apiRequest("POST", `/api/work-orders/${workOrderId}/status`, { status });
+      return res.json();
+    },
+    onSuccess: (updated: WorkOrderDetail) => {
+      invalidateOrder(updated?.objectId ?? order?.objectId);
+      setPendingStatus(null);
+      toast({ title: "Status uppdaterad", description: "Orderstatusen ändrades." });
+    },
+    onError: (err: Error) => {
+      setPendingStatus(null);
+      toast({ title: "Kunde inte ändra status", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async ({ reason, force }: { reason: string; force: boolean }) => {
+      const url = `/api/work-orders/${workOrderId}${force ? "?force=true" : ""}`;
+      await apiRequest("DELETE", url, reason ? { reason } : undefined);
+    },
+    onSuccess: () => {
+      const objectId = order?.objectId;
+      invalidateOrder(objectId);
+      setCancelOpen(false);
+      toast({ title: "Order avbruten", description: "Arbetsordern har avbeställts." });
+      navigate(objectId ? `/objects/${objectId}` : "/objects");
+    },
+    onError: (err: Error) => {
+      const msg = err.message || "";
+      if (!forceCancel && /fryst|Fortnox|force=true/i.test(msg)) {
+        setForceCancel(true);
+        toast({
+          title: "Kräver tvångsläge",
+          description: "Ordern är skyddad. Bekräfta tvångsavbeställning för att radera ändå.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: "Kunde inte avbryta", description: msg, variant: "destructive" });
+    },
+  });
+
+  const openEdit = () => {
+    if (!order) return;
+    setEditForm({
+      title: order.title ?? "",
+      description: order.description ?? "",
+      scheduledDate: order.scheduledDate
+        ? new Date(order.scheduledDate).toISOString().slice(0, 10)
+        : "",
+      priority: order.priority ?? "normal",
+    });
+    setEditOpen(true);
+  };
+
+  const submitEdit = () => {
+    const payload: Record<string, unknown> = {
+      title: editForm.title.trim(),
+      description: editForm.description.trim() || null,
+      priority: editForm.priority,
+      scheduledDate: editForm.scheduledDate || null,
+    };
+    editMutation.mutate(payload);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-24" data-testid="loading-workorder">
@@ -230,6 +388,197 @@ export default function WorkOrderDetailPage() {
           </Badge>
         )}
       </PageHeader>
+
+      {(() => {
+        const nextStatuses = allowedNextStatuses(order.orderStatus || "skapad");
+        const isTerminal = TERMINAL_STATUSES.includes(order.orderStatus || "");
+        const canCancel = order.orderStatus !== "utford" && order.orderStatus !== "fakturerad";
+        return (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3" data-testid="workorder-actions">
+            <Button variant="outline" size="sm" onClick={openEdit} data-testid="button-edit-workorder">
+              <Pencil className="h-4 w-4 mr-1.5" /> Redigera
+            </Button>
+
+            {nextStatuses.length > 0 && (
+              <Select value="" onValueChange={(v) => setPendingStatus(v)}>
+                <SelectTrigger className="h-9 w-[180px]" data-testid="select-change-status">
+                  <SelectValue placeholder="Byt status…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {nextStatuses.map((s) => (
+                    <SelectItem key={s} value={s} data-testid={`status-option-${s}`}>
+                      {ORDER_STATUS_LABELS[s] || s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            <div className="ml-auto" />
+
+            {canCancel && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setCancelReason("");
+                  setForceCancel(false);
+                  setCancelOpen(true);
+                }}
+                data-testid="button-cancel-workorder"
+              >
+                <Ban className="h-4 w-4 mr-1.5" /> Avbryt order
+              </Button>
+            )}
+            {isTerminal && (
+              <span className="text-sm text-muted-foreground" data-testid="text-terminal-status">
+                Ordern är {ORDER_STATUS_LABELS[order.orderStatus || ""]?.toLowerCase()} och kan inte ändras.
+              </span>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Redigera-dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent data-testid="dialog-edit-workorder">
+          <DialogHeader>
+            <DialogTitle>Redigera arbetsorder</DialogTitle>
+            <DialogDescription>Ändra nyckelfält och spara direkt.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-title">Titel</Label>
+              <Input
+                id="edit-title"
+                value={editForm.title}
+                onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+                data-testid="input-edit-title"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-description">Beskrivning</Label>
+              <Textarea
+                id="edit-description"
+                rows={3}
+                value={editForm.description}
+                onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                data-testid="input-edit-description"
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-scheduled">Schemalagt datum</Label>
+                <Input
+                  id="edit-scheduled"
+                  type="date"
+                  value={editForm.scheduledDate}
+                  onChange={(e) => setEditForm((f) => ({ ...f, scheduledDate: e.target.value }))}
+                  data-testid="input-edit-scheduled-date"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-priority">Prioritet</Label>
+                <Select
+                  value={editForm.priority}
+                  onValueChange={(v) => setEditForm((f) => ({ ...f, priority: v }))}
+                >
+                  <SelectTrigger id="edit-priority" data-testid="select-edit-priority">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRIORITY_OPTIONS.map((p) => (
+                      <SelectItem key={p} value={p} data-testid={`priority-option-${p}`}>
+                        {priorityLabels[p] || p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)} data-testid="button-cancel-edit">
+              Avbryt
+            </Button>
+            <Button
+              onClick={submitEdit}
+              disabled={editMutation.isPending || !editForm.title.trim()}
+              data-testid="button-save-edit"
+            >
+              {editMutation.isPending && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
+              Spara
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Statusbyte-bekräftelse */}
+      <AlertDialog open={!!pendingStatus} onOpenChange={(o) => !o && setPendingStatus(null)}>
+        <AlertDialogContent data-testid="dialog-confirm-status">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Byt status?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Ändra orderns status till{" "}
+              <strong>{pendingStatus ? ORDER_STATUS_LABELS[pendingStatus] || pendingStatus : ""}</strong>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-status">Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (pendingStatus) statusMutation.mutate(pendingStatus);
+              }}
+              disabled={statusMutation.isPending}
+              data-testid="button-confirm-status"
+            >
+              {statusMutation.isPending && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
+              Bekräfta
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Avbryt-order-bekräftelse */}
+      <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <AlertDialogContent data-testid="dialog-confirm-cancel">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Avbryt arbetsorder?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {forceCancel
+                ? "Ordern är skyddad (fryst eller exporterad). Tvångsavbeställning krävs och kräver administratörsbehörighet."
+                : "Ordern avbeställs och tas bort från aktiva vyer. Detta kan återställas av en administratör."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1.5 py-1">
+            <Label htmlFor="cancel-reason">Orsak (valfritt)</Label>
+            <Textarea
+              id="cancel-reason"
+              rows={2}
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="Varför avbeställs ordern?"
+              data-testid="input-cancel-reason"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-cancel">Tillbaka</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                cancelMutation.mutate({ reason: cancelReason.trim(), force: forceCancel });
+              }}
+              disabled={cancelMutation.isPending}
+              data-testid="button-confirm-cancel"
+            >
+              {cancelMutation.isPending && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
+              {forceCancel ? "Tvinga avbeställning" : "Avbryt order"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Grunddata */}
