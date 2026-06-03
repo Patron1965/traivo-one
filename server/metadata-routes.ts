@@ -228,6 +228,78 @@ metadataRouter.delete("/areas/:id", requireAdmin, async (req: Request, res: Resp
   }
 });
 
+// Task #677: Byt namn (label) och/eller ändra ordning (sortOrder). `value` är den
+// stabila grupperingsnyckeln (metadata_katalog.area) och förblir immutable — i
+// linje med immutabiliteten för metadata-katalogens nycklar. Standardkategorier
+// (isSystem) får döpas om och flyttas (men inte tas bort). Minst ett av fälten
+// måste anges.
+const updateMetadataAreaSchema = z
+  .object({
+    label: z.string().trim().min(1).max(100).optional(),
+    sortOrder: z.number().int().optional(),
+  })
+  .refine((d) => d.label !== undefined || d.sortOrder !== undefined, {
+    message: "Ange minst ett fält att uppdatera (label eller sortOrder).",
+  });
+
+metadataRouter.patch("/areas/:id", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const { label, sortOrder } = updateMetadataAreaSchema.parse(req.body);
+
+    const [area] = await db
+      .select()
+      .from(metadataAreas)
+      .where(and(eq(metadataAreas.id, req.params.id), eq(metadataAreas.tenantId, tenantId)))
+      .limit(1);
+
+    if (!area) {
+      return res.status(404).json({ error: "Kategorin hittades inte" });
+    }
+
+    const updates: { label?: string; sortOrder?: number } = {};
+
+    if (label !== undefined && label !== area.label) {
+      // Dubblettkoll på etikett (case-insensitive) — exkludera kategorin själv.
+      const existingAreas = await db
+        .select()
+        .from(metadataAreas)
+        .where(eq(metadataAreas.tenantId, tenantId));
+      const labelLower = label.toLowerCase();
+      if (existingAreas.some((a) => a.id !== area.id && a.label.toLowerCase() === labelLower)) {
+        return res.status(409).json({ error: `Kategorin "${label}" finns redan.` });
+      }
+      updates.label = label;
+    }
+
+    if (sortOrder !== undefined && sortOrder !== area.sortOrder) {
+      updates.sortOrder = sortOrder;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.json(area);
+    }
+
+    const [updated] = await db
+      .update(metadataAreas)
+      .set(updates)
+      .where(and(eq(metadataAreas.id, req.params.id), eq(metadataAreas.tenantId, tenantId)))
+      .returning();
+
+    res.json(updated);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return res.status(400).json({ error: "Valideringsfel", details: error.errors });
+    }
+    console.error("Error updating metadata area:", error);
+    res.status(500).json({ error: "Kunde inte uppdatera kategorin" });
+  }
+});
+
 const createMetadataTypeSchema = z.object({
   namn: z.string().min(1),
   beskrivning: z.string().nullish(),
