@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { RouteMap } from "@/components/RouteMap";
 import { OptimizedRouteMap } from "@/components/OptimizedRouteMap";
@@ -571,7 +572,13 @@ export default function RoutesPage() {
                               <span className="bg-primary text-primary-foreground px-1.5 py-0.5 rounded text-[10px]">
                                 {stopIdx + 1}
                               </span>
-                              <span className="truncate max-w-[120px]">{stop.orderTitle}</span>
+                              <Link
+                                href={`/work-orders/${stop.orderId}`}
+                                className="truncate max-w-[120px] hover:text-foreground hover:underline"
+                                data-testid={`link-open-order-${stop.orderId}`}
+                              >
+                                {stop.orderTitle}
+                              </Link>
                               {stopIdx < route.stops.length - 1 && <span className="mx-1">-</span>}
                             </span>
                           ))}

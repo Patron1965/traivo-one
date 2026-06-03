@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -9,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, MapPin, User, Calendar as CalendarIcon, Clock, Package, Check, ChevronsUpDown, Tag, ShoppingCart, DollarSign, MessageSquare, Send, CheckCircle2, XCircle, AlertCircle, Search, Copy, AlertTriangle, Ban } from "lucide-react";
+import { Loader2, Plus, Trash2, MapPin, User, Calendar as CalendarIcon, Clock, Package, Check, ChevronsUpDown, Tag, ShoppingCart, DollarSign, MessageSquare, Send, CheckCircle2, XCircle, AlertCircle, Search, Copy, AlertTriangle, Ban, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -74,6 +75,7 @@ interface WorkOrderLineWithDetails extends WorkOrderLine {
 
 export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = [] }: JobDetailModalProps) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const otherBulkIds = useMemo(() => bulkWorkOrderIds.filter(id => id !== workOrderId), [bulkWorkOrderIds, workOrderId]);
   const hasBulkTargets = otherBulkIds.length > 0;
   const [objectSearch, setObjectSearch] = useState("");
@@ -564,6 +566,21 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
               <Badge className={cn("ml-2", getStatusColor(workOrder.orderStatus))}>
                 {getStatusLabel(workOrder.orderStatus)}
               </Badge>
+            )}
+            {workOrderId && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="ml-auto mr-6 h-7 gap-1.5"
+                onClick={() => {
+                  onClose();
+                  setLocation(`/work-orders/${workOrderId}`);
+                }}
+                data-testid="button-open-work-order"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Öppna order
+              </Button>
             )}
           </DialogTitle>
           <DialogDescription className="sr-only">
