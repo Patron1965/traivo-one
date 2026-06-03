@@ -242,6 +242,63 @@ const updateMetadataAreaSchema = z
     message: "Ange minst ett fält att uppdatera (label eller sortOrder).",
   });
 
+// Task #679: Batch-omordning via drag-and-drop. Klienten skickar hela den nya
+// ordningen som en lista av id:n; servern sätter sortOrder = listindex för varje
+// rad i en enda transaktion. Alla id:n måste tillhöra tenanten och motsvara
+// exakt tenantens kategorier (inga saknade/extra) så att ordningen blir komplett.
+const reorderMetadataAreasSchema = z.object({
+  orderedIds: z.array(z.string().min(1)).min(1),
+});
+
+metadataRouter.patch("/areas/reorder", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const { orderedIds } = reorderMetadataAreasSchema.parse(req.body);
+
+    // Dubbletter i indatan är inte tillåtna.
+    if (new Set(orderedIds).size !== orderedIds.length) {
+      return res.status(400).json({ error: "Dubbletter i ordningslistan." });
+    }
+
+    const existing = await db
+      .select()
+      .from(metadataAreas)
+      .where(eq(metadataAreas.tenantId, tenantId));
+
+    const existingIds = new Set(existing.map((a) => a.id));
+
+    // Alla inskickade id:n måste tillhöra tenanten, och listan måste täcka exakt
+    // tenantens kategorier — annars vägrar vi (defense-in-depth + komplett ordning).
+    if (orderedIds.length !== existing.length || orderedIds.some((id) => !existingIds.has(id))) {
+      return res.status(400).json({
+        error: "Ordningslistan matchar inte tenantens kategorier.",
+      });
+    }
+
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        await tx
+          .update(metadataAreas)
+          .set({ sortOrder: i })
+          .where(and(eq(metadataAreas.id, orderedIds[i]), eq(metadataAreas.tenantId, tenantId)));
+      }
+    });
+
+    const updated = await getMetadataAreas(tenantId);
+    res.json(updated);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return res.status(400).json({ error: "Valideringsfel", details: error.errors });
+    }
+    console.error("Error reordering metadata areas:", error);
+    res.status(500).json({ error: "Kunde inte ändra ordningen" });
+  }
+});
+
 metadataRouter.patch("/areas/:id", requireAdmin, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantIdWithFallback(req);

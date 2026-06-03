@@ -1,6 +1,23 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   Select,
   SelectContent,
@@ -11,7 +28,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Minus, Trash2, Check, X, Loader2, Pencil, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, Minus, Trash2, Check, X, Loader2, Pencil, ChevronUp, ChevronDown, GripVertical } from "lucide-react";
 import { useMetadataAreas } from "@/hooks/use-metadata-areas";
 import type { MetadataArea } from "@shared/schema";
 
@@ -102,11 +119,52 @@ export function MetadataAreaSelect({
     },
   });
 
+  // Task #679: Batch-omordning vid drag-släpp (en skrivning per släpp). Hela den
+  // nya ordningen skickas som lista av id:n; servern sätter sortOrder = index.
+  const reorderMutation = useMutation({
+    mutationFn: async (orderedIds: string[]) => {
+      const res = await apiRequest("PATCH", "/api/metadata/areas/reorder", { orderedIds });
+      return (await res.json()) as MetadataArea[];
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/metadata/areas"] });
+    },
+    onError: (error: Error) => {
+      // Återställ den optimistiska ordningen till serverns sanning.
+      setOrderIds(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/metadata/areas"] });
+      toast({
+        title: "Kunde inte ändra ordningen",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const removableAreas = rawAreas.filter((a) => !a.isSystem);
   // Manage-läget visar alla kategorier (i visningsordning) för namnbyte/omordning.
   // Borttagning är fortfarande begränsad till egna (icke-system) kategorier.
-  const orderedAreas = [...rawAreas].sort(
+  const sortedAreas = [...rawAreas].sort(
     (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.label.localeCompare(b.label),
+  );
+
+  // Optimistisk lokal ordning under/efter ett drag-släpp (innan servern svarat).
+  // null = följ serverns ordning. Synka tillbaka när serverdatan ändras.
+  const [orderIds, setOrderIds] = useState<string[] | null>(null);
+  const serverOrderKey = sortedAreas.map((a) => a.id).join(",");
+  useEffect(() => {
+    setOrderIds(null);
+  }, [serverOrderKey]);
+
+  const areaById = new Map(sortedAreas.map((a) => [a.id, a] as const));
+  const orderedAreas: MetadataArea[] =
+    orderIds !== null
+      ? orderIds.map((id) => areaById.get(id)).filter((a): a is MetadataArea => Boolean(a))
+      : sortedAreas;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
   const handleSaveNew = () => {
@@ -137,15 +195,27 @@ export function MetadataAreaSelect({
     );
   };
 
-  // Flytta en kategori upp/ned genom att byta sortOrder med grannen. Vi normaliserar
-  // mot listpositionen (index) så att lika/luckiga sortOrder-värden ändå byter plats.
+  // Applicera en ny komplett ordning: visa optimistiskt direkt och persistera med
+  // en enda batch-skrivning. Vid fel återställs ordningen i mutationens onError.
+  const applyOrder = (next: MetadataArea[]) => {
+    setOrderIds(next.map((a) => a.id));
+    reorderMutation.mutate(next.map((a) => a.id));
+  };
+
+  // Tangentbordstillgänglig fallback: flytta en kategori upp/ned ett steg.
   const handleMove = (index: number, direction: -1 | 1) => {
     const target = index + direction;
     if (target < 0 || target >= orderedAreas.length) return;
-    const a = orderedAreas[index];
-    const b = orderedAreas[target];
-    updateMutation.mutate({ id: a.id, sortOrder: target });
-    updateMutation.mutate({ id: b.id, sortOrder: index });
+    applyOrder(arrayMove(orderedAreas, index, target));
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = orderedAreas.findIndex((a) => a.id === active.id);
+    const newIndex = orderedAreas.findIndex((a) => a.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    applyOrder(arrayMove(orderedAreas, oldIndex, newIndex));
   };
 
   return (
@@ -252,121 +322,207 @@ export function MetadataAreaSelect({
       {removeMode && (
         <div className="rounded-md border border-border p-2 space-y-1">
           <p className="text-xs text-muted-foreground px-1">
-            Byt namn eller ändra ordning. Standardkategorier kan flyttas och döpas om men inte tas bort.
+            Dra för att ändra ordning, eller byt namn. Standardkategorier kan flyttas och döpas om men inte tas bort.
           </p>
           {orderedAreas.length === 0 ? (
             <p className="text-xs text-muted-foreground px-1">Inga kategorier ännu.</p>
           ) : (
-            orderedAreas.map((area, index) => (
-              <div
-                key={area.id}
-                className="flex items-center gap-1 rounded px-2 py-1 hover-elevate"
-                data-testid={`row-area-${area.value}`}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={orderedAreas.map((a) => a.id)}
+                strategy={verticalListSortingStrategy}
               >
-                <div className="flex flex-col shrink-0">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-4 w-6"
-                    aria-label={`Flytta upp ${area.label}`}
-                    data-testid={`button-move-up-area-${area.value}`}
-                    disabled={index === 0 || updateMutation.isPending}
-                    onClick={() => handleMove(index, -1)}
-                  >
-                    <ChevronUp className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-4 w-6"
-                    aria-label={`Flytta ned ${area.label}`}
-                    data-testid={`button-move-down-area-${area.value}`}
-                    disabled={index === orderedAreas.length - 1 || updateMutation.isPending}
-                    onClick={() => handleMove(index, 1)}
-                  >
-                    <ChevronDown className="h-3 w-3" />
-                  </Button>
-                </div>
-
-                {editingId === area.id ? (
-                  <>
-                    <Input
-                      autoFocus
-                      value={editingLabel}
-                      onChange={(e) => setEditingLabel(e.target.value)}
-                      className="h-7 flex-1"
-                      data-testid={`input-edit-area-${area.value}`}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleSaveEdit(area);
-                        } else if (e.key === "Escape") {
-                          setEditingId(null);
-                        }
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      aria-label="Spara namn"
-                      data-testid={`button-save-edit-area-${area.value}`}
-                      disabled={!editingLabel.trim() || updateMutation.isPending}
-                      onClick={() => handleSaveEdit(area)}
-                    >
-                      {updateMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Check className="h-4 w-4" />
-                      )}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      aria-label="Avbryt namnbyte"
-                      data-testid={`button-cancel-edit-area-${area.value}`}
-                      onClick={() => setEditingId(null)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-sm flex-1 truncate">{area.label}</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      aria-label={`Byt namn på ${area.label}`}
-                      data-testid={`button-edit-area-${area.value}`}
-                      disabled={updateMutation.isPending}
-                      onClick={() => handleStartEdit(area)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      aria-label={`Ta bort ${area.label}`}
-                      data-testid={`button-delete-area-${area.value}`}
-                      disabled={area.isSystem || deleteMutation.isPending}
-                      onClick={() => deleteMutation.mutate(area.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </>
-                )}
-              </div>
-            ))
+                {orderedAreas.map((area, index) => (
+                  <SortableAreaRow
+                    key={area.id}
+                    area={area}
+                    index={index}
+                    total={orderedAreas.length}
+                    isEditing={editingId === area.id}
+                    editingLabel={editingLabel}
+                    setEditingLabel={setEditingLabel}
+                    onStartEdit={() => handleStartEdit(area)}
+                    onCancelEdit={() => setEditingId(null)}
+                    onSaveEdit={() => handleSaveEdit(area)}
+                    onMove={handleMove}
+                    onDelete={() => deleteMutation.mutate(area.id)}
+                    isBusy={updateMutation.isPending || reorderMutation.isPending}
+                    isDeleting={deleteMutation.isPending}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+interface SortableAreaRowProps {
+  area: MetadataArea;
+  index: number;
+  total: number;
+  isEditing: boolean;
+  editingLabel: string;
+  setEditingLabel: (v: string) => void;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onSaveEdit: () => void;
+  onMove: (index: number, direction: -1 | 1) => void;
+  onDelete: () => void;
+  isBusy: boolean;
+  isDeleting: boolean;
+}
+
+// Task #679: En dragbar rad i hanteringspanelen. Drag-handtaget (GripVertical) bär
+// dnd-kit-lyssnarna; upp/ned-knapparna kvarstår som tangentbordstillgänglig fallback.
+function SortableAreaRow({
+  area,
+  index,
+  total,
+  isEditing,
+  editingLabel,
+  setEditingLabel,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
+  onMove,
+  onDelete,
+  isBusy,
+  isDeleting,
+}: SortableAreaRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: area.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-1 rounded px-2 py-1 hover-elevate bg-background"
+      data-testid={`row-area-${area.value}`}
+    >
+      <button
+        type="button"
+        className="shrink-0 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50"
+        aria-label={`Dra för att flytta ${area.label}`}
+        data-testid={`drag-handle-area-${area.value}`}
+        disabled={isBusy && !isDragging}
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <div className="flex flex-col shrink-0">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-4 w-6"
+          aria-label={`Flytta upp ${area.label}`}
+          data-testid={`button-move-up-area-${area.value}`}
+          disabled={index === 0 || isBusy}
+          onClick={() => onMove(index, -1)}
+        >
+          <ChevronUp className="h-3 w-3" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-4 w-6"
+          aria-label={`Flytta ned ${area.label}`}
+          data-testid={`button-move-down-area-${area.value}`}
+          disabled={index === total - 1 || isBusy}
+          onClick={() => onMove(index, 1)}
+        >
+          <ChevronDown className="h-3 w-3" />
+        </Button>
+      </div>
+
+      {isEditing ? (
+        <>
+          <Input
+            autoFocus
+            value={editingLabel}
+            onChange={(e) => setEditingLabel(e.target.value)}
+            className="h-7 flex-1"
+            data-testid={`input-edit-area-${area.value}`}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                onSaveEdit();
+              } else if (e.key === "Escape") {
+                onCancelEdit();
+              }
+            }}
+          />
+          <Button
+            type="button"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            aria-label="Spara namn"
+            data-testid={`button-save-edit-area-${area.value}`}
+            disabled={!editingLabel.trim() || isBusy}
+            onClick={onSaveEdit}
+          >
+            {isBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Check className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            aria-label="Avbryt namnbyte"
+            data-testid={`button-cancel-edit-area-${area.value}`}
+            onClick={onCancelEdit}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </>
+      ) : (
+        <>
+          <span className="text-sm flex-1 truncate">{area.label}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            aria-label={`Byt namn på ${area.label}`}
+            data-testid={`button-edit-area-${area.value}`}
+            disabled={isBusy}
+            onClick={onStartEdit}
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            aria-label={`Ta bort ${area.label}`}
+            data-testid={`button-delete-area-${area.value}`}
+            disabled={area.isSystem || isDeleting}
+            onClick={onDelete}
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        </>
       )}
     </div>
   );
