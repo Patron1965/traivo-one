@@ -141,6 +141,30 @@ export function parseLanguageNameRef(refName: string): string | null {
   return m ? m[1].toLowerCase() : null;
 }
 
+// Task #643: kundens egna butiksnummer/externt ID lagras som en vanlig metadata-
+// kolumn (ALDRIG kolumn A, som alltid är Traivos systemnummer). En rad utan
+// system-/interimsnummer kan ändå matchas mot ett befintligt objekt via det
+// externa ID:t. Vi känner igen externt-ID-kolumner på referensnamnet (namn-delen,
+// hybrid "kod:namn" stöds) efter normalisering: gemener utan mellanslag/_/-.
+const EXTERNAL_ID_REF_ALIASES = new Set<string>([
+  "externtid",
+  "externidentitet",
+  "externalid",
+  "externidentity",
+  "butiksnummer",
+  "butiksnr",
+  "butiksid",
+]);
+
+export function normalizeExternalIdToken(s: string): string {
+  return (s ?? "").toLowerCase().replace(/[\s_\-]/g, "");
+}
+
+// Är en metadata-kolumns referensnamn ett externt-ID-fält (butiksnummer m.fl.)?
+export function isExternalIdRef(refName: string): boolean {
+  return EXTERNAL_ID_REF_ALIASES.has(normalizeExternalIdToken(parseMetadataRef(refName).name));
+}
+
 type KnownObjectFields = {
   address?: string;
   city?: string;
@@ -512,10 +536,13 @@ export async function buildExportWorkbook(
           "TRAIVO – EXPORT AV BEFINTLIGA OBJEKT (FÖR UPPDATERING)",
           "",
           "Den här filen är en kopia av era nuvarande objekt i importmallens enflik-format.",
-          "Systemnummer är ifyllt på varje rad — ändra fält direkt och läs tillbaka filen via",
-          "objektimporten för att UPPDATERA befintliga objekt. Lägg nya objekt i en separat",
-          "interimslista (se 'Exportera som interim-mall') enligt principen att inte blanda listor.",
-          "Rader utan systemnummer kan inte matchas automatiskt — ge dem ett interimsnummer.",
+          "Systemnummer (kolumn A) är Traivos eget ID och är ifyllt på varje rad — ändra fält",
+          "direkt och läs tillbaka filen via objektimporten för att UPPDATERA befintliga objekt.",
+          "Använd kolumn A för att kartlägga era egna butiksnummer/externt ID (en egen metadata-",
+          "kolumn, t.ex. Butiksnummer) mot Traivos systemnummer. En rad utan systemnummer kan",
+          "ändå matchas om dess externt-ID-värde är unikt — annars ge raden ett interimsnummer.",
+          "Lägg nya objekt i en separat interimslista (se 'Exportera som interim-mall') enligt",
+          "principen att inte blanda listor.",
         ];
   introLines.forEach((l) => readme.addRow([l]));
   readme.addRow([]);
@@ -849,6 +876,7 @@ type CompositeChange = {
 type RowResolution = {
   action: "create" | "update" | "repoint";
   targetObjectId: string | null; // för update/repoint
+  matchKey: RowMatchKey | null; // Task #643: hur target matchades (null = create)
   interimNo: string; // "" om ingen
   systemNumber: string; // "" om ingen
   parentRef: ParentRef | null; // null = ingen förälder (rot) / bevaras vid update
@@ -873,6 +901,7 @@ type ValRow = {
   errors: string[];
   // Mellanlagring under upplösning.
   target?: ExistingObject;
+  matchKey?: RowMatchKey; // Task #643: hur target matchades (för förhandsvisning)
   parentRef?: ParentRef | null;
   res?: RowResolution;
 };
@@ -891,6 +920,42 @@ type ExistingObject = {
   nameTranslations: Record<string, string> | null; // Task #634
 };
 
+// Rå objektrad så som den selekteras från DB inför matchning.
+type ExistingObjectRow = {
+  id: string;
+  objectNumber: string | null;
+  name: string | null;
+  parentId: string | null;
+  address: string | null;
+  city: string | null;
+  postalCode: string | null;
+  notes: string | null;
+  containerCount: number | null;
+  nameTranslations: unknown;
+};
+
+function toExistingObject(e: ExistingObjectRow): ExistingObject {
+  return {
+    id: e.id,
+    objectNumber: e.objectNumber ?? null,
+    name: e.name ?? "",
+    parentId: e.parentId ?? null,
+    address: e.address ?? null,
+    city: e.city ?? null,
+    postalCode: e.postalCode ?? null,
+    notes: e.notes ?? null,
+    containerCount: e.containerCount ?? null,
+    nameTranslations: (e.nameTranslations as Record<string, string> | null) ?? null,
+  };
+}
+
+// Task #643: hur en uppdaterad/repekad rad matchades mot sitt befintliga objekt.
+//   systemNumber → kolumn A (Traivos systemnummer, objectNumber)
+//   name         → fallback på unikt objektnamn när systemnummer ej fanns
+//   externalId   → kundens butiksnummer/externt ID i en metadata-kolumn
+//   interim      → re-import av tidigare interim-skapat objekt (MALL-<interim>)
+type RowMatchKey = "systemNumber" | "name" | "externalId" | "interim";
+
 interface ImportSheetReport {
   name: string;
   totalRows: number;
@@ -902,6 +967,7 @@ interface ImportSheetReport {
   actions: Array<{
     row: number;
     action: "create" | "update" | "repoint";
+    matchKey: RowMatchKey | null; // Task #643
     name: string;
     level: ObjLevel;
     levelLabel: string;
@@ -1087,8 +1153,32 @@ async function validateAll(
     if (sysNo && name) nameLookup.add(name.toLowerCase());
   }
 
+  const EXISTING_OBJECT_SELECT = {
+    id: objects.id,
+    objectNumber: objects.objectNumber,
+    name: objects.name,
+    parentId: objects.parentId,
+    address: objects.address,
+    city: objects.city,
+    postalCode: objects.postalCode,
+    notes: objects.notes,
+    containerCount: objects.containerCount,
+    nameTranslations: objects.nameTranslations,
+  } as const;
+
   const byObjNum = new Map<string, ExistingObject>();
   const byNameLower = new Map<string, ExistingObject[]>();
+  const byId = new Map<string, ExistingObject>(); // Task #643: id → objekt (externt-ID-matchning)
+  const indexExisting = (obj: ExistingObject) => {
+    byId.set(obj.id, obj);
+    if (obj.objectNumber) byObjNum.set(obj.objectNumber, obj);
+    const nl = obj.name.toLowerCase();
+    if (nl) {
+      const arr = byNameLower.get(nl) ?? [];
+      arr.push(obj);
+      byNameLower.set(nl, arr);
+    }
+  };
   const numberArr = Array.from(numberLookup);
   const nameArr = Array.from(nameLookup);
   if (numberArr.length > 0 || nameArr.length > 0) {
@@ -1099,42 +1189,98 @@ async function validateAll(
           ? inArray(objects.objectNumber, numberArr)
           : inArray(sql`lower(${objects.name})`, nameArr);
     const existing = await db
-      .select({
-        id: objects.id,
-        objectNumber: objects.objectNumber,
-        name: objects.name,
-        parentId: objects.parentId,
-        address: objects.address,
-        city: objects.city,
-        postalCode: objects.postalCode,
-        notes: objects.notes,
-        containerCount: objects.containerCount,
-        nameTranslations: objects.nameTranslations,
-      })
+      .select(EXISTING_OBJECT_SELECT)
       .from(objects)
-      .where(and(eq(objects.tenantId, tenantId), cond));
-    for (const e of existing) {
-      const obj: ExistingObject = {
-        id: e.id,
-        objectNumber: e.objectNumber ?? null,
-        name: e.name ?? "",
-        parentId: e.parentId ?? null,
-        address: e.address ?? null,
-        city: e.city ?? null,
-        postalCode: e.postalCode ?? null,
-        notes: e.notes ?? null,
-        containerCount: e.containerCount ?? null,
-        nameTranslations: (e.nameTranslations as Record<string, string> | null) ?? null,
-      };
-      if (obj.objectNumber) byObjNum.set(obj.objectNumber, obj);
-      const nl = obj.name.toLowerCase();
-      if (nl) {
-        const arr = byNameLower.get(nl) ?? [];
-        arr.push(obj);
-        byNameLower.set(nl, arr);
+      .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt), cond));
+    for (const e of existing) indexExisting(toExistingObject(e));
+  }
+
+  // 2b. Task #643: externt-ID-matchning. Rader utan system-/interimsnummer kan
+  // matchas mot ett befintligt objekt via kundens egna butiksnummer/externt ID
+  // (lagrat som metadata-värde). Förladda befintliga objekts externt-ID-värden →
+  // objekt-id, så att klassificeringen i steg 3 kan slå upp rätt mål (unik match
+  // krävs; flera träffar = tvetydigt och blockerar raden).
+  const externalIdRefNames: string[] = [];
+  const externalIdKatalogIds = new Set<string>();
+  if (!interimListFlag) {
+    for (const refName of metadataColumns) {
+      if (!isExternalIdRef(refName)) continue;
+      externalIdRefNames.push(refName);
+      const resn = metaResolution.get(refName);
+      if (resn?.kind === "definition") externalIdKatalogIds.add(resn.katalog.id);
+    }
+  }
+  const extIdToObjectIds = new Map<string, string[]>(); // normaliserat värde → objekt-id:n
+  if (externalIdRefNames.length > 0 && externalIdKatalogIds.size > 0) {
+    const wanted = new Set<string>();
+    for (const row of valRows) {
+      if (row.errors.length) continue;
+      if (trim(row.data, "systemNumber") || trim(row.data, "interim")) continue;
+      for (const refName of externalIdRefNames) {
+        const v = (row.metadata[refName] ?? "").trim();
+        if (v) {
+          wanted.add(v.toLowerCase());
+          break;
+        }
+      }
+    }
+    if (wanted.size > 0) {
+      const evRows = await db
+        .select()
+        .from(metadataVarden)
+        .where(
+          and(
+            eq(metadataVarden.tenantId, tenantId),
+            inArray(metadataVarden.metadataKatalogId, Array.from(externalIdKatalogIds)),
+          ),
+        );
+      const matchedIds = new Set<string>();
+      const tmp = new Map<string, Set<string>>();
+      for (const ev of evRows) {
+        if (!ev.objektId) continue;
+        const dv = getDisplayValue(ev);
+        if (dv === null) continue;
+        const norm = dv.trim().toLowerCase();
+        if (!wanted.has(norm)) continue;
+        let s = tmp.get(norm);
+        if (!s) {
+          s = new Set<string>();
+          tmp.set(norm, s);
+        }
+        s.add(ev.objektId);
+        matchedIds.add(ev.objektId);
+      }
+      // Ladda objekt-detaljer för matchade id:n som inte redan finns i byId.
+      const missing = Array.from(matchedIds).filter((id) => !byId.has(id));
+      if (missing.length > 0) {
+        const extra = await db
+          .select(EXISTING_OBJECT_SELECT)
+          .from(objects)
+          .where(
+            and(eq(objects.tenantId, tenantId), inArray(objects.id, missing), isNull(objects.deletedAt)),
+          );
+        for (const e of extra) indexExisting(toExistingObject(e));
+      }
+      // Endast objekt som fortfarande finns (ej soft-deletade) räknas som träff.
+      for (const [norm, set] of Array.from(tmp.entries())) {
+        const ids = Array.from(set).filter((id) => byId.has(id));
+        if (ids.length > 0) extIdToObjectIds.set(norm, ids);
       }
     }
   }
+
+  // Slå upp en rads externt-ID-värde (första ifyllda externt-ID-kolumnen) och
+  // de objekt-id:n det matchar. Tomt värde → null.
+  const resolveExternalIdMatch = (
+    row: ValRow,
+  ): { value: string; objectIds: string[] } | null => {
+    if (interimListFlag || externalIdRefNames.length === 0) return null;
+    for (const refName of externalIdRefNames) {
+      const v = (row.metadata[refName] ?? "").trim();
+      if (v) return { value: v, objectIds: extIdToObjectIds.get(v.toLowerCase()) ?? [] };
+    }
+    return null;
+  };
 
   // Lättvikts id->parentId-karta för hela tenant — används för att räkna djup på
   // system-föräldrar (som kan ligga utanför filen).
@@ -1172,26 +1318,22 @@ async function validateAll(
     const sysNo = interimListFlag ? "" : trim(data, "systemNumber");
     const name = trim(data, "name");
 
-    if (!sysNo && !interimNo) {
-      row.errors.push(
-        interimListFlag
-          ? "Interimsnummer krävs i interimslist-läge (ren nyimport)."
-          : "Raden saknar både Systemnummer (uppdatering) och Interimsnummer (nytt objekt).",
-      );
-      continue;
-    }
     if (!name) {
       row.errors.push('Saknat värde: "Objektnamn"');
       continue;
     }
 
     let target: ExistingObject | undefined;
+    let matchKey: RowMatchKey | undefined;
     if (sysNo) {
       target = byObjNum.get(sysNo);
-      if (!target) {
+      if (target) {
+        matchKey = "systemNumber";
+      } else {
         const matches = byNameLower.get(name.toLowerCase()) ?? [];
         if (matches.length === 1) {
           target = matches[0];
+          matchKey = "name";
         } else if (matches.length > 1) {
           row.errors.push(
             `Flera befintliga objekt har namnet "${name}". Ange ett exakt Systemnummer för att peka ut rätt objekt.`,
@@ -1204,11 +1346,39 @@ async function validateAll(
           continue;
         }
       }
-    } else {
+    } else if (interimNo) {
       // Endast interim → re-import uppdaterar om MALL-<interim> redan finns.
       target = byObjNum.get(OBJEKTMALL_INTERIM_PREFIX + interimNo);
+      if (target) matchKey = "interim";
+    } else {
+      // Task #643: varken systemnummer eller interimsnummer — försök matcha mot
+      // ett befintligt objekt via kundens externt ID (butiksnummer m.fl.).
+      const ext = resolveExternalIdMatch(row);
+      if (!ext) {
+        row.errors.push(
+          interimListFlag
+            ? "Interimsnummer krävs i interimslist-läge (ren nyimport)."
+            : "Raden saknar Systemnummer, Interimsnummer och Externt ID. Ange Interimsnummer för nytt objekt, Systemnummer för uppdatering, eller fyll i en externt-ID-kolumn (t.ex. Butiksnummer) för att matcha via metadata.",
+        );
+        continue;
+      }
+      if (ext.objectIds.length === 0) {
+        row.errors.push(
+          `Externt ID "${ext.value}" matchade inget befintligt objekt. Kontrollera värdet eller ange Systemnummer.`,
+        );
+        continue;
+      }
+      if (ext.objectIds.length > 1) {
+        row.errors.push(
+          `Externt ID "${ext.value}" matchar flera befintliga objekt. Ange ett exakt Systemnummer för att peka ut rätt objekt.`,
+        );
+        continue;
+      }
+      target = byId.get(ext.objectIds[0]);
+      matchKey = "externalId";
     }
     row.target = target;
+    row.matchKey = matchKey;
   }
 
   // 4. Lös upp förälder per rad (ordnings-oberoende).
@@ -1481,6 +1651,7 @@ async function validateAll(
     row.res = {
       action,
       targetObjectId: target?.id ?? null,
+      matchKey: action === "create" ? null : row.matchKey ?? null,
       interimNo,
       systemNumber: sysNo,
       parentRef,
@@ -1527,6 +1698,7 @@ async function validateAll(
       actions.push({
         row: row.rowNumber,
         action: res.action,
+        matchKey: res.matchKey,
         name: res.name,
         level: res.level,
         levelLabel: LEVEL_META[res.level].label,

@@ -54,9 +54,11 @@ interface CompositeColumn {
   prefix: string;
   subfields: string[];
 }
+type RowMatchKey = "systemNumber" | "name" | "externalId" | "interim";
 interface ActionRow {
   row: number;
   action: RowAction;
+  matchKey?: RowMatchKey | null;
   name: string;
   level: string;
   levelLabel: string;
@@ -121,6 +123,14 @@ const LEVEL_LABELS: Record<string, string> = {
   organisation: "Organisation",
   stores: "Butik/Fastighet",
   containers: "Kärl",
+};
+
+// Task #643: hur en uppdaterad rad matchades mot sitt befintliga objekt.
+const MATCH_KEY_META: Record<RowMatchKey, { label: string; className: string }> = {
+  systemNumber: { label: "Systemnummer", className: "bg-chart-1/10" },
+  name: { label: "Namn", className: "bg-chart-3/10" },
+  externalId: { label: "Externt ID", className: "bg-chart-4/10" },
+  interim: { label: "Interimsnummer", className: "bg-chart-2/10" },
 };
 
 const META_STATUS_META: Record<MetadataWriteStatus, { label: string; className: string }> = {
@@ -630,7 +640,20 @@ export default function ObjektmallImportPage() {
                                     )}
                                   </span>
                                 </TableCell>
-                                <TableCell className="text-xs text-muted-foreground">{a.detail}</TableCell>
+                                <TableCell className="text-xs text-muted-foreground">
+                                  <span className="flex items-center gap-1.5">
+                                    {a.matchKey && MATCH_KEY_META[a.matchKey] && (
+                                      <Badge
+                                        variant="outline"
+                                        className={`${MATCH_KEY_META[a.matchKey].className} text-[10px] px-1 py-0 shrink-0`}
+                                        data-testid={`badge-matchkey-import-${a.row}`}
+                                      >
+                                        {MATCH_KEY_META[a.matchKey].label}
+                                      </Badge>
+                                    )}
+                                    <span>{a.detail}</span>
+                                  </span>
+                                </TableCell>
                               </TableRow>
                               {hasExpand && isExpanded && (
                                 <TableRow

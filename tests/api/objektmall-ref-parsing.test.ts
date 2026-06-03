@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   parseMetadataRef,
   parseLanguageNameRef,
+  normalizeExternalIdToken,
+  isExternalIdRef,
 } from "../../server/routes/objektmallImportRoutes";
 import { normalizeLanguage } from "../../server/services/display-name";
 
@@ -76,6 +78,31 @@ describe("parseLanguageNameRef", () => {
   it("icke-namn-kolumner ignoreras", () => {
     expect(parseLanguageNameRef("Gatuadress")).toBeNull();
     expect(parseLanguageNameRef("22:Gatuadress")).toBeNull();
+  });
+});
+
+describe("normalizeExternalIdToken", () => {
+  it("gemener och tar bort mellanslag/_/-", () => {
+    expect(normalizeExternalIdToken("Externt ID")).toBe("externtid");
+    expect(normalizeExternalIdToken("externt_id")).toBe("externtid");
+    expect(normalizeExternalIdToken("Butiks-Nr")).toBe("butiksnr");
+  });
+});
+
+describe("isExternalIdRef", () => {
+  it("känner igen externt-ID-alias (klartext, hybrid, varianter)", () => {
+    expect(isExternalIdRef("Externt ID")).toBe(true);
+    expect(isExternalIdRef("externt_id")).toBe(true);
+    expect(isExternalIdRef("Butiksnummer")).toBe(true);
+    expect(isExternalIdRef("butiksnr")).toBe(true);
+    // Hybrid "kod:namn" — namn-delen avgör.
+    expect(isExternalIdRef("90:Butiksnummer")).toBe(true);
+  });
+
+  it("vanliga metadata-kolumner är INTE externt-ID", () => {
+    expect(isExternalIdRef("Gatuadress")).toBe(false);
+    expect(isExternalIdRef("Kontaktperson")).toBe(false);
+    expect(isExternalIdRef("22:Gatuadress")).toBe(false);
   });
 });
 
