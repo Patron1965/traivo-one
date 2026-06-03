@@ -964,8 +964,11 @@ export default function ObjectDetailPage() {
                             size="sm"
                             className="h-auto p-0 mt-1 text-xs text-primary hover:bg-transparent"
                             onClick={() => {
-                              setHighlightedWorkOrderId(latestWoId);
-                              setActiveTab("workorders");
+                              if (latestWoId) {
+                                navigate(`/work-orders/${latestWoId}`);
+                              } else {
+                                setActiveTab("workorders");
+                              }
                             }}
                             data-testid="link-latest-workorder"
                           >
@@ -1586,7 +1589,11 @@ export default function ObjectDetailPage() {
                     return (
                     <div
                       key={wo.id}
-                      className={`flex items-center justify-between py-3 gap-4 transition-colors ${isHighlighted ? "-mx-2 px-2 rounded-md bg-primary/10 ring-1 ring-primary/40" : ""}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigate(`/work-orders/${wo.id}`)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/work-orders/${wo.id}`); } }}
+                      className={`flex items-center justify-between py-3 gap-4 transition-colors cursor-pointer hover:bg-muted/50 -mx-2 px-2 rounded-md ${isHighlighted ? "bg-primary/10 ring-1 ring-primary/40" : ""}`}
                       data-testid={`workorder-row-${wo.id}`}
                     >
                       <div className="min-w-0 flex-1">

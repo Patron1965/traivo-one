@@ -28,6 +28,7 @@ const WeekPlannerPage = lazy(() => import("@/pages/WeekPlannerPage"));
 const RoutesPage = lazy(() => import("@/pages/RoutesPage"));
 const ObjectsPage = lazy(() => import("@/pages/ObjectsPage"));
 const ObjectDetailPage = lazy(() => import("@/pages/ObjectDetailPage"));
+const WorkOrderDetailPage = lazy(() => import("@/pages/WorkOrderDetailPage"));
 const ObjectDuplicatesPage = lazy(() => import("@/pages/ObjectDuplicatesPage"));
 const MissingCoordinatesPage = lazy(() => import("@/pages/MissingCoordinatesPage"));
 const ResourcesPage = lazy(() => import("@/pages/ResourcesPage"));
@@ -157,6 +158,7 @@ function Router() {
         <Route path="/objects/missing-coordinates">{() => <ProtectedRoute component={MissingCoordinatesPage} path="/objects" />}</Route>
         <Route path="/objects/:id">{() => <ProtectedRoute component={ObjectDetailPage} path="/objects" />}</Route>
         <Route path="/objects">{() => <ProtectedRoute component={ObjectsPage} path="/objects" />}</Route>
+        <Route path="/work-orders/:id">{() => <ProtectedRoute component={WorkOrderDetailPage} path="/work-orders" />}</Route>
         <Route path="/resources">{() => <ProtectedRoute component={ResourcesPage} path="/resources" />}</Route>
         <Route path="/procurements">{() => <ProtectedRoute component={ProcurementsPage} path="/procurements" />}</Route>
         <Route path="/articles">{() => <ProtectedRoute component={ArticlesPage} path="/articles" />}</Route>

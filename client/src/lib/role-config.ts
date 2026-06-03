@@ -41,6 +41,7 @@ const PLANNER_ROUTES = new Set([
   "/routes",
   "/optimization",
   "/objects",
+  "/work-orders",
   "/resources",
   "/procurements",
   "/articles",
