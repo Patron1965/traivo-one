@@ -7,6 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
+import { validateParentMetadataLink } from "../metadata-queries";
 import { requireAdmin, requirePlanner } from "../tenant-middleware";
 import { objects, workOrders, objectMetadata, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles, weeklyReportNotes, weeklyReportActionItemSchema, type WeeklyReportActionItem, objectPayers } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
@@ -2055,6 +2056,12 @@ app.get("/api/metadata-labels/:id", asyncHandler(async (req, res) => {
 app.post("/api/metadata-labels", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertMetadataKatalogSchema.parse({ ...req.body, tenantId, isSystem: false });
+    // Task #662: validera överordnat metadata-fält även på denna skriv-yta så att
+    // en-nivå-invarianten och tenant-isoleringen inte kan kringgås här.
+    if (data.parentMetadataId) {
+      const parentError = await validateParentMetadataLink(tenantId, data.parentMetadataId, null);
+      if (parentError) throw new ValidationError(parentError);
+    }
     const [label] = await db.insert(metadataKatalog).values(data).returning();
     res.status(201).json(label);
 }));

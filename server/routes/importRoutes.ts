@@ -18,7 +18,7 @@ import { getMapProvider } from "../services/mapProvider";
 import { objects, workOrders, customers, objectMetadata, workOrderLines, metadataKatalog, fortnoxMappings, customerServiceContracts, importBatches, auditLogs, customerImportMappings, type InsertFortnoxContractSuggestion, type InsertWorkOrder } from "@shared/schema";
 import { normalizeAddressKey } from "@shared/address-normalize";
 import crypto from "crypto";
-import { createMetadata, updateMetadata, getAllMetadataTypes, seedKarlMetadataTypes, KARL_METADATA_DEFINITIONS } from "../metadata-queries";
+import { createMetadata, updateMetadata, getAllMetadataTypes, seedKarlMetadataTypes, KARL_METADATA_DEFINITIONS, buildMetadataTypeLookup, deriveMetadataDotKey } from "../metadata-queries";
 import { metadataVarden } from "@shared/schema";
 import { ensureClusterForCustomer, updateClusterCache } from "../auto-cluster";
 import { restoreEnrichModusBatch } from "../enrich-modus-restore";
@@ -1508,7 +1508,7 @@ async function runModusObjectsImportJob(params: {
     await updateBatchProgress();
 
     const metadataTypes = await getAllMetadataTypes(tenantId);
-    const metadataTypeMap = new Map(metadataTypes.map(t => [t.namn.toLowerCase(), t]));
+    const metadataTypeMap = buildMetadataTypeLookup(metadataTypes);
 
     // Detect all "Metadata - *" columns from first row
     const firstRow = rows[0];
@@ -3907,7 +3907,7 @@ app.post("/api/import/metadata/csv", upload.single("file"), asyncHandler(async (
 
     const rows = result.data as Record<string, string>[];
     const metadataTypes = await getAllMetadataTypes(tenantId);
-    const metadataTypeMap = new Map(metadataTypes.map(t => [t.namn.toLowerCase(), t]));
+    const metadataTypeMap = buildMetadataTypeLookup(metadataTypes);
 
     const metadataCols = rows.length > 0
       ? Object.keys(rows[0]).filter(k => !["objektnummer", "objektnamn", "objekt", "id", "namn", "name", "objectnumber"].includes(k.toLowerCase()))
@@ -4142,6 +4142,10 @@ app.post("/api/import/suggest-mapping", upload.single("file"), asyncHandler(asyn
     
     const tenantId = getTenantIdWithFallback(req);
     const metadataTypes = await getAllMetadataTypes(tenantId);
+    // Task #662: case-insensitivt uppslag som även matchar punktnotation
+    // (kontakt.fornamn) för metadata-familjer, utöver `namn`/`beteckning`.
+    const metaLookup = buildMetadataTypeLookup(metadataTypes);
+    const metaById = new Map(metadataTypes.map((m: any) => [m.id, m]));
     
     const suggestions: Array<{
       csvColumn: string;
@@ -4183,11 +4187,15 @@ app.post("/api/import/suggest-mapping", upload.single("file"), asyncHandler(asyn
         }
         
         if (!bestField) {
-          const matchingMeta = metadataTypes.find((m: any) => 
-            m.beteckning?.toLowerCase() === colLower || m.name?.toLowerCase() === colLower
-          );
+          // Matcha mot namn / punktnotation (kontakt.fornamn) via lookup, samt
+          // beteckning som fallback. Punktnotation visas som förslag för underfält.
+          let matchingMeta: any = metaLookup.get(colLower);
+          if (!matchingMeta) {
+            matchingMeta = metadataTypes.find((m: any) => m.beteckning?.toLowerCase() === colLower);
+          }
           if (matchingMeta) {
-            bestMeta = matchingMeta.beteckning || matchingMeta.name;
+            const dot = deriveMetadataDotKey(matchingMeta, metaById);
+            bestMeta = dot || matchingMeta.beteckning || matchingMeta.namn;
             confidence = 0.8;
           }
         }
@@ -5797,7 +5805,7 @@ app.post("/api/import/modus/objects/enrich/preview", requireAdmin, upload.single
   // Hämta existerande metadata för matchade objekt + våra metadatatyper
   const matchedObjectIds = matchedObjs.map(o => o.id);
   const allTypes = await getAllMetadataTypes(tenantId);
-  const typeByName = new Map(allTypes.map(t => [t.namn.toLowerCase(), t]));
+  const typeByName = buildMetadataTypeLookup(allTypes);
 
   const missingMetadataTypes = metadataColumns
     .filter(c => !typeByName.has(c.metadataName.toLowerCase()))
@@ -6079,7 +6087,7 @@ async function runEnrichApplyJob(params: {
     await seedKarlMetadataTypes(tenantId);
 
     const allTypes = await getAllMetadataTypes(tenantId);
-    const typeByName = new Map(allTypes.map(t => [t.namn.toLowerCase(), t]));
+    const typeByName = buildMetadataTypeLookup(allTypes);
 
     const modusIds = new Set<string>();
     for (const row of rows) {

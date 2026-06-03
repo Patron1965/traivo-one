@@ -1755,6 +1755,71 @@ export async function getAllMetadataTypes(tenantId: string): Promise<MetadataKat
 }
 
 // ============================================================================
+// METADATA-FAMILJER: PUNKTNOTATION (Task #662)
+// ============================================================================
+
+// Härleder punktnotationsnyckeln för ett underfält: förälder.namn + "." + barn.namn.
+// Returnerar null för rotfält (utan förälder) eller om föräldern saknas i kartan.
+export function deriveMetadataDotKey(
+  type: Pick<MetadataKatalog, "namn" | "parentMetadataId">,
+  byId: Map<string, Pick<MetadataKatalog, "namn">>,
+): string | null {
+  if (!type.parentMetadataId) return null;
+  const parent = byId.get(type.parentMetadataId);
+  if (!parent) return null;
+  return `${parent.namn}.${type.namn}`;
+}
+
+// Bygger ett case-insensitivt uppslag header/namn → katalogtyp för import-matchning.
+// Inkluderar varje typs `namn` samt den härledda punktnotationen (kontakt.fornamn)
+// så att en CSV-header som "kontakt.fornamn" matchar rätt underfält automatiskt.
+// Direkta namn registreras först och vinner därför över punktnotationsnycklar.
+export function buildMetadataTypeLookup(
+  types: MetadataKatalog[],
+): Map<string, MetadataKatalog> {
+  const byId = new Map(types.map((t) => [t.id, t]));
+  const map = new Map<string, MetadataKatalog>();
+  for (const t of types) {
+    map.set(t.namn.toLowerCase(), t);
+  }
+  for (const t of types) {
+    const dot = deriveMetadataDotKey(t, byId);
+    if (dot) {
+      const key = dot.toLowerCase();
+      if (!map.has(key)) map.set(key, t);
+    }
+  }
+  return map;
+}
+
+// Validerar ett föreslaget överordnat metadata-fält (Task #662). Returnerar ett
+// svenskt felmeddelande om kopplingen är ogiltig, annars null. Tillämpar samma
+// invariant på alla skriv-ytor: ingen självreferens, föräldern måste finnas i
+// samma tenant, och endast en nivå av föräldraskap tillåts (föräldern får inte
+// själv vara ett underfält).
+export async function validateParentMetadataLink(
+  tenantId: string,
+  parentId: string,
+  selfId: string | null,
+): Promise<string | null> {
+  if (selfId && parentId === selfId) {
+    return "Ett metadatafält kan inte vara sin egen förälder.";
+  }
+  const [parent] = await db
+    .select()
+    .from(metadataKatalog)
+    .where(and(eq(metadataKatalog.id, parentId), eq(metadataKatalog.tenantId, tenantId)))
+    .limit(1);
+  if (!parent) {
+    return "Det överordnade metadatafältet hittades inte i denna tenant.";
+  }
+  if (parent.parentMetadataId) {
+    return "Endast en nivå av metadata-familjer tillåts — det valda fältet är redan ett underfält.";
+  }
+  return null;
+}
+
+// ============================================================================
 // SEED STANDARD METADATATYPER FÖR EN TENANT
 // ============================================================================
 

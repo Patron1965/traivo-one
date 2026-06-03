@@ -86,6 +86,7 @@ interface MetadataKatalog {
   allowedValues: string[] | null;
   allowDuplicates: boolean;
   kronologiskVisning: boolean;
+  parentMetadataId: string | null;
   createdAt: string;
 }
 
@@ -225,6 +226,10 @@ export default function MetadataSettingsPage() {
     },
   });
 
+  const typesById = new Map<string, MetadataKatalog>(
+    (metadataTypes || []).map((t) => [t.id, t]),
+  );
+
   const groupedTypes = metadataTypes?.reduce((acc, type) => {
     const groupKey = type.area || type.kategori || 'annat';
     if (!acc[groupKey]) acc[groupKey] = [];
@@ -246,6 +251,35 @@ export default function MetadataSettingsPage() {
     areaOptions.find((a) => a.value === key)?.label ||
     categoryOptions.find((c) => c.value === key)?.label ||
     key;
+
+  // Task #662: rendera familjer hierarkiskt — rotfält följs direkt av sina
+  // underfält. Underfält vars förälder ligger i en annan grupp renderas på plats
+  // med punktnotation (parent.namn.barn.namn).
+  const buildOrderedRows = (types: MetadataKatalog[]) => {
+    const idsInGroup = new Set(types.map((t) => t.id));
+    const childrenByParent = new Map<string, MetadataKatalog[]>();
+    types.forEach((t) => {
+      if (t.parentMetadataId) {
+        const list = childrenByParent.get(t.parentMetadataId) || [];
+        list.push(t);
+        childrenByParent.set(t.parentMetadataId, list);
+      }
+    });
+    const rows: { type: MetadataKatalog; isChild: boolean; dotKey: string | null }[] = [];
+    types.forEach((type) => {
+      const parent = type.parentMetadataId ? typesById.get(type.parentMetadataId) : undefined;
+      if (parent && idsInGroup.has(parent.id)) {
+        return; // renderas under sin förälder nedan
+      }
+      const dotKey = parent ? `${parent.namn}.${type.namn}` : null;
+      rows.push({ type, isChild: !!parent, dotKey });
+      const kids = childrenByParent.get(type.id) || [];
+      kids.forEach((kid) => {
+        rows.push({ type: kid, isChild: true, dotKey: `${type.namn}.${kid.namn}` });
+      });
+    });
+    return rows;
+  };
 
   return (
     <div className="container py-6 space-y-6">
@@ -279,6 +313,7 @@ export default function MetadataSettingsPage() {
               <MetadataTypeForm
                 onSubmit={(data) => createMutation.mutate(data)}
                 isPending={createMutation.isPending}
+                allTypes={metadataTypes || []}
               />
             </DialogContent>
           </Dialog>
@@ -334,7 +369,7 @@ export default function MetadataSettingsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {types.map((type) => {
+                    {buildOrderedRows(types).map(({ type, isChild, dotKey }) => {
                       const Icon = getIcon(type.icon);
                       return (
                         <TableRow key={type.id} data-testid={`metadata-type-row-${type.namn}`}>
@@ -342,10 +377,15 @@ export default function MetadataSettingsPage() {
                             {type.displayNumber ?? '–'}
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2">
+                            <div className={`flex items-center gap-2${isChild ? ' pl-6' : ''}`}>
                               <Icon className="h-4 w-4 text-muted-foreground" />
                               <div>
                                 <span className="font-medium">{type.namn.replace(/_/g, ' ')}</span>
+                                {dotKey && (
+                                  <Badge variant="outline" className="ml-2 text-[10px] font-mono" data-testid={`badge-dotkey-${type.namn}`}>
+                                    {dotKey}
+                                  </Badge>
+                                )}
                                 {type.beskrivning && (
                                   <p className="text-xs text-muted-foreground">{type.beskrivning}</p>
                                 )}
@@ -434,6 +474,7 @@ export default function MetadataSettingsPage() {
               initialData={editingType}
               onSubmit={(data) => updateMutation.mutate({ id: editingType.id, data })}
               isPending={updateMutation.isPending}
+              allTypes={metadataTypes || []}
             />
           )}
         </DialogContent>
@@ -446,6 +487,7 @@ interface MetadataTypeFormProps {
   initialData?: MetadataKatalog;
   onSubmit: (data: Partial<MetadataKatalog>) => void;
   isPending: boolean;
+  allTypes: MetadataKatalog[];
 }
 
 function toSnakeCase(str: string): string {
@@ -456,7 +498,7 @@ function toSnakeCase(str: string): string {
     .replace(/^_|_$/g, '');
 }
 
-function MetadataTypeForm({ initialData, onSubmit, isPending }: MetadataTypeFormProps) {
+function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes }: MetadataTypeFormProps) {
   const [displayLabel, setDisplayLabel] = useState(initialData?.namn?.replace(/_/g, ' ') || '');
   const [namn, setNamn] = useState(initialData?.namn || '');
   const [codeManuallyEdited, setCodeManuallyEdited] = useState(!!initialData);
@@ -477,6 +519,15 @@ function MetadataTypeForm({ initialData, onSubmit, isPending }: MetadataTypeForm
   );
   const [allowDuplicates, setAllowDuplicates] = useState(initialData?.allowDuplicates ?? false);
   const [kronologiskVisning, setKronologiskVisning] = useState(initialData?.kronologiskVisning ?? false);
+  const [parentMetadataId, setParentMetadataId] = useState(initialData?.parentMetadataId || '');
+
+  // Task #662: detta fält är redan ett gruppfält (har underfält) → kan inte själv
+  // bli underfält (endast en nivå tillåts). Dölj/lås då dropdownen.
+  const hasChildren = !!initialData && allTypes.some((t) => t.parentMetadataId === initialData.id);
+  // Kandidater = rotfält (utan egen förälder), exkl. sig själv.
+  const parentCandidates = allTypes
+    .filter((t) => !t.parentMetadataId && t.id !== initialData?.id)
+    .sort((a, b) => a.namn.localeCompare(b.namn, 'sv'));
 
   const handleLabelChange = (value: string) => {
     setDisplayLabel(value);
@@ -507,6 +558,7 @@ function MetadataTypeForm({ initialData, onSubmit, isPending }: MetadataTypeForm
       allowedValues: allowedValues.length > 0 ? allowedValues : null,
       allowDuplicates,
       kronologiskVisning,
+      parentMetadataId: parentMetadataId || null,
     });
   };
 
@@ -641,6 +693,32 @@ function MetadataTypeForm({ initialData, onSubmit, isPending }: MetadataTypeForm
           />
           <p className="text-xs text-muted-foreground mt-1">Ordning inom området (lämna luft för insättning)</p>
         </div>
+      </div>
+
+      <div>
+        <Label>Överordnat metadata-fält</Label>
+        <Select
+          value={parentMetadataId || 'none'}
+          onValueChange={(v) => setParentMetadataId(v === 'none' ? '' : v)}
+          disabled={hasChildren}
+        >
+          <SelectTrigger data-testid="select-type-parent">
+            <SelectValue placeholder="Inget (toppnivåfält)" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Inget (toppnivåfält)</SelectItem>
+            {parentCandidates.map((opt) => (
+              <SelectItem key={opt.id} value={opt.id} data-testid={`select-parent-option-${opt.namn}`}>
+                {opt.namn.replace(/_/g, ' ')}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground mt-1">
+          {hasChildren
+            ? 'Detta fält är ett gruppfält med underfält och kan inte själv bli ett underfält.'
+            : 'Gör fältet till ett underfält i en metadatafamilj (t.ex. kontakt → kontakt.fornamn). Endast en nivå tillåts.'}
+        </p>
       </div>
 
       <div>

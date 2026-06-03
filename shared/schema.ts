@@ -3837,10 +3837,18 @@ export const metadataKatalog = pgTable("metadata_katalog", {
   // (Lyftkrok, Antal, Kontakt etc — PDF §14.3 + §3.2).
   kronologiskVisning: boolean("kronologisk_visning").default(false).notNull(),
 
+  // Task #662: Metadata-familjer via överordnat fält. Nullable självreferens till
+  // förälder-katalogposten — ett underfält (t.ex. kontakt.fornamn) pekar på sitt
+  // gruppfält (kontakt). Punktnotation härleds i koden som förälder.namn + "." +
+  // barn.namn. API:t tillåter endast EN nivå (föräldern måste vara ett rotfält).
+  // FK hanteras separat (jfr koppladTillMetadataId) via migrations/0056.
+  parentMetadataId: varchar("parent_metadata_id"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_metadata_katalog_tenant_namn").on(table.tenantId, table.namn),
   index("idx_metadata_katalog_tenant_beteckning").on(table.tenantId, table.beteckning),
+  index("idx_metadata_katalog_parent").on(table.parentMetadataId),
 ]);
 
 // Metadatavärden - EAV-modell med typade värdefält och korsbefruktning

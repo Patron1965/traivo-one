@@ -29,6 +29,7 @@ import {
   getArticleMetadataForObject,
   writeArticleMetadataOnObject,
   getMetadataKatalogUsage,
+  validateParentMetadataLink,
 } from "./metadata-queries";
 import { getTenantIdWithFallback } from "./tenant-middleware";
 
@@ -107,7 +108,38 @@ const createMetadataTypeSchema = z.object({
     .transform((v) => (v === undefined ? undefined : v.length > 0 ? v : null)),
   // Task #579: aktivera kronologisk tidslinje per fält (Lyftkrok, Antal, etc).
   kronologiskVisning: z.boolean().optional().default(false),
+  // Task #662: Metadata-familjer — överordnat fält (självreferens). Tom sträng → null
+  // (= rotfält). undefined bevaras så partiella PUT inte rör relationen.
+  parentMetadataId: z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v && v.trim().length > 0 ? v.trim() : null)),
 });
+
+// Task #662: validerar att ett valt överordnat fält är giltigt. Returnerar ett
+// svenskt felmeddelande vid problem, annars null. Regler:
+//  - inte sig själv (self-reference)
+//  - föräldern måste finnas i samma tenant
+//  - endast EN nivå tillåts: föräldern måste själv vara ett rotfält
+// Delegerar till den delade validatorn i metadata-queries så att alla skriv-ytor
+// (denna router + /api/metadata-labels) tillämpar exakt samma invariant.
+async function validateParentMetadata(
+  tenantId: string,
+  parentId: string,
+  selfId: string | null,
+): Promise<string | null> {
+  return validateParentMetadataLink(tenantId, parentId, selfId);
+}
+
+// Räknar hur många fält som har detta fält som förälder (= det är redan en familj-
+// förälder). Används för att blockera att en förälder själv görs till underfält.
+async function countMetadataChildren(tenantId: string, id: string): Promise<number> {
+  const children = await db
+    .select({ id: metadataKatalog.id })
+    .from(metadataKatalog)
+    .where(and(eq(metadataKatalog.tenantId, tenantId), eq(metadataKatalog.parentMetadataId, id)));
+  return children.length;
+}
 
 metadataRouter.post("/types", async (req: Request, res: Response) => {
   try {
@@ -143,6 +175,15 @@ metadataRouter.post("/types", async (req: Request, res: Response) => {
 
       if (existingBeteckning.length > 0) {
         return res.status(409).json({ error: `Metadatatyp med beteckning '${validated.beteckning}' finns redan` });
+      }
+    }
+
+    // Task #662: validera överordnat fält (familj). Nya typer har inga barn än,
+    // så endast self/finns/en-nivå behöver kontrolleras (selfId = null vid skapande).
+    if (validated.parentMetadataId) {
+      const parentError = await validateParentMetadata(tenantId, validated.parentMetadataId, null);
+      if (parentError) {
+        return res.status(400).json({ error: parentError });
       }
     }
 
@@ -238,6 +279,44 @@ metadataRouter.put("/types/:id", async (req: Request, res: Response) => {
       }
     }
 
+    // Task #662: överordnat fält (familj) är strukturellt — det ändrar den härledda
+    // punktnotationen (förälder.barn) som import/sök matchar mot. Blockera därför
+    // ändringen när typen redan ANVÄNDS (analogt med namn/beteckning ovan), och
+    // validera self/finns/en-nivå samt att en befintlig förälder inte själv görs
+    // till underfält (skulle skapa två nivåer).
+    const changesParent =
+      validated.parentMetadataId !== undefined &&
+      (validated.parentMetadataId ?? null) !== (existing.parentMetadataId ?? null);
+
+    if (changesParent) {
+      const usage = await getMetadataKatalogUsage(id, tenantId);
+      if (usage.total > 0) {
+        return res.status(409).json({
+          error:
+            `Kan inte ändra överordnat fält — metadatatypen används ` +
+            `(${usage.valueCount} värden, ${usage.conceptFilterCount} koncept-filter). ` +
+            `Punktnotationen (förälder.barn) är en stabil nyckel för import och sök/filter. ` +
+            `Skapa en ny metadatatyp i rätt familj och migrera värden istället.`,
+          usage,
+        });
+      }
+
+      if (validated.parentMetadataId) {
+        const childCount = await countMetadataChildren(tenantId, id);
+        if (childCount > 0) {
+          return res.status(400).json({
+            error:
+              "Detta fält är redan ett gruppfält med underfält och kan därför inte " +
+              "själv bli ett underfält (endast en nivå av familjer tillåts).",
+          });
+        }
+        const parentError = await validateParentMetadata(tenantId, validated.parentMetadataId, id);
+        if (parentError) {
+          return res.status(400).json({ error: parentError });
+        }
+      }
+    }
+
     const [updated] = await db
       .update(metadataKatalog)
       .set(validated)
@@ -270,6 +349,18 @@ metadataRouter.delete("/types/:id", async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+
+    // Task #662: ett gruppfält med underfält kan inte raderas direkt (FK skulle
+    // annars ge ett rått DB-fel och lämna underfält dinglande). Be användaren ta
+    // bort eller flytta underfälten först.
+    const childCount = await countMetadataChildren(tenantId, id);
+    if (childCount > 0) {
+      return res.status(409).json({
+        error:
+          `Kan inte radera — fältet är ett gruppfält med ${childCount} underfält. ` +
+          `Ta bort eller flytta underfälten först.`,
+      });
+    }
 
     await db
       .delete(metadataKatalog)
