@@ -112,8 +112,14 @@ const createMetadataTypeSchema = z.object({
   // (= rotfält). undefined bevaras så partiella PUT inte rör relationen.
   parentMetadataId: z
     .string()
+    .nullable()
     .optional()
-    .transform((v) => (v === undefined ? undefined : v && v.trim().length > 0 ? v.trim() : null)),
+    .transform((v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const t = v.trim();
+      return t.length > 0 ? t : null;
+    }),
 });
 
 // Task #662: validerar att ett valt överordnat fält är giltigt. Returnerar ett

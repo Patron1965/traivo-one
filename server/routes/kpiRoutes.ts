@@ -2129,7 +2129,22 @@ app.delete("/api/metadata-labels/:id", requireAdmin, asyncHandler(async (req, re
     if (existing.isSystem) {
       throw new ForbiddenError("Systemmetadata kan inte raderas");
     }
-    
+
+    // Task #662: blockera radering av ett gruppfält som har underfält (FK skulle
+    // annars ge ett rått DB-fel). Samma invariant som /api/metadata/types DELETE.
+    const children = await db.select({ id: metadataKatalog.id })
+      .from(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.tenantId, tenantId),
+        eq(metadataKatalog.parentMetadataId, req.params.id)
+      ));
+    if (children.length > 0) {
+      throw new ConflictError(
+        `Kan inte radera — fältet är ett gruppfält med ${children.length} underfält. ` +
+        `Ta bort eller flytta underfälten först.`,
+      );
+    }
+
     await db.delete(metadataKatalog)
       .where(and(
         eq(metadataKatalog.id, req.params.id),
