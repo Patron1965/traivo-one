@@ -16,6 +16,7 @@ const ADMIN_ONLY_ROUTES = new Set([
   "/tenant-config",
   "/onboarding",
   "/import",
+  "/import-templates",
   "/architecture",
   "/system-dashboard",
   "/industry-packages",

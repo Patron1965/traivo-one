@@ -1901,6 +1901,32 @@ export function deriveMetadataDotKey(
   return `${parent.namn}.${type.namn}`;
 }
 
+// Task #664: Härleder ordnade Excel-kolumnheaders för en importmalls fältlista.
+// För varje fortfarande existerande katalog-ID returneras dess punktnotation
+// (underfält) eller `namn` (rotfält) — exakt den sträng som buildMetadataTypeLookup
+// matchar mot vid import, så genererad mall och import håller ihop. Raderade/okända
+// ID:n hoppas tyst över; ordningen följer fieldIds; dubblett-headers filtreras bort.
+export async function resolveTemplateFieldHeaders(
+  tenantId: string,
+  fieldIds: string[],
+): Promise<Array<{ id: string; header: string; namn: string; beteckning: string | null }>> {
+  if (!Array.isArray(fieldIds) || fieldIds.length === 0) return [];
+  const types = await getAllMetadataTypes(tenantId);
+  const byId = new Map(types.map((t) => [t.id, t]));
+  const out: Array<{ id: string; header: string; namn: string; beteckning: string | null }> = [];
+  const seen = new Set<string>();
+  for (const id of fieldIds) {
+    const t = byId.get(id);
+    if (!t) continue;
+    const header = deriveMetadataDotKey(t, byId) ?? t.namn;
+    const key = header.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ id: t.id, header, namn: t.namn, beteckning: t.beteckning ?? null });
+  }
+  return out;
+}
+
 // Bygger ett case-insensitivt uppslag header/namn → katalogtyp för import-matchning.
 // Inkluderar varje typs `namn` samt den härledda punktnotationen (kontakt.fornamn)
 // så att en CSV-header som "kontakt.fornamn" matchar rätt underfält automatiskt.

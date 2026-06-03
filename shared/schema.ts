@@ -3879,6 +3879,35 @@ export const insertMetadataKatalogKundSchema = createInsertSchema(metadataKatalo
 });
 export type InsertMetadataKatalogKund = z.infer<typeof insertMetadataKatalogKundSchema>;
 
+// Task #664: Namngivna importmallar (Excel-mall-builder). Admin bockar i vilka
+// metadata-katalogfält som ska ingå → en namngiven, tenant-scopad mall som
+// genererar en Excel-fil med de fasta systemkolumnerna (A–E enligt
+// OBJEKTMALL_FIXED_COLUMNS) plus en dynamisk kolumn per valt fält. `fieldIds`
+// är en ORDNAD lista av metadata_katalog-ID:n; headern (punktnotation för
+// underfält, annars `namn`) härleds vid generering så att den alltid matchar
+// importens uppslag (buildMetadataTypeLookup). Fält som hunnit raderas filtreras
+// bort vid generering. Ingen FK på fieldIds (text[] kan ej referera).
+export const importTemplates = pgTable("import_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: varchar("name", { length: 120 }).notNull(),
+  description: text("description"),
+  fieldIds: text("field_ids").array().notNull().default([]),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_import_templates_tenant").on(table.tenantId),
+  uniqueIndex("idx_import_templates_tenant_name").on(table.tenantId, table.name),
+]);
+export type ImportTemplate = typeof importTemplates.$inferSelect;
+export const insertImportTemplateSchema = createInsertSchema(importTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertImportTemplate = z.infer<typeof insertImportTemplateSchema>;
+
 // Metadatavärden - EAV-modell med typade värdefält och korsbefruktning
 // Supports both objects (objektId) and work orders (workOrderId) as targets
 export const metadataVarden = pgTable("metadata_varden", {

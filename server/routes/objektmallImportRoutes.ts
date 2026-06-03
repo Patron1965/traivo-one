@@ -26,9 +26,10 @@
 import type { Express } from "express";
 import multer from "multer";
 import ExcelJS from "exceljs";
+import { z } from "zod";
 import { and, eq, or, sql, desc, inArray, isNull } from "drizzle-orm";
 import { asyncHandler } from "../asyncHandler";
-import { NotFoundError, ValidationError } from "../errors";
+import { NotFoundError, ValidationError, ConflictError } from "../errors";
 import { getTenantIdWithFallback, requireAdmin, requireTenantWithFallback } from "../tenant-middleware";
 import { db } from "../db";
 import {
@@ -39,14 +40,17 @@ import {
   metadataKatalog,
   metadataVarden,
   importBatches,
+  importTemplates,
   users,
   type MetadataKatalog,
+  type ImportTemplate,
 } from "@shared/schema";
 import {
   coerceMetadataVardeFromRaw,
   computeImportMetadataStatus,
   writeImportedMetadataValue,
   getDisplayValue,
+  resolveTemplateFieldHeaders,
   type ImportMetadataWriteStatus,
 } from "../metadata-queries";
 import { enqueueMetadataChange } from "../services/metadata-change-jobs";
@@ -228,6 +232,30 @@ function isKnownObjectFieldRef(refName: string): boolean {
 // Mall-generator
 // ============================================================
 export async function buildTemplateWorkbook(): Promise<Buffer> {
+  // Standardmall: exempel-metadata-kolumner (förslag som användaren byter ut).
+  return buildObjektmallWorkbook([...OBJEKTMALL_EXAMPLE_METADATA_HEADERS], {
+    exampleMetaValues: [
+      "Storgatan",
+      "5",
+      "614 30",
+      "Söderköping",
+      "Anna Andersson",
+      "Platschef",
+      "070-123 45 67",
+      "BUTIK-4711",
+    ],
+  });
+}
+
+// Task #664: Parametriserad objektmall-generator. Bygger samma enflik-mall
+// (README "Läs mig först" + "Import"-flik med fasta kolumner A–E) men låter
+// anroparen injicera de dynamiska metadata-kolumnerna (kolumn F+) via en
+// header-lista. Används både av standardmallen ovan (exempel-headers) och av
+// de namngivna importmallarna (valda katalogfälts härledda headers).
+export async function buildObjektmallWorkbook(
+  metadataHeaders: string[],
+  opts?: { exampleMetaValues?: string[]; readmeTitle?: string },
+): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Traivo";
   wb.created = new Date();
@@ -317,7 +345,7 @@ export async function buildTemplateWorkbook(): Promise<Buffer> {
   // Import-flik (platt).
   const ws = wb.addWorksheet(OBJEKTMALL_IMPORT_SHEET_NAME);
   const fixedHeaders = OBJEKTMALL_FIXED_COLUMNS.map((c) => c.header);
-  const allHeaders = [...fixedHeaders, ...OBJEKTMALL_EXAMPLE_METADATA_HEADERS];
+  const allHeaders = [...fixedHeaders, ...metadataHeaders];
   ws.columns = allHeaders.map((h) => ({
     header: h,
     width: Math.min(Math.max(h.length + 4, 16), 36),
@@ -345,7 +373,7 @@ export async function buildTemplateWorkbook(): Promise<Buffer> {
   // Rad 2 — beskrivningar.
   const descs = [
     ...OBJEKTMALL_FIXED_COLUMNS.map((c) => c.description),
-    ...OBJEKTMALL_EXAMPLE_METADATA_HEADERS.map((h) => {
+    ...metadataHeaders.map((h) => {
       const composite = parseCompositeRef(h);
       return composite
         ? `Underfält "${composite.subfield}" till det sammansatta fältet "${composite.prefix}" (punktnotation). Grupperas ihop med övriga "${composite.prefix}.*"-kolumner.`
@@ -360,22 +388,19 @@ export async function buildTemplateWorkbook(): Promise<Buffer> {
   });
   descRow.height = 36;
 
-  // Rad 3 — exempelrad (markerad så användaren förstår att ta bort den).
-  const exampleValues = [
+  // Rad 3 — exempelrad (markerad så användaren förstår att ta bort den). Fasta
+  // kolumner A–E har konstant exempel; metadata-kolumnerna fylls med anroparens
+  // exempelvärden (tomma för namngivna mallar).
+  const fixedExampleValues = [
     "[EXEMPEL – ta bort denna rad]",
     "ORG-1",
     "",
     "",
     "KINAB Koncern",
-    "Storgatan",
-    "5",
-    "614 30",
-    "Söderköping",
-    "Anna Andersson",
-    "Platschef",
-    "070-123 45 67",
-    "BUTIK-4711",
   ];
+  const metaExampleValues =
+    opts?.exampleMetaValues ?? metadataHeaders.map(() => "");
+  const exampleValues = [...fixedExampleValues, ...metaExampleValues];
   const exampleRow = ws.addRow(exampleValues);
   exampleRow.eachCell({ includeEmpty: true }, (cell) => {
     cell.font = { italic: true, color: { argb: "FF6B7C8C" } };
@@ -2178,6 +2203,186 @@ export function registerObjektmallImportRoutes(app: Express): void {
         ));
       if (!row) throw new NotFoundError("Importkörning");
       res.json(row);
+    }),
+  );
+
+  // === Namngivna importmallar (Task #664) ===================================
+  const templateBodySchema = z.object({
+    name: z
+      .string()
+      .trim()
+      .min(1, "Namn krävs.")
+      .max(120, "Namnet får vara högst 120 tecken."),
+    description: z.string().trim().max(2000).optional().nullable(),
+    fieldIds: z.array(z.string()).default([]),
+  });
+
+  function templateExcelFilename(name: string): string {
+    const slug =
+      name
+        .toLowerCase()
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 60) || "mall";
+    return `traivo-importmall-${slug}.xlsx`;
+  }
+
+  async function buildTemplateExcel(tenantId: string, fieldIds: string[]): Promise<Buffer> {
+    const headers = await resolveTemplateFieldHeaders(tenantId, fieldIds);
+    return buildObjektmallWorkbook(headers.map((h) => h.header));
+  }
+
+  // Lista sparade mallar (tenant-scopad).
+  app.get(
+    "/api/import-templates",
+    requireTenantWithFallback,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const rows = await db
+        .select()
+        .from(importTemplates)
+        .where(eq(importTemplates.tenantId, tenantId))
+        .orderBy(desc(importTemplates.updatedAt));
+      res.setHeader("Cache-Control", "no-cache, must-revalidate");
+      res.json(rows);
+    }),
+  );
+
+  // Skapa ny mall.
+  app.post(
+    "/api/import-templates",
+    requireTenantWithFallback,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const userId = (req as any).user?.claims?.sub ?? (req as any).user?.id ?? null;
+      const body = templateBodySchema.parse(req.body);
+      const [clash] = await db
+        .select({ id: importTemplates.id })
+        .from(importTemplates)
+        .where(and(eq(importTemplates.tenantId, tenantId), eq(importTemplates.name, body.name)));
+      if (clash) throw new ConflictError(`En mall med namnet "${body.name}" finns redan.`);
+      const [row] = await db
+        .insert(importTemplates)
+        .values({
+          tenantId,
+          name: body.name,
+          description: body.description ?? null,
+          fieldIds: body.fieldIds,
+          createdBy: userId,
+        })
+        .returning();
+      res.status(201).json(row);
+    }),
+  );
+
+  // Uppdatera mall.
+  app.put(
+    "/api/import-templates/:id",
+    requireTenantWithFallback,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const body = templateBodySchema.parse(req.body);
+      const [existing] = await db
+        .select({ id: importTemplates.id })
+        .from(importTemplates)
+        .where(and(eq(importTemplates.tenantId, tenantId), eq(importTemplates.id, req.params.id)));
+      if (!existing) throw new NotFoundError("Importmall");
+      const [clash] = await db
+        .select({ id: importTemplates.id })
+        .from(importTemplates)
+        .where(
+          and(
+            eq(importTemplates.tenantId, tenantId),
+            eq(importTemplates.name, body.name),
+            sql`${importTemplates.id} <> ${req.params.id}`,
+          ),
+        );
+      if (clash) throw new ConflictError(`En mall med namnet "${body.name}" finns redan.`);
+      const [row] = await db
+        .update(importTemplates)
+        .set({
+          name: body.name,
+          description: body.description ?? null,
+          fieldIds: body.fieldIds,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(importTemplates.tenantId, tenantId), eq(importTemplates.id, req.params.id)))
+        .returning();
+      res.json(row);
+    }),
+  );
+
+  // Radera mall.
+  app.delete(
+    "/api/import-templates/:id",
+    requireTenantWithFallback,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const result = await db
+        .delete(importTemplates)
+        .where(and(eq(importTemplates.tenantId, tenantId), eq(importTemplates.id, req.params.id)))
+        .returning({ id: importTemplates.id });
+      if (result.length === 0) throw new NotFoundError("Importmall");
+      res.json({ ok: true });
+    }),
+  );
+
+  // Generera & ladda ner Excel för en sparad mall.
+  app.get(
+    "/api/import-templates/:id/excel",
+    requireTenantWithFallback,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const [row] = await db
+        .select()
+        .from(importTemplates)
+        .where(and(eq(importTemplates.tenantId, tenantId), eq(importTemplates.id, req.params.id)));
+      if (!row) throw new NotFoundError("Importmall");
+      const buf = await buildTemplateExcel(tenantId, row.fieldIds ?? []);
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${templateExcelFilename(row.name)}"`,
+      );
+      res.setHeader("Cache-Control", "no-cache, must-revalidate");
+      res.send(buf);
+    }),
+  );
+
+  // Ad-hoc generering från en fält-lista (utan att spara mallen).
+  app.post(
+    "/api/import-templates/excel",
+    requireTenantWithFallback,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const body = z
+        .object({
+          name: z.string().trim().max(120).optional(),
+          fieldIds: z.array(z.string()).default([]),
+        })
+        .parse(req.body);
+      const buf = await buildTemplateExcel(tenantId, body.fieldIds);
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${templateExcelFilename(body.name ?? "forhandsvisning")}"`,
+      );
+      res.setHeader("Cache-Control", "no-cache, must-revalidate");
+      res.send(buf);
     }),
   );
 }

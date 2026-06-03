@@ -21,10 +21,19 @@ import {
   ChevronRight,
   ChevronDown,
   ArrowRight,
+  Settings2,
 } from "lucide-react";
+import { Link } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { OBJEKTMALL_FILENAME, OBJEKTMALL_FIXED_COLUMNS } from "@shared/objektmall-template";
+
+interface SavedImportTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  fieldIds: string[];
+}
 
 type RowAction = "create" | "update" | "repoint";
 type MetadataWriteStatus = "create" | "replace" | "add" | "unchanged";
@@ -152,6 +161,10 @@ export default function ObjektmallImportPage() {
 
   const historyQuery = useQuery<HistoryItem[]>({
     queryKey: ["/api/admin/objektmall/history"],
+  });
+
+  const savedTemplatesQuery = useQuery<SavedImportTemplate[]>({
+    queryKey: ["/api/import-templates"],
   });
 
   const previewMutation = useMutation<PreviewResponse, Error, File>({
@@ -311,6 +324,55 @@ export default function ObjektmallImportPage() {
                 Tips: håll uppdaterings- och nyimportlistor åtskilda — blanda inte befintliga
                 (systemnummer) med helt nya rader (interimsnummer) i samma fil.
               </p>
+            </div>
+
+            <Separator className="my-3" />
+
+            <div className="space-y-2" data-testid="section-saved-templates">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium">Namngivna mallar</p>
+                <Button asChild variant="ghost" size="sm" data-testid="link-manage-templates">
+                  <Link href="/import-templates">
+                    <Settings2 className="h-3.5 w-3.5 mr-1" />
+                    Hantera
+                  </Link>
+                </Button>
+              </div>
+              {savedTemplatesQuery.isLoading ? (
+                <p className="text-xs text-muted-foreground">Laddar mallar…</p>
+              ) : (savedTemplatesQuery.data?.length ?? 0) === 0 ? (
+                <p className="text-xs text-muted-foreground" data-testid="text-no-saved-templates">
+                  Inga sparade mallar ännu. Skapa namngivna mallar med valda metadatafält under{" "}
+                  <Link href="/import-templates" className="underline">
+                    Importmallar
+                  </Link>
+                  .
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {savedTemplatesQuery.data?.map((tpl) => (
+                    <Button
+                      key={tpl.id}
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      className="justify-start"
+                      data-testid={`button-download-saved-template-${tpl.id}`}
+                    >
+                      <a href={`/api/import-templates/${tpl.id}/excel`} download>
+                        <FileDown className="h-4 w-4 mr-2 shrink-0" />
+                        <span className="truncate">
+                          {tpl.name}
+                          <span className="text-muted-foreground">
+                            {" "}
+                            ({tpl.fieldIds?.length ?? 0} fält)
+                          </span>
+                        </span>
+                      </a>
+                    </Button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <Separator className="my-3" />

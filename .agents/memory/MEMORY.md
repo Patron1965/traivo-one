@@ -8,6 +8,7 @@
 - [vitest 4 oxc JSX](vitest4-oxc-jsx.md) — vitest 4 bundlar rolldown-vite (oxc) som ignorerar `esbuild`; client `.tsx` parse-fail tills `oxc: { jsx: "automatic" }` sätts i vitest.config.
 - [Mobile-app uses cookie-auth objects endpoints](mobile-app-cookie-auth.md) — SimpleFieldApp körs i webbsession med cookie-auth; `/api/objects*` (ej `/api/mobile/*`) funkar direkt i mobil-UI.
 - [Objektmall-import diff/preview](objektmall-import-diff.md) — förhandsvisningens fält-diff måste spegla exakt vad commit skriver; notes byggs via delade helpers anropade från både validering och commit.
+- [Importmall-headers ↔ import-matchning](import-template-headers.md) — genererade Excel-mall-headers måste härledas med samma regel (`deriveMetadataDotKey ?? namn`) som `buildMetadataTypeLookup` matchar mot vid import, annars matchar inte kolumnerna.
 - [Metadata kundlås read-paths](metadata-customer-lock.md) — kundlåsta katalogfält måste filtreras på ALLA objekt-vända läsningar (objekt-scoped endpoint, server-härledd kund), ej bara admin /types.
 - [wouter useParams outside Route](wouter-direct-render-params.md) — pages rendered via App.tsx `location.startsWith` branches get `{}` from useParams; parse the param from the pathname instead.
 - [Public endpoint tenant token](public-endpoint-tenant-token.md) — `/api/public/*` får aldrig ta rå tenant-slug (enumeration); resolva tenant server-side via QR-code eller HMAC-signed token (`server/dynamic-qr-token.ts`).

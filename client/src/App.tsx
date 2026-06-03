@@ -35,6 +35,7 @@ const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
 const ImportPage = lazy(() => import("@/pages/ImportPage"));
 const ObjektmallImportPage = lazy(() => import("@/pages/admin/ObjektmallImportPage"));
+const ImportTemplatesPage = lazy(() => import("@/pages/admin/ImportTemplatesPage"));
 const ProcurementsPage = lazy(() => import("@/pages/ProcurementsPage"));
 const OptimizationPrepPage = lazy(() => import("@/pages/OptimizationPrepPage"));
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
@@ -179,6 +180,7 @@ function Router() {
         <Route path="/booking-slots">{() => <ProtectedRoute component={BookingSlotsAdminPage} path="/booking-slots" />}</Route>
         <Route path="/import">{() => <ProtectedRoute component={ImportPage} path="/import" />}</Route>
         <Route path="/objektmall-import">{() => <ProtectedRoute component={ObjektmallImportPage} path="/objektmall-import" />}</Route>
+        <Route path="/import-templates">{() => <ProtectedRoute component={ImportTemplatesPage} path="/import-templates" />}</Route>
         <Route path="/system-overview">{() => <ProtectedRoute component={SystemOverviewPage} path="/system-overview" />}</Route>
         <Route path="/settings">{() => <ProtectedRoute component={SettingsPage} path="/settings" />}</Route>
         <Route path="/system-dashboard">{() => <ProtectedRoute component={SystemDashboardPage} path="/system-dashboard" />}</Route>
