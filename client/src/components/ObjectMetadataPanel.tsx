@@ -730,8 +730,10 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
     enabled: open,
   });
 
+  // Task #663: använd objekt-scoped endpoint så kundlåsta fält som inte gäller
+  // detta objekts kund inte dyker upp i lägg-till-pickern.
   const { data: metadataTypes = [] } = useQuery<MetadataKatalog[]>({
-    queryKey: ['/api/metadata/types'],
+    queryKey: ['/api/metadata/objects', object.id, 'available-types'],
     enabled: open,
   });
 

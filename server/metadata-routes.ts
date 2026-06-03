@@ -2,7 +2,8 @@ import { Router, Request, Response } from "express";
 import { z, ZodError } from "zod";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
-import { metadataKatalog, metadataVarden, articles } from "@shared/schema";
+import { metadataKatalog, metadataKatalogKunder, metadataVarden, articles, customers } from "@shared/schema";
+import { inArray } from "drizzle-orm";
 import { getErrorMessage } from "./routes/helpers";
 import {
   getObjectWithAllMetadata,
@@ -30,6 +31,9 @@ import {
   writeArticleMetadataOnObject,
   getMetadataKatalogUsage,
   validateParentMetadataLink,
+  getAllMetadataTypesWithCustomers,
+  getAvailableMetadataTypesForObject,
+  getMetadataCustomerLinks,
 } from "./metadata-queries";
 import { getTenantIdWithFallback } from "./tenant-middleware";
 
@@ -55,7 +59,15 @@ metadataRouter.get("/types", async (req: Request, res: Response) => {
     } catch (seedErr) {
       console.warn("[metadata] auto-seed failed (kontinuerar med befintliga typer):", seedErr);
     }
-    const types = await getAllMetadataTypes(tenantId);
+    // Task #663: returnera varje typ berikad med dess kundlås-kopplingar
+    // (customerIds[]). Med ?customerId=... filtreras katalogen hierarki-medvetet
+    // (generella fält + fält kopplade till kunden eller någon förälder) för
+    // nedströmskonsumenter (import/order). Utan parametern returneras hela
+    // katalogen (admin-vy) så klienten kan filtrera och visa kundlås-status.
+    const customerIdParam = typeof req.query.customerId === "string" && req.query.customerId.length > 0
+      ? req.query.customerId
+      : undefined;
+    const types = await getAllMetadataTypesWithCustomers(tenantId, customerIdParam);
     res.json(types);
   } catch (error) {
     console.error("Error fetching metadata types:", error);
@@ -108,6 +120,10 @@ const createMetadataTypeSchema = z.object({
     .transform((v) => (v === undefined ? undefined : v.length > 0 ? v : null)),
   // Task #579: aktivera kronologisk tidslinje per fält (Lyftkrok, Antal, etc).
   kronologiskVisning: z.boolean().optional().default(false),
+  // Task #663: kundlås. Lista av customerId:n som fältet begränsas till. Tom array
+  // = generellt fält (gäller alla kunder). undefined = orört (partiella PUT rör
+  // inte kopplingarna). Hanteras separat (m2m), inte en kolumn på metadata_katalog.
+  customerIds: z.array(z.string()).optional(),
   // Task #662: Metadata-familjer — överordnat fält (självreferens). Tom sträng → null
   // (= rotfält). undefined bevaras så partiella PUT inte rör relationen.
   parentMetadataId: z
@@ -135,6 +151,46 @@ async function validateParentMetadata(
   selfId: string | null,
 ): Promise<string | null> {
   return validateParentMetadataLink(tenantId, parentId, selfId);
+}
+
+// Task #663: validerar att alla angivna customerId:n finns i denna tenant.
+// Returnerar ett svenskt felmeddelande om någon saknas (= försök att koppla mot
+// en kund utanför tenant), annars null. Dedupar input.
+async function validateCustomerIds(
+  tenantId: string,
+  customerIds: string[],
+): Promise<string | null> {
+  const unique = Array.from(new Set(customerIds.filter((c) => c && c.length > 0)));
+  if (unique.length === 0) return null;
+  const found = await db
+    .select({ id: customers.id })
+    .from(customers)
+    .where(and(eq(customers.tenantId, tenantId), inArray(customers.id, unique)));
+  if (found.length !== unique.length) {
+    return "En eller flera valda kunder hittades inte i denna tenant.";
+  }
+  return null;
+}
+
+// Task #663: ersätter ett katalogfälts kundlås-kopplingar med exakt `customerIds`
+// (tom array = generellt fält). Idempotent: rensar befintliga och sätter nya.
+async function syncMetadataCustomerLinks(
+  tenantId: string,
+  metadataKatalogId: string,
+  customerIds: string[],
+): Promise<void> {
+  const unique = Array.from(new Set(customerIds.filter((c) => c && c.length > 0)));
+  await db
+    .delete(metadataKatalogKunder)
+    .where(and(
+      eq(metadataKatalogKunder.tenantId, tenantId),
+      eq(metadataKatalogKunder.metadataKatalogId, metadataKatalogId),
+    ));
+  if (unique.length > 0) {
+    await db.insert(metadataKatalogKunder).values(
+      unique.map((customerId) => ({ tenantId, metadataKatalogId, customerId })),
+    );
+  }
 }
 
 // Räknar hur många fält som har detta fält som förälder (= det är redan en familj-
@@ -193,12 +249,26 @@ metadataRouter.post("/types", async (req: Request, res: Response) => {
       }
     }
 
+    // Task #663: kundlås hanteras i en separat m2m-tabell, inte som en kolumn.
+    // Lyft ut customerIds ur värdena innan insert och validera att kunderna finns.
+    const { customerIds, ...katalogValues } = validated;
+    if (customerIds !== undefined) {
+      const customerError = await validateCustomerIds(tenantId, customerIds);
+      if (customerError) {
+        return res.status(400).json({ error: customerError });
+      }
+    }
+
     const [newType] = await db.insert(metadataKatalog).values({
       tenantId,
-      ...validated,
+      ...katalogValues,
     }).returning();
 
-    res.status(201).json(newType);
+    if (customerIds !== undefined && customerIds.length > 0) {
+      await syncMetadataCustomerLinks(tenantId, newType.id, customerIds);
+    }
+
+    res.status(201).json({ ...newType, customerIds: customerIds ?? [] });
   } catch (error) {
     console.error("Error creating metadata type:", error);
     if (error instanceof ZodError) {
@@ -323,9 +393,19 @@ metadataRouter.put("/types/:id", async (req: Request, res: Response) => {
       }
     }
 
+    // Task #663: kundlås hanteras i en separat m2m-tabell. Lyft ut customerIds ur
+    // uppdateringsvärdena. undefined = orört; en array (inkl. tom) = ersätt exakt.
+    const { customerIds, ...katalogValues } = validated;
+    if (customerIds !== undefined) {
+      const customerError = await validateCustomerIds(tenantId, customerIds);
+      if (customerError) {
+        return res.status(400).json({ error: customerError });
+      }
+    }
+
     const [updated] = await db
       .update(metadataKatalog)
-      .set(validated)
+      .set(katalogValues)
       .where(and(eq(metadataKatalog.id, id), eq(metadataKatalog.tenantId, tenantId)))
       .returning();
 
@@ -333,7 +413,12 @@ metadataRouter.put("/types/:id", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Metadatatyp hittades inte" });
     }
 
-    res.json(updated);
+    if (customerIds !== undefined) {
+      await syncMetadataCustomerLinks(tenantId, id, customerIds);
+    }
+
+    const links = await getMetadataCustomerLinks(tenantId);
+    res.json({ ...updated, customerIds: links.get(id) ?? [] });
   } catch (error) {
     console.error("Error updating metadata type:", error);
     // Handle Zod validation errors
@@ -414,6 +499,24 @@ metadataRouter.get("/objects/:objectId", async (req: Request, res: Response) => 
   } catch (error) {
     console.error("Error fetching object metadata:", error);
     res.status(500).json({ error: "Kunde inte hämta metadata" });
+  }
+});
+
+// Task #663: kundlås-filtrerad katalog för ett specifikt objekt. Objektets kund
+// härleds server-side så objekt-vyer (lägg-till-picker m.m.) aldrig visar fält
+// som är låsta till andra kunder. Generella fält (utan kundlås) är alltid med.
+metadataRouter.get("/objects/:objectId/available-types", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+    const { objectId } = req.params;
+    const types = await getAvailableMetadataTypesForObject(tenantId, objectId);
+    res.json(types);
+  } catch (error) {
+    console.error("Error fetching available metadata types for object:", error);
+    res.status(500).json({ error: "Kunde inte hämta tillgängliga metadatatyper" });
   }
 });
 

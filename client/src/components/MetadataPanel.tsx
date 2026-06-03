@@ -212,8 +212,10 @@ export function MetadataPanel({ objectId, readOnly = false }: MetadataPanelProps
     enabled: !!objectId,
   });
 
+  // Task #663: objekt-scoped katalog → kundlåsta fält för andra kunder döljs.
   const { data: metadataTypes } = useQuery<MetadataKatalog[]>({
-    queryKey: ['/api/metadata/types'],
+    queryKey: ['/api/metadata/objects', objectId, 'available-types'],
+    enabled: !!objectId,
   });
 
   const createMutation = useMutation({

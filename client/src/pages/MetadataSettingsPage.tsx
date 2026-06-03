@@ -87,7 +87,17 @@ interface MetadataKatalog {
   allowDuplicates: boolean;
   kronologiskVisning: boolean;
   parentMetadataId: string | null;
+  // Task #663: kundlås — tom array = generellt fält (alla kunder); en eller flera
+  // customerId:n = fältet visas endast för dessa kunder och deras underkunder.
+  customerIds?: string[];
   createdAt: string;
+}
+
+interface CustomerOption {
+  id: string;
+  name: string;
+  hierarchyType: string | null;
+  parentCustomerId: string | null;
 }
 
 const areaOptions = [
@@ -168,8 +178,42 @@ export default function MetadataSettingsPage() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingType, setEditingType] = useState<MetadataKatalog | null>(null);
 
+  // Task #663: filtrera listan på kund. 'all' = visa alla typer. Annars visas
+  // generella fält (utan kundlås) + fält låsta till vald kund eller någon av dess
+  // föräldrar (hierarki-medvetet, speglar serverns scope-upplösning).
+  const [customerFilter, setCustomerFilter] = useState<string>('all');
+
   const { data: metadataTypes, isLoading } = useQuery<MetadataKatalog[]>({
     queryKey: ['/api/metadata/types'],
+  });
+
+  const { data: customers } = useQuery<CustomerOption[]>({
+    queryKey: ['/api/customers'],
+  });
+
+  // Bygg upp self+ancestor-set för en kund (för hierarki-medveten filtrering).
+  const customerScope = (customerId: string): Set<string> => {
+    const byId = new Map((customers || []).map((c) => [c.id, c]));
+    const scope = new Set<string>([customerId]);
+    let current = byId.get(customerId);
+    let guard = 0;
+    while (current?.parentCustomerId && guard < 32) {
+      if (scope.has(current.parentCustomerId)) break;
+      scope.add(current.parentCustomerId);
+      current = byId.get(current.parentCustomerId);
+      guard += 1;
+    }
+    return scope;
+  };
+
+  const customerNameById = new Map((customers || []).map((c) => [c.id, c.name]));
+
+  const visibleTypes = (metadataTypes || []).filter((t) => {
+    if (customerFilter === 'all') return true;
+    const links = t.customerIds || [];
+    if (links.length === 0) return true; // generellt fält
+    const scope = customerScope(customerFilter);
+    return links.some((id) => scope.has(id));
   });
 
   const seedMutation = useMutation({
@@ -230,7 +274,7 @@ export default function MetadataSettingsPage() {
     (metadataTypes || []).map((t) => [t.id, t]),
   );
 
-  const groupedTypes = metadataTypes?.reduce((acc, type) => {
+  const groupedTypes = visibleTypes.reduce((acc, type) => {
     const groupKey = type.area || type.kategori || 'annat';
     if (!acc[groupKey]) acc[groupKey] = [];
     acc[groupKey].push(type);
@@ -299,6 +343,19 @@ export default function MetadataSettingsPage() {
             Lägg till standardtyper
           </Button>
         )}
+        <Select value={customerFilter} onValueChange={setCustomerFilter}>
+          <SelectTrigger className="w-56" data-testid="select-customer-filter">
+            <SelectValue placeholder="Filtrera på kund" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" data-testid="select-customer-filter-all">Alla kunder</SelectItem>
+            {(customers || []).map((c) => (
+              <SelectItem key={c.id} value={c.id} data-testid={`select-customer-filter-${c.id}`}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-add-type">
@@ -314,6 +371,7 @@ export default function MetadataSettingsPage() {
                 onSubmit={(data) => createMutation.mutate(data)}
                 isPending={createMutation.isPending}
                 allTypes={metadataTypes || []}
+                customers={customers || []}
               />
             </DialogContent>
           </Dialog>
@@ -405,6 +463,14 @@ export default function MetadataSettingsPage() {
                                       <Clock className="h-2.5 w-2.5 mr-0.5" />Historik
                                     </Badge>
                                   )}
+                                  {type.customerIds && type.customerIds.length > 0 && (
+                                    <Badge variant="outline" className="text-[10px] border-warning text-warning" data-testid={`badge-customerlock-${type.namn}`}>
+                                      <Key className="h-2.5 w-2.5 mr-0.5" />
+                                      {type.customerIds.length === 1
+                                        ? `Kundlåst: ${customerNameById.get(type.customerIds[0]) || '1 kund'}`
+                                        : `Kundlåst: ${type.customerIds.length} kunder`}
+                                    </Badge>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -475,6 +541,7 @@ export default function MetadataSettingsPage() {
               onSubmit={(data) => updateMutation.mutate({ id: editingType.id, data })}
               isPending={updateMutation.isPending}
               allTypes={metadataTypes || []}
+              customers={customers || []}
             />
           )}
         </DialogContent>
@@ -488,6 +555,7 @@ interface MetadataTypeFormProps {
   onSubmit: (data: Partial<MetadataKatalog>) => void;
   isPending: boolean;
   allTypes: MetadataKatalog[];
+  customers: CustomerOption[];
 }
 
 function toSnakeCase(str: string): string {
@@ -498,7 +566,7 @@ function toSnakeCase(str: string): string {
     .replace(/^_|_$/g, '');
 }
 
-function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes }: MetadataTypeFormProps) {
+function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes, customers }: MetadataTypeFormProps) {
   const [displayLabel, setDisplayLabel] = useState(initialData?.namn?.replace(/_/g, ' ') || '');
   const [namn, setNamn] = useState(initialData?.namn || '');
   const [codeManuallyEdited, setCodeManuallyEdited] = useState(!!initialData);
@@ -520,6 +588,23 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes }: Metada
   const [allowDuplicates, setAllowDuplicates] = useState(initialData?.allowDuplicates ?? false);
   const [kronologiskVisning, setKronologiskVisning] = useState(initialData?.kronologiskVisning ?? false);
   const [parentMetadataId, setParentMetadataId] = useState(initialData?.parentMetadataId || '');
+  // Task #663: kundlås. Tom = generellt fält (alla kunder). Annars begränsas fältet
+  // till valda kunder (och deras underkunder via hierarkin på serversidan).
+  const [customerLockEnabled, setCustomerLockEnabled] = useState(
+    !!initialData?.customerIds && initialData.customerIds.length > 0,
+  );
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>(
+    initialData?.customerIds || [],
+  );
+  const [customerSearch, setCustomerSearch] = useState('');
+  const filteredCustomers = customers
+    .filter((c) => c.name.toLowerCase().includes(customerSearch.trim().toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+  const toggleCustomer = (id: string) => {
+    setSelectedCustomerIds((prev) =>
+      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id],
+    );
+  };
 
   // Task #662: detta fält är redan ett gruppfält (har underfält) → kan inte själv
   // bli underfält (endast en nivå tillåts). Dölj/lås då dropdownen.
@@ -559,6 +644,7 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes }: Metada
       allowDuplicates,
       kronologiskVisning,
       parentMetadataId: parentMetadataId || null,
+      customerIds: customerLockEnabled ? selectedCustomerIds : [],
     });
   };
 
@@ -719,6 +805,70 @@ function MetadataTypeForm({ initialData, onSubmit, isPending, allTypes }: Metada
             ? 'Detta fält är ett gruppfält med underfält och kan inte själv bli ett underfält.'
             : 'Gör fältet till ett underfält i en metadatafamilj (t.ex. kontakt → kontakt.fornamn). Endast en nivå tillåts.'}
         </p>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <Label>Kundlås</Label>
+            <p className="text-xs text-muted-foreground">
+              Begränsa fältet till specifika kunder. Av = generellt fält (gäller alla
+              kunder). Koppling mot en överordnad kund (koncern/region) täcker även
+              dess underkunder.
+            </p>
+          </div>
+          <Switch
+            checked={customerLockEnabled}
+            onCheckedChange={setCustomerLockEnabled}
+            data-testid="switch-type-customerlock"
+          />
+        </div>
+
+        {customerLockEnabled && (
+          <div className="space-y-2" data-testid="customer-lock-picker">
+            <Input
+              value={customerSearch}
+              onChange={(e) => setCustomerSearch(e.target.value)}
+              placeholder="Sök kund..."
+              data-testid="input-customer-search"
+            />
+            <div className="max-h-48 overflow-y-auto rounded-md border divide-y">
+              {filteredCustomers.length === 0 ? (
+                <p className="text-xs text-muted-foreground p-3" data-testid="text-no-customers">
+                  Inga kunder matchar.
+                </p>
+              ) : (
+                filteredCustomers.map((c) => {
+                  const checked = selectedCustomerIds.includes(c.id);
+                  return (
+                    <button
+                      type="button"
+                      key={c.id}
+                      onClick={() => toggleCustomer(c.id)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover-elevate"
+                      data-testid={`option-customer-${c.id}`}
+                    >
+                      <Switch checked={checked} className="pointer-events-none" />
+                      <span className="flex-1">{c.name}</span>
+                      {c.hierarchyType && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {c.hierarchyType}
+                        </Badge>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground" data-testid="text-selected-customer-count">
+              {selectedCustomerIds.length === 0
+                ? 'Inga kunder valda — spara med tomt urval gör fältet generellt igen.'
+                : `${selectedCustomerIds.length} kund(er) valda.`}
+            </p>
+          </div>
+        )}
       </div>
 
       <div>

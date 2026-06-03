@@ -3851,6 +3851,34 @@ export const metadataKatalog = pgTable("metadata_katalog", {
   index("idx_metadata_katalog_parent").on(table.parentMetadataId),
 ]);
 
+// Task #663: Kundlåsta metadatafält. Ett katalogfält kan begränsas till en eller
+// flera kunder via denna m2m-koppling. INGEN koppling = generellt fält (gäller
+// alla kunder, back-compat). En eller flera kopplingar = kundlåst: fältet visas
+// endast för objekt vars kund är en kopplad kund ELLER en ättling till en kopplad
+// kund (kundhierarkin agerar "kategori" — koppling mot ett koncern/region-nav
+// täcker hela undergrenen). Scope-upplösning sker i koden (metadata-queries).
+export const metadataKatalogKunder = pgTable("metadata_katalog_customers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  metadataKatalogId: varchar("metadata_katalog_id")
+    .references(() => metadataKatalog.id, { onDelete: "cascade" })
+    .notNull(),
+  customerId: varchar("customer_id")
+    .references(() => customers.id, { onDelete: "cascade" })
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_metadata_katalog_customers_unique").on(table.metadataKatalogId, table.customerId),
+  index("idx_metadata_katalog_customers_tenant").on(table.tenantId),
+  index("idx_metadata_katalog_customers_customer").on(table.tenantId, table.customerId),
+]);
+export type MetadataKatalogKund = typeof metadataKatalogKunder.$inferSelect;
+export const insertMetadataKatalogKundSchema = createInsertSchema(metadataKatalogKunder).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertMetadataKatalogKund = z.infer<typeof insertMetadataKatalogKundSchema>;
+
 // Metadatavärden - EAV-modell med typade värdefält och korsbefruktning
 // Supports both objects (objektId) and work orders (workOrderId) as targets
 export const metadataVarden = pgTable("metadata_varden", {

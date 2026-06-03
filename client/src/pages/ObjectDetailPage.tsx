@@ -424,13 +424,15 @@ export default function ObjectDetailPage() {
     enabled: !!objectId,
   });
 
+  // Task #663: objekt-scoped katalog → kundlåsta fält för andra kunder döljs.
   const { data: metadataTypes = [] } = useQuery<MetadataType[]>({
-    queryKey: ["/api/metadata/types"],
+    queryKey: ["/api/metadata/objects", objectId, "available-types"],
     queryFn: async () => {
-      const res = await fetch("/api/metadata/types");
+      const res = await fetch(`/api/metadata/objects/${objectId}/available-types`);
       if (!res.ok) return [];
       return res.json();
     },
+    enabled: !!objectId,
   });
 
   const { data: matchingArticles = [] } = useQuery<Array<{

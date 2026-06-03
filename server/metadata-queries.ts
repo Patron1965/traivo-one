@@ -2,7 +2,9 @@ import { db } from "./db";
 import { sql, eq, and, inArray, desc } from "drizzle-orm";
 import { 
   objects, 
+  customers,
   metadataKatalog, 
+  metadataKatalogKunder,
   metadataVarden,
   metadataHistorik,
   MetadataKatalog,
@@ -12,6 +14,10 @@ import {
   ObjectWithAllMetadataEAV,
   GeographicPosition
 } from "@shared/schema";
+
+// Task #663: katalogtyp berikad med dess kundlås-kopplingar (tom array = generellt
+// fält, gäller alla kunder; en eller flera customerIds = kundlåst).
+export type MetadataKatalogWithCustomers = MetadataKatalog & { customerIds: string[] };
 
 export function getDisplayValue(existing: MetadataVarden): string | null {
   return existing.vardeString ?? 
@@ -565,12 +571,28 @@ export async function getObjectWithAllMetadata(
     });
   }
 
+  // Task #663: filtrera bort kundlåsta fält som inte hör till objektets kund.
+  // Ett fält utan kopplingar är generellt (alltid med). Ett kundlåst fält behålls
+  // bara om objektets kund (eller någon av dess förfäder) finns bland de kopplade
+  // kunderna. Saknar objektet kund kan inget kundlås matcha → endast generella fält.
+  const customerLinks = await getMetadataCustomerLinks(tenantId);
+  const hasAnyLock = Array.from(customerLinks.values()).some((l) => l.length > 0);
+  let filteredMetadata = metadataWithKatalog;
+  if (hasAnyLock) {
+    const scope = objekt.customerId
+      ? await getCustomerSelfAndAncestorIds(tenantId, objekt.customerId)
+      : new Set<string>();
+    filteredMetadata = metadataWithKatalog.filter((m) =>
+      isMetadataAllowedForCustomerScope(customerLinks.get(m.metadataKatalogId), scope),
+    );
+  }
+
   return {
     id: objekt.id,
     name: objekt.name,
     objectType: objekt.objectType,
     parentId: objekt.parentId,
-    metadata: metadataWithKatalog,
+    metadata: filteredMetadata,
   };
 }
 
@@ -1752,6 +1774,115 @@ export async function getAllMetadataTypes(tenantId: string): Promise<MetadataKat
     .from(metadataKatalog)
     .where(eq(metadataKatalog.tenantId, tenantId))
     .orderBy(metadataKatalog.kategori, metadataKatalog.sortOrder);
+}
+
+// ============================================================================
+// KUNDLÅSTA METADATAFÄLT (Task #663)
+// ============================================================================
+
+// Hämtar alla kundlås-kopplingar för en tenant som Map<katalogId, customerId[]>.
+// Ett katalogfält som SAKNAS i kartan (eller har tom array) är ett generellt fält
+// som gäller alla kunder (back-compat). Ett fält med en eller flera customerIds är
+// kundlåst. Ett enda DB-anrop — använd vid massuppslag (objektpanel, types-endpoint).
+export async function getMetadataCustomerLinks(
+  tenantId: string,
+): Promise<Map<string, string[]>> {
+  const rows = await db
+    .select({
+      metadataKatalogId: metadataKatalogKunder.metadataKatalogId,
+      customerId: metadataKatalogKunder.customerId,
+    })
+    .from(metadataKatalogKunder)
+    .where(eq(metadataKatalogKunder.tenantId, tenantId));
+  const map = new Map<string, string[]>();
+  for (const r of rows) {
+    const list = map.get(r.metadataKatalogId);
+    if (list) list.push(r.customerId);
+    else map.set(r.metadataKatalogId, [r.customerId]);
+  }
+  return map;
+}
+
+// Returnerar kundens egen id + alla förfäder-id:n (uppåt i parent_customer_id-
+// kedjan) som ett Set. Används för att avgöra om ett kundlåst fält gäller ett
+// objekt: fältet gäller om någon av dess kopplade kunder finns i detta set (dvs.
+// objektets kund ÄR den kopplade kunden eller en ättling till den). Iterativ
+// uppåtgång med cykelskydd (max 32 nivåer), speglar storage.getCustomerAncestors.
+export async function getCustomerSelfAndAncestorIds(
+  tenantId: string,
+  customerId: string,
+): Promise<Set<string>> {
+  const result = new Set<string>([customerId]);
+  let currentId: string | null | undefined = customerId;
+  for (let i = 0; i < 32; i++) {
+    if (!currentId) break;
+    const [row] = await db
+      .select({ parentCustomerId: customers.parentCustomerId })
+      .from(customers)
+      .where(and(
+        eq(customers.id, currentId),
+        eq(customers.tenantId, tenantId),
+      ))
+      .limit(1);
+    if (!row || !row.parentCustomerId) break;
+    if (result.has(row.parentCustomerId)) break; // cykelskydd
+    result.add(row.parentCustomerId);
+    currentId = row.parentCustomerId;
+  }
+  return result;
+}
+
+// Avgör om ett katalogfält ska vara synligt givet en kunds scope-set (self +
+// ancestors). Tom/saknad koppling = generellt fält (alltid synligt). Annars synligt
+// endast om minst en kopplad kund finns i scope-setet.
+export function isMetadataAllowedForCustomerScope(
+  linkIds: string[] | undefined,
+  scope: Set<string>,
+): boolean {
+  if (!linkIds || linkIds.length === 0) return true;
+  return linkIds.some((id) => scope.has(id));
+}
+
+// Hämtar alla katalogtyper för en tenant berikade med deras kundlås-kopplingar.
+// Om `customerId` anges filtreras resultatet hierarki-medvetet: generella fält +
+// fält kopplade till kunden eller någon av dess förfäder. Utan `customerId`
+// returneras alla typer (admin-vy) med customerIds[] för klientfiltrering.
+export async function getAllMetadataTypesWithCustomers(
+  tenantId: string,
+  customerId?: string,
+): Promise<MetadataKatalogWithCustomers[]> {
+  const [types, links] = await Promise.all([
+    getAllMetadataTypes(tenantId),
+    getMetadataCustomerLinks(tenantId),
+  ]);
+  const scope = customerId
+    ? await getCustomerSelfAndAncestorIds(tenantId, customerId)
+    : null;
+  const enriched: MetadataKatalogWithCustomers[] = [];
+  for (const t of types) {
+    const customerIds = links.get(t.id) ?? [];
+    if (scope && !isMetadataAllowedForCustomerScope(customerIds, scope)) continue;
+    enriched.push({ ...t, customerIds });
+  }
+  return enriched;
+}
+
+// Task #663: returnerar katalogen kundlås-filtrerad för ett specifikt objekt.
+// Objektets kund härleds server-side (objects.customerId) så klienten aldrig kan
+// vidga synligheten via egna parametrar. Resultatet = generella fält + fält
+// kopplade till objektets kund eller någon av dess förfäder. Saknar objektet kund
+// (eller objektet hör ej till tenant) returneras endast generella fält.
+export async function getAvailableMetadataTypesForObject(
+  tenantId: string,
+  objectId: string,
+): Promise<MetadataKatalogWithCustomers[]> {
+  const [objekt] = await db
+    .select({ customerId: objects.customerId })
+    .from(objects)
+    .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)))
+    .limit(1);
+  const customerId = objekt?.customerId ?? undefined;
+  return getAllMetadataTypesWithCustomers(tenantId, customerId ?? "__none__");
 }
 
 // ============================================================================
