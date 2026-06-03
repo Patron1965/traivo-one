@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryErrorState } from "@/components/ErrorBoundary";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, ApiError } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatSekFromOre } from "@/lib/format";
 import { workOrderStatusBadge, priorityBadgeClasses, priorityLabels } from "@/lib/status-colors";
@@ -240,6 +240,11 @@ export default function WorkOrderDetailPage() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [forceCancel, setForceCancel] = useState(false);
+  const [scheduleConflict, setScheduleConflict] = useState<{
+    hard: string[];
+    soft: string[];
+    blocked: boolean;
+  } | null>(null);
 
   const invalidateOrder = (objectId?: string | null) => {
     queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId] });
@@ -258,9 +263,26 @@ export default function WorkOrderDetailPage() {
     onSuccess: (updated: WorkOrderDetail) => {
       invalidateOrder(updated?.objectId ?? order?.objectId);
       setEditOpen(false);
+      setScheduleConflict(null);
       toast({ title: "Sparat", description: "Arbetsordern uppdaterades." });
     },
     onError: (err: Error) => {
+      // Schemakonflikt från constraint-motorn (samma som veckoplaneraren):
+      // 422 = hård blockering (kan ej sparas), 409 = mjuk konflikt (kräver
+      // bekräftelse → spara igen med force).
+      if (err instanceof ApiError && (err.status === 422 || err.status === 409)) {
+        const details = (err.details ?? {}) as {
+          hardConflicts?: string[];
+          softConflicts?: string[];
+          blocked?: boolean;
+        };
+        const hard = details.hardConflicts ?? [];
+        const soft = details.softConflicts ?? [];
+        if (hard.length > 0 || soft.length > 0) {
+          setScheduleConflict({ hard, soft, blocked: err.status === 422 });
+          return;
+        }
+      }
       toast({ title: "Kunde inte spara", description: err.message, variant: "destructive" });
     },
   });
@@ -321,14 +343,23 @@ export default function WorkOrderDetailPage() {
     setEditOpen(true);
   };
 
+  const buildEditPayload = (force = false): Record<string, unknown> => ({
+    title: editForm.title.trim(),
+    description: editForm.description.trim() || null,
+    priority: editForm.priority,
+    scheduledDate: editForm.scheduledDate || null,
+    checkConstraints: true,
+    ...(force ? { force: true } : {}),
+  });
+
   const submitEdit = () => {
-    const payload: Record<string, unknown> = {
-      title: editForm.title.trim(),
-      description: editForm.description.trim() || null,
-      priority: editForm.priority,
-      scheduledDate: editForm.scheduledDate || null,
-    };
-    editMutation.mutate(payload);
+    setScheduleConflict(null);
+    editMutation.mutate(buildEditPayload(false));
+  };
+
+  const confirmSoftConflict = () => {
+    setScheduleConflict(null);
+    editMutation.mutate(buildEditPayload(true));
   };
 
   if (isLoading) {
@@ -512,6 +543,78 @@ export default function WorkOrderDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Schemakonflikt (samma kontroll som veckoplaneraren) */}
+      <AlertDialog open={!!scheduleConflict} onOpenChange={(o) => !o && setScheduleConflict(null)}>
+        <AlertDialogContent data-testid="dialog-schedule-conflict">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {scheduleConflict?.blocked ? "Ändringen blockeras" : "Bekräfta schemakonflikt"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {scheduleConflict?.blocked
+                ? "Datum-/resursändringen bryter mot hårda planeringsregler och kan inte sparas. Justera planeringen och försök igen."
+                : "Datum-/resursändringen skapar konflikter med planeringen. Granska varningarna nedan och bekräfta om du vill spara ändå."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 py-1">
+            {scheduleConflict?.hard && scheduleConflict.hard.length > 0 && (
+              <div className="space-y-1.5" data-testid="list-hard-conflicts">
+                <p className="text-sm font-medium text-destructive flex items-center gap-1.5">
+                  <Ban className="h-3.5 w-3.5" /> Blockerande
+                </p>
+                <ul className="space-y-1">
+                  {scheduleConflict.hard.map((c, i) => (
+                    <li
+                      key={`hard-${i}`}
+                      className="text-sm rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-1.5"
+                      data-testid={`text-hard-conflict-${i}`}
+                    >
+                      {c}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {scheduleConflict?.soft && scheduleConflict.soft.length > 0 && (
+              <div className="space-y-1.5" data-testid="list-soft-conflicts">
+                <p className="text-sm font-medium text-warning flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5" /> Varningar
+                </p>
+                <ul className="space-y-1">
+                  {scheduleConflict.soft.map((c, i) => (
+                    <li
+                      key={`soft-${i}`}
+                      className="text-sm rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1.5"
+                      data-testid={`text-soft-conflict-${i}`}
+                    >
+                      {c}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-conflict">
+              {scheduleConflict?.blocked ? "Stäng" : "Avbryt"}
+            </AlertDialogCancel>
+            {!scheduleConflict?.blocked && (
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  confirmSoftConflict();
+                }}
+                disabled={editMutation.isPending}
+                data-testid="button-confirm-conflict"
+              >
+                {editMutation.isPending && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
+                Spara ändå
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Statusbyte-bekräftelse */}
       <AlertDialog open={!!pendingStatus} onOpenChange={(o) => !o && setPendingStatus(null)}>

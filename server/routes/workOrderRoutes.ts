@@ -14,6 +14,7 @@ import {
 } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, slaRiskSnapshots, type OrderConcept, isOutsidePreferredWindow } from "@shared/schema";
+import type { WorkOrder } from "@shared/schema";
 import { handleWorkOrderStatusChange } from "../ai-communication";
 import { notificationService } from "../notifications";
 import { asyncHandler } from "../asyncHandler";
@@ -35,6 +36,97 @@ async function computeOutsidePreferredWindow(
   };
 }
 import { getArticleMetadataForObject, writeArticleMetadataOnObject, writeSystemMetadataOnObject } from "../metadata-queries";
+
+/**
+ * Kör constraint-/konfliktkontrollen (samma motor som veckoplaneraren bulk-schedule
+ * använder) för en enstaka datum-/resursändring på en arbetsorder. Returnerar
+ * dedupade beskrivningar uppdelade i hårda (blockerande) och mjuka (kräver
+ * bekräftelse) konflikter. Används av PATCH /api/work-orders/:id när klienten
+ * skickar `checkConstraints: true` (t.ex. detaljvyns redigera-dialog) så att en
+ * planerare inte oavsiktligt skapar överbokning eller bryter en klusterregel.
+ */
+async function validateWorkOrderScheduleChange(params: {
+  tenantId: string;
+  workOrder: WorkOrder;
+  scheduledDate: string;
+  resourceId: string | null;
+  teamId: string | null;
+}): Promise<{ hard: string[]; soft: string[] }> {
+  const { tenantId, workOrder, scheduledDate } = params;
+
+  const allOrders = await storage.getWorkOrders(tenantId);
+  const allResources = await storage.getResources(tenantId);
+  const resourceAvailability = await storage.getResourceAvailabilityByTenant(tenantId);
+  const vehicleSchedules = await storage.getVehicleSchedulesByTenant(tenantId);
+  const resourceIdsList = allResources.map(r => r.id);
+  const resourceVehicles = await storage.getResourceVehiclesByResourceIds(resourceIdsList);
+  const dependencyInstances = await storage.getTaskDependencyInstances(tenantId);
+  const resourceArticles = await storage.getResourceArticlesByResourceIds(resourceIdsList);
+  const teamMembers = await storage.getAllTeamMembers(tenantId);
+  const clustersList = await storage.getClusters(tenantId);
+  const tenant = await storage.getTenant(tenantId);
+  const tenantSettings = (tenant?.settings as Record<string, unknown>) || {};
+  const hardClusterBlocking = tenantSettings.hardClusterBlocking !== false;
+
+  // Lös ut en resurs för flytten. Om ordern är team-tilldelad använder vi en
+  // medlems resurs (samma som bulk-schedule). Saknas både resurs och team kör
+  // vi ändå de datumbaserade kontrollerna (tidsfönster, beroenden, restriktioner).
+  let effectiveResourceId: string = params.resourceId || "";
+  if (!effectiveResourceId && params.teamId) {
+    const tm = teamMembers.find(m => m.teamId === params.teamId);
+    effectiveResourceId = tm?.resourceId || "";
+  }
+
+  const timeRestrictions = workOrder.objectId
+    ? await storage.getObjectTimeRestrictions(workOrder.objectId)
+    : [];
+  const workOrderLines = await storage.getWorkOrderLines(workOrder.id);
+
+  // Nollställ ordens egna scheduledDate i datasetet så kapacitetskontrollen inte
+  // dubbelräknar dess gamla dag — flytten lägger tillbaka timmarna på den nya
+  // dagen. Raden måste finnas kvar (med uppdaterad resurs/team) så per-flytt-
+  // kontrollerna kan slå upp ordern.
+  const idx = allOrders.findIndex(o => o.id === workOrder.id);
+  if (idx >= 0) {
+    allOrders[idx] = {
+      ...allOrders[idx],
+      scheduledDate: null,
+      resourceId: effectiveResourceId || null,
+      teamId: params.teamId ?? null,
+    };
+  }
+
+  const { validateSchedule } = await import("../planning/constraintEngine");
+  const violations = validateSchedule(
+    [{ workOrderId: workOrder.id, resourceId: effectiveResourceId, scheduledDate }],
+    {
+      allOrders,
+      resources: allResources,
+      resourceAvailability,
+      vehicleSchedules,
+      resourceVehicles,
+      dependencyInstances,
+      timeRestrictions,
+      resourceArticles,
+      workOrderLines,
+      teamMembers,
+      clusters: clustersList,
+      hardClusterBlocking,
+    },
+  );
+
+  // Inkludera violations som rör denna order direkt, plus aggregerade
+  // kapacitets-/kluster-/beroende-konflikter (rapporteras ibland mot annan id).
+  const relevant = violations.filter(v =>
+    v.workOrderId === workOrder.id ||
+    v.category === "capacity" ||
+    v.category === "cluster_geographic" ||
+    v.category === "dependency_chain"
+  );
+  const hard = Array.from(new Set(relevant.filter(v => v.type === "hard").map(v => v.description)));
+  const soft = Array.from(new Set(relevant.filter(v => v.type === "soft").map(v => v.description)));
+  return { hard, soft };
+}
 
 export async function registerWorkOrderRoutes(app: Express) {
 
@@ -719,6 +811,13 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
   const clusterOverride = updateData.clusterOverride;
   delete updateData.clusterOverride;
 
+  // Opt-in constraint-kontroll (detaljvyns redigera-dialog). Dessa flaggor är
+  // styrfält och får aldrig sparas på ordern.
+  const wantsConstraintCheck = req.body.checkConstraints === true;
+  const forceSchedule = req.body.force === true;
+  delete updateData.checkConstraints;
+  delete updateData.force;
+
   const existingOrder = await storage.getWorkOrder(req.params.id);
   if (!existingOrder || !verifyTenantOwnership(existingOrder, tenantId)) {
     throw new NotFoundError("Arbetsorder");
@@ -730,6 +829,54 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
   if (updateData.teamId) await ensureTeamInTenant(updateData.teamId, tenantId);
   if (updateData.customerId) await ensureCustomerInTenant(updateData.customerId, tenantId);
   if (updateData.objectId) await ensureObjectInTenant(updateData.objectId, tenantId);
+
+  // När klienten begär det (detaljvyns redigera-dialog), kör samma
+  // constraint-/konfliktkontroll som veckoplaneraren innan vi sparar en
+  // datum-/resurs-/team-ändring. Hårda konflikter blockerar (422); mjuka
+  // konflikter kräver bekräftelse (409) tills klienten skickar `force: true`.
+  if (wantsConstraintCheck) {
+    const toDateStr = (v: unknown): string | null => {
+      if (typeof v === "string" && v) return v.slice(0, 10);
+      if (v instanceof Date) return v.toISOString().slice(0, 10);
+      return null;
+    };
+    const existingDateStr = existingOrder.scheduledDate
+      ? new Date(existingOrder.scheduledDate).toISOString().slice(0, 10)
+      : null;
+    const newDateStr = "scheduledDate" in updateData ? toDateStr(updateData.scheduledDate) : null;
+    const effectiveDateStr = newDateStr ?? existingDateStr;
+
+    const dateChanged = "scheduledDate" in updateData && newDateStr !== existingDateStr;
+    const resourceChanged = "resourceId" in updateData && updateData.resourceId !== existingOrder.resourceId;
+    const teamChanged = "teamId" in updateData && updateData.teamId !== existingOrder.teamId;
+
+    if (effectiveDateStr && (dateChanged || resourceChanged || teamChanged)) {
+      const conflicts = await validateWorkOrderScheduleChange({
+        tenantId,
+        workOrder: existingOrder,
+        scheduledDate: effectiveDateStr,
+        resourceId: ("resourceId" in updateData ? updateData.resourceId : existingOrder.resourceId) as string | null,
+        teamId: ("teamId" in updateData ? updateData.teamId : existingOrder.teamId) as string | null,
+      });
+
+      if (conflicts.hard.length > 0) {
+        return res.status(422).json({
+          error: "Schemakonflikt",
+          code: "ERR_VALIDATION",
+          message: "Ändringen blockeras av hårda planeringsregler och kan inte sparas.",
+          details: { hardConflicts: conflicts.hard, softConflicts: conflicts.soft, blocked: true },
+        });
+      }
+      if (conflicts.soft.length > 0 && !forceSchedule) {
+        return res.status(409).json({
+          error: "Schemakonflikt",
+          code: "ERR_CONFLICT",
+          message: "Ändringen skapar konflikter som kräver bekräftelse.",
+          details: { hardConflicts: [], softConflicts: conflicts.soft, requiresConfirmation: true },
+        });
+      }
+    }
+  }
 
   const isResourceChange = updateData.resourceId && updateData.resourceId !== existingOrder.resourceId;
   const assignedResourceId = updateData.resourceId || existingOrder.resourceId;
