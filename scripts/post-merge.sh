@@ -18,7 +18,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0055_drop_customer_invoices_created_at.sql \
            migrations/0056_metadata_parent.sql \
            migrations/0057_metadata_katalog_customers.sql \
-           migrations/0058_import_templates.sql; do
+           migrations/0058_import_templates.sql \
+           migrations/0059_order_type_metadata_links.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"

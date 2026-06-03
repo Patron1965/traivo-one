@@ -68,6 +68,17 @@ interface WorkOrderLineWithDetails extends WorkOrderLine {
   articleDescription?: string;
 }
 
+// Task #665: fält kopplat till orderns ordertyp (familjer expanderade till underfält).
+interface OrderTypeMetadataField {
+  id: string;
+  namn: string;
+  beskrivning: string | null;
+  datatyp: string;
+  kategori: string | null;
+  dotKey: string | null;
+  linkSortOrder: number;
+}
+
 export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = [] }: JobDetailModalProps) {
   const { toast } = useToast();
   const otherBulkIds = useMemo(() => bulkWorkOrderIds.filter(id => id !== workOrderId), [bulkWorkOrderIds, workOrderId]);
@@ -77,6 +88,9 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
   const [metadataPopoverOpen, setMetadataPopoverOpen] = useState(false);
   const [selectedMetadataType, setSelectedMetadataType] = useState<string>("");
   const [metadataValue, setMetadataValue] = useState<string>("");
+  // Task #665: lokala utkast för kopplade fält (keyed by katalog-fält-id). Ett fält
+  // utan utkast faller tillbaka till sitt sparade work-order-metadata-värde.
+  const [coupledDrafts, setCoupledDrafts] = useState<Record<string, string>>({});
   const [showAddArticleDialog, setShowAddArticleDialog] = useState(false);
   const [articleSearch, setArticleSearch] = useState("");
   const [selectedArticleId, setSelectedArticleId] = useState<string>("");
@@ -177,6 +191,22 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
     enabled: !!workOrderId && open,
   });
 
+  // Task #665: fält kopplade till orderns ordertyp. Kundlås (#663) tillämpas server-
+  // side via ?customerId så irrelevanta fält aldrig dyker upp i formuläret.
+  const orderType = workOrder?.orderType;
+  const { data: coupledFields = [], isLoading: coupledLoading } = useQuery<OrderTypeMetadataField[]>({
+    queryKey: ["/api/order-type-metadata", orderType, workOrder?.customerId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (workOrder?.customerId) params.set("customerId", workOrder.customerId);
+      const qs = params.toString();
+      const res = await fetch(`/api/order-type-metadata/${encodeURIComponent(orderType!)}${qs ? `?${qs}` : ""}`);
+      if (!res.ok) throw new Error("Failed to fetch coupled fields");
+      return res.json();
+    },
+    enabled: open && !!orderType,
+  });
+
   const addMetadataMutation = useMutation({
     mutationFn: async ({ metadataTypNamn, varde }: { metadataTypNamn: string; varde: string }) => {
       await apiRequest("POST", `/api/metadata/work-orders/${workOrderId}`, { metadataTypNamn, varde });
@@ -214,6 +244,36 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
     },
   });
 
+  // Task #665: spara värde för ett kopplat fält via befintlig WO-metadata-väg.
+  // Ersätter ev. befintligt värde eftersom POST alltid lägger till. Vi skapar det
+  // nya värdet FÖRST och raderar det gamla först efter lyckad POST — så att ett
+  // misslyckat POST aldrig leder till dataförlust (värsta utfallet blir en kortvarig
+  // dubblett om DELETE skulle fela, vilket invalidate-refetchen synliggör).
+  const saveCoupledFieldMutation = useMutation({
+    mutationFn: async ({ fieldId, namn, varde, existingId }: { fieldId: string; namn: string; varde: string; existingId?: string }) => {
+      const trimmed = varde.trim();
+      if (trimmed !== "") {
+        await apiRequest("POST", `/api/metadata/work-orders/${workOrderId}`, { metadataTypNamn: namn, varde });
+      }
+      if (existingId) {
+        await apiRequest("DELETE", `/api/metadata/work-orders/metadata/${existingId}`);
+      }
+      return fieldId;
+    },
+    onSuccess: (fieldId: string) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/metadata/work-orders", workOrderId] });
+      setCoupledDrafts((prev) => {
+        const next = { ...prev };
+        delete next[fieldId];
+        return next;
+      });
+      toast({ title: "Fält sparat", description: "Värdet har sparats på jobbet." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Kunde inte spara fält", description: error.message || "Försök igen senare.", variant: "destructive" });
+    },
+  });
+
   const handleAddMetadata = () => {
     if (!selectedMetadataType || !metadataValue.trim()) {
       toast({ title: "Fyll i alla fält", description: "Välj metadatatyp och ange värde.", variant: "destructive" });
@@ -235,6 +295,27 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
       default: return '';
     }
   };
+
+  // Task #665: råvärde (för input-förifyllning) av ett sparat WO-metadata.
+  const getMetadataRawValue = (metadata: WorkOrderMetadata): string => {
+    switch (metadata.katalog.datatyp) {
+      case 'string': return metadata.vardeString ?? '';
+      case 'integer': return metadata.vardeInteger != null ? String(metadata.vardeInteger) : '';
+      case 'decimal': return metadata.vardeDecimal != null ? String(metadata.vardeDecimal) : '';
+      case 'boolean': return metadata.vardeBoolean == null ? '' : metadata.vardeBoolean ? 'true' : 'false';
+      case 'datetime': return metadata.vardeDatetime ? metadata.vardeDatetime.slice(0, 10) : '';
+      case 'json': return metadata.vardeJson != null ? JSON.stringify(metadata.vardeJson) : '';
+      case 'referens': return metadata.vardeReferens ?? '';
+      default: return '';
+    }
+  };
+
+  // Task #665: snabb uppslag av sparat WO-metadata per katalog-fält-id.
+  const savedMetaByFieldId = useMemo(() => {
+    const m = new Map<string, WorkOrderMetadata>();
+    for (const meta of workOrderMetadata) m.set(meta.metadataKatalogId, meta);
+    return m;
+  }, [workOrderMetadata]);
 
   const { data: communications = [], isLoading: communicationsLoading } = useQuery<CustomerCommunication[]>({
     queryKey: ["/api/work-orders", workOrderId, "communications"],
@@ -883,6 +964,85 @@ export function JobDetailModal({ open, onClose, workOrderId, bulkWorkOrderIds = 
                   Lägg till
                 </Button>
               </div>
+
+              {/* Task #665: fält kopplade till orderns ordertyp — visas automatiskt för inmatning */}
+              {coupledLoading ? (
+                <div className="flex items-center justify-center py-3">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </div>
+              ) : coupledFields.length > 0 ? (
+                <div className="border rounded-md p-3 space-y-3 bg-muted/20" data-testid="section-coupled-fields">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    Fält för ordertypen{orderType ? ` "${orderType}"` : ""}
+                  </div>
+                  {coupledFields.map((field) => {
+                    const savedMeta = savedMetaByFieldId.get(field.id);
+                    const savedValue = savedMeta ? getMetadataRawValue(savedMeta) : "";
+                    const draft = coupledDrafts[field.id];
+                    const currentValue = draft !== undefined ? draft : savedValue;
+                    const isDirty = draft !== undefined && draft !== savedValue;
+                    const label = field.dotKey ?? field.namn;
+                    const setVal = (v: string) =>
+                      setCoupledDrafts((prev) => ({ ...prev, [field.id]: v }));
+                    return (
+                      <div key={field.id} className="space-y-1" data-testid={`coupled-field-${field.id}`}>
+                        <label className="text-sm font-medium flex items-center gap-2">
+                          {label}
+                          {field.beskrivning && (
+                            <span className="text-xs text-muted-foreground font-normal">- {field.beskrivning}</span>
+                          )}
+                        </label>
+                        <div className="flex gap-2">
+                          {field.datatyp === 'boolean' ? (
+                            <Select value={currentValue} onValueChange={setVal}>
+                              <SelectTrigger className="flex-1" data-testid={`input-coupled-field-${field.id}`}>
+                                <SelectValue placeholder="Välj värde..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="true">Ja</SelectItem>
+                                <SelectItem value="false">Nej</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              className="flex-1"
+                              type={field.datatyp === 'integer' || field.datatyp === 'decimal' ? 'number' : field.datatyp === 'datetime' ? 'date' : 'text'}
+                              step={field.datatyp === 'decimal' ? '0.01' : undefined}
+                              placeholder={
+                                field.datatyp === 'integer' ? 'Ange heltal...' :
+                                field.datatyp === 'decimal' ? 'Ange decimaltal...' :
+                                'Ange värde...'
+                              }
+                              value={currentValue}
+                              onChange={(e) => setVal(e.target.value)}
+                              data-testid={`input-coupled-field-${field.id}`}
+                            />
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={!isDirty || saveCoupledFieldMutation.isPending}
+                            onClick={() =>
+                              saveCoupledFieldMutation.mutate({
+                                fieldId: field.id,
+                                namn: field.namn,
+                                varde: currentValue,
+                                existingId: savedMeta?.id,
+                              })
+                            }
+                            data-testid={`button-save-coupled-field-${field.id}`}
+                          >
+                            {saveCoupledFieldMutation.isPending && saveCoupledFieldMutation.variables?.fieldId === field.id && (
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            )}
+                            Spara
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
 
               {metadataPopoverOpen && (
                 <div className="border rounded-md p-3 space-y-3 bg-muted/30">

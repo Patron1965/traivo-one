@@ -3908,6 +3908,37 @@ export const insertImportTemplateSchema = createInsertSchema(importTemplates).om
 });
 export type InsertImportTemplate = z.infer<typeof insertImportTemplateSchema>;
 
+// Task #665: Metadata kopplad till uppgift/order. En koppling = (ordertyp →
+// metadata_katalog-fält). metadataKatalogId kan peka på ett rotfält ELLER ett
+// familj-förälder-fält; vid läsning expanderas en familj-förälder till sina
+// underfält. orderType matchar work_orders.order_type (fri sträng). Tenant-scopad,
+// expand-contract (endast ny tabell). Inga FK på order_type (fri sträng).
+export const orderTypeMetadataLinks = pgTable("order_type_metadata_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  orderType: varchar("order_type", { length: 100 }).notNull(),
+  metadataKatalogId: varchar("metadata_katalog_id")
+    .references(() => metadataKatalog.id, { onDelete: "cascade" })
+    .notNull(),
+  sortOrder: integer("sort_order").default(0),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_order_type_metadata_links_tenant").on(table.tenantId),
+  index("idx_order_type_metadata_links_tenant_type").on(table.tenantId, table.orderType),
+  uniqueIndex("idx_order_type_metadata_links_unique").on(
+    table.tenantId,
+    table.orderType,
+    table.metadataKatalogId,
+  ),
+]);
+export type OrderTypeMetadataLink = typeof orderTypeMetadataLinks.$inferSelect;
+export const insertOrderTypeMetadataLinkSchema = createInsertSchema(orderTypeMetadataLinks).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertOrderTypeMetadataLink = z.infer<typeof insertOrderTypeMetadataLinkSchema>;
+
 // Metadatavärden - EAV-modell med typade värdefält och korsbefruktning
 // Supports both objects (objektId) and work orders (workOrderId) as targets
 export const metadataVarden = pgTable("metadata_varden", {

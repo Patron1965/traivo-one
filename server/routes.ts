@@ -762,6 +762,8 @@ export async function registerRoutes(
   // Task #603: Excel-mall objektimport (multi-flik upload + dry-run + commit)
   const { registerObjektmallImportRoutes } = await import("./routes/objektmallImportRoutes");
   registerObjektmallImportRoutes(app);
+  const { registerOrderTypeMetadataRoutes } = await import("./routes/orderTypeMetadataRoutes");
+  registerOrderTypeMetadataRoutes(app);
   await registerOnboardingRoutes(app);
   registerConfigRoutes(app);
   registerClusterRoutes(app);

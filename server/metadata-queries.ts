@@ -7,12 +7,14 @@ import {
   metadataKatalogKunder,
   metadataVarden,
   metadataHistorik,
+  orderTypeMetadataLinks,
   MetadataKatalog,
   MetadataVarden,
   MetadataHistorik,
   MetadataVardenWithKatalog,
   ObjectWithAllMetadataEAV,
-  GeographicPosition
+  GeographicPosition,
+  OrderTypeMetadataLink,
 } from "@shared/schema";
 
 // Task #663: katalogtyp berikad med dess kundlås-kopplingar (tom array = generellt
@@ -2343,4 +2345,177 @@ export async function deleteWorkOrderMetadata(
   await db.delete(metadataVarden).where(
     and(eq(metadataVarden.id, metadataId), eq(metadataVarden.tenantId, tenantId))
   );
+}
+
+// ============================================================================
+// METADATA KOPPLAD TILL ORDERTYP (Task #665)
+// ============================================================================
+
+// Ett kopplat fält som ska visas i orderformuläret. `dotKey` är punktnotation för
+// underfält (förälder.namn), annars null. `linkSortOrder` kommer från kopplingen,
+// `customerIds` är fältets kundlås (tom = generellt). Familj-förälder expanderas
+// till sina underfält — själva förälder-raden returneras aldrig som inmatningsfält.
+export type OrderTypeMetadataField = MetadataKatalogWithCustomers & {
+  dotKey: string | null;
+  linkSortOrder: number;
+};
+
+// Hämtar alla kopplingar (ordertyp → metadata_katalog) för en tenant + ordertyp.
+export async function getOrderTypeMetadataLinks(
+  tenantId: string,
+  orderType: string,
+): Promise<OrderTypeMetadataLink[]> {
+  return await db
+    .select()
+    .from(orderTypeMetadataLinks)
+    .where(and(
+      eq(orderTypeMetadataLinks.tenantId, tenantId),
+      eq(orderTypeMetadataLinks.orderType, orderType),
+    ))
+    .orderBy(orderTypeMetadataLinks.sortOrder, orderTypeMetadataLinks.createdAt);
+}
+
+// Hämtar kopplingar berikade med fältets namn/datatyp för admin-vyn (alla typer).
+export async function getOrderTypeMetadataLinksWithField(
+  tenantId: string,
+  orderType: string,
+): Promise<Array<OrderTypeMetadataLink & { katalog: MetadataKatalog | null }>> {
+  const [links, types] = await Promise.all([
+    getOrderTypeMetadataLinks(tenantId, orderType),
+    getAllMetadataTypes(tenantId),
+  ]);
+  const byId = new Map(types.map((t) => [t.id, t]));
+  return links.map((l) => ({ ...l, katalog: byId.get(l.metadataKatalogId) ?? null }));
+}
+
+// Skapar en koppling (idempotent via unikt index — befintlig koppling uppdaterar
+// sortOrder istället för att skapa dubblett). Tenant-scopad.
+export async function createOrderTypeMetadataLink(data: {
+  tenantId: string;
+  orderType: string;
+  metadataKatalogId: string;
+  sortOrder?: number;
+  createdBy?: string;
+}): Promise<OrderTypeMetadataLink> {
+  // Verifiera att fältet tillhör samma tenant (annars kan en klient koppla in
+  // ett annat tenants katalog-ID via egen payload).
+  const [field] = await db
+    .select({ id: metadataKatalog.id })
+    .from(metadataKatalog)
+    .where(and(
+      eq(metadataKatalog.id, data.metadataKatalogId),
+      eq(metadataKatalog.tenantId, data.tenantId),
+    ))
+    .limit(1);
+  if (!field) {
+    throw new Error("Metadatafältet hittades inte för denna tenant");
+  }
+
+  const [link] = await db
+    .insert(orderTypeMetadataLinks)
+    .values({
+      tenantId: data.tenantId,
+      orderType: data.orderType,
+      metadataKatalogId: data.metadataKatalogId,
+      sortOrder: data.sortOrder ?? 0,
+      createdBy: data.createdBy,
+    })
+    .onConflictDoUpdate({
+      target: [
+        orderTypeMetadataLinks.tenantId,
+        orderTypeMetadataLinks.orderType,
+        orderTypeMetadataLinks.metadataKatalogId,
+      ],
+      set: { sortOrder: data.sortOrder ?? 0 },
+    })
+    .returning();
+  return link;
+}
+
+// Raderar en koppling. Tenant-predikat på DELETE (defense-in-depth) även om id
+// redan är globalt unikt.
+export async function deleteOrderTypeMetadataLink(
+  id: string,
+  tenantId: string,
+): Promise<void> {
+  const deleted = await db
+    .delete(orderTypeMetadataLinks)
+    .where(and(
+      eq(orderTypeMetadataLinks.id, id),
+      eq(orderTypeMetadataLinks.tenantId, tenantId),
+    ))
+    .returning({ id: orderTypeMetadataLinks.id });
+  if (deleted.length === 0) {
+    throw new Error("Kopplingen hittades inte");
+  }
+}
+
+// Task #665 + #663: löser ut de metadatafält som ska visas i orderformuläret för
+// en given ordertyp. Familj-förälder-kopplingar expanderas till sina underfält;
+// rot-/lövfält-kopplingar inkluderas som de är. Resultatet kundlås-filtreras
+// (Task #663): med `customerId` döljs fält vars kundlås inte matchar orderns kund
+// eller någon av dess förfäder. Utan `customerId` (admin-förhandsvisning) visas
+// alla fält men berikade med deras `customerIds[]`.
+export async function resolveOrderTypeMetadataFields(
+  tenantId: string,
+  orderType: string,
+  customerId?: string,
+): Promise<OrderTypeMetadataField[]> {
+  const [links, types, customerLinks] = await Promise.all([
+    getOrderTypeMetadataLinks(tenantId, orderType),
+    getAllMetadataTypes(tenantId),
+    getMetadataCustomerLinks(tenantId),
+  ]);
+  if (links.length === 0) return [];
+
+  const byId = new Map(types.map((t) => [t.id, t]));
+  // Bygg barn-uppslag: parentMetadataId → barn[] (en nivå, Task #662).
+  const childrenByParent = new Map<string, MetadataKatalog[]>();
+  for (const t of types) {
+    if (t.parentMetadataId) {
+      const arr = childrenByParent.get(t.parentMetadataId);
+      if (arr) arr.push(t);
+      else childrenByParent.set(t.parentMetadataId, [t]);
+    }
+  }
+  Array.from(childrenByParent.values()).forEach((arr) => {
+    arr.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  });
+
+  const scope = customerId
+    ? await getCustomerSelfAndAncestorIds(tenantId, customerId)
+    : null;
+
+  const out: OrderTypeMetadataField[] = [];
+  const seen = new Set<string>();
+
+  const pushField = (field: MetadataKatalog, linkSortOrder: number) => {
+    if (seen.has(field.id)) return;
+    const customerIds = customerLinks.get(field.id) ?? [];
+    if (scope && !isMetadataAllowedForCustomerScope(customerIds, scope)) return;
+    seen.add(field.id);
+    out.push({
+      ...field,
+      customerIds,
+      dotKey: deriveMetadataDotKey(field, byId),
+      linkSortOrder,
+    });
+  };
+
+  for (const link of links) {
+    const target = byId.get(link.metadataKatalogId);
+    if (!target) continue; // raderat fält — hoppa tyst
+    const children = childrenByParent.get(target.id) ?? [];
+    if (children.length > 0) {
+      // Familj-förälder: expandera till underfält (förälder-raden lagrar inget värde).
+      for (const child of children) {
+        pushField(child, link.sortOrder ?? 0);
+      }
+    } else {
+      // Rot-/lövfält eller underfält direkt kopplat: inkludera fältet självt.
+      pushField(target, link.sortOrder ?? 0);
+    }
+  }
+
+  return out;
 }

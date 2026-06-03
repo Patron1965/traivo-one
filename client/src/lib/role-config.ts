@@ -26,6 +26,7 @@ const ADMIN_ONLY_ROUTES = new Set([
   "/data-requirements",
   "/metadata-settings",
   "/metadata-definitions",
+  "/order-type-metadata",
   "/restore-dormant-customers",
   "/shadow-comparison",
 ]);
