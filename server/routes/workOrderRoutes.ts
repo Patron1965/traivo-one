@@ -878,6 +878,22 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
     } catch (metaErr) {
       console.error("[metadata-writeback] Error during auto-writeback:", metaErr);
     }
+
+    // Task #693: systemgenererad, read-only metadata på objektet — "Senast
+    // slutförd order". Best-effort; ett misslyckande får aldrig blockera
+    // slutförandet.
+    try {
+      const completed = workOrder.completedAt ? new Date(workOrder.completedAt) : new Date();
+      await writeSystemMetadataOnObject(
+        workOrder.objectId,
+        "Senast slutförd order",
+        `${workOrder.title} (${completed.toISOString().slice(0, 10)})`,
+        tenantId,
+        `system:wo-completed:${workOrder.id}`,
+      );
+    } catch (e) {
+      console.error("[task-693] writeSystemMetadataOnObject (Senast slutförd order) failed:", e);
+    }
   }
 
   const isAssignmentChange = newResourceId !== oldResourceId;
@@ -982,6 +998,23 @@ app.delete("/api/work-orders/:id", asyncHandler(async (req, res) => {
     });
   } catch (auditErr) {
     console.error(`[work-orders] failed to write cancellation audit log for ${req.params.id}:`, auditErr);
+  }
+
+  // Task #693: systemgenererad, read-only metadata på objektet — "Senast
+  // inställd order". Best-effort; ett misslyckande får aldrig blockera
+  // avbeställningen.
+  if (existing!.objectId) {
+    try {
+      await writeSystemMetadataOnObject(
+        existing!.objectId,
+        "Senast inställd order",
+        `${existing!.title} (${new Date().toISOString().slice(0, 10)})`,
+        tenantId,
+        `system:wo-cancelled:${req.params.id}`,
+      );
+    } catch (e) {
+      console.error("[task-693] writeSystemMetadataOnObject (Senast inställd order) failed:", e);
+    }
   }
 
   console.log(`[work-orders] cancelled id=${req.params.id} tenant=${tenantId} userId=${userId} force=${force} reason=${reason ?? ""}`);

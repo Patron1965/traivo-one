@@ -634,6 +634,23 @@ export async function exportWorkOrderToFortnox(
       console.warn("[invoice-queue] post-export state transition failed:", err);
     }
 
+    // Task #693: systemgenererad, read-only metadata på objektet — "Senast
+    // fakturerad order". Best-effort; ett misslyckande får aldrig bryta exporten.
+    try {
+      if (workOrder.objectId) {
+        const { writeSystemMetadataOnObject } = await import("./metadata-queries");
+        await writeSystemMetadataOnObject(
+          workOrder.objectId,
+          "Senast fakturerad order",
+          `${workOrder.title ?? "Arbetsorder"} (${new Date().toISOString().slice(0, 10)})`,
+          tenantId,
+          `system:wo-invoiced:${workOrder.id}`,
+        );
+      }
+    } catch (err) {
+      console.warn("[task-693] writeSystemMetadataOnObject (Senast fakturerad order) failed:", err);
+    }
+
     return { success: true, invoiceNumber: invoiceNumbers.join(", ") };
   } catch (error) {
     console.error("Export to Fortnox failed:", error);
@@ -865,9 +882,14 @@ export async function exportConsolidatedInvoiceToFortnox(
     // Bygg invoiceRows från alla WOs. Använd samma frozen-skalning som
     // exportWorkOrderToFortnox så summan blir konsistent.
     const invoiceRows: Array<Record<string, unknown>> = [];
+    // Task #693: samla objekt-koppling per WO för "Senast fakturerad order".
+    const invoicedObjects: Array<{ objectId: string; title: string }> = [];
     for (const woId of woIds) {
       const wo = await storage.getWorkOrder(woId);
       if (!wo || wo.tenantId !== tenantId) continue;
+      if (wo.objectId) {
+        invoicedObjects.push({ objectId: wo.objectId, title: wo.title ?? "Arbetsorder" });
+      }
       const lines = await storage.getWorkOrderLines(woId);
       if (!lines.length) continue;
       const useFrozen =
@@ -935,6 +957,26 @@ export async function exportConsolidatedInvoiceToFortnox(
           eq(workOrders.tenantId, tenantId),
         ));
     });
+
+    // Task #693: systemgenererad, read-only metadata per objekt — "Senast
+    // fakturerad order". Best-effort; ett misslyckande får aldrig bryta exporten.
+    try {
+      const { writeSystemMetadataOnObject } = await import("./metadata-queries");
+      const stamp = new Date().toISOString().slice(0, 10);
+      for (const obj of invoicedObjects) {
+        await writeSystemMetadataOnObject(
+          obj.objectId,
+          "Senast fakturerad order",
+          `${obj.title} (${stamp})`,
+          tenantId,
+          `system:wo-invoiced-consolidated:${invoiceId}`,
+        ).catch((err) =>
+          console.warn(`[task-693] writeSystemMetadataOnObject (consolidated) failed for object ${obj.objectId}:`, err),
+        );
+      }
+    } catch (err) {
+      console.warn("[task-693] writeSystemMetadataOnObject (Senast fakturerad order, consolidated) failed:", err);
+    }
 
     return { success: true, invoiceNumber: fortnoxNumber };
   } catch (error) {

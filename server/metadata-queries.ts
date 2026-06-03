@@ -2289,6 +2289,10 @@ export const STANDARD_METADATA_DEFINITIONS: Array<{
   // relevant händelse (metod='system'). De kan aldrig sättas/ändras manuellt.
   { namn: 'Senaste arbetsorder', datatyp: 'string', arLogisk: false, standardArvs: false, kategori: 'status', beskrivning: 'Senast skapade arbetsorder på objektet (systemfält, sätts automatiskt)', sortOrder: 990, icon: 'ClipboardList', area: 'status', displayNumber: 990, isSystem: true },
   { namn: 'Senaste felanmälan', datatyp: 'string', arLogisk: false, standardArvs: false, kategori: 'status', beskrivning: 'Senast inkomna felanmälan på objektet (systemfält, sätts automatiskt)', sortOrder: 992, icon: 'AlertTriangle', area: 'status', displayNumber: 992, isSystem: true },
+  // Task #693: ytterligare livshändelser som ger systemgenererade fält.
+  { namn: 'Senast slutförd order', datatyp: 'string', arLogisk: false, standardArvs: false, kategori: 'status', beskrivning: 'Senast slutförda arbetsorder på objektet (systemfält, sätts automatiskt vid slutförande)', sortOrder: 994, icon: 'CheckCircle2', area: 'status', displayNumber: 994, isSystem: true },
+  { namn: 'Senast fakturerad order', datatyp: 'string', arLogisk: false, standardArvs: false, kategori: 'ekonomi', beskrivning: 'Senast fakturerade arbetsorder på objektet (systemfält, sätts automatiskt vid Fortnox-export)', sortOrder: 996, icon: 'Receipt', area: 'ekonomi', displayNumber: 996, isSystem: true },
+  { namn: 'Senast inställd order', datatyp: 'string', arLogisk: false, standardArvs: false, kategori: 'status', beskrivning: 'Senast inställda (avbeställda) arbetsorder på objektet (systemfält, sätts automatiskt vid inställning)', sortOrder: 998, icon: 'XCircle', area: 'status', displayNumber: 998, isSystem: true },
   { namn: 'Objektnamn', datatyp: 'string', arLogisk: true, standardArvs: false, kategori: 'grunduppgifter', beskrivning: 'Objektets namn (systemfält)', sortOrder: 1000, icon: 'Type', area: 'grunduppgifter', displayNumber: 1000, isSystem: true, isRequired: true },
 ];
 
