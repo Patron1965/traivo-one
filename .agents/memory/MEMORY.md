@@ -10,5 +10,6 @@
 - [Objektmall-import diff/preview](objektmall-import-diff.md) — förhandsvisningens fält-diff måste spegla exakt vad commit skriver; notes byggs via delade helpers anropade från både validering och commit.
 - [wouter useParams outside Route](wouter-direct-render-params.md) — pages rendered via App.tsx `location.startsWith` branches get `{}` from useParams; parse the param from the pathname instead.
 - [Public endpoint tenant token](public-endpoint-tenant-token.md) — `/api/public/*` får aldrig ta rå tenant-slug (enumeration); resolva tenant server-side via QR-code eller HMAC-signed token (`server/dynamic-qr-token.ts`).
+- [Schema-drift & post-merge replay](schema-drift-replay.md) — strukturella schema.ts-ändringar måste ha idempotent migration OCH stå i post-merge replay-listan; kör `scripts/schema-drift-check.ts` för att hitta drift.
 - [Två metadata-system](dual-metadata-systems.md) — engelskt (metadataDefinitions/objectMetadata) vs svenskt (metadataKatalog/Varden/Historik); import skriver svenskt, export läser engelskt → round-trip-drift.
 - [Sammansatta metadatafält (punktnotation)](composite-metadata-import.md) — `fält.underfält`-kolumner grupperas till ETT JSON-fält; skrivs via vanlig metadata-väg men tvingad json-datatyp (asJsonKatalog) → varde_json.
