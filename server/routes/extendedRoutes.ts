@@ -548,10 +548,9 @@ function toUnifiedStatus(source: CaseSource, raw: string | null | undefined): Un
     if (s === "closed") return "arkiverad";
     return "inkommen";
   }
-  // public: new, reviewed, converted, rejected
+  // public: new, reviewed, converted, rejected (ingen "resolved"-status finns)
   if (s === "reviewed") return "mottagen";
   if (s === "converted") return "under_behandling";
-  if (s === "resolved") return "avslutad";
   if (s === "rejected") return "arkiverad";
   return "inkommen";
 }
@@ -564,7 +563,8 @@ function fromUnifiedStatus(source: CaseSource, unified: UnifiedStatus): string {
   if (source === "customer") {
     return { inkommen: "open", mottagen: "open", under_behandling: "in_progress", avslutad: "resolved", arkiverad: "closed" }[unified];
   }
-  return { inkommen: "new", mottagen: "reviewed", under_behandling: "converted", avslutad: "resolved", arkiverad: "rejected" }[unified];
+  // public saknar "resolved"; avslutad mappas till "converted" (åtgärdad/omvandlad)
+  return { inkommen: "new", mottagen: "reviewed", under_behandling: "converted", avslutad: "converted", arkiverad: "rejected" }[unified];
 }
 
 // GET /api/cases — enhetlig lista över alla ärenden
@@ -793,35 +793,57 @@ app.post("/api/cases/:source/:id/create-order", requirePlanner, asyncHandler(asy
 
     const { DEVIATION_CATEGORY_LABELS } = await import("@shared/schema");
     const catLabel = (DEVIATION_CATEGORY_LABELS as Record<string, string>)[existing.category] || existing.category || "Ärende";
+    const userId = (req.user as any)?.claims?.sub ?? (req.session as any)?.userId ?? null;
 
-    const workOrder = await storage.createWorkOrder({
+    const title = existing.title || catLabel;
+    const description = [
+      `Åtgärd från ärende (${source}): ${existing.title || ""}`,
+      existing.description ? `\nBeskrivning: ${existing.description}` : "",
+      existing.suggestedAction ? `\nFöreslagen åtgärd: ${existing.suggestedAction}` : "",
+    ].join("");
+    const priority = existing.priority || (existing.severityLevel === "critical" || existing.severityLevel === "high" ? "high" : "normal");
+
+    // Ärende → Orderkoncept → Uppgift: skapa ett ad-hoc (avrop) orderkoncept och
+    // expandera det till EN uppgift via samma assignment-väg som ordinarie
+    // konceptkörning (createAssignment med orderConceptId). Vi går ALDRIG förbi
+    // konceptlagret med en lös work_order — uppgiften bär orderConceptId så att
+    // lineage/fakturering/rapportering följer det vanliga flödet.
+    const concept = await storage.createOrderConcept({
       tenantId,
+      name: title,
+      description,
       customerId,
-      objectId,
-      taskCategory: "field",
-      title: existing.title || catLabel,
-      description: [
-        `Åtgärd från ärende (${source}): ${existing.title || ""}`,
-        existing.description ? `\nBeskrivning: ${existing.description}` : "",
-        existing.suggestedAction ? `\nFöreslagen åtgärd: ${existing.suggestedAction}` : "",
-      ].join(""),
-      orderStatus: "skapad",
-      priority: existing.priority || (existing.severityLevel === "critical" || existing.severityLevel === "high" ? "high" : "normal"),
-      creationMethod: "case_create_order",
-      taskLatitude: existing.latitude ?? object.latitude ?? null,
-      taskLongitude: existing.longitude ?? object.longitude ?? null,
+      scenario: "avrop",
+      scheduleType: "once",
+      priority,
     } as any);
 
-    // Länka tillbaka + flytta ärendet till "under behandling"
+    const assignment = await storage.createAssignment({
+      tenantId,
+      orderConceptId: concept.id,
+      objectId,
+      clusterId: object.clusterId || undefined,
+      title,
+      description,
+      status: "not_planned",
+      priority,
+      address: object.address || undefined,
+      latitude: existing.latitude ?? object.latitude ?? undefined,
+      longitude: existing.longitude ?? object.longitude ?? undefined,
+      creationMethod: "case_create_order",
+      createdBy: userId,
+    } as any);
+
+    // Länka tillbaka + flytta ärendet framåt
     if (source === "deviation") {
-      await storage.updateDeviationReport(existing.id, tenantId, { linkedActionOrderId: workOrder.id, status: "in_progress" });
+      await storage.updateDeviationReport(existing.id, tenantId, { linkedActionOrderId: assignment.id, status: "in_progress" });
     } else if (source === "public") {
-      await storage.updatePublicIssueReport(existing.id, tenantId, { linkedWorkOrderId: workOrder.id, status: "converted" });
+      await storage.updatePublicIssueReport(existing.id, tenantId, { linkedWorkOrderId: assignment.id, status: "converted" });
     } else {
       await storage.updateCustomerIssueReport(existing.id, tenantId, { status: "in_progress" });
     }
 
-    res.status(201).json({ workOrder, message: "Arbetsorder skapad från ärende" });
+    res.status(201).json({ orderConcept: concept, assignment, message: "Order skapad från ärende via orderkoncept" });
 }));
 
 // ============================================
@@ -886,6 +908,45 @@ app.get("/api/public/dynamic-info", asyncHandler(async (req, res) => {
         label: (DEVIATION_CATEGORY_LABELS as Record<string, string>)[id] || id,
       })),
     });
+}));
+
+// POST /api/public/parse-issue-report — token-gated AI-tolkning för publik felanmälan
+// Samma fritext→strukturerat som /api/ai/parse-issue-report men gated på giltig
+// dynamisk QR-token (ej öppen) + per-tenant budget/rate-limit (DoS-skydd).
+app.post("/api/public/parse-issue-report", asyncHandler(async (req, res) => {
+    const schema = z.object({
+      t: z.string().min(1),
+      text: z.string().min(3).max(2000),
+      objectName: z.string().max(200).optional().nullable(),
+      objectType: z.string().max(200).optional().nullable(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      const formatted = formatZodError(parsed.error);
+      throw new ValidationError(formatted.error, formatted.details);
+    }
+    const tenantId = verifyDynamicQrToken(parsed.data.t);
+    if (!tenantId) throw new NotFoundError("Ogiltig kod");
+
+    const { enforceBudgetAndRateLimit } = await import("../ai-budget-service");
+    const enforcement = await enforceBudgetAndRateLimit(tenantId, "analysis");
+    if (!enforcement.allowed) {
+      if (enforcement.errorType === "ratelimit") res.set("Retry-After", String(enforcement.retryAfterSeconds || 60));
+      return res.status(429).json({
+        error: enforcement.errorType === "ratelimit" ? "AI-anropsgräns nådd" : "AI-budget överskriden",
+        message: enforcement.errorMessage,
+      });
+    }
+
+    const { parseIssueReportAI } = await import("../services/issue-parser");
+    const result = await parseIssueReportAI({
+      text: parsed.data.text,
+      objectName: parsed.data.objectName,
+      objectType: parsed.data.objectType,
+      model: enforcement.model,
+      tenantId,
+    });
+    res.json(result);
 }));
 
 // POST /api/public/report-dynamic — felanmälan mot valt objekt (objektoberoende QR)

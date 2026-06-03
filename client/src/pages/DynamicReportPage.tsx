@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, CheckCircle2, MapPin, Loader2, Navigation, Building2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, MapPin, Loader2, Navigation, Building2, Sparkles } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 
 interface DynamicInfo {
@@ -34,6 +34,7 @@ export default function DynamicReportPage() {
   const [position, setPosition] = useState<{ latitude: number; longitude: number } | null>(null);
   const [selectedObject, setSelectedObject] = useState<NearbyObject | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [aiText, setAiText] = useState('');
   const [formData, setFormData] = useState({
     category: '',
     title: '',
@@ -96,6 +97,26 @@ export default function DynamicReportPage() {
       });
     },
     onSuccess: () => setSubmitted(true),
+  });
+
+  const aiMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest('POST', '/api/public/parse-issue-report', {
+        t: token,
+        text: aiText,
+        objectName: selectedObject?.name ?? null,
+        objectType: selectedObject?.objectType ?? null,
+      });
+      return res.json() as Promise<{ category: string; title: string; description: string }>;
+    },
+    onSuccess: (data) => {
+      setFormData((prev) => ({
+        ...prev,
+        category: data.category || prev.category,
+        title: data.title || prev.title,
+        description: data.description || prev.description,
+      }));
+    },
   });
 
   if (infoLoading) {
@@ -238,6 +259,35 @@ export default function DynamicReportPage() {
                   submitMutation.mutate();
                 }}
               >
+                <div className="space-y-2 rounded-md border border-dashed border-border p-3">
+                  <Label htmlFor="ai-text" className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" /> Beskriv felet med egna ord
+                  </Label>
+                  <Textarea
+                    id="ai-text"
+                    value={aiText}
+                    onChange={(e) => setAiText(e.target.value)}
+                    placeholder="T.ex. Soptunnan vid entrén är trasig och luktar illa"
+                    rows={2}
+                    data-testid="input-ai-text"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={aiText.trim().length < 3 || aiMutation.isPending}
+                    onClick={() => aiMutation.mutate()}
+                    data-testid="button-ai-parse"
+                  >
+                    {aiMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                    Fyll i automatiskt
+                  </Button>
+                  {aiMutation.isError && (
+                    <p className="text-sm text-muted-foreground" data-testid="text-ai-error">
+                      Kunde inte tolka texten. Fyll i fälten manuellt nedan.
+                    </p>
+                  )}
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="category">Kategori *</Label>
                   <Select value={formData.category} onValueChange={(v) => setFormData({ ...formData, category: v })}>

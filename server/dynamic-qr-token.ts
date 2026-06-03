@@ -1,6 +1,17 @@
 import { createHmac, timingSafeEqual } from "crypto";
 
-const SECRET = process.env.SESSION_SECRET || "dev-insecure-dynamic-qr-secret";
+function resolveSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "SESSION_SECRET måste vara satt i produktion för att signera dynamiska QR-tokens.",
+    );
+  }
+  return "dev-insecure-dynamic-qr-secret";
+}
+
+const SECRET = resolveSecret();
 
 function sign(payload: string): string {
   return createHmac("sha256", SECRET).update(`dynqr:${payload}`).digest("base64url");
