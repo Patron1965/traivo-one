@@ -11,9 +11,15 @@ import { objects, objectPayers } from "@shared/schema";
  * Returnerar NULL om inga payers finns.
  */
 export function primaryPayerCustomerIdSql(): SQL<string | null> {
+  // OBS: ${objects} (tabellnamnet) — INTE ${objects.id}. När detta fragment
+  // används som SELECT-kolumn i en enkel-tabell-select utelämnar drizzle
+  // tabellprefixet och renderar bara "id". Inuti subqueryn binder då "id" till
+  // object_payers.id (närmaste scope) → op.object_id = op.id → alltid falskt →
+  // NULL. Genom att skriva ${objects}.id tvingar vi kvalificeringen "objects".id
+  // så korrelationen mot yttre objects-raden blir korrekt i båda kontexter.
   return sql<string | null>`(
     SELECT op.customer_id FROM object_payers op
-    WHERE op.object_id = ${objects.id}
+    WHERE op.object_id = ${objects}.id
       AND op.is_primary = true
     ORDER BY op.priority DESC NULLS LAST, op.created_at ASC
     LIMIT 1

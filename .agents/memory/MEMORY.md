@@ -16,6 +16,7 @@
 - [wouter useParams outside Route](wouter-direct-render-params.md) — pages rendered via App.tsx `location.startsWith` branches get `{}` from useParams; parse the param from the pathname instead.
 - [Public endpoint tenant token](public-endpoint-tenant-token.md) — `/api/public/*` får aldrig ta rå tenant-slug (enumeration); resolva tenant server-side via QR-code eller HMAC-signed token (`server/dynamic-qr-token.ts`).
 - [Schema-drift & post-merge replay](schema-drift-replay.md) — strukturella schema.ts-ändringar måste ha idempotent migration OCH stå i post-merge replay-listan; kör `scripts/schema-drift-check.ts` för att hitta drift.
+- [Drizzle korrelerad subquery-kolumn](drizzle-unqualified-subquery-column.md) — i sql`` correlated subquery referera ${table}.col (ej ${table.col}); som SELECT-kolumn droppar drizzle prefixet → binder fel tabell → tyst NULL.
 - [Två metadata-system](dual-metadata-systems.md) — engelskt (metadataDefinitions/objectMetadata) vs svenskt (metadataKatalog/Varden/Historik); import skriver svenskt, export läser engelskt → round-trip-drift.
 - [Sammansatta metadatafält (punktnotation)](composite-metadata-import.md) — `fält.underfält`-kolumner grupperas till ETT JSON-fält; skrivs via vanlig metadata-väg men tvingad json-datatyp (asJsonKatalog) → varde_json.
 - [Metadata värde-ursprung](metadata-origin-model.md) — `metod` bär ursprung (system/tjanst/utforande=read-only); guards+badges måste behandla auto-origin på server OCH frontend; artiklar kopplar metadata via namn ej id.
