@@ -151,6 +151,7 @@ import { db } from "./db";
 import { eq, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray, getTableColumns, type SQL, type SQLWrapper } from "drizzle-orm";
 
 type Condition = SQL | SQLWrapper | undefined;
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type ExecuteResult = { rows?: unknown[]; rowCount?: number };
 function asExecuteResult(r: unknown): ExecuteResult {
   return (r ?? {}) as ExecuteResult;
@@ -389,7 +390,7 @@ export interface IStorage {
   getCustomerObjectMapPoints(customerId: string, tenantId: string, opts?: { bbox?: [number, number, number, number]; clusterId?: string | null; limit?: number }): Promise<CustomerMapPoint[]>;
   searchCustomerObjects(customerId: string, tenantId: string, query: string, limit?: number): Promise<CustomerObjectSearchHit[]>;
   getCustomerObjectMapData(customerId: string, tenantId: string, opts: { bbox?: [number, number, number, number]; clusterId?: string | null; zoom: number; limit?: number }): Promise<CustomerMapData>;
-  createObject(object: InsertObject): Promise<ServiceObject>;
+  createObject(object: InsertObject, tx?: DbTransaction): Promise<ServiceObject>;
   updateObject(id: string, object: Partial<InsertObject>): Promise<ServiceObject | undefined>;
   deleteObject(id: string): Promise<void>;
   resolveDeliveryPreferences(objectId: string): Promise<{
@@ -2612,23 +2613,30 @@ export class DatabaseStorage implements IStorage {
     return this.computeNextObjectNumber(tenantId);
   }
 
-  async createObject(insertObject: InsertObject): Promise<ServiceObject> {
+  async createObject(insertObject: InsertObject, tx?: DbTransaction): Promise<ServiceObject> {
     // Explicit nummer (import, kopiering med eget nr) respekteras oförändrat.
     if (insertObject.objectNumber && String(insertObject.objectNumber).trim() !== "") {
-      const [object] = await db.insert(objects).values(insertObject).returning();
+      const runner = tx ?? db;
+      const [object] = await runner.insert(objects).values(insertObject).returning();
       return object;
     }
     // Auto-generera sekventiellt systemnummer concurrency-safe: ett advisory-lås
     // per tenant serialiserar MAX+1-beräkningen så två samtidiga skapanden inte
-    // kan landa på samma nummer.
-    return await db.transaction(async (tx) => {
-      await tx.execute(
+    // kan landa på samma nummer. Advisory-låset är transaktionsbundet; att ta det
+    // flera gånger i samma transaktion (t.ex. vid gren-kopiering) blockerar aldrig.
+    const run = async (txn: DbTransaction): Promise<ServiceObject> => {
+      await txn.execute(
         sql`SELECT pg_advisory_xact_lock(hashtext('object_number'), hashtext(${insertObject.tenantId}))`,
       );
-      const objectNumber = await this.computeNextObjectNumber(insertObject.tenantId, tx);
-      const [object] = await tx.insert(objects).values({ ...insertObject, objectNumber }).returning();
+      const objectNumber = await this.computeNextObjectNumber(insertObject.tenantId, txn);
+      const [object] = await txn.insert(objects).values({ ...insertObject, objectNumber }).returning();
       return object;
-    });
+    };
+    // Om en yttre transaktion redan finns (t.ex. atomär gren-kopiering) återanvänds
+    // den så hela trädet skapas eller rullas tillbaka som en enhet — annars öppnas
+    // en egen transaktion för bakåtkompatibilitet med enskilda skapanden.
+    if (tx) return run(tx);
+    return await db.transaction(run);
   }
 
   async updateObject(id: string, data: Partial<InsertObject>): Promise<ServiceObject | undefined> {

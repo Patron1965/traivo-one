@@ -1,21 +1,29 @@
 ---
 name: createObject advisory-lock transaction
-description: Why object copy/bulk-create flows can't be naively wrapped in an outer DB transaction
+description: How object copy/bulk-create flows stay atomic given createObject's OBJ-NNN advisory lock
 ---
 
-`storage.createObject` opens its **own** transaction with a Postgres advisory lock
-to serialize OBJ-NNN number generation.
+`storage.createObject` serializes OBJ-NNN number generation with a Postgres
+**transaction-bound** advisory lock (`pg_advisory_xact_lock`).
 
-**Why this matters:** any flow that creates many objects in a loop (e.g.
-`copyObjectTree` branch-copy in `server/services/object-copy.ts`) cannot just be
-wrapped in an outer `db.transaction(async tx => …)` and have each `createObject`
-call participate — `createObject` doesn't accept a `tx` and nesting it inside an
-outer transaction risks advisory-lock deadlock / lock-scope mismatch.
+`createObject(insertObject, tx?)` accepts an **optional** transaction. When a `tx`
+is passed it runs inside that transaction (re-acquiring the advisory lock, which
+never blocks within the same transaction) instead of opening its own. This is what
+makes bulk-create flows atomic.
+
+**Why this matters:** the advisory lock is xact-scoped, so re-taking it on each
+`createObject` call inside one outer transaction is safe (a transaction can't block
+on a lock it already holds). MAX+1 also sees the rows inserted earlier in the same
+transaction, so sequential numbering stays correct.
 
 **How to apply:**
-- Self-contained multi-step writes that do NOT call `createObject` (e.g.
-  `moveObject` — updates `objects.parentId` + primary `object_parents` row) SHOULD
-  be wrapped in `db.transaction` for atomicity. This is already done for `moveObject`.
-- To make a bulk-create flow atomic, you must first refactor `createObject` to
-  accept an optional `tx`, or pre-allocate the OBJ-NNN numbers, before wrapping.
-  Don't naively nest.
+- To make a multi-object create flow atomic, open ONE `db.transaction` and pass `tx`
+  to every `createObject` call (see `copyObjectTree` in
+  `server/services/object-copy.ts`). Either the whole tree is created or nothing is.
+- Keep operations that can fail non-fatally (e.g. best-effort metadata copy) OUTSIDE
+  that transaction. A thrown query puts Postgres in aborted-transaction state, so a
+  caught-and-continue error mid-transaction would poison all later statements.
+  `copyObjectTree` therefore creates objects + primary `object_parents` rows in the
+  atomic phase, then copies metadata best-effort after commit.
+- Self-contained writes that don't call `createObject` (e.g. `moveObject`) are still
+  wrapped in `db.transaction` directly for atomicity.

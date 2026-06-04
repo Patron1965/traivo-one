@@ -91,35 +91,26 @@ async function copyOwnEnglishMetadata(
   return toInsert.length;
 }
 
-// Skapa en klon av ETT objekt och dess metadata + primär förälder-relation.
-async function copyOneObject(
+// Kopiera EGEN metadata (båda systemen) till en redan skapad klon. Best-effort:
+// metadata-kopiering är icke-fatal och rapporteras via metadataCopyError. Körs
+// EFTER att objektträdet committats (utanför den atomära transaktionen) så ett
+// metadata-fel aldrig river hela trädet — och så att ett fel i ett katalog-fält
+// inte sätter den atomära transaktionen i abort-läge mitt under skapandet.
+async function copyMetadataForClone(
   src: ServiceObject,
+  cloneId: string,
   tenantId: string,
-  parentId: string | null,
-  name: string,
-): Promise<{ clone: ServiceObject; metaCount: number; metaError: string | null }> {
-  const clone = await storage.createObject(buildCloneInsert(src, tenantId, parentId, name) as any);
-
-  if (clone.parentId) {
-    await db.insert(objectParents).values({
-      tenantId,
-      objectId: clone.id,
-      parentId: clone.parentId,
-      isPrimary: true,
-      relationContext: "primary",
-    });
-  }
-
+): Promise<{ metaCount: number; metaError: string | null }> {
   let metaCount = 0;
   let metaError: string | null = null;
   try {
-    metaCount += await copyObjectLocalMetadata(src.id, clone.id, tenantId);
-    metaCount += await copyOwnEnglishMetadata(src.id, clone.id, tenantId);
+    metaCount += await copyObjectLocalMetadata(src.id, cloneId, tenantId);
+    metaCount += await copyOwnEnglishMetadata(src.id, cloneId, tenantId);
   } catch (err) {
     metaError = err instanceof Error ? err.message : "Okänt fel";
     console.error("Kunde inte kopiera metadata vid objektkopiering:", err);
   }
-  return { clone, metaCount, metaError };
+  return { metaCount, metaError };
 }
 
 // BFS över barnobjekt (tenant-scopat) — returnerar i ordning förälder-före-barn
@@ -162,32 +153,62 @@ export async function copyObjectTree(
   }
   const rootName = opts.name && opts.name.trim() !== "" ? opts.name.trim() : src.name;
 
-  const createdIds: string[] = [];
-  let copiedMetadata = 0;
-  let metadataCopyError: string | null = null;
-  const idMap = new Map<string, string>();
-
-  const rootRes = await copyOneObject(src, tenantId, src.parentId ?? null, rootName);
-  idMap.set(src.id, rootRes.clone.id);
-  createdIds.push(rootRes.clone.id);
-  copiedMetadata += rootRes.metaCount;
-  if (rootRes.metaError && !metadataCopyError) metadataCopyError = rootRes.metaError;
-
+  // Källobjekt i förälder-före-barn-ordning: rot först, sedan ev. underträd.
+  const sources: ServiceObject[] = [src];
   if (mode === "branch") {
-    const descendants = await getDescendantObjects(rootId, tenantId);
-    for (const d of descendants) {
-      const mappedParentId = d.parentId ? idMap.get(d.parentId) ?? null : null;
-      const res = await copyOneObject(d, tenantId, mappedParentId, d.name);
-      idMap.set(d.id, res.clone.id);
-      createdIds.push(res.clone.id);
-      copiedMetadata += res.metaCount;
-      if (res.metaError && !metadataCopyError) metadataCopyError = res.metaError;
-    }
+    sources.push(...await getDescendantObjects(rootId, tenantId));
   }
 
+  const createdIds: string[] = [];
+  const idMap = new Map<string, string>();
+  const clonePairs: { src: ServiceObject; clone: ServiceObject }[] = [];
+
+  // Fas 1 — ATOMÄR: skapa alla klon-objekt + deras primära object_parents-rad i
+  // EN transaktion. createObject återanvänder den medskickade transaktionen (och
+  // dess advisory-lås för OBJ-NNN) i stället för att öppna en egen, så hela trädet
+  // antingen skapas eller rullas tillbaka — inga halvkopierade träd blir kvar.
+  await db.transaction(async (tx) => {
+    for (const s of sources) {
+      const isRoot = s.id === src.id;
+      const parentId = isRoot
+        ? (src.parentId ?? null)
+        : (s.parentId ? idMap.get(s.parentId) ?? null : null);
+      const name = isRoot ? rootName : s.name;
+
+      const clone = await storage.createObject(
+        buildCloneInsert(s, tenantId, parentId, name) as any,
+        tx,
+      );
+      idMap.set(s.id, clone.id);
+      createdIds.push(clone.id);
+      clonePairs.push({ src: s, clone });
+
+      if (clone.parentId) {
+        await tx.insert(objectParents).values({
+          tenantId,
+          objectId: clone.id,
+          parentId: clone.parentId,
+          isPrimary: true,
+          relationContext: "primary",
+        });
+      }
+    }
+  });
+
+  // Fas 2 — BEST-EFFORT: kopiera metadata efter att trädet committats. Icke-fatal
+  // och utanför den atomära transaktionen (se copyMetadataForClone).
+  let copiedMetadata = 0;
+  let metadataCopyError: string | null = null;
+  for (const { src: s, clone } of clonePairs) {
+    const res = await copyMetadataForClone(s, clone.id, tenantId);
+    copiedMetadata += res.metaCount;
+    if (res.metaError && !metadataCopyError) metadataCopyError = res.metaError;
+  }
+
+  const rootClone = clonePairs[0].clone;
   return {
-    rootId: rootRes.clone.id,
-    rootClone: rootRes.clone,
+    rootId: rootClone.id,
+    rootClone,
     createdIds,
     copiedMetadata,
     metadataCopyError,
