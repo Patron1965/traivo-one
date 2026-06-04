@@ -2574,6 +2574,8 @@ export const orderConcepts = pgTable("order_concepts", {
   currentStep: integer("current_step").default(1),
   customerMode: text("customer_mode").default("HARDCODED").notNull(),
   customerId: varchar("customer_id"),
+  // Steg 1 — metadatafält som bär kundidentitet vid FROM_METADATA-läge
+  customerMetadataField: text("customer_metadata_field"),
   invoiceLevel: text("invoice_level"),
   invoiceModel: text("invoice_model"),
   invoicePeriod: text("invoice_period"),

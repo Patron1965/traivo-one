@@ -220,13 +220,8 @@ export async function registerSession11Routes(app: Express) {
   app.get("/api/structure-articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const article = await storage.getArticle(req.params.id);
-    if (!verifyTenantOwnership(article, tenantId) || !(article as any).isStructure) {
-      throw new NotFoundError("Strukturartikel hittades inte");
-    }
+    if (!verifyTenantOwnership(article, tenantId)) throw new NotFoundError("Strukturartikel hittades inte");
     const components = await storage.getArticleComponents(req.params.id, tenantId);
-    const all = await storage.getArticles(tenantId);
-    const byId = new Map(all.map((a: any) => [a.id, a]));
-    const enriched = components.map((c: any) => ({ ...c, childArticle: byId.get(c.childArticleId) }));
-    res.json({ ...article, components: enriched });
+    res.json({ ...article, components });
   }));
 }

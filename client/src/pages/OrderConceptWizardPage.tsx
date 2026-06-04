@@ -89,6 +89,7 @@ export default function OrderConceptWizardPage() {
   // Step 1
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [customerMode, setCustomerMode] = useState<CustomerMode>("HARDCODED");
+  const [customerMetadataField, setCustomerMetadataField] = useState<string | null>(null);
   // Step 2
   const [priceListId, setPriceListId] = useState<string | null>(null);
   const [priceModel, setPriceModel] = useState<string>("running");
@@ -134,6 +135,7 @@ export default function OrderConceptWizardPage() {
     form.setValue("conceptName", wizardData.name || "");
     setCustomerMode(wizardData.customerMode || "HARDCODED");
     setSelectedCustomerId(wizardData.customerId || null);
+    setCustomerMetadataField(wizardData.customerMetadataField || null);
     const savedStep = Math.min(wizardData.currentStep || 1, TOTAL_STEPS);
     setCurrentStep(savedStep);
     if (savedStep > 1) {
@@ -233,6 +235,7 @@ export default function OrderConceptWizardPage() {
     name: conceptName,
     customerMode,
     customerId: customerMode === "HARDCODED" ? selectedCustomerId : null,
+    customerMetadataField: customerMode === "FROM_METADATA" ? (customerMetadataField || null) : null,
     priceListId: priceListId || null,
     priceModel,
     fixedPriceAmount: priceModel === "fixed" && fixedPriceKronor !== ""
@@ -259,7 +262,7 @@ export default function OrderConceptWizardPage() {
     totalValue,
     totalCost,
     estimatedHours,
-  }), [conceptName, customerMode, selectedCustomerId, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoicePeriod, invoiceLock, invoiceMethod, subscriptionAdjustmentDate, invoiceConsolidation, departmentMetadataField, targetClusterIds, deliveryTimeType, timeWindows, intervalStartDate, intervalEndDate, intervalFrequencyDays, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
+  }), [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoicePeriod, invoiceLock, invoiceMethod, subscriptionAdjustmentDate, invoiceConsolidation, departmentMetadataField, targetClusterIds, deliveryTimeType, timeWindows, intervalStartDate, intervalEndDate, intervalFrequencyDays, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
 
   const createConceptMutation = useMutation({
     mutationFn: async () => {
@@ -583,10 +586,13 @@ export default function OrderConceptWizardPage() {
                 onCustomerModeChange={(mode) => {
                   setCustomerMode(mode);
                   if (mode === "FROM_METADATA") setSelectedCustomerId(null);
+                  if (mode === "HARDCODED") setCustomerMetadataField(null);
                   setHasUnsavedWork(true);
                 }}
                 selectedCustomerId={selectedCustomerId}
                 onSelectCustomer={(id) => { setSelectedCustomerId(id); setHasUnsavedWork(true); }}
+                customerMetadataField={customerMetadataField}
+                onCustomerMetadataFieldChange={(f) => { setCustomerMetadataField(f); setHasUnsavedWork(true); }}
               />
             )}
 

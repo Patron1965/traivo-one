@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Search, User, Database } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Search, User, Database, Info } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import type { Customer, CustomerMode } from "@shared/schema";
+import type { Customer, CustomerMode, MetadataDefinition } from "@shared/schema";
 
 interface Step1Props {
   conceptName: string;
@@ -16,6 +18,8 @@ interface Step1Props {
   onCustomerModeChange: (mode: CustomerMode) => void;
   selectedCustomerId: string | null;
   onSelectCustomer: (id: string | null) => void;
+  customerMetadataField: string | null;
+  onCustomerMetadataFieldChange: (field: string | null) => void;
 }
 
 export default function Step1NameCustomer({
@@ -26,8 +30,14 @@ export default function Step1NameCustomer({
   onCustomerModeChange,
   selectedCustomerId,
   onSelectCustomer,
+  customerMetadataField,
+  onCustomerMetadataFieldChange,
 }: Step1Props) {
   const [search, setSearch] = useState("");
+
+  const { data: metadataDefs = [] } = useQuery<MetadataDefinition[]>({
+    queryKey: ["/api/metadata-definitions"],
+  });
 
   const filtered = useMemo(() => {
     if (!search) return customers.slice(0, 30);
@@ -138,6 +148,51 @@ export default function Step1NameCustomer({
                   </div>
                 )}
               </ScrollArea>
+            </CardContent>
+          </Card>
+        )}
+
+        {customerMode === "FROM_METADATA" && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Metadatafält för kund</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label htmlFor="customer-metadata-field" className="text-xs text-muted-foreground mb-1.5 block">
+                  Vilket metadatafält innehåller kundens identifikation?
+                </Label>
+                <Select
+                  value={customerMetadataField ?? ""}
+                  onValueChange={(v) => onCustomerMetadataFieldChange(v || null)}
+                >
+                  <SelectTrigger
+                    id="customer-metadata-field"
+                    className={cn("max-w-sm", !customerMetadataField && "border-chart-4/40 ring-1 ring-chart-4/40")}
+                    data-testid="select-customer-metadata-field"
+                  >
+                    <SelectValue placeholder="Välj metadatafält..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {metadataDefs.length === 0 ? (
+                      <SelectItem value="__none__" disabled>Inga metadatafält konfigurerade</SelectItem>
+                    ) : (
+                      metadataDefs.map((def) => (
+                        <SelectItem key={def.id} value={def.fieldKey} data-testid={`option-metadata-field-${def.fieldKey}`}>
+                          {def.fieldLabel}
+                          <span className="ml-1.5 text-xs text-muted-foreground">({def.fieldKey})</span>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-start gap-2 rounded-md bg-muted/50 p-2.5">
+                <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <p className="text-xs text-muted-foreground">
+                  Systemet slår upp värdet i detta fält på varje objekt när order genereras, och kopplar ordern till den kund vars identifikation matchar.
+                </p>
+              </div>
             </CardContent>
           </Card>
         )}
