@@ -25,3 +25,4 @@
 - [Replit Auth i preview-iframe](replit-auth-preview-iframe.md) — login failar i inbäddad preview (cross-site iframe): dev-cookie `SameSite=None` + bryt ut ur iframen via `goToLogin()`; prod oförändrad (Lax).
 - [Arkiv/soft-delete-konvention](archive-soft-delete-convention.md) — alla arkiv-/restore-endpoints `requireAdmin`; aktiva listningar filtrerar `isNull(deletedAt)`; metadata-restore blockerar namnkollision.
 - [/objects route SPA-shadowing](objects-route-spa-shadowing.md) — `/objects/<id>` måste falla till SPA via `next("route")` FÖRE auth-mw; annars 401 från storage-routen → klienten "loggas ut".
+- [Drizzle correlated-subquery col-qualifiering](drizzle-correlated-subquery-column-qualification.md) — `sql\`${table.col}\`` renderas OKVALIFICERAT (`"col"`) → i korrelerad subquery binds det till inre tabellens kolumn; använd literal `"objects"."id"`.

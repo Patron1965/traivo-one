@@ -1,6 +1,6 @@
 import { sql, and, eq, desc, asc, type SQL } from "drizzle-orm";
 import { db } from "../db";
-import { objects, objectPayers } from "@shared/schema";
+import { objectPayers } from "@shared/schema";
 
 /**
  * SQL-fragment som returnerar primär-payer-customer_id för objects.id
@@ -11,15 +11,16 @@ import { objects, objectPayers } from "@shared/schema";
  * Returnerar NULL om inga payers finns.
  */
 export function primaryPayerCustomerIdSql(): SQL<string | null> {
-  // OBS: ${objects} (tabellnamnet) — INTE ${objects.id}. När detta fragment
-  // används som SELECT-kolumn i en enkel-tabell-select utelämnar drizzle
-  // tabellprefixet och renderar bara "id". Inuti subqueryn binder då "id" till
-  // object_payers.id (närmaste scope) → op.object_id = op.id → alltid falskt →
-  // NULL. Genom att skriva ${objects}.id tvingar vi kvalificeringen "objects".id
-  // så korrelationen mot yttre objects-raden blir korrekt i båda kontexter.
+  // OBS: skriv den kvalificerade literalen "objects"."id" — INTE ${objects.id}.
+  // När drizzle renderar ${objects.id} som SELECT-kolumn i en enkel-tabell-select
+  // utelämnas tabellprefixet och bara "id" renderas. Inuti subqueryn binder då
+  // "id" till object_payers.id (närmaste scope) → op.object_id = op.id → alltid
+  // falskt → NULL. Den explicita literalen "objects"."id" tvingar korrelationen
+  // mot yttre objects-raden och kräver ingen objects-import (samma form som de
+  // tre predikat-hjälparna nedan).
   return sql<string | null>`(
     SELECT op.customer_id FROM object_payers op
-    WHERE op.object_id = ${objects}.id
+    WHERE op.object_id = "objects"."id"
       AND op.is_primary = true
     ORDER BY op.priority DESC NULLS LAST, op.created_at ASC
     LIMIT 1
@@ -33,7 +34,7 @@ export function primaryPayerCustomerIdSql(): SQL<string | null> {
 export function objectHasPrimaryCustomerSql(customerId: string): SQL<boolean> {
   return sql<boolean>`EXISTS (
     SELECT 1 FROM object_payers op
-    WHERE op.object_id = ${objects.id}
+    WHERE op.object_id = "objects"."id"
       AND op.is_primary = true
       AND op.customer_id = ${customerId}
   )`;
@@ -46,7 +47,7 @@ export function objectPrimaryCustomerInSql(customerIds: string[]): SQL<boolean> 
   if (customerIds.length === 0) return sql<boolean>`FALSE`;
   return sql<boolean>`EXISTS (
     SELECT 1 FROM object_payers op
-    WHERE op.object_id = ${objects.id}
+    WHERE op.object_id = "objects"."id"
       AND op.is_primary = true
       AND op.customer_id IN (${sql.join(customerIds.map(id => sql`${id}`), sql`, `)})
   )`;
@@ -60,7 +61,7 @@ export function objectHasNoPrimaryCustomerSql(tenantId: string): SQL<boolean> {
   return sql<boolean>`NOT EXISTS (
     SELECT 1 FROM object_payers op
     JOIN customers c ON c.id = op.customer_id
-    WHERE op.object_id = ${objects.id}
+    WHERE op.object_id = "objects"."id"
       AND op.is_primary = true
       AND c.tenant_id = ${tenantId}
       AND c.deleted_at IS NULL
