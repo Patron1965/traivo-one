@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Save, Copy, PlayCircle, Loader2, CheckCircle2,
   MapPin, Clock, Package, Calendar, Gauge, ChevronDown, ChevronUp,
-  BarChart3, TrendingUp,
+  BarChart3, TrendingUp, FileDown, AlertCircle
 } from "lucide-react";
 
 interface Step7Props {
@@ -242,6 +242,7 @@ export default function Step7ReviewSave({
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [templateName, setTemplateName] = useState("");
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const { data: summary, isLoading: summaryLoading } = useQuery<ReviewSummary>({
     queryKey: ["/api/order-concepts", conceptId, "review-summary"],
@@ -314,7 +315,43 @@ export default function Step7ReviewSave({
     onError: (e: Error) => toast({ title: "Kunde inte skapa order", description: e.message, variant: "destructive" }),
   });
 
-  const busy = saveTemplateMutation.isPending || copyMutation.isPending || executeMutation.isPending;
+  const handleExportPdf = async () => {
+    if (!conceptId) {
+      toast({
+        title: "Konceptet är inte sparat",
+        description: "Spara konceptet innan du exporterar PDF.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setPdfLoading(true);
+    try {
+      const res = await fetch(`/api/order-concepts/${conceptId}/export-pdf`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "Okänt fel");
+        throw new Error(errText || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${conceptName || "orderkoncept"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "PDF exporterad", description: "Filen laddades ned." });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Okänt fel";
+      toast({ title: "Kunde inte exportera PDF", description: msg, variant: "destructive" });
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const busy = saveTemplateMutation.isPending || copyMutation.isPending || executeMutation.isPending || pdfLoading;
 
   const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
     <div className="flex justify-between text-sm py-1">
@@ -540,6 +577,35 @@ export default function Step7ReviewSave({
       </Card>
 
       {/* Spara som mall / kopiera */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium">Exportera och dela</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              disabled={busy || !conceptId}
+              onClick={handleExportPdf}
+              data-testid="button-export-pdf"
+            >
+              {pdfLoading ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <FileDown className="h-4 w-4 mr-1" />
+              )}
+              Exportera PDF
+            </Button>
+            {!conceptId && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                <AlertCircle className="h-3 w-3" />
+                Spara konceptet för att aktivera PDF-export.
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Spara som mall</CardTitle>

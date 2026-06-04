@@ -8,7 +8,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
-import { objects, workOrders, customerCommunications, objectContacts, orderConceptArticles, orderConceptObjects, articleObjectMappings, conceptFilters, priceLists, objectMetadata, metadataDefinitions, deliverySchedules, assignments as assignmentsTable, type InsertOrderConceptArticle } from "@shared/schema";
+import { objects, workOrders, customerCommunications, objectContacts, orderConceptArticles, orderConceptObjects, articleObjectMappings, conceptFilters, priceLists, objectMetadata, metadataDefinitions, deliverySchedules, assignments as assignmentsTable, articles, type InsertOrderConceptArticle } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import OpenAI from "openai";
 
@@ -1968,7 +1968,267 @@ app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) 
   });
 }));
 
-// Steg 1-2 & 7: Spara koncept som mall (status=template).
+// ============================================
+// PDF-EXPORT
+// ============================================
+
+app.get("/api/order-concepts/:id/export-pdf", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const rawConcept = await storage.getOrderConcept(req.params.id);
+    const concept = verifyTenantOwnership(rawConcept, tenantId);
+    if (!concept) throw new NotFoundError("Orderkoncept hittades inte");
+
+    const { jsPDF } = await import("jspdf");
+
+    const customer = concept.customerId ? await storage.getCustomer(concept.customerId) : null;
+
+    const [conceptObjectRows, conceptArticles, schedules, filters] = await Promise.all([
+      db
+        .select({
+          objectName: objects.name,
+          objectAddress: objects.address,
+          objectType: objects.objectType,
+          included: orderConceptObjects.included,
+        })
+        .from(orderConceptObjects)
+        .leftJoin(objects, eq(orderConceptObjects.objectId, objects.id))
+        .where(and(
+          eq(orderConceptObjects.orderConceptId, concept.id),
+          eq(orderConceptObjects.included, true),
+        ))
+        .orderBy(orderConceptObjects.sortOrder),
+      db
+        .select({
+          articleName: articles.name,
+          articleNumber: articles.articleNumber,
+          quantity: orderConceptArticles.quantity,
+          unitPrice: orderConceptArticles.unitPrice,
+          taskCategory: orderConceptArticles.taskCategory,
+        })
+        .from(orderConceptArticles)
+        .leftJoin(articles, eq(orderConceptArticles.articleId, articles.id))
+        .where(eq(orderConceptArticles.orderConceptId, concept.id))
+        .orderBy(orderConceptArticles.sortOrder),
+      storage.getDeliverySchedules(concept.id),
+      storage.getConceptFilters(concept.id),
+    ]);
+
+    // Använd sparade ekonomifält från konceptet (sätts av wizarden, stored i kr/h).
+    const storedTotalValue = concept.totalValue ?? 0;
+    const storedTotalCost = concept.totalCost ?? 0;
+    const storedEstimatedHours = concept.estimatedHours ?? 0;
+
+    const doc = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
+    const W = 210;
+    const margin = 18;
+    const contentW = W - margin * 2;
+    let y = 18;
+
+    const COLOR_HEADER = [27, 75, 107] as [number, number, number];   // Deep Ocean Blue
+    const COLOR_ROW_ALT = [232, 244, 248] as [number, number, number]; // Arctic Ice
+    const COLOR_TEXT = [44, 62, 80] as [number, number, number];       // Midnight Navy
+    const COLOR_MUTED = [107, 124, 140] as [number, number, number];   // Mountain Gray
+
+    // ---- Header ----
+    doc.setFillColor(...COLOR_HEADER);
+    doc.rect(0, 0, W, 30, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("Orderkoncept — sammanfattning", margin, 13);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Exporterat ${new Date().toLocaleDateString("sv-SE")}`, margin, 20);
+    if (concept.name) {
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.text(concept.name, margin, 27);
+    }
+    y = 38;
+
+    // ---- Helper functions ----
+    const sectionTitle = (title: string) => {
+      doc.setFillColor(...COLOR_HEADER);
+      doc.rect(margin, y, contentW, 7, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text(title, margin + 2, y + 5);
+      y += 9;
+    };
+
+    const kv = (label: string, value: string, col = 0) => {
+      const colW = contentW / 2;
+      const x = margin + col * colW;
+      doc.setTextColor(...COLOR_MUTED);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.text(label, x, y);
+      doc.setTextColor(...COLOR_TEXT);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text(value || "—", x, y + 4);
+    };
+
+    // ---- Sammanfattning ----
+    sectionTitle("Sammanfattning");
+    kv("Namn", concept.name || "—", 0);
+    kv("Kund", customer?.name || (concept.customerId ? `(id: ${concept.customerId.slice(0, 8)})` : "Från metadata"), 1);
+    y += 10;
+    kv("Matchade objekt", String(conceptObjectRows.length), 0);
+    kv("Villkorsfilter", String(filters.length), 1);
+    y += 10;
+    kv("Artiklar/uppgifter", String(conceptArticles.length), 0);
+    kv("Leveransmodell", concept.deliveryModel || "—", 1);
+    y += 10;
+    kv("Beräknat ordervärde", `${storedTotalValue.toLocaleString("sv-SE")} kr`, 0);
+    kv("Beräknad kostnad", `${storedTotalCost.toLocaleString("sv-SE")} kr`, 1);
+    y += 10;
+    kv("Beräknad arbetstid", `${storedEstimatedHours.toFixed(1)} h`, 0);
+    kv("Scheman", String(schedules.length), 1);
+    y += 14;
+
+    // ---- Objekt ----
+    if (conceptObjectRows.length > 0) {
+      if (y > 240) { doc.addPage(); y = 18; }
+      sectionTitle(`Matchade objekt (${conceptObjectRows.length})`);
+
+      const cols = [contentW * 0.45, contentW * 0.35, contentW * 0.2];
+      const headers = ["Namn", "Adress", "Typ"];
+      doc.setFillColor(...COLOR_HEADER);
+      doc.rect(margin, y, contentW, 6, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      let cx = margin + 2;
+      headers.forEach((h, i) => { doc.text(h, cx, y + 4); cx += cols[i]; });
+      y += 6;
+
+      conceptObjectRows.slice(0, 80).forEach((obj, idx) => {
+        if (y > 270) { doc.addPage(); y = 18; }
+        if (idx % 2 === 0) {
+          doc.setFillColor(...COLOR_ROW_ALT);
+          doc.rect(margin, y, contentW, 6, "F");
+        }
+        doc.setTextColor(...COLOR_TEXT);
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        cx = margin + 2;
+        const cells = [
+          doc.splitTextToSize(obj.objectName || "—", cols[0] - 4)[0],
+          doc.splitTextToSize(obj.objectAddress || "—", cols[1] - 4)[0],
+          obj.objectType || "—",
+        ];
+        cells.forEach((cell, i) => { doc.text(String(cell), cx, y + 4); cx += cols[i]; });
+        y += 6;
+      });
+      if (conceptObjectRows.length > 80) {
+        doc.setTextColor(...COLOR_MUTED);
+        doc.setFontSize(8);
+        doc.text(`… och ${conceptObjectRows.length - 80} till.`, margin + 2, y + 4);
+        y += 8;
+      }
+      y += 4;
+    }
+
+    // ---- Artiklar ----
+    if (conceptArticles.length > 0) {
+      if (y > 230) { doc.addPage(); y = 18; }
+      sectionTitle(`Artiklar / uppgifter (${conceptArticles.length})`);
+
+      const cols2 = [contentW * 0.15, contentW * 0.45, contentW * 0.15, contentW * 0.15, contentW * 0.1];
+      const headers2 = ["Art.nr", "Namn", "Antal", "À-pris (kr)", "Typ"];
+      doc.setFillColor(...COLOR_HEADER);
+      doc.rect(margin, y, contentW, 6, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      let cx2 = margin + 2;
+      headers2.forEach((h, i) => { doc.text(h, cx2, y + 4); cx2 += cols2[i]; });
+      y += 6;
+
+      const categoryLabel: Record<string, string> = {
+        field: "Fält",
+        admin: "Admin",
+        logistics: "Logistik",
+      };
+
+      conceptArticles.forEach((art, idx) => {
+        if (y > 270) { doc.addPage(); y = 18; }
+        if (idx % 2 === 0) {
+          doc.setFillColor(...COLOR_ROW_ALT);
+          doc.rect(margin, y, contentW, 6, "F");
+        }
+        doc.setTextColor(...COLOR_TEXT);
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        cx2 = margin + 2;
+        const unitPriceKr = art.unitPrice != null ? (art.unitPrice / 100).toLocaleString("sv-SE") : "—";
+        const cells2 = [
+          art.articleNumber || "—",
+          doc.splitTextToSize(art.articleName || "—", cols2[1] - 4)[0],
+          String(art.quantity ?? 1),
+          unitPriceKr,
+          categoryLabel[art.taskCategory || "field"] || art.taskCategory || "—",
+        ];
+        cells2.forEach((cell, i) => { doc.text(String(cell), cx2, y + 4); cx2 += cols2[i]; });
+        y += 6;
+      });
+      y += 4;
+    }
+
+    // ---- Scheman ----
+    if (schedules.length > 0) {
+      if (y > 240) { doc.addPage(); y = 18; }
+      sectionTitle(`Leveransscheman (${schedules.length})`);
+      const weekdayNames = ["Sön", "Mån", "Tis", "Ons", "Tor", "Fre", "Lör"];
+      const periodicityLabel: Record<string, string> = {
+        days: "dagar",
+        weeks: "veckor",
+        months: "månader",
+        years: "år",
+      };
+      schedules.forEach((s, idx) => {
+        if (y > 270) { doc.addPage(); y = 18; }
+        if (idx % 2 === 0) {
+          doc.setFillColor(...COLOR_ROW_ALT);
+          doc.rect(margin, y, contentW, 6, "F");
+        }
+        doc.setTextColor(...COLOR_TEXT);
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        const freq = `${s.periodicityValue ?? 1} ${periodicityLabel[s.periodicityUnit ?? "months"] ?? s.periodicityUnit}`;
+        const weekday = s.preferredWeekday != null ? weekdayNames[s.preferredWeekday] : "—";
+        const time = s.preferredTimeFrom ? `${s.preferredTimeFrom}–${s.preferredTimeTo ?? ""}` : "—";
+        const line = `Intervall: ${freq}  |  Dag: ${weekday}  |  Tid: ${time}${s.season ? `  |  Säsong: ${s.season}` : ""}`;
+        doc.text(line, margin + 2, y + 4);
+        y += 6;
+      });
+      y += 4;
+    }
+
+    // ---- Footer ----
+    const pageCount = (doc as any).getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFillColor(...COLOR_HEADER);
+      doc.rect(0, 290, W, 10, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "normal");
+      doc.text("Traivo — konfidentiellt dokument", margin, 296);
+      doc.text(`Sida ${i} / ${pageCount}`, W - margin - 15, 296);
+    }
+
+    const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+    const safeName = (concept.name || "orderkoncept").replace(/[^a-zA-Z0-9_\- åäöÅÄÖ]/g, "_").slice(0, 60);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(safeName)}.pdf"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+    res.send(pdfBuffer);
+}));
+
+
 app.post("/api/order-concepts/:id/save-as-template", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const userId = req.session?.user?.id;
