@@ -3,7 +3,7 @@ import type { Express } from "express";
     MobileAuthenticatedRequest, enrichOrderForMobile, broadcastPlannerEvent, handleQuickAction, getFallbackChecklist,
     storage, db, eq, sql, desc, and, gte, isNull, inArray, z,
     formatZodError, isMobileAuthenticated, isAuthenticated,
-    getTenantIdWithFallback, asyncHandler,
+    getTenantIdWithFallback, requirePlanner, asyncHandler,
     NotFoundError, ValidationError, ForbiddenError,
     routeFeedbackTable, orderChecklistItems, workOrders, customerChangeRequests, taskMetadataUpdates, etaNotificationsTable, pushTokens, resources, teams, teamMembers, resourceProfileAssignments,
     mapGoCategory, ONE_CATEGORIES, GO_CATEGORY_MAP,
@@ -26,12 +26,13 @@ app.get("/api/checklist-templates", isAuthenticated, asyncHandler(async (req: Re
 }));
 
 app.get("/api/checklist-templates/:id", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
-    const template = await storage.getChecklistTemplate(req.params.id);
+    const tenantId = getTenantIdWithFallback(req);
+    const template = await storage.getChecklistTemplate(req.params.id, tenantId);
     if (!template) throw new NotFoundError("Mall hittades inte");
     res.json(template);
 }));
 
-app.post("/api/checklist-templates", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
+app.post("/api/checklist-templates", isAuthenticated, requirePlanner, asyncHandler(async (req: Request, res: Response) => {
     const tenantId = getTenantIdWithFallback(req);
     const { name, articleType, questions, isActive } = req.body;
 
@@ -51,14 +52,16 @@ app.post("/api/checklist-templates", isAuthenticated, asyncHandler(async (req: R
     res.json(template);
 }));
 
-app.patch("/api/checklist-templates/:id", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
-    const template = await storage.updateChecklistTemplate(req.params.id, req.body);
+app.patch("/api/checklist-templates/:id", isAuthenticated, requirePlanner, asyncHandler(async (req: Request, res: Response) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const template = await storage.updateChecklistTemplate(req.params.id, tenantId, req.body);
     if (!template) throw new NotFoundError("Mall hittades inte");
     res.json(template);
 }));
 
-app.delete("/api/checklist-templates/:id", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
-    await storage.deleteChecklistTemplate(req.params.id);
+app.delete("/api/checklist-templates/:id", isAuthenticated, requirePlanner, asyncHandler(async (req: Request, res: Response) => {
+    const tenantId = getTenantIdWithFallback(req);
+    await storage.deleteChecklistTemplate(req.params.id, tenantId);
     res.json({ success: true });
 }));
 
@@ -244,16 +247,22 @@ app.get("/api/mobile/terminology", isMobileAuthenticated, asyncHandler(async (re
     res.json(merged);
 }));
 
-app.get("/api/checklist/:workOrderId", asyncHandler(async (req, res) => {
+app.get("/api/checklist/:workOrderId", isAuthenticated, requirePlanner, asyncHandler(async (req: Request, res: Response) => {
     const { workOrderId } = req.params;
+    const tenantId = getTenantIdWithFallback(req);
+    const workOrder = await storage.getWorkOrder(workOrderId);
+    if (!workOrder || workOrder.tenantId !== tenantId) throw new NotFoundError("Arbetsorder hittades inte");
     const items = await db.select().from(orderChecklistItems)
       .where(eq(orderChecklistItems.workOrderId, workOrderId))
       .orderBy(orderChecklistItems.sortOrder);
     res.json(items);
 }));
 
-app.post("/api/checklist/:workOrderId/items", asyncHandler(async (req, res) => {
+app.post("/api/checklist/:workOrderId/items", isAuthenticated, requirePlanner, asyncHandler(async (req: Request, res: Response) => {
     const { workOrderId } = req.params;
+    const tenantId = getTenantIdWithFallback(req);
+    const workOrder = await storage.getWorkOrder(workOrderId);
+    if (!workOrder || workOrder.tenantId !== tenantId) throw new NotFoundError("Arbetsorder hittades inte");
     const { stepText, isAiGenerated, sortOrder } = req.body;
     if (!stepText || typeof stepText !== "string" || !stepText.trim()) {
       return res.status(400).json({ error: "stepText krävs" });
@@ -271,12 +280,17 @@ app.post("/api/checklist/:workOrderId/items", asyncHandler(async (req, res) => {
     res.status(201).json(item);
 }));
 
-app.patch("/api/checklist/items/:itemId", asyncHandler(async (req, res) => {
+app.patch("/api/checklist/items/:itemId", isAuthenticated, requirePlanner, asyncHandler(async (req: Request, res: Response) => {
     const { itemId } = req.params;
+    const tenantId = getTenantIdWithFallback(req);
     const { isCompleted } = req.body;
     if (typeof isCompleted !== "boolean") {
       return res.status(400).json({ error: "isCompleted (boolean) krävs" });
     }
+    const [existing] = await db.select().from(orderChecklistItems).where(eq(orderChecklistItems.id, itemId));
+    if (!existing) throw new NotFoundError("Checklista-objekt hittades inte");
+    const workOrder = await storage.getWorkOrder(existing.workOrderId);
+    if (!workOrder || workOrder.tenantId !== tenantId) throw new NotFoundError("Checklista-objekt hittades inte");
     const [updated] = await db.update(orderChecklistItems)
       .set({
         isCompleted,
@@ -290,18 +304,27 @@ app.patch("/api/checklist/items/:itemId", asyncHandler(async (req, res) => {
     res.json(updated);
 }));
 
-app.delete("/api/checklist/items/:itemId", asyncHandler(async (req, res) => {
+app.delete("/api/checklist/items/:itemId", isAuthenticated, requirePlanner, asyncHandler(async (req: Request, res: Response) => {
     const { itemId } = req.params;
+    const tenantId = getTenantIdWithFallback(req);
+    const [existing] = await db.select().from(orderChecklistItems).where(eq(orderChecklistItems.id, itemId));
+    if (!existing) throw new NotFoundError("Checklista-objekt hittades inte");
+    const workOrder = await storage.getWorkOrder(existing.workOrderId);
+    if (!workOrder || workOrder.tenantId !== tenantId) throw new NotFoundError("Checklista-objekt hittades inte");
     await db.delete(orderChecklistItems)
       .where(eq(orderChecklistItems.id, itemId));
     res.json({ success: true });
 }));
 
-app.post("/api/checklist/:workOrderId/generate", asyncHandler(async (req, res) => {
+app.post("/api/checklist/:workOrderId/generate", isAuthenticated, requirePlanner, asyncHandler(async (req: Request, res: Response) => {
     const { workOrderId } = req.params;
+    const tenantId = getTenantIdWithFallback(req);
 
     const workOrder = await storage.getWorkOrder(workOrderId);
     if (!workOrder) {
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
+    }
+    if (workOrder.tenantId !== tenantId) {
       return res.status(404).json({ error: "Arbetsorder hittades inte" });
     }
 
@@ -600,8 +623,11 @@ app.post("/api/mobile/quick-action", isMobileAuthenticated, asyncHandler(async (
     res.json(result);
 }));
 
-app.post("/api/quick-action", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
+app.post("/api/quick-action", isAuthenticated, requirePlanner, asyncHandler(async (req: Request, res: Response) => {
     const { orderId, actionType } = req.body;
+    const tenantId = getTenantIdWithFallback(req);
+    const order = await storage.getWorkOrder(orderId);
+    if (!order || order.tenantId !== tenantId) throw new NotFoundError("Order hittades inte");
     const result = await handleQuickAction(orderId, actionType);
     res.json(result);
 }));

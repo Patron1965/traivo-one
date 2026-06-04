@@ -1016,11 +1016,11 @@ export interface IStorage {
 
   // Checklist Templates
   getChecklistTemplates(tenantId: string): Promise<ChecklistTemplate[]>;
-  getChecklistTemplate(id: string): Promise<ChecklistTemplate | undefined>;
+  getChecklistTemplate(id: string, tenantId: string): Promise<ChecklistTemplate | undefined>;
   getChecklistTemplatesByArticleType(tenantId: string, articleType: string): Promise<ChecklistTemplate[]>;
   createChecklistTemplate(template: InsertChecklistTemplate): Promise<ChecklistTemplate>;
-  updateChecklistTemplate(id: string, data: Partial<InsertChecklistTemplate>): Promise<ChecklistTemplate | undefined>;
-  deleteChecklistTemplate(id: string): Promise<void>;
+  updateChecklistTemplate(id: string, tenantId: string, data: Partial<InsertChecklistTemplate>): Promise<ChecklistTemplate | undefined>;
+  deleteChecklistTemplate(id: string, tenantId: string): Promise<void>;
 
   // Driver Notifications
   getDriverNotifications(resourceId: string, options?: { unreadOnly?: boolean; limit?: number }): Promise<DriverNotification[]>;
@@ -8433,8 +8433,8 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(checklistTemplates).where(eq(checklistTemplates.tenantId, tenantId)).orderBy(checklistTemplates.name);
   }
 
-  async getChecklistTemplate(id: string): Promise<ChecklistTemplate | undefined> {
-    const [result] = await db.select().from(checklistTemplates).where(eq(checklistTemplates.id, id));
+  async getChecklistTemplate(id: string, tenantId: string): Promise<ChecklistTemplate | undefined> {
+    const [result] = await db.select().from(checklistTemplates).where(and(eq(checklistTemplates.id, id), eq(checklistTemplates.tenantId, tenantId)));
     return result || undefined;
   }
 
@@ -8449,13 +8449,14 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateChecklistTemplate(id: string, data: Partial<InsertChecklistTemplate>): Promise<ChecklistTemplate | undefined> {
-    const [result] = await db.update(checklistTemplates).set({ ...data, updatedAt: new Date() }).where(eq(checklistTemplates.id, id)).returning();
+  async updateChecklistTemplate(id: string, tenantId: string, data: Partial<InsertChecklistTemplate>): Promise<ChecklistTemplate | undefined> {
+    const { tenantId: _stripped, ...safeData } = data as Partial<InsertChecklistTemplate> & { tenantId?: string };
+    const [result] = await db.update(checklistTemplates).set({ ...safeData, updatedAt: new Date() }).where(and(eq(checklistTemplates.id, id), eq(checklistTemplates.tenantId, tenantId))).returning();
     return result;
   }
 
-  async deleteChecklistTemplate(id: string): Promise<void> {
-    await db.delete(checklistTemplates).where(eq(checklistTemplates.id, id));
+  async deleteChecklistTemplate(id: string, tenantId: string): Promise<void> {
+    await db.delete(checklistTemplates).where(and(eq(checklistTemplates.id, id), eq(checklistTemplates.tenantId, tenantId)));
   }
 
   async getDriverNotifications(resourceId: string, options?: { unreadOnly?: boolean; limit?: number }): Promise<DriverNotification[]> {

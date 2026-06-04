@@ -4,7 +4,7 @@ import { db } from "../../db";
 import { eq, sql, desc, and, gte, lte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, mobileTokens, generateMobileToken, validateMobileToken, isMobileAuthenticated } from "../helpers";
-import { getTenantIdWithFallback } from "../../tenant-middleware";
+import { getTenantIdWithFallback, requirePlanner } from "../../tenant-middleware";
 import { asyncHandler } from "../../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../../errors";
 import { isAuthenticated } from "../../replit_integrations/auth";
@@ -280,7 +280,7 @@ export function getFallbackChecklist(orderType: string): string[] {
 export {
   storage, db, eq, sql, desc, and, gte, lte, isNull, inArray, z,
   formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, mobileTokens, generateMobileToken, validateMobileToken, isMobileAuthenticated,
-  getTenantIdWithFallback, asyncHandler,
+  getTenantIdWithFallback, requirePlanner, asyncHandler,
   NotFoundError, ValidationError, ForbiddenError,
   isAuthenticated,
   routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotificationsTable, pushTokens, resources, teams, teamMembers, resourceProfileAssignments, workEntries, workSessions, visitConfirmationsTable,
