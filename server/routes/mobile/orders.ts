@@ -14,7 +14,84 @@ import type { Express } from "express";
   } from "./shared";
   import type { WorkOrder } from "./shared";
   import type { Response } from "express";
-  
+
+  // Löser effektiv produktionstid (minuter) ur redan hämtade listrader.
+  // Prioritet: resurs-specifik (giltig) → generisk lista (giltig) → artikelns
+  // bas-produktionstid. Work orders saknar utrustnings-koppling, så
+  // utrustnings-specifika listrader (equipmentId satt) matchas aldrig här.
+  function resolveProductionTimeFromLists(
+    lists: Array<Record<string, unknown>>,
+    resourceId: string | null,
+    baseProductionTime: number | null,
+  ): { productionTimeMinutes: number | null; productionTimeSource: "resource" | "list" | "article" | null } {
+    const now = Date.now();
+    const valid = lists.filter((l) => {
+      const from = l.validFrom ? new Date(l.validFrom as string).getTime() : -Infinity;
+      const to = l.validTo ? new Date(l.validTo as string).getTime() : Infinity;
+      return now >= from && now <= to;
+    });
+    if (resourceId) {
+      // Resurs-unik rad utan utrustnings-bindning (WO har ingen equipmentId).
+      const byResource = valid.find((l) => l.performerResourceId === resourceId && !l.equipmentId);
+      if (byResource) return { productionTimeMinutes: Number(byResource.productionTimeMinutes), productionTimeSource: "resource" };
+    }
+    const generic = valid.find((l) => !l.performerResourceId && !l.equipmentId);
+    if (generic) return { productionTimeMinutes: Number(generic.productionTimeMinutes), productionTimeSource: "list" };
+    if (baseProductionTime != null) return { productionTimeMinutes: baseProductionTime, productionTimeSource: "article" };
+    return { productionTimeMinutes: null, productionTimeSource: null };
+  }
+
+  // Berikar WO-rader till mobil-artikelobjekt med Session 11/12-fält (filer,
+  // rapporteringstyp, retur-flagga) + effektiv produktionstid. Slår upp artikel
+  // och produktionstids-listor en gång per unikt articleId (undviker N+1).
+  async function enrichMobileArticleLines(
+    lines: Array<Record<string, unknown>>,
+    tenantId: string,
+    resourceId: string | null,
+  ) {
+    const uniqueArticleIds = Array.from(
+      new Set(lines.map((l) => l.articleId as string).filter(Boolean)),
+    );
+    const articleMap = new Map<string, Record<string, unknown> | null>();
+    const listMap = new Map<string, Array<Record<string, unknown>>>();
+    await Promise.all(
+      uniqueArticleIds.map(async (aid) => {
+        const [article, lists] = await Promise.all([
+          storage.getArticle(aid).catch(() => null) as Promise<Record<string, unknown> | null>,
+          storage.getProductionTimeLists(tenantId, aid).catch(() => []) as Promise<Array<Record<string, unknown>>>,
+        ]);
+        articleMap.set(aid, article);
+        listMap.set(aid, lists);
+      }),
+    );
+    return lines.map((line) => {
+      const aid = line.articleId as string;
+      const article = articleMap.get(aid) ?? null;
+      const lists = listMap.get(aid) ?? [];
+      const pt = resolveProductionTimeFromLists(
+        lists,
+        resourceId,
+        article?.productionTime != null ? Number(article.productionTime) : null,
+      );
+      return {
+        id: line.id,
+        articleId: line.articleId,
+        articleNumber: (article?.articleNumber as string) || "",
+        articleName: (article?.name as string) || "",
+        quantity: line.quantity,
+        resolvedPrice: line.resolvedPrice || 0,
+        resolvedCost: line.resolvedCost || 0,
+        // Session 11/12 — fält-rapportering & logistik
+        files: article?.files ?? [],
+        reportingType: article?.reportingType ?? null,
+        reportingMetadataField: article?.reportingMetadataField ?? null,
+        shouldBeReturned: article?.shouldBeReturned ?? false,
+        productionTimeMinutes: pt.productionTimeMinutes,
+        productionTimeSource: pt.productionTimeSource,
+      };
+    });
+  }
+
   export function registerOrderRoutes(app: Express) {
 // Get work orders for the logged-in resource
 app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
@@ -216,19 +293,10 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
     }));
 
     const orderLines = await storage.getWorkOrderLines(orderId).catch(() => []);
-    const articles = await Promise.all(
-      orderLines.map(async (line: Record<string, unknown>) => {
-        const article = await storage.getArticle(line.articleId as string).catch(() => null);
-        return {
-          id: line.id,
-          articleId: line.articleId,
-          articleNumber: article?.articleNumber || "",
-          articleName: article?.name || "",
-          quantity: line.quantity,
-          resolvedPrice: line.resolvedPrice || 0,
-          resolvedCost: line.resolvedCost || 0,
-        };
-      })
+    const articles = await enrichMobileArticleLines(
+      orderLines as Array<Record<string, unknown>>,
+      order.tenantId,
+      (order.resourceId as string) || null,
     );
 
     const detailScheduledStart =
@@ -1009,6 +1077,13 @@ app.get("/api/mobile/v2/orders/:id", isMobileAuthenticated, asyncHandler(async (
     );
     const canStart = !dependencyStatus.some(d => d.isBlocking);
 
+    // Berikade artiklar — Session 11/12-fält + effektiv produktionstid.
+    const articles = await enrichMobileArticleLines(
+      orderLines as Array<Record<string, unknown>>,
+      order.tenantId,
+      (order.resourceId as string) || null,
+    );
+
     res.json({
       apiVersion: "v2",
       orderId: order.id,
@@ -1021,6 +1096,7 @@ app.get("/api/mobile/v2/orders/:id", isMobileAuthenticated, asyncHandler(async (
       customer: customer ? { id: customer.id, name: customer.name } : null,
       // === ADR v3-fält ===
       frozen,
+      articles,
       bomChecklist,
       dependencyStatus,
       canStart,

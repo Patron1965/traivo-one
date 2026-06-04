@@ -92,21 +92,26 @@ för material/struktur — behandla v1 `subSteps` som legacy.
   **UI-rekommendation:** Markera föruppgifter tydligt (t.ex. "Föruppgift"-badge)
   och koppla dem visuellt till sin huvuduppgift via `parentWorkOrderId`.
 
-### 3.4 Artikel-fält för fält-arbete **[behöver endpoint-utökning på mobil]**
-Dessa finns nu på `articles` men exponeras ännu inte fullt i `/api/mobile/*`-
-artikellistan (som bara ger `articleNumber/name/quantity/resolvedPrice/cost`):
+### 3.4 Artikel-fält för fält-arbete **[LIVE — exponerat på mobil]**
+Dessa exponeras nu på `articles[]` i **både** `GET /api/mobile/orders/:id` (v1)
+och `GET /api/mobile/v2/orders/:id`. Artikelobjektet innehåller utöver
+`id/articleId/articleNumber/articleName/quantity/resolvedPrice/resolvedCost`:
 
 - **`files`** — `{name, url, type}[]`: instruktioner/PDF/monteringsguider för
   artikeln. Bör visas som nedladdnings-/visningsbara bilagor i jobbvyn.
+  (Tom array `[]` när inga filer finns.)
 - **`reportingType`** — *vad* teknikern ska rapportera (`antal` | `status` |
-  `foto` | `text` …). Styr vilken inmatning som ska visas vid utförande.
+  `foto` | `fotogalleri` | `text`, eller `null`). Styr vilken inmatning som ska
+  visas vid utförande.
 - **`reportingMetadataField`** — *vart* det rapporterade värdet sparas (vilken
-  metadata-nyckel på objektet). Driver dynamisk återrapportering/writeback.
+  metadata-nyckel på objektet, eller `null`). Driver dynamisk
+  återrapportering/writeback. **OBS metadata-fallgropar i §6** vid skrivning.
 - **`shouldBeReturned`** — boolean: artikeln ingår i ett retur-/pantflöde. Bör
   trigga ett "ta med tillbaka / pant"-moment i fält.
-- **`defaultMetadataAssociation`** — vilket metadatafält artikeln "hakar fast på"
-  som standard (t.ex. kärl/fastighet). Mest planeringslogik, men kan visas som
-  kontext.
+
+`defaultMetadataAssociation` (vilket metadatafält artikeln "hakar fast på" som
+standard) är planeringslogik och exponeras medvetet **inte** på mobil — säg till
+om Go behöver det som kontext.
 
 ### 3.5 Komponent-nivå (`article_components`) **[surfar delvis]**
 - **`quantityFormula`** — formel (t.ex. `metadata.antal * 2`) som skalar
@@ -115,11 +120,23 @@ artikellistan (som bara ger `articleNumber/name/quantity/resolvedPrice/cost`):
 - **`reportingType` / `reportingMetadataField`** på komponent överskuggar
   artikelns för just den delen.
 
-### 3.6 Produktionstid / ställtid (nytt register) **[web-only idag]**
+### 3.6 Produktionstid / ställtid **[LIVE — exponerat på mobil]**
 `production_time_lists` ger per-artikel produktionstid som kan vara override per
 `resourceId` eller `equipmentId` (komplement till `articles.productionTime`).
-Påverkar förväntad jobblängd. Idag används det i web/planering; om Go vill visa
-"beräknad tid" korrekt per resurs behövs en mobil-exponering — säg till.
+Den **effektiva** tiden är nu upplöst server-side per artikel på `articles[]`
+(v1 + v2):
+
+- **`productionTimeMinutes`** — effektiv produktionstid i minuter (eller `null`).
+- **`productionTimeSource`** — varifrån värdet kom:
+  `"resource"` (utförarunik listrad för orderns resurs) ›
+  `"list"` (generisk listrad för artikeln) ›
+  `"article"` (artikelns bas-`productionTime`).
+
+Upplösningsprioritet: resurs-specifik giltig rad → generisk giltig rad →
+artikelns bas-tid. Endast rader vars `validFrom/validTo`-fönster täcker nu räknas.
+**Begränsning:** work orders saknar utrustnings-koppling, så utrustnings-unika
+listrader matchas inte (kräver känd `equipmentId` på ordern) — säg till om det
+behövs.
 
 ---
 
@@ -264,9 +281,9 @@ härleds från resursen / `req.mobileTenantId`.
    `subSteps` som legacy (§3.2).
 3. **Visa föruppgifter** (`isPreTask` / `parentWorkOrderId`) och håll start-gaten
    på `canStart` (§3.3).
-4. **Begär endpoint-utökning** för artikel-`files`, `reportingType`,
-   `reportingMetadataField`, `shouldBeReturned` om dynamisk återrapportering ska
-   byggas i fält (§3.4).
+4. **Bygg fält-rapportering** mot de nya artikel-fälten — `files`,
+   `reportingType`, `reportingMetadataField`, `shouldBeReturned` och
+   `productionTimeMinutes` är nu LIVE på `articles[]` (v1 + v2), se §3.4 + §3.6.
 5. **Kommunicera fakturastatus rätt:** "utförd ≠ fakturerad" pga
    frysning/broms/samlingsfaktura (§5).
 
