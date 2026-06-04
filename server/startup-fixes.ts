@@ -1,9 +1,21 @@
 import { db } from "./db";
 import { userTenantRoles } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { sql, eq, and } from "drizzle-orm";
 
 const TOMAS_USER_ID = "42556180";
 const DEFAULT_TENANT_ID = "kinab";
+
+export async function runIdempotentMigrations(): Promise<void> {
+  await db.execute(sql`
+    ALTER TABLE articles ADD COLUMN IF NOT EXISTS default_metadata_association text;
+  `);
+  await db.execute(sql`
+    ALTER TABLE order_concepts ADD COLUMN IF NOT EXISTS invoice_brake boolean DEFAULT false;
+  `);
+  await db.execute(sql`
+    ALTER TABLE order_concepts ADD COLUMN IF NOT EXISTS interval_flex_days integer;
+  `);
+}
 
 export async function fixInitialOwnerRole(): Promise<void> {
   const existing = await db

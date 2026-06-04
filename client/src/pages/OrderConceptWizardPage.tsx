@@ -19,7 +19,6 @@ import type {
   InvoiceLevel, InvoiceModel, InvoicePeriod,
   CustomerMode, TaskCategory,
 } from "@shared/schema";
-
 import Step1NameCustomer from "@/components/orderkoncept/Step1NameCustomer";
 import Step2PriceReference from "@/components/orderkoncept/Step2PriceReference";
 import Step3Invoicing from "@/components/orderkoncept/Step3Invoicing";
@@ -28,6 +27,24 @@ import Step5DeliveryTime, { type TimeWindow, type DeliveryRestriction } from "@/
 import Step6Tasks, { type ConceptArticleRow } from "@/components/orderkoncept/Step6Tasks";
 import Step7ReviewSave from "@/components/orderkoncept/Step7ReviewSave";
 import WizardSidebar from "@/components/orderkoncept/WizardSidebar";
+
+function deriveTaskCategory(article: Article): TaskCategory {
+  if (article.articleType === "vara") return "logistics";
+  if (article.articleType === "felanmalan") return "admin";
+  return "field";
+}
+
+function deriveIsPreTask(article: Article): boolean {
+  return article.articleType === "beroende" || (article.offsetMinutes ?? 0) < 0;
+}
+
+function deriveOffsetMinutes(article: Article): number | null {
+  if (article.articleType === "beroende" && article.dependencyMinutesBefore) {
+    return -article.dependencyMinutesBefore;
+  }
+  if ((article.offsetMinutes ?? 0) !== 0) return article.offsetMinutes ?? null;
+  return null;
+}
 
 const STEPS = [
   { num: 1, label: "Namn & Kund" },
@@ -388,19 +405,29 @@ export default function OrderConceptWizardPage() {
     setHasUnsavedWork(true);
   }, []);
 
-  const handleAddArticle = useCallback(async (articleId: string, quantity: number, unitPrice: number | null, taskCategory: TaskCategory = "field") => {
+  const handleAddArticle = useCallback(async (articleId: string, quantity: number, unitPrice: number | null) => {
     if (!conceptId) {
       toast({ title: "Spara konceptet först", description: "Gå framåt till nästa steg för att skapa utkastet.", variant: "destructive" });
       return;
     }
+    const article = articles.find(a => a.id === articleId);
+    const taskCategory = article ? deriveTaskCategory(article) : "field";
+    const isPreTask = article ? deriveIsPreTask(article) : false;
+    const dependencyOffsetMinutes = article ? deriveOffsetMinutes(article) : null;
+    const metadataAssociation = article?.defaultMetadataAssociation || null;
     try {
-      const res = await apiRequest("POST", `/api/order-concepts/${conceptId}/articles`, { articleId, quantity, unitPrice, taskCategory });
+      const res = await apiRequest("POST", `/api/order-concepts/${conceptId}/articles`, {
+        articleId, quantity, unitPrice, taskCategory,
+        ...(isPreTask ? { isPreTask: true } : {}),
+        ...(dependencyOffsetMinutes !== null ? { dependencyOffsetMinutes } : {}),
+        ...(metadataAssociation ? { metadataAssociation } : {}),
+      });
       const newArticle = await res.json();
       setConceptArticles(prev => [...prev, newArticle]);
     } catch {
       toast({ title: "Kunde inte lägga till artikel", variant: "destructive" });
     }
-  }, [conceptId, toast]);
+  }, [conceptId, articles, toast]);
 
   const handleRemoveArticle = useCallback(async (id: string) => {
     if (!conceptId) return;

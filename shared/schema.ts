@@ -640,6 +640,8 @@ export const articles = pgTable("articles", {
   reportingMetadataField: text("reporting_metadata_field"),
   // Session 11: framtida — artikeln ska returneras (retur-/pantflöde)
   shouldBeReturned: boolean("should_be_returned").default(false),
+  // Session 12 (Steg 6): förvalt metadatafält som föreslås som "Hakar fast på" vid tillägg i orderkoncept
+  defaultMetadataAssociation: text("default_metadata_association"),
   unit: text("unit").default("st"),
   status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

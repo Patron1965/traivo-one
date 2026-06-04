@@ -85,7 +85,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Article, ServiceObject } from "@shared/schema";
+import type { Article, ServiceObject, MetadataDefinition } from "@shared/schema";
 import { QueryState } from "@/components/QueryState";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
@@ -175,6 +175,7 @@ interface ArticleFormData {
   limitationType: string;
   quantityMode: string;
   offsetMinutes: number;
+  defaultMetadataAssociation: string;
 }
 
 const emptyFormData: ArticleFormData = {
@@ -207,6 +208,7 @@ const emptyFormData: ArticleFormData = {
   limitationType: "unlimited",
   quantityMode: "use_object_quantity",
   offsetMinutes: 0,
+  defaultMetadataAssociation: "",
 };
 
 export default function ArticlesPage() {
@@ -243,6 +245,10 @@ export default function ArticlesPage() {
 
   const { data: metadataTypes = [] } = useQuery<{ id: string; namn: string; datatyp: string }[]>({
     queryKey: ["/api/metadata/types"],
+  });
+
+  const { data: metadataDefinitions = [] } = useQuery<MetadataDefinition[]>({
+    queryKey: ["/api/metadata-definitions"],
   });
 
   // Task #682: varna när en metadatareferens redan är kopplad till en annan
@@ -402,6 +408,7 @@ export default function ArticlesPage() {
       limitationType: article.limitationType || "unlimited",
       quantityMode: article.quantityMode || "use_object_quantity",
       offsetMinutes: article.offsetMinutes ?? 0,
+      defaultMetadataAssociation: article.defaultMetadataAssociation || "",
     });
     setOffsetMinutesInput(String(article.offsetMinutes ?? 0));
     setDialogOpen(true);
@@ -1280,6 +1287,27 @@ export default function ArticlesPage() {
                 />
                 <p className="text-xs text-muted-foreground">
                   Negativt värde = utförs <strong>före</strong> huvudjobbet (t.ex. -120 = telefonavisering 2 timmar innan, -2400 = nyckelhämtning 40 timmar innan). 0 = samtidigt med huvudjobbet. Positivt = efter. När orderkonceptet expanderas skapas en separat förberedande uppgift kopplad till huvudjobbet.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="defaultMetadataAssociation">Förvalt metadatafält (Hakar fast på)</Label>
+                <Select
+                  value={formData.defaultMetadataAssociation || "__none__"}
+                  onValueChange={(v) => setFormData({ ...formData, defaultMetadataAssociation: v === "__none__" ? "" : v })}
+                >
+                  <SelectTrigger id="defaultMetadataAssociation" data-testid="select-default-metadata-assoc">
+                    <SelectValue placeholder="—" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">—</SelectItem>
+                    {metadataDefinitions.map((d) => (
+                      <SelectItem key={d.id} value={d.fieldKey}>{d.fieldLabel}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Föreslås automatiskt som "Hakar fast på"-koppling när artikeln läggs till i ett orderkoncept (Steg 6).
                 </p>
               </div>
 

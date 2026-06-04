@@ -4,19 +4,17 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, Trash2, Package, MapPin } from "lucide-react";
-import type { Article, MetadataDefinition, TaskCategory } from "@shared/schema";
-import { TASK_CATEGORY_LABELS, TASK_CATEGORIES } from "@shared/schema";
+import { Search, Plus, Trash2, Package, MapPin, Clock } from "lucide-react";
+import type { Article, MetadataDefinition } from "@shared/schema";
+import { MetadataFieldSelect, METADATA_NONE } from "@/components/orderkoncept/shared/ConditionFilter";
 
 export interface ConceptArticleRow {
   id: string;
   articleId: string;
   quantity: number;
   unitPrice: number | null;
-  taskCategory?: TaskCategory | null;
+  taskCategory?: string | null;
   metadataAssociation?: string | null;
   metadataCorrespondence?: string | null;
   isPreTask?: boolean | null;
@@ -26,13 +24,15 @@ export interface ConceptArticleRow {
 interface Step6Props {
   conceptArticles: ConceptArticleRow[];
   articles: Article[];
-  onAddArticle: (articleId: string, quantity: number, unitPrice: number | null, taskCategory: TaskCategory) => void;
+  onAddArticle: (articleId: string, quantity: number, unitPrice: number | null) => void;
   onRemoveArticle: (id: string) => void;
   onUpdateQuantity: (id: string, quantity: number) => void;
   onUpdateArticleField: (id: string, patch: Partial<ConceptArticleRow>) => void;
 }
 
-const NONE = "__none__";
+function deriveIsPreTask(article: Article): boolean {
+  return article.articleType === "beroende" || (article.offsetMinutes ?? 0) < 0;
+}
 
 export default function Step6Tasks({
   conceptArticles,
@@ -43,7 +43,6 @@ export default function Step6Tasks({
   onUpdateArticleField,
 }: Step6Props) {
   const [search, setSearch] = useState("");
-  const [pendingCategory, setPendingCategory] = useState<TaskCategory>("field");
   const { data: definitions = [] } = useQuery<MetadataDefinition[]>({ queryKey: ["/api/metadata-definitions"] });
 
   const filteredArticles = useMemo(() => {
@@ -63,49 +62,48 @@ export default function Step6Tasks({
 
   return (
     <div className="space-y-4" data-testid="step6-tasks">
-      <div className="grid grid-cols-1 sm:grid-cols-[1fr_220px] gap-2">
-        <div>
-          <Label className="text-sm font-medium mb-1 block">Sök artikel/uppgift</Label>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Sök på namn eller nummer..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" data-testid="input-article-search" />
-          </div>
-        </div>
-        <div>
-          <Label className="text-sm font-medium mb-1 block">Uppgiftstyp</Label>
-          <Select value={pendingCategory} onValueChange={(v) => setPendingCategory(v as TaskCategory)}>
-            <SelectTrigger data-testid="select-task-category"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {TASK_CATEGORIES.map((c) => (
-                <SelectItem key={c} value={c}>{TASK_CATEGORY_LABELS[c]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div>
+        <Label className="text-sm font-medium mb-1 block">Sök artikel/uppgift</Label>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Sök på namn eller nummer..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+            data-testid="input-article-search"
+          />
         </div>
       </div>
 
       {filteredArticles.length > 0 && (
         <div className="border rounded-md max-h-60 overflow-y-auto bg-popover">
-          {filteredArticles.map((article) => (
-            <div key={article.id} className="flex items-center justify-between px-3 py-2 hover:bg-accent text-sm">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{article.name}</span>
-                {article.articleNumber && <span className="text-xs text-muted-foreground">({article.articleNumber})</span>}
-                {article.isGeotagged && (
-                  <Badge variant="outline" className="gap-1 text-[10px]"><MapPin className="h-3 w-3" /> Geotaggad</Badge>
-                )}
+          {filteredArticles.map((article) => {
+            const autoPreTask = deriveIsPreTask(article);
+            return (
+              <div key={article.id} className="flex items-center justify-between px-3 py-2 hover:bg-accent text-sm">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-medium truncate">{article.name}</span>
+                  {article.articleNumber && <span className="text-xs text-muted-foreground shrink-0">({article.articleNumber})</span>}
+                  {article.isGeotagged && (
+                    <Badge variant="outline" className="gap-1 text-[10px] shrink-0"><MapPin className="h-3 w-3" /> Geotaggad</Badge>
+                  )}
+                  {autoPreTask && (
+                    <Badge variant="secondary" className="text-[10px] shrink-0"><Clock className="h-3 w-3 mr-0.5" /> Föruppgift</Badge>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={addedIds.has(article.id)}
+                  onClick={() => { onAddArticle(article.id, 1, null); setSearch(""); }}
+                  data-testid={`button-add-article-${article.id}`}
+                >
+                  {addedIds.has(article.id) ? <span className="text-xs">Tillagd</span> : <><Plus className="h-4 w-4 mr-1" /> Lägg till</>}
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={addedIds.has(article.id)}
-                onClick={() => { onAddArticle(article.id, 1, null, pendingCategory); setSearch(""); }}
-                data-testid={`button-add-article-${article.id}`}
-              >
-                {addedIds.has(article.id) ? <span className="text-xs">Tillagd</span> : <><Plus className="h-4 w-4 mr-1" /> Lägg till</>}
-              </Button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -121,16 +119,19 @@ export default function Step6Tasks({
             <div className="divide-y">
               {rows.map((ca) => {
                 const price = ca.unitPrice ?? ca.article?.listPrice ?? 0;
+                const autoPreTask = ca.article ? deriveIsPreTask(ca.article) : !!ca.isPreTask;
                 return (
                   <div key={ca.id} className="p-3 space-y-2" data-testid={`article-row-${ca.id}`}>
                     <div className="flex items-center gap-3">
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm truncate flex items-center gap-2">
+                        <div className="font-medium text-sm truncate flex items-center gap-2 flex-wrap">
                           {ca.article?.name || "Okänd artikel"}
                           {ca.article?.isGeotagged && (
                             <Badge variant="outline" className="gap-1 text-[10px]"><MapPin className="h-3 w-3" /> Geotaggad</Badge>
                           )}
-                          {ca.isPreTask && <Badge variant="secondary" className="text-[10px]">Föruppgift</Badge>}
+                          {autoPreTask && (
+                            <Badge variant="secondary" className="text-[10px]"><Clock className="h-3 w-3 mr-0.5" /> Föruppgift</Badge>
+                          )}
                         </div>
                         <div className="text-xs text-muted-foreground">{price} kr/st</div>
                       </div>
@@ -150,55 +151,45 @@ export default function Step6Tasks({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-1">
                       <div>
                         <Label className="text-[11px] text-muted-foreground mb-0.5 block">Hakar fast på (metadata)</Label>
-                        <Select
-                          value={ca.metadataAssociation || NONE}
-                          onValueChange={(v) => onUpdateArticleField(ca.id, { metadataAssociation: v === NONE ? null : v })}
-                        >
-                          <SelectTrigger className="h-8 text-xs" data-testid={`select-assoc-${ca.id}`}><SelectValue placeholder="—" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={NONE}>—</SelectItem>
-                            {definitions.map((d) => <SelectItem key={d.id} value={d.fieldKey}>{d.fieldLabel}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
+                        <MetadataFieldSelect
+                          value={ca.metadataAssociation || METADATA_NONE}
+                          onValueChange={(v) => onUpdateArticleField(ca.id, { metadataAssociation: v === METADATA_NONE ? null : v })}
+                          definitions={definitions}
+                          index={0}
+                          allowNone
+                          placeholder="—"
+                          className="h-8 text-xs w-full"
+                          testId={`select-assoc-${ca.id}`}
+                        />
                       </div>
                       <div>
                         <Label className="text-[11px] text-muted-foreground mb-0.5 block">Antal styrs av (metadata)</Label>
-                        <Select
-                          value={ca.metadataCorrespondence || NONE}
-                          onValueChange={(v) => onUpdateArticleField(ca.id, { metadataCorrespondence: v === NONE ? null : v })}
-                        >
-                          <SelectTrigger className="h-8 text-xs" data-testid={`select-corr-${ca.id}`}><SelectValue placeholder="—" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={NONE}>—</SelectItem>
-                            {definitions.map((d) => <SelectItem key={d.id} value={d.fieldKey}>{d.fieldLabel}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
+                        <MetadataFieldSelect
+                          value={ca.metadataCorrespondence || METADATA_NONE}
+                          onValueChange={(v) => onUpdateArticleField(ca.id, { metadataCorrespondence: v === METADATA_NONE ? null : v })}
+                          definitions={definitions}
+                          index={1}
+                          allowNone
+                          placeholder="—"
+                          className="h-8 text-xs w-full"
+                          testId={`select-corr-${ca.id}`}
+                        />
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3 pl-1">
-                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                        <Checkbox
-                          checked={!!ca.isPreTask}
-                          onCheckedChange={(v) => onUpdateArticleField(ca.id, { isPreTask: !!v })}
-                          data-testid={`checkbox-pretask-${ca.id}`}
+                    {autoPreTask && (
+                      <div className="flex items-center gap-2 pl-1">
+                        <span className="text-xs text-muted-foreground">Offset (min, negativt = före huvuduppgift):</span>
+                        <Input
+                          type="number"
+                          value={ca.dependencyOffsetMinutes ?? ""}
+                          onChange={(e) => onUpdateArticleField(ca.id, { dependencyOffsetMinutes: e.target.value === "" ? null : parseInt(e.target.value) })}
+                          className="w-28 h-7 text-xs"
+                          placeholder="-2880"
+                          data-testid={`input-offset-${ca.id}`}
                         />
-                        Föruppgift (plock/beställning/föravisering)
-                      </label>
-                      {ca.isPreTask && (
-                        <div className="flex items-center gap-1.5 text-xs">
-                          <span className="text-muted-foreground">Offset (min, negativt = före):</span>
-                          <Input
-                            type="number"
-                            value={ca.dependencyOffsetMinutes ?? ""}
-                            onChange={(e) => onUpdateArticleField(ca.id, { dependencyOffsetMinutes: e.target.value === "" ? null : parseInt(e.target.value) })}
-                            className="w-24 h-7 text-xs"
-                            placeholder="-2880"
-                            data-testid={`input-offset-${ca.id}`}
-                          />
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}

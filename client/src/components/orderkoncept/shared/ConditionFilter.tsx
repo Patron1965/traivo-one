@@ -28,7 +28,11 @@ interface MetadataFieldSelectProps {
   index: number;
   placeholder?: string;
   className?: string;
+  allowNone?: boolean;
+  testId?: string;
 }
+
+export const METADATA_NONE = "__none__";
 
 export function MetadataFieldSelect({
   value,
@@ -37,13 +41,16 @@ export function MetadataFieldSelect({
   index,
   placeholder = "Metadatafält",
   className = "w-[200px]",
+  allowNone = false,
+  testId,
 }: MetadataFieldSelectProps) {
   return (
     <Select value={value} onValueChange={onValueChange}>
-      <SelectTrigger className={className} data-testid={`select-filter-key-${index}`}>
+      <SelectTrigger className={className} data-testid={testId ?? `select-filter-key-${index}`}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
+        {allowNone && <SelectItem value={METADATA_NONE}>—</SelectItem>}
         {definitions.map((d) => (
           <SelectItem key={d.id} value={d.fieldKey}>
             {d.fieldLabel}

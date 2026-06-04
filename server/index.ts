@@ -4,7 +4,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./seed";
-import { fixInitialOwnerRole } from "./startup-fixes";
+import { fixInitialOwnerRole, runIdempotentMigrations } from "./startup-fixes";
 import { startImportBatchWatchdog } from "./import-batch-watchdog";
 import { logger } from "./logger";
 import { requestIdMiddleware } from "./middleware/request-id";
@@ -193,6 +193,12 @@ process.on('exit', (code) => {
       console.log('[startup] Database seeding complete');
     } catch (error) {
       console.error("Failed to seed database:", error);
+    }
+
+    try {
+      await runIdempotentMigrations();
+    } catch (error) {
+      console.error("[startup] Failed to run idempotent migrations:", error);
     }
 
     try {
