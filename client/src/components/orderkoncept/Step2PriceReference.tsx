@@ -1,11 +1,15 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Sparkles, Info } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Sparkles, Info, ChevronDown, Loader2 } from "lucide-react";
+import { formatSekFromOre } from "@/lib/format";
+import type { Article, PriceListArticle } from "@shared/schema";
 
 interface PriceListLite {
   id: string;
@@ -66,11 +70,41 @@ export default function Step2PriceReference({
 
   const priceLists = customerId ? (data?.priceLists ?? []) : (allLists.data ?? []);
 
+  const [showPrices, setShowPrices] = useState(false);
+
   useEffect(() => {
     if (customerId && data?.suggestedPriceListId && !priceListId) {
       onPriceListChange(data.suggestedPriceListId);
     }
   }, [customerId, data?.suggestedPriceListId, priceListId, onPriceListChange]);
+
+  const { data: priceListArticles, isLoading: itemsLoading } = useQuery<PriceListArticle[]>({
+    queryKey: ["/api/price-lists", priceListId, "articles"],
+    enabled: !!priceListId && showPrices,
+  });
+
+  const { data: articles } = useQuery<Article[]>({
+    queryKey: ["/api/articles"],
+    enabled: !!priceListId && showPrices,
+  });
+
+  const articleMap = useMemo(() => {
+    const map = new Map<string, Article>();
+    for (const a of articles ?? []) map.set(a.id, a);
+    return map;
+  }, [articles]);
+
+  const previewRows = useMemo(() => {
+    return (priceListArticles ?? [])
+      .map((pla) => ({ pla, article: articleMap.get(pla.articleId) }))
+      .sort((a, b) => {
+        const an = a.article?.articleNumber ?? "";
+        const bn = b.article?.articleNumber ?? "";
+        return an.localeCompare(bn, "sv");
+      });
+  }, [priceListArticles, articleMap]);
+
+  const selectedListName = priceLists.find((pl) => pl.id === priceListId)?.name;
 
   return (
     <div className="space-y-6" data-testid="step2-price-reference">
@@ -116,6 +150,63 @@ export default function Step2PriceReference({
             <Info className="h-3 w-3 shrink-0" />
             Välj en fast kund i steg 1 för att få automatiskt prislisteförslag.
           </p>
+        )}
+
+        {priceListId && (
+          <Collapsible open={showPrices} onOpenChange={setShowPrices} className="mt-3 max-w-md">
+            <CollapsibleTrigger
+              className="flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-primary transition-colors"
+              data-testid="button-toggle-price-preview"
+            >
+              <ChevronDown className={`h-4 w-4 transition-transform ${showPrices ? "rotate-180" : ""}`} />
+              {showPrices ? "Dölj priser" : "Visa priser"}
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2">
+              <div className="rounded-md border" data-testid="price-preview">
+                {itemsLoading ? (
+                  <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground" data-testid="price-preview-loading">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Laddar priser…
+                  </div>
+                ) : previewRows.length === 0 ? (
+                  <p className="p-4 text-sm text-muted-foreground" data-testid="price-preview-empty">
+                    {selectedListName ? `"${selectedListName}" innehåller inga artiklar än.` : "Prislistan innehåller inga artiklar än."}
+                  </p>
+                ) : (
+                  <>
+                    <ScrollArea className="max-h-64">
+                      <table className="w-full text-sm">
+                        <thead className="sticky top-0 bg-muted/50 text-xs text-muted-foreground">
+                          <tr>
+                            <th className="text-left font-medium px-3 py-2">Artikel</th>
+                            <th className="text-right font-medium px-3 py-2">Pris</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {previewRows.map(({ pla, article }) => (
+                            <tr key={pla.id} className="border-t" data-testid={`price-preview-row-${pla.id}`}>
+                              <td className="px-3 py-2">
+                                <span className="font-medium">{article?.name ?? "Okänd artikel"}</span>
+                                {article?.articleNumber && (
+                                  <span className="text-muted-foreground"> · {article.articleNumber}</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums" data-testid={`price-preview-amount-${pla.id}`}>
+                                {formatSekFromOre(pla.price)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </ScrollArea>
+                    <p className="px-3 py-2 text-xs text-muted-foreground border-t">
+                      {previewRows.length} artikel{previewRows.length === 1 ? "" : "ar"} i prislistan.
+                    </p>
+                  </>
+                )}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         )}
       </div>
 
