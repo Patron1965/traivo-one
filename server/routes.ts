@@ -769,6 +769,8 @@ export async function registerRoutes(
   registerOrderTypeMetadataRoutes(app);
   await registerOnboardingRoutes(app);
   registerConfigRoutes(app);
+  const { registerSession11Routes } = await import("./routes/session11Routes");
+  await registerSession11Routes(app);
   registerClusterRoutes(app);
   registerAIRoutes(app);
   registerOptimizationRoutes(app);

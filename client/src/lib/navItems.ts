@@ -40,6 +40,7 @@ import {
   Inbox,
   Link2,
   Archive,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 import { translate } from "./i18n";
@@ -84,6 +85,9 @@ export function getGrunddataItems(t: (key: string, fallback: string) => string, 
     { title: l("nav.fleet"), url: "/fleet", icon: Fuel, description: l("nav.fleet.desc") },
     { title: useI18n ? l("nav.articles") : t("article_plural", l("nav.articles")), url: "/articles", icon: Package, description: l("nav.articles.desc") },
     { title: l("nav.article-components"), url: "/article-components", icon: Package, description: l("nav.article-components.desc") },
+    { title: "Strukturartiklar", url: "/structure-articles", icon: Layers, description: "Strukturartikelregister: paket av komponenter med kvantitet och rapportering" },
+    { title: "Produktionstider", url: "/production-time-lists", icon: Clock, description: "Produktionstidslista per artikel, utförare och utrustning" },
+    { title: "Leverantörer", url: "/suppliers", icon: Truck, description: "Leverantörsregister med kontaktuppgifter och artikelkopplingar", adminOnly: true },
     { title: l("nav.price-lists"), url: "/price-lists", icon: Receipt, description: l("nav.price-lists.desc") },
     { title: l("nav.import"), url: "/import", icon: Upload, description: l("nav.import.desc") },
     { title: "Importera objekt (mall)", url: "/objektmall-import", icon: Upload, description: "Bulkimport av organisationer, butiker och kärl via Excel-mall" },

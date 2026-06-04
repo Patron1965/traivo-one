@@ -7,6 +7,13 @@ ALTER TABLE articles ADD COLUMN IF NOT EXISTS reporting_type text;
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS reporting_metadata_field text;
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS should_be_returned boolean DEFAULT false;
 
+-- Register 4 (Strukturartikel): per-underartikelfält på canonical article_components
+-- (Option A — eget register-yta ovanpå befintliga articles(isStructure)+article_components,
+--  ingen ny fysisk tabell, en källa till sanning).
+ALTER TABLE article_components ADD COLUMN IF NOT EXISTS quantity_formula text;
+ALTER TABLE article_components ADD COLUMN IF NOT EXISTS reporting_type text;
+ALTER TABLE article_components ADD COLUMN IF NOT EXISTS reporting_metadata_field text;
+
 -- Register 3: Produktionstidslista
 CREATE TABLE IF NOT EXISTS production_time_lists (
   id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -55,41 +62,7 @@ CREATE INDEX IF NOT EXISTS idx_supplier_article_links_article ON supplier_articl
 CREATE INDEX IF NOT EXISTS idx_supplier_article_links_supplier ON supplier_article_links(supplier_id);
 CREATE UNIQUE INDEX IF NOT EXISTS unq_supplier_article_links_article_supplier ON supplier_article_links(article_id, supplier_id);
 
--- Register 4: Strukturartikelregister (fysiskt separerat)
-CREATE TABLE IF NOT EXISTS structure_articles (
-  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id varchar NOT NULL REFERENCES tenants(id),
-  structure_number text NOT NULL,
-  name text NOT NULL,
-  external_description text,
-  internal_description text,
-  hook_level text,
-  hook_conditions jsonb DEFAULT '{}'::jsonb,
-  association_label text,
-  association_value text,
-  association_operator text DEFAULT 'equals',
-  legacy_article_id varchar REFERENCES articles(id) ON DELETE SET NULL,
-  status text NOT NULL DEFAULT 'active',
-  created_at timestamp NOT NULL DEFAULT now(),
-  deleted_at timestamp
-);
-CREATE INDEX IF NOT EXISTS idx_structure_articles_tenant ON structure_articles(tenant_id);
-CREATE UNIQUE INDEX IF NOT EXISTS unq_structure_articles_tenant_number ON structure_articles(tenant_id, structure_number);
-
-CREATE TABLE IF NOT EXISTS structure_article_components (
-  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id varchar NOT NULL REFERENCES tenants(id),
-  structure_article_id varchar NOT NULL REFERENCES structure_articles(id) ON DELETE CASCADE,
-  article_id varchar NOT NULL REFERENCES articles(id) ON DELETE RESTRICT,
-  sort_order integer DEFAULT 0,
-  quantity real NOT NULL DEFAULT 1.0,
-  quantity_formula text,
-  reporting_type text,
-  reporting_metadata_field text,
-  is_mandatory boolean DEFAULT true,
-  notes text,
-  created_at timestamp NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_structure_article_components_structure ON structure_article_components(structure_article_id);
-CREATE INDEX IF NOT EXISTS idx_structure_article_components_article ON structure_article_components(article_id);
-CREATE UNIQUE INDEX IF NOT EXISTS unq_structure_article_components_struct_article ON structure_article_components(structure_article_id, article_id);
+-- Register 4 (Strukturartikel): inga nya fysiska tabeller (Option A).
+-- Eventuella tidigare skapade tabeller från en avbruten Option B-väg städas bort.
+DROP TABLE IF EXISTS structure_article_components;
+DROP TABLE IF EXISTS structure_articles;

@@ -126,6 +126,10 @@ import {
   metadataDefinitions, objectMetadata, objectPayers,
   objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, objectTimeRestrictions, structuralArticles,
   orderConcepts, conceptFilters, plannerSearchFilters, articleComponents, invoiceRecalculationLog, assignments, assignmentArticles, subscriptionChanges,
+  productionTimeLists, suppliers, supplierArticleLinks,
+  type ProductionTimeList, type InsertProductionTimeList,
+  type Supplier, type InsertSupplier,
+  type SupplierArticleLink, type InsertSupplierArticleLink,
   taskDependencyTemplates, taskDependencyInstances, invoiceRules, orderConceptRunLogs,
   orderConceptObjects, orderConceptArticles, articleObjectMappings,
   invoiceConfigurations, documentConfigurations, deliverySchedules,
@@ -148,7 +152,7 @@ import {
   deliveryPreferencesSchema,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray, getTableColumns, type SQL, type SQLWrapper } from "drizzle-orm";
+import { eq, ne, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray, getTableColumns, type SQL, type SQLWrapper } from "drizzle-orm";
 
 type Condition = SQL | SQLWrapper | undefined;
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -758,6 +762,25 @@ export interface IStorage {
   createArticleComponent(component: InsertArticleComponent): Promise<ArticleComponent>;
   updateArticleComponent(id: string, tenantId: string, data: Partial<InsertArticleComponent>): Promise<ArticleComponent | undefined>;
   deleteArticleComponent(id: string, tenantId: string): Promise<void>;
+
+  // Session 11 (Register 3): Produktionstidslista
+  getProductionTimeLists(tenantId: string, articleId?: string): Promise<ProductionTimeList[]>;
+  getProductionTimeList(id: string, tenantId: string): Promise<ProductionTimeList | undefined>;
+  createProductionTimeList(data: InsertProductionTimeList): Promise<ProductionTimeList>;
+  updateProductionTimeList(id: string, tenantId: string, data: Partial<InsertProductionTimeList>): Promise<ProductionTimeList | undefined>;
+  deleteProductionTimeList(id: string, tenantId: string): Promise<void>;
+
+  // Session 11 (Register 5): Leverantörsregister
+  getSuppliers(tenantId: string, opts?: { includeDeleted?: boolean }): Promise<Supplier[]>;
+  getSupplier(id: string, tenantId: string): Promise<Supplier | undefined>;
+  createSupplier(data: InsertSupplier): Promise<Supplier>;
+  updateSupplier(id: string, tenantId: string, data: Partial<InsertSupplier>): Promise<Supplier | undefined>;
+  deleteSupplier(id: string, tenantId: string): Promise<void>;
+  getSupplierArticleLinks(tenantId: string, opts?: { articleId?: string; supplierId?: string }): Promise<SupplierArticleLink[]>;
+  getSupplierArticleLink(id: string, tenantId: string): Promise<SupplierArticleLink | undefined>;
+  createSupplierArticleLink(data: InsertSupplierArticleLink): Promise<SupplierArticleLink>;
+  updateSupplierArticleLink(id: string, tenantId: string, data: Partial<InsertSupplierArticleLink>): Promise<SupplierArticleLink | undefined>;
+  deleteSupplierArticleLink(id: string, tenantId: string): Promise<void>;
 
   // ADR v3 (F6): Index-justering pa prislista
   applyIndexAdjustmentToPriceList(priceListId: string, tenantId: string, percentage: number): Promise<{ priceListId: string; percentage: number; updatedArticles: number; indexDate: Date }>;
@@ -6635,6 +6658,134 @@ export class DatabaseStorage implements IStorage {
   async deleteArticleComponent(id: string, tenantId: string): Promise<void> {
     await db.delete(articleComponents)
       .where(and(eq(articleComponents.id, id), eq(articleComponents.tenantId, tenantId)));
+  }
+
+  // ============================================
+  // Session 11 (Register 3): Produktionstidslista
+  // ============================================
+  async getProductionTimeLists(tenantId: string, articleId?: string): Promise<ProductionTimeList[]> {
+    return db.select().from(productionTimeLists)
+      .where(articleId
+        ? and(eq(productionTimeLists.tenantId, tenantId), eq(productionTimeLists.articleId, articleId))
+        : eq(productionTimeLists.tenantId, tenantId))
+      .orderBy(desc(productionTimeLists.createdAt));
+  }
+
+  async getProductionTimeList(id: string, tenantId: string): Promise<ProductionTimeList | undefined> {
+    const [row] = await db.select().from(productionTimeLists)
+      .where(and(eq(productionTimeLists.id, id), eq(productionTimeLists.tenantId, tenantId)));
+    return row || undefined;
+  }
+
+  async createProductionTimeList(data: InsertProductionTimeList): Promise<ProductionTimeList> {
+    const [row] = await db.insert(productionTimeLists).values(data).returning();
+    return row;
+  }
+
+  async updateProductionTimeList(id: string, tenantId: string, data: Partial<InsertProductionTimeList>): Promise<ProductionTimeList | undefined> {
+    const [row] = await db.update(productionTimeLists)
+      .set(data)
+      .where(and(eq(productionTimeLists.id, id), eq(productionTimeLists.tenantId, tenantId)))
+      .returning();
+    return row || undefined;
+  }
+
+  async deleteProductionTimeList(id: string, tenantId: string): Promise<void> {
+    await db.delete(productionTimeLists)
+      .where(and(eq(productionTimeLists.id, id), eq(productionTimeLists.tenantId, tenantId)));
+  }
+
+  // ============================================
+  // Session 11 (Register 5): Leverantörsregister
+  // ============================================
+  async getSuppliers(tenantId: string, opts?: { includeDeleted?: boolean }): Promise<Supplier[]> {
+    return db.select().from(suppliers)
+      .where(opts?.includeDeleted
+        ? eq(suppliers.tenantId, tenantId)
+        : and(eq(suppliers.tenantId, tenantId), isNull(suppliers.deletedAt)))
+      .orderBy(suppliers.name);
+  }
+
+  async getSupplier(id: string, tenantId: string): Promise<Supplier | undefined> {
+    const [row] = await db.select().from(suppliers)
+      .where(and(eq(suppliers.id, id), eq(suppliers.tenantId, tenantId)));
+    return row || undefined;
+  }
+
+  async createSupplier(data: InsertSupplier): Promise<Supplier> {
+    const [row] = await db.insert(suppliers).values(data).returning();
+    return row;
+  }
+
+  async updateSupplier(id: string, tenantId: string, data: Partial<InsertSupplier>): Promise<Supplier | undefined> {
+    const [row] = await db.update(suppliers)
+      .set(data)
+      .where(and(eq(suppliers.id, id), eq(suppliers.tenantId, tenantId)))
+      .returning();
+    return row || undefined;
+  }
+
+  async deleteSupplier(id: string, tenantId: string): Promise<void> {
+    // Soft-delete (bevarar leverantörshistorik för framtida inköpsportal/koppling)
+    await db.update(suppliers)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(suppliers.id, id), eq(suppliers.tenantId, tenantId)));
+  }
+
+  async getSupplierArticleLinks(tenantId: string, opts?: { articleId?: string; supplierId?: string }): Promise<SupplierArticleLink[]> {
+    const conds = [eq(supplierArticleLinks.tenantId, tenantId)];
+    if (opts?.articleId) conds.push(eq(supplierArticleLinks.articleId, opts.articleId));
+    if (opts?.supplierId) conds.push(eq(supplierArticleLinks.supplierId, opts.supplierId));
+    return db.select().from(supplierArticleLinks)
+      .where(and(...conds))
+      .orderBy(desc(supplierArticleLinks.isPrimary), desc(supplierArticleLinks.createdAt));
+  }
+
+  async getSupplierArticleLink(id: string, tenantId: string): Promise<SupplierArticleLink | undefined> {
+    const [row] = await db.select().from(supplierArticleLinks)
+      .where(and(eq(supplierArticleLinks.id, id), eq(supplierArticleLinks.tenantId, tenantId)));
+    return row || undefined;
+  }
+
+  async createSupplierArticleLink(data: InsertSupplierArticleLink): Promise<SupplierArticleLink> {
+    return db.transaction(async (tx) => {
+      const [row] = await tx.insert(supplierArticleLinks).values(data).returning();
+      // En primär leverantör per artikel: nollställ övriga om denna är primär
+      if (row.isPrimary) {
+        await tx.update(supplierArticleLinks)
+          .set({ isPrimary: false })
+          .where(and(
+            eq(supplierArticleLinks.tenantId, row.tenantId),
+            eq(supplierArticleLinks.articleId, row.articleId),
+            ne(supplierArticleLinks.id, row.id),
+          ));
+      }
+      return row;
+    });
+  }
+
+  async updateSupplierArticleLink(id: string, tenantId: string, data: Partial<InsertSupplierArticleLink>): Promise<SupplierArticleLink | undefined> {
+    return db.transaction(async (tx) => {
+      const [row] = await tx.update(supplierArticleLinks)
+        .set({ ...data, updatedAt: new Date() })
+        .where(and(eq(supplierArticleLinks.id, id), eq(supplierArticleLinks.tenantId, tenantId)))
+        .returning();
+      if (row && row.isPrimary) {
+        await tx.update(supplierArticleLinks)
+          .set({ isPrimary: false })
+          .where(and(
+            eq(supplierArticleLinks.tenantId, tenantId),
+            eq(supplierArticleLinks.articleId, row.articleId),
+            ne(supplierArticleLinks.id, row.id),
+          ));
+      }
+      return row || undefined;
+    });
+  }
+
+  async deleteSupplierArticleLink(id: string, tenantId: string): Promise<void> {
+    await db.delete(supplierArticleLinks)
+      .where(and(eq(supplierArticleLinks.id, id), eq(supplierArticleLinks.tenantId, tenantId)));
   }
 
   // ============================================

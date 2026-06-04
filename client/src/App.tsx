@@ -48,6 +48,9 @@ const SubscriptionsPage = lazy(() => import("@/pages/SubscriptionsPage"));
 const PlanningParametersPage = lazy(() => import("@/pages/PlanningParametersPage"));
 const PlannerSearchFiltersPage = lazy(() => import("@/pages/PlannerSearchFiltersPage"));
 const ArticleComponentsPage = lazy(() => import("@/pages/ArticleComponentsPage"));
+const SuppliersPage = lazy(() => import("@/pages/SuppliersPage"));
+const ProductionTimeListsPage = lazy(() => import("@/pages/ProductionTimeListsPage"));
+const StructureArticlesPage = lazy(() => import("@/pages/StructureArticlesPage"));
 const InvoiceRecalculationLogPage = lazy(() => import("@/pages/InvoiceRecalculationLogPage"));
 const InvoiceQueuePage = lazy(() => import("@/pages/InvoiceQueuePage"));
 const OnboardingWizardPage = lazy(() => import("@/pages/OnboardingWizardPage"));
@@ -171,6 +174,9 @@ function Router() {
         <Route path="/planning-parameters">{() => <ProtectedRoute component={PlanningParametersPage} path="/planning-parameters" />}</Route>
         <Route path="/planner-search-filters">{() => <ProtectedRoute component={PlannerSearchFiltersPage} path="/planner-search-filters" />}</Route>
         <Route path="/article-components">{() => <ProtectedRoute component={ArticleComponentsPage} path="/article-components" />}</Route>
+        <Route path="/structure-articles">{() => <ProtectedRoute component={StructureArticlesPage} path="/structure-articles" />}</Route>
+        <Route path="/production-time-lists">{() => <ProtectedRoute component={ProductionTimeListsPage} path="/production-time-lists" />}</Route>
+        <Route path="/suppliers">{() => <ProtectedRoute component={SuppliersPage} path="/suppliers" />}</Route>
         <Route path="/invoice-recalculation-log">{() => <ProtectedRoute component={InvoiceRecalculationLogPage} path="/invoice-recalculation-log" />}</Route>
         <Route path="/invoice-queue">{() => <ProtectedRoute component={InvoiceQueuePage} path="/invoice-queue" />}</Route>
         <Route path="/dashboard">{() => <ProtectedRoute component={DashboardPage} path="/dashboard" />}</Route>
