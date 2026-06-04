@@ -60,10 +60,12 @@ import {
   Target,
   Users,
   List,
+  ListTree,
   Map,
   MoreHorizontal,
   Layers,
 } from "lucide-react";
+import { ClusterTreeExplorer } from "@/components/ClusterTreeExplorer";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import {
   DropdownMenu,
@@ -187,7 +189,7 @@ export default function ClustersPage() {
   const { t } = useTerminology();
   const [, navigate] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  const [viewMode, setViewMode] = useState<"tree" | "list" | "map">("tree");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingCluster, setEditingCluster] = useState<Cluster | null>(null);
@@ -425,6 +427,7 @@ export default function ClustersPage() {
       />
 
       <div className="flex items-center gap-4 flex-wrap">
+        {viewMode !== "tree" && (
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -435,8 +438,13 @@ export default function ClustersPage() {
             data-testid="input-search-clusters"
           />
         </div>
-        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "map")}>
+        )}
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "tree" | "list" | "map")}>
           <TabsList>
+            <TabsTrigger value="tree" data-testid="tab-tree">
+              <ListTree className="h-4 w-4 mr-1" />
+              Träd
+            </TabsTrigger>
             <TabsTrigger value="list" data-testid="tab-list">
               <List className="h-4 w-4 mr-1" />
               Lista
@@ -449,6 +457,9 @@ export default function ClustersPage() {
         </Tabs>
       </div>
 
+      {viewMode === "tree" ? (
+        <ClusterTreeExplorer />
+      ) : (
       <QueryState
         isLoading={isLoading}
         isError={isError}
@@ -753,6 +764,7 @@ export default function ClustersPage() {
         </div>
       )}
       </QueryState>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">

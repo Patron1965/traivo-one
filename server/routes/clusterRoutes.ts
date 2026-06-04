@@ -8,7 +8,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
-import { insertClusterSchema, objects, workOrders, resources } from "@shared/schema";
+import { insertClusterSchema, objects, workOrders, resources, customers, objectPayers, teams, metadataKatalog, metadataVarden } from "@shared/schema";
 
 export async function registerClusterRoutes(app: Express) {
 // ============== CLUSTERS - NAVET I VERKSAMHETEN ==============
@@ -16,6 +16,134 @@ app.get("/api/clusters", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const clusters = await storage.getClusters(tenantId);
     res.json(clusters || []);
+}));
+
+// Task #712: Hierarkisk objektträd-data för klustervyn. Returnerar en platt nodlista
+// (klienten bygger trädet) med strukturdata + primär kund + utförare/orderstatus
+// (från arbetsordrar) + direkt metadata för sök/filtrering. Allt tenant-scopat.
+app.get("/api/clusters/tree", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+
+    const objRows = await db.select({
+      id: objects.id,
+      name: objects.name,
+      parentId: objects.parentId,
+      hierarchyLevel: objects.hierarchyLevel,
+      objectType: objects.objectType,
+      clusterId: objects.clusterId,
+      latitude: objects.latitude,
+      longitude: objects.longitude,
+      entranceLatitude: objects.entranceLatitude,
+      entranceLongitude: objects.entranceLongitude,
+      address: objects.address,
+      postalCode: objects.postalCode,
+      city: objects.city,
+      accessType: objects.accessType,
+    }).from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
+
+    // Primär betalare (kund) per objekt
+    const payerRows = await db.select({
+      objectId: objectPayers.objectId,
+      customerId: objectPayers.customerId,
+      customerName: customers.name,
+    }).from(objectPayers)
+      .innerJoin(customers, eq(objectPayers.customerId, customers.id))
+      .where(and(eq(objectPayers.tenantId, tenantId), eq(objectPayers.isPrimary, true)));
+    const customerByObject = new Map<string, { id: string; name: string }>();
+    for (const p of payerRows) {
+      if (!customerByObject.has(p.objectId)) customerByObject.set(p.objectId, { id: p.customerId, name: p.customerName });
+    }
+
+    // Arbetsordrar → utförare + orderstatus per objekt
+    const woRows = await db.select({
+      objectId: workOrders.objectId,
+      orderStatus: workOrders.orderStatus,
+      resourceId: workOrders.resourceId,
+      teamId: workOrders.teamId,
+    }).from(workOrders).where(and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt)));
+
+    const resourceRows = await db.select({ id: resources.id, name: resources.name })
+      .from(resources).where(eq(resources.tenantId, tenantId));
+    const teamRows = await db.select({ id: teams.id, name: teams.name })
+      .from(teams).where(eq(teams.tenantId, tenantId));
+    const resourceName = new Map(resourceRows.map(r => [r.id, r.name] as const));
+    const teamName = new Map(teamRows.map(t => [t.id, t.name] as const));
+
+    const woByObject = new Map<string, { statuses: Set<string>; execIds: Set<string>; execNames: Set<string> }>();
+    for (const wo of woRows) {
+      if (!wo.objectId) continue;
+      let agg = woByObject.get(wo.objectId);
+      if (!agg) { agg = { statuses: new Set(), execIds: new Set(), execNames: new Set() }; woByObject.set(wo.objectId, agg); }
+      if (wo.orderStatus) agg.statuses.add(wo.orderStatus);
+      if (wo.resourceId) { agg.execIds.add(wo.resourceId); const n = resourceName.get(wo.resourceId); if (n) agg.execNames.add(n); }
+      if (wo.teamId) { agg.execIds.add(wo.teamId); const n = teamName.get(wo.teamId); if (n) agg.execNames.add(n); }
+    }
+
+    // Direkt metadata per objekt (ej mjukraderad)
+    const metaRows = await db.select({
+      objektId: metadataVarden.objektId,
+      namn: metadataKatalog.namn,
+      vardeString: metadataVarden.vardeString,
+      vardeInteger: metadataVarden.vardeInteger,
+      vardeDecimal: metadataVarden.vardeDecimal,
+      vardeBoolean: metadataVarden.vardeBoolean,
+      vardeDatetime: metadataVarden.vardeDatetime,
+      vardeJson: metadataVarden.vardeJson,
+    }).from(metadataVarden)
+      .innerJoin(metadataKatalog, eq(metadataVarden.metadataKatalogId, metadataKatalog.id))
+      .where(and(eq(metadataVarden.tenantId, tenantId), eq(metadataVarden.raderad, false)));
+
+    const metaByObject = new Map<string, Record<string, string>>();
+    for (const r of metaRows) {
+      if (!r.objektId) continue;
+      let v: string | null = null;
+      if (r.vardeString != null) v = String(r.vardeString);
+      else if (r.vardeInteger != null) v = String(r.vardeInteger);
+      else if (r.vardeDecimal != null) v = String(r.vardeDecimal);
+      else if (r.vardeBoolean != null) v = r.vardeBoolean ? "Ja" : "Nej";
+      else if (r.vardeDatetime != null) v = new Date(r.vardeDatetime).toISOString().slice(0, 10);
+      else if (r.vardeJson != null) v = typeof r.vardeJson === "string" ? r.vardeJson : JSON.stringify(r.vardeJson);
+      if (v == null) continue;
+      let m = metaByObject.get(r.objektId);
+      if (!m) { m = {}; metaByObject.set(r.objektId, m); }
+      m[r.namn.toLowerCase()] = v;
+    }
+
+    // Direkta barn-räknare
+    const childCount = new Map<string, number>();
+    for (const o of objRows) {
+      if (o.parentId) childCount.set(o.parentId, (childCount.get(o.parentId) || 0) + 1);
+    }
+
+    const nodes = objRows.map(o => {
+      const cust = customerByObject.get(o.id) || null;
+      const agg = woByObject.get(o.id);
+      return {
+        id: o.id,
+        name: o.name,
+        parentId: o.parentId,
+        hierarchyLevel: o.hierarchyLevel,
+        objectType: o.objectType,
+        clusterId: o.clusterId,
+        latitude: o.latitude,
+        longitude: o.longitude,
+        entranceLatitude: o.entranceLatitude,
+        entranceLongitude: o.entranceLongitude,
+        address: o.address,
+        postalCode: o.postalCode,
+        city: o.city,
+        accessType: o.accessType,
+        childCount: childCount.get(o.id) || 0,
+        customerId: cust?.id ?? null,
+        customerName: cust?.name ?? null,
+        executorIds: agg ? Array.from(agg.execIds) : [],
+        executorNames: agg ? Array.from(agg.execNames) : [],
+        orderStatuses: agg ? Array.from(agg.statuses) : [],
+        metadata: metaByObject.get(o.id) || {},
+      };
+    });
+
+    res.json({ nodes });
 }));
 
 app.get("/api/clusters/zones", asyncHandler(async (req, res) => {

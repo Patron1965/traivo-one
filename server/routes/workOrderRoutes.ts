@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import {
   formatZodError,
@@ -12,8 +12,8 @@ import {
   ensureObjectInTenant,
   ensureResourceIdsInTenant,
 } from "./helpers";
-import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
-import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, slaRiskSnapshots, type OrderConcept, isOutsidePreferredWindow } from "@shared/schema";
+import { getTenantIdWithFallback, requireAdmin, requirePlanner } from "../tenant-middleware";
+import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, objectPayers, slaRiskSnapshots, type OrderConcept, isOutsidePreferredWindow } from "@shared/schema";
 import type { WorkOrder } from "@shared/schema";
 import { handleWorkOrderStatusChange } from "../ai-communication";
 import { notificationService } from "../notifications";
@@ -760,6 +760,64 @@ app.post("/api/work-orders/carry-over", asyncHandler(async (req, res) => {
   }
   
   res.json({ moved: movedCount, toDate: to.toISOString().split("T")[0] });
+}));
+
+// Task #712: Snabborder från filtrerat urval i klusterträdet. Skapar en arbetsorder
+// per valt objekt och löser primär betalare (kund) per objekt. Allt tenant-scopat;
+// objekt utan primär kund eller utanför tenant hoppas över och rapporteras tillbaka.
+app.post("/api/work-orders/quick-bulk", requirePlanner, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const schema = z.object({
+    objectIds: z.array(z.string().min(1)).min(1, "Välj minst ett objekt"),
+    title: z.string().min(1, "Titel krävs"),
+    orderType: z.string().optional(),
+    priority: z.string().optional(),
+  });
+  const parsed = schema.parse(req.body);
+  const uniqueIds = Array.from(new Set(parsed.objectIds));
+
+  const objRows = await db.select({ id: objects.id })
+    .from(objects)
+    .where(and(eq(objects.tenantId, tenantId), inArray(objects.id, uniqueIds), isNull(objects.deletedAt)));
+  const validIds = new Set(objRows.map(o => o.id));
+
+  const payerByObject = new Map<string, string>();
+  if (validIds.size > 0) {
+    const payerRows = await db.select({ objectId: objectPayers.objectId, customerId: objectPayers.customerId })
+      .from(objectPayers)
+      .where(and(eq(objectPayers.tenantId, tenantId), eq(objectPayers.isPrimary, true), inArray(objectPayers.objectId, Array.from(validIds))));
+    for (const p of payerRows) {
+      if (!payerByObject.has(p.objectId)) payerByObject.set(p.objectId, p.customerId);
+    }
+  }
+
+  const createdIds: string[] = [];
+  const skipped: { objectId: string; reason: string }[] = [];
+  for (const objectId of uniqueIds) {
+    if (!validIds.has(objectId)) { skipped.push({ objectId, reason: "Objekt saknas eller tillhör annan tenant" }); continue; }
+    const customerId = payerByObject.get(objectId);
+    if (!customerId) { skipped.push({ objectId, reason: "Saknar primär kund (betalare)" }); continue; }
+    try {
+      const data = insertWorkOrderSchema.parse({
+        tenantId,
+        customerId,
+        objectId,
+        title: parsed.title,
+        orderType: parsed.orderType || "service",
+        priority: parsed.priority || "normal",
+        orderStatus: "skapad",
+        isSimulated: false,
+      });
+      const workOrder = await storage.createWorkOrder(data);
+      createdIds.push(workOrder.id);
+    } catch (err) {
+      // Fail-soft per objekt: en rad som fallerar avbryter inte hela bulken.
+      // Redan skapade ordrar bevaras och resultatet rapporteras deterministiskt.
+      skipped.push({ objectId, reason: err instanceof Error ? err.message : "Kunde inte skapa order" });
+    }
+  }
+
+  res.json({ created: createdIds.length, createdIds, skipped });
 }));
 
 app.post("/api/work-orders", asyncHandler(async (req, res) => {
