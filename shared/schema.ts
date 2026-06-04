@@ -632,6 +632,14 @@ export const articles = pgTable("articles", {
   infoLink: text("info_link"),
   // Session 9B: geotaggad — uppgiften kräver fysisk position (fältarbete på plats)
   isGeotagged: boolean("is_geotagged").default(false),
+  // Session 11 (Register 1): filer (PDF-instruktioner, monteringsguider) — array av {name,url,type}
+  files: jsonb("files").default([]),
+  // Session 11: metadatakorrespondens — VAD artikeln rapporterar tillbaka
+  // 'antal' | 'status' | 'foto' | 'fotogalleri' | 'text'
+  reportingType: text("reporting_type"),
+  reportingMetadataField: text("reporting_metadata_field"),
+  // Session 11: framtida — artikeln ska returneras (retur-/pantflöde)
+  shouldBeReturned: boolean("should_be_returned").default(false),
   unit: text("unit").default("st"),
   status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -6106,6 +6114,137 @@ export const insertArticleComponentSchema = createInsertSchema(articleComponents
 });
 export type InsertArticleComponent = z.infer<typeof insertArticleComponentSchema>;
 export type ArticleComponent = typeof articleComponents.$inferSelect;
+
+// ============================================
+// Session 11 (Register 3): Produktionstidslista
+// Produktionstid per artikel × utförare (resurs)/utrustning — kan variera.
+// Kompletterar articles.productionTime (behålls som fallback/bakåtkomp).
+// ============================================
+export const productionTimeLists = pgTable("production_time_lists", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  // Specifik utförare (resurs) om tiden är utförarunik
+  performerResourceId: varchar("performer_resource_id").references(() => resources.id, { onDelete: "set null" }),
+  // Specifik utrustning om tiden är utrustningsunik
+  equipmentId: varchar("equipment_id").references(() => equipment.id, { onDelete: "set null" }),
+  productionTimeMinutes: integer("production_time_minutes").notNull(),
+  validFrom: timestamp("valid_from"),
+  validTo: timestamp("valid_to"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_production_time_lists_tenant").on(table.tenantId),
+  index("idx_production_time_lists_article").on(table.articleId),
+]);
+export const insertProductionTimeListSchema = createInsertSchema(productionTimeLists).omit({ id: true, createdAt: true });
+export type InsertProductionTimeList = z.infer<typeof insertProductionTimeListSchema>;
+export type ProductionTimeList = typeof productionTimeLists.$inferSelect;
+
+// ============================================
+// Session 11 (Register 5): Leverantörsregister
+// Leverantörsföretag + koppling av flera leverantörer per artikel (lev.artikelnr,
+// leveranstid, inköpspris). Data för framtida inköpsportal — struktur finns från start.
+// ============================================
+export const suppliers = pgTable("suppliers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  contact: text("contact"),
+  phone: text("phone"),
+  email: text("email"),
+  status: text("status").default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_suppliers_tenant").on(table.tenantId),
+]);
+export const insertSupplierSchema = createInsertSchema(suppliers).omit({ id: true, createdAt: true });
+export type InsertSupplier = z.infer<typeof insertSupplierSchema>;
+export type Supplier = typeof suppliers.$inferSelect;
+
+// Leverantörskoppling: artikel × leverantör
+export const supplierArticleLinks = pgTable("supplier_article_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  supplierId: varchar("supplier_id").references(() => suppliers.id, { onDelete: "cascade" }).notNull(),
+  // Leverantörens eget artikelnummer för denna artikel
+  supplierArticleNumber: text("supplier_article_number"),
+  // Leveranstid i dagar från denna leverantör
+  leadTimeDays: integer("lead_time_days"),
+  // Inköpspris i öre (DB-prisfält är öre)
+  purchasePrice: integer("purchase_price"),
+  currency: text("currency").default("SEK").notNull(),
+  isPrimary: boolean("is_primary").default(false),
+  active: boolean("active").default(true),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_supplier_article_links_tenant").on(table.tenantId),
+  index("idx_supplier_article_links_article").on(table.articleId),
+  index("idx_supplier_article_links_supplier").on(table.supplierId),
+  unique("unq_supplier_article_links_article_supplier").on(table.articleId, table.supplierId),
+]);
+export const insertSupplierArticleLinkSchema = createInsertSchema(supplierArticleLinks).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSupplierArticleLink = z.infer<typeof insertSupplierArticleLinkSchema>;
+export type SupplierArticleLink = typeof supplierArticleLinks.$inferSelect;
+
+// ============================================
+// Session 11 (Register 4): Strukturartikelregister (fysiskt separerat)
+// Sammansatta artiklar i egen tabell. Metadataassociation PÅ TOPP-nivå; varje
+// underartikel har egen metadatakorrespondens. Backfill + write-through-synk till
+// legacy articles.isStructure + article_components (så expansion/Fortnox/mobile fungerar).
+// ============================================
+export const structureArticles = pgTable("structure_articles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  structureNumber: text("structure_number").notNull(),
+  name: text("name").notNull(),
+  externalDescription: text("external_description"),
+  internalDescription: text("internal_description"),
+  // Metadataassociation PÅ TOPP-NIVÅ (villkor för var strukturen hakar fast)
+  hookLevel: text("hook_level"),
+  hookConditions: jsonb("hook_conditions").default({}),
+  associationLabel: text("association_label"),
+  associationValue: text("association_value"),
+  associationOperator: text("association_operator").default("equals"),
+  // Pekare till legacy strukturartikel i articles (under migration/synk)
+  legacyArticleId: varchar("legacy_article_id").references((): any => articles.id, { onDelete: "set null" }),
+  status: text("status").default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_structure_articles_tenant").on(table.tenantId),
+  unique("unq_structure_articles_tenant_number").on(table.tenantId, table.structureNumber),
+]);
+export const insertStructureArticleSchema = createInsertSchema(structureArticles).omit({ id: true, createdAt: true });
+export type InsertStructureArticle = z.infer<typeof insertStructureArticleSchema>;
+export type StructureArticle = typeof structureArticles.$inferSelect;
+
+// Underartiklar i en strukturartikel (pekar på rena artiklar)
+export const structureArticleComponents = pgTable("structure_article_components", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  structureArticleId: varchar("structure_article_id").references(() => structureArticles.id, { onDelete: "cascade" }).notNull(),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "restrict" }).notNull(),
+  sortOrder: integer("sort_order").default(0),
+  quantity: real("quantity").default(1.0).notNull(),
+  // Kvantitetsformel för skalning, t.ex. "metadata.antal"
+  quantityFormula: text("quantity_formula"),
+  // EGEN metadatakorrespondens per underartikel (VAD den rapporterar)
+  reportingType: text("reporting_type"),
+  reportingMetadataField: text("reporting_metadata_field"),
+  isMandatory: boolean("is_mandatory").default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_structure_article_components_structure").on(table.structureArticleId),
+  index("idx_structure_article_components_article").on(table.articleId),
+  unique("unq_structure_article_components_struct_article").on(table.structureArticleId, table.articleId),
+]);
+export const insertStructureArticleComponentSchema = createInsertSchema(structureArticleComponents).omit({ id: true, createdAt: true });
+export type InsertStructureArticleComponent = z.infer<typeof insertStructureArticleComponentSchema>;
+export type StructureArticleComponent = typeof structureArticleComponents.$inferSelect;
 
 // ============================================
 // ADR v3 (F4): Beroende-graf mellan work_orders (instans-nivå)
