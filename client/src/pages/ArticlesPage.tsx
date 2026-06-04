@@ -76,6 +76,7 @@ import {
   LinkIcon,
   Beaker,
   AlertTriangle,
+  Tag,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -250,6 +251,14 @@ export default function ArticlesPage() {
   const { data: metadataDefinitions = [] } = useQuery<MetadataDefinition[]>({
     queryKey: ["/api/metadata-definitions"],
   });
+
+  const metadataDefinitionLabels = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const d of metadataDefinitions) {
+      map.set(d.fieldKey, d.fieldLabel);
+    }
+    return map;
+  }, [metadataDefinitions]);
 
   // Task #682: varna när en metadatareferens redan är kopplad till en annan
   // ordertyp/artikel (undvik generiska fältkollisioner, t.ex. antal vs antal_matavfall).
@@ -755,6 +764,15 @@ export default function ArticlesPage() {
                         >
                           <span className="font-mono text-xs mr-1">{article.articleNumber}</span>
                           {article.name}
+                          {article.defaultMetadataAssociation && (
+                            <span
+                              className="ml-1.5 inline-flex items-center gap-0.5 border-l pl-1.5 text-xs text-muted-foreground"
+                              data-testid={`badge-default-metadata-${article.id}`}
+                            >
+                              <Tag className="h-3 w-3" />
+                              {metadataDefinitionLabels.get(article.defaultMetadataAssociation) || article.defaultMetadataAssociation}
+                            </span>
+                          )}
                         </Badge>
                       ))}
                     </div>
@@ -787,6 +805,15 @@ export default function ArticlesPage() {
                       >
                         <span className="font-mono text-xs mr-1">{article.articleNumber}</span>
                         {article.name}
+                        {article.defaultMetadataAssociation && (
+                          <span
+                            className="ml-1.5 inline-flex items-center gap-0.5 border-l pl-1.5 text-xs"
+                            data-testid={`badge-default-metadata-${article.id}`}
+                          >
+                            <Tag className="h-3 w-3" />
+                            {metadataDefinitionLabels.get(article.defaultMetadataAssociation) || article.defaultMetadataAssociation}
+                          </span>
+                        )}
                       </Badge>
                     ))}
                     {articles.filter(a => !a.hookLevel).length > 20 && (
@@ -855,6 +882,16 @@ export default function ArticlesPage() {
                           <div className="text-sm text-muted-foreground truncate max-w-[300px]">
                             {article.description}
                           </div>
+                        )}
+                        {article.defaultMetadataAssociation && (
+                          <Badge
+                            variant="outline"
+                            className="mt-1 gap-1 font-normal text-xs"
+                            data-testid={`badge-default-metadata-${article.id}`}
+                          >
+                            <Tag className="h-3 w-3" />
+                            {metadataDefinitionLabels.get(article.defaultMetadataAssociation) || article.defaultMetadataAssociation}
+                          </Badge>
                         )}
                       </div>
                     </TableCell>
