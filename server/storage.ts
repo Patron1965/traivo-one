@@ -425,6 +425,10 @@ export interface IStorage {
   getWorkOrderCounts(tenantId: string): Promise<{ overdue: number; todayPending: number; total: number }>;
   getActiveResourceCount(tenantId: string): Promise<number>;
   createWorkOrder(workOrder: InsertWorkOrder): Promise<WorkOrder>;
+  createWorkOrderWithLines(
+    workOrder: InsertWorkOrder,
+    lines: Omit<InsertWorkOrderLine, "workOrderId" | "tenantId">[],
+  ): Promise<{ workOrder: WorkOrder; lines: WorkOrderLine[] }>;
   updateWorkOrder(id: string, workOrder: Partial<InsertWorkOrder>): Promise<WorkOrder | undefined>;
   deleteWorkOrder(id: string, opts?: { reason?: string; userId?: string | null }): Promise<void>;
   restoreWorkOrder(id: string): Promise<WorkOrder | undefined>;
@@ -3477,6 +3481,72 @@ export class DatabaseStorage implements IStorage {
     const [workOrder] = await db.insert(workOrders).values(values).returning();
     if (workOrder?.tenantId) invalidateWorkflowCaches(workOrder.tenantId);
     return workOrder;
+  }
+
+  // Skapar en arbetsorder och alla dess rader i EN databastransaktion. Allt eller
+  // inget: om någon rad-insert fallerar rullas hela ordern tillbaka så att inga
+  // halvfärdiga ordrar (WO utan rader) kan uppstå. Alla read-baserade härledningar
+  // (koordinater från objekt, team från resurs) görs före transaktionen — endast
+  // skrivningarna är transaktionella. Totaler räknas om inom transaktionen.
+  async createWorkOrderWithLines(
+    insertWorkOrder: InsertWorkOrder,
+    lines: Omit<InsertWorkOrderLine, "workOrderId" | "tenantId">[],
+  ): Promise<{ workOrder: WorkOrder; lines: WorkOrderLine[] }> {
+    const values = { ...insertWorkOrder };
+    if (values.objectId && (values.taskLatitude == null || values.taskLongitude == null)) {
+      const [obj] = await db.select({ latitude: objects.latitude, longitude: objects.longitude })
+        .from(objects).where(eq(objects.id, values.objectId)).limit(1);
+      if (obj) {
+        if (values.taskLatitude == null && obj.latitude != null) values.taskLatitude = obj.latitude;
+        if (values.taskLongitude == null && obj.longitude != null) values.taskLongitude = obj.longitude;
+      }
+    }
+    const teamIdProvided = Object.prototype.hasOwnProperty.call(insertWorkOrder, "teamId");
+    if (!teamIdProvided && values.tenantId && values.resourceId) {
+      values.teamId = await inferTeamIdForResource(
+        values.tenantId,
+        values.resourceId,
+        values.clusterId ?? null,
+      );
+    }
+
+    const result = await db.transaction(async (tx) => {
+      const [workOrder] = await tx.insert(workOrders).values(values).returning();
+
+      const insertedLines: WorkOrderLine[] = [];
+      for (const line of lines) {
+        const [wol] = await tx.insert(workOrderLines).values({
+          ...line,
+          tenantId: workOrder.tenantId,
+          workOrderId: workOrder.id,
+        }).returning();
+        insertedLines.push(wol);
+      }
+
+      // Räkna om totaler från de nyss skapade raderna (samma logik som
+      // recalculateWorkOrderTotals men inom transaktionen).
+      let totalValue = 0;
+      let totalCost = 0;
+      let totalMinutes = 0;
+      for (const line of insertedLines) {
+        if (!line.isOptional) {
+          const qty = line.quantity || 1;
+          totalValue += (line.resolvedPrice || 0) * qty;
+          totalCost += (line.resolvedCost || 0) * qty;
+          totalMinutes += (line.resolvedProductionMinutes || 0) * qty;
+        }
+      }
+      const [updated] = await tx.update(workOrders).set({
+        cachedValue: totalValue,
+        cachedCost: totalCost,
+        cachedProductionMinutes: totalMinutes,
+      }).where(eq(workOrders.id, workOrder.id)).returning();
+
+      return { workOrder: updated ?? workOrder, lines: insertedLines };
+    });
+
+    if (result.workOrder?.tenantId) invalidateWorkflowCaches(result.workOrder.tenantId);
+    return result;
   }
 
   async updateWorkOrder(id: string, data: Partial<InsertWorkOrder>): Promise<WorkOrder | undefined> {

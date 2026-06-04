@@ -22,5 +22,14 @@ parent + ALLA rader postas på nytt = dubblett-WO. Upptäckt i code review av
 enkel-uppgift-wizarden.
 
 **How to apply:** Gäller alla nya wizards/dialogs i klienten som saknar en
-atomisk batch-endpoint. Den riktiga långsiktiga lösningen är en batch-endpoint
-som skapar WO + rader i en DB-transaktion (se follow-up).
+atomisk batch-endpoint.
+
+**Uppdatering:** Den atomiska batch-endpointen finns nu:
+`POST /api/work-orders/with-lines` (`{ workOrder, lines }`) skapar WO + alla
+rader i EN DB-transaktion via `storage.createWorkOrderWithLines` (allt-eller-
+inget; rullar tillbaka hela ordern om en rad failar). Pris/tid resolvas före
+transaktionen, totaler räknas om inom den. `EnkelUppgiftWizard` använder den för
+nya uppgifter. Tillägg på *befintlig* order postar fortfarande rader en-och-en
+(ordern finns redan → ingen partiell-parent-risk) och behåller `lineFailures`-
+mönstret. Nya batch-create-flöden bör återanvända with-lines-endpointen i stället
+för create-then-append.

@@ -15,7 +15,7 @@ import {
 } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin, requirePlanner } from "../tenant-middleware";
 import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, objectPayers, slaRiskSnapshots, type OrderConcept, isOutsidePreferredWindow } from "@shared/schema";
-import type { WorkOrder } from "@shared/schema";
+import type { WorkOrder, InsertWorkOrderLine } from "@shared/schema";
 import { handleWorkOrderStatusChange } from "../ai-communication";
 import { notificationService } from "../notifications";
 import { asyncHandler } from "../asyncHandler";
@@ -928,6 +928,163 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
   }
 
   res.status(201).json(workOrder);
+}));
+
+// Atomisk skapa-WO-med-rader (Task #741). Skapar arbetsordern OCH alla rader
+// (artikel + fritext) i EN databastransaktion. Allt-eller-inget: om någon rad
+// fallerar rullas hela ordern tillbaka, så inga halvfärdiga ordrar (WO utan
+// rader) kan uppstå. Ersätter wizardens tidigare flöde med WO-skapande följt av
+// N separata rad-anrop. Full tenant-scoping på alla refererade id:n och rader.
+const withLinesBodySchema = z.object({
+  workOrder: z.record(z.unknown()),
+  lines: z.array(z.object({
+    articleId: z.string().optional().nullable(),
+    quantity: z.number().int().positive().optional(),
+    isOptional: z.boolean().optional(),
+    notes: z.string().optional().nullable(),
+    priceListId: z.string().optional().nullable(),
+    description: z.string().optional().nullable(),
+    unitPrice: z.number().optional(),
+    unitCost: z.number().optional(),
+    productionMinutes: z.number().optional(),
+  })).default([]),
+});
+
+app.post("/api/work-orders/with-lines", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+
+  const parsedBody = withLinesBodySchema.safeParse(req.body);
+  if (!parsedBody.success) {
+    return res.status(400).json(formatZodError(parsedBody.error));
+  }
+
+  const bodyData: Record<string, unknown> = { ...parsedBody.data.workOrder };
+  for (const field of ['scheduledDate', 'desiredDeliveryStart', 'desiredDeliveryEnd'] as const) {
+    if (bodyData[field] && typeof bodyData[field] === 'string') {
+      const dateStr = bodyData[field] as string;
+      bodyData[field] = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T12:00:00Z');
+    }
+  }
+
+  // Kund är valfri (Enkel uppgift). Saknas customerId används tenantens interna
+  // kund som beställare (DB-kolumnen är fortsatt NOT NULL).
+  if (!bodyData.customerId) {
+    const internalCustomer = await storage.resolveInternalCustomer(tenantId);
+    bodyData.customerId = internalCustomer.id;
+  }
+
+  const data = insertWorkOrderSchema.parse({
+    orderStatus: 'skapad',
+    isSimulated: false,
+    ...bodyData,
+    tenantId,
+  });
+
+  // Validera alla refererade id:n mot tenant så att en planerare inte kan skapa
+  // en order som pekar på resurser/kunder/objekt/team i en annan tenant.
+  if (data.resourceId) await ensureResourceInTenant(data.resourceId, tenantId);
+  if (data.teamId) await ensureTeamInTenant(data.teamId, tenantId);
+  if (data.customerId) await ensureCustomerInTenant(data.customerId, tenantId);
+  if (data.objectId) await ensureObjectInTenant(data.objectId, tenantId);
+  if (data.clusterId) await ensureClusterInTenant(data.clusterId, tenantId);
+
+  const prefFlags = await computeOutsidePreferredWindow(
+    data.objectId,
+    data.plannedWindowStart,
+    data.plannedWindowEnd,
+  );
+  const workOrderData = {
+    ...data,
+    outsidePreferredWindow: prefFlags.outsidePreferredWindow,
+    deliveryPreferencePriority: prefFlags.deliveryPreferencePriority,
+  };
+
+  // Resolva pris/tid för varje rad (read-only) och bygg rad-data. Detta görs
+  // före transaktionen — endast skrivningarna är transaktionella.
+  const lineInputs: Omit<InsertWorkOrderLine, "workOrderId" | "tenantId">[] = [];
+  for (const line of parsedBody.data.lines) {
+    const quantity = line.quantity ?? 1;
+    const isOptional = line.isOptional ?? false;
+    const notes = line.notes ?? undefined;
+
+    if (!line.articleId) {
+      const trimmedDescription = typeof line.description === "string" ? line.description.trim() : "";
+      if (!trimmedDescription) {
+        throw new ValidationError("Antingen articleId eller description krävs för en orderrad");
+      }
+      const unitPrice = Math.max(0, Math.round(Number(line.unitPrice ?? 0)));
+      const unitCost = Math.max(0, Math.round(Number(line.unitCost ?? 0)));
+      const productionMinutes = Math.max(0, Math.round(Number(line.productionMinutes ?? 0)));
+      lineInputs.push(insertWorkOrderLineSchema.omit({ workOrderId: true, tenantId: true }).parse({
+        articleId: null,
+        description: trimmedDescription,
+        quantity,
+        resolvedPrice: unitPrice,
+        resolvedCost: unitCost,
+        resolvedProductionMinutes: productionMinutes,
+        priceListIdUsed: null,
+        priceSource: "manual",
+        isOptional,
+        notes,
+      }));
+      continue;
+    }
+
+    // Artikelrad — validera att artikeln tillhör tenant och resolva pris.
+    const priceInfo = line.priceListId
+      ? await storage.resolveArticlePriceFromList(tenantId, line.articleId, line.priceListId)
+      : await storage.resolveArticlePrice(tenantId, line.articleId, workOrderData.customerId);
+
+    const [articleRow] = await db.select({ tenantId: articles.tenantId, quantityMode: articles.quantityMode })
+      .from(articles)
+      .where(and(eq(articles.id, line.articleId), eq(articles.tenantId, tenantId)));
+    if (!articleRow) {
+      throw new ValidationError("Artikeln saknas eller tillhör en annan tenant");
+    }
+    const effectiveQuantity = articleRow.quantityMode === 'single_per_task' ? 1 : quantity;
+
+    lineInputs.push(insertWorkOrderLineSchema.omit({ workOrderId: true, tenantId: true }).parse({
+      articleId: line.articleId,
+      quantity: effectiveQuantity,
+      resolvedPrice: priceInfo.price,
+      resolvedCost: priceInfo.cost,
+      resolvedProductionMinutes: priceInfo.productionMinutes,
+      priceListIdUsed: priceInfo.priceListId,
+      priceSource: priceInfo.source,
+      isOptional,
+      notes,
+    }));
+  }
+
+  const { workOrder, lines } = await storage.createWorkOrderWithLines(workOrderData, lineInputs);
+
+  // Best-effort: systemgenererad metadata + notifieringar (får aldrig blockera).
+  if (workOrder.objectId) {
+    try {
+      const scheduled = workOrder.scheduledDate ? ` (${new Date(workOrder.scheduledDate).toISOString().slice(0, 10)})` : "";
+      await writeSystemMetadataOnObject(
+        workOrder.objectId,
+        "Senaste arbetsorder",
+        `${workOrder.title}${scheduled}`,
+        tenantId,
+        `system:wo-create:${workOrder.id}`,
+      );
+    } catch (e) {
+      console.error("[task-682] writeSystemMetadataOnObject (Senaste arbetsorder) failed:", e);
+    }
+  }
+
+  if (workOrder.resourceId) {
+    notificationService.notifyJobAssigned(workOrder, workOrder.resourceId);
+    try {
+      const { maybeSendExtraJobSms } = await import("../extra-job-sms");
+      void maybeSendExtraJobSms({ workOrder, resourceId: workOrder.resourceId, reason: "assigned" });
+    } catch (e) {
+      console.error("[extra-job-sms] hook failed (create-with-lines):", e);
+    }
+  }
+
+  res.status(201).json({ ...workOrder, lines });
 }));
 
 app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {

@@ -356,74 +356,81 @@ export function EnkelUppgiftWizard({
   const handleCreate = async () => {
     setSubmitting(true);
     try {
-      let workOrderId: string;
-
-      if (mode === "tillagg" && selectedOrder) {
-        workOrderId = selectedOrder.id;
-      } else {
-        const payload: Record<string, unknown> = {
-          title: derivedTitle,
-          orderType: "service",
-        };
-        if (kundType === "extern" && selectedCustomer) payload.customerId = selectedCustomer.id;
-        if (coupling === "objekt" && selectedObject) payload.objectId = selectedObject.id;
-        if (coupling === "kluster" && selectedCluster) payload.clusterId = selectedCluster.id;
-        if (deliveryStart) payload.desiredDeliveryStart = deliveryStart;
-        if (deliveryEnd) payload.desiredDeliveryEnd = deliveryEnd;
-        if (description.trim()) payload.description = description.trim();
-        if (plannedNotes.trim()) payload.plannedNotes = plannedNotes.trim();
-
-        const woRes = await apiRequest("POST", "/api/work-orders", payload);
-        const wo = await woRes.json();
-        workOrderId = wo.id;
-      }
-
-      // Ordern finns nu. Posta rader och samla ev. fel — ordern återskapas aldrig vid
-      // omförsök, så vi undviker dubbletter. Misslyckade rader rapporteras separat.
-      let lineFailures = 0;
-      for (const line of articleLines) {
-        try {
-          await apiRequest("POST", `/api/work-orders/${workOrderId}/lines`, {
-            articleId: line.articleId,
-            quantity: line.quantity,
-          });
-        } catch {
-          lineFailures += 1;
-        }
-      }
-      for (const line of freeTextLines) {
-        if (!line.description.trim()) continue;
-        try {
-          await apiRequest("POST", `/api/work-orders/${workOrderId}/lines`, {
+      // Bygg rad-payload (artikel + fritext) en gång.
+      const linePayloads = [
+        ...articleLines.map((line) => ({
+          articleId: line.articleId,
+          quantity: line.quantity,
+        })),
+        ...freeTextLines
+          .filter((line) => line.description.trim())
+          .map((line) => ({
             description: line.description.trim(),
             unitPrice: Math.round(line.unitPriceKr * 100),
             productionMinutes: line.productionMinutes,
             quantity: line.quantity,
-          });
-        } catch {
-          lineFailures += 1;
+          })),
+      ];
+
+      let workOrderId: string;
+
+      if (mode === "tillagg" && selectedOrder) {
+        // Tillägg på befintlig order: ordern finns redan, posta bara raderna.
+        // Ordern återskapas aldrig vid omförsök, så vi undviker dubbletter.
+        workOrderId = selectedOrder.id;
+        let lineFailures = 0;
+        for (const line of linePayloads) {
+          try {
+            await apiRequest("POST", `/api/work-orders/${workOrderId}/lines`, line);
+          } catch {
+            lineFailures += 1;
+          }
         }
-      }
+        queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId, "lines"] });
 
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId, "lines"] });
-
-      if (lineFailures > 0) {
-        toast({
-          title: "Uppgiften skapades med varning",
-          description: `${lineFailures} rad(er) kunde inte läggas till. Öppna uppgiften och lägg till dem manuellt.`,
-          variant: "destructive",
-        });
+        if (lineFailures > 0) {
+          toast({
+            title: "Uppgiften skapades med varning",
+            description: `${lineFailures} rad(er) kunde inte läggas till. Öppna uppgiften och lägg till dem manuellt.`,
+            variant: "destructive",
+          });
+        } else {
+          toast({ title: "Uppgift tillagd på order", description: derivedTitle });
+        }
       } else {
-        toast({
-          title: mode === "tillagg" ? "Uppgift tillagd på order" : "Enkel uppgift skapad",
-          description: derivedTitle,
+        // Ny uppgift: skapa work order + alla rader atomiskt i ETT anrop. Backend
+        // kör allt i en DB-transaktion — om något felar skapas ingen partiell order.
+        const workOrderPayload: Record<string, unknown> = {
+          title: derivedTitle,
+          orderType: "service",
+        };
+        if (kundType === "extern" && selectedCustomer) workOrderPayload.customerId = selectedCustomer.id;
+        if (coupling === "objekt" && selectedObject) workOrderPayload.objectId = selectedObject.id;
+        if (coupling === "kluster" && selectedCluster) workOrderPayload.clusterId = selectedCluster.id;
+        if (deliveryStart) workOrderPayload.desiredDeliveryStart = deliveryStart;
+        if (deliveryEnd) workOrderPayload.desiredDeliveryEnd = deliveryEnd;
+        if (description.trim()) workOrderPayload.description = description.trim();
+        if (plannedNotes.trim()) workOrderPayload.plannedNotes = plannedNotes.trim();
+
+        const res = await apiRequest("POST", "/api/work-orders/with-lines", {
+          workOrder: workOrderPayload,
+          lines: linePayloads,
         });
+        const wo = await res.json();
+        workOrderId = wo.id;
+
+        queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId, "lines"] });
+
+        toast({ title: "Enkel uppgift skapad", description: derivedTitle });
       }
+
       onCreated?.(workOrderId);
       onClose();
     } catch (err) {
-      // Själva order-skapandet misslyckades — inget partiellt WO skapat, säkert att försöka igen.
+      // Inget partiellt WO skapas (atomiskt skapande / tillägg på befintlig order),
+      // så det är säkert att försöka igen.
       toast({
         title: "Kunde inte skapa uppgiften",
         description: err instanceof Error ? err.message : "Okänt fel",
