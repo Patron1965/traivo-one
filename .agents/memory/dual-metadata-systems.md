@@ -47,6 +47,22 @@ väljer kanonisk: is_system → har beteckning → äldst, pekar om ALLA refs in
 `import_templates.field_ids[]` + `parent_metadata_id`, sedan delete). `concept_filters.metadata_key`
 matchar på namn-sträng → kanonisk måste behålla namnet.
 
+## Blockera nedärvning sker i svenska systemet (inte engelska breaksInheritance)
+Objektformulärets metadata-datapath är det svenska systemet. "Blockera nedärvning"
+(stoppa ett fält från att ärvas vidare till barn) styrs av `metadataVarden.stoppaVidareArvning`
+— resolvern (`getObjectWithAllMetadata`) ackumulerar blockerade katalog-id nedför kedjan.
+Engelska `objectMetadata.breaksInheritance` är en **no-op** för formulärets vy.
+
+För ett ÄRVT fält (source='inherited', `id` = förfaderns rad — PATCH:a den ALDRIG):
+materialisera en lokal kopia via `POST /api/metadata/` och sätt sedan
+`PATCH /api/metadata/:id/inheritance {stoppaVidareArvning:true}`. Det finns ingen atomisk
+en-endpoint-väg → klienten måste kompensera (radera den nyskapade raden om PATCH faller)
+annars blir en osynlig föräldralös lokal rad kvar. Avblockera = `DELETE` den lokala raden.
+
+**Why:** Två steg utan transaktion → partiellt fel strandar rader som varken syns som ärvda
+eller blockerade. **How to apply:** Vill du ha det robust, bygg en server-side atomisk
+block/unblock-endpoint; annars behåll kompenserande delete i klienten.
+
 ## Återanvändbara hjälpare (server/metadata-queries.ts)
 - `coerceMetadataVardeFromRaw(katalog, raw)` → `{vardeFields, displayValue}`,
   validerar `datatyp` + `allowedValues` (kastar svenskt fel). `displayValue` =

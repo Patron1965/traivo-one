@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { z } from "zod";
-import { insertCustomerSchema, insertCustomerRelationshipSchema, insertObjectSchema, objects, customers, workOrders, workOrderLines, CUSTOMER_HIERARCHY_TYPES, insertInvoiceRecipientSchema, INVOICE_RECIPIENT_LEVELS, type InvoiceRecipientLevel } from "@shared/schema";
+import { insertCustomerSchema, insertCustomerRelationshipSchema, insertObjectSchema, objects, objectParents, customers, workOrders, workOrderLines, technicianRatings, resources, CUSTOMER_HIERARCHY_TYPES, insertInvoiceRecipientSchema, INVOICE_RECIPIENT_LEVELS, type InvoiceRecipientLevel } from "@shared/schema";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
@@ -590,7 +590,23 @@ app.get("/api/objects/tree", asyncHandler(async (req, res) => {
       ))
       .limit(100);
 
-    return res.json(rows.map(r => ({ ...r, childCount: 0, children: [] })));
+    // Task #727: berika sökträffar med släktnamn (displayName) så att en sökbar
+    // "Överordnat objekt"-dropdown kan visa hela hierarki-kedjan per träff och
+    // användaren inte kopplar mot fel gren när två objekt har samma namn.
+    let displayNameMap = new Map<string, string>();
+    try {
+      const { computeDisplayNamesBatch } = await import("../services/display-name");
+      displayNameMap = await computeDisplayNamesBatch(rows.map(r => r.id), tenantId);
+    } catch {
+      // fallback: displayName = name
+    }
+
+    return res.json(rows.map(r => ({
+      ...r,
+      displayName: displayNameMap.get(r.id) || r.name,
+      childCount: 0,
+      children: [],
+    })));
   }
 
   const parentFilter = parentId && typeof parentId === "string"
@@ -758,6 +774,39 @@ app.get("/api/objects/:id/issue-reports", asyncHandler(async (req, res) => {
   }
   const reports = await storage.getPublicIssueReports(tenantId, { objectId: req.params.id });
   res.json(reports);
+}));
+
+// Task #727: kronologisk lista över technician-ratings per objekt. technician_ratings
+// har inget objectId — vi joinar via work_orders.objectId. Tenant-scopad i alla
+// predikat (cross-tenant ger tom lista).
+app.get("/api/objects/:id/ratings", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const object = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(object, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const rows = await db
+    .select({
+      id: technicianRatings.id,
+      workOrderId: technicianRatings.workOrderId,
+      resourceId: technicianRatings.resourceId,
+      resourceName: resources.name,
+      rating: technicianRatings.rating,
+      comment: technicianRatings.comment,
+      categories: technicianRatings.categories,
+      createdAt: technicianRatings.createdAt,
+    })
+    .from(technicianRatings)
+    .innerJoin(workOrders, eq(technicianRatings.workOrderId, workOrders.id))
+    .leftJoin(resources, eq(technicianRatings.resourceId, resources.id))
+    .where(and(
+      eq(technicianRatings.tenantId, tenantId),
+      eq(workOrders.tenantId, tenantId),
+      eq(workOrders.objectId, req.params.id),
+    ))
+    .orderBy(sql`${technicianRatings.createdAt} DESC`)
+    .limit(100);
+  res.json(rows);
 }));
 
 // Task #714: signerad, objekt-bunden QR-token för kundbetyg/feedback. Token
@@ -967,8 +1016,81 @@ app.patch("/api/objects/:id", asyncHandler(async (req, res) => {
     return res.status(400).json(formatZodError(parseResult.error));
   }
   const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as Record<string, unknown>;
-  const object = await storage.updateObject(req.params.id, updateData);
+
+  // Task #727: repoint (byt överordnat objekt) ska hålla object_parents primär-
+  // relation i synk med legacy objects.parentId (invariant: skriv aldrig den ena
+  // utan den andra). Validera att den nya föräldern tillhör samma tenant, blockera
+  // självkoppling, och kör objects.parentId + object_parents atomiskt i en transaktion.
+  const isRepoint = "parentId" in updateData;
+  let newParentId: string | null = null;
+  if (isRepoint) {
+    newParentId = (updateData.parentId as string | null) ?? null;
+    if (newParentId && newParentId === req.params.id) {
+      throw new ValidationError("Ett objekt kan inte vara sitt eget överordnade objekt.");
+    }
+    if (newParentId) {
+      const parent = await storage.getObject(newParentId);
+      if (!verifyTenantOwnership(parent, tenantId)) {
+        throw new NotFoundError("Förälderobjekt");
+      }
+    }
+  }
+
+  // Skriv allt utom parentId via storage; parentId hanteras atomiskt nedan så att
+  // legacy-kolumnen och object_parents aldrig kan hamna i otakt vid fel/race.
+  const { parentId: _p, ...nonParentUpdate } = updateData as Record<string, unknown>;
+  let object = await storage.updateObject(req.params.id, nonParentUpdate);
   if (!object) throw new NotFoundError("Objekt");
+
+  if (isRepoint) {
+    await db.transaction(async (tx) => {
+      await tx.update(objects)
+        .set({ parentId: newParentId })
+        .where(and(eq(objects.id, req.params.id), eq(objects.tenantId, tenantId)));
+
+      const existingPrimary = await tx
+        .select({ id: objectParents.id, parentId: objectParents.parentId })
+        .from(objectParents)
+        .where(and(
+          eq(objectParents.objectId, req.params.id),
+          eq(objectParents.tenantId, tenantId),
+          eq(objectParents.isPrimary, true),
+        ));
+      const primary = existingPrimary[0];
+      if (!newParentId) {
+        if (primary) {
+          await tx.delete(objectParents).where(and(eq(objectParents.id, primary.id), eq(objectParents.tenantId, tenantId)));
+        }
+      } else if (primary) {
+        if (primary.parentId !== newParentId) {
+          await tx.update(objectParents)
+            .set({ parentId: newParentId, relationContext: "primary" })
+            .where(and(eq(objectParents.id, primary.id), eq(objectParents.tenantId, tenantId)));
+        }
+      } else {
+        const same = await tx
+          .select({ id: objectParents.id })
+          .from(objectParents)
+          .where(and(
+            eq(objectParents.objectId, req.params.id),
+            eq(objectParents.tenantId, tenantId),
+            eq(objectParents.parentId, newParentId),
+          ));
+        if (same[0]) {
+          await tx.update(objectParents).set({ isPrimary: true }).where(and(eq(objectParents.id, same[0].id), eq(objectParents.tenantId, tenantId)));
+        } else {
+          await tx.insert(objectParents).values({
+            tenantId,
+            objectId: req.params.id,
+            parentId: newParentId,
+            isPrimary: true,
+            relationContext: "primary",
+          });
+        }
+      }
+    });
+    object = (await storage.getObject(req.params.id)) ?? object;
+  }
 
   const addressChanged = "address" in updateData && updateData.address !== existing!.address;
   const coordsExplicitlyProvided = "latitude" in updateData || "longitude" in updateData;

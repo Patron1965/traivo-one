@@ -29,7 +29,7 @@ import {
   Map as MapIcon, List, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, XCircle,
   Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera, Layers, FileUp, Pyramid,
-  ArrowUp, ArrowDown, ArrowUpDown, Network, Pencil, FolderPlus
+  ArrowUp, ArrowDown, ArrowUpDown, Network, Pencil, FolderPlus, Archive
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
@@ -45,6 +45,9 @@ import { ObjectMetadataPanel } from "@/components/ObjectMetadataPanel";
 import { ObjectPayersPanel } from "@/components/ObjectPayersPanel";
 import { ObjectParentsPanel } from "@/components/ObjectParentsPanel";
 import { ObjectDisplayNames } from "@/components/ObjectDisplayNames";
+import { ObjectParentCombobox } from "@/components/ObjectParentCombobox";
+import { ObjectInheritedMetadataPanel } from "@/components/ObjectInheritedMetadataPanel";
+import { ObjectSystemGeneratedPanel } from "@/components/ObjectSystemGeneratedPanel";
 import { useLocalizedObjectName } from "@/lib/object-name";
 import { ObjectApplicableArticlesPanel } from "@/components/ObjectApplicableArticlesPanel";
 import { ObjectContactsDialog } from "@/components/ObjectContactsPanel";
@@ -236,7 +239,8 @@ export default function ObjectsPage() {
   // Task #681: full-redigering + radering via radens kontextmeny.
   const [editObjectOpen, setEditObjectOpen] = useState(false);
   const [editForm, setEditForm] = useState({
-    id: "", name: "", objectType: "fastighet", accessType: "open", accessCode: "",
+    id: "", objectNumber: "" as string | null, parentId: null as string | null,
+    name: "", objectType: "fastighet", accessType: "open", accessCode: "",
     address: "", city: "", postalCode: "",
     latitude: null as number | null, longitude: null as number | null,
   });
@@ -628,6 +632,22 @@ export default function ObjectsPage() {
     },
   });
 
+  // Task #727: arkivera objekt (livscykel). 409 = blockerat (kräver force).
+  const archiveObjectMutation = useMutation({
+    mutationFn: async ({ id, force }: { id: string; force?: boolean }) => {
+      const res = await apiRequest("POST", `/api/objects/${id}/archive`, force ? { force: true } : {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
+      toast({ title: "Objekt arkiverat" });
+      setEditObjectOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte arkivera objektet", description: error.message, variant: "destructive" });
+    },
+  });
+
   const customerMap = customerNameMap;
 
   const topLevelObjects = useMemo(() => objects.filter(obj => !obj.parentId), [objects]);
@@ -837,12 +857,10 @@ export default function ObjectsPage() {
   const handleAddChild = useCallback((parent: ServiceObject) => {
     resetCreateForm();
     setCreateParentId(parent.id);
-    setCreateParentName(parent.name || parent.objectNumber || "");
+    setCreateParentName((parent as any).displayName || parent.name || parent.objectNumber || "");
     setNewObject((p) => ({
       ...p,
       name: "",
-      objectType: parent.objectType,
-      customerId: parent.customerId || "",
     }));
     setBuilderKey((k) => k + 1);
     setCreateDialogOpen(true);
@@ -853,6 +871,8 @@ export default function ObjectsPage() {
   const handleEditObject = useCallback((obj: ServiceObject) => {
     setEditForm({
       id: obj.id,
+      objectNumber: obj.objectNumber ?? "",
+      parentId: obj.parentId ?? null,
       name: obj.name || "",
       objectType: obj.objectType,
       accessType: obj.accessType || "open",
@@ -2185,76 +2205,36 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
               />
             </div>
             <div>
-              <Label>{t("asset_type")}</Label>
-              <Select value={newObject.objectType} onValueChange={(v) => setNewObject({ ...newObject, objectType: v })}>
-                <SelectTrigger data-testid="select-new-object-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(objectTypeLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Tillgångstyp</Label>
-              <Select value={newObject.accessType} onValueChange={(v) => setNewObject({ ...newObject, accessType: v })}>
-                <SelectTrigger data-testid="select-new-access-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(accessTypeLabels).map(([value, { label }]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {(newObject.accessType === "code" || newObject.accessType === "key") && (
-              <div>
-                <Label>{newObject.accessType === "code" ? "Kod" : "Nyckelnummer"}</Label>
-                <Input
-                  value={newObject.accessCode}
-                  onChange={(e) => setNewObject({ ...newObject, accessCode: e.target.value })}
-                  placeholder={newObject.accessType === "code" ? "Portkod" : "Nyckelnummer"}
-                  data-testid="input-new-access-code"
-                />
-              </div>
-            )}
-            <div>
-              <Label>Adress</Label>
-              <AddressSearch
-                defaultValue={newObject.address}
-                placeholder="Sök gatuadress..."
-                onSelect={(result) => setNewObject({
-                  ...newObject,
-                  address: result.address,
-                  latitude: result.lat,
-                  longitude: result.lon,
-                  city: result.city || "",
-                  postalCode: result.postalCode || "",
-                  entranceLatitude: result.entranceLat || null,
-                  entranceLongitude: result.entranceLon || null,
-                  addressDescriptor: result.addressDescriptor || "",
-                })}
+              <Label>Släktnamn</Label>
+              <Input
+                value={createParentName ? `${createParentName} > ${newObject.name || "(nytt objekt)"}` : (newObject.name || "(nytt objekt)")}
+                readOnly
+                disabled
+                className="bg-muted"
+                data-testid="input-new-object-displayname"
               />
+              <p className="text-xs text-muted-foreground mt-1">Genereras automatiskt från överordnat objekt och namn.</p>
             </div>
             <div>
-              <Label>Kund</Label>
-              <CustomerCombobox
-                value={newObject.customerId || null}
-                onChange={(id) => setNewObject({ ...newObject, customerId: id || "" })}
-                placeholder="Välj kund"
-                emptyOptionLabel="Ingen kund"
+              <Label>Överordnat objekt</Label>
+              <ObjectParentCombobox
+                value={createParentId}
+                valueLabel={createParentName}
+                onChange={(id, opt) => {
+                  setCreateParentId(id);
+                  setCreateParentName(opt ? (opt.displayName || opt.name) : "");
+                }}
                 className="w-full"
-                testId="select-new-customer"
+                testId="select-new-parent"
               />
+              <p className="text-xs text-muted-foreground mt-1">Sök på namn, adress eller systemnummer. Släktnamnet visas per träff så du kopplar mot rätt gren.</p>
             </div>
             <div className="border-t pt-4">
               <Label className="mb-2 block">Metadata</Label>
+              <p className="text-xs text-muted-foreground mb-3">Objekttyp, adress, kund m.m. läggs till som metadatafält. Ärvda värden från överordnat objekt är förifyllda.</p>
               <MetadataFieldBuilder
                 key={builderKey}
-                customerId={newObject.customerId || null}
+                customerId={null}
                 inheritedFields={createParentId ? inheritedSeeds : undefined}
                 onChange={setMetadataFields}
               />
@@ -2267,18 +2247,11 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                 data: {
                   name: newObject.name,
                   parentId: createParentId || undefined,
-                  objectType: newObject.objectType,
-                  accessType: newObject.accessType,
-                  accessCode: newObject.accessCode || undefined,
-                  address: newObject.address || undefined,
-                  customerId: newObject.customerId || undefined,
-                  latitude: newObject.latitude || undefined,
-                  longitude: newObject.longitude || undefined,
-                  city: newObject.city || undefined,
-                  postalCode: newObject.postalCode || undefined,
-                  entranceLatitude: newObject.entranceLatitude || undefined,
-                  entranceLongitude: newObject.entranceLongitude || undefined,
-                  addressDescriptor: newObject.addressDescriptor || undefined,
+                  // Task #727: Objekttyp/Tillgångstyp/Adress/Kund är inte längre
+                  // formulärfält — de hanteras som metadata. Skicka säkra defaults
+                  // så backend-schemat (objectType/accessType) förblir giltigt.
+                  objectType: "fastighet",
+                  accessType: "open",
                 },
                 metadata: metadataFields,
               })} 
@@ -2292,43 +2265,81 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
         </DialogContent>
       </Dialog>
 
-      {/* Task #681: full-redigeringsdialog */}
+      {/* Task #681/#727: full-redigeringsdialog */}
       <Dialog open={editObjectOpen} onOpenChange={setEditObjectOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Redigera objekt</DialogTitle>
-            <DialogDescription>Uppdatera objektets grunduppgifter.</DialogDescription>
+            <DialogDescription>Uppdatera objektets grunduppgifter och metadata.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          {(() => {
+            const editingFull = objects.find((o) => o.id === editForm.id);
+            const editParentLabel = editForm.parentId
+              ? (() => {
+                  const p = objects.find((o) => o.id === editForm.parentId);
+                  return (p as any)?.displayName || p?.name || p?.objectNumber || "";
+                })()
+              : "";
+            return (
+          <div className="space-y-5">
+            {/* Fasta systemfält */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label>Systemnummer</Label>
+                <Input value={editForm.objectNumber || "—"} readOnly disabled data-testid="input-edit-object-number" />
+              </div>
+              <div>
+                <Label>Namn</Label>
+                <Input
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  data-testid="input-edit-object-name"
+                />
+              </div>
+            </div>
             <div>
-              <Label>Namn</Label>
+              <Label>Släktnamn</Label>
               <Input
-                value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                data-testid="input-edit-object-name"
+                value={`${editParentLabel ? editParentLabel + " > " : ""}${editForm.name}`}
+                readOnly
+                disabled
+                data-testid="input-edit-display-name"
               />
             </div>
             <div>
-              <Label>{t("asset_type")}</Label>
-              <Select value={editForm.objectType} onValueChange={(v) => setEditForm({ ...editForm, objectType: v })}>
-                <SelectTrigger data-testid="select-edit-object-type"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(objectTypeLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Överordnat objekt</Label>
+              <ObjectParentCombobox
+                value={editForm.parentId}
+                valueLabel={editParentLabel}
+                excludeId={editForm.id}
+                onChange={(id) => setEditForm({ ...editForm, parentId: id })}
+              />
+              <p className="text-xs text-muted-foreground mt-1">Byt överordnat objekt för att flytta objektet i hierarkin.</p>
             </div>
-            <div>
-              <Label>Tillgångstyp</Label>
-              <Select value={editForm.accessType} onValueChange={(v) => setEditForm({ ...editForm, accessType: v })}>
-                <SelectTrigger data-testid="select-edit-access-type"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(accessTypeLabels).map(([value, { label }]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label>{t("asset_type")}</Label>
+                <Select value={editForm.objectType} onValueChange={(v) => setEditForm({ ...editForm, objectType: v })}>
+                  <SelectTrigger data-testid="select-edit-object-type"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(objectTypeLabels).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Tillgångstyp</Label>
+                <Select value={editForm.accessType} onValueChange={(v) => setEditForm({ ...editForm, accessType: v })}>
+                  <SelectTrigger data-testid="select-edit-access-type"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(accessTypeLabels).map(([value, { label }]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             {(editForm.accessType === "code" || editForm.accessType === "key") && (
               <div>
@@ -2355,7 +2366,59 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                 })}
               />
             </div>
+
+            {/* Ärvd metadata */}
+            <div className="border-t pt-4">
+              <Label className="text-sm font-semibold">Ärvd metadata</Label>
+              <p className="text-xs text-muted-foreground mb-2">Värden som ärvs från överordnade objekt. Blockera ett fält för att stoppa det från att ärvas vidare nedåt.</p>
+              {editForm.id && <ObjectInheritedMetadataPanel objectId={editForm.id} />}
+            </div>
+
+            {/* Systemgenererad metadata */}
+            <div className="border-t pt-4">
+              <Label className="text-sm font-semibold">Systemgenererad metadata</Label>
+              <p className="text-xs text-muted-foreground mb-2">Data som skapas automatiskt från objektets aktivitet.</p>
+              {editForm.id && <ObjectSystemGeneratedPanel objectId={editForm.id} />}
+            </div>
+
+            {/* Åtgärder */}
+            <div className="border-t pt-4 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!editingFull}
+                onClick={() => { if (editingFull) { setEditObjectOpen(false); handleCopyObject(editingFull); } }}
+                data-testid="button-edit-copy-object"
+              >
+                <Copy className="h-4 w-4 mr-1" /> Kopiera
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!editingFull}
+                onClick={() => { if (editingFull) { setEditObjectOpen(false); handleAddChild(editingFull); } }}
+                data-testid="button-edit-add-child"
+              >
+                <Plus className="h-4 w-4 mr-1" /> Underordnat
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-warning hover:text-warning border-warning/40"
+                disabled={archiveObjectMutation.isPending}
+                onClick={() => archiveObjectMutation.mutate({ id: editForm.id })}
+                data-testid="button-edit-archive-object"
+              >
+                {archiveObjectMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Archive className="h-4 w-4 mr-1" />}
+                Arkivera
+              </Button>
+            </div>
           </div>
+            );
+          })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditObjectOpen(false)}>Avbryt</Button>
             <Button
@@ -2364,6 +2427,7 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                   id: editForm.id,
                   data: {
                     name: editForm.name,
+                    parentId: editForm.parentId ?? null,
                     objectType: editForm.objectType,
                     accessType: editForm.accessType,
                     accessCode: editForm.accessCode || undefined,
