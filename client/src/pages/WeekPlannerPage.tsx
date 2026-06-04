@@ -1,17 +1,19 @@
 import { useState, useMemo, useEffect } from "react";
 import { WeekPlanner } from "@/components/WeekPlanner";
 import { JobModal } from "@/components/JobModal";
+import { EnkelUppgiftWizard } from "@/components/EnkelUppgiftWizard";
 import { JobDetailModal } from "@/components/JobDetailModal";
 import { AISuggestionsPanel } from "@/components/AISuggestionsPanel";
 import { RouteOptimizationPanel } from "@/components/RouteOptimizationPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Sparkles, X, AlertTriangle, Route } from "lucide-react";
+import { Calendar, Sparkles, X, AlertTriangle, Route, Zap } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { format, startOfWeek, addDays } from "date-fns";
 
 export default function WeekPlannerPage() {
   const [showJobModal, setShowJobModal] = useState(false);
+  const [showEnkelUppgift, setShowEnkelUppgift] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
   const [filterParam] = useState(() => {
@@ -38,8 +40,18 @@ export default function WeekPlannerPage() {
 
   return (
     <div className="flex h-full relative flex-col">
-      <div className="px-4 pt-4">
+      <div className="px-4 pt-4 flex items-center justify-between gap-2">
         <PageHeader icon={Calendar} title="Veckoplanerare" testId="text-page-title" />
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5"
+          onClick={() => setShowEnkelUppgift(true)}
+          data-testid="button-open-enkel-uppgift"
+        >
+          <Zap className="h-4 w-4" />
+          Enkel uppgift
+        </Button>
       </div>
       {filterParam === "unassigned" && (
         <div className="flex items-center gap-3 px-4 py-2 bg-destructive/10 border-b border-destructive/30" data-testid="banner-unassigned-filter">
@@ -116,6 +128,11 @@ export default function WeekPlannerPage() {
         open={showJobModal}
         onClose={() => setShowJobModal(false)}
         onSubmit={(data) => console.log("New job created:", data)}
+      />
+
+      <EnkelUppgiftWizard
+        open={showEnkelUppgift}
+        onClose={() => setShowEnkelUppgift(false)}
       />
 
       <JobDetailModal

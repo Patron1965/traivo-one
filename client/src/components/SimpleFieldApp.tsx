@@ -10,7 +10,7 @@ import {
   HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X,
   Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
   User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share,
-  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText, ListTodo, Eye, EyeOff, Settings, Network
+  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database, FileText, ListTodo, Eye, EyeOff, Settings, Network, Plus
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -54,6 +54,7 @@ import { FieldTodoList, getUncompletedTodoCount } from "@/components/FieldTodoLi
 import { VoiceInput } from "@/components/VoiceInput";
 import { FocusTimeline, FocusCTA, ExpandableDetail, OrderStatusBadge, getTimelineStep, useFocusMode } from "@/components/FocusMode";
 import { OutboxCenter } from "@/components/OutboxCenter";
+import { EnkelUppgiftWizard } from "@/components/EnkelUppgiftWizard";
 import { TimelineView } from "@/components/TimelineView";
 import {
   Dialog,
@@ -197,6 +198,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const localizedObjectName = useLocalizedObjectName();
   const { focusMode, setFocusMode } = useFocusMode();
   const [view, setView] = useState<View>("jobs");
+  const [showEnkelUppgift, setShowEnkelUppgift] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [jobStarted, setJobStarted] = useState(false);
   const [startTime, setStartTime] = useState<Date | null>(null);
@@ -2566,6 +2568,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   return (
     <div className="flex flex-col h-full bg-background">
       <OfflineBanner isOnline={isOnline} />
+      <EnkelUppgiftWizard
+        open={showEnkelUppgift}
+        onClose={() => setShowEnkelUppgift(false)}
+      />
       <div className="p-4 border-b bg-card space-y-3">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -2586,6 +2592,16 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1"
+              onClick={() => setShowEnkelUppgift(true)}
+              data-testid="button-open-enkel-uppgift-mobile"
+            >
+              <Plus className="h-4 w-4" />
+              Enkel uppgift
+            </Button>
             {weatherData && (
               <Badge variant="outline" className="text-xs gap-1" data-testid="badge-weather">
                 <Thermometer className="h-3 w-3" />

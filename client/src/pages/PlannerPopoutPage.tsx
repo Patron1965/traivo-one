@@ -2,12 +2,13 @@ import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { WeekPlanner } from "@/components/WeekPlanner";
 import { JobModal } from "@/components/JobModal";
+import { EnkelUppgiftWizard } from "@/components/EnkelUppgiftWizard";
 import { JobDetailModal } from "@/components/JobDetailModal";
 import { AISuggestionsPanel } from "@/components/AISuggestionsPanel";
 import { RouteOptimizationPanel } from "@/components/RouteOptimizationPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, X, Route, ExternalLink, Calendar, Inbox } from "lucide-react";
+import { Sparkles, X, Route, ExternalLink, Calendar, Inbox, Plus } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
 import type { PlannerDisplayMode } from "@/components/weekplanner/types";
 import type { SyncRole } from "@/components/weekplanner/usePlannerSync";
@@ -23,6 +24,7 @@ function readPopoutView(): "calendar" | "orderlager" | "full" {
 export default function PlannerPopoutPage() {
   const [location] = useLocation();
   const [showJobModal, setShowJobModal] = useState(false);
+  const [showEnkelUppgift, setShowEnkelUppgift] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [showAIPanel, setShowAIPanel] = useState(() => {
     const saved = localStorage.getItem('weekplanner-ai-panel-open');
@@ -81,6 +83,16 @@ export default function PlannerPopoutPage() {
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            onClick={() => setShowEnkelUppgift(true)}
+            data-testid="button-open-enkel-uppgift"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Enkel uppgift
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -161,6 +173,11 @@ export default function PlannerPopoutPage() {
         open={showJobModal}
         onClose={() => setShowJobModal(false)}
         onSubmit={(data) => console.log("New job created:", data)}
+      />
+
+      <EnkelUppgiftWizard
+        open={showEnkelUppgift}
+        onClose={() => setShowEnkelUppgift(false)}
       />
 
       <JobDetailModal
