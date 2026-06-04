@@ -19,7 +19,7 @@ dialogen — och visa en varnings-toast om någon rad föll bort (be användaren
 **Why:** Annars: parent + några rader skapas, en senare rad failar, generisk
 fel-toast visas, dialogen står kvar, användaren trycker "Skapa" igen → en NY
 parent + ALLA rader postas på nytt = dubblett-WO. Upptäckt i code review av
-`EnkelUppgiftWizard.tsx`.
+enkel-uppgift-wizarden.
 
 **How to apply:** Gäller alla nya wizards/dialogs i klienten som saknar en
 atomisk batch-endpoint. Den riktiga långsiktiga lösningen är en batch-endpoint

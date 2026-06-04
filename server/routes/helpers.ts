@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { storage } from "../storage";
 import { NotFoundError, UnauthorizedError } from "../errors";
-import type { Resource, Team, Customer, ServiceObject } from "@shared/schema";
+import type { Resource, Team, Customer, ServiceObject, Cluster } from "@shared/schema";
 
 declare global {
   namespace Express {
@@ -81,6 +81,10 @@ export function ensureCustomerInTenant(id: string | null | undefined, tenantId: 
 
 export function ensureObjectInTenant(id: string | null | undefined, tenantId: string): Promise<ServiceObject> {
   return ensureTenantOwnership((oid: string) => storage.getObject(oid), id, tenantId, "Objekt");
+}
+
+export function ensureClusterInTenant(id: string | null | undefined, tenantId: string): Promise<Cluster> {
+  return ensureTenantOwnership((cid: string) => storage.getCluster(cid), id, tenantId, "Kluster");
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   ensureTeamInTenant,
   ensureCustomerInTenant,
   ensureObjectInTenant,
+  ensureClusterInTenant,
   ensureResourceIdsInTenant,
 } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin, requirePlanner } from "../tenant-middleware";
@@ -851,6 +852,7 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
   if (data.teamId) await ensureTeamInTenant(data.teamId, tenantId);
   if (data.customerId) await ensureCustomerInTenant(data.customerId, tenantId);
   if (data.objectId) await ensureObjectInTenant(data.objectId, tenantId);
+  if (data.clusterId) await ensureClusterInTenant(data.clusterId, tenantId);
 
   if (data.articleId && data.objectId) {
     const article = await storage.getArticle(data.articleId);
@@ -953,6 +955,7 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
   if (updateData.teamId) await ensureTeamInTenant(updateData.teamId, tenantId);
   if (updateData.customerId) await ensureCustomerInTenant(updateData.customerId, tenantId);
   if (updateData.objectId) await ensureObjectInTenant(updateData.objectId, tenantId);
+  if (updateData.clusterId) await ensureClusterInTenant(updateData.clusterId, tenantId);
 
   // När klienten begär det (detaljvyns redigera-dialog), kör samma
   // constraint-/konfliktkontroll som veckoplaneraren innan vi sparar en
