@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useTerminology } from "@/hooks/use-terminology";
 import { useForm } from "react-hook-form";
@@ -371,6 +371,37 @@ export default function ClustersPage() {
     [filteredClusters]
   );
 
+  // Flera kluster kan dela exakt samma centrumkoordinat (samma adress/auto-klustring).
+  // Då hamnar kartnålarna ovanpå varandra och ett klick träffar alltid den översta —
+  // vilket gör att "Visa detaljer" öppnar fel (intilliggande) kluster. Vi fördelar
+  // därför sammanfallande nålar i en liten ring så att var och en går att klicka på.
+  const markerPositions = useMemo(() => {
+    const groups: Record<string, typeof clustersWithCoordinates> = {};
+    for (const c of clustersWithCoordinates) {
+      const key = `${c.centerLatitude!.toFixed(4)},${c.centerLongitude!.toFixed(4)}`;
+      (groups[key] ??= []).push(c);
+    }
+    const positions: Record<string, [number, number]> = {};
+    for (const list of Object.values(groups)) {
+      if (list.length === 1) {
+        const c = list[0];
+        positions[c.id] = [c.centerLatitude!, c.centerLongitude!];
+        continue;
+      }
+      const spreadMeters = 90;
+      const ordered = [...list].sort((a, b) => a.id.localeCompare(b.id));
+      ordered.forEach((c, i) => {
+        const lat = c.centerLatitude!;
+        const lng = c.centerLongitude!;
+        const angle = (i / ordered.length) * 2 * Math.PI;
+        const dLat = (spreadMeters * Math.cos(angle)) / 111320;
+        const dLng = (spreadMeters * Math.sin(angle)) / (111320 * Math.cos((lat * Math.PI) / 180));
+        positions[c.id] = [lat + dLat, lng + dLng];
+      });
+    }
+    return positions;
+  }, [clustersWithCoordinates]);
+
   const selectedCluster = selectedClusterId 
     ? (clusters || []).find(c => c.id === selectedClusterId) 
     : null;
@@ -497,22 +528,24 @@ export default function ClustersPage() {
                   <MapFitBounds clusters={clustersWithCoordinates} />
                   {clustersWithCoordinates.map((cluster) => {
                     const color = cluster.color || SLA_COLORS[cluster.slaLevel || "standard"] || SLA_COLORS.standard;
+                    const isSelected = cluster.id === selectedClusterId;
                     return (
-                      <div key={cluster.id}>
-                        {cluster.radiusKm && (
+                      <Fragment key={cluster.id}>
+                        {cluster.radiusKm && isSelected && (
                           <Circle
                             center={[cluster.centerLatitude!, cluster.centerLongitude!]}
                             radius={Math.min(cluster.radiusKm, 100) * 1000}
                             pathOptions={{
                               color: color,
                               fillColor: color,
-                              fillOpacity: 0.15,
+                              fillOpacity: 0.12,
                               weight: 2,
+                              interactive: false,
                             }}
                           />
                         )}
                         <Marker
-                          position={[cluster.centerLatitude!, cluster.centerLongitude!]}
+                          position={markerPositions[cluster.id] ?? [cluster.centerLatitude!, cluster.centerLongitude!]}
                           icon={createClusterIcon(color)}
                           eventHandlers={{
                             click: () => setSelectedClusterId(cluster.id),
@@ -540,7 +573,7 @@ export default function ClustersPage() {
                             </div>
                           </Popup>
                         </Marker>
-                      </div>
+                      </Fragment>
                     );
                   })}
                 </MapContainer>
