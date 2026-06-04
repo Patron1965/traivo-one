@@ -8,8 +8,31 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
-import { objects, workOrders, customerCommunications, objectContacts, orderConceptArticles, orderConceptObjects, articleObjectMappings, type InsertOrderConceptArticle } from "@shared/schema";
+import { objects, workOrders, customerCommunications, objectContacts, orderConceptArticles, orderConceptObjects, articleObjectMappings, conceptFilters, priceLists, objectMetadata, metadataDefinitions, deliverySchedules, type InsertOrderConceptArticle } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
+import OpenAI from "openai";
+
+const openaiClient = new OpenAI({
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+});
+
+// Delad operator-matchning för villkorsfilter (steg 4). Återanvänds av
+// förhandsvisning och execute så preview och faktisk körning matchar identiskt.
+function matchesFilter(metadataValue: unknown, operator: string, filterValue: unknown): boolean {
+  switch (operator) {
+    case "equals": return String(metadataValue ?? "") === String(filterValue ?? "");
+    case "not_equals": return String(metadataValue ?? "") !== String(filterValue ?? "");
+    case "contains": return String(metadataValue ?? "").toLowerCase().includes(String(filterValue ?? "").toLowerCase());
+    case "starts_with": return String(metadataValue ?? "").toLowerCase().startsWith(String(filterValue ?? "").toLowerCase());
+    case "greater_than": return Number(metadataValue) > Number(filterValue);
+    case "less_than": return Number(metadataValue) < Number(filterValue);
+    case "in_list": return Array.isArray(filterValue) && filterValue.map(String).includes(String(metadataValue));
+    case "exists": return metadataValue !== undefined && metadataValue !== null && metadataValue !== "";
+    case "not_exists": return metadataValue === undefined || metadataValue === null || metadataValue === "";
+    default: return true;
+  }
+}
 
 export async function registerOrderConceptRoutes(app: Express) {
 // ============================================
@@ -137,7 +160,7 @@ app.post("/api/order-concepts/:id/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
-    const { articleId, quantity, unitPrice, taskCategory } = req.body;
+    const { articleId, quantity, unitPrice, taskCategory, metadataAssociation, metadataCorrespondence, isPreTask, dependencyOffsetMinutes } = req.body;
     if (!articleId || typeof articleId !== "string") {
       throw new ValidationError("articleId krävs");
     }
@@ -154,6 +177,11 @@ app.post("/api/order-concepts/:id/articles", asyncHandler(async (req, res) => {
       quantity: quantity || 1,
       unitPrice: unitPrice ?? null,
       taskCategory: validCategory,
+      // Session 9B — metadataassociation/-korrespondens, föruppgift & beroende-offset.
+      ...(typeof metadataAssociation === "string" ? { metadataAssociation } : {}),
+      ...(typeof metadataCorrespondence === "string" ? { metadataCorrespondence } : {}),
+      ...(typeof isPreTask === "boolean" ? { isPreTask } : {}),
+      ...(typeof dependencyOffsetMinutes === "number" ? { dependencyOffsetMinutes } : {}),
     });
     const allArticles = await storage.getOrderConceptArticles(req.params.id);
     await storage.updateOrderConcept(req.params.id, tenantId, { totalArticles: allArticles.length });
@@ -164,7 +192,7 @@ app.patch("/api/order-concepts/:id/articles/:articleId", asyncHandler(async (req
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
-    const allowed: Partial<Pick<InsertOrderConceptArticle, "quantity" | "unitPrice" | "quantityModeOverride">> = {};
+    const allowed: Partial<InsertOrderConceptArticle> = {};
     if (typeof req.body.quantity === "number") allowed.quantity = req.body.quantity;
     if (req.body.unitPrice === null || typeof req.body.unitPrice === "number") allowed.unitPrice = req.body.unitPrice;
     if (req.body.quantityModeOverride === null || typeof req.body.quantityModeOverride === "string") {
@@ -175,6 +203,11 @@ app.patch("/api/order-concepts/:id/articles/:articleId", asyncHandler(async (req
         throw new ValidationError("Ogiltigt quantityModeOverride");
       }
     }
+    // Session 9B — metadataassociation/-korrespondens, föruppgift & beroende-offset.
+    if (req.body.metadataAssociation === null || typeof req.body.metadataAssociation === "string") allowed.metadataAssociation = req.body.metadataAssociation;
+    if (req.body.metadataCorrespondence === null || typeof req.body.metadataCorrespondence === "string") allowed.metadataCorrespondence = req.body.metadataCorrespondence;
+    if (typeof req.body.isPreTask === "boolean") allowed.isPreTask = req.body.isPreTask;
+    if (req.body.dependencyOffsetMinutes === null || typeof req.body.dependencyOffsetMinutes === "number") allowed.dependencyOffsetMinutes = req.body.dependencyOffsetMinutes;
     const updated = await storage.updateOrderConceptArticle(req.params.articleId, req.params.id, allowed);
     if (!updated) throw new NotFoundError("Artikelrad hittades inte");
     res.json(updated);
@@ -1647,5 +1680,252 @@ app.post("/api/work-orders/:workOrderId/auto-eta-sms", asyncHandler(async (req, 
       etaMinutes,
     });
 }));
+
+// ============================================
+// SESSION 9B — 7-stegs wizard (Task #738)
+// ============================================
+
+// Steg 2: Föreslå prislista för vald kund (kundunik > rabattbrev > generell)
+app.get("/api/order-concepts/price-lists/for-customer/:customerId", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { customerId } = req.params;
+    const all = await storage.getPriceLists(tenantId);
+    const active = all.filter(pl => pl.status === "active" && !pl.deletedAt);
+    const byPriority = (a: typeof active[number], b: typeof active[number]) => (b.priority ?? 1) - (a.priority ?? 1);
+
+    const kundunik = active.filter(pl => pl.priceListType === "kundunik" && pl.customerId === customerId).sort(byPriority);
+    const rabattbrev = active.filter(pl => pl.priceListType === "rabattbrev" && pl.customerId === customerId).sort(byPriority);
+    const generell = active.filter(pl => pl.priceListType === "generell").sort(byPriority);
+
+    let suggestedPriceListId: string | null = null;
+    let suggestedSource: "kundunik" | "rabattbrev" | "generell" | null = null;
+    if (kundunik.length > 0) { suggestedPriceListId = kundunik[0].id; suggestedSource = "kundunik"; }
+    else if (rabattbrev.length > 0) { suggestedPriceListId = rabattbrev[0].id; suggestedSource = "rabattbrev"; }
+    else if (generell.length > 0) { suggestedPriceListId = generell[0].id; suggestedSource = "generell"; }
+
+    res.json({ suggestedPriceListId, suggestedSource, priceLists: active });
+}));
+
+// Steg 4: Förhandsvisa villkorsfilter mot valda kluster (X av Y matchar).
+// Tar clusterIds + filter i body så förhandsvisning fungerar innan konceptet sparats.
+app.post("/api/order-concepts/condition-preview", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const schema = z.object({
+      clusterIds: z.array(z.string()).default([]),
+      filters: z.array(z.object({
+        metadataKey: z.string(),
+        operator: z.string(),
+        filterValue: z.any().optional(),
+      })).default([]),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+    const { clusterIds, filters } = parsed.data;
+
+    // Samla objekt från valda kluster (dedupe).
+    const objectMap = new Map<string, any>();
+    for (const clusterId of clusterIds) {
+      const clusterObjects = await storage.getClusterObjects(clusterId);
+      for (const obj of clusterObjects) {
+        if (verifyTenantOwnership(obj, tenantId)) objectMap.set(obj.id, obj);
+      }
+    }
+    const objectList = Array.from(objectMap.values());
+    const total = objectList.length;
+
+    // Bygg metadata-karta (fieldKey -> värde) i en batch om filter finns.
+    const metaByObject = new Map<string, Record<string, unknown>>();
+    if (filters.length > 0 && total > 0) {
+      const objectIds = objectList.map(o => o.id);
+      const defs = await db.select().from(metadataDefinitions)
+        .where(and(eq(metadataDefinitions.tenantId, tenantId), isNull(metadataDefinitions.deletedAt)));
+      const defKey = new Map(defs.map(d => [d.id, d.fieldKey]));
+      const rows = await db.select().from(objectMetadata)
+        .where(and(eq(objectMetadata.tenantId, tenantId), inArray(objectMetadata.objectId, objectIds)));
+      for (const row of rows) {
+        const key = defKey.get(row.definitionId);
+        if (!key) continue;
+        const map = metaByObject.get(row.objectId) ?? {};
+        map[key] = row.valueJson ?? row.value;
+        metaByObject.set(row.objectId, map);
+      }
+    }
+
+    const matchedObjects = objectList.filter(obj => {
+      if (filters.length === 0) return true;
+      const meta = metaByObject.get(obj.id) ?? {};
+      // Inkludera även objektets baskolumner som möjliga nycklar.
+      return filters.every(f => {
+        const value = f.metadataKey in meta ? meta[f.metadataKey] : (obj as any)[f.metadataKey];
+        return matchesFilter(value, f.operator, f.filterValue);
+      });
+    });
+
+    res.json({
+      total,
+      matched: matchedObjects.length,
+      sample: matchedObjects.slice(0, 50).map(o => ({
+        id: o.id,
+        name: o.name,
+        objectNumber: o.objectNumber ?? null,
+        address: o.address ?? null,
+      })),
+    });
+}));
+
+// Steg 5: AI-hjälp för leveranstid — tolkar mjuka villkor/restriktioner.
+app.post("/api/order-concepts/:id/delivery-ai-help", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const concept = verifyTenantOwnership(await storage.getOrderConcept(req.params.id), tenantId);
+    if (!concept) throw new NotFoundError("Orderkoncept hittades inte");
+
+    const userText: string = typeof req.body?.prompt === "string" ? req.body.prompt : "";
+    const context = {
+      deliveryTimeType: (concept as any).deliveryTimeType ?? null,
+      timeWindows: (concept as any).timeWindows ?? null,
+      intervalFrequencyDays: (concept as any).intervalFrequencyDays ?? null,
+      deliveryRestrictions: (concept as any).deliveryRestrictions ?? null,
+    };
+
+    const completion = await openaiClient.chat.completions.create({
+      model: "gpt-4o-mini",
+      max_tokens: 600,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: "Du är en planeringsassistent för fältservice (avfallshantering). Tolka användarens mjuka leveransvillkor och föreslå strukturerade leveranstidsinställningar. Svara ENDAST med JSON på svenska enligt formatet: {\"summary\": string, \"suggestions\": [{\"title\": string, \"detail\": string}], \"restrictions\": [{\"type\": string, \"description\": string}]}.",
+        },
+        {
+          role: "user",
+          content: `Befintlig kontext: ${JSON.stringify(context)}\n\nAnvändarens beskrivning: ${userText || "(ingen text angiven, ge generella råd baserat på kontexten)"}`,
+        },
+      ],
+    });
+
+    const { trackApiUsage } = await import("../api-usage-tracker");
+    trackApiUsage({ service: "openai", method: "chat.completions.create", endpoint: "/v1/chat/completions", model: "gpt-4o-mini", units: 1, metadata: { feature: "delivery-ai-help" } });
+
+    let result: unknown;
+    try {
+      result = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
+    } catch {
+      result = { summary: completion.choices[0]?.message?.content ?? "", suggestions: [], restrictions: [] };
+    }
+    res.json(result);
+}));
+
+// Steg 1-2 & 7: Spara koncept som mall (status=template).
+app.post("/api/order-concepts/:id/save-as-template", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const userId = req.session?.user?.id;
+    const source = verifyTenantOwnership(await storage.getOrderConcept(req.params.id), tenantId);
+    if (!source) throw new NotFoundError("Orderkoncept hittades inte");
+
+    const templateName: string = typeof req.body?.name === "string" && req.body.name.trim()
+      ? req.body.name.trim()
+      : `${source.name} (mall)`;
+
+    const created = await copyConcept(source, tenantId, userId, {
+      name: templateName,
+      status: "template",
+      copyObjects: false,
+    });
+    res.status(201).json(created);
+}));
+
+// Steg 7 & list: Kopiera koncept (valfritt peka om till andra kluster/grenar).
+app.post("/api/order-concepts/:id/copy", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const userId = req.session?.user?.id;
+    const source = verifyTenantOwnership(await storage.getOrderConcept(req.params.id), tenantId);
+    if (!source) throw new NotFoundError("Orderkoncept hittades inte");
+
+    const targetClusterIds: string[] | undefined = Array.isArray(req.body?.targetClusterIds)
+      ? req.body.targetClusterIds
+      : undefined;
+    const name: string = typeof req.body?.name === "string" && req.body.name.trim()
+      ? req.body.name.trim()
+      : `${source.name} (kopia)`;
+    const asTemplate = req.body?.asTemplate === true;
+
+    const created = await copyConcept(source, tenantId, userId, {
+      name,
+      status: asTemplate ? "template" : "draft",
+      targetClusterIds,
+      copyObjects: !targetClusterIds,
+    });
+    res.status(201).json(created);
+}));
+
+// Hjälpfunktion: djupkopiera ett koncept med filter, artiklar, scheman och konfig.
+async function copyConcept(
+  source: any,
+  tenantId: string,
+  userId: string | undefined,
+  opts: { name: string; status: string; targetClusterIds?: string[]; copyObjects?: boolean },
+) {
+    const { id, createdAt, updatedAt, createdBy, ...rest } = source;
+    const newConcept = await storage.createOrderConcept({
+      ...rest,
+      tenantId,
+      createdBy: userId,
+      name: opts.name,
+      status: opts.status,
+      ...(opts.targetClusterIds ? { targetClusterIds: opts.targetClusterIds } : {}),
+    });
+
+    // Kopiera villkorsfilter.
+    const filters = await storage.getConceptFilters(source.id);
+    for (const f of filters) {
+      const { id: _fid, orderConceptId: _ocid, createdAt: _fca, ...frest } = f as any;
+      await storage.createConceptFilter({ ...frest, orderConceptId: newConcept.id });
+    }
+
+    // Kopiera artiklar.
+    const articleRows = await storage.getOrderConceptArticles(source.id);
+    if (articleRows.length > 0) {
+      await db.insert(orderConceptArticles).values(
+        articleRows.map((a: any) => {
+          const { id: _aid, orderConceptId: _aocid, createdAt: _aca, ...arest } = a;
+          return { ...arest, orderConceptId: newConcept.id };
+        }),
+      );
+    }
+
+    // Kopiera leveransscheman, fakturakonfig och dokumentkonfig.
+    const schedules = await storage.getDeliverySchedules(source.id);
+    if (schedules.length > 0) {
+      await storage.upsertDeliverySchedules(newConcept.id, schedules.map((s: any) => {
+        const { id: _sid, orderConceptId: _socid, createdAt: _sca, ...srest } = s;
+        return { ...srest, orderConceptId: newConcept.id };
+      }));
+    }
+    const invoiceConfig = await storage.getInvoiceConfiguration(source.id);
+    if (invoiceConfig) {
+      const { id: _iid, orderConceptId: _iocid, createdAt: _ica, ...irest } = invoiceConfig as any;
+      await storage.upsertInvoiceConfiguration({ ...irest, orderConceptId: newConcept.id });
+    }
+    const docConfigs = await storage.getDocumentConfigurations(source.id);
+    if (docConfigs.length > 0) {
+      await storage.upsertDocumentConfigurations(newConcept.id, docConfigs.map((d: any) => {
+        const { id: _did, orderConceptId: _docid, createdAt: _dca, ...drest } = d;
+        return { ...drest, orderConceptId: newConcept.id };
+      }));
+    }
+
+    // Kopiera objekt om vi inte pekar om till andra grenar.
+    if (opts.copyObjects) {
+      const conceptObjects = await storage.getOrderConceptObjects(source.id);
+      if (conceptObjects.length > 0) {
+        await storage.addOrderConceptObjects(conceptObjects.map((o: any) => ({
+          orderConceptId: newConcept.id,
+          objectId: o.objectId,
+        })));
+      }
+    }
+
+    return newConcept;
+}
 
 }

@@ -630,6 +630,8 @@ export const articles = pgTable("articles", {
   internalDescription: text("internal_description"),
   // Länk till arbetsbeskrivning
   infoLink: text("info_link"),
+  // Session 9B: geotaggad — uppgiften kräver fysisk position (fältarbete på plats)
+  isGeotagged: boolean("is_geotagged").default(false),
   unit: text("unit").default("st"),
   status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -2595,6 +2597,30 @@ export const orderConcepts = pgTable("order_concepts", {
   // Inget enum — tenanten väljer terminologi.
   seasonName: text("season_name"),
 
+  // === SESSION 9B: 7-stegs orderkoncept-wizard ===
+  // Steg 1 — meddelande till utföraren (beskrivning = befintlig description)
+  executorMessage: text("executor_message"),
+  // Steg 2 — prislista + prismodell + kundreferenser
+  priceListId: varchar("price_list_id").references(() => priceLists.id),
+  priceModel: text("price_model").default("running"), // 'running' (löpande) | 'fixed' (fast pris)
+  fixedPriceAmount: integer("fixed_price_amount"), // öre, gäller när priceModel='fixed'
+  customerReference: text("customer_reference"), // "Er referens"
+  customerLabel: text("customer_label"), // "Er beteckning"
+  // Steg 3 — faktureringsmodell + abonnemangsregler + sampackning
+  invoiceMethod: text("invoice_method"), // 'afterwards' | 'scheduled' | 'subscription'
+  subscriptionAdjustmentDate: timestamp("subscription_adjustment_date"), // valfritt årligt justeringsdatum (tomt = löpande)
+  invoiceConsolidation: text("invoice_consolidation").default("per_job"), // 'per_job' | 'weekly' | 'monthly' | 'department'
+  departmentMetadataField: text("department_metadata_field"), // metadatafält för per-avdelning-sampackning
+  // Steg 4 — flera inpekningsgrenar (targetClusterId behålls för bakåtkomp/primär gren)
+  targetClusterIds: text("target_cluster_ids").array(),
+  // Steg 5 — leveranstid (tidsfönster eller intervall) + restriktioner
+  deliveryTimeType: text("delivery_time_type"), // 'time_window' | 'interval'
+  timeWindows: jsonb("time_windows"), // [{ months:[1..12], weekdays:[0..6], timeFrom, timeTo }]
+  intervalStartDate: timestamp("interval_start_date"),
+  intervalEndDate: timestamp("interval_end_date"),
+  intervalFrequencyDays: integer("interval_frequency_days"),
+  deliveryRestrictions: jsonb("delivery_restrictions"), // { hard:[{type,value}], soft:[{type,value}] }
+
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
@@ -3231,6 +3257,11 @@ export const orderConceptArticles = pgTable("order_concept_articles", {
   // Override för artikelns quantityMode på just denna orderkoncept-rad.
   // null = använd artikelns inställning. Värden: 'use_object_quantity' | 'single_per_task'
   quantityModeOverride: text("quantity_mode_override"),
+  // Session 9B — uppgiftsrad (steg 6)
+  metadataAssociation: text("metadata_association"), // var artikeln hakar fast (metadatafält)
+  metadataCorrespondence: text("metadata_correspondence"), // vilket metadatafält styr antal
+  isPreTask: boolean("is_pre_task").default(false), // föruppgift (plocka/beställ/föravisering)
+  dependencyOffsetMinutes: integer("dependency_offset_minutes"), // negativt = före huvuduppgift (t.ex. föravisering −2 dagar)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_oca_order_concept").on(table.orderConceptId),

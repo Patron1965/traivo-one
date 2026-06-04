@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, ensureResourc
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingConflict } from "../errors";
-import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, importBatches, type InsertWorkOrder } from "@shared/schema";
+import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, importBatches, objectMetadata, metadataDefinitions, type InsertWorkOrder } from "@shared/schema";
 import { getISOWeek } from "./helpers";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 
@@ -1569,7 +1569,19 @@ app.patch("/api/order-concepts/:id", asyncHandler(async (req, res) => {
     if (req.body.customerMode && !["HARDCODED", "FROM_METADATA"].includes(req.body.customerMode)) {
       throw new ValidationError("customerMode måste vara HARDCODED eller FROM_METADATA");
     }
-    
+
+    // Session 9B — timestamp-kolumner kräver Date-objekt (inte ISO-sträng) i drizzle .set().
+    for (const dateField of ["subscriptionAdjustmentDate", "intervalStartDate", "intervalEndDate"] as const) {
+      const v = (req.body as Record<string, unknown>)[dateField];
+      if (typeof v === "string" && v.trim()) {
+        const parsed = new Date(v);
+        if (!Number.isNaN(parsed.getTime())) (req.body as Record<string, unknown>)[dateField] = parsed;
+        else (req.body as Record<string, unknown>)[dateField] = null;
+      } else if (v === "" ) {
+        (req.body as Record<string, unknown>)[dateField] = null;
+      }
+    }
+
     const concept = await storage.updateOrderConcept(req.params.id, tenantId, req.body);
     res.json(concept);
 }));
@@ -1656,42 +1668,72 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
     }
 
     const filters = await storage.getConceptFilters(concept.id);
-    
-    // Get all objects in the cluster hierarchy
+
+    // Get all objects in the selected cluster branches (multi-cluster, Session 9B)
+    // med bakåtkompatibel fallback till legacy targetClusterId.
+    const targetClusterIds: string[] = Array.isArray((concept as any).targetClusterIds) && (concept as any).targetClusterIds.length > 0
+      ? (concept as any).targetClusterIds
+      : (concept.targetClusterId ? [concept.targetClusterId] : []);
+
     let targetObjects: ServiceObject[] = [];
-    if (concept.targetClusterId) {
-      const clusterObjects = await storage.getClusterObjects(concept.targetClusterId);
-      targetObjects = clusterObjects;
+    if (targetClusterIds.length > 0) {
+      const objectMap = new Map<string, ServiceObject>();
+      for (const clusterId of targetClusterIds) {
+        const clusterObjects = await storage.getClusterObjects(clusterId);
+        for (const obj of clusterObjects) {
+          if (verifyTenantOwnership(obj, tenantId)) objectMap.set(obj.id, obj);
+        }
+      }
+      targetObjects = Array.from(objectMap.values());
     } else {
       targetObjects = await storage.getObjects(tenantId);
     }
 
+    // Bygg metadata-karta (fieldKey -> värde) i en batch så villkorsfiltren matchar
+    // faktiska metadatavärden (getClusterObjects returnerar råa objekt utan metadata).
+    const metaByObject = new Map<string, Record<string, unknown>>();
+    if (filters.length > 0 && targetObjects.length > 0) {
+      const objectIds = targetObjects.map(o => o.id);
+      const defs = await db.select().from(metadataDefinitions)
+        .where(and(eq(metadataDefinitions.tenantId, tenantId), isNull(metadataDefinitions.deletedAt)));
+      const defKey = new Map(defs.map(d => [d.id, d.fieldKey]));
+      const rows = await db.select().from(objectMetadata)
+        .where(and(eq(objectMetadata.tenantId, tenantId), inArray(objectMetadata.objectId, objectIds)));
+      for (const row of rows) {
+        const key = defKey.get(row.definitionId);
+        if (!key) continue;
+        const map = metaByObject.get(row.objectId) ?? {};
+        map[key] = row.valueJson ?? row.value;
+        metaByObject.set(row.objectId, map);
+      }
+    }
+
     // Apply filters to find matching objects
     const matchingObjects = targetObjects.filter(obj => {
+      const meta = metaByObject.get(obj.id) ?? {};
       return filters.every(filter => {
-        const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
-        const metadataValue = objWithMeta.metadata?.[filter.metadataKey];
+        const metadataValue = filter.metadataKey in meta ? meta[filter.metadataKey] : (obj as any)[filter.metadataKey];
         const filterValue = filter.filterValue;
         
         switch (filter.operator) {
           case "equals":
-            return metadataValue === filterValue;
+            return String(metadataValue ?? "") === String(filterValue ?? "");
           case "not_equals":
-            return metadataValue !== filterValue;
+            return String(metadataValue ?? "") !== String(filterValue ?? "");
           case "contains":
-            return String(metadataValue || "").includes(String(filterValue));
+            return String(metadataValue || "").toLowerCase().includes(String(filterValue ?? "").toLowerCase());
           case "starts_with":
-            return String(metadataValue || "").startsWith(String(filterValue));
+            return String(metadataValue || "").toLowerCase().startsWith(String(filterValue ?? "").toLowerCase());
           case "greater_than":
             return Number(metadataValue) > Number(filterValue);
           case "less_than":
             return Number(metadataValue) < Number(filterValue);
           case "in_list":
-            return Array.isArray(filterValue) && filterValue.includes(metadataValue);
+            return Array.isArray(filterValue) && filterValue.map(String).includes(String(metadataValue));
           case "exists":
-            return metadataValue !== undefined && metadataValue !== null;
+            return metadataValue !== undefined && metadataValue !== null && metadataValue !== "";
           case "not_exists":
-            return metadataValue === undefined || metadataValue === null;
+            return metadataValue === undefined || metadataValue === null || metadataValue === "";
           default:
             return true;
         }
@@ -1821,6 +1863,71 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
       }
     }
 
+    // Session 9B — Föruppgifter & beroendeuppgifter (steg 6/7).
+    // Artikelrader markerade isPreTask (t.ex. plocka/beställ för fysiska artiklar
+    // eller föravisering med negativ leveranstid) expanderas till en egen
+    // föruppgift per matchande objekt, schemalagd med dependencyOffsetMinutes
+    // relativt huvuduppgiftens datum (negativt = före).
+    const preTaskArticles = conceptArticles.filter(ca => (ca as any).isPreTask === true && (!ca.taskCategory || ca.taskCategory === "field"));
+    const createdPreTasks: Array<{ id: string; objectId: string; articleId: string }> = [];
+    if (preTaskArticles.length > 0) {
+      for (const obj of matchingObjects) {
+        for (const ca of preTaskArticles) {
+          const article = await storage.getArticle(ca.articleId);
+          if (!article) continue;
+          const qty = ca.quantity ?? 1;
+          const offsetMin = Number((ca as any).dependencyOffsetMinutes ?? 0);
+          let preDate: Date | undefined = undefined;
+          if (scheduledDate) {
+            preDate = new Date(scheduledDate.getTime() + offsetMin * 60_000);
+          }
+          let unitTime = article.productionTime || 30;
+          let unitPrice = article.listPrice || 0;
+          let unitCost = article.cost || 0;
+          if (concept.customerId) {
+            const info = await storage.resolveArticlePrice(tenantId, ca.articleId, concept.customerId);
+            unitTime = info.productionMinutes || unitTime;
+            unitPrice = info.price;
+            unitCost = info.cost;
+          }
+          const preAssignment = await storage.createAssignment({
+            tenantId,
+            orderConceptId: concept.id,
+            objectId: obj.id,
+            clusterId: obj.clusterId || undefined,
+            title: `${article.name} (föruppgift)`,
+            description: concept.description || undefined,
+            status: "not_planned",
+            priority: concept.priority || "normal",
+            scheduledDate: preDate,
+            quantity: qty,
+            address: obj.address || undefined,
+            latitude: obj.latitude || undefined,
+            longitude: obj.longitude || undefined,
+            creationMethod: "automatic",
+            createdBy: userId,
+            estimatedDuration: unitTime * qty,
+            cachedValue: unitPrice * qty,
+            cachedCost: unitCost * qty,
+          });
+          await storage.createAssignmentArticle({
+            assignmentId: preAssignment.id,
+            articleId: ca.articleId,
+            quantity: qty,
+            unitPrice,
+            totalPrice: unitPrice * qty,
+            unitCost,
+            totalCost: unitCost * qty,
+            unitTime,
+            totalTime: unitTime * qty,
+            sequenceOrder: 1,
+            status: "pending",
+          });
+          createdPreTasks.push({ id: preAssignment.id, objectId: obj.id, articleId: ca.articleId });
+        }
+      }
+    }
+
     // Update last run date
     await storage.updateOrderConcept(concept.id, tenantId, {
       lastRunDate: new Date()
@@ -1829,10 +1936,13 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
     res.json({
       success: true,
       message: `Skapade ${createdAssignments.length} uppgifter från ${matchingObjects.length} matchande objekt` +
+        (createdPreTasks.length > 0 ? ` + ${createdPreTasks.length} föruppgifter` : "") +
         (createdAdminWorkOrders.length > 0 ? ` + ${createdAdminWorkOrders.length} administrativa uppgifter` : ""),
       assignmentsCreated: createdAssignments.length,
       objectsMatched: matchingObjects.length,
       assignments: createdAssignments,
+      preTasksCreated: createdPreTasks.length,
+      preTasks: createdPreTasks,
       adminWorkOrdersCreated: createdAdminWorkOrders.length,
       adminWorkOrders: createdAdminWorkOrders,
     });

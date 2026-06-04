@@ -8,72 +8,54 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ToastAction } from "@/components/ui/toast";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, ArrowRight, Save, Check, Loader2, AlertTriangle, PlayCircle, Wand2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Save, Check, Loader2, AlertTriangle, PlayCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import type {
-  OrderConcept, Customer, Article,
+  Customer, Article,
   InvoiceLevel, InvoiceModel, InvoicePeriod,
-  DeliveryModel, DeliverySeason, DistributionChannel, DocumentType,
-  CustomerMode
+  CustomerMode, TaskCategory,
 } from "@shared/schema";
 
-import Step1ObjectSelection from "@/components/orderkoncept/Step1ObjectSelection";
-import Step2ObjectConfirmation from "@/components/orderkoncept/Step2ObjectConfirmation";
-import Step3InvoiceModel from "@/components/orderkoncept/Step3InvoiceModel";
-import Step4InvoiceTemplates from "@/components/orderkoncept/Step4InvoiceTemplates";
-import Step5DocumentConfig from "@/components/orderkoncept/Step5DocumentConfig";
-import Step6Articles from "@/components/orderkoncept/Step6Articles";
-import Step7ArticleMapping from "@/components/orderkoncept/Step7ArticleMapping";
-import Step8Review from "@/components/orderkoncept/Step8Review";
-import Step9DeliveryModel from "@/components/orderkoncept/Step9DeliveryModel";
+import Step1NameCustomer from "@/components/orderkoncept/Step1NameCustomer";
+import Step2PriceReference from "@/components/orderkoncept/Step2PriceReference";
+import Step3Invoicing from "@/components/orderkoncept/Step3Invoicing";
+import Step4Inspection, { type ConditionFilter } from "@/components/orderkoncept/Step4Inspection";
+import Step5DeliveryTime, { type TimeWindow, type DeliveryRestriction } from "@/components/orderkoncept/Step5DeliveryTime";
+import Step6Tasks, { type ConceptArticleRow } from "@/components/orderkoncept/Step6Tasks";
+import Step7ReviewSave from "@/components/orderkoncept/Step7ReviewSave";
 import WizardSidebar from "@/components/orderkoncept/WizardSidebar";
 
 const STEPS = [
-  { num: 1, label: "Objekt" },
-  { num: 2, label: "Bekräfta" },
-  { num: 3, label: "Faktura" },
-  { num: 4, label: "Mall" },
-  { num: 5, label: "Dokument" },
-  { num: 6, label: "Artiklar" },
-  { num: 7, label: "Koppling" },
-  { num: 8, label: "Kontroll" },
-  { num: 9, label: "Leverans" },
+  { num: 1, label: "Namn & Kund" },
+  { num: 2, label: "Prislista" },
+  { num: 3, label: "Fakturering" },
+  { num: 4, label: "Inpekning" },
+  { num: 5, label: "Leveranstid" },
+  { num: 6, label: "Uppgifter" },
+  { num: 7, label: "Granska" },
 ];
-
-interface DocConfig {
-  documentType: DocumentType;
-  enabled: boolean;
-  showPrice: boolean;
-  distributionChannels: DistributionChannel[];
-  recipients: string[];
-}
-
-interface ScheduleEntry {
-  season: DeliverySeason;
-  enabled: boolean;
-  startDate?: string;
-  endDate?: string;
-}
+const TOTAL_STEPS = STEPS.length;
 
 const wizardFormSchema = z.object({
   conceptName: z.string().min(1, "Ange ett namn för orderkonceptet."),
   invoiceLevel: z.string().min(1, "Välj en faktureringsnivå."),
   invoiceModel: z.string().min(1, "Välj en faktureringsmodell."),
-  deliveryModel: z.string().min(1, "Välj en leveransmodell."),
 });
 
 type WizardFormValues = z.infer<typeof wizardFormSchema>;
 
 const stepFieldsToValidate: Partial<Record<number, (keyof WizardFormValues)[]>> = {
-  1: ["conceptName"],
   3: ["invoiceLevel", "invoiceModel"],
-  9: ["deliveryModel"],
 };
+
+const toDateInput = (v: unknown): string =>
+  v ? new Date(v as string).toISOString().split("T")[0] : "";
+const toIsoOrNull = (v: string): string | null =>
+  v ? new Date(v).toISOString() : null;
 
 export default function OrderConceptWizardPage() {
   const params = useParams<{ id?: string }>();
@@ -91,51 +73,50 @@ export default function OrderConceptWizardPage() {
 
   const form = useForm<WizardFormValues>({
     resolver: zodResolver(wizardFormSchema),
-    defaultValues: {
-      conceptName: "",
-      invoiceLevel: "",
-      invoiceModel: "",
-      deliveryModel: "",
-    },
+    defaultValues: { conceptName: "", invoiceLevel: "", invoiceModel: "" },
     mode: "onTouched",
   });
 
   const conceptName = form.watch("conceptName");
   const invoiceLevel = form.watch("invoiceLevel") as InvoiceLevel | "";
   const invoiceModel = form.watch("invoiceModel") as InvoiceModel | "";
-  const deliveryModel = form.watch("deliveryModel") as DeliveryModel | "";
 
   const setConceptName = useCallback((v: string) => {
     form.setValue("conceptName", v, { shouldValidate: true, shouldDirty: true });
     setHasUnsavedWork(true);
   }, [form]);
 
+  // Step 1
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [customerMode, setCustomerMode] = useState<CustomerMode>("HARDCODED");
-  const [selectedObjectIds, setSelectedObjectIds] = useState<Set<string>>(new Set());
+  // Step 2
+  const [priceListId, setPriceListId] = useState<string | null>(null);
+  const [priceModel, setPriceModel] = useState<string>("running");
+  const [fixedPriceKronor, setFixedPriceKronor] = useState<string>("");
+  const [customerReference, setCustomerReference] = useState("");
+  const [customerLabel, setCustomerLabel] = useState("");
+  // Step 3
   const [invoicePeriod, setInvoicePeriod] = useState<InvoicePeriod | null>(null);
   const [invoiceLock, setInvoiceLock] = useState(false);
-  const [headerMetadata, setHeaderMetadata] = useState<string[]>([]);
-  const [lineMetadata, setLineMetadata] = useState<string[]>([]);
-  const [showPrices, setShowPrices] = useState(true);
-  const [paymentTermsDays, setPaymentTermsDays] = useState(30);
-  const [fortnoxExportEnabled, setFortnoxExportEnabled] = useState(true);
-  const [documents, setDocuments] = useState<DocConfig[]>([
-    { documentType: "order_confirmation", enabled: true, showPrice: true, distributionChannels: ["email"], recipients: [] },
-    { documentType: "delivery_note", enabled: true, showPrice: false, distributionChannels: ["email"], recipients: [] },
-    { documentType: "invoice", enabled: true, showPrice: true, distributionChannels: ["email", "portal"], recipients: [] },
-  ]);
-  const [conceptArticles, setConceptArticles] = useState<any[]>([]);
-  const [mappings, setMappings] = useState<any[]>([]);
-  const [schedules, setSchedules] = useState<ScheduleEntry[]>([]);
-  const [minDaysBetween, setMinDaysBetween] = useState(60);
-  const [rollingExtension, setRollingExtension] = useState(true);
-  const [rollingMonths, setRollingMonths] = useState(12);
-  const [contractLengthMonths, setContractLengthMonths] = useState(12);
+  const [invoiceMethod, setInvoiceMethod] = useState<string | null>(null);
+  const [subscriptionAdjustmentDate, setSubscriptionAdjustmentDate] = useState("");
+  const [invoiceConsolidation, setInvoiceConsolidation] = useState("per_job");
+  const [departmentMetadataField, setDepartmentMetadataField] = useState<string | null>(null);
+  // Step 4
+  const [targetClusterIds, setTargetClusterIds] = useState<Set<string>>(new Set());
+  const [filters, setFilters] = useState<ConditionFilter[]>([]);
+  // Step 5
+  const [deliveryTimeType, setDeliveryTimeType] = useState("");
+  const [timeWindows, setTimeWindows] = useState<TimeWindow[]>([]);
+  const [intervalStartDate, setIntervalStartDate] = useState("");
+  const [intervalEndDate, setIntervalEndDate] = useState("");
+  const [intervalFrequencyDays, setIntervalFrequencyDays] = useState("");
+  const [deliveryRestrictions, setDeliveryRestrictions] = useState<DeliveryRestriction[]>([]);
+  // Step 6
+  const [conceptArticles, setConceptArticles] = useState<ConceptArticleRow[]>([]);
 
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const { data: articles = [] } = useQuery<Article[]>({ queryKey: ["/api/articles"] });
-  
 
   const { data: wizardData, isLoading: wizardLoading } = useQuery({
     queryKey: ["/api/order-concepts", conceptId, "wizard"],
@@ -149,157 +130,136 @@ export default function OrderConceptWizardPage() {
   });
 
   useEffect(() => {
-    if (wizardData && isEditing) {
-      form.setValue("conceptName", wizardData.name || "");
-      setCustomerMode(wizardData.customerMode || "HARDCODED");
-      setSelectedCustomerId(wizardData.customerId || null);
-      const savedStep = wizardData.currentStep || 1;
-      setCurrentStep(savedStep);
-      if (savedStep > 1) {
-        setResumeStep(savedStep);
-        setShowResumeBanner(true);
-      }
-      form.setValue("invoiceLevel", wizardData.invoiceLevel || "");
-      form.setValue("invoiceModel", wizardData.invoiceModel || "");
-      setInvoicePeriod(wizardData.invoicePeriod || null);
-      setInvoiceLock(wizardData.invoiceLock || false);
-      form.setValue("deliveryModel", wizardData.deliveryModel || "");
-      if (wizardData.conceptObjects) {
-        setSelectedObjectIds(new Set(wizardData.conceptObjects.map((o: any) => o.objectId)));
-      }
-      if (wizardData.conceptArticles) setConceptArticles(wizardData.conceptArticles);
-      if (wizardData.mappings) setMappings(wizardData.mappings);
-      if (wizardData.invoiceConfig) {
-        setHeaderMetadata(wizardData.invoiceConfig.headerMetadata || []);
-        setLineMetadata(wizardData.invoiceConfig.lineMetadata || []);
-        setShowPrices(wizardData.invoiceConfig.showPrices ?? true);
-        setPaymentTermsDays(wizardData.invoiceConfig.paymentTermsDays || 30);
-        setFortnoxExportEnabled(wizardData.invoiceConfig.fortnoxExportEnabled ?? true);
-      }
-      if (wizardData.documentConfigs && wizardData.documentConfigs.length > 0) {
-        setDocuments(wizardData.documentConfigs.map((d: any) => ({
-          documentType: d.documentType,
-          enabled: d.enabled,
-          showPrice: d.showPrice,
-          distributionChannels: d.distributionChannels || [],
-          recipients: d.recipients || [],
-        })));
-      }
-      if (wizardData.schedules) {
-        setSchedules(wizardData.schedules.map((s: any) => ({
-          season: s.season,
-          enabled: s.active,
-          startDate: s.startDate ? new Date(s.startDate).toISOString().split("T")[0] : undefined,
-          endDate: s.endDate ? new Date(s.endDate).toISOString().split("T")[0] : undefined,
-        })));
-        if (wizardData.schedules[0]) {
-          setMinDaysBetween(wizardData.schedules[0].minDaysBetween || 60);
-          setRollingExtension(wizardData.schedules[0].rollingExtension ?? true);
-          setRollingMonths(wizardData.schedules[0].rollingMonths || 12);
-        }
-      }
-      setContractLengthMonths(wizardData.contractLengthMonths || 12);
+    if (!wizardData || !isEditing) return;
+    form.setValue("conceptName", wizardData.name || "");
+    setCustomerMode(wizardData.customerMode || "HARDCODED");
+    setSelectedCustomerId(wizardData.customerId || null);
+    const savedStep = Math.min(wizardData.currentStep || 1, TOTAL_STEPS);
+    setCurrentStep(savedStep);
+    if (savedStep > 1) {
+      setResumeStep(savedStep);
+      setShowResumeBanner(true);
     }
+    setPriceListId(wizardData.priceListId || null);
+    setPriceModel(wizardData.priceModel || "running");
+    setFixedPriceKronor(wizardData.fixedPriceAmount != null ? String(wizardData.fixedPriceAmount / 100) : "");
+    setCustomerReference(wizardData.customerReference || "");
+    setCustomerLabel(wizardData.customerLabel || "");
+    form.setValue("invoiceLevel", wizardData.invoiceLevel || "");
+    form.setValue("invoiceModel", wizardData.invoiceModel || "");
+    setInvoicePeriod(wizardData.invoicePeriod || null);
+    setInvoiceLock(wizardData.invoiceLock || false);
+    setInvoiceMethod(wizardData.invoiceMethod || null);
+    setSubscriptionAdjustmentDate(toDateInput(wizardData.subscriptionAdjustmentDate));
+    setInvoiceConsolidation(wizardData.invoiceConsolidation || "per_job");
+    setDepartmentMetadataField(wizardData.departmentMetadataField || null);
+    setTargetClusterIds(new Set(Array.isArray(wizardData.targetClusterIds) ? wizardData.targetClusterIds : []));
+    setFilters((wizardData.filters || []).map((f: any) => ({
+      metadataKey: f.metadataKey, operator: f.operator, filterValue: f.filterValue,
+    })));
+    setDeliveryTimeType(wizardData.deliveryTimeType || "");
+    setTimeWindows(Array.isArray(wizardData.timeWindows) ? wizardData.timeWindows : []);
+    setIntervalStartDate(toDateInput(wizardData.intervalStartDate));
+    setIntervalEndDate(toDateInput(wizardData.intervalEndDate));
+    setIntervalFrequencyDays(wizardData.intervalFrequencyDays != null ? String(wizardData.intervalFrequencyDays) : "");
+    setDeliveryRestrictions(Array.isArray(wizardData.deliveryRestrictions) ? wizardData.deliveryRestrictions : []);
+    if (wizardData.conceptArticles) setConceptArticles(wizardData.conceptArticles);
   }, [wizardData, isEditing]);
 
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
 
-  const totalValue = useMemo(() => {
-    return conceptArticles.reduce((sum, ca) => {
-      const art = articles.find(a => a.id === ca.articleId);
-      const price = ca.unitPrice ?? art?.listPrice ?? 0;
-      return sum + price * (ca.quantity || 1);
-    }, 0);
-  }, [conceptArticles, articles]);
+  const totalValue = useMemo(() => conceptArticles.reduce((sum, ca) => {
+    const art = articles.find(a => a.id === ca.articleId);
+    const price = ca.unitPrice ?? art?.listPrice ?? 0;
+    return sum + price * (ca.quantity || 1);
+  }, 0), [conceptArticles, articles]);
 
-  const totalCost = useMemo(() => {
-    return conceptArticles.reduce((sum, ca) => {
-      const art = articles.find(a => a.id === ca.articleId);
-      return sum + (art?.cost || 0) * (ca.quantity || 1);
-    }, 0);
-  }, [conceptArticles, articles]);
+  const totalCost = useMemo(() => conceptArticles.reduce((sum, ca) => {
+    const art = articles.find(a => a.id === ca.articleId);
+    return sum + (art?.cost || 0) * (ca.quantity || 1);
+  }, 0), [conceptArticles, articles]);
 
-  const estimatedHours = useMemo(() => {
-    return conceptArticles.reduce((sum, ca) => {
-      const art = articles.find(a => a.id === ca.articleId);
-      return sum + ((art?.productionTime || 0) * (ca.quantity || 1)) / 60;
-    }, 0);
-  }, [conceptArticles, articles]);
+  const estimatedHours = useMemo(() => conceptArticles.reduce((sum, ca) => {
+    const art = articles.find(a => a.id === ca.articleId);
+    return sum + ((art?.productionTime || 0) * (ca.quantity || 1)) / 60;
+  }, 0), [conceptArticles, articles]);
 
   const getStepStatus = useCallback((stepNum: number): "complete" | "warning" | "future" => {
     if (stepNum >= currentStep) return "future";
     switch (stepNum) {
       case 1:
-        if (!conceptName || selectedObjectIds.size === 0) return "warning";
-        return "complete";
-      case 2:
-        if (selectedObjectIds.size === 0) return "warning";
+        if (!conceptName || (customerMode === "HARDCODED" && !selectedCustomerId)) return "warning";
         return "complete";
       case 3:
         if (!invoiceLevel || !invoiceModel) return "warning";
         return "complete";
       case 4:
-        return "complete";
-      case 5:
+        if (targetClusterIds.size === 0) return "warning";
         return "complete";
       case 6:
         if (conceptArticles.length === 0) return "warning";
         return "complete";
-      case 7: {
-        if (conceptArticles.length > 0 && mappings.length === 0) return "warning";
-        return "complete";
-      }
-      case 8:
-        return "complete";
-      case 9:
-        if (!deliveryModel) return "warning";
-        return "complete";
       default:
-        return "future";
+        return "complete";
     }
-  }, [currentStep, conceptName, selectedObjectIds, invoiceLevel, invoiceModel, conceptArticles, mappings, deliveryModel]);
+  }, [currentStep, conceptName, customerMode, selectedCustomerId, invoiceLevel, invoiceModel, targetClusterIds, conceptArticles]);
 
-  type ValidationResult = { message: string; reason?: "needs_mapping" } | null;
-
-  const validateCurrentStep = useCallback(async (): Promise<ValidationResult> => {
+  const validateCurrentStep = useCallback(async (): Promise<string | null> => {
     const fields = stepFieldsToValidate[currentStep];
     if (fields) {
       const valid = await form.trigger(fields);
       if (!valid) {
-        const firstError = fields
-          .map(f => form.formState.errors[f]?.message)
-          .filter(Boolean)[0];
-        if (firstError) return { message: String(firstError) };
+        const firstError = fields.map(f => form.formState.errors[f]?.message).filter(Boolean)[0];
+        if (firstError) return String(firstError);
       }
     }
-
     switch (currentStep) {
       case 1:
-      case 2:
-        if (selectedObjectIds.size === 0) {
-          return {
-            message: currentStep === 1
-              ? "Välj minst ett objekt."
-              : "Inga objekt valda. Gå tillbaka och välj objekt.",
-          };
-        }
+        if (!conceptName) return "Ange ett namn för orderkonceptet.";
+        if (customerMode === "HARDCODED" && !selectedCustomerId) return "Välj en kund eller byt till metadata-läge.";
+        break;
+      case 4:
+        if (targetClusterIds.size === 0) return "Välj minst ett kluster.";
         break;
       case 6:
-        if (conceptArticles.length === 0) return { message: "Lägg till minst en artikel." };
+        if (conceptArticles.length === 0) return "Lägg till minst en uppgift/artikel.";
         break;
-      case 7: {
-        if (conceptArticles.length > 0 && mappings.length === 0) {
-          return {
-            message: "Koppla artiklar till objekt innan du fortsätter.",
-            reason: "needs_mapping",
-          };
-        }
-        break;
-      }
     }
-
     return null;
-  }, [currentStep, form, selectedObjectIds, conceptArticles, mappings]);
+  }, [currentStep, form, conceptName, customerMode, selectedCustomerId, targetClusterIds, conceptArticles]);
+
+  const buildConceptPatch = useCallback((nextStep: number) => ({
+    currentStep: nextStep,
+    name: conceptName,
+    customerMode,
+    customerId: customerMode === "HARDCODED" ? selectedCustomerId : null,
+    priceListId: priceListId || null,
+    priceModel,
+    fixedPriceAmount: priceModel === "fixed" && fixedPriceKronor !== ""
+      ? Math.round(parseFloat(fixedPriceKronor) * 100) : null,
+    customerReference: customerReference || null,
+    customerLabel: customerLabel || null,
+    invoiceLevel: invoiceLevel || null,
+    invoiceModel: invoiceModel || null,
+    invoicePeriod,
+    invoiceLock,
+    invoiceMethod: invoiceMethod || null,
+    subscriptionAdjustmentDate: toIsoOrNull(subscriptionAdjustmentDate),
+    invoiceConsolidation,
+    departmentMetadataField: invoiceConsolidation === "department" ? (departmentMetadataField || null) : null,
+    targetClusterIds: Array.from(targetClusterIds),
+    deliveryTimeType: deliveryTimeType || null,
+    timeWindows: deliveryTimeType === "time_window" ? timeWindows : [],
+    intervalStartDate: deliveryTimeType === "interval" ? toIsoOrNull(intervalStartDate) : null,
+    intervalEndDate: deliveryTimeType === "interval" ? toIsoOrNull(intervalEndDate) : null,
+    intervalFrequencyDays: deliveryTimeType === "interval" && intervalFrequencyDays !== ""
+      ? parseInt(intervalFrequencyDays) : null,
+    deliveryRestrictions,
+    totalArticles: conceptArticles.length,
+    totalValue,
+    totalCost,
+    estimatedHours,
+  }), [conceptName, customerMode, selectedCustomerId, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoicePeriod, invoiceLock, invoiceMethod, subscriptionAdjustmentDate, invoiceConsolidation, departmentMetadataField, targetClusterIds, deliveryTimeType, timeWindows, intervalStartDate, intervalEndDate, intervalFrequencyDays, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
 
   const createConceptMutation = useMutation({
     mutationFn: async () => {
@@ -324,66 +284,24 @@ export default function OrderConceptWizardPage() {
     mutationFn: async ({ step, nextStep, overrideConceptId }: { step: number; nextStep?: number; overrideConceptId?: string }) => {
       const cId = overrideConceptId || conceptId;
       if (!cId) return;
-      await apiRequest("PATCH", `/api/order-concepts/${cId}`, {
-        currentStep: nextStep ?? step,
-        name: conceptName,
-        customerMode,
-        customerId: customerMode === "HARDCODED" ? selectedCustomerId : null,
-        invoiceLevel: invoiceLevel || null,
-        invoiceModel: invoiceModel || null,
-        invoicePeriod,
-        invoiceLock,
-        deliveryModel: deliveryModel || null,
-        contractLengthMonths: deliveryModel === "subscription" ? contractLengthMonths : undefined,
-        totalObjects: selectedObjectIds.size,
-        totalArticles: conceptArticles.length,
-        totalValue,
-        totalCost,
-        estimatedHours,
-      });
-
-      if ((step === 1 || step === 2) && selectedObjectIds.size > 0) {
-        await apiRequest("POST", `/api/order-concepts/${cId}/objects`, {
-          objectIds: Array.from(selectedObjectIds),
-        });
-      }
+      await apiRequest("PATCH", `/api/order-concepts/${cId}`, buildConceptPatch(nextStep ?? step));
 
       if (step === 4) {
-        await apiRequest("PUT", `/api/order-concepts/${cId}/invoice-config`, {
-          headerMetadata,
-          lineMetadata,
-          showPrices,
-          paymentTermsDays,
-          fortnoxExportEnabled,
-        });
-      }
-
-      if (step === 5) {
-        await apiRequest("PUT", `/api/order-concepts/${cId}/documents`, {
-          documents: documents.map(d => ({
-            documentType: d.documentType,
-            enabled: d.enabled,
-            showPrice: d.showPrice,
-            distributionChannels: d.distributionChannels,
-            recipients: d.recipients,
-          })),
-        });
-      }
-
-      if (step === 9) {
-        const enabledSchedules = schedules.filter(s => s.enabled).map(s => ({
-          season: s.season,
-          startDate: s.startDate ? new Date(s.startDate).toISOString() : undefined,
-          endDate: s.endDate ? new Date(s.endDate).toISOString() : undefined,
-          minDaysBetween,
-          rollingExtension,
-          rollingMonths,
-          active: true,
-        }));
-        await apiRequest("PUT", `/api/order-concepts/${cId}/delivery`, {
-          deliveryModel,
-          schedules: enabledSchedules,
-        });
+        // Replace-all filter set
+        const existingRes = await fetch(`/api/order-concepts/${cId}/filters`);
+        if (existingRes.ok) {
+          const existing = await existingRes.json();
+          for (const f of existing) {
+            await apiRequest("DELETE", `/api/order-concepts/${cId}/filters/${f.id}`);
+          }
+        }
+        for (const f of filters.filter(f => f.metadataKey)) {
+          await apiRequest("POST", `/api/order-concepts/${cId}/filters`, {
+            metadataKey: f.metadataKey,
+            operator: f.operator,
+            filterValue: f.filterValue ?? null,
+          });
+        }
       }
     },
     onSuccess: () => {
@@ -391,127 +309,37 @@ export default function OrderConceptWizardPage() {
     },
   });
 
-  const autoMapMutation = useMutation({
-    mutationFn: async () => {
-      if (!conceptId) throw new Error("Inget orderkoncept att koppla.");
-      const res = await apiRequest("POST", `/api/order-concepts/${conceptId}/article-mappings/auto`);
-      return res.json();
-    },
-    onSuccess: async () => {
-      if (!conceptId) return;
-      try {
-        const res = await fetch(`/api/order-concepts/${conceptId}/article-mappings`);
-        if (res.ok) setMappings(await res.json());
-      } catch {}
-      queryClient.invalidateQueries({ queryKey: ["/api/order-concepts", conceptId] });
-    },
-  });
-
-  const showNeedsMappingToast = useCallback((message: string) => {
-    const baseProps = {
-      title: "Ofullständigt steg",
-      description: message,
-      variant: "destructive" as const,
-      duration: Infinity,
-    };
-
-    let toastRef: ReturnType<typeof toast> | null = null;
-
-    const buildAction = (loading: boolean): React.ReactElement<typeof ToastAction> => (
-      <ToastAction
-        altText="Koppla artiklar automatiskt"
-        disabled={loading}
-        onClick={(e) => {
-          e.preventDefault();
-          if (loading || !toastRef) return;
-          const ref = toastRef;
-          ref.update({
-            id: ref.id,
-            ...baseProps,
-            open: true,
-            action: buildAction(true),
-          });
-          autoMapMutation.mutate(undefined, {
-            onSuccess: () => {
-              ref.dismiss();
-              toast({ title: "Artiklar kopplade", description: "Du kan nu trycka Nästa." });
-            },
-            onError: (err: unknown) => {
-              const errMsg = err instanceof Error ? err.message : "Försök igen.";
-              ref.update({
-                id: ref.id,
-                title: "Kunde inte koppla automatiskt",
-                description: errMsg,
-                variant: "destructive",
-                duration: Infinity,
-                open: true,
-                action: buildAction(false),
-              });
-            },
-          });
-        }}
-        data-testid="toast-action-auto-map"
-      >
-        {loading ? (
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-        ) : (
-          <Wand2 className="h-4 w-4 mr-2" />
-        )}
-        Koppla automatiskt nu
-      </ToastAction>
-    );
-
-    toastRef = toast({ ...baseProps, action: buildAction(false) });
-  }, [toast, autoMapMutation]);
-
-  const showValidationToast = useCallback((result: { message: string; reason?: "needs_mapping" }) => {
-    if (result.reason === "needs_mapping") {
-      showNeedsMappingToast(result.message);
-    } else {
-      toast({ title: "Ofullständigt steg", description: result.message, variant: "destructive" });
-    }
-  }, [toast, showNeedsMappingToast]);
-
   const handleNext = useCallback(async () => {
     if (processingNextRef.current) return;
     processingNextRef.current = true;
-
     const validationError = await validateCurrentStep();
     if (validationError) {
-      showValidationToast(validationError);
+      toast({ title: "Ofullständigt steg", description: validationError, variant: "destructive" });
       processingNextRef.current = false;
       return;
     }
-
     try {
       let activeConceptId = conceptId;
-
       if (!activeConceptId && currentStep === 1) {
         const created = await createConceptMutation.mutateAsync();
-        if (!created || !created.id) {
-          throw new Error("Kunde inte skapa orderkoncept — inget id returnerades.");
-        }
+        if (!created?.id) throw new Error("Kunde inte skapa orderkoncept — inget id returnerades.");
         activeConceptId = created.id;
       }
-
-      const newStep = currentStep < 9 ? currentStep + 1 : currentStep;
-
+      const newStep = currentStep < TOTAL_STEPS ? currentStep + 1 : currentStep;
       if (activeConceptId) {
         await saveStepMutation.mutateAsync({ step: currentStep, nextStep: newStep, overrideConceptId: activeConceptId });
       }
-
-      if (currentStep < 9) {
+      if (currentStep < TOTAL_STEPS) {
         setShowResumeBanner(false);
         setCurrentStep(newStep);
         setHasUnsavedWork(false);
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Okänt fel";
-      toast({ title: "Kunde inte spara steget", description: message, variant: "destructive" });
+      toast({ title: "Kunde inte spara steget", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
     } finally {
       processingNextRef.current = false;
     }
-  }, [conceptId, currentStep, conceptName, createConceptMutation, saveStepMutation, validateCurrentStep, showValidationToast, toast]);
+  }, [conceptId, currentStep, createConceptMutation, saveStepMutation, validateCurrentStep, toast]);
 
   const handleBack = useCallback(async () => {
     if (currentStep > 1) {
@@ -537,69 +365,32 @@ export default function OrderConceptWizardPage() {
         toast({ title: "Utkast sparat" });
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Okänt fel";
-      toast({ title: "Kunde inte spara utkast", description: message, variant: "destructive" });
+      toast({ title: "Kunde inte spara utkast", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
     }
-  }, [conceptId, currentStep, conceptName]);
+  }, [conceptId, currentStep, conceptName, createConceptMutation, saveStepMutation, toast]);
 
-  const handleActivate = useCallback(async () => {
-    if (!conceptId) return;
-    try {
-      await saveStepMutation.mutateAsync({ step: 9 });
-      await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { status: "active" });
-      queryClient.invalidateQueries({ queryKey: ["/api/order-concepts"] });
-      setHasUnsavedWork(false);
-      toast({ title: "Orderkoncept aktiverat!" });
-      navigate("/order-concepts");
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Okänt fel";
-      toast({ title: "Kunde inte aktivera", description: message, variant: "destructive" });
-    }
-  }, [conceptId, navigate]);
-
-  const toggleObject = useCallback((id: string) => {
-    setSelectedObjectIds(prev => {
+  const toggleCluster = useCallback((id: string) => {
+    setTargetClusterIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+    setHasUnsavedWork(true);
   }, []);
 
-  const toggleAllObjects = useCallback((ids: string[], selected: boolean) => {
-    setSelectedObjectIds(prev => {
-      const next = new Set(prev);
-      for (const id of ids) {
-        if (selected) next.add(id);
-        else next.delete(id);
-      }
-      return next;
-    });
-  }, []);
-
-  const selectAllObjects = useCallback(() => {
-    setSelectedObjectIds(prev => new Set(prev));
-  }, []);
-
-  const deselectAllObjects = useCallback(() => {
-    setSelectedObjectIds(new Set());
-  }, []);
-
-  const handleAddArticle = useCallback(async (articleId: string, quantity: number, unitPrice: number | null, taskCategory: "field" | "admin" | "logistics" = "field") => {
-    if (!conceptId) return;
+  const handleAddArticle = useCallback(async (articleId: string, quantity: number, unitPrice: number | null, taskCategory: TaskCategory = "field") => {
+    if (!conceptId) {
+      toast({ title: "Spara konceptet först", description: "Gå framåt till nästa steg för att skapa utkastet.", variant: "destructive" });
+      return;
+    }
     try {
-      const res = await apiRequest("POST", `/api/order-concepts/${conceptId}/articles`, {
-        articleId,
-        quantity,
-        unitPrice,
-        taskCategory,
-      });
+      const res = await apiRequest("POST", `/api/order-concepts/${conceptId}/articles`, { articleId, quantity, unitPrice, taskCategory });
       const newArticle = await res.json();
       setConceptArticles(prev => [...prev, newArticle]);
     } catch {
       toast({ title: "Kunde inte lägga till artikel", variant: "destructive" });
     }
-  }, [conceptId]);
+  }, [conceptId, toast]);
 
   const handleRemoveArticle = useCallback(async (id: string) => {
     if (!conceptId) return;
@@ -609,7 +400,7 @@ export default function OrderConceptWizardPage() {
     } catch {
       toast({ title: "Kunde inte ta bort artikel", variant: "destructive" });
     }
-  }, [conceptId]);
+  }, [conceptId, toast]);
 
   const handleUpdateQuantity = useCallback((id: string, quantity: number) => {
     setConceptArticles(prev => prev.map(a => a.id === id ? { ...a, quantity } : a));
@@ -618,15 +409,19 @@ export default function OrderConceptWizardPage() {
     }
   }, [conceptId]);
 
-  const handleUpdateQuantityMode = useCallback(async (id: string, mode: "use_object_quantity" | "single_per_task" | null) => {
-    setConceptArticles(prev => prev.map(a => a.id === id ? { ...a, quantityModeOverride: mode } : a));
-    if (!conceptId) return;
-    try {
-      await apiRequest("PATCH", `/api/order-concepts/${conceptId}/articles/${id}`, { quantityModeOverride: mode });
-    } catch {
-      toast({ title: "Kunde inte uppdatera kvantitetsläge", variant: "destructive" });
+  const handleUpdateArticleField = useCallback((id: string, patch: Partial<ConceptArticleRow>) => {
+    setConceptArticles(prev => prev.map(a => a.id === id ? { ...a, ...patch } : a));
+    if (conceptId) {
+      apiRequest("PATCH", `/api/order-concepts/${conceptId}/articles/${id}`, patch).catch(() => {
+        toast({ title: "Kunde inte uppdatera uppgift", variant: "destructive" });
+      });
     }
-  }, [conceptId]);
+  }, [conceptId, toast]);
+
+  const persistCurrent = useCallback(async () => {
+    if (!conceptId) return;
+    await saveStepMutation.mutateAsync({ step: currentStep, overrideConceptId: conceptId });
+  }, [conceptId, currentStep, saveStepMutation]);
 
   const isSaving = createConceptMutation.isPending || saveStepMutation.isPending;
 
@@ -642,10 +437,10 @@ export default function OrderConceptWizardPage() {
             <Skeleton className="h-9 w-64" />
           </div>
           <div className="flex items-center justify-center gap-1">
-            {Array.from({ length: 9 }).map((_, i) => (
+            {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
               <div key={i} className="flex items-center">
                 <Skeleton className="h-7 w-16 rounded" />
-                {i < 8 && <div className="w-4 h-px mx-0.5 bg-muted-foreground/30" />}
+                {i < TOTAL_STEPS - 1 && <div className="w-4 h-px mx-0.5 bg-muted-foreground/30" />}
               </div>
             ))}
           </div>
@@ -655,7 +450,6 @@ export default function OrderConceptWizardPage() {
             <Skeleton className="h-6 w-48" />
             <Skeleton className="h-32 w-full" />
             <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-24 w-3/4" />
           </div>
         </div>
       </div>
@@ -698,7 +492,7 @@ export default function OrderConceptWizardPage() {
                     if (step.num > currentStep) {
                       const validationError = await validateCurrentStep();
                       if (validationError) {
-                        showValidationToast(validationError);
+                        toast({ title: "Ofullständigt steg", description: validationError, variant: "destructive" });
                         return;
                       }
                     }
@@ -755,26 +549,16 @@ export default function OrderConceptWizardPage() {
                     Du fortsätter från steg {resumeStep} — <strong>{STEPS[resumeStep - 1]?.label}</strong>
                   </span>
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-chart-1 hover:text-chart-1 h-7"
-                      onClick={() => setShowResumeBanner(false)}
-                      data-testid="button-continue-wizard"
-                    >
+                    <Button variant="ghost" size="sm" className="text-chart-1 hover:text-chart-1 h-7" onClick={() => setShowResumeBanner(false)} data-testid="button-continue-wizard">
                       Fortsätt här
                     </Button>
                     <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-chart-1 hover:text-chart-1 h-7"
+                      variant="ghost" size="sm" className="text-chart-1 hover:text-chart-1 h-7"
                       onClick={async () => {
                         setCurrentStep(1);
                         setShowResumeBanner(false);
                         if (conceptId) {
-                          try {
-                            await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: 1 });
-                          } catch {}
+                          try { await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: 1 }); } catch {}
                         }
                       }}
                       data-testid="button-restart-wizard"
@@ -787,130 +571,120 @@ export default function OrderConceptWizardPage() {
             )}
 
             <h2 className="text-base font-medium mb-4">
-              Steg {currentStep} av 9 — {STEPS[currentStep - 1].label}
+              Steg {currentStep} av {TOTAL_STEPS} — {STEPS[currentStep - 1].label}
             </h2>
 
             {currentStep === 1 && (
-              <Step1ObjectSelection
-                selectedObjectIds={selectedObjectIds}
-                onToggleObject={toggleObject}
-                onToggleAll={toggleAllObjects}
-                selectedCustomerId={selectedCustomerId}
-                onSelectCustomer={setSelectedCustomerId}
+              <Step1NameCustomer
+                conceptName={conceptName}
+                onConceptNameChange={setConceptName}
+                customers={customers}
                 customerMode={customerMode}
                 onCustomerModeChange={(mode) => {
                   setCustomerMode(mode);
-                  if (mode === "FROM_METADATA") {
-                    setSelectedCustomerId(null);
-                  }
+                  if (mode === "FROM_METADATA") setSelectedCustomerId(null);
+                  setHasUnsavedWork(true);
                 }}
+                selectedCustomerId={selectedCustomerId}
+                onSelectCustomer={(id) => { setSelectedCustomerId(id); setHasUnsavedWork(true); }}
               />
             )}
 
             {currentStep === 2 && (
-              <Step2ObjectConfirmation
-                selectedObjectIds={selectedObjectIds}
-                onToggleObject={toggleObject}
-                onSelectAll={selectAllObjects}
-                onDeselectAll={deselectAllObjects}
-                customerMode={customerMode}
+              <Step2PriceReference
+                customerId={customerMode === "HARDCODED" ? selectedCustomerId : null}
+                priceListId={priceListId}
+                onPriceListChange={(id) => { setPriceListId(id); setHasUnsavedWork(true); }}
+                priceModel={priceModel}
+                onPriceModelChange={(v) => { setPriceModel(v); setHasUnsavedWork(true); }}
+                fixedPriceKronor={fixedPriceKronor}
+                onFixedPriceChange={(v) => { setFixedPriceKronor(v); setHasUnsavedWork(true); }}
+                customerReference={customerReference}
+                onCustomerReferenceChange={(v) => { setCustomerReference(v); setHasUnsavedWork(true); }}
+                customerLabel={customerLabel}
+                onCustomerLabelChange={(v) => { setCustomerLabel(v); setHasUnsavedWork(true); }}
               />
             )}
 
             {currentStep === 3 && (
-              <Step3InvoiceModel
+              <Step3Invoicing
                 invoiceLevel={invoiceLevel || null}
                 invoiceModel={invoiceModel || null}
                 invoicePeriod={invoicePeriod}
                 invoiceLock={invoiceLock}
-                objectCount={selectedObjectIds.size}
+                invoiceMethod={invoiceMethod}
+                subscriptionAdjustmentDate={subscriptionAdjustmentDate}
+                invoiceConsolidation={invoiceConsolidation}
+                departmentMetadataField={departmentMetadataField}
+                objectCount={targetClusterIds.size}
                 onUpdate={(data) => {
                   if (data.invoiceLevel !== undefined) form.setValue("invoiceLevel", data.invoiceLevel || "", { shouldValidate: true });
                   if (data.invoiceModel !== undefined) form.setValue("invoiceModel", data.invoiceModel || "", { shouldValidate: true });
                   if (data.invoicePeriod !== undefined) setInvoicePeriod(data.invoicePeriod);
                   if (data.invoiceLock !== undefined) setInvoiceLock(data.invoiceLock);
+                  if (data.invoiceMethod !== undefined) setInvoiceMethod(data.invoiceMethod);
+                  if (data.subscriptionAdjustmentDate !== undefined) setSubscriptionAdjustmentDate(data.subscriptionAdjustmentDate);
+                  if (data.invoiceConsolidation !== undefined) setInvoiceConsolidation(data.invoiceConsolidation);
+                  if (data.departmentMetadataField !== undefined) setDepartmentMetadataField(data.departmentMetadataField);
+                  setHasUnsavedWork(true);
                 }}
               />
             )}
 
             {currentStep === 4 && (
-              <Step4InvoiceTemplates
-                headerMetadata={headerMetadata}
-                lineMetadata={lineMetadata}
-                showPrices={showPrices}
-                paymentTermsDays={paymentTermsDays}
-                fortnoxExportEnabled={fortnoxExportEnabled}
-                onUpdate={(data) => {
-                  if (data.headerMetadata !== undefined) setHeaderMetadata(data.headerMetadata);
-                  if (data.lineMetadata !== undefined) setLineMetadata(data.lineMetadata);
-                  if (data.showPrices !== undefined) setShowPrices(data.showPrices);
-                  if (data.paymentTermsDays !== undefined) setPaymentTermsDays(data.paymentTermsDays);
-                  if (data.fortnoxExportEnabled !== undefined) setFortnoxExportEnabled(data.fortnoxExportEnabled);
-                }}
+              <Step4Inspection
+                targetClusterIds={targetClusterIds}
+                onToggleCluster={toggleCluster}
+                filters={filters}
+                onFiltersChange={(f) => { setFilters(f); setHasUnsavedWork(true); }}
               />
             )}
 
             {currentStep === 5 && (
-              <Step5DocumentConfig
-                documents={documents}
-                onUpdate={setDocuments}
+              <Step5DeliveryTime
+                conceptId={conceptId}
+                deliveryTimeType={deliveryTimeType}
+                timeWindows={timeWindows}
+                intervalStartDate={intervalStartDate}
+                intervalEndDate={intervalEndDate}
+                intervalFrequencyDays={intervalFrequencyDays}
+                deliveryRestrictions={deliveryRestrictions}
+                onUpdate={(data) => {
+                  if (data.deliveryTimeType !== undefined) setDeliveryTimeType(data.deliveryTimeType);
+                  if (data.timeWindows !== undefined) setTimeWindows(data.timeWindows);
+                  if (data.intervalStartDate !== undefined) setIntervalStartDate(data.intervalStartDate);
+                  if (data.intervalEndDate !== undefined) setIntervalEndDate(data.intervalEndDate);
+                  if (data.intervalFrequencyDays !== undefined) setIntervalFrequencyDays(data.intervalFrequencyDays);
+                  if (data.deliveryRestrictions !== undefined) setDeliveryRestrictions(data.deliveryRestrictions);
+                  setHasUnsavedWork(true);
+                }}
               />
             )}
 
             {currentStep === 6 && (
-              <Step6Articles
+              <Step6Tasks
                 conceptArticles={conceptArticles}
+                articles={articles}
                 onAddArticle={handleAddArticle}
                 onRemoveArticle={handleRemoveArticle}
                 onUpdateQuantity={handleUpdateQuantity}
-                onUpdateQuantityMode={handleUpdateQuantityMode}
+                onUpdateArticleField={handleUpdateArticleField}
               />
             )}
 
-            {currentStep === 7 && conceptId && (
-              <Step7ArticleMapping
-                conceptId={conceptId}
-                conceptArticles={conceptArticles}
-                mappings={mappings}
-                onAutoMap={() => autoMapMutation.mutate()}
-                isAutoMapping={autoMapMutation.isPending}
-              />
-            )}
-
-            {currentStep === 8 && conceptId && (
-              <Step8Review
+            {currentStep === 7 && (
+              <Step7ReviewSave
                 conceptId={conceptId}
                 conceptName={conceptName}
-                customerName={selectedCustomer?.name}
-                objectCount={selectedObjectIds.size}
+                customerName={customerMode === "HARDCODED" ? selectedCustomer?.name : undefined}
+                clusterCount={targetClusterIds.size}
+                filterCount={filters.filter(f => f.metadataKey).length}
                 articleCount={conceptArticles.length}
-                totalValue={totalValue}
-                totalCost={totalCost}
+                totalValueKr={totalValue}
+                totalCostKr={totalCost}
                 estimatedHours={estimatedHours}
-                invoiceLevel={invoiceLevel || null}
-                invoiceModel={invoiceModel || null}
-                invoicePeriod={invoicePeriod}
-                deliveryModel={deliveryModel || null}
-                mappingCount={mappings.length}
-              />
-            )}
-
-            {currentStep === 9 && (
-              <Step9DeliveryModel
-                deliveryModel={deliveryModel || null}
-                schedules={schedules}
-                minDaysBetween={minDaysBetween}
-                rollingExtension={rollingExtension}
-                rollingMonths={rollingMonths}
-                contractLengthMonths={contractLengthMonths}
-                onUpdate={(data) => {
-                  if (data.deliveryModel !== undefined) form.setValue("deliveryModel", data.deliveryModel || "", { shouldValidate: true });
-                  if (data.schedules !== undefined) setSchedules(data.schedules);
-                  if (data.minDaysBetween !== undefined) setMinDaysBetween(data.minDaysBetween);
-                  if (data.rollingExtension !== undefined) setRollingExtension(data.rollingExtension);
-                  if (data.rollingMonths !== undefined) setRollingMonths(data.rollingMonths);
-                  if (data.contractLengthMonths !== undefined) setContractLengthMonths(data.contractLengthMonths);
-                }}
+                deliveryTimeType={deliveryTimeType}
+                onBeforeAction={persistCurrent}
               />
             )}
           </div>
@@ -919,53 +693,30 @@ export default function OrderConceptWizardPage() {
         <div className="hidden xl:block border-l p-4 overflow-y-auto">
           <WizardSidebar
             concept={null}
-            objectCount={selectedObjectIds.size}
+            objectCount={targetClusterIds.size}
             articleCount={conceptArticles.length}
             totalValue={totalValue}
             totalCost={totalCost}
             estimatedHours={estimatedHours}
-            customerName={selectedCustomer?.name}
+            customerName={customerMode === "HARDCODED" ? selectedCustomer?.name : undefined}
           />
         </div>
       </div>
 
       <div className="border-t bg-background p-4 flex items-center justify-between">
-        <Button
-          variant="outline"
-          onClick={handleBack}
-          disabled={currentStep === 1 || isSaving}
-          data-testid="button-wizard-back"
-        >
+        <Button variant="outline" onClick={handleBack} disabled={currentStep === 1 || isSaving} data-testid="button-wizard-back">
           <ArrowLeft className="h-4 w-4 mr-1" />
           Tillbaka
         </Button>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={handleSaveDraft}
-            disabled={isSaving || (!conceptId && !conceptName)}
-            data-testid="button-save-draft"
-          >
+          <Button variant="outline" onClick={handleSaveDraft} disabled={isSaving || (!conceptId && !conceptName)} data-testid="button-save-draft">
             {isSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
             Spara utkast
           </Button>
 
-          {currentStep === 9 ? (
-            <Button
-              onClick={handleActivate}
-              disabled={isSaving}
-              data-testid="button-activate"
-            >
-              {isSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
-              Skapa Orderkoncept
-            </Button>
-          ) : (
-            <Button
-              onClick={handleNext}
-              disabled={isSaving || (currentStep === 1 && !conceptName)}
-              data-testid="button-wizard-next"
-            >
+          {currentStep < TOTAL_STEPS && (
+            <Button onClick={handleNext} disabled={isSaving || (currentStep === 1 && !conceptName)} data-testid="button-wizard-next">
               {isSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
               Nästa
               <ArrowRight className="h-4 w-4 ml-1" />

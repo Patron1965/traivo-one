@@ -24,7 +24,8 @@ if command -v psql >/dev/null 2>&1 && [ -n "$DATABASE_URL" ]; then
            migrations/0061_metadata_areas.sql \
            migrations/0062_metadata_inheritance_core.sql \
            migrations/0063_archive_soft_delete.sql \
-           migrations/0064_work_order_lines_freetext.sql; do
+           migrations/0064_work_order_lines_freetext.sql \
+           migrations/0065_order_concept_7step.sql; do
     if [ -f "$f" ]; then
       echo "[post-merge] Applying $f"
       psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
