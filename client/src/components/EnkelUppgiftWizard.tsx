@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
@@ -29,6 +29,10 @@ import {
   Clock,
   AlertTriangle,
   Info,
+  CalendarClock,
+  Layers,
+  X,
+  User,
 } from "lucide-react";
 import { apiRequest, queryClient, versionedUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -85,8 +89,47 @@ interface FreeTextLine {
   quantity: number;
 }
 
+interface ResourceOption {
+  id: string;
+  name: string;
+  initials?: string | null;
+  status?: string | null;
+}
+
+interface Placement {
+  resourceId: string;
+  resourceName: string;
+  scheduledDate: string; // yyyy-mm-dd
+  scheduledStartTime?: string; // HH:MM
+}
+
 type Mode = "tillagg" | "ny";
 type Coupling = "objekt" | "kluster" | "ingen";
+
+interface DraftPayload {
+  mode: Mode | null;
+  selectedOrder: WorkOrderOption | null;
+  kundType: "extern" | "intern";
+  selectedCustomer: CustomerOption | null;
+  coupling: Coupling;
+  selectedObject: ObjectOption | null;
+  selectedCluster: ClusterOption | null;
+  deliveryStart: string;
+  deliveryEnd: string;
+  articleLines: ArticleLine[];
+  freeTextLines: FreeTextLine[];
+  title: string;
+  description: string;
+  plannedNotes: string;
+  placement: Placement | null;
+}
+
+interface BatchDraft extends DraftPayload {
+  draftId: string;
+  derivedTitle: string;
+  totalPriceOre: number;
+  totalMinutes: number;
+}
 
 interface EnkelUppgiftWizardProps {
   open: boolean;
@@ -156,14 +199,24 @@ export function EnkelUppgiftWizard({
   const [description, setDescription] = useState("");
   const [plannedNotes, setPlannedNotes] = useState("");
 
+  // Steg 6 – snöre-placering (valfri direkt-schemaläggning)
+  const [placementEnabled, setPlacementEnabled] = useState(false);
+  const [placementResource, setPlacementResource] = useState<ResourceOption | null>(null);
+  const [placementResourceSearch, setPlacementResourceSearch] = useState("");
+  const [placementDate, setPlacementDate] = useState("");
+  const [placementTime, setPlacementTime] = useState("");
+
+  // Batch – flera uppgifter byggs upp och skapas i ett svep
+  const [batchDrafts, setBatchDrafts] = useState<BatchDraft[]>([]);
+
+  const debouncedResource = useDebounced(placementResourceSearch);
   const debouncedOrder = useDebounced(orderSearch);
   const debouncedCustomer = useDebounced(customerSearch);
   const debouncedObject = useDebounced(objectSearch);
   const debouncedArticle = useDebounced(articleSearch);
 
-  // Reset vid stängning
-  useEffect(() => {
-    if (!open) return;
+  // Nollställ alla formulärfält till ett rent utgångsläge (rör ej batch-listan).
+  const resetForm = useCallback(() => {
     setStep(0);
     setMode(null);
     setOrderSearch("");
@@ -180,6 +233,11 @@ export function EnkelUppgiftWizard({
     setTitle("");
     setDescription("");
     setPlannedNotes("");
+    setPlacementEnabled(false);
+    setPlacementResource(null);
+    setPlacementResourceSearch("");
+    setPlacementDate("");
+    setPlacementTime("");
     if (presetObjectId) {
       setCoupling("objekt");
       setSelectedObject({ id: presetObjectId, name: presetObjectName || "Valt objekt", displayName: presetObjectName });
@@ -188,7 +246,14 @@ export function EnkelUppgiftWizard({
       setSelectedObject(null);
     }
     setSelectedCluster(null);
-  }, [open, presetObjectId, presetObjectName]);
+  }, [presetObjectId, presetObjectName]);
+
+  // Reset vid öppning (rensar även batch-listan så varje session börjar tomt).
+  useEffect(() => {
+    if (!open) return;
+    resetForm();
+    setBatchDrafts([]);
+  }, [open, resetForm]);
 
   // ── Queries ──────────────────────────────────────────────────────────
   const { data: orderResults, isFetching: ordersFetching } = useQuery<WorkOrderOption[]>({
@@ -259,6 +324,26 @@ export function EnkelUppgiftWizard({
     enabled: open && step === 4 && debouncedArticle.trim().length > 0,
     staleTime: 15000,
   });
+
+  const { data: resourceResults, isFetching: resourcesFetching } = useQuery<ResourceOption[]>({
+    queryKey: ["/api/resources", "enkel-placement"],
+    queryFn: async () => {
+      const res = await fetch(versionedUrl(`/api/resources`), { credentials: "include" });
+      if (!res.ok) throw new Error("Kunde inte hämta resurser");
+      return (await res.json()) as ResourceOption[];
+    },
+    enabled: open && step === 5 && placementEnabled,
+    staleTime: 60000,
+  });
+
+  const filteredResources = useMemo(() => {
+    const list = (resourceResults || []).filter((r) => (r.status ?? "active") !== "inactive");
+    const q = debouncedResource.trim().toLowerCase();
+    if (!q) return list.slice(0, 30);
+    return list
+      .filter((r) => r.name?.toLowerCase().includes(q) || (r.initials ?? "").toLowerCase().includes(q))
+      .slice(0, 30);
+  }, [resourceResults, debouncedResource]);
 
   // ── Beräkningar ──────────────────────────────────────────────────────
   const totalPriceOre = useMemo(() => {
@@ -352,85 +437,166 @@ export function EnkelUppgiftWizard({
     setFreeTextLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   const removeFreeText = (id: string) => setFreeTextLines((prev) => prev.filter((l) => l.id !== id));
 
+  // ── Snöre-placering ──────────────────────────────────────────────────
+  const currentPlacement = useMemo<Placement | null>(() => {
+    if (!placementEnabled || !placementResource || !placementDate) return null;
+    return {
+      resourceId: placementResource.id,
+      resourceName: placementResource.name,
+      scheduledDate: placementDate,
+      scheduledStartTime: placementTime || undefined,
+    };
+  }, [placementEnabled, placementResource, placementDate, placementTime]);
+
+  // ── Draft-hantering (batch) ──────────────────────────────────────────
+  const buildCurrentDraft = useCallback((): DraftPayload => ({
+    mode,
+    selectedOrder,
+    kundType,
+    selectedCustomer,
+    coupling,
+    selectedObject,
+    selectedCluster,
+    deliveryStart,
+    deliveryEnd,
+    articleLines,
+    freeTextLines,
+    title,
+    description,
+    plannedNotes,
+    placement: currentPlacement,
+  }), [mode, selectedOrder, kundType, selectedCustomer, coupling, selectedObject, selectedCluster, deliveryStart, deliveryEnd, articleLines, freeTextLines, title, description, plannedNotes, currentPlacement]);
+
+  const addCurrentToBatch = useCallback(() => {
+    if (!hasLines) return;
+    const draft: BatchDraft = {
+      ...buildCurrentDraft(),
+      draftId: crypto.randomUUID(),
+      derivedTitle,
+      totalPriceOre,
+      totalMinutes,
+    };
+    setBatchDrafts((prev) => [...prev, draft]);
+    resetForm();
+  }, [hasLines, buildCurrentDraft, derivedTitle, totalPriceOre, totalMinutes, resetForm]);
+
+  const removeDraft = useCallback((draftId: string) => {
+    setBatchDrafts((prev) => prev.filter((d) => d.draftId !== draftId));
+  }, []);
+
   // ── Skapa ────────────────────────────────────────────────────────────
+  // Skapar EN uppgift utifrån en draft. Returnerar antal misslyckade rader.
+  // Order-skapandet sker en gång; rader och placering är best-effort så att
+  // en redan skapad order aldrig dubbleras vid delfel.
+  const createOne = async (draft: DraftPayload): Promise<{ workOrderId: string; lineFailures: number; placementFailed: boolean }> => {
+    let workOrderId: string;
+    const draftTitle =
+      draft.title.trim() ||
+      draft.articleLines[0]?.name ||
+      draft.freeTextLines.find((l) => l.description.trim())?.description.trim() ||
+      "Enkel uppgift";
+
+    // Bygg rad-payload (artikel + fritext) en gång.
+    const linePayloads = [
+      ...draft.articleLines.map((line) => ({
+        articleId: line.articleId,
+        quantity: line.quantity,
+      })),
+      ...draft.freeTextLines
+        .filter((line) => line.description.trim())
+        .map((line) => ({
+          description: line.description.trim(),
+          unitPrice: Math.round(line.unitPriceKr * 100),
+          productionMinutes: line.productionMinutes,
+          quantity: line.quantity,
+        })),
+    ];
+
+    let lineFailures = 0;
+
+    if (draft.mode === "tillagg" && draft.selectedOrder) {
+      // Tillägg på befintlig order: ordern finns redan, posta bara raderna.
+      // Ordern återskapas aldrig vid omförsök, så vi undviker dubbletter.
+      workOrderId = draft.selectedOrder.id;
+      for (const line of linePayloads) {
+        try {
+          await apiRequest("POST", `/api/work-orders/${workOrderId}/lines`, line);
+        } catch {
+          lineFailures += 1;
+        }
+      }
+    } else {
+      // Ny uppgift: skapa work order + alla rader atomiskt i ETT anrop. Backend
+      // kör allt i en DB-transaktion — om något felar skapas ingen partiell order.
+      const payload: Record<string, unknown> = {
+        title: draftTitle,
+        orderType: "service",
+      };
+      if (draft.kundType === "extern" && draft.selectedCustomer) payload.customerId = draft.selectedCustomer.id;
+      if (draft.coupling === "objekt" && draft.selectedObject) payload.objectId = draft.selectedObject.id;
+      if (draft.coupling === "kluster" && draft.selectedCluster) payload.clusterId = draft.selectedCluster.id;
+      if (draft.deliveryStart) payload.desiredDeliveryStart = draft.deliveryStart;
+      if (draft.deliveryEnd) payload.desiredDeliveryEnd = draft.deliveryEnd;
+      if (draft.description.trim()) payload.description = draft.description.trim();
+      if (draft.plannedNotes.trim()) payload.plannedNotes = draft.plannedNotes.trim();
+
+      const woRes = await apiRequest("POST", "/api/work-orders/with-lines", {
+        workOrder: payload,
+        lines: linePayloads,
+      });
+      const wo = await woRes.json();
+      workOrderId = wo.id;
+    }
+
+    // Snöre-placering: schemalägg direkt på vald resurs/dag (best-effort).
+    let placementFailed = false;
+    if (draft.placement) {
+      try {
+        const placePayload: Record<string, unknown> = {
+          resourceId: draft.placement.resourceId,
+          scheduledDate: draft.placement.scheduledDate,
+          orderStatus: "planerad_resurs",
+        };
+        if (draft.placement.scheduledStartTime) placePayload.scheduledStartTime = draft.placement.scheduledStartTime;
+        await apiRequest("PATCH", `/api/work-orders/${workOrderId}`, placePayload);
+      } catch {
+        placementFailed = true;
+      }
+    }
+
+    return { workOrderId, lineFailures, placementFailed };
+  };
+
   const handleCreate = async () => {
     setSubmitting(true);
     try {
-      // Bygg rad-payload (artikel + fritext) en gång.
-      const linePayloads = [
-        ...articleLines.map((line) => ({
-          articleId: line.articleId,
-          quantity: line.quantity,
-        })),
-        ...freeTextLines
-          .filter((line) => line.description.trim())
-          .map((line) => ({
-            description: line.description.trim(),
-            unitPrice: Math.round(line.unitPriceKr * 100),
-            productionMinutes: line.productionMinutes,
-            quantity: line.quantity,
-          })),
-      ];
+      const draft = buildCurrentDraft();
+      const { workOrderId, lineFailures, placementFailed } = await createOne(draft);
 
-      let workOrderId: string;
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId, "lines"] });
 
-      if (mode === "tillagg" && selectedOrder) {
-        // Tillägg på befintlig order: ordern finns redan, posta bara raderna.
-        // Ordern återskapas aldrig vid omförsök, så vi undviker dubbletter.
-        workOrderId = selectedOrder.id;
-        let lineFailures = 0;
-        for (const line of linePayloads) {
-          try {
-            await apiRequest("POST", `/api/work-orders/${workOrderId}/lines`, line);
-          } catch {
-            lineFailures += 1;
-          }
-        }
-        queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId, "lines"] });
-
-        if (lineFailures > 0) {
-          toast({
-            title: "Uppgiften skapades med varning",
-            description: `${lineFailures} rad(er) kunde inte läggas till. Öppna uppgiften och lägg till dem manuellt.`,
-            variant: "destructive",
-          });
-        } else {
-          toast({ title: "Uppgift tillagd på order", description: derivedTitle });
-        }
-      } else {
-        // Ny uppgift: skapa work order + alla rader atomiskt i ETT anrop. Backend
-        // kör allt i en DB-transaktion — om något felar skapas ingen partiell order.
-        const workOrderPayload: Record<string, unknown> = {
-          title: derivedTitle,
-          orderType: "service",
-        };
-        if (kundType === "extern" && selectedCustomer) workOrderPayload.customerId = selectedCustomer.id;
-        if (coupling === "objekt" && selectedObject) workOrderPayload.objectId = selectedObject.id;
-        if (coupling === "kluster" && selectedCluster) workOrderPayload.clusterId = selectedCluster.id;
-        if (deliveryStart) workOrderPayload.desiredDeliveryStart = deliveryStart;
-        if (deliveryEnd) workOrderPayload.desiredDeliveryEnd = deliveryEnd;
-        if (description.trim()) workOrderPayload.description = description.trim();
-        if (plannedNotes.trim()) workOrderPayload.plannedNotes = plannedNotes.trim();
-
-        const res = await apiRequest("POST", "/api/work-orders/with-lines", {
-          workOrder: workOrderPayload,
-          lines: linePayloads,
+      if (lineFailures > 0 || placementFailed) {
+        const parts: string[] = [];
+        if (lineFailures > 0) parts.push(`${lineFailures} rad(er) kunde inte läggas till`);
+        if (placementFailed) parts.push("placeringen på snöret misslyckades");
+        toast({
+          title: "Uppgiften skapades med varning",
+          description: `${parts.join(" och ")}. Öppna uppgiften och åtgärda manuellt.`,
+          variant: "destructive",
         });
-        const wo = await res.json();
-        workOrderId = wo.id;
-
-        queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId, "lines"] });
-
-        toast({ title: "Enkel uppgift skapad", description: derivedTitle });
+      } else {
+        toast({
+          title: draft.mode === "tillagg" ? "Uppgift tillagd på order" : "Enkel uppgift skapad",
+          description: draft.placement ? `${derivedTitle} · placerad på snöret` : derivedTitle,
+        });
       }
 
       onCreated?.(workOrderId);
       onClose();
     } catch (err) {
-      // Inget partiellt WO skapas (atomiskt skapande / tillägg på befintlig order),
-      // så det är säkert att försöka igen.
+      // Inget partiellt WO skapas (atomiskt skapande via /with-lines eller tillägg
+      // på befintlig order), så det är säkert att försöka igen.
       toast({
         title: "Kunde inte skapa uppgiften",
         description: err instanceof Error ? err.message : "Okänt fel",
@@ -439,6 +605,59 @@ export function EnkelUppgiftWizard({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // Skapar/kvitterar alla batch-drafts (plus aktuell om den har rader) i ett svep.
+  const handleCreateAll = async () => {
+    const drafts: DraftPayload[] = [...batchDrafts];
+    if (hasLines) drafts.push(buildCurrentDraft());
+    if (drafts.length === 0) return;
+
+    setSubmitting(true);
+    let created = 0;
+    let failed = 0;
+    let totalLineFailures = 0;
+    let placementFailures = 0;
+    let lastWorkOrderId: string | null = null;
+
+    for (const draft of drafts) {
+      try {
+        const { workOrderId, lineFailures, placementFailed } = await createOne(draft);
+        created += 1;
+        totalLineFailures += lineFailures;
+        if (placementFailed) placementFailures += 1;
+        lastWorkOrderId = workOrderId;
+        onCreated?.(workOrderId);
+      } catch {
+        failed += 1;
+      }
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    if (lastWorkOrderId) {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders", lastWorkOrderId, "lines"] });
+    }
+
+    const warnings: string[] = [];
+    if (failed > 0) warnings.push(`${failed} kunde inte skapas`);
+    if (totalLineFailures > 0) warnings.push(`${totalLineFailures} rad(er) misslyckades`);
+    if (placementFailures > 0) warnings.push(`${placementFailures} placering(ar) misslyckades`);
+
+    if (warnings.length > 0) {
+      toast({
+        title: created > 0 ? `${created} uppgift(er) skapade med varning` : "Kunde inte skapa uppgifterna",
+        description: warnings.join(", "),
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: `${created} uppgifter skapade`,
+        description: "Alla uppgifter kvitterades i ett svep.",
+      });
+    }
+
+    setSubmitting(false);
+    if (created > 0) onClose();
   };
 
   return (
@@ -460,6 +679,43 @@ export function EnkelUppgiftWizard({
             />
           ))}
         </div>
+
+        {/* Batch-kö: uppgifter som byggts upp och skapas i ett svep */}
+        {batchDrafts.length > 0 && (
+          <div className="rounded-md border bg-muted/40 p-2 space-y-1.5" data-testid="batch-queue">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Layers className="h-3.5 w-3.5" />
+              {batchDrafts.length} uppgift(er) i kön — skapas tillsammans
+            </div>
+            <div className="space-y-1 max-h-28 overflow-auto">
+              {batchDrafts.map((d) => (
+                <div
+                  key={d.draftId}
+                  className="flex items-center justify-between gap-2 rounded bg-background px-2 py-1 text-xs"
+                  data-testid={`batch-item-${d.draftId}`}
+                >
+                  <span className="truncate">
+                    {d.derivedTitle}
+                    <span className="text-muted-foreground"> · {formatSekFromOre(d.totalPriceOre)} · ~{d.totalMinutes} min</span>
+                    {d.placement && (
+                      <span className="text-muted-foreground"> · {d.placement.resourceName}</span>
+                    )}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 shrink-0"
+                    onClick={() => removeDraft(d.draftId)}
+                    data-testid={`button-remove-draft-${d.draftId}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <ScrollArea className="flex-1 -mx-1 px-1">
           <div className="py-2 space-y-4">
@@ -1026,6 +1282,113 @@ export function EnkelUppgiftWizard({
                     </Badge>
                   ))}
                 </div>
+
+                {/* Snöre-placering: schemalägg direkt på en resurs/dag */}
+                <Separator />
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => setPlacementEnabled((v) => !v)}
+                    className={`w-full rounded-lg border p-3 text-left transition hover-elevate ${placementEnabled ? "border-primary bg-primary/5" : ""}`}
+                    data-testid="button-toggle-placement"
+                  >
+                    <div className="flex items-center gap-2">
+                      <CalendarClock className="h-4 w-4 text-primary shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm">Placera på snöret direkt (valfritt)</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          Schemalägg uppgiften på en resurs i stället för att lägga den bland oplanerade.
+                        </div>
+                      </div>
+                      <div className={`h-4 w-4 rounded-full border shrink-0 ${placementEnabled ? "bg-primary border-primary" : ""}`}>
+                        {placementEnabled && <Check className="h-3 w-3 text-primary-foreground" />}
+                      </div>
+                    </div>
+                  </button>
+
+                  {placementEnabled && (
+                    <div className="space-y-3 rounded-md border p-3" data-testid="placement-panel">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Resurs</Label>
+                        {placementResource ? (
+                          <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm">
+                            <span className="flex items-center gap-2 truncate">
+                              <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <span className="truncate" data-testid="text-selected-resource">{placementResource.name}</span>
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 shrink-0"
+                              onClick={() => { setPlacementResource(null); setPlacementResourceSearch(""); }}
+                              data-testid="button-clear-resource"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2 rounded-md border px-2">
+                              <Search className="h-4 w-4 text-muted-foreground" />
+                              <Input
+                                value={placementResourceSearch}
+                                onChange={(e) => setPlacementResourceSearch(e.target.value)}
+                                placeholder="Sök resurs..."
+                                className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-1"
+                                data-testid="input-resource-search"
+                              />
+                            </div>
+                            <div className="rounded-md border divide-y max-h-40 overflow-auto">
+                              {resourcesFetching && (
+                                <div className="p-3 text-center text-xs text-muted-foreground">Laddar...</div>
+                              )}
+                              {!resourcesFetching && filteredResources.map((r) => (
+                                <button
+                                  key={r.id}
+                                  type="button"
+                                  onClick={() => setPlacementResource(r)}
+                                  className="block w-full text-left px-3 py-2 text-sm hover:bg-accent"
+                                  data-testid={`option-resource-${r.id}`}
+                                >
+                                  {r.name}
+                                </button>
+                              ))}
+                              {!resourcesFetching && filteredResources.length === 0 && (
+                                <div className="p-3 text-center text-xs text-muted-foreground">Inga resurser</div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <div className="flex gap-3">
+                        <div className="flex-1 space-y-1.5">
+                          <Label className="text-xs">Dag</Label>
+                          <Input
+                            type="date"
+                            value={placementDate}
+                            onChange={(e) => setPlacementDate(e.target.value)}
+                            data-testid="input-placement-date"
+                          />
+                        </div>
+                        <div className="flex-1 space-y-1.5">
+                          <Label className="text-xs">Starttid (valfri)</Label>
+                          <Input
+                            type="time"
+                            value={placementTime}
+                            onChange={(e) => setPlacementTime(e.target.value)}
+                            data-testid="input-placement-time"
+                          />
+                        </div>
+                      </div>
+                      {placementEnabled && (!placementResource || !placementDate) && (
+                        <p className="text-xs text-muted-foreground" data-testid="text-placement-hint">
+                          Välj resurs och dag för att placera direkt — annars skapas uppgiften oplanerad.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -1046,10 +1409,34 @@ export function EnkelUppgiftWizard({
               Nästa
             </Button>
           ) : (
-            <Button type="button" onClick={handleCreate} disabled={submitting || !hasLines} data-testid="button-create">
-              {submitting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
-              Skapa uppgift
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addCurrentToBatch}
+                disabled={submitting || !hasLines}
+                data-testid="button-add-to-batch"
+              >
+                <Layers className="h-4 w-4 mr-1" />
+                Lägg till fler
+              </Button>
+              {batchDrafts.length > 0 ? (
+                <Button
+                  type="button"
+                  onClick={handleCreateAll}
+                  disabled={submitting || (batchDrafts.length === 0 && !hasLines)}
+                  data-testid="button-create-all"
+                >
+                  {submitting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
+                  Skapa alla ({batchDrafts.length + (hasLines ? 1 : 0)})
+                </Button>
+              ) : (
+                <Button type="button" onClick={handleCreate} disabled={submitting || !hasLines} data-testid="button-create">
+                  {submitting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
+                  Skapa uppgift
+                </Button>
+              )}
+            </div>
           )}
         </DialogFooter>
       </DialogContent>
