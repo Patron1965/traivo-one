@@ -133,13 +133,19 @@ export function registerObjectStorageRoutes(app: Express): void {
    *
    * Requires authentication. Private files are never served anonymously.
    */
-  app.get("/objects/:objectPath(*)", isAuthenticated, requireTenantWithFallback, async (req, res, next) => {
+  app.get("/objects/:objectPath(*)", (req, res, next) => {
     // Only handle multi-segment paths (e.g. /objects/uploads/abc123).
-    // Single-segment /objects/<id> belongs to the SPA (object detail page).
+    // Single-segment /objects/<id> is the SPA object-detail route and must fall
+    // through to the client app. We skip the WHOLE storage handler (including the
+    // auth middleware below) via next("route") — otherwise isAuthenticated would
+    // return 401 for an anonymous/expired session and the client treats that as a
+    // forced logout when opening the full object view.
     const objectPath = req.params.objectPath ?? "";
     if (!objectPath.includes("/")) {
-      return next();
+      return next("route");
     }
+    next();
+  }, isAuthenticated, requireTenantWithFallback, async (req, res, next) => {
     try {
       const objectFile = await objectStorageService.getObjectEntityFile(req.path);
 
