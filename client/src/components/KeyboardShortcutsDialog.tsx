@@ -17,7 +17,7 @@ const shortcutGroups = [
   {
     title: "Veckoplanering",
     shortcuts: [
-      { keys: "N", description: "Nytt jobb" },
+      { keys: "N", description: "Nytt orderkoncept" },
       { keys: "F", description: "Fyll veckan (auto-fill)" },
       { keys: "1", description: "Dagvy" },
       { keys: "2", description: "Veckovy" },

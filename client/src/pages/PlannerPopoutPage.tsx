@@ -8,7 +8,7 @@ import { AISuggestionsPanel } from "@/components/AISuggestionsPanel";
 import { RouteOptimizationPanel } from "@/components/RouteOptimizationPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, X, Route, ExternalLink, Calendar, Inbox, Plus } from "lucide-react";
+import { Sparkles, X, Route, ExternalLink, Calendar, Inbox, Plus, FileText } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
 import type { PlannerDisplayMode } from "@/components/weekplanner/types";
 import type { SyncRole } from "@/components/weekplanner/usePlannerSync";
@@ -22,7 +22,7 @@ function readPopoutView(): "calendar" | "orderlager" | "full" {
 }
 
 export default function PlannerPopoutPage() {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const [showJobModal, setShowJobModal] = useState(false);
   const [showEnkelUppgift, setShowEnkelUppgift] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -96,6 +96,16 @@ export default function PlannerPopoutPage() {
           <Button
             variant="ghost"
             size="sm"
+            className="h-8 text-xs gap-1.5 text-muted-foreground"
+            onClick={() => setShowJobModal(true)}
+            data-testid="button-open-engangsorder"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Engångsorder
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             className="h-8 text-xs gap-1.5"
             onClick={() => window.opener?.focus()}
             data-testid="button-back-to-main"
@@ -109,7 +119,7 @@ export default function PlannerPopoutPage() {
       <div className="flex flex-1 min-h-0">
         <div className="flex-1 min-w-0 overflow-auto">
           <WeekPlanner
-            onAddJob={() => setShowJobModal(true)}
+            onAddJob={() => navigate("/order-concepts/new")}
             onSelectJob={(id) => setSelectedJobId(id)}
             showAIPanel={showAIPanelInPopout && showAIPanel}
             onToggleAIPanel={showAIPanelInPopout ? () => setShowAIPanel(!showAIPanel) : undefined}

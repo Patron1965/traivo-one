@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useLocation } from "wouter";
 import { WeekPlanner } from "@/components/WeekPlanner";
 import { JobModal } from "@/components/JobModal";
 import { EnkelUppgiftWizard } from "@/components/EnkelUppgiftWizard";
@@ -7,11 +8,12 @@ import { AISuggestionsPanel } from "@/components/AISuggestionsPanel";
 import { RouteOptimizationPanel } from "@/components/RouteOptimizationPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Sparkles, X, AlertTriangle, Route, Zap } from "lucide-react";
+import { Calendar, Sparkles, X, AlertTriangle, Route, Zap, FileText } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { format, startOfWeek, addDays } from "date-fns";
 
 export default function WeekPlannerPage() {
+  const [, navigate] = useLocation();
   const [showJobModal, setShowJobModal] = useState(false);
   const [showEnkelUppgift, setShowEnkelUppgift] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -42,16 +44,28 @@ export default function WeekPlannerPage() {
     <div className="flex h-full relative flex-col">
       <div className="px-4 pt-4 flex items-center justify-between gap-2">
         <PageHeader icon={Calendar} title="Veckoplanerare" testId="text-page-title" />
-        <Button
-          size="sm"
-          variant="outline"
-          className="gap-1.5"
-          onClick={() => setShowEnkelUppgift(true)}
-          data-testid="button-open-enkel-uppgift"
-        >
-          <Zap className="h-4 w-4" />
-          Enkel uppgift
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => setShowEnkelUppgift(true)}
+            data-testid="button-open-enkel-uppgift"
+          >
+            <Zap className="h-4 w-4" />
+            Enkel uppgift
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="gap-1.5 text-muted-foreground"
+            onClick={() => setShowJobModal(true)}
+            data-testid="button-open-engangsorder"
+          >
+            <FileText className="h-4 w-4" />
+            Engångsorder
+          </Button>
+        </div>
       </div>
       {filterParam === "unassigned" && (
         <div className="flex items-center gap-3 px-4 py-2 bg-destructive/10 border-b border-destructive/30" data-testid="banner-unassigned-filter">
@@ -65,7 +79,7 @@ export default function WeekPlannerPage() {
       <div className="flex flex-1 min-h-0 mx-3 mb-3 border border-border rounded-lg shadow-sm bg-background overflow-hidden">
       <div className="flex-1 min-w-0 overflow-auto">
         <WeekPlanner 
-          onAddJob={() => setShowJobModal(true)}
+          onAddJob={() => navigate("/order-concepts/new")}
           onSelectJob={(id) => setSelectedJobId(id)}
           onSelectedJobIdsChange={setSelectedJobIds}
           showAIPanel={showAIPanel}

@@ -465,7 +465,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                 <Plus className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">Nytt jobb (N)</TooltipContent>
+            <TooltipContent side="top">Nytt orderkoncept (N)</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
