@@ -67,6 +67,8 @@ import {
   ArrowRight,
   ArrowLeft,
   Lightbulb,
+  ScanSearch,
+  Receipt,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -194,6 +196,9 @@ export default function OrderConceptsPage() {
   const [runLogsDialogOpen, setRunLogsDialogOpen] = useState(false);
   const [chainTraceWorkOrderId, setChainTraceWorkOrderId] = useState<string | null>(null);
   const [selectedConceptForPhase2, setSelectedConceptForPhase2] = useState<string | null>(null);
+  const [detectChangesDialogOpen, setDetectChangesDialogOpen] = useState(false);
+  const [invoicingStatusDialogOpen, setInvoicingStatusDialogOpen] = useState(false);
+  const [selectedConceptForFas4, setSelectedConceptForFas4] = useState<string | null>(null);
   const [depTemplateForm, setDepTemplateForm] = useState({
     sourceArticleId: "",
     dependentArticleId: "",
@@ -413,6 +418,29 @@ export default function OrderConceptsPage() {
     onError: (error: Error) => {
       toast({ title: "Kunde inte köra om koncept", description: error.message, variant: "destructive" });
     },
+  });
+
+  const detectChangesMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/order-concepts/${id}/detect-changes`),
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte detektera ändringar", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const detectChangesData = detectChangesMutation.data as any;
+
+  const invoicingStatusQueryKey = selectedConceptForFas4
+    ? ["/api/order-concepts", selectedConceptForFas4, "invoicing-status"]
+    : null;
+
+  const { data: invoicingStatus, isLoading: invoicingStatusLoading } = useQuery<any>({
+    queryKey: invoicingStatusQueryKey!,
+    queryFn: async () => {
+      const res = await fetch(`/api/order-concepts/${selectedConceptForFas4}/invoicing-status`);
+      if (!res.ok) throw new Error("Kunde inte hämta faktureringsstatus");
+      return res.json();
+    },
+    enabled: !!selectedConceptForFas4 && invoicingStatusDialogOpen,
   });
 
   const handleEdit = (concept: OrderConcept) => {
@@ -827,6 +855,39 @@ export default function OrderConceptsPage() {
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>Spåra kedja</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedConceptForFas4(concept.id);
+                                setDetectChangesDialogOpen(true);
+                                detectChangesMutation.reset();
+                              }}
+                              data-testid={`button-detect-changes-${concept.id}`}
+                            >
+                              <ScanSearch className="h-4 w-4 text-chart-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Identifiera ändringar</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedConceptForFas4(concept.id);
+                                setInvoicingStatusDialogOpen(true);
+                              }}
+                              data-testid={`button-invoicing-status-${concept.id}`}
+                            >
+                              <Receipt className="h-4 w-4 text-chart-2" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Faktureringssynk</TooltipContent>
                         </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -1768,6 +1829,202 @@ export default function OrderConceptsPage() {
                 </Card>
               ))}
             </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Identifiera ändringar (Fas 4) */}
+      <Dialog open={detectChangesDialogOpen} onOpenChange={(o) => { setDetectChangesDialogOpen(o); if (!o) detectChangesMutation.reset(); }}>
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ScanSearch className="h-5 w-5" />
+              Identifiera ändringar
+            </DialogTitle>
+            <DialogDescription>
+              Jämför konceptets nuvarande objektlista mot de filter och kluster som finns konfigurerade.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {!detectChangesData ? (
+              <div className="flex flex-col items-center gap-3 py-6">
+                <p className="text-sm text-muted-foreground text-center">
+                  Klicka "Analysera" för att se vilka objekt som tillkommit eller tagits bort sedan senaste körning.
+                </p>
+                <Button
+                  onClick={() => { if (selectedConceptForFas4) detectChangesMutation.mutate(selectedConceptForFas4); }}
+                  disabled={detectChangesMutation.isPending}
+                  data-testid="button-run-detect-changes"
+                >
+                  {detectChangesMutation.isPending
+                    ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Analyserar...</>
+                    : <><ScanSearch className="h-4 w-4 mr-2" />Analysera</>}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="p-3 rounded-lg bg-chart-2/10 dark:bg-chart-2/15">
+                    <div className="text-2xl font-bold text-chart-2" data-testid="detect-added-count">
+                      +{detectChangesData.summary?.addedCount ?? 0}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">Nya objekt</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-destructive/10 dark:bg-destructive/15">
+                    <div className="text-2xl font-bold text-destructive" data-testid="detect-removed-count">
+                      -{detectChangesData.summary?.removedCount ?? 0}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">Borttagna</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/40">
+                    <div className="text-2xl font-bold" data-testid="detect-unchanged-count">
+                      {detectChangesData.summary?.unchangedCount ?? 0}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">Oförändrade</div>
+                  </div>
+                </div>
+
+                {!detectChangesData.hasChanges && (
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-chart-2/10 dark:bg-chart-2/15 text-chart-2 text-sm">
+                    <Check className="h-4 w-4 shrink-0" />
+                    Inga ändringar hittades — konceptet är uppdaterat.
+                  </div>
+                )}
+
+                {detectChangesData.added?.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-xs text-chart-2">Nya objekt ({detectChangesData.added.length})</Label>
+                    <div className="max-h-40 overflow-y-auto space-y-1">
+                      {detectChangesData.added.map((o: any) => (
+                        <div key={o.id} className="flex items-start gap-2 text-xs p-2 rounded bg-chart-2/5 dark:bg-chart-2/10">
+                          <span className="text-chart-2 font-bold">+</span>
+                          <div>
+                            <div className="font-medium">{o.name}</div>
+                            {o.address && <div className="text-muted-foreground">{o.address}</div>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {detectChangesData.removed?.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-xs text-destructive">Borttagna objekt ({detectChangesData.removed.length})</Label>
+                    <div className="max-h-40 overflow-y-auto space-y-1">
+                      {detectChangesData.removed.map((o: any) => (
+                        <div key={o.id} className="flex items-start gap-2 text-xs p-2 rounded bg-destructive/5 dark:bg-destructive/10">
+                          <span className="text-destructive font-bold">−</span>
+                          <div className="font-medium">{o.name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center pt-2 border-t">
+                  <span className="text-xs text-muted-foreground">
+                    Totalt matchande nu: {detectChangesData.totalMatchingNow ?? 0} objekt
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { if (selectedConceptForFas4) detectChangesMutation.mutate(selectedConceptForFas4); }}
+                    disabled={detectChangesMutation.isPending}
+                    data-testid="button-rerun-detect-changes"
+                  >
+                    <RefreshCw className={`h-3 w-3 mr-1 ${detectChangesMutation.isPending ? "animate-spin" : ""}`} />
+                    Kör igen
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Faktureringssynk (Fas 4) */}
+      <Dialog open={invoicingStatusDialogOpen} onOpenChange={setInvoicingStatusDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="h-5 w-5" />
+              Faktureringssynk
+            </DialogTitle>
+            <DialogDescription>
+              Faktureringsstatus för uppdrag genererade av detta orderkoncept.
+            </DialogDescription>
+          </DialogHeader>
+          {invoicingStatusLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : invoicingStatus ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-4 rounded-lg border text-center">
+                  <div className="text-3xl font-bold" data-testid="inv-total">{invoicingStatus.totalAssignments}</div>
+                  <div className="text-xs text-muted-foreground mt-1">Totalt genererade uppdrag</div>
+                </div>
+                <div className="p-4 rounded-lg border text-center">
+                  <div className="text-3xl font-bold text-chart-2" data-testid="inv-invoiced">{invoicingStatus.invoicedCount}</div>
+                  <div className="text-xs text-muted-foreground mt-1">Fakturerade</div>
+                </div>
+              </div>
+
+              {invoicingStatus.completedNotInvoiced > 0 && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-warning/10 dark:bg-warning/15 text-warning text-sm" data-testid="inv-pending-warning">
+                  <Clock className="h-4 w-4 shrink-0" />
+                  <span>{invoicingStatus.completedNotInvoiced} slutförda uppdrag saknar fakturering</span>
+                </div>
+              )}
+
+              {Object.keys(invoicingStatus.statusCounts || {}).length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-xs">Uppdrag per status</Label>
+                  <div className="space-y-1">
+                    {Object.entries(invoicingStatus.statusCounts as Record<string, number>).map(([status, count]) => (
+                      <div key={status} className="flex items-center justify-between text-sm py-1.5 px-3 rounded bg-muted/40">
+                        <span className="text-muted-foreground capitalize">
+                          {status === "not_planned" ? "Ej planerat" :
+                           status === "planned_rough" ? "Grovplanerat" :
+                           status === "planned_fine" ? "Finplanerat" :
+                           status === "in_progress" ? "Pågår" :
+                           status === "completed" ? "Slutfört" :
+                           status === "cancelled" ? "Avbokat" : status}
+                        </span>
+                        <Badge variant="secondary">{count}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2 pt-2 border-t">
+                <Label className="text-xs">Fortnox-integration</Label>
+                <div className={`flex items-center gap-2 p-3 rounded-lg text-sm ${
+                  invoicingStatus.fortnoxConnected
+                    ? "bg-chart-2/10 dark:bg-chart-2/15 text-chart-2"
+                    : "bg-muted/40 text-muted-foreground"
+                }`}>
+                  {invoicingStatus.fortnoxConnected
+                    ? <><Check className="h-4 w-4 shrink-0" />Fortnox är anslutet</>
+                    : <><X className="h-4 w-4 shrink-0" />Fortnox är inte anslutet</>}
+                </div>
+                {invoicingStatus.priceListId && (
+                  <p className="text-xs text-muted-foreground">Prislista konfigurerad — frozen-prislogik aktiveras vid faktureringsexport.</p>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => navigate("/invoices")} data-testid="button-go-invoices">
+                  <Receipt className="h-4 w-4 mr-2" />
+                  Öppna fakturering
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-6">Ingen data tillgänglig.</p>
           )}
         </DialogContent>
       </Dialog>

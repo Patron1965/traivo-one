@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Save, Copy, PlayCircle, Loader2, CheckCircle2,
   MapPin, Clock, Package, Calendar, Gauge, ChevronDown, ChevronUp,
+  BarChart3, TrendingUp,
 } from "lucide-react";
 
 interface Step7Props {
@@ -69,6 +70,20 @@ interface ReviewSummary {
   totalProductionMinutes: number;
   schedule: ReviewSchedule;
   geoSpread: GeoSpread;
+}
+
+interface SimulatePeriod {
+  year: number;
+  month: number;
+  label: string;
+  jobCount: number;
+  weeklyAvg: number;
+}
+
+interface SimulateResult {
+  objectCount: number;
+  periods: SimulatePeriod[];
+  summary: { totalJobs: number; monthlyAvg: number; weeklyAvg: number };
 }
 
 const WEEKDAY_LABELS = ["Sö", "Må", "Ti", "On", "To", "Fr", "Lö"];
@@ -240,6 +255,17 @@ export default function Step7ReviewSave({
     staleTime: 10_000,
   });
 
+  const { data: simData, isLoading: simLoading } = useQuery<SimulateResult>({
+    queryKey: ["/api/order-concepts", conceptId, "simulate"],
+    queryFn: async () => {
+      const res = await fetch(`/api/order-concepts/${conceptId}/simulate`);
+      if (!res.ok) throw new Error("Kunde inte ladda simulering");
+      return res.json();
+    },
+    enabled: !!conceptId,
+    staleTime: 30000,
+  });
+
   const saveTemplateMutation = useMutation({
     mutationFn: async () => {
       if (!conceptId) throw new Error("Spara konceptet först.");
@@ -296,6 +322,8 @@ export default function Step7ReviewSave({
       <span className="font-medium">{value}</span>
     </div>
   );
+
+  const maxJobCount = simData ? Math.max(...simData.periods.map((p) => p.jobCount), 1) : 1;
 
   return (
     <div className="space-y-5" data-testid="step7-review-save">
@@ -439,6 +467,74 @@ export default function Step7ReviewSave({
             <p className="text-sm text-muted-foreground italic">
               Spara konceptet för att se ställtidsuppskattning
             </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Simulering — uppskattade jobb per månad (Fas 4) */}
+      <Card data-testid="card-simulation">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" /> Simulering — uppskattade jobb per månad
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!conceptId ? (
+            <p className="text-sm text-muted-foreground text-center py-4">Spara konceptet för att se simulering.</p>
+          ) : simLoading ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : !simData || simData.summary.totalJobs === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              Inga jobb uppskattade — konfigurera leveranstid (intervall eller tidsfönster) i steg 3.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 rounded-lg bg-chart-2/10 dark:bg-chart-2/15 text-center">
+                  <div className="text-xl font-bold text-chart-2" data-testid="sim-total-jobs">
+                    {simData.summary.totalJobs.toLocaleString("sv-SE")}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">Totalt (12 mån)</div>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50 text-center">
+                  <div className="text-xl font-bold" data-testid="sim-monthly-avg">
+                    {simData.summary.monthlyAvg.toLocaleString("sv-SE")}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">Snitt/månad</div>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50 text-center">
+                  <div className="text-xl font-bold" data-testid="sim-weekly-avg">
+                    {simData.summary.weeklyAvg.toLocaleString("sv-SE")}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">Snitt/vecka</div>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
+                <TrendingUp className="h-3 w-3" />
+                Baserat på {simData.objectCount} objekt
+              </div>
+              <div className="space-y-1">
+                {simData.periods.map((p) => (
+                  <div key={`${p.year}-${p.month}`} className="flex items-center gap-2 text-xs" data-testid={`sim-period-${p.year}-${p.month}`}>
+                    <span className="w-16 text-muted-foreground shrink-0">{p.label}</span>
+                    <div className="flex-1 bg-muted/40 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-chart-2 h-2 rounded-full transition-all"
+                        style={{ width: `${(p.jobCount / maxJobCount) * 100}%` }}
+                      />
+                    </div>
+                    <span className="w-12 text-right font-medium">
+                      {p.jobCount > 0 ? p.jobCount.toLocaleString("sv-SE") : <span className="text-muted-foreground">—</span>}
+                    </span>
+                    <Badge variant="outline" className="text-xs w-16 justify-center shrink-0">
+                      ~{p.weeklyAvg}/v
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

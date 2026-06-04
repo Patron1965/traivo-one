@@ -8,7 +8,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
-import { objects, workOrders, customerCommunications, objectContacts, orderConceptArticles, orderConceptObjects, articleObjectMappings, conceptFilters, priceLists, objectMetadata, metadataDefinitions, deliverySchedules, type InsertOrderConceptArticle } from "@shared/schema";
+import { objects, workOrders, customerCommunications, objectContacts, orderConceptArticles, orderConceptObjects, articleObjectMappings, conceptFilters, priceLists, objectMetadata, metadataDefinitions, deliverySchedules, assignments as assignmentsTable, type InsertOrderConceptArticle } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import OpenAI from "openai";
 
@@ -2009,6 +2009,196 @@ app.post("/api/order-concepts/:id/copy", asyncHandler(async (req, res) => {
       copyObjects: !targetClusterIds,
     });
     res.status(201).json(created);
+}));
+
+// ============================================
+// FAS 4: SIMULERING, AUTO-UPPDATERING & FAKTURERINGSSYNK
+// ============================================
+
+// Simulering: Beräknar uppskattat antal jobb per månad de nästa 12 månaderna.
+app.get("/api/order-concepts/:id/simulate", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const rawConcept = await storage.getOrderConcept(req.params.id);
+    const concept = verifyTenantOwnership(rawConcept, tenantId);
+    if (!concept) throw new NotFoundError("Orderkoncept hittades inte");
+
+    const conceptObjectRows = await storage.getOrderConceptObjects(concept.id);
+    const objectCount = conceptObjectRows.length || (concept as any).totalObjects || 0;
+
+    const deliveryTimeType = (concept as any).deliveryTimeType as string | null;
+    const timeWindows = (concept as any).timeWindows as Array<{ months: number[]; weekdays: number[] }> | null;
+    const intervalFrequencyDays = (concept as any).intervalFrequencyDays as number | null;
+
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "Maj", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"];
+    const now = new Date();
+    const periods: Array<{ year: number; month: number; label: string; jobCount: number; weeklyAvg: number }> = [];
+
+    for (let m = 0; m < 12; m++) {
+        const date = new Date(now.getFullYear(), now.getMonth() + m, 1);
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1; // 1-indexerat
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const label = `${monthNames[month - 1]} ${year}`;
+        let jobCount = 0;
+
+        if (deliveryTimeType === "interval" && intervalFrequencyDays && intervalFrequencyDays > 0) {
+            jobCount = Math.ceil(daysInMonth / intervalFrequencyDays) * objectCount;
+        } else if (deliveryTimeType === "time_window" && Array.isArray(timeWindows) && timeWindows.length > 0) {
+            for (const tw of timeWindows) {
+                if (!Array.isArray(tw.months) || !Array.isArray(tw.weekdays)) continue;
+                if (!tw.months.includes(month)) continue;
+                let matchingDays = 0;
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const wd = new Date(year, month - 1, d).getDay();
+                    if (tw.weekdays.includes(wd)) matchingDays++;
+                }
+                jobCount += matchingDays * objectCount;
+            }
+        } else if (concept.deliverySchedule) {
+            const schedule = concept.deliverySchedule as any[];
+            const monthEntries = schedule.filter((s: any) => s.month === 0 || s.month === month);
+            jobCount = monthEntries.length * objectCount;
+        } else if (concept.scenario === "schema" && concept.intervalDays && concept.intervalDays > 0) {
+            jobCount = Math.ceil(daysInMonth / concept.intervalDays) * objectCount;
+        } else if (concept.scenario === "abonnemang") {
+            jobCount = objectCount;
+        }
+
+        const weeksInMonth = daysInMonth / 7;
+        periods.push({ year, month, label, jobCount, weeklyAvg: Math.round((jobCount / weeksInMonth) * 10) / 10 });
+    }
+
+    const totalJobs = periods.reduce((s, p) => s + p.jobCount, 0);
+    res.json({
+        objectCount,
+        periods,
+        summary: {
+            totalJobs,
+            monthlyAvg: Math.round((totalJobs / 12) * 10) / 10,
+            weeklyAvg: Math.round((totalJobs / 52) * 10) / 10,
+        },
+    });
+}));
+
+// Auto-uppdatering: Detekterar förändringar i underliggande data (objekt, metadata).
+app.post("/api/order-concepts/:id/detect-changes", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const rawConcept = await storage.getOrderConcept(req.params.id);
+    const concept = verifyTenantOwnership(rawConcept, tenantId);
+    if (!concept) throw new NotFoundError("Orderkoncept hittades inte");
+
+    const filters = await storage.getConceptFilters(concept.id);
+    const targetClusterIds: string[] = Array.isArray((concept as any).targetClusterIds) && (concept as any).targetClusterIds.length > 0
+        ? (concept as any).targetClusterIds
+        : (concept.targetClusterId ? [concept.targetClusterId] : []);
+
+    let candidateObjects: any[] = [];
+    if (targetClusterIds.length > 0) {
+        const objectMap = new Map<string, any>();
+        for (const clusterId of targetClusterIds) {
+            const clusterObjects = await storage.getClusterObjects(clusterId);
+            for (const obj of clusterObjects) {
+                if (verifyTenantOwnership(obj, tenantId)) objectMap.set(obj.id, obj);
+            }
+        }
+        candidateObjects = Array.from(objectMap.values());
+    } else {
+        candidateObjects = await storage.getObjects(tenantId);
+    }
+
+    const metaByObject = new Map<string, Record<string, unknown>>();
+    if (filters.length > 0 && candidateObjects.length > 0) {
+        const objectIds = candidateObjects.map((o: any) => o.id);
+        const defs = await db.select().from(metadataDefinitions)
+            .where(and(eq(metadataDefinitions.tenantId, tenantId), isNull(metadataDefinitions.deletedAt)));
+        const defKey = new Map(defs.map(d => [d.id, d.fieldKey]));
+        const rows = await db.select().from(objectMetadata)
+            .where(and(eq(objectMetadata.tenantId, tenantId), inArray(objectMetadata.objectId, objectIds)));
+        for (const row of rows) {
+            const key = defKey.get(row.definitionId);
+            if (!key) continue;
+            const map = metaByObject.get(row.objectId) ?? {};
+            map[key] = row.valueJson ?? row.value;
+            metaByObject.set(row.objectId, map);
+        }
+    }
+
+    const nowMatchingObjects = candidateObjects.filter((obj: any) => {
+        const meta = metaByObject.get(obj.id) ?? {};
+        return filters.every(f => {
+            const value = f.metadataKey in meta ? meta[f.metadataKey] : (obj as any)[f.metadataKey];
+            return matchesFilter(value, f.operator, f.filterValue);
+        });
+    });
+
+    const currentObjectRows = await storage.getOrderConceptObjects(concept.id);
+    const currentObjectIds = new Set(currentObjectRows.map((r: any) => r.objectId));
+    const nowMatchingIds = new Set(nowMatchingObjects.map((o: any) => o.id));
+
+    const addedObjects = nowMatchingObjects
+        .filter((o: any) => !currentObjectIds.has(o.id))
+        .map((o: any) => ({ id: o.id, name: o.name, address: o.address }));
+
+    const removedObjects = currentObjectRows
+        .filter((r: any) => !nowMatchingIds.has(r.objectId))
+        .map((r: any) => ({ id: r.objectId, name: (r as any).objectName || r.objectId }));
+
+    const unchangedCount = currentObjectRows.filter((r: any) => nowMatchingIds.has(r.objectId)).length;
+
+    res.json({
+        hasChanges: addedObjects.length > 0 || removedObjects.length > 0,
+        added: addedObjects.slice(0, 100),
+        removed: removedObjects.slice(0, 100),
+        unchangedCount,
+        totalMatchingNow: nowMatchingObjects.length,
+        totalInConcept: currentObjectRows.length,
+        summary: { addedCount: addedObjects.length, removedCount: removedObjects.length, unchangedCount },
+    });
+}));
+
+// Faktureringssynk: Hämtar faktureringsstatus för konceptets genererade uppdrag.
+app.get("/api/order-concepts/:id/invoicing-status", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const rawConcept = await storage.getOrderConcept(req.params.id);
+    const concept = verifyTenantOwnership(rawConcept, tenantId);
+    if (!concept) throw new NotFoundError("Orderkoncept hittades inte");
+
+    const rows = await db.select({
+        id: assignmentsTable.id,
+        status: assignmentsTable.status,
+        completedAt: assignmentsTable.completedAt,
+        invoicedAt: assignmentsTable.invoicedAt,
+        scheduledDate: assignmentsTable.scheduledDate,
+    })
+    .from(assignmentsTable)
+    .where(and(
+        eq(assignmentsTable.tenantId, tenantId),
+        eq(assignmentsTable.orderConceptId, concept.id),
+        isNull(assignmentsTable.deletedAt),
+    ));
+
+    const statusCounts: Record<string, number> = {};
+    let invoicedCount = 0;
+    let completedNotInvoiced = 0;
+    for (const row of rows) {
+        statusCounts[row.status] = (statusCounts[row.status] || 0) + 1;
+        if (row.invoicedAt) invoicedCount++;
+        if (row.completedAt && !row.invoicedAt) completedNotInvoiced++;
+    }
+
+    const fortnoxConfig = await storage.getFortnoxConfig(tenantId);
+    const fortnoxConnected = !!(fortnoxConfig?.accessToken && fortnoxConfig?.isActive);
+
+    res.json({
+        totalAssignments: rows.length,
+        statusCounts,
+        invoicedCount,
+        completedNotInvoiced,
+        fortnoxConnected,
+        priceListId: (concept as any).priceListId || null,
+        invoiceLevel: (concept as any).invoiceLevel || null,
+        customerId: (concept as any).customerId || null,
+    });
 }));
 
 // Hjälpfunktion: djupkopiera ett koncept med filter, artiklar, scheman och konfig.
