@@ -2647,6 +2647,7 @@ export const STANDARD_METADATA_DEFINITIONS: Array<{
   isSystem?: boolean;
   isRequired?: boolean;
   referensTabell?: string;
+  kronologiskVisning?: boolean;
 }> = [
   // === Grunduppgifter ===
   // PDF §7: displayNumber följer 1/3/6/9/12/15/18/21/24 — systemfält Objektnamn = 1000 (alltid sist).
@@ -2666,7 +2667,9 @@ export const STANDARD_METADATA_DEFINITIONS: Array<{
   // Task #682: systemgenererade, read-only fält som skrivs automatiskt vid
   // relevant händelse (metod='system'). De kan aldrig sättas/ändras manuellt.
   { namn: 'Senaste arbetsorder', datatyp: 'string', arLogisk: false, standardArvs: false, kategori: 'status', beskrivning: 'Senast skapade arbetsorder på objektet (systemfält, sätts automatiskt)', sortOrder: 990, icon: 'ClipboardList', area: 'status', displayNumber: 990, isSystem: true },
-  { namn: 'Senaste felanmälan', datatyp: 'string', arLogisk: false, standardArvs: false, kategori: 'status', beskrivning: 'Senast inkomna felanmälan på objektet (systemfält, sätts automatiskt)', sortOrder: 992, icon: 'AlertTriangle', area: 'status', displayNumber: 992, isSystem: true },
+  { namn: 'Senaste felanmälan', datatyp: 'string', arLogisk: false, standardArvs: false, kategori: 'status', beskrivning: 'Senast inkomna felanmälan på objektet (systemfält, sätts automatiskt)', sortOrder: 992, icon: 'AlertTriangle', area: 'status', displayNumber: 992, isSystem: true, kronologiskVisning: true },
+  // Task #714: kundbetyg/feedback via QR — kronologisk gallerivy (historik-tidslinje).
+  { namn: 'Senaste kundbetyg', datatyp: 'string', arLogisk: false, standardArvs: false, kategori: 'status', beskrivning: 'Senast inkomna kundbetyg/feedback via QR på objektet (systemfält, sätts automatiskt)', sortOrder: 993, icon: 'Star', area: 'status', displayNumber: 993, isSystem: true, kronologiskVisning: true },
   // Task #693: ytterligare livshändelser som ger systemgenererade fält.
   { namn: 'Senast slutförd order', datatyp: 'string', arLogisk: false, standardArvs: false, kategori: 'status', beskrivning: 'Senast slutförda arbetsorder på objektet (systemfält, sätts automatiskt vid slutförande)', sortOrder: 994, icon: 'CheckCircle2', area: 'status', displayNumber: 994, isSystem: true },
   { namn: 'Senast fakturerad order', datatyp: 'string', arLogisk: false, standardArvs: false, kategori: 'ekonomi', beskrivning: 'Senast fakturerade arbetsorder på objektet (systemfält, sätts automatiskt vid Fortnox-export)', sortOrder: 996, icon: 'Receipt', area: 'ekonomi', displayNumber: 996, isSystem: true },
@@ -2764,6 +2767,23 @@ export async function seedDefaultMetadataTypes(tenantId: string): Promise<{ crea
     }
     await db.insert(metadataKatalog).values({ tenantId, ...def });
     created.push(def.namn);
+  }
+
+  // 1b. Backfill: standardkatalog-fält som redan finns men vars kronologiskVisning
+  // har ändrats i koden (t.ex. system-fält som ska visas kronologiskt) uppdateras
+  // idempotent så att existerande tenants får rätt beteende utan migrering.
+  const chronologicalNames = STANDARD_METADATA_DEFINITIONS
+    .filter(d => d.kronologiskVisning === true)
+    .map(d => d.namn);
+  if (chronologicalNames.length > 0) {
+    await db
+      .update(metadataKatalog)
+      .set({ kronologiskVisning: true })
+      .where(and(
+        eq(metadataKatalog.tenantId, tenantId),
+        inArray(metadataKatalog.namn, chronologicalNames),
+        eq(metadataKatalog.kronologiskVisning, false),
+      ));
   }
 
   // 2. Legacy default-typer — behåll bakåtkompatibilitet för tomma tenants,

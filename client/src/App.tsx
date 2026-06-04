@@ -104,6 +104,7 @@ const AIPlanningPage = lazy(() => import("@/pages/AIPlanningPage"));
 const AICommandCenterPage = lazy(() => import("@/pages/AICommandCenterPage"));
 const FieldLoginPage = lazy(() => import("@/pages/FieldLoginPage"));
 const PublicReportPage = lazy(() => import("@/pages/public-report"));
+const PublicFeedbackPage = lazy(() => import("@/pages/public-feedback"));
 const SmsSettingsPage = lazy(() => import("@/pages/SmsSettingsPage"));
 const EnvironmentalCertificatePage = lazy(() => import("@/pages/EnvironmentalCertificatePage"));
 const LundstamsROIPage = lazy(() => import("@/pages/LundstamsROIPage"));
@@ -332,6 +333,16 @@ function AppContent() {
       <ErrorBoundary>
         <Suspense fallback={<PageLoader />}>
           <PublicReportPage />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
+  if (location.startsWith("/feedback/")) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <PublicFeedbackPage />
         </Suspense>
       </ErrorBoundary>
     );

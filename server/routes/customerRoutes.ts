@@ -12,6 +12,7 @@ import { primaryPayerCustomerIdSql, objectHasPrimaryCustomerSql } from "../servi
 import { ensureClusterAndAssign } from "../auto-cluster";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 import { copyObjectTree } from "../services/object-copy";
+import { signObjectQrToken } from "../dynamic-qr-token";
 
 export async function registerCustomerRoutes(app: Express) {
 
@@ -732,6 +733,30 @@ app.get("/api/objects/:id/work-orders", asyncHandler(async (req, res) => {
     .filter(wo => wo.objectId === req.params.id)
     .slice(0, 50);
   res.json(objectOrders);
+}));
+
+// Task #714: kronologisk lista över felanmälningar på ett objekt (för galleri
+// med bläddringsbara foton). Tenant-scopad — cross-tenant ger 404.
+app.get("/api/objects/:id/issue-reports", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const object = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(object, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const reports = await storage.getPublicIssueReports(tenantId, { objectId: req.params.id });
+  res.json(reports);
+}));
+
+// Task #714: signerad, objekt-bunden QR-token för kundbetyg/feedback. Token
+// härleds server-side (HMAC) — klienten bygger /feedback/:token-URL:en.
+app.get("/api/objects/:id/feedback-token", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const object = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(object, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const token = signObjectQrToken(tenantId, req.params.id);
+  res.json({ token });
 }));
 
 // Task #681: read-only förhandsvisning av nästa systemnummer för skapa-dialogen.

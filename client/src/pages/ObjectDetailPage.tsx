@@ -38,7 +38,7 @@ import "leaflet/dist/leaflet.css";
 import { useMapConfig } from "@/hooks/use-map-config";
 import type { ServiceObject, WorkOrder, DeliveryPreferences } from "@shared/schema";
 import { PolylineEditor } from "@/components/PolylineEditor";
-import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors } from "@/lib/status-colors";
+import { objectStatusBadge as statusColors, workOrderStatusBadge as workOrderStatusColors, getCustomerReportStatusBadge } from "@/lib/status-colors";
 import type { LucideIcon } from "lucide-react";
 
 interface InheritanceSource {
@@ -98,6 +98,32 @@ function isReadonlyMetadataOrigin(metod?: string | null): boolean {
 // inkommen felanmälan). Vi lyfter fram dem på objektkortet.
 const LATEST_WORKORDER_FIELD = "Senaste arbetsorder";
 const LATEST_ISSUE_FIELD = "Senaste felanmälan";
+
+// Task #714: orderstatus-livscykel för "Kopplade uppgifter"-galleriets step-
+// indicator. Linjär progression; omöjlig/avbruten är terminala sidospår.
+const ORDER_STATUSES: { value: string; label: string }[] = [
+  { value: "skapad", label: "Skapad" },
+  { value: "planerad_pre", label: "Förplanerad" },
+  { value: "planerad_resurs", label: "Resurs" },
+  { value: "planerad_las", label: "Låst" },
+  { value: "utford", label: "Utförd" },
+  { value: "fakturerad", label: "Fakturerad" },
+];
+const ORDER_STATUS_LABELS: Record<string, string> = {
+  ...Object.fromEntries(ORDER_STATUSES.map((s) => [s.value, s.label])),
+  omojlig: "Omöjlig",
+  avbruten: "Avbruten",
+};
+const ORDER_STATUS_BADGE: Record<string, string> = {
+  skapad: "bg-muted text-muted-foreground border border-border",
+  planerad_pre: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
+  planerad_resurs: "bg-chart-1/15 text-chart-1 border border-chart-1/30",
+  planerad_las: "bg-chart-3/15 text-chart-3 border border-chart-3/30",
+  utford: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+  fakturerad: "bg-chart-2/15 text-chart-2 border border-chart-2/30",
+  omojlig: "bg-destructive/15 text-destructive border border-destructive/30",
+  avbruten: "bg-destructive/15 text-destructive border border-destructive/30",
+};
 
 function getMetadataDisplayValue(entry: MetadataEntry | undefined): string | null {
   if (!entry) return null;
@@ -171,6 +197,17 @@ type WorkOrderListItem = Partial<Omit<WorkOrder, "id" | "scheduledDate">> & {
   scheduledDate?: string | Date | null;
   resourceName?: string;
 };
+
+interface IssueReportItem {
+  id: string;
+  title: string;
+  description?: string | null;
+  category?: string | null;
+  status?: string | null;
+  reporterName?: string | null;
+  photos?: string[] | null;
+  createdAt?: string | null;
+}
 
 interface ParentRelation {
   id: string;
@@ -362,6 +399,8 @@ export default function ObjectDetailPage() {
     reason: "",
   });
   const [workOrderForm, setWorkOrderForm] = useState({ title: "", description: "", scheduledDate: "" });
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ photos: string[]; index: number } | null>(null);
 
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -453,6 +492,28 @@ export default function ObjectDetailPage() {
     queryFn: async () => {
       const res = await fetch(`/api/objects/${objectId}/work-orders`);
       if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!objectId,
+  });
+
+  // Task #714: kronologisk lista över felanmälningar (med bläddringsbara foton).
+  const { data: issueReports = [] } = useQuery<IssueReportItem[]>({
+    queryKey: ["/api/objects", objectId, "issue-reports"],
+    queryFn: async () => {
+      const res = await fetch(`/api/objects/${objectId}/issue-reports`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!objectId,
+  });
+
+  // Task #714: server-signerad objekt-bunden QR-token för kundbetyg/feedback.
+  const { data: feedbackTokenData } = useQuery<{ token: string }>({
+    queryKey: ["/api/objects", objectId, "feedback-token"],
+    queryFn: async () => {
+      const res = await fetch(`/api/objects/${objectId}/feedback-token`);
+      if (!res.ok) return { token: "" };
       return res.json();
     },
     enabled: !!objectId,
@@ -1046,7 +1107,10 @@ export default function ObjectDetailPage() {
             Bilder {images.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{images.length}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="workorders" data-testid="tab-workorders">
-            Arbetsordrar {workOrders.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{workOrders.length}</Badge>}
+            Kopplade uppgifter {workOrders.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{workOrders.length}</Badge>}
+          </TabsTrigger>
+          <TabsTrigger value="kundkontakt" data-testid="tab-kundkontakt">
+            Kundkontakt {issueReports.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{issueReports.length}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="restrictions" data-testid="tab-restrictions">
             SlotPreference {timeRestrictions.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{timeRestrictions.length}</Badge>}
@@ -1816,7 +1880,12 @@ export default function ObjectDetailPage() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <ClipboardList className="h-4 w-4" /> Arbetsordrar
+                  <ClipboardList className="h-4 w-4" /> Kopplade uppgifter
+                  {workOrders.length > 0 && (
+                    <Badge variant="secondary" className="text-xs" data-testid="badge-workorder-count">
+                      {workOrders.length}
+                    </Badge>
+                  )}
                 </CardTitle>
                 <Button
                   variant="outline"
@@ -1824,54 +1893,208 @@ export default function ObjectDetailPage() {
                   onClick={() => setWorkOrderDialogOpen(true)}
                   data-testid="button-add-workorder"
                 >
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Ny arbetsorder
+                  <Plus className="h-3.5 w-3.5 mr-1" /> ⚡ Ny snabborder
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
               {workOrders.length > 0 ? (
-                <div className="divide-y">
+                <div className="grid gap-3 sm:grid-cols-2">
                   {workOrders.map((wo) => {
                     const isHighlighted = highlightedWorkOrderId === wo.id;
+                    const isExpanded = expandedOrderId === wo.id;
+                    const status = wo.orderStatus || "skapad";
+                    const currentStep = ORDER_STATUSES.findIndex((s) => s.value === status);
+                    const isTerminalSidetrack = status === "omojlig" || status === "avbruten";
                     return (
-                    <div
-                      key={wo.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => navigate(`/work-orders/${wo.id}`)}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/work-orders/${wo.id}`); } }}
-                      className={`flex items-center justify-between py-3 gap-4 transition-colors cursor-pointer hover:bg-muted/50 -mx-2 px-2 rounded-md ${isHighlighted ? "bg-primary/10 ring-1 ring-primary/40" : ""}`}
-                      data-testid={`workorder-row-${wo.id}`}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium truncate">{wo.title || `Order ${wo.id.slice(0, 8)}`}</div>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <div
+                        key={wo.id}
+                        className={`rounded-lg border p-3 transition-colors ${isHighlighted ? "border-primary/40 bg-primary/5" : "border-border"}`}
+                        data-testid={`workorder-row-${wo.id}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium truncate" data-testid={`text-workorder-title-${wo.id}`}>
+                              {wo.title || `Order ${wo.id.slice(0, 8)}`}
+                            </div>
+                            <div className="text-xs text-muted-foreground font-mono mt-0.5">
+                              #{wo.id.slice(0, 8)}
+                            </div>
+                          </div>
+                          <Badge className={ORDER_STATUS_BADGE[status] || ORDER_STATUS_BADGE.skapad} data-testid={`badge-workorder-status-${wo.id}`}>
+                            {ORDER_STATUS_LABELS[status] || "Skapad"}
+                          </Badge>
+                        </div>
+
+                        {/* Step-indicator (livscykel) */}
+                        {!isTerminalSidetrack && (
+                          <div className="mt-3 flex items-center gap-1" data-testid={`steps-workorder-${wo.id}`}>
+                            {ORDER_STATUSES.map((step, idx) => (
+                              <div
+                                key={step.value}
+                                className={`h-1.5 flex-1 rounded-full ${idx <= currentStep ? "bg-primary" : "bg-muted"}`}
+                                title={step.label}
+                              />
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="mt-2 flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
                           {wo.scheduledDate && (
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <span className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
                               {new Date(wo.scheduledDate).toLocaleDateString("sv-SE")}
                             </span>
                           )}
                           {wo.resourceName && (
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <span className="flex items-center gap-1">
                               <Truck className="h-3 w-3" />
                               {wo.resourceName}
                             </span>
                           )}
                         </div>
+
+                        {isExpanded && (
+                          <div className="mt-3 border-t pt-3 space-y-2 text-xs" data-testid={`workorder-expanded-${wo.id}`}>
+                            {wo.description && (
+                              <p className="text-muted-foreground whitespace-pre-wrap">{wo.description}</p>
+                            )}
+                            <div className="text-muted-foreground">
+                              Aktuell status: <span className="font-medium text-foreground">{ORDER_STATUS_LABELS[status] || status}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => setExpandedOrderId(isExpanded ? null : wo.id)}
+                            data-testid={`button-expand-workorder-${wo.id}`}
+                          >
+                            {isExpanded ? "Dölj" : "Visa mer"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => navigate(`/work-orders/${wo.id}`)}
+                            data-testid={`button-open-workorder-${wo.id}`}
+                          >
+                            Öppna <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+                          </Button>
+                        </div>
                       </div>
-                      <Badge className={workOrderStatusColors[wo.orderStatus || "skapad"] || workOrderStatusColors.unassigned}>
-                        {wo.orderStatus === "utford" ? "Klar" :
-                         wo.orderStatus === "planerad_resurs" ? "Planerad" :
-                         wo.orderStatus === "planerad_las" ? "Låst" :
-                         wo.orderStatus === "fakturerad" ? "Fakturerad" : "Skapad"}
-                      </Badge>
-                    </div>
                     );
                   })}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">Inga arbetsordrar kopplade till detta objekt.</p>
+                <p className="text-sm text-muted-foreground">Inga uppgifter kopplade till detta objekt.</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ==================== KUNDKONTAKT (felanmälan + feedback-QR) ==================== */}
+        <TabsContent value="kundkontakt" className="space-y-4">
+          {/* Feedback-QR */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Hash className="h-4 w-4" /> QR för kundbetyg
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {feedbackTokenData?.token ? (
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(`${window.location.origin}/feedback/${feedbackTokenData.token}`)}`}
+                    alt="QR-kod för kundbetyg"
+                    className="h-40 w-40 rounded-md border border-border bg-white p-2"
+                    data-testid="img-feedback-qr"
+                  />
+                  <div className="text-sm text-muted-foreground space-y-2">
+                    <p>Skanna koden för att lämna ett kundbetyg på detta objekt. Svaren sparas kronologiskt som systemmetadata.</p>
+                    <a
+                      href={`/feedback/${feedbackTokenData.token}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                      data-testid="link-feedback-page"
+                    >
+                      Öppna betygsformulär <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">QR-kod kunde inte genereras.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Felanmälningar (kronologiskt, bläddringsbara foton) */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" /> Felanmälningar
+                {issueReports.length > 0 && (
+                  <Badge variant="secondary" className="text-xs" data-testid="badge-issue-count">
+                    {issueReports.length}
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {issueReports.length > 0 ? (
+                <div className="space-y-3">
+                  {issueReports.map((report) => (
+                    <div
+                      key={report.id}
+                      className="rounded-lg border border-border p-3"
+                      data-testid={`issue-report-${report.id}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium" data-testid={`text-issue-title-${report.id}`}>
+                            {report.title}
+                          </div>
+                          {report.createdAt && (
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              {new Date(report.createdAt).toLocaleString("sv-SE")}
+                              {report.reporterName ? ` · ${report.reporterName}` : ""}
+                            </div>
+                          )}
+                        </div>
+                        {report.status && (
+                          <Badge className={getCustomerReportStatusBadge(report.status).className} data-testid={`badge-issue-status-${report.id}`}>
+                            {getCustomerReportStatusBadge(report.status).label}
+                          </Badge>
+                        )}
+                      </div>
+                      {report.description && (
+                        <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">{report.description}</p>
+                      )}
+                      {report.photos && report.photos.length > 0 && (
+                        <div className="mt-3 flex gap-2 flex-wrap">
+                          {report.photos.map((photo, idx) => (
+                            <button
+                              key={photo}
+                              type="button"
+                              onClick={() => setLightbox({ photos: report.photos || [], index: idx })}
+                              className="h-16 w-16 overflow-hidden rounded-md border border-border hover-elevate"
+                              data-testid={`button-issue-photo-${report.id}-${idx}`}
+                            >
+                              <img src={photo} alt={`Bild ${idx + 1}`} className="h-full w-full object-cover" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Inga felanmälningar registrerade för detta objekt.</p>
               )}
             </CardContent>
           </Card>
@@ -2740,6 +2963,46 @@ export default function ObjectDetailPage() {
               Skapa
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ==================== FELANMÄLAN — FOTO-LIGHTBOX ==================== */}
+      <Dialog open={!!lightbox} onOpenChange={(open) => { if (!open) setLightbox(null); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Bild {lightbox ? lightbox.index + 1 : 0} av {lightbox ? lightbox.photos.length : 0}
+            </DialogTitle>
+            <DialogDescription>Bläddra mellan bifogade bilder i felanmälan.</DialogDescription>
+          </DialogHeader>
+          {lightbox && lightbox.photos[lightbox.index] && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                disabled={lightbox.index <= 0}
+                onClick={() => setLightbox((lb) => lb ? { ...lb, index: Math.max(0, lb.index - 1) } : lb)}
+                data-testid="button-lightbox-prev"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <img
+                src={lightbox.photos[lightbox.index]}
+                alt={`Bild ${lightbox.index + 1}`}
+                className="max-h-[70vh] w-full rounded-md object-contain bg-muted"
+                data-testid="img-lightbox"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                disabled={lightbox.index >= lightbox.photos.length - 1}
+                onClick={() => setLightbox((lb) => lb ? { ...lb, index: Math.min(lb.photos.length - 1, lb.index + 1) } : lb)}
+                data-testid="button-lightbox-next"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

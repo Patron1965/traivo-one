@@ -7,8 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, CheckCircle2, MapPin, Camera, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, MapPin, Camera, Loader2, Sparkles, X } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
+
+interface UploadedPhoto {
+  previewUrl: string;
+  objectPath: string;
+}
 
 interface ReportInfo {
   objectId: string;
@@ -22,7 +27,10 @@ interface ReportInfo {
 }
 
 export default function PublicReportPage() {
-  const { code } = useParams<{ code: string }>();
+  const params = useParams<{ code: string }>();
+  // Fallback: sidan renderas via en location.startsWith-gren i App.tsx, så
+  // wouters useParams kan returnera {} — parsa då koden ur pathname.
+  const code = params.code || window.location.pathname.split('/report/')[1]?.split(/[/?#]/)[0] || '';
   const [formData, setFormData] = useState({
     category: '',
     title: '',
@@ -33,6 +41,10 @@ export default function PublicReportPage() {
   });
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
 
   const { data: info, isLoading, error } = useQuery<ReportInfo>({
     queryKey: ['/api/public/report', code],
@@ -43,6 +55,7 @@ export default function PublicReportPage() {
     mutationFn: async (data: typeof formData) => {
       return apiRequest('POST', `/api/public/report/${code}`, {
         ...data,
+        photos: photos.map((p) => p.objectPath),
         ...(location && { latitude: location.latitude, longitude: location.longitude }),
       });
     },
@@ -50,6 +63,63 @@ export default function PublicReportPage() {
       setSubmitted(true);
     },
   });
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    setUploadError(null);
+    setUploading(true);
+    try {
+      for (const file of files) {
+        const urlRes = await apiRequest('POST', `/api/public/report/${code}/upload-url`, {
+          name: file.name,
+          size: file.size,
+          contentType: file.type,
+        });
+        const { uploadURL, objectPath } = await urlRes.json();
+        const putRes = await fetch(uploadURL, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type },
+          body: file,
+        });
+        if (!putRes.ok) throw new Error('upload failed');
+        await apiRequest('POST', `/api/public/report/${code}/confirm-upload`, { objectPath });
+        setPhotos((prev) => [...prev, { previewUrl: URL.createObjectURL(file), objectPath }]);
+      }
+    } catch {
+      setUploadError('Kunde inte ladda upp bilden. Kontrollera filtyp och storlek.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removePhoto = (objectPath: string) => {
+    setPhotos((prev) => {
+      const target = prev.find((p) => p.objectPath === objectPath);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((p) => p.objectPath !== objectPath);
+    });
+  };
+
+  const handleSuggestDescription = async () => {
+    if (!formData.title.trim()) return;
+    setSuggesting(true);
+    try {
+      const res = await apiRequest('POST', `/api/public/report/${code}/suggest-description`, {
+        title: formData.title,
+        category: formData.category,
+      });
+      const data = await res.json();
+      if (data?.description) {
+        setFormData((prev) => ({ ...prev, description: data.description }));
+      }
+    } catch {
+      // Tyst fallback — AI-förslag är frivilligt.
+    } finally {
+      setSuggesting(false);
+    }
+  };
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -117,6 +187,8 @@ export default function PublicReportPage() {
                   reporterEmail: '',
                   reporterPhone: '',
                 });
+                photos.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+                setPhotos([]);
               }}
               data-testid="button-new-report"
             >
@@ -196,7 +268,25 @@ export default function PublicReportPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description">Detaljerad beskrivning</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="description">Detaljerad beskrivning</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    disabled={!formData.title.trim() || suggesting}
+                    onClick={handleSuggestDescription}
+                    data-testid="button-suggest-description"
+                  >
+                    {suggesting ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3.5 w-3.5 mr-1" />
+                    )}
+                    Föreslå med AI
+                  </Button>
+                </div>
                 <Textarea
                   id="description"
                   placeholder="Beskriv problemet mer ingående..."
@@ -205,6 +295,63 @@ export default function PublicReportPage() {
                   rows={3}
                   data-testid="input-description"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Bilder (frivilligt)</Label>
+                {photos.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2" data-testid="grid-photos">
+                    {photos.map((photo) => (
+                      <div key={photo.objectPath} className="relative aspect-square">
+                        <img
+                          src={photo.previewUrl}
+                          alt="Uppladdad bild"
+                          className="h-full w-full rounded-md object-cover border border-border"
+                          data-testid={`img-photo-${photo.objectPath}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(photo.objectPath)}
+                          className="absolute -right-1.5 -top-1.5 rounded-full bg-destructive p-0.5 text-destructive-foreground"
+                          data-testid={`button-remove-photo-${photo.objectPath}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <label
+                  htmlFor="photo-input"
+                  className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-border py-3 text-sm text-muted-foreground hover-elevate"
+                  data-testid="label-add-photo"
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Laddar upp...
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="h-4 w-4" />
+                      Lägg till bild
+                    </>
+                  )}
+                </label>
+                <input
+                  id="photo-input"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={handlePhotoSelect}
+                  data-testid="input-photo"
+                />
+                {uploadError && (
+                  <p className="text-destructive text-sm" data-testid="text-upload-error">{uploadError}</p>
+                )}
               </div>
 
               <div className="border-t pt-4 mt-4">

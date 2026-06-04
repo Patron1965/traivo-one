@@ -14,9 +14,12 @@ import { sendEmail } from "../replit_integrations/resend";
 import { requireAdmin, requirePlanner } from "../tenant-middleware";
 import { hashPassword } from "../password";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject, createMetadata, getAllMetadataTypes, writeSystemMetadataOnObject } from "../metadata-queries";
-import { signDynamicQrToken, verifyDynamicQrToken } from "../dynamic-qr-token";
+import { signDynamicQrToken, verifyDynamicQrToken, verifyObjectQrToken } from "../dynamic-qr-token";
 import { checkPublicReportRateLimit, getClientKeyForRequest } from "../public-report-rate-limit";
 import { RateLimitError } from "../errors";
+import { ObjectStorageService, ALLOWED_UPLOAD_MIME_TYPES } from "../replit_integrations/object_storage/objectStorage";
+import { getObjectAclPolicy } from "../replit_integrations/object_storage/objectAcl";
+import { MAX_FIELD_PHOTO_SIZE_BYTES, MAX_FIELD_PHOTO_SIZE_MB } from "@shared/upload-limits";
 
 export async function registerExtendedRoutes(app: Express) {
 // ============================================
@@ -96,7 +99,40 @@ app.post("/api/public/report/:code", asyncHandler(async (req, res) => {
     if (!category || !title) {
       throw new ValidationError("Kategori och titel krävs");
     }
-    
+
+    // Task #714: validera foton hårt. Klienten får bara skicka bekräftade,
+    // tenant-ägda /objects/-sökvägar (satta via confirm-upload). Vi verifierar
+    // ACL-ägaren server-side så att foton från annan tenant eller godtyckliga
+    // URL:er aldrig persisteras (bypassar ej upload-confirm-pipelinen).
+    let validatedPhotos: string[] | undefined;
+    if (photos !== undefined && photos !== null) {
+      const photosSchema = z.array(z.string().min(1).max(512)).max(10);
+      const parsedPhotos = photosSchema.safeParse(photos);
+      if (!parsedPhotos.success) {
+        throw new ValidationError("Ogiltig fotolista (max 10 bilder).");
+      }
+      const objectStorageService = new ObjectStorageService();
+      const accepted: string[] = [];
+      for (const objectPath of parsedPhotos.data) {
+        if (!/^\/objects\/[a-zA-Z0-9/_-]+$/.test(objectPath)) {
+          throw new ValidationError("Ogiltig objektsökväg för foto.");
+        }
+        let aclOwner: string | null = null;
+        try {
+          const file = await objectStorageService.getObjectEntityFile(objectPath);
+          const acl = await getObjectAclPolicy(file);
+          aclOwner = acl?.owner ?? null;
+        } catch {
+          throw new ValidationError("Ett bifogat foto kunde inte hittas. Ladda upp på nytt.");
+        }
+        if (aclOwner !== `tenant:${qrLink.tenantId}`) {
+          throw new ValidationError("Ett bifogat foto är inte giltigt för denna anmälan.");
+        }
+        accepted.push(objectPath);
+      }
+      validatedPhotos = accepted.length > 0 ? accepted : undefined;
+    }
+
     // Create public issue report
     const report = await storage.createPublicIssueReport({
       tenantId: qrLink.tenantId,
@@ -108,19 +144,218 @@ app.post("/api/public/report/:code", asyncHandler(async (req, res) => {
       reporterName: reporterName || undefined,
       reporterEmail: reporterEmail || undefined,
       reporterPhone: reporterPhone || undefined,
-      photos: photos || undefined,
+      photos: validatedPhotos,
       latitude: latitude || undefined,
       longitude: longitude || undefined,
       ipAddress: req.ip || undefined,
       userAgent: req.headers['user-agent'] || undefined,
       status: 'new',
     });
-    
+
+    // Task #714: skriv systemgenererad, kronologisk metadata "Senaste felanmälan"
+    // på objektet (samma mönster som report-dynamic). Best-effort.
+    try {
+      const when = new Date().toISOString().slice(0, 10);
+      await writeSystemMetadataOnObject(
+        qrLink.objectId,
+        "Senaste felanmälan",
+        `${title} (${when})`,
+        qrLink.tenantId,
+        `system:public-issue-report:${report.id}`,
+      );
+    } catch (e) {
+      console.error("[task-714] writeSystemMetadataOnObject (Senaste felanmälan) failed:", e);
+    }
+
     res.status(201).json({
       success: true,
       reportId: report.id,
       message: "Tack för din anmälan! Vi har tagit emot den och kommer att hantera ärendet.",
     });
+}));
+
+// ============================================
+// PUBLIC FELANMÄLAN — FOTO-UPPLADDNING + AI (Task #714)
+// ============================================
+// Anonyma anmälare måste kunna ladda upp foton utan inloggning. Vi minter en
+// signerad upload-URL gated på en giltig (oförutsägbar) QR-kod, och sätter ACL
+// till tenant:<tenantId> (härledd server-side från koden — aldrig från klienten)
+// först efter bekräftad uppladdning. Mime + storlek valideras på båda stegen.
+
+// POST /api/public/report/:code/upload-url — signerad foto-upload-URL (kodgated)
+app.post("/api/public/report/:code/upload-url", asyncHandler(async (req, res) => {
+    const rateCheck = checkPublicReportRateLimit(getClientKeyForRequest(req));
+    if (!rateCheck.allowed) {
+      res.set("Retry-After", String(rateCheck.retryAfterSeconds || 60));
+      throw new RateLimitError("För många uppladdningar från denna enhet. Vänta en stund och försök igen.");
+    }
+    const qrLink = await storage.getQrCodeLinkByCode(req.params.code);
+    if (!qrLink) throw new NotFoundError("Ogiltig QR-kod");
+    if (!qrLink.isActive) return res.status(410).json({ error: "Denna QR-kod är inte längre aktiv" });
+
+    const schema = z.object({
+      name: z.string().min(1).max(255),
+      size: z.number().int().positive().optional(),
+      contentType: z.string().min(1).max(100),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      const formatted = formatZodError(parsed.error);
+      throw new ValidationError(formatted.error, formatted.details);
+    }
+    if (!ALLOWED_UPLOAD_MIME_TYPES.has(parsed.data.contentType)) {
+      throw new ValidationError("Filtypen tillåts inte. Endast bilder och PDF är tillåtna.");
+    }
+    if (parsed.data.size !== undefined && parsed.data.size > MAX_FIELD_PHOTO_SIZE_BYTES) {
+      res.status(413).json({ error: `Bilden är för stor. Maxgräns är ${MAX_FIELD_PHOTO_SIZE_MB} MB.` });
+      return;
+    }
+
+    const objectStorageService = new ObjectStorageService();
+    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+    const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+    res.json({ uploadURL, objectPath });
+}));
+
+// POST /api/public/report/:code/confirm-upload — sätt tenant-ACL efter PUT
+app.post("/api/public/report/:code/confirm-upload", asyncHandler(async (req, res) => {
+    const qrLink = await storage.getQrCodeLinkByCode(req.params.code);
+    if (!qrLink) throw new NotFoundError("Ogiltig QR-kod");
+    if (!qrLink.isActive) return res.status(410).json({ error: "Denna QR-kod är inte längre aktiv" });
+
+    const objectPath = req.body?.objectPath;
+    if (!objectPath || typeof objectPath !== "string") {
+      throw new ValidationError("objectPath krävs");
+    }
+    if (!/^\/objects\/[a-zA-Z0-9/_-]+$/.test(objectPath)) {
+      throw new ValidationError("Ogiltig objektsökväg");
+    }
+
+    const objectStorageService = new ObjectStorageService();
+    // ACL härleds från koden (server-side), aldrig från klienten.
+    await objectStorageService.validateUploadedFileAndSetAcl(
+      objectPath,
+      `tenant:${qrLink.tenantId}`,
+      "private",
+      MAX_FIELD_PHOTO_SIZE_BYTES,
+    );
+    res.json({ confirmed: true, objectPath });
+}));
+
+// POST /api/public/report/:code/suggest-description — AI-förslag på beskrivning
+// (kodgated + per-tenant budget/rate-limit). Fail-closed.
+app.post("/api/public/report/:code/suggest-description", asyncHandler(async (req, res) => {
+    const qrLink = await storage.getQrCodeLinkByCode(req.params.code);
+    if (!qrLink) throw new NotFoundError("Ogiltig QR-kod");
+    if (!qrLink.isActive) return res.status(410).json({ error: "Denna QR-kod är inte längre aktiv" });
+
+    const schema = z.object({
+      title: z.string().min(3).max(200),
+      category: z.string().max(100).optional().nullable(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      const formatted = formatZodError(parsed.error);
+      throw new ValidationError(formatted.error, formatted.details);
+    }
+
+    const tenantId = qrLink.tenantId;
+    const { enforceBudgetAndRateLimit } = await import("../ai-budget-service");
+    const enforcement = await enforceBudgetAndRateLimit(tenantId, "analysis");
+    if (!enforcement.allowed) {
+      if (enforcement.errorType === "ratelimit") res.set("Retry-After", String(enforcement.retryAfterSeconds || 60));
+      return res.status(429).json({
+        error: enforcement.errorType === "ratelimit" ? "AI-anropsgräns nådd" : "AI-budget överskriden",
+        message: enforcement.errorMessage,
+      });
+    }
+
+    const object = await storage.getObject(qrLink.objectId);
+    const text = parsed.data.category
+      ? `Felanmälan i kategori "${parsed.data.category}": ${parsed.data.title}`
+      : parsed.data.title;
+    const { parseIssueReportAI } = await import("../services/issue-parser");
+    const result = await parseIssueReportAI({
+      text,
+      objectName: object?.name ?? null,
+      objectType: object?.objectType ?? null,
+      model: enforcement.model,
+      tenantId,
+    });
+    res.json({ description: (result as any)?.description ?? "" });
+}));
+
+// ============================================
+// PUBLIC KUNDBETYG / FEEDBACK (Task #714)
+// ============================================
+// Objekt-bunden, signerad QR-token (objqr:) → tenant + objekt härleds server-side.
+// Ingen enumeration (HMAC-signerad). Fail-closed.
+
+const FEEDBACK_QUESTION = "Hur nöjd är du med vår service på denna plats?";
+const FEEDBACK_OPTIONS = [
+  { id: "mycket_nojd", label: "Mycket nöjd" },
+  { id: "nojd", label: "Nöjd" },
+  { id: "neutral", label: "Neutral" },
+  { id: "missnojd", label: "Missnöjd" },
+  { id: "mycket_missnojd", label: "Mycket missnöjd" },
+];
+
+// GET /api/public/feedback/:token — formulärdata för kundbetyg
+app.get("/api/public/feedback/:token", asyncHandler(async (req, res) => {
+    const decoded = verifyObjectQrToken(req.params.token);
+    if (!decoded) throw new NotFoundError("Ogiltig kod");
+    const object = await storage.getObject(decoded.objectId);
+    if (!object || object.tenantId !== decoded.tenantId) throw new NotFoundError("Objekt hittades inte");
+
+    const { tenantBranding } = await import("@shared/schema");
+    const [branding] = await db.select().from(tenantBranding).where(eq(tenantBranding.tenantId, decoded.tenantId));
+
+    res.json({
+      objectName: object.name,
+      objectAddress: object.address,
+      companyName: branding?.companyName || "Fältservice",
+      primaryColor: branding?.primaryColor || "#3B82F6",
+      question: FEEDBACK_QUESTION,
+      options: FEEDBACK_OPTIONS,
+    });
+}));
+
+// POST /api/public/feedback/:token — spara kundbetyg som systemgenererad metadata
+app.post("/api/public/feedback/:token", asyncHandler(async (req, res) => {
+    const rateCheck = checkPublicReportRateLimit(getClientKeyForRequest(req));
+    if (!rateCheck.allowed) {
+      res.set("Retry-After", String(rateCheck.retryAfterSeconds || 60));
+      throw new RateLimitError("För många omdömen från denna enhet. Vänta en stund och försök igen.");
+    }
+    const decoded = verifyObjectQrToken(req.params.token);
+    if (!decoded) throw new NotFoundError("Ogiltig kod");
+    const object = await storage.getObject(decoded.objectId);
+    if (!object || object.tenantId !== decoded.tenantId) throw new NotFoundError("Objekt hittades inte");
+
+    const schema = z.object({
+      answer: z.enum(FEEDBACK_OPTIONS.map((o) => o.id) as unknown as [string, ...string[]]),
+      name: z.string().max(120).optional().nullable(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      const formatted = formatZodError(parsed.error);
+      throw new ValidationError(formatted.error, formatted.details);
+    }
+
+    const label = FEEDBACK_OPTIONS.find((o) => o.id === parsed.data.answer)?.label ?? parsed.data.answer;
+    const name = parsed.data.name?.trim();
+    const when = new Date().toISOString().slice(0, 10);
+    const value = name ? `${label} – ${name} (${when})` : `${label} (${when})`;
+
+    await writeSystemMetadataOnObject(
+      decoded.objectId,
+      "Senaste kundbetyg",
+      value,
+      decoded.tenantId,
+      "system:public-feedback",
+    );
+
+    res.status(201).json({ success: true, message: "Tack för ditt omdöme!" });
 }));
 
 // ============================================
