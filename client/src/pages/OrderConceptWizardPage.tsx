@@ -31,7 +31,7 @@ import WizardSidebar from "@/components/orderkoncept/WizardSidebar";
 
 const STEPS = [
   { num: 1, label: "Namn & Kund" },
-  { num: 2, label: "Prislista" },
+  { num: 2, label: "Pris & Referens" },
   { num: 3, label: "Fakturering" },
   { num: 4, label: "Inpekning" },
   { num: 5, label: "Leveranstid" },
@@ -590,7 +590,7 @@ export default function OrderConceptWizardPage() {
                   setHasUnsavedWork(true);
                 }}
                 selectedCustomerId={selectedCustomerId}
-                onSelectCustomer={(id) => { setSelectedCustomerId(id); setHasUnsavedWork(true); }}
+                onSelectCustomer={(id) => { setSelectedCustomerId(id); setPriceListId(null); setHasUnsavedWork(true); }}
                 customerMetadataField={customerMetadataField}
                 onCustomerMetadataFieldChange={(f) => { setCustomerMetadataField(f); setHasUnsavedWork(true); }}
               />
