@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -8,38 +8,237 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Save, Copy, PlayCircle, Loader2, CheckCircle2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import {
+  Save, Copy, PlayCircle, Loader2, CheckCircle2,
+  MapPin, Clock, Package, Calendar, Gauge, ChevronDown, ChevronUp,
+} from "lucide-react";
 
 interface Step7Props {
   conceptId: string | null;
   conceptName: string;
   customerName?: string;
-  clusterCount: number;
-  filterCount: number;
-  articleCount: number;
-  totalValueKr: number;
-  totalCostKr: number;
-  estimatedHours: number;
   deliveryTimeType: string;
   onBeforeAction: () => Promise<void>;
+}
+
+interface ArticleLine {
+  id: string;
+  name: string;
+  articleNumber: string;
+  quantity: number;
+  unitPriceKr: number;
+  lineTotalKr: number;
+  costKr: number;
+  productionMinutes: number;
+}
+
+interface ClusterSummary {
+  clusterId: string;
+  clusterName: string;
+  totalObjects: number;
+  matchedObjects: number;
+  samples: Array<{ id: string; name: string; address: string | null }>;
+}
+
+interface GeoSpread {
+  spreadKm: number | null;
+  setupTimeMinutes: number | null;
+  setupTimeLabel: string | null;
+  clusterCount: number;
+  hasCenterData: boolean;
+}
+
+interface ReviewSchedule {
+  type: string | null;
+  intervalStartDate: string | null;
+  intervalEndDate: string | null;
+  intervalFrequencyDays: number | null;
+  toleranceDays: number;
+  timeWindows: Array<{ weekdays: number[]; timeFrom: string; timeTo: string }>;
+  deliveryRestrictions: any;
+}
+
+interface ReviewSummary {
+  clusterSummaries: ClusterSummary[];
+  totalMatchedObjects: number;
+  articleLines: ArticleLine[];
+  totalValueKr: number;
+  totalCostKr: number;
+  totalProductionMinutes: number;
+  schedule: ReviewSchedule;
+  geoSpread: GeoSpread;
+}
+
+const WEEKDAY_LABELS = ["Sö", "Må", "Ti", "On", "To", "Fr", "Lö"];
+
+function fmtKr(kr: number) {
+  return kr.toLocaleString("sv-SE", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " kr";
+}
+
+function fmtDate(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("sv-SE");
+}
+
+function fmtMinutes(min: number) {
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m > 0 ? `${h} tim ${m} min` : `${h} tim`;
+}
+
+function ScheduleSummary({ schedule }: { schedule: ReviewSchedule }) {
+  if (!schedule.type) {
+    return <span className="text-muted-foreground text-sm">Ej konfigurerat</span>;
+  }
+  if (schedule.type === "interval") {
+    const freq = schedule.intervalFrequencyDays;
+    const tol = schedule.toleranceDays ?? 0;
+    return (
+      <div className="space-y-1 text-sm">
+        <div className="flex items-center gap-2">
+          <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span>
+            <span className="font-medium">{fmtDate(schedule.intervalStartDate)}</span>
+            {" → "}
+            <span className="font-medium">{fmtDate(schedule.intervalEndDate)}</span>
+          </span>
+        </div>
+        {freq != null && (
+          <div className="flex items-center gap-2 text-muted-foreground pl-5">
+            <span>var {freq}:e dag{tol > 0 ? ` (±${tol} dag${tol > 1 ? "ar" : ""})` : ""}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (schedule.type === "time_window") {
+    const windows: ReviewSchedule["timeWindows"] = Array.isArray(schedule.timeWindows) ? schedule.timeWindows : [];
+    if (windows.length === 0) {
+      return <span className="text-muted-foreground text-sm">Tidsfönster (ej konfigurerade)</span>;
+    }
+    return (
+      <div className="space-y-1">
+        {windows.map((w, i) => (
+          <div key={i} className="flex items-center gap-2 text-sm">
+            <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span>
+              {w.weekdays.map(d => WEEKDAY_LABELS[d]).join(", ")}{" "}
+              <span className="font-medium">{w.timeFrom}–{w.timeTo}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return <span className="text-muted-foreground text-sm">{schedule.type}</span>;
+}
+
+function SetupTimeCard({ geo }: { geo: GeoSpread }) {
+  if (!geo.hasCenterData) {
+    return (
+      <div className="text-sm text-muted-foreground italic">
+        Koordinater saknas för valda kluster — ställtid kan ej beräknas.
+      </div>
+    );
+  }
+  const label = geo.setupTimeLabel ?? "Okänd";
+  const spread = geo.spreadKm;
+  const isLong = (geo.setupTimeMinutes ?? 0) >= 60;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-3">
+        <div className={`flex items-center gap-2 text-sm font-medium ${isLong ? "text-warning" : "text-chart-2"}`}>
+          <Gauge className="h-4 w-4" />
+          <span>{label}</span>
+        </div>
+        {spread != null && spread > 0 && (
+          <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+            {spread.toLocaleString("sv-SE", { maximumFractionDigits: 1 })} km spridning
+          </Badge>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Uppskattning baserad på geografisk spridning mellan {geo.clusterCount} kluster
+        {geo.clusterCount === 1 ? "" : "s"} centerpunkter. Märkt som estimat.
+      </p>
+    </div>
+  );
+}
+
+function ClusterBlock({ cluster }: { cluster: ClusterSummary }) {
+  const [expanded, setExpanded] = useState(false);
+  const filtered = cluster.matchedObjects < cluster.totalObjects;
+  return (
+    <div className="border rounded-md p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="text-sm font-medium">{cluster.clusterName}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold">{cluster.matchedObjects}</span>
+          {filtered && (
+            <span className="text-xs text-muted-foreground">
+              av {cluster.totalObjects} objekt
+            </span>
+          )}
+          {!filtered && (
+            <span className="text-xs text-muted-foreground">objekt</span>
+          )}
+          {cluster.samples.length > 0 && (
+            <button
+              onClick={() => setExpanded(v => !v)}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+              data-testid={`toggle-cluster-${cluster.clusterId}`}
+            >
+              {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </button>
+          )}
+        </div>
+      </div>
+      {expanded && cluster.samples.length > 0 && (
+        <ul className="pl-5 space-y-0.5">
+          {cluster.samples.map(s => (
+            <li key={s.id} className="text-xs text-muted-foreground truncate">
+              {s.name}{s.address ? ` — ${s.address}` : ""}
+            </li>
+          ))}
+          {cluster.matchedObjects > cluster.samples.length && (
+            <li className="text-xs text-muted-foreground italic">
+              …och {cluster.matchedObjects - cluster.samples.length} till
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 export default function Step7ReviewSave({
   conceptId,
   conceptName,
   customerName,
-  clusterCount,
-  filterCount,
-  articleCount,
-  totalValueKr,
-  totalCostKr,
-  estimatedHours,
   deliveryTimeType,
   onBeforeAction,
 }: Step7Props) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [templateName, setTemplateName] = useState("");
+
+  const { data: summary, isLoading: summaryLoading } = useQuery<ReviewSummary>({
+    queryKey: ["/api/order-concepts", conceptId, "review-summary"],
+    queryFn: async () => {
+      if (!conceptId) throw new Error("Inget koncept-id");
+      const res = await fetch(`/api/order-concepts/${conceptId}/review-summary`);
+      if (!res.ok) throw new Error("Kunde inte hämta sammanfattning");
+      return res.json();
+    },
+    enabled: !!conceptId,
+    staleTime: 10_000,
+  });
 
   const saveTemplateMutation = useMutation({
     mutationFn: async () => {
@@ -99,27 +298,152 @@ export default function Step7ReviewSave({
   );
 
   return (
-    <div className="space-y-6" data-testid="step7-review-save">
+    <div className="space-y-5" data-testid="step7-review-save">
+
+      {/* Identitet */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4" /> Sammanfattning
+            <CheckCircle2 className="h-4 w-4 text-chart-2" /> Identitet
           </CardTitle>
         </CardHeader>
         <CardContent>
           <Row label="Namn" value={conceptName || "—"} />
           <Row label="Kund" value={customerName || "Från metadata"} />
-          <Row label="Kluster" value={`${clusterCount} st`} />
-          <Row label="Villkorsfilter" value={`${filterCount} st`} />
-          <Row label="Uppgifter/artiklar" value={`${articleCount} st`} />
-          <Row label="Leveranstid" value={deliveryTimeType === "interval" ? "Intervall" : deliveryTimeType === "time_window" ? "Tidsfönster" : "—"} />
-          <Separator className="my-2" />
-          <Row label="Beräknat ordervärde" value={`${totalValueKr.toLocaleString("sv-SE")} kr`} />
-          <Row label="Beräknad kostnad" value={`${totalCostKr.toLocaleString("sv-SE")} kr`} />
-          <Row label="Beräknad arbetstid" value={`${estimatedHours.toFixed(1)} h`} />
         </CardContent>
       </Card>
 
+      {/* Matchade objekt per kluster */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <MapPin className="h-4 w-4" /> Matchade objekt
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {summaryLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          ) : summary ? (
+            <>
+              <div className="flex items-center gap-2 text-sm mb-3">
+                <span className="font-semibold text-base">{summary.totalMatchedObjects}</span>
+                <span className="text-muted-foreground">objekt totalt</span>
+                {summary.clusterSummaries.length > 0 && (
+                  <span className="text-muted-foreground">
+                    ({summary.clusterSummaries.length} kluster)
+                  </span>
+                )}
+              </div>
+              <div className="space-y-2">
+                {summary.clusterSummaries.map(cs => (
+                  <ClusterBlock key={cs.clusterId} cluster={cs} />
+                ))}
+                {summary.clusterSummaries.length === 0 && (
+                  <p className="text-sm text-muted-foreground italic">Inga kluster valda</p>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">
+              Spara konceptet för att se matchade objekt
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Artiklar & ekonomi */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Package className="h-4 w-4" /> Uppgifter & ekonomi
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {summaryLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-6 w-full" />
+              <Skeleton className="h-6 w-full" />
+            </div>
+          ) : summary && summary.articleLines.length > 0 ? (
+            <div className="space-y-1">
+              {summary.articleLines.map(line => (
+                <div key={line.id} className="text-sm py-1 border-b last:border-0">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="font-medium">{line.name}</span>
+                      {line.articleNumber && (
+                        <span className="text-xs text-muted-foreground ml-1.5">({line.articleNumber})</span>
+                      )}
+                    </div>
+                    <span className="font-semibold tabular-nums">{fmtKr(line.lineTotalKr)}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {fmtKr(line.unitPriceKr)} × {line.quantity.toLocaleString("sv-SE")} st
+                    {line.productionMinutes > 0 && (
+                      <span className="ml-2">· {fmtMinutes(line.productionMinutes)}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <Separator className="my-2" />
+              <div className="space-y-0.5 pt-1">
+                <Row label="Totalt ordervärde" value={<span className="text-base font-bold">{fmtKr(summary.totalValueKr)}</span>} />
+                <Row label="Beräknad kostnad" value={fmtKr(summary.totalCostKr)} />
+                <Row
+                  label="Beräknad arbetstid"
+                  value={fmtMinutes(summary.totalProductionMinutes)}
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">Inga uppgifter/artiklar tillagda</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Schema */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Calendar className="h-4 w-4" /> Schema
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {summaryLoading ? (
+            <Skeleton className="h-12 w-full" />
+          ) : summary ? (
+            <ScheduleSummary schedule={summary.schedule} />
+          ) : (
+            <span className="text-sm text-muted-foreground italic">—</span>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Ställtidsestimering */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Clock className="h-4 w-4" /> Estimerad ställtid
+            <Badge variant="outline" className="text-xs font-normal ml-auto">uppskattning</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {summaryLoading ? (
+            <Skeleton className="h-10 w-full" />
+          ) : summary ? (
+            <SetupTimeCard geo={summary.geoSpread} />
+          ) : (
+            <p className="text-sm text-muted-foreground italic">
+              Spara konceptet för att se ställtidsuppskattning
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Spara som mall / kopiera */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Spara som mall</CardTitle>
@@ -127,22 +451,49 @@ export default function Step7ReviewSave({
         <CardContent className="flex flex-wrap items-end gap-2">
           <div className="flex-1 min-w-[200px]">
             <Label htmlFor="template-name" className="text-xs mb-1 block">Mallnamn (valfritt)</Label>
-            <Input id="template-name" placeholder={`${conceptName || "Koncept"} (mall)`} value={templateName} onChange={(e) => setTemplateName(e.target.value)} data-testid="input-template-name" />
+            <Input
+              id="template-name"
+              placeholder={`${conceptName || "Koncept"} (mall)`}
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
+              data-testid="input-template-name"
+            />
           </div>
-          <Button variant="outline" disabled={busy || !conceptId} onClick={() => saveTemplateMutation.mutate()} data-testid="button-save-template">
-            {saveTemplateMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+          <Button
+            variant="outline"
+            disabled={busy || !conceptId}
+            onClick={() => saveTemplateMutation.mutate()}
+            data-testid="button-save-template"
+          >
+            {saveTemplateMutation.isPending
+              ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              : <Save className="h-4 w-4 mr-1" />}
             Spara mall
           </Button>
-          <Button variant="outline" disabled={busy || !conceptId} onClick={() => copyMutation.mutate()} data-testid="button-copy-concept">
-            {copyMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Copy className="h-4 w-4 mr-1" />}
+          <Button
+            variant="outline"
+            disabled={busy || !conceptId}
+            onClick={() => copyMutation.mutate()}
+            data-testid="button-copy-concept"
+          >
+            {copyMutation.isPending
+              ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              : <Copy className="h-4 w-4 mr-1" />}
             Kopiera koncept
           </Button>
         </CardContent>
       </Card>
 
       <div className="flex justify-end">
-        <Button size="lg" disabled={busy || !conceptId} onClick={() => executeMutation.mutate()} data-testid="button-create-order">
-          {executeMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PlayCircle className="h-4 w-4 mr-2" />}
+        <Button
+          size="lg"
+          disabled={busy || !conceptId}
+          onClick={() => executeMutation.mutate()}
+          data-testid="button-create-order"
+        >
+          {executeMutation.isPending
+            ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            : <PlayCircle className="h-4 w-4 mr-2" />}
           Skapa order
         </Button>
       </div>

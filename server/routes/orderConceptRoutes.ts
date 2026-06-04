@@ -1815,6 +1815,159 @@ app.post("/api/order-concepts/:id/delivery-ai-help", asyncHandler(async (req, re
     res.json(result);
 }));
 
+// Steg 7: Konkret granskningssammanfattning — matchade objekt per kluster,
+// aggregerade artikeltotaler, schema och estimerad ställtid från geografisk spridning.
+app.get("/api/order-concepts/:id/review-summary", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const rawConcept = await storage.getOrderConcept(req.params.id);
+  const concept = verifyTenantOwnership(rawConcept, tenantId);
+  if (!concept) throw new NotFoundError("Orderkoncept hittades inte");
+
+  // --- Artikelrader med ekonomisk nedbrytning ---
+  const conceptArticleRows = await storage.getOrderConceptArticles(concept.id);
+  const tenantArticles = await storage.getArticles(tenantId);
+  const articleMap = new Map(tenantArticles.map((a: any) => [a.id, a]));
+
+  const articleLines = conceptArticleRows.map((ca: any) => {
+    const art: any = articleMap.get(ca.articleId);
+    const unitPriceOre = ca.unitPrice ?? art?.listPrice ?? 0;
+    const qty = ca.quantity || 1;
+    return {
+      id: ca.id,
+      articleId: ca.articleId,
+      name: art?.name ?? "Okänd artikel",
+      articleNumber: art?.articleNumber ?? "",
+      quantity: qty,
+      unitPriceKr: unitPriceOre / 100,
+      lineTotalKr: (unitPriceOre * qty) / 100,
+      costKr: ((art?.cost ?? 0) * qty) / 100,
+      productionMinutes: (art?.productionTime ?? 0) * qty,
+    };
+  });
+
+  // --- Kluster med matchade objekt ---
+  const targetClusterIds: string[] = Array.isArray((concept as any).targetClusterIds)
+    ? (concept as any).targetClusterIds
+    : (concept as any).targetClusterId ? [(concept as any).targetClusterId] : [];
+
+  const conceptFiltersRows = await storage.getConceptFilters(concept.id);
+
+  const clusterSummaries: any[] = [];
+  let totalMatchedObjects = 0;
+  const clusterCenters: Array<{ lat: number; lng: number }> = [];
+
+  for (const clusterId of targetClusterIds) {
+    const cluster = await storage.getCluster(clusterId);
+    if (!cluster || (cluster as any).tenantId !== tenantId) continue;
+
+    const centerLat = (cluster as any).centerLatitude;
+    const centerLng = (cluster as any).centerLongitude;
+    if (centerLat && centerLng) {
+      clusterCenters.push({ lat: centerLat, lng: centerLng });
+    }
+
+    const clusterObjects = await storage.getClusterObjects(clusterId);
+    const tenantObjects = clusterObjects.filter((o: any) => o.tenantId === tenantId);
+
+    let matchedObjects: any[] = tenantObjects;
+    if (conceptFiltersRows.length > 0 && tenantObjects.length > 0) {
+      const objectIds = tenantObjects.map((o: any) => o.id);
+      const defs = await db.select().from(metadataDefinitions)
+        .where(and(eq(metadataDefinitions.tenantId, tenantId), isNull(metadataDefinitions.deletedAt)));
+      const defKey = new Map(defs.map(d => [d.id, d.fieldKey]));
+      const rows = await db.select().from(objectMetadata)
+        .where(and(eq(objectMetadata.tenantId, tenantId), inArray(objectMetadata.objectId, objectIds)));
+      const metaByObject = new Map<string, Record<string, unknown>>();
+      for (const row of rows) {
+        const key = defKey.get(row.definitionId);
+        if (!key) continue;
+        const map = metaByObject.get(row.objectId) ?? {};
+        map[key] = (row as any).valueJson ?? (row as any).value;
+        metaByObject.set(row.objectId, map);
+      }
+      matchedObjects = tenantObjects.filter((obj: any) => {
+        const meta = metaByObject.get(obj.id) ?? {};
+        return conceptFiltersRows.every((f: any) => {
+          const value = f.metadataKey in meta ? meta[f.metadataKey] : obj[f.metadataKey];
+          return matchesFilter(value, f.operator, f.filterValue);
+        });
+      });
+    }
+
+    totalMatchedObjects += matchedObjects.length;
+    clusterSummaries.push({
+      clusterId,
+      clusterName: (cluster as any).name,
+      totalObjects: tenantObjects.length,
+      matchedObjects: matchedObjects.length,
+      samples: matchedObjects.slice(0, 8).map((o: any) => ({
+        id: o.id,
+        name: o.name,
+        address: o.address ?? null,
+      })),
+    });
+  }
+
+  // --- Geografisk spridning & ställtidsestimering ---
+  let spreadKm: number | null = null;
+  let setupTimeMinutes: number | null = null;
+  let setupTimeLabel: string | null = null;
+
+  if (clusterCenters.length >= 2) {
+    let maxDist = 0;
+    for (let i = 0; i < clusterCenters.length; i++) {
+      for (let j = i + 1; j < clusterCenters.length; j++) {
+        const R = 6371;
+        const dLat = (clusterCenters[j].lat - clusterCenters[i].lat) * Math.PI / 180;
+        const dLon = (clusterCenters[j].lng - clusterCenters[i].lng) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 +
+          Math.cos(clusterCenters[i].lat * Math.PI / 180) *
+          Math.cos(clusterCenters[j].lat * Math.PI / 180) *
+          Math.sin(dLon / 2) ** 2;
+        const d = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        if (d > maxDist) maxDist = d;
+      }
+    }
+    spreadKm = Math.round(maxDist * 10) / 10;
+    if (maxDist < 5) { setupTimeMinutes = 15; setupTimeLabel = "Tät (ca 15 min)"; }
+    else if (maxDist < 15) { setupTimeMinutes = 30; setupTimeLabel = "Mellantät (ca 30 min)"; }
+    else if (maxDist < 40) { setupTimeMinutes = 60; setupTimeLabel = "Spridd (ca 1 tim)"; }
+    else { setupTimeMinutes = 120; setupTimeLabel = "Mycket spridd (ca 2 tim)"; }
+  } else if (clusterCenters.length === 1) {
+    spreadKm = 0;
+    setupTimeMinutes = 15;
+    setupTimeLabel = "Enstaka kluster (ca 15 min)";
+  }
+
+  // --- Schema ---
+  const schedule = {
+    type: (concept as any).deliveryTimeType ?? null,
+    intervalStartDate: (concept as any).intervalStartDate ?? null,
+    intervalEndDate: (concept as any).intervalEndDate ?? null,
+    intervalFrequencyDays: (concept as any).intervalFrequencyDays ?? null,
+    toleranceDays: (concept as any).toleranceDays ?? 0,
+    timeWindows: (concept as any).timeWindows ?? [],
+    deliveryRestrictions: (concept as any).deliveryRestrictions ?? null,
+  };
+
+  res.json({
+    clusterSummaries,
+    totalMatchedObjects,
+    articleLines,
+    totalValueKr: articleLines.reduce((s: number, l: any) => s + l.lineTotalKr, 0),
+    totalCostKr: articleLines.reduce((s: number, l: any) => s + l.costKr, 0),
+    totalProductionMinutes: articleLines.reduce((s: number, l: any) => s + l.productionMinutes, 0),
+    schedule,
+    geoSpread: {
+      spreadKm,
+      setupTimeMinutes,
+      setupTimeLabel,
+      clusterCount: clusterCenters.length,
+      hasCenterData: clusterCenters.length > 0,
+    },
+  });
+}));
+
 // Steg 1-2 & 7: Spara koncept som mall (status=template).
 app.post("/api/order-concepts/:id/save-as-template", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);

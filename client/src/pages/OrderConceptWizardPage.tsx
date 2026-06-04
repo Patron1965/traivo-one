@@ -683,12 +683,6 @@ export default function OrderConceptWizardPage() {
                 conceptId={conceptId}
                 conceptName={conceptName}
                 customerName={customerMode === "HARDCODED" ? selectedCustomer?.name : undefined}
-                clusterCount={targetClusterIds.size}
-                filterCount={filters.filter(f => f.metadataKey).length}
-                articleCount={conceptArticles.length}
-                totalValueKr={totalValue}
-                totalCostKr={totalCost}
-                estimatedHours={estimatedHours}
                 deliveryTimeType={deliveryTimeType}
                 onBeforeAction={persistCurrent}
               />
