@@ -126,3 +126,9 @@ id = "Ai5imJcaZ4FuwzptHvfH-"
 uri = "file://exports/Traivo_objektimport_mall_v3.xlsx"
 type = "table"
 title = "Traivo Objektimport-mall v3 (färsk)"
+
+[[outputs]]
+id = "wbg3-nMN7fi0jKgurm3-D"
+uri = "file://docs/traivo-go-integration-rapport.md"
+type = "text"
+title = "Traivo Go ↔ Traivo One — Integrationsrapport"
