@@ -113,6 +113,7 @@ export default function OrderConceptWizardPage() {
   const [intervalStartDate, setIntervalStartDate] = useState("");
   const [intervalEndDate, setIntervalEndDate] = useState("");
   const [intervalFrequencyDays, setIntervalFrequencyDays] = useState("");
+  const [intervalFlexDays, setIntervalFlexDays] = useState("");
   const [deliveryRestrictions, setDeliveryRestrictions] = useState<DeliveryRestriction[]>([]);
   // Step 6
   const [conceptArticles, setConceptArticles] = useState<ConceptArticleRow[]>([]);
@@ -166,6 +167,7 @@ export default function OrderConceptWizardPage() {
     setIntervalStartDate(toDateInput(wizardData.intervalStartDate));
     setIntervalEndDate(toDateInput(wizardData.intervalEndDate));
     setIntervalFrequencyDays(wizardData.intervalFrequencyDays != null ? String(wizardData.intervalFrequencyDays) : "");
+    setIntervalFlexDays(wizardData.intervalFlexDays != null ? String(wizardData.intervalFlexDays) : "");
     setDeliveryRestrictions(Array.isArray(wizardData.deliveryRestrictions) ? wizardData.deliveryRestrictions : []);
     if (wizardData.conceptArticles) setConceptArticles(wizardData.conceptArticles);
   }, [wizardData, isEditing]);
@@ -260,12 +262,14 @@ export default function OrderConceptWizardPage() {
     intervalEndDate: deliveryTimeType === "interval" ? toIsoOrNull(intervalEndDate) : null,
     intervalFrequencyDays: deliveryTimeType === "interval" && intervalFrequencyDays !== ""
       ? parseInt(intervalFrequencyDays) : null,
+    intervalFlexDays: deliveryTimeType === "interval" && intervalFlexDays !== ""
+      ? parseInt(intervalFlexDays) : null,
     deliveryRestrictions,
     totalArticles: conceptArticles.length,
     totalValue,
     totalCost,
     estimatedHours,
-  }), [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoicePeriod, invoiceLock, invoiceBrake, invoiceMethod, subscriptionAdjustmentDate, invoiceConsolidation, departmentMetadataField, targetClusterIds, deliveryTimeType, timeWindows, intervalStartDate, intervalEndDate, intervalFrequencyDays, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
+  }), [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoicePeriod, invoiceLock, invoiceBrake, invoiceMethod, subscriptionAdjustmentDate, invoiceConsolidation, departmentMetadataField, targetClusterIds, deliveryTimeType, timeWindows, intervalStartDate, intervalEndDate, intervalFrequencyDays, intervalFlexDays, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
 
   const createConceptMutation = useMutation({
     mutationFn: async () => {
@@ -659,6 +663,7 @@ export default function OrderConceptWizardPage() {
                 intervalStartDate={intervalStartDate}
                 intervalEndDate={intervalEndDate}
                 intervalFrequencyDays={intervalFrequencyDays}
+                intervalFlexDays={intervalFlexDays}
                 deliveryRestrictions={deliveryRestrictions}
                 onUpdate={(data) => {
                   if (data.deliveryTimeType !== undefined) setDeliveryTimeType(data.deliveryTimeType);
@@ -666,6 +671,7 @@ export default function OrderConceptWizardPage() {
                   if (data.intervalStartDate !== undefined) setIntervalStartDate(data.intervalStartDate);
                   if (data.intervalEndDate !== undefined) setIntervalEndDate(data.intervalEndDate);
                   if (data.intervalFrequencyDays !== undefined) setIntervalFrequencyDays(data.intervalFrequencyDays);
+                  if (data.intervalFlexDays !== undefined) setIntervalFlexDays(data.intervalFlexDays);
                   if (data.deliveryRestrictions !== undefined) setDeliveryRestrictions(data.deliveryRestrictions);
                   setHasUnsavedWork(true);
                 }}

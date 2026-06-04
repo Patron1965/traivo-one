@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Plus, Trash2, Clock, Repeat, Wand2, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Trash2, Clock, Repeat, Wand2, Loader2, Info, ShieldAlert, AlertCircle } from "lucide-react";
+import type { MetadataDefinition } from "@shared/schema";
+import { ConditionFilterRow, CONDITION_OPERATORS } from "@/components/orderkoncept/shared/ConditionFilter";
 
 export interface TimeWindow {
   weekdays: number[];
@@ -18,8 +21,10 @@ export interface TimeWindow {
 }
 
 export interface DeliveryRestriction {
-  type: string;
-  value: string;
+  type: "soft" | "hard";
+  metadataKey: string;
+  operator: string;
+  filterValue?: unknown;
 }
 
 interface AiResult {
@@ -34,6 +39,7 @@ interface Step5State {
   intervalStartDate: string;
   intervalEndDate: string;
   intervalFrequencyDays: string;
+  intervalFlexDays: string;
   deliveryRestrictions: DeliveryRestriction[];
 }
 
@@ -52,10 +58,15 @@ export default function Step5DeliveryTime({
   intervalStartDate,
   intervalEndDate,
   intervalFrequencyDays,
+  intervalFlexDays,
   deliveryRestrictions,
   onUpdate,
 }: Step5Props) {
   const [aiPrompt, setAiPrompt] = useState("");
+
+  const { data: definitions = [] } = useQuery<MetadataDefinition[]>({
+    queryKey: ["/api/metadata/definitions"],
+  });
 
   const aiMutation = useMutation<AiResult>({
     mutationFn: async () => {
@@ -78,9 +89,18 @@ export default function Step5DeliveryTime({
   };
 
   const addRestriction = () =>
-    onUpdate({ deliveryRestrictions: [...deliveryRestrictions, { type: "soft", value: "" }] });
+    onUpdate({
+      deliveryRestrictions: [
+        ...deliveryRestrictions,
+        { type: "soft", metadataKey: "", operator: "equals", filterValue: "" },
+      ],
+    });
   const updateRestriction = (i: number, patch: Partial<DeliveryRestriction>) =>
-    onUpdate({ deliveryRestrictions: deliveryRestrictions.map((r, idx) => (idx === i ? { ...r, ...patch } : r)) });
+    onUpdate({
+      deliveryRestrictions: deliveryRestrictions.map((r, idx) =>
+        idx === i ? { ...r, ...patch } : r
+      ),
+    });
   const removeRestriction = (i: number) =>
     onUpdate({ deliveryRestrictions: deliveryRestrictions.filter((_, idx) => idx !== i) });
 
@@ -153,25 +173,58 @@ export default function Step5DeliveryTime({
       )}
 
       {deliveryTimeType === "interval" && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl">
-          <div>
-            <Label htmlFor="interval-start" className="text-sm mb-1 block">Startdatum</Label>
-            <Input id="interval-start" type="date" value={intervalStartDate} onChange={(e) => onUpdate({ intervalStartDate: e.target.value })} data-testid="input-interval-start" />
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl">
+            <div>
+              <Label htmlFor="interval-start" className="text-sm mb-1 block">Startdatum</Label>
+              <Input id="interval-start" type="date" value={intervalStartDate} onChange={(e) => onUpdate({ intervalStartDate: e.target.value })} data-testid="input-interval-start" />
+            </div>
+            <div>
+              <Label htmlFor="interval-end" className="text-sm mb-1 block">Slutdatum</Label>
+              <Input id="interval-end" type="date" value={intervalEndDate} onChange={(e) => onUpdate({ intervalEndDate: e.target.value })} data-testid="input-interval-end" />
+            </div>
+            <div>
+              <Label htmlFor="interval-freq" className="text-sm mb-1 block">Var N:e dag</Label>
+              <Input id="interval-freq" type="number" min={1} value={intervalFrequencyDays} onChange={(e) => onUpdate({ intervalFrequencyDays: e.target.value })} placeholder="14" data-testid="input-interval-frequency" />
+            </div>
           </div>
-          <div>
-            <Label htmlFor="interval-end" className="text-sm mb-1 block">Slutdatum</Label>
-            <Input id="interval-end" type="date" value={intervalEndDate} onChange={(e) => onUpdate({ intervalEndDate: e.target.value })} data-testid="input-interval-end" />
-          </div>
-          <div>
-            <Label htmlFor="interval-freq" className="text-sm mb-1 block">Var N:e dag</Label>
-            <Input id="interval-freq" type="number" min={1} value={intervalFrequencyDays} onChange={(e) => onUpdate({ intervalFrequencyDays: e.target.value })} placeholder="14" data-testid="input-interval-frequency" />
+
+          <div className="max-w-xs">
+            <Label htmlFor="interval-flex" className="text-sm mb-1 block flex items-center gap-1.5">
+              ± Flexdagar
+              <span className="text-muted-foreground font-normal">(ruttoptimering)</span>
+            </Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="interval-flex"
+                type="number"
+                min={0}
+                value={intervalFlexDays}
+                onChange={(e) => onUpdate({ intervalFlexDays: e.target.value })}
+                placeholder="0"
+                className="w-24"
+                data-testid="input-interval-flex-days"
+              />
+              <span className="text-sm text-muted-foreground">dagar</span>
+            </div>
+            <div className="flex items-start gap-1.5 mt-2 text-xs text-muted-foreground">
+              <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <span>
+                Ruttoptimeringen får flytta besöket ±N dagar från det planerade datumet.
+                Utan flexfönster måste varje order utföras exakt dag 14, 28, 42…,
+                vilket begränsar möjligheten att samla nära kunder på samma tur.
+              </span>
+            </div>
           </div>
         </div>
       )}
 
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-medium">Restriktioner</h3>
+          <div>
+            <h3 className="text-sm font-medium">Restriktioner</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Villkor baserade på objektets metadata — hårda blockerar schemaläggning, mjuka är rekommendationer.</p>
+          </div>
           <Button variant="outline" size="sm" onClick={addRestriction} data-testid="button-add-restriction">
             <Plus className="h-4 w-4 mr-1" /> Lägg till
           </Button>
@@ -179,21 +232,82 @@ export default function Step5DeliveryTime({
         {deliveryRestrictions.length === 0 ? (
           <p className="text-sm text-muted-foreground">Inga restriktioner.</p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {deliveryRestrictions.map((r, i) => (
-              <div key={i} className="flex items-center gap-2" data-testid={`restriction-row-${i}`}>
-                <RadioGroup value={r.type} onValueChange={(v) => updateRestriction(i, { type: v })} className="flex gap-3">
-                  <label className="flex items-center gap-1 text-xs cursor-pointer">
-                    <RadioGroupItem value="hard" data-testid={`restriction-hard-${i}`} /> Hård
-                  </label>
-                  <label className="flex items-center gap-1 text-xs cursor-pointer">
-                    <RadioGroupItem value="soft" data-testid={`restriction-soft-${i}`} /> Mjuk
-                  </label>
-                </RadioGroup>
-                <Input placeholder="T.ex. ej före kl 07:00" value={r.value} onChange={(e) => updateRestriction(i, { value: e.target.value })} className="flex-1 max-w-md" data-testid={`input-restriction-${i}`} />
-                <Button variant="ghost" size="sm" onClick={() => removeRestriction(i)} className="h-9 w-9 p-0 text-destructive hover:text-destructive" data-testid={`button-remove-restriction-${i}`}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+              <div key={i} className="border rounded-md p-3 space-y-2" data-testid={`restriction-row-${i}`}>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateRestriction(i, { type: "hard" })}
+                      className={`flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors ${r.type === "hard" ? "bg-destructive text-destructive-foreground border-destructive" : "bg-background hover:bg-muted"}`}
+                      data-testid={`restriction-hard-${i}`}
+                    >
+                      <ShieldAlert className="h-3 w-3" /> Hård
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateRestriction(i, { type: "soft" })}
+                      className={`flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors ${r.type === "soft" ? "bg-warning text-warning-foreground border-warning" : "bg-background hover:bg-muted"}`}
+                      data-testid={`restriction-soft-${i}`}
+                    >
+                      <AlertCircle className="h-3 w-3" /> Mjuk
+                    </button>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {r.type === "hard" ? "Blockerar schemaläggning" : "Rekommendation"}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeRestriction(i)}
+                    className="h-7 w-7 p-0 text-destructive hover:text-destructive ml-auto"
+                    data-testid={`button-remove-restriction-${i}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select
+                    value={r.metadataKey}
+                    onValueChange={(v) => updateRestriction(i, { metadataKey: v })}
+                  >
+                    <SelectTrigger className="w-[180px]" data-testid={`select-restriction-key-${i}`}>
+                      <SelectValue placeholder="Metadatafält" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {definitions.map((d) => (
+                        <SelectItem key={d.id} value={d.fieldKey}>
+                          {d.fieldLabel}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={r.operator}
+                    onValueChange={(v) => updateRestriction(i, { operator: v })}
+                  >
+                    <SelectTrigger className="w-[140px]" data-testid={`select-restriction-operator-${i}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CONDITION_OPERATORS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!CONDITION_OPERATORS.find((o) => o.value === r.operator)?.noValue && (
+                    <Input
+                      placeholder="Värde"
+                      value={String(r.filterValue ?? "")}
+                      onChange={(e) => updateRestriction(i, { filterValue: e.target.value })}
+                      className="w-[140px]"
+                      data-testid={`input-restriction-value-${i}`}
+                    />
+                  )}
+                </div>
               </div>
             ))}
           </div>

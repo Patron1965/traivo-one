@@ -2630,7 +2630,8 @@ export const orderConcepts = pgTable("order_concepts", {
   intervalStartDate: timestamp("interval_start_date"),
   intervalEndDate: timestamp("interval_end_date"),
   intervalFrequencyDays: integer("interval_frequency_days"),
-  deliveryRestrictions: jsonb("delivery_restrictions"), // { hard:[{type,value}], soft:[{type,value}] }
+  intervalFlexDays: integer("interval_flex_days"), // ±N dagar flexfönster för ruttoptimering
+  deliveryRestrictions: jsonb("delivery_restrictions"), // [{type:'soft'|'hard', metadataKey, operator, filterValue}]
 
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
