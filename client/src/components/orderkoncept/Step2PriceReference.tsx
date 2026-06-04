@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -7,9 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sparkles, Info, ChevronDown, Loader2, Search } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Sparkles, Info, ChevronDown, Loader2, Search, Layers, CornerDownRight } from "lucide-react";
 import { formatSekFromOre } from "@/lib/format";
-import type { Article, PriceListArticle } from "@shared/schema";
+import type { Article, PriceListArticle, ArticleComponent } from "@shared/schema";
 
 interface PriceListLite {
   id: string;
@@ -105,14 +106,87 @@ export default function Step2PriceReference({
       });
   }, [priceListArticles, articleMap]);
 
-  const filteredRows = useMemo(() => {
+  const priceByArticleId = useMemo(() => {
+    const map = new Map<string, PriceListArticle>();
+    for (const pla of priceListArticles ?? []) map.set(pla.articleId, pla);
+    return map;
+  }, [priceListArticles]);
+
+  const structureArticleIds = useMemo(
+    () => previewRows.filter((r) => r.article?.isStructure).map((r) => r.article!.id),
+    [previewRows],
+  );
+
+  const componentResults = useQueries({
+    queries: structureArticleIds.map((id) => ({
+      queryKey: ["/api/articles", id, "components"] as const,
+      enabled: !!priceListId && showPrices,
+    })),
+  });
+
+  const componentsLoading = componentResults.some((r) => r.isLoading);
+
+  const componentsByStructure = useMemo(() => {
+    const map = new Map<string, ArticleComponent[]>();
+    structureArticleIds.forEach((id, i) => {
+      const data = componentResults[i]?.data as ArticleComponent[] | undefined;
+      if (data) map.set(id, data);
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [structureArticleIds, componentResults.map((r) => r.data)]);
+
+  const nestedChildIds = useMemo(() => {
+    const set = new Set<string>();
+    componentsByStructure.forEach((comps) => {
+      for (const c of comps) set.add(c.childArticleId);
+    });
+    return set;
+  }, [componentsByStructure]);
+
+  const structuresWithComponents = useMemo(
+    () => structureArticleIds.filter((id) => (componentsByStructure.get(id)?.length ?? 0) > 0).length,
+    [structureArticleIds, componentsByStructure],
+  );
+
+  const hasBom = structuresWithComponents > 0;
+
+  // Sökfiltrering kombinerad med BOM-gruppering: filtrera först, gruppera sedan.
+  // En strukturartikel visas om den själv matchar ELLER om någon av dess komponenter matchar.
+  const displayGroups = useMemo(() => {
     const q = priceSearch.trim().toLowerCase();
-    if (!q) return previewRows;
+    const matchArticle = (article?: Article) => {
+      if (!q) return true;
+      const name = article?.name?.toLowerCase() ?? "";
+      const number = article?.articleNumber?.toLowerCase() ?? "";
+      return name.includes(q) || number.includes(q);
+    };
+    const groups: { pla: PriceListArticle; article?: Article; components: ArticleComponent[] }[] = [];
+    for (const { pla, article } of previewRows) {
+      const isStruct = !!article?.isStructure;
+      if (!isStruct && article && nestedChildIds.has(article.id)) continue;
+      if (isStruct) {
+        const comps = componentsByStructure.get(article!.id) ?? [];
+        const structMatches = matchArticle(article);
+        const matchingComps = q ? comps.filter((c) => matchArticle(articleMap.get(c.childArticleId))) : comps;
+        if (!q || structMatches || matchingComps.length > 0) {
+          groups.push({ pla, article, components: structMatches ? comps : matchingComps });
+        }
+      } else if (matchArticle(article)) {
+        groups.push({ pla, article, components: [] });
+      }
+    }
+    return groups;
+  }, [previewRows, nestedChildIds, componentsByStructure, articleMap, priceSearch]);
+
+  const filteredCount = useMemo(() => {
+    const q = priceSearch.trim().toLowerCase();
+    if (!q) return previewRows.length;
     return previewRows.filter(({ article }) => {
       const name = article?.name?.toLowerCase() ?? "";
       const number = article?.articleNumber?.toLowerCase() ?? "";
       return name.includes(q) || number.includes(q);
-    });
+    }).length;
   }, [previewRows, priceSearch]);
 
   const selectedListName = priceLists.find((pl) => pl.id === priceListId)?.name;
@@ -204,7 +278,7 @@ export default function Step2PriceReference({
                         />
                       </div>
                     </div>
-                    {filteredRows.length === 0 ? (
+                    {displayGroups.length === 0 ? (
                       <p className="p-4 text-sm text-muted-foreground" data-testid="price-preview-no-results">
                         Inga artiklar matchar "{priceSearch.trim()}".
                       </p>
@@ -218,27 +292,85 @@ export default function Step2PriceReference({
                             </tr>
                           </thead>
                           <tbody>
-                            {filteredRows.map(({ pla, article }) => (
-                              <tr key={pla.id} className="border-t" data-testid={`price-preview-row-${pla.id}`}>
-                                <td className="px-3 py-2">
-                                  <span className="font-medium">{article?.name ?? "Okänd artikel"}</span>
-                                  {article?.articleNumber && (
-                                    <span className="text-muted-foreground"> · {article.articleNumber}</span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-right tabular-nums" data-testid={`price-preview-amount-${pla.id}`}>
-                                  {formatSekFromOre(pla.price)}
-                                </td>
-                              </tr>
-                            ))}
+                            {displayGroups.map(({ pla, article, components }) => {
+                              const isStruct = !!article?.isStructure;
+                              return (
+                                <Fragment key={pla.id}>
+                                  <tr className="border-t" data-testid={`price-preview-row-${pla.id}`}>
+                                    <td className="px-3 py-2">
+                                      <span className="font-medium">{article?.name ?? "Okänd artikel"}</span>
+                                      {isStruct && (
+                                        <Badge
+                                          variant="outline"
+                                          className="ml-2 gap-1 align-middle text-[10px] font-medium text-chart-4 border-chart-4/40 bg-chart-4/10"
+                                          data-testid={`badge-structure-${pla.id}`}
+                                        >
+                                          <Layers className="h-2.5 w-2.5" />
+                                          Struktur
+                                        </Badge>
+                                      )}
+                                      {article?.articleNumber && (
+                                        <span className="text-muted-foreground"> · {article.articleNumber}</span>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-2 text-right tabular-nums" data-testid={`price-preview-amount-${pla.id}`}>
+                                      {formatSekFromOre(pla.price)}
+                                    </td>
+                                  </tr>
+                                  {components.map((comp) => {
+                                    const childArticle = articleMap.get(comp.childArticleId);
+                                    const childPla = priceByArticleId.get(comp.childArticleId);
+                                    return (
+                                      <tr
+                                        key={comp.id}
+                                        className="border-t bg-muted/20"
+                                        data-testid={`price-preview-component-${comp.id}`}
+                                      >
+                                        <td className="px-3 py-1.5 pl-8">
+                                          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                                            <CornerDownRight className="h-3 w-3 shrink-0" />
+                                            <span className="text-foreground">{childArticle?.name ?? "Okänd komponent"}</span>
+                                          </span>
+                                          {comp.quantity != null && comp.quantity !== 1 && (
+                                            <span className="text-muted-foreground text-xs"> × {comp.quantity}</span>
+                                          )}
+                                          {childArticle?.articleNumber && (
+                                            <span className="text-muted-foreground text-xs"> · {childArticle.articleNumber}</span>
+                                          )}
+                                          {comp.isMandatory === false && (
+                                            <Badge variant="outline" className="ml-2 align-middle text-[10px] font-normal text-muted-foreground">
+                                              valfri
+                                            </Badge>
+                                          )}
+                                        </td>
+                                        <td className="px-3 py-1.5 text-right tabular-nums text-xs text-muted-foreground">
+                                          {childPla ? formatSekFromOre(childPla.price) : "ingår"}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </Fragment>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </ScrollArea>
                     )}
                     <p className="px-3 py-2 text-xs text-muted-foreground border-t" data-testid="price-preview-count">
-                      {priceSearch.trim()
-                        ? `${filteredRows.length} av ${previewRows.length} artikel${previewRows.length === 1 ? "" : "ar"} matchar.`
-                        : `${previewRows.length} artikel${previewRows.length === 1 ? "" : "ar"} i prislistan.`}
+                      {priceSearch.trim() ? (
+                        `${filteredCount} av ${previewRows.length} artikel${previewRows.length === 1 ? "" : "ar"} matchar.`
+                      ) : (
+                        <>
+                          {previewRows.length} artikel{previewRows.length === 1 ? "" : "ar"} i prislistan
+                          {hasBom && (
+                            <>
+                              {" · "}
+                              {structuresWithComponents} strukturartik{structuresWithComponents === 1 ? "el" : "lar"} med komponenter
+                            </>
+                          )}
+                          {componentsLoading && " · laddar komponenter…"}.
+                        </>
+                      )}
                     </p>
                   </>
                 )}
