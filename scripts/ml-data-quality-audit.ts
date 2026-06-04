@@ -13,7 +13,8 @@
  *   - Per-executionCode breakdown: minst 30 prov per kod för stratifiering
  *   - Setup-log linkage: andel WO med matchande setup_time_logs
  *
- * Kör: npx tsx scripts/ml-data-quality-audit.ts [--tenant=<id>]
+ * Kör (CLI): npx tsx scripts/ml-data-quality-audit-cli.ts [--tenant=<id>] [--write-baseline]
+ * Detta är biblioteksmodulen (inga sidoeffekter vid import); CLI-entry ligger i *-cli.ts.
  * Output: stdout JSON + markdown-sammanfattning
  */
 import { db } from "../server/db";
@@ -83,7 +84,7 @@ function classifyReadiness(globalValidRatio: number): MlReadinessLevel {
   return "not_ready";
 }
 
-async function buildReport(opts: { tenantId?: string } = {}): Promise<OverallReport> {
+export async function buildReport(opts: { tenantId?: string } = {}): Promise<OverallReport> {
   const cutoff = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
   const baseConds: SQL[] = [
@@ -242,7 +243,7 @@ export async function runDataQualityAudit(opts: { tenantId?: string } = {}): Pro
   return buildReport(opts);
 }
 
-function buildMarkdown(report: OverallReport): string {
+export function buildMarkdown(report: OverallReport): string {
   const lines: string[] = [];
   lines.push(`# ML Data Quality Audit — ${report.generatedAt}`);
   lines.push(``);
@@ -284,23 +285,4 @@ export async function writeBaselineReport(report: OverallReport): Promise<string
   const filePath = path.resolve(process.cwd(), "docs", `ml-data-quality-baseline-${ym}.md`);
   await fs.writeFile(filePath, buildMarkdown(report), "utf-8");
   return filePath;
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  // CLI: cross-tenant per default (kräver DB-access — engineer/ops only).
-  const cliTenant = process.argv.find(a => a.startsWith("--tenant="))?.split("=")[1];
-  const writeBaseline = process.argv.includes("--write-baseline");
-  buildReport({ tenantId: cliTenant }).then(async report => {
-    console.log(JSON.stringify(report, null, 2));
-    console.log("\n---\nMARKDOWN-SAMMANFATTNING:\n---");
-    console.log(buildMarkdown(report));
-    if (writeBaseline) {
-      const p = await writeBaselineReport(report);
-      console.log(`\n[baseline skriven] ${p}`);
-    }
-    process.exit(0);
-  }).catch(err => {
-    console.error("Audit failed:", err);
-    process.exit(1);
-  });
 }

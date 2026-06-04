@@ -77,7 +77,7 @@ npm run db:push  # eller psql -f migrations/0035_ml_feature_snapshots.sql
 
 ### Vecka 4: kör go/no-go-audit
 ```bash
-npx tsx scripts/ml-data-quality-audit.ts > /tmp/ml-audit.json
+npx tsx scripts/ml-data-quality-audit-cli.ts > /tmp/ml-audit.json
 ```
 Eller via UI: **Admin → ML datakvalitet → Kör audit**.
 
