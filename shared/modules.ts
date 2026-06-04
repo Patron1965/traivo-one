@@ -188,8 +188,8 @@ export const PACKAGE_DEFINITIONS: Record<PackageTier, PackageDefinition> = {
   pilot: {
     tier: "pilot",
     label: "Pilot",
-    description: "Kurerat pilot-set: kärnflöden + KPI-dashboard + tidrapportering + besiktningar + SMS",
-    modules: ["core", "customer_mgmt", "kpi_analytics", "work_sessions", "inspections", "sms"],
+    description: "Kurerat pilot-set: kärnflöden + KPI-dashboard + tidrapportering + besiktningar + orderkoncept + SMS",
+    modules: ["core", "customer_mgmt", "kpi_analytics", "work_sessions", "inspections", "order_concepts", "sms"],
     price: "Kontakta oss",
   },
   standard: {
