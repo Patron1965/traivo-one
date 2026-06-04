@@ -7,7 +7,7 @@ vanlig webbläsar-session med **cookie-auth (Replit Auth)**, inte som en separat
 bearer-token-klient. Den blandar `mobileApiCall` för vissa endpoints med vanliga
 cookie-autentiserade `fetch`/`apiRequest`-anrop mot `/api/objects`, `/api/work-orders` m.fl.
 
-**Why:** Vid Task #619 behövde släktnamn visas i mobil-UI. `/api/objects/:id/display-names`
+**Why:** Släktnamn behövde visas i mobil-UI. `/api/objects/:id/display-names`
 ligger bakom normal tenant-middleware (cookie-auth), INTE under `/api/mobile/*`.
 Eftersom mobil-appen ändå kör i cookie-session funkar samma endpoint i både web och
 mobil — ingen separat `/api/mobile/*`-endpoint behövdes.

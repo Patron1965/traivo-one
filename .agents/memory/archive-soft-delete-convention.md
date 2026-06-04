@@ -9,7 +9,7 @@ Traivo använder soft-delete (`deletedAt` + `archivedBy` + `archivedReason`, all
 
 ## Regler (durabla)
 - **Alla arkiv-listnings- och återställnings-endpoints måste vara `requireAdmin`.** Detta gäller både den samlade `/api/archive/*`-familjen OCH de äldre objekt-specifika endpointsen (`GET /api/objects/archived`, `POST /api/objects/:id/restore`, `POST /api/work-orders/:id/restore`). 
-  **Why:** Vid #716 hade objekt-/WO-arkivendpoints (från #552) ingen admin-gate medan de nya hade det — inkonsekvent och en privilege-escalation (vilken tenant-medlem som helst kunde lista/återställa arkiverade objekt). Code review (architect) flaggade detta som kritiskt.
+  **Why:** De äldre objekt-/WO-arkivendpointsen saknade en gång admin-gate medan de nyare hade det — inkonsekvent och en privilege-escalation (vilken tenant-medlem som helst kunde lista/återställa arkiverade objekt). Code review flaggade detta som kritiskt.
   **How to apply:** Lägg ALDRIG till en ny arkiv-/restore-route utan `requireAdmin`. Vid ändring i `server/routes/objectLifecycleRoutes.ts` eller `server/routes/archiveRoutes.ts`: behåll admin-gaten.
 - **Aktiva listningar måste filtrera `isNull(deletedAt)`** på alla läs-vägar (även inheritance-varianter), annars läcker arkiverade rader in i normala vyer.
 - **Restore av metadatatyp måste blockera namn/beteckning-kollision** mot aktiv (icke-arkiverad) rad — annars bryts unikhets-invarianten (`metadata_katalog.namn`/`beteckning` är universella nycklar, se replit.md gotcha).

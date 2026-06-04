@@ -100,9 +100,9 @@ export function MetadataLabelsTab() {
     mutationFn: async (id: string) => apiRequest("DELETE", `/api/metadata-labels/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/metadata-labels"] });
-      toast({ title: "Etikett raderad" });
+      toast({ title: "Etikett arkiverad" });
     },
-    onError: (error: Error) => toast({ title: "Kunde inte radera etikett", description: error.message, variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte arkivera etikett", description: error.message, variant: "destructive" }),
   });
 
   const emptyForm = { namn: "", beteckning: "", beskrivning: "", datatyp: "string", icon: "Tag", standardArvs: false, isRequired: false, allowedValues: "", area: "", displayNumber: "", allowDuplicates: false, kronologiskVisning: false };

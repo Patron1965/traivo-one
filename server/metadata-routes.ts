@@ -789,7 +789,7 @@ metadataRouter.put("/types/:id", async (req: Request, res: Response) => {
   }
 });
 
-metadataRouter.delete("/types/:id", async (req: Request, res: Response) => {
+metadataRouter.delete("/types/:id", requireAdmin, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantIdWithFallback(req);
     if (!tenantId) {

@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
-import { validateParentMetadataLink } from "../metadata-queries";
+import { validateParentMetadataLink, softDeleteMetadataType } from "../metadata-queries";
 import { requireAdmin, requirePlanner } from "../tenant-middleware";
 import { objects, workOrders, objectMetadata, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema, workOrderLines, articles, weeklyReportNotes, weeklyReportActionItemSchema, type WeeklyReportActionItem, objectPayers } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
@@ -2025,7 +2025,10 @@ app.get("/api/metadata-labels", asyncHandler(async (req, res) => {
     const { kategori, beteckning, isSystem } = req.query;
     
     const results = await db.select().from(metadataKatalog)
-      .where(eq(metadataKatalog.tenantId, tenantId))
+      .where(and(
+        eq(metadataKatalog.tenantId, tenantId),
+        isNull(metadataKatalog.deletedAt),
+      ))
       .orderBy(metadataKatalog.area, metadataKatalog.sortOrder, metadataKatalog.namn);
     
     let filtered = results;
@@ -2047,7 +2050,8 @@ app.get("/api/metadata-labels/:id", asyncHandler(async (req, res) => {
     const [label] = await db.select().from(metadataKatalog)
       .where(and(
         eq(metadataKatalog.id, req.params.id),
-        eq(metadataKatalog.tenantId, tenantId)
+        eq(metadataKatalog.tenantId, tenantId),
+        isNull(metadataKatalog.deletedAt),
       ));
     if (!label) throw new NotFoundError("Etikett hittades inte");
     res.json(label);
@@ -2154,11 +2158,13 @@ app.delete("/api/metadata-labels/:id", requireAdmin, asyncHandler(async (req, re
       );
     }
 
-    await db.delete(metadataKatalog)
-      .where(and(
-        eq(metadataKatalog.id, req.params.id),
-        eq(metadataKatalog.tenantId, tenantId)
-      ));
+    // Task #716: arkivering (soft-delete) istället för permanent radering — samma
+    // beteende som DELETE /api/metadata/types/:id. Historiska snapshot/värden förblir
+    // läsbara; arkiverade poster döljs från katalog/objektvyer och kan återställas
+    // via admin-arkivet.
+    const archivedBy = (req as any).session?.user?.id ?? null;
+    const archived = await softDeleteMetadataType(tenantId, req.params.id, { archivedBy });
+    if (!archived) throw new NotFoundError("Etikett hittades inte");
     res.status(204).send();
 }));
 
