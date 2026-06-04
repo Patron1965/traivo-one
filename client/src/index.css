@@ -13,6 +13,14 @@
   border: none !important;
 }
 
+/* Isolera Leafletkartans interna z-index (paneler/kontroller upp till 1000) i en
+ * egen stacking-context så att de inte målar ovanpå overlays (t.ex. ObjectDetailSheet
+ * som ligger på z-50). Annars hamnar objektinfo "under" kartan. */
+.leaflet-container {
+  isolation: isolate;
+  z-index: 0;
+}
+
 /* Traivo Brand Colors (placeholder — replace with final palette when approved)
  * Deep Ocean Blue: #1B4B6B | Arctic Ice: #E8F4F8 | Mountain Gray: #6B7C8C
  * Northern Teal: #4A9B9B | Midnight Navy: #2C3E50 | Aurora Green: #7DBFB0
