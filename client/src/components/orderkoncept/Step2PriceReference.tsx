@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sparkles, Info, ChevronDown, Loader2 } from "lucide-react";
+import { Sparkles, Info, ChevronDown, Loader2, Search } from "lucide-react";
 import { formatSekFromOre } from "@/lib/format";
 import type { Article, PriceListArticle } from "@shared/schema";
 
@@ -71,6 +71,7 @@ export default function Step2PriceReference({
   const priceLists = customerId ? (data?.priceLists ?? []) : (allLists.data ?? []);
 
   const [showPrices, setShowPrices] = useState(false);
+  const [priceSearch, setPriceSearch] = useState("");
 
   useEffect(() => {
     if (customerId && data?.suggestedPriceListId && !priceListId) {
@@ -103,6 +104,16 @@ export default function Step2PriceReference({
         return an.localeCompare(bn, "sv");
       });
   }, [priceListArticles, articleMap]);
+
+  const filteredRows = useMemo(() => {
+    const q = priceSearch.trim().toLowerCase();
+    if (!q) return previewRows;
+    return previewRows.filter(({ article }) => {
+      const name = article?.name?.toLowerCase() ?? "";
+      const number = article?.articleNumber?.toLowerCase() ?? "";
+      return name.includes(q) || number.includes(q);
+    });
+  }, [previewRows, priceSearch]);
 
   const selectedListName = priceLists.find((pl) => pl.id === priceListId)?.name;
 
@@ -153,7 +164,14 @@ export default function Step2PriceReference({
         )}
 
         {priceListId && (
-          <Collapsible open={showPrices} onOpenChange={setShowPrices} className="mt-3 max-w-md">
+          <Collapsible
+            open={showPrices}
+            onOpenChange={(open) => {
+              setShowPrices(open);
+              if (!open) setPriceSearch("");
+            }}
+            className="mt-3 max-w-md"
+          >
             <CollapsibleTrigger
               className="flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-primary transition-colors"
               data-testid="button-toggle-price-preview"
@@ -174,33 +192,53 @@ export default function Step2PriceReference({
                   </p>
                 ) : (
                   <>
-                    <ScrollArea className="max-h-64">
-                      <table className="w-full text-sm">
-                        <thead className="sticky top-0 bg-muted/50 text-xs text-muted-foreground">
-                          <tr>
-                            <th className="text-left font-medium px-3 py-2">Artikel</th>
-                            <th className="text-right font-medium px-3 py-2">Pris</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {previewRows.map(({ pla, article }) => (
-                            <tr key={pla.id} className="border-t" data-testid={`price-preview-row-${pla.id}`}>
-                              <td className="px-3 py-2">
-                                <span className="font-medium">{article?.name ?? "Okänd artikel"}</span>
-                                {article?.articleNumber && (
-                                  <span className="text-muted-foreground"> · {article.articleNumber}</span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums" data-testid={`price-preview-amount-${pla.id}`}>
-                                {formatSekFromOre(pla.price)}
-                              </td>
+                    <div className="p-2 border-b">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                        <Input
+                          value={priceSearch}
+                          onChange={(e) => setPriceSearch(e.target.value)}
+                          placeholder="Sök artikelnamn eller artikelnummer…"
+                          className="pl-8 h-8 text-sm"
+                          data-testid="input-price-search"
+                        />
+                      </div>
+                    </div>
+                    {filteredRows.length === 0 ? (
+                      <p className="p-4 text-sm text-muted-foreground" data-testid="price-preview-no-results">
+                        Inga artiklar matchar "{priceSearch.trim()}".
+                      </p>
+                    ) : (
+                      <ScrollArea className="max-h-64">
+                        <table className="w-full text-sm">
+                          <thead className="sticky top-0 bg-muted/50 text-xs text-muted-foreground">
+                            <tr>
+                              <th className="text-left font-medium px-3 py-2">Artikel</th>
+                              <th className="text-right font-medium px-3 py-2">Pris</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </ScrollArea>
-                    <p className="px-3 py-2 text-xs text-muted-foreground border-t">
-                      {previewRows.length} artikel{previewRows.length === 1 ? "" : "ar"} i prislistan.
+                          </thead>
+                          <tbody>
+                            {filteredRows.map(({ pla, article }) => (
+                              <tr key={pla.id} className="border-t" data-testid={`price-preview-row-${pla.id}`}>
+                                <td className="px-3 py-2">
+                                  <span className="font-medium">{article?.name ?? "Okänd artikel"}</span>
+                                  {article?.articleNumber && (
+                                    <span className="text-muted-foreground"> · {article.articleNumber}</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums" data-testid={`price-preview-amount-${pla.id}`}>
+                                  {formatSekFromOre(pla.price)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </ScrollArea>
+                    )}
+                    <p className="px-3 py-2 text-xs text-muted-foreground border-t" data-testid="price-preview-count">
+                      {priceSearch.trim()
+                        ? `${filteredRows.length} av ${previewRows.length} artikel${previewRows.length === 1 ? "" : "ar"} matchar.`
+                        : `${previewRows.length} artikel${previewRows.length === 1 ? "" : "ar"} i prislistan.`}
                     </p>
                   </>
                 )}
