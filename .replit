@@ -7,10 +7,6 @@ channel = "stable-24_05"
 packages = ["glib", "nss", "nspr", "at-spi2-atk", "cups", "libdrm", "dbus", "expat", "xorg.libxcb", "xorg.libX11", "xorg.libXcomposite", "xorg.libXdamage", "xorg.libXext", "xorg.libXfixes", "xorg.libXrandr", "libxkbcommon", "mesa", "pango", "cairo", "alsa-lib", "at-spi2-core", "xorg.libxshmfence"]
 
 [[ports]]
-localPort = 3001
-externalPort = 3001
-
-[[ports]]
 localPort = 5000
 externalPort = 80
 

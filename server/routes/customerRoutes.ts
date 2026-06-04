@@ -625,7 +625,11 @@ app.get("/api/objects/tree", asyncHandler(async (req, res) => {
   const customerFilter = (customerId && typeof customerId === "string")
     ? sql` AND EXISTS (SELECT 1 FROM object_payers op WHERE op.object_id = c.id AND op.is_primary = true AND op.customer_id = ${customerId})`
     : sql``;
-  const childCountSql = sql<number>`(SELECT count(*) FROM objects c WHERE c.parent_id = ${objects.id} AND c.tenant_id = ${tenantId} AND c.deleted_at IS NULL${customerFilter})`;
+  // OBS: skriv den kvalificerade literalen "objects"."id" — INTE ${objects.id}.
+  // Som SELECT-kolumn (scalar subselect) renderar drizzle ${objects.id} okvalificerat
+  // som "id", vilket inuti subqueryn binder till inre "objects c" → c.parent_id = c.id
+  // → alltid falskt → childCount = 0. Literalen tvingar korrelation mot yttre objects-raden.
+  const childCountSql = sql<number>`(SELECT count(*) FROM objects c WHERE c.parent_id = "objects"."id" AND c.tenant_id = ${tenantId} AND c.deleted_at IS NULL${customerFilter})`;
 
   const rows = await db
     .select({
@@ -670,7 +674,8 @@ app.get("/api/objects/tree/:parentId/children", asyncHandler(async (req, res) =>
   const customerFilter2 = (customerId && typeof customerId === "string")
     ? sql` AND EXISTS (SELECT 1 FROM object_payers op WHERE op.object_id = c.id AND op.is_primary = true AND op.customer_id = ${customerId})`
     : sql``;
-  const childCountSql2 = sql<number>`(SELECT count(*) FROM objects c WHERE c.parent_id = ${objects.id} AND c.tenant_id = ${tenantId} AND c.deleted_at IS NULL${customerFilter2})`;
+  // Se kommentar vid childCountSql ovan: literal "objects"."id" krävs i scalar subselect.
+  const childCountSql2 = sql<number>`(SELECT count(*) FROM objects c WHERE c.parent_id = "objects"."id" AND c.tenant_id = ${tenantId} AND c.deleted_at IS NULL${customerFilter2})`;
 
   const rows = await db
     .select({

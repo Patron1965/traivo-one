@@ -34,3 +34,15 @@ already relies on).
 `sql`` fragment that may be used as a select-column value, reference outer columns
 via `${table}.colname`, and verify with `query.toSQL().sql` in both a select-list
 and a where-clause context.
+
+**Audit finding (empirically confirmed via `.toSQL()`):** the unqualified-render
+hazard ONLY occurs when the `sql`` fragment sits in the **SELECT-column** position
+(scalar subselect). In **JOIN-ON** conditions and **WHERE/`and()`** conditions,
+`${objects.id}` renders qualified `"objects"."id"` and is safe. So `.leftJoin(...,
+sql\`... WHERE op.object_id = ${objects.id}\`)` and `where(and(..., sql\`EXISTS(...
+WHERE x = ${objects.id})\`))` are fine; only `select({ col: sql\`(SELECT ... WHERE
+... = ${objects.id})\` })` is broken. Aggregates like `count(distinct ${t.id})`
+also render qualified. A repo-wide sweep found only the two `childCountSql` scalar
+subselects in `server/routes/customerRoutes.ts` (both fixed with literal
+`"objects"."id"`); every other correlated-subquery fragment was either JOIN-ON,
+WHERE, or already used a literal qualified/alias reference.
