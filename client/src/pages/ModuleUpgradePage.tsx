@@ -23,11 +23,11 @@ export default function ModuleUpgradePage() {
 
           <div className="space-y-2">
             <h2 className="text-xl font-bold" data-testid="text-module-name">
-              {moduleDef?.label || "Modul"} \u00e4r inte aktiverad
+              {moduleDef?.label || "Modul"} är inte aktiverad
             </h2>
             <p className="text-muted-foreground text-sm">
-              Denna funktion ing\u00e5r inte i ditt nuvarande paket ({currentPackage.label}).
-              Kontakta din administrat\u00f6r f\u00f6r att uppgradera.
+              Denna funktion ingår inte i ditt nuvarande paket ({currentPackage.label}).
+              Kontakta din administratör för att uppgradera.
             </p>
           </div>
 
