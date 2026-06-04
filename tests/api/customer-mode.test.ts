@@ -12,6 +12,8 @@ describe("CustomerMode — HARDCODED / FROM_METADATA", () => {
   let objectWithCust2: string;
 
   beforeAll(async () => {
+    await storage.ensureTenant(TENANT_ID, { name: "Default tenant (test)" });
+
     const customer1 = await storage.createCustomer({
       tenantId: TENANT_ID,
       name: `CustMode1 ${randomId()}`,
@@ -35,6 +37,14 @@ describe("CustomerMode — HARDCODED / FROM_METADATA", () => {
       objectLevel: 2,
     } as InsertObject);
     objectWithCust1 = obj1.id;
+    await storage.createObjectPayer({
+      tenantId: TENANT_ID,
+      objectId: obj1.id,
+      customerId: customer1Id,
+      payerType: "primary",
+      isPrimary: true,
+      priority: 1,
+    } as any);
 
     const obj2 = await storage.createObject({
       tenantId: TENANT_ID,
@@ -45,6 +55,14 @@ describe("CustomerMode — HARDCODED / FROM_METADATA", () => {
       objectLevel: 2,
     } as InsertObject);
     objectWithCust2 = obj2.id;
+    await storage.createObjectPayer({
+      tenantId: TENANT_ID,
+      objectId: obj2.id,
+      customerId: customer2Id,
+      payerType: "primary",
+      isPrimary: true,
+      priority: 1,
+    } as any);
   });
 
   describe("Schema defaults", () => {

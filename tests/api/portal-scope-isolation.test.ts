@@ -79,6 +79,14 @@ describe("Portal scope isolation — kunder ser aldrig data utanför sin scope",
         hierarchyLevel: parentId ? "rum" : "fastighet",
         parentId: parentId ?? undefined,
       } as InsertObject);
+      await storage.createObjectPayer({
+        tenantId: TENANT_ID,
+        objectId: obj.id,
+        customerId,
+        payerType: "primary",
+        isPrimary: true,
+        priority: 1,
+      } as any);
       return obj.id;
     };
 
