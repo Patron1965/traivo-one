@@ -823,7 +823,7 @@ export default function ObjectsPage() {
 
   const handleCopyObject = useCallback((obj: ServiceObject) => {
     setObjectToCopy(obj);
-    setCopyName(`${obj.name} (kopia)`);
+    setCopyName(obj.name);
     setCopyMode("single");
     setCopyDialogOpen(true);
   }, []);

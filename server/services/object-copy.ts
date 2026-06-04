@@ -160,7 +160,7 @@ export async function copyObjectTree(
   if (!src || src.tenantId !== tenantId) {
     throw new Error("Objekt hittades inte");
   }
-  const rootName = opts.name && opts.name.trim() !== "" ? opts.name.trim() : `${src.name} (kopia)`;
+  const rootName = opts.name && opts.name.trim() !== "" ? opts.name.trim() : src.name;
 
   const createdIds: string[] = [];
   let copiedMetadata = 0;

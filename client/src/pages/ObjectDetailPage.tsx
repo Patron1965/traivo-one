@@ -543,6 +543,7 @@ export default function ObjectDetailPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "resolved"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "ancestors"] });
       queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
       toast({ title: "Sparat", description: "Objektet har uppdaterats." });
       setEditDialogOpen(false);
@@ -1424,7 +1425,7 @@ export default function ObjectDetailPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { setCopyName(`${obj.name || obj.objectNumber || ""} (kopia)`); setCopyMode("single"); setCopyDialogOpen(true); }}
+              onClick={() => { setCopyName(obj.name || obj.objectNumber || ""); setCopyMode("single"); setCopyDialogOpen(true); }}
               data-testid="button-open-copy"
             >
               <Copy className="h-4 w-4 mr-2" /> Kopiera objekt/gren
