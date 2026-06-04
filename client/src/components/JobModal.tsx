@@ -648,7 +648,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
               Önskad leveranstid
             </Label>
             <div className="grid grid-cols-2 gap-2">
-              <Popover open={fromPopoverOpen} onOpenChange={setFromPopoverOpen}>
+              <Popover open={fromPopoverOpen} onOpenChange={setFromPopoverOpen} modal>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
@@ -688,7 +688,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                   )}
                 </PopoverContent>
               </Popover>
-              <Popover open={toPopoverOpen} onOpenChange={setToPopoverOpen}>
+              <Popover open={toPopoverOpen} onOpenChange={setToPopoverOpen} modal>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
