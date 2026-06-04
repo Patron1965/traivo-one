@@ -70,7 +70,7 @@ import("../optimization-job-runner").then(({ startJobCleanupScheduler, resetStal
 //
 // Byt modell genom att ändra "model: gpt-4o-mini" till önskad modell nedan
 // ============================================
-app.post("/api/ai/field-assistant", asyncHandler(async (req, res) => {
+app.post("/api/ai/field-assistant", requirePlanner, asyncHandler(async (req, res) => {
     const { question, jobContext, conversationHistory = [] } = req.body;
     if (!question || typeof question !== "string") {
       throw new ValidationError("Fråga krävs");
@@ -784,7 +784,7 @@ app.get("/api/ai/proactive-tips", isAuthenticated, asyncHandler(async (req, res)
 }));
 
 // AI Planning suggestions - now with KPIs
-app.post("/api/ai/planning-suggestions", asyncHandler(async (req, res) => {
+app.post("/api/ai/planning-suggestions", requirePlanner, asyncHandler(async (req, res) => {
     const { generatePlanningSuggestions, calculatePlanningKPIs } = await import("../ai-planner");
     const { weekStart, weekEnd } = req.body;
     
@@ -830,7 +830,7 @@ app.post("/api/ai/planning-suggestions", asyncHandler(async (req, res) => {
     res.json(suggestions);
 }));
 
-app.get("/api/ai/planning-analysis", asyncHandler(async (req, res) => {
+app.get("/api/ai/planning-analysis", requirePlanner, asyncHandler(async (req, res) => {
     const { calculatePlanningKPIs } = await import("../ai-planner");
     const tenantId = getTenantIdWithFallback(req);
     const week = req.query.week as string || "current";
@@ -1726,7 +1726,7 @@ app.post("/api/ai/planner-chat/execute", requirePlanner, asyncHandler(async (req
 }));
 
 // AI Setup Time Insights
-app.get("/api/ai/setup-insights", asyncHandler(async (req, res) => {
+app.get("/api/ai/setup-insights", requirePlanner, asyncHandler(async (req, res) => {
     const { analyzeSetupTimeLogs } = await import("../ai-planner");
     
     const tenantId = getTenantIdWithFallback(req);
@@ -1741,7 +1741,7 @@ app.get("/api/ai/setup-insights", asyncHandler(async (req, res) => {
 }));
 
 // Apply recommended setup time updates
-app.post("/api/ai/apply-setup-updates", asyncHandler(async (req, res) => {
+app.post("/api/ai/apply-setup-updates", requirePlanner, asyncHandler(async (req, res) => {
     const { updates } = req.body;
     if (!Array.isArray(updates) || updates.length === 0) {
       throw new ValidationError("Updates måste vara en icke-tom array");
@@ -1781,7 +1781,7 @@ app.post("/api/ai/apply-setup-updates", asyncHandler(async (req, res) => {
 }));
 
 // AI Predictive Planning
-app.get("/api/ai/predictive-planning", asyncHandler(async (req, res) => {
+app.get("/api/ai/predictive-planning", requirePlanner, asyncHandler(async (req, res) => {
     const weeksAhead = parseInt(req.query.weeksAhead as string) || 4;
     
     const { generatePredictivePlanning } = await import("../ai-planner");

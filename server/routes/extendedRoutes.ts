@@ -2217,11 +2217,12 @@ app.get("/api/ai/eta-overview", asyncHandler(async (req, res) => {
     res.json(overview);
 }));
 
-app.post("/api/ai/eta-check-delays", asyncHandler(async (req, res) => {
+app.post("/api/ai/eta-check-delays", requirePlanner, asyncHandler(async (req, res) => {
     const { checkAndNotifyDelays } = await import("../ai-eta-service");
     const tenantId = getTenantIdWithFallback(req);
     const { thresholdMinutes } = req.body;
-    const result = await checkAndNotifyDelays(tenantId, thresholdMinutes || 20);
+    const resolvedThreshold = Math.max(1, typeof thresholdMinutes === "number" ? thresholdMinutes : 20);
+    const result = await checkAndNotifyDelays(tenantId, resolvedThreshold);
     res.json(result);
 }));
 
@@ -2245,7 +2246,7 @@ app.get("/api/ai/insights", asyncHandler(async (req, res) => {
 // AI-ASSISTED PLANNING
 // ============================================
 
-app.post("/api/ai/assisted-plan", asyncHandler(async (req, res) => {
+app.post("/api/ai/assisted-plan", requirePlanner, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { enforceBudgetAndRateLimit: enforcePlan } = await import("../ai-budget-service");
     const apEnforcement = await enforcePlan(tenantId, "planning");
@@ -2290,7 +2291,7 @@ app.post("/api/ai/assisted-plan", asyncHandler(async (req, res) => {
 // AI CUSTOMER COMMUNICATION
 // ============================================
 
-app.get("/api/ai/communications", asyncHandler(async (req, res) => {
+app.get("/api/ai/communications", requirePlanner, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId, status, from, to } = req.query;
     const log = await getCommunicationLog(tenantId, {
@@ -2302,7 +2303,7 @@ app.get("/api/ai/communications", asyncHandler(async (req, res) => {
     res.json(log);
 }));
 
-app.get("/api/ai/communications/settings", asyncHandler(async (req, res) => {
+app.get("/api/ai/communications/settings", requirePlanner, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const settings = await getAutoNotificationSettings(tenantId);
     res.json(settings);
