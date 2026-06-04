@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Progress } from "@/components/ui/progress";
 import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -142,6 +143,7 @@ export default function ObjectsPage() {
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [objectToCopy, setObjectToCopy] = useState<ServiceObject | null>(null);
   const [copyName, setCopyName] = useState("");
+  const [copyMode, setCopyMode] = useState<"single" | "branch">("single");
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [csvData, setCsvData] = useState("");
   const [csvDragActive, setCsvDragActive] = useState(false);
@@ -588,15 +590,18 @@ export default function ObjectsPage() {
 
   // Task #681: klona objekt via dedikerad server-endpoint (nytt nr + kopierad metadata).
   const copyObjectMutation = useMutation({
-    mutationFn: async ({ id, name }: { id: string; name: string }) => {
-      const res = await apiRequest("POST", `/api/objects/${id}/copy`, { name });
+    mutationFn: async ({ id, name, mode }: { id: string; name: string; mode: "single" | "branch" }) => {
+      const res = await apiRequest("POST", `/api/objects/${id}/copy`, { name, mode });
       return res.json();
     },
     onSuccess: (created: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
       const n = created?.copiedMetadata ?? 0;
+      const createdCount = created?.createdCount ?? 1;
       if (created?.metadataCopyError) {
         toast({ title: "Objekt kopierat – men metadata misslyckades", description: `Objektet skapades, men metadata kunde inte kopieras: ${created.metadataCopyError}`, variant: "destructive" });
+      } else if (createdCount > 1) {
+        toast({ title: "Gren kopierad", description: `${createdCount} objekt skapade.${n > 0 ? ` ${n} metadatafält kopierade.` : ""}` });
       } else {
         toast({ title: "Objekt kopierat", description: n > 0 ? `${n} metadatafält kopierade.` : undefined });
       }
@@ -819,12 +824,13 @@ export default function ObjectsPage() {
   const handleCopyObject = useCallback((obj: ServiceObject) => {
     setObjectToCopy(obj);
     setCopyName(`${obj.name} (kopia)`);
+    setCopyMode("single");
     setCopyDialogOpen(true);
   }, []);
 
   const executeCopy = () => {
     if (!objectToCopy) return;
-    copyObjectMutation.mutate({ id: objectToCopy.id, name: copyName });
+    copyObjectMutation.mutate({ id: objectToCopy.id, name: copyName, mode: copyMode });
   };
 
   // Task #681: öppna skapa-dialogen i barn-läge under valt objekt.
@@ -1957,6 +1963,19 @@ export default function ObjectsPage() {
                 onChange={(e) => setCopyName(e.target.value)}
                 data-testid="input-copy-name"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Omfattning</Label>
+              <RadioGroup value={copyMode} onValueChange={(v) => setCopyMode(v as "single" | "branch")}>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="single" id="copy-mode-single" data-testid="radio-copy-single" />
+                  <Label htmlFor="copy-mode-single" className="font-normal cursor-pointer">Endast detta objekt</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="branch" id="copy-mode-branch" data-testid="radio-copy-branch" />
+                  <Label htmlFor="copy-mode-branch" className="font-normal cursor-pointer">Hela grenen (objektet + alla barnobjekt)</Label>
+                </div>
+              </RadioGroup>
             </div>
           </div>
           <DialogFooter>

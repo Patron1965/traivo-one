@@ -29,8 +29,9 @@ import {
   Calendar, Loader2, ChevronRight, ExternalLink, Wrench, Shield,
   Hash, Truck, Timer, Info, Box, Layers, ClipboardList, Plus,
   Trash2, Pencil, Save, X, Phone, Mail, LinkIcon, Search, History,
-  ArrowUp, ArrowDown, RotateCcw, Cog
+  ArrowUp, ArrowDown, RotateCcw, Cog, Copy, ArrowRightLeft
 } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -342,6 +343,12 @@ export default function ObjectDetailPage() {
   const [highlightedWorkOrderId, setHighlightedWorkOrderId] = useState<string | null>(null);
 
   const [editForm, setEditForm] = useState<ObjectEditForm>({});
+  // Task #713: flytta- och kopiera-dialoger
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [moveSearch, setMoveSearch] = useState("");
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  const [copyName, setCopyName] = useState("");
+  const [copyMode, setCopyMode] = useState<"single" | "branch">("single");
   const [contactForm, setContactForm] = useState({ name: "", contactType: "primary", phone: "", email: "", role: "" });
   const [imageForm, setImageForm] = useState({ imageUrl: "", imageType: "photo", description: "" });
   const [restrictionForm, setRestrictionForm] = useState({
@@ -542,6 +549,56 @@ export default function ObjectDetailPage() {
     },
     onError: (error: Error) => {
       toast({ title: "Kunde inte spara ändringarna", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Task #713: lista alla objekt (för förälder-väljaren) — laddas bara när
+  // flytta-dialogen är öppen.
+  const { data: allObjects = [] } = useQuery<ServiceObject[]>({
+    queryKey: ["/api/objects"],
+    enabled: moveDialogOpen,
+  });
+
+  // Task #713: flytta objektet till ny förälder (null = rotnivå). Servern
+  // cykelskyddar och validerar ägarskap; barnobjekt + släktnamn uppdateras.
+  const moveObjectMutation = useMutation({
+    mutationFn: async (newParentId: string | null) => {
+      await apiRequest("PATCH", `/api/objects/${objectId}/move`, { parentId: newParentId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "ancestors"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "descendants"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "resolved"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "parents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+      toast({ title: "Objekt flyttat" });
+      setMoveDialogOpen(false);
+      setMoveSearch("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte flytta objektet", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Task #713: kopiera objekt (single) eller hela grenen (branch).
+  const copyObjectMutation = useMutation({
+    mutationFn: async ({ name, mode }: { name: string; mode: "single" | "branch" }) => {
+      const res = await apiRequest("POST", `/api/objects/${objectId}/copy`, { name, mode });
+      return res.json();
+    },
+    onSuccess: (created: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "descendants"] });
+      const count = created?.createdCount ?? 1;
+      if (created?.metadataCopyError) {
+        toast({ title: "Objekt kopierat – men metadata misslyckades", description: created.metadataCopyError, variant: "destructive" });
+      } else {
+        toast({ title: "Objekt kopierat", description: count > 1 ? `${count} objekt kopierade.` : undefined });
+      }
+      setCopyDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte kopiera objektet", description: error.message, variant: "destructive" });
     },
   });
 
@@ -773,6 +830,18 @@ export default function ObjectDetailPage() {
 
   const obj = resolvedObject;
   const inheritanceSources: InheritanceSource[] = obj.inheritanceSources || [];
+
+  // Task #713: Släktnamn = hela kedjan rot → detta objekt, sammanfogad med " > ".
+  // ancestors (root→self) inkluderar normalt objektet självt sist; dedupliceras
+  // defensivt så vi aldrig får dubbel slutnod.
+  const slaktnamnChain: { id: string; name: string }[] = (() => {
+    const chain = ancestors.map((a) => ({ id: a.id, name: a.name || a.objectNumber || "" }));
+    if (chain.length === 0 || chain[chain.length - 1].id !== objectId) {
+      chain.push({ id: objectId, name: obj.name || obj.objectNumber || "" });
+    }
+    return chain;
+  })();
+  const slaktnamn = slaktnamnChain.map((c) => c.name).join(" > ");
 
   const getInheritanceInfo = (fieldName: string) => {
     const source = inheritanceSources.find((s) => s.field === fieldName);
@@ -1343,6 +1412,24 @@ export default function ObjectDetailPage() {
 
         {/* ==================== HIERARKI ==================== */}
         <TabsContent value="hierarchy">
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setMoveSearch(""); setMoveDialogOpen(true); }}
+              data-testid="button-open-move"
+            >
+              <ArrowRightLeft className="h-4 w-4 mr-2" /> Flytta objekt
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setCopyName(`${obj.name || obj.objectNumber || ""} (kopia)`); setCopyMode("single"); setCopyDialogOpen(true); }}
+              data-testid="button-open-copy"
+            >
+              <Copy className="h-4 w-4 mr-2" /> Kopiera objekt/gren
+            </Button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardHeader className="pb-3">
@@ -2025,6 +2112,18 @@ export default function ObjectDetailPage() {
                   />
                 </div>
                 <div className="space-y-2">
+                  <Label>Släktnamn</Label>
+                  <div
+                    className="rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground break-words"
+                    data-testid="text-slaktnamn"
+                  >
+                    {slaktnamn || "—"}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Hela hierarkin (rot → detta objekt). Uppdateras automatiskt vid flytt.
+                  </p>
+                </div>
+                <div className="space-y-2">
                   <Label>Objekttyp</Label>
                   <Select value={editForm.objectType} onValueChange={(v) => setEditForm({ ...editForm, objectType: v })}>
                     <SelectTrigger data-testid="select-edit-objectType">
@@ -2213,6 +2312,118 @@ export default function ObjectDetailPage() {
             >
               {updateObjectMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
               Spara
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ==================== FLYTTA OBJEKT (Task #713) ==================== */}
+      <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Flytta objekt</DialogTitle>
+            <DialogDescription>
+              Välj ny förälder för {obj.name || obj.objectNumber}. Eventuella barnobjekt följer med och släktnamnet uppdateras automatiskt.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Input
+              placeholder="Sök objekt..."
+              value={moveSearch}
+              onChange={(e) => setMoveSearch(e.target.value)}
+              data-testid="input-move-search"
+            />
+            <div className="max-h-64 overflow-y-auto rounded-md border">
+              <div className="p-1">
+                <button
+                  type="button"
+                  onClick={() => moveObjectMutation.mutate(null)}
+                  disabled={moveObjectMutation.isPending}
+                  className="w-full text-left px-3 py-2 rounded-md hover:bg-muted text-sm disabled:opacity-50"
+                  data-testid="button-move-to-root"
+                >
+                  (ingen — flytta till rotnivå)
+                </button>
+                {(() => {
+                  const excludedIds = new Set<string>([objectId, ...descendants.map((d) => d.id)]);
+                  const q = moveSearch.trim().toLowerCase();
+                  const candidates = allObjects
+                    .filter((o) => !excludedIds.has(o.id))
+                    .filter((o) => {
+                      if (!q) return true;
+                      return (o.name || "").toLowerCase().includes(q) || (o.objectNumber || "").toLowerCase().includes(q);
+                    })
+                    .slice(0, 50);
+                  if (candidates.length === 0) {
+                    return <p className="text-sm text-muted-foreground px-3 py-2">Inga matchande objekt.</p>;
+                  }
+                  return candidates.map((o) => (
+                    <button
+                      key={o.id}
+                      type="button"
+                      onClick={() => moveObjectMutation.mutate(o.id)}
+                      disabled={moveObjectMutation.isPending}
+                      className="w-full text-left px-3 py-2 rounded-md hover:bg-muted text-sm flex items-center gap-2 disabled:opacity-50"
+                      data-testid={`button-move-target-${o.id}`}
+                    >
+                      <span className="font-medium">{o.name || o.objectNumber}</span>
+                      {o.objectNumber && <span className="text-xs text-muted-foreground">{o.objectNumber}</span>}
+                    </button>
+                  ));
+                })()}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMoveDialogOpen(false)} data-testid="button-cancel-move">Avbryt</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ==================== KOPIERA OBJEKT/GREN (Task #713) ==================== */}
+      <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Kopiera objekt</DialogTitle>
+            <DialogDescription>
+              Skapa en kopia av {obj.name || obj.objectNumber}. Ett nytt objektnummer genereras och metadata kopieras med.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="copy-name">Namn på kopian</Label>
+              <Input
+                id="copy-name"
+                value={copyName}
+                onChange={(e) => setCopyName(e.target.value)}
+                data-testid="input-copy-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Omfattning</Label>
+              <RadioGroup value={copyMode} onValueChange={(v) => setCopyMode(v as "single" | "branch")}>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="single" id="copy-single" data-testid="radio-copy-single" />
+                  <Label htmlFor="copy-single" className="font-normal cursor-pointer">Endast detta objekt</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="branch" id="copy-branch" data-testid="radio-copy-branch" />
+                  <Label htmlFor="copy-branch" className="font-normal cursor-pointer">
+                    Hela grenen ({descendants.length} barnobjekt)
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCopyDialogOpen(false)} data-testid="button-cancel-copy">Avbryt</Button>
+            <Button
+              onClick={() => copyObjectMutation.mutate({ name: copyName, mode: copyMode })}
+              disabled={copyObjectMutation.isPending}
+              data-testid="button-confirm-copy"
+            >
+              {copyObjectMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+              Kopiera
             </Button>
           </DialogFooter>
         </DialogContent>

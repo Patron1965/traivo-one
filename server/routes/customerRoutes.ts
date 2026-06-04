@@ -11,7 +11,7 @@ import { eq, and, isNull, sql, or, inArray } from "drizzle-orm";
 import { primaryPayerCustomerIdSql, objectHasPrimaryCustomerSql } from "../services/object-customer";
 import { ensureClusterAndAssign } from "../auto-cluster";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
-import { copyObjectLocalMetadata } from "../metadata-queries";
+import { copyObjectTree } from "../services/object-copy";
 
 export async function registerCustomerRoutes(app: Express) {
 
@@ -750,59 +750,41 @@ app.get("/api/objects/:id", asyncHandler(async (req, res) => {
   res.json(verified);
 }));
 
-// Task #681: klona ett objekt — nytt systemnummer, "(kopia)"-namn och alla
-// lokala metadatavärden kopierade. Barnobjekt kopieras INTE.
+// Task #681 / #713: klona ett objekt — nytt systemnummer, "(kopia)"-namn och
+// metadata kopierade (båda metadata-systemen). mode="single" (default) kopierar
+// bara objektet; mode="branch" kopierar hela grenen (objekt + alla barnobjekt)
+// med bevarad intern hierarki. Se server/services/object-copy.ts.
 app.post("/api/objects/:id/copy", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const source = await storage.getObject(req.params.id);
   if (!verifyTenantOwnership(source, tenantId)) {
     throw new NotFoundError("Objekt");
   }
-  const src = source!;
-  const requestedName = typeof req.body?.name === "string" && req.body.name.trim() !== ""
-    ? req.body.name.trim()
-    : `${src.name} (kopia)`;
-  const clone = await storage.createObject({
-    tenantId,
-    customerId: src.customerId ?? undefined,
-    parentId: src.parentId ?? undefined,
-    name: requestedName,
-    objectType: src.objectType,
-    objectLevel: src.objectLevel,
-    hierarchyLevel: src.hierarchyLevel ?? undefined,
-    address: src.address ?? undefined,
-    city: src.city ?? undefined,
-    postalCode: src.postalCode ?? undefined,
-    latitude: src.latitude ?? undefined,
-    longitude: src.longitude ?? undefined,
-    accessType: src.accessType ?? undefined,
-    accessCode: src.accessCode ?? undefined,
-    keyNumber: src.keyNumber ?? undefined,
-    accessInfo: src.accessInfo ?? undefined,
-    containerCount: src.containerCount ?? undefined,
-    avgSetupTime: src.avgSetupTime ?? undefined,
-    status: "active",
-  } as any);
+  const mode = req.body?.mode === "branch" ? "branch" : "single";
+  const requestedName = typeof req.body?.name === "string" ? req.body.name : undefined;
 
-  let copiedMetadata = 0;
-  let metadataCopyError: string | null = null;
-  try {
-    copiedMetadata = await copyObjectLocalMetadata(src.id, clone.id, tenantId);
-  } catch (err) {
-    metadataCopyError = err instanceof Error ? err.message : "Okänt fel";
-    console.error("Kunde inte kopiera metadata vid objektkopiering:", err);
-  }
+  const result = await copyObjectTree(req.params.id, tenantId, mode, { name: requestedName });
 
-  if (clone.customerId) {
-    try {
-      await ensureClusterAndAssign(tenantId, clone.customerId, clone.id);
-    } catch (err) {
-      console.error("Auto-cluster error on object copy:", err);
+  for (const createdId of result.createdIds) {
+    const created = await storage.getObject(createdId);
+    if (created?.customerId) {
+      try {
+        await ensureClusterAndAssign(tenantId, created.customerId, created.id);
+      } catch (err) {
+        console.error("Auto-cluster error on object copy:", err);
+      }
     }
   }
 
-  const updated = await storage.getObject(clone.id);
-  res.status(201).json({ ...(updated || clone), copiedMetadata, metadataCopyError });
+  const updated = await storage.getObject(result.rootId);
+  res.status(201).json({
+    ...(updated || result.rootClone),
+    copiedMetadata: result.copiedMetadata,
+    metadataCopyError: result.metadataCopyError,
+    createdCount: result.createdIds.length,
+    createdIds: result.createdIds,
+    mode,
+  });
 }));
 
 app.get("/api/customers/:customerId/objects", asyncHandler(async (req, res) => {

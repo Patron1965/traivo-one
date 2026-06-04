@@ -739,6 +739,41 @@ app.patch("/api/objects/:id/primary-parent", asyncHandler(async (req, res) => {
   res.json(result);
 }));
 
+// Task #713: flytta ett objekt till en ny förälder (eller rotnivå). Repekar
+// primär förälder + objects.parentId; barnobjekt följer med (deras parentId är
+// oförändrat) och släktnamn räknas om on-read. Cykelskydd: målet får inte ligga
+// under objektet självt. parentId === null ⇒ flytta till rotnivå.
+app.patch("/api/objects/:id/move", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const existing = await storage.getObject(req.params.id);
+  if (!verifyTenantOwnership(existing, tenantId)) {
+    throw new NotFoundError("Objekt");
+  }
+  const rawParent = req.body?.parentId;
+  const newParentId = typeof rawParent === "string" && rawParent.trim() !== "" ? rawParent.trim() : null;
+
+  if (newParentId) {
+    if (newParentId === req.params.id) {
+      throw new ValidationError("Ett objekt kan inte bli sin egen förälder.");
+    }
+    const parent = await storage.getObject(newParentId);
+    if (!verifyTenantOwnership(parent, tenantId)) {
+      throw new NotFoundError("Förälder-objekt");
+    }
+    // Cykelskydd: hämta målets anfäder (rot→mål, inkl. målet) och säkerställ att
+    // objektet som flyttas inte redan ligger ovanför målet.
+    const processor = await createInheritanceProcessor(tenantId);
+    const targetAncestors = await processor.getAncestorChain(newParentId);
+    if (targetAncestors.some((a: { id: string }) => a.id === req.params.id)) {
+      throw new ValidationError("Ogiltig flytt: målobjektet ligger under objektet och skulle skapa en cykel.");
+    }
+  }
+
+  const moved = await storage.moveObject(req.params.id, newParentId, tenantId);
+  if (!moved) throw new NotFoundError("Objekt");
+  res.json(moved);
+}));
+
 app.get("/api/objects/:id/resolved", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const existing = await storage.getObject(req.params.id);

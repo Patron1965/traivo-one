@@ -1032,6 +1032,7 @@ export interface IStorage {
   addObjectParent(data: InsertObjectParent): Promise<ObjectParent>;
   removeObjectParent(id: string, objectId?: string): Promise<void>;
   setPrimaryParent(objectId: string, parentId: string, tenantId: string): Promise<ObjectParent | undefined>;
+  moveObject(objectId: string, newParentId: string | null, tenantId: string): Promise<ServiceObject | undefined>;
 
   // Resource Profiles (Utföranderoller)
   getResourceProfiles(tenantId: string): Promise<ResourceProfile[]>;
@@ -8321,6 +8322,63 @@ export class DatabaseStorage implements IStorage {
     }
 
     return updated || undefined;
+  }
+
+  // Task #713: flytta ett objekt till en ny förälder (eller rotnivå = null).
+  // Repekar objects.parentId OCH den primära object_parents-raden. Barnobjekt
+  // följer med automatiskt (deras parentId pekar oförändrat på det flyttade
+  // objektet). Cykel-/ägarskapskontroll görs i route:n innan anrop; här hålls
+  // tenant_id i alla predikat (defense-in-depth) + en själv-förälder-spärr.
+  async moveObject(objectId: string, newParentId: string | null, tenantId: string): Promise<ServiceObject | undefined> {
+    if (newParentId && newParentId === objectId) {
+      throw new Error("Ett objekt kan inte bli sin egen förälder.");
+    }
+    const [obj] = await db.select().from(objects)
+      .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));
+    if (!obj) return undefined;
+
+    // Atomiskt: håll objects.parentId och primär object_parents-rad i synk så vi
+    // aldrig lämnar ett halvflyttat tillstånd vid fel mitt i.
+    await db.transaction(async (tx) => {
+      await tx.update(objects)
+        .set({ parentId: newParentId })
+        .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));
+
+      // Demota alla nuvarande primära relationer för objektet.
+      await tx.update(objectParents)
+        .set({ isPrimary: false })
+        .where(and(eq(objectParents.objectId, objectId), eq(objectParents.tenantId, tenantId)));
+
+      if (newParentId) {
+        const existing = await tx.select().from(objectParents)
+          .where(and(
+            eq(objectParents.objectId, objectId),
+            eq(objectParents.parentId, newParentId),
+            eq(objectParents.tenantId, tenantId),
+          ));
+        if (existing.length > 0) {
+          await tx.update(objectParents)
+            .set({ isPrimary: true })
+            .where(and(
+              eq(objectParents.objectId, objectId),
+              eq(objectParents.parentId, newParentId),
+              eq(objectParents.tenantId, tenantId),
+            ));
+        } else {
+          await tx.insert(objectParents).values({
+            tenantId,
+            objectId,
+            parentId: newParentId,
+            isPrimary: true,
+            relationContext: "primary",
+          });
+        }
+      }
+    });
+
+    const [moved] = await db.select().from(objects)
+      .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));
+    return moved || undefined;
   }
 
   async getResourceProfiles(tenantId: string): Promise<ResourceProfile[]> {
