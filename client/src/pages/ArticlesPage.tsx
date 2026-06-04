@@ -87,6 +87,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Article, ServiceObject, MetadataDefinition } from "@shared/schema";
+import { deriveIsPreTask } from "@/lib/article-pre-task";
 import { QueryState } from "@/components/QueryState";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
@@ -877,7 +878,19 @@ export default function ArticlesPage() {
                     </TableCell>
                     <TableCell>
                       <div>
-                        <div className="font-medium">{article.name}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{article.name}</span>
+                          {deriveIsPreTask(article) && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="secondary" className="gap-1 text-[10px] shrink-0 cursor-help" data-testid={`badge-pre-task-${article.id}`}>
+                                  <Clock className="h-3 w-3" /> Föruppgift
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>Deriveras automatiskt till en föruppgift (typ "beroende" eller negativ offset)</TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
                         {article.description && (
                           <div className="text-sm text-muted-foreground truncate max-w-[300px]">
                             {article.description}

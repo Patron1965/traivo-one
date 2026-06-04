@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { deriveIsPreTask } from "@/lib/article-pre-task";
 import { ArrowLeft, ArrowRight, Save, Check, Loader2, AlertTriangle, PlayCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -32,10 +33,6 @@ function deriveTaskCategory(article: Article): TaskCategory {
   if (article.articleType === "vara") return "logistics";
   if (article.articleType === "felanmalan") return "admin";
   return "field";
-}
-
-function deriveIsPreTask(article: Article): boolean {
-  return article.articleType === "beroende" || (article.offsetMinutes ?? 0) < 0;
 }
 
 function deriveOffsetMinutes(article: Article): number | null {

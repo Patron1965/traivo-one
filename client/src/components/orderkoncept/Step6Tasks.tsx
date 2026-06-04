@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, Plus, Trash2, Package, MapPin, Clock } from "lucide-react";
 import type { Article, MetadataDefinition } from "@shared/schema";
+import { deriveIsPreTask } from "@/lib/article-pre-task";
 import { MetadataFieldSelect, METADATA_NONE } from "@/components/orderkoncept/shared/ConditionFilter";
 
 export interface ConceptArticleRow {
@@ -28,10 +29,6 @@ interface Step6Props {
   onRemoveArticle: (id: string) => void;
   onUpdateQuantity: (id: string, quantity: number) => void;
   onUpdateArticleField: (id: string, patch: Partial<ConceptArticleRow>) => void;
-}
-
-function deriveIsPreTask(article: Article): boolean {
-  return article.articleType === "beroende" || (article.offsetMinutes ?? 0) < 0;
 }
 
 export default function Step6Tasks({
