@@ -57,7 +57,6 @@ const ClusterDetailPage = lazy(() => import("@/pages/ClusterDetailPage"));
 const EconomicsDashboardPage = lazy(() => import("@/pages/EconomicsDashboardPage"));
 const SetupTimeAnalysisPage = lazy(() => import("@/pages/SetupTimeAnalysisPage"));
 const PredictivePlanningPage = lazy(() => import("@/pages/PredictivePlanningPage"));
-const AutoClusterPage = lazy(() => import("@/pages/AutoClusterPage"));
 const CustomerPortalPage = lazy(() => import("@/pages/CustomerPortalPage"));
 const CustomerReportsPage = lazy(() => import("@/pages/CustomerReportsPage"));
 const CasesPage = lazy(() => import("@/pages/CasesPage"));
@@ -175,7 +174,6 @@ function Router() {
         <Route path="/economics">{() => <ProtectedRoute component={EconomicsDashboardPage} path="/economics" />}</Route>
         <Route path="/setup-analysis">{() => <ProtectedRoute component={SetupTimeAnalysisPage} path="/setup-analysis" />}</Route>
         <Route path="/predictive-planning">{() => <ProtectedRoute component={PredictivePlanningPage} path="/predictive-planning" />}</Route>
-        <Route path="/auto-cluster">{() => <ProtectedRoute component={AutoClusterPage} path="/auto-cluster" />}</Route>
         <Route path="/customer-portal">{() => <ProtectedRoute component={CustomerPortalPage} path="/customer-portal" />}</Route>
         <Route path="/customer-reports">{() => <ProtectedRoute component={CustomerReportsPage} path="/customer-reports" />}</Route>
         <Route path="/cases">{() => <ProtectedRoute component={CasesPage} path="/cases" />}</Route>

@@ -36,7 +36,7 @@ export const MODULE_DEFINITIONS: Record<ModuleKey, Omit<ModuleDefinition, "key">
     label: "Grundplattform",
     description: "Objekt, resurser, kluster, ordrar, veckoplanering, ruttplanering, artiklar, prislistor",
     icon: "LayoutDashboard",
-    routes: ["/", "/home", "/clusters", "/auto-cluster", "/objects", "/resources", "/articles", "/article-components", "/price-lists", "/planner", "/routes", "/order-stock", "/assignments", "/settings", "/weather", "/planner-map", "/historical-map", "/metadata", "/metadata-settings", "/subscriptions", "/optimization", "/notifications", "/control-tower", "/enhetsansvarig", "/planning-parameters", "/planner-search-filters"],
+    routes: ["/", "/home", "/clusters", "/objects", "/resources", "/articles", "/article-components", "/price-lists", "/planner", "/routes", "/order-stock", "/assignments", "/settings", "/weather", "/planner-map", "/historical-map", "/metadata", "/metadata-settings", "/subscriptions", "/optimization", "/notifications", "/control-tower", "/enhetsansvarig", "/planning-parameters", "/planner-search-filters"],
     navItems: [],
   },
   customer_mgmt: {

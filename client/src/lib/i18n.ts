@@ -37,8 +37,6 @@ const translations: Record<string, Record<Language, string>> = {
   "nav.vehicles": { sv: "Fordon", en: "Vehicles" },
   "nav.clusters": { sv: "Kluster", en: "Clusters" },
   "nav.clusters.desc": { sv: "Arbetsområden", en: "Work areas" },
-  "nav.auto-cluster": { sv: "Auto-klustring", en: "Auto-clustering" },
-  "nav.auto-cluster.desc": { sv: "Automatisk områdesindelning", en: "Automatic area division" },
   "nav.articles": { sv: "Artiklar", en: "Articles" },
   "nav.articles.desc": { sv: "Produkter och tjänster", en: "Products and services" },
   "nav.price-lists": { sv: "Prislistor", en: "Price Lists" },

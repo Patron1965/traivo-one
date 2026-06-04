@@ -21,11 +21,6 @@ test.describe("Clusters page", () => {
     await expect(page.locator('[data-testid="button-create-cluster-empty"]')).toBeVisible({ timeout: 10000 });
   });
 
-  test("auto-cluster button in empty state", async ({ page }) => {
-    await navigateTo(page, "/clusters");
-    await expect(page.locator('[data-testid="button-auto-cluster-empty"]')).toBeVisible({ timeout: 10000 });
-  });
-
   test("create dialog opens with form fields", async ({ page }) => {
     await navigateTo(page, "/clusters");
     await page.locator('[data-testid="button-create-cluster-empty"]').click();

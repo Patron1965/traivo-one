@@ -58,7 +58,6 @@ const PLANNER_ROUTES = new Set([
   "/economics",
   "/setup-analysis",
   "/predictive-planning",
-  "/auto-cluster",
   "/customer-portal",
   "/portal-messages",
   "/booking-slots",

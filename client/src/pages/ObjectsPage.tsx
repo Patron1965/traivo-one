@@ -173,7 +173,6 @@ export default function ObjectsPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [servicePatternDialog, setServicePatternDialog] = useState<{ open: boolean; loading: boolean; data?: { summary: string; patterns: { label: string; value: string }[]; anomalies: { objectId: string; objectName: string; reason: string }[] } }>({ open: false, loading: false });
-  const [clusterDialog, setClusterDialog] = useState<{ open: boolean; loading: boolean; data?: { suggestions?: { suggestedName: string; objectCount: number; postalCodes: string[]; rationale: string }[]; message?: string } }>({ open: false, loading: false });
   const [maintenanceDialog, setMaintenanceDialog] = useState<{ open: boolean; loading: boolean; data?: { overdue: { objectName: string; predictedDate: string; daysUntil: number; confidence: number }[]; upcoming: { objectName: string; predictedDate: string; daysUntil: number; confidence: number }[]; summary: string; totalPredicted: number } }>({ open: false, loading: false });
   const [overflowPanel, setOverflowPanel] = useState<{ objectId: string; panel: "images" | "payers" | "parents" | "articles" } | null>(null);
   const [expandedDisplayNames, setExpandedDisplayNames] = useState<Set<string>>(new Set());
@@ -1607,16 +1606,6 @@ export default function ObjectsPage() {
               setServicePatternDialog({ open: true, loading: false, data });
             } catch (error) { toast({ title: "Kunde inte analysera servicemönster", description: error instanceof Error ? error.message : "Försök igen senare.", variant: "destructive" }); setServicePatternDialog({ open: true, loading: false, data: { summary: "Kunde inte analysera servicemönster.", patterns: [], anomalies: [] } }); }
           }}},
-          { type: "optimization", title: "Gruppering", description: "Föreslå optimal gruppering av objekt baserat på geografi och servicebehov", action: { label: "Analysera", onClick: async () => {
-            setClusterDialog({ open: true, loading: true });
-            try {
-              const ids = filteredObjects.map(o => o.id);
-              const res = await apiRequest("POST", "/api/ai/auto-cluster", { objectIds: ids.length <= 200 ? ids : undefined });
-              if (!res.ok) throw new Error("API error");
-              const data = await res.json();
-              setClusterDialog({ open: true, loading: false, data });
-            } catch (error) { toast({ title: "Kunde inte generera klusterförslag", description: error instanceof Error ? error.message : "Försök igen senare.", variant: "destructive" }); setClusterDialog({ open: true, loading: false, data: { message: "Kunde inte generera klusterförslag." } }); }
-          }}},
           { type: "info", title: "Underhållsprognoser", description: "Prediktera kommande servicebehov baserat på historik", action: { label: "Analysera", onClick: async () => {
             setMaintenanceDialog({ open: true, loading: true });
             try {
@@ -2921,59 +2910,6 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234"
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={clusterDialog.open} onOpenChange={(v) => { if (!v) setClusterDialog({ open: false, loading: false }); }}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2" data-testid="text-cluster-title">
-              <MapIcon className="h-5 w-5 text-chart-5" />
-              Gruppering — AI-förslag
-            </DialogTitle>
-            <DialogDescription>Förslag på optimal geografisk gruppering av objekt</DialogDescription>
-          </DialogHeader>
-          {clusterDialog.loading ? (
-            <div className="flex flex-col items-center gap-3 py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-chart-5" />
-              <p className="text-sm text-muted-foreground">AI analyserar gruppering...</p>
-            </div>
-          ) : clusterDialog.data && (
-            <div className="space-y-4">
-              {clusterDialog.data.message && (
-                <div className="p-3 rounded-md bg-chart-5/15 dark:bg-chart-5/40 border border-chart-5/50 dark:border-chart-5/40">
-                  <p className="text-sm" data-testid="text-cluster-message">{clusterDialog.data.message}</p>
-                </div>
-              )}
-              {clusterDialog.data.suggestions && clusterDialog.data.suggestions.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    {clusterDialog.data.suggestions.length} kluster föreslagna
-                  </p>
-                  {clusterDialog.data.suggestions.map((s, i) => (
-                    <div key={i} className="p-3 rounded-md bg-background border border-border/50" data-testid={`card-cluster-suggestion-${i}`}>
-                      <div className="flex justify-between items-start">
-                        <p className="text-sm font-medium">{s.suggestedName}</p>
-                        <Badge variant="secondary" className="text-xs">{s.objectCount} objekt</Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">{s.rationale}</p>
-                      {s.postalCodes.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {s.postalCodes.slice(0, 6).map((pc, j) => (
-                            <Badge key={j} variant="outline" className="text-xs">{pc}</Badge>
-                          ))}
-                          {s.postalCodes.length > 6 && <Badge variant="outline" className="text-xs">+{s.postalCodes.length - 6}</Badge>}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {(!clusterDialog.data.suggestions || clusterDialog.data.suggestions.length === 0) && !clusterDialog.data.message && (
-                <p className="text-sm text-muted-foreground text-center py-4">Inga klusterförslag genererade. Kontrollera att objekt har adresser.</p>
               )}
             </div>
           )}

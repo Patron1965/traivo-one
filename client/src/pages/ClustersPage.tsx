@@ -62,7 +62,6 @@ import {
   List,
   Map,
   MoreHorizontal,
-  Sparkles,
   Layers,
 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
@@ -408,10 +407,6 @@ export default function ClustersPage() {
             {quickStats.totalOrders} aktiva ordrar
           </Badge>
         )}
-        <Button variant="outline" onClick={() => navigate("/auto-cluster")} data-testid="button-auto-cluster">
-          <Sparkles className="mr-2 h-4 w-4" />
-          Auto-klustring
-        </Button>
         <Button variant="outline" onClick={handleOpenCreate} data-testid="button-create-cluster">
           <Plus className="mr-2 h-4 w-4" />
           Manuellt kluster
@@ -463,13 +458,9 @@ export default function ClustersPage() {
         loadingVariant="skeleton-rows"
         skeletonRows={6}
         emptyTitle="Inga kluster ännu"
-        emptyDescription="Kluster skapas automatiskt när objekt importeras eller läggs till med en kund. Du kan även skapa kluster manuellt eller använda auto-klustring."
+        emptyDescription="Kluster skapas automatiskt när objekt importeras eller läggs till med en kund. Du kan även skapa kluster manuellt."
         emptyAction={
           <div className="flex items-center justify-center gap-3">
-            <Button variant="outline" onClick={() => navigate("/auto-cluster")} data-testid="button-auto-cluster-empty">
-              <Sparkles className="mr-2 h-4 w-4" />
-              Auto-klustring
-            </Button>
             <Button variant="outline" onClick={handleOpenCreate} data-testid="button-create-cluster-empty">
               <Plus className="mr-2 h-4 w-4" />
               Manuellt kluster
