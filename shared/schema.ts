@@ -471,7 +471,12 @@ export const workOrderLines = pgTable("work_order_lines", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   workOrderId: varchar("work_order_id").references(() => workOrders.id).notNull(),
-  articleId: varchar("article_id").references(() => articles.id).notNull(),
+  // Nullable för fritext-/blindgångar-rader (Enkel uppgift) som saknar artikel.
+  // Måste antingen ha articleId ELLER description (valideras i route-lagret).
+  articleId: varchar("article_id").references(() => articles.id),
+  // Fritext-beskrivning för rader utan artikel (manuellt pris/tid sätts direkt
+  // på resolvedPrice/resolvedProductionMinutes). NULL för artikelrader.
+  description: text("description"),
   quantity: integer("quantity").default(1).notNull(),
   // Beräknat pris (från prislisthierarkin vid skapande)
   resolvedPrice: integer("resolved_price").default(0),

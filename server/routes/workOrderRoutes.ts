@@ -831,6 +831,13 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
     }
   }
 
+  // Enkel uppgift (Task #736): kund är valfri. Saknas customerId använder vi
+  // tenantens interna kund som beställare (DB-kolumnen är fortsatt NOT NULL).
+  if (!bodyData.customerId) {
+    const internalCustomer = await storage.resolveInternalCustomer(tenantId);
+    bodyData.customerId = internalCustomer.id;
+  }
+
   const data = insertWorkOrderSchema.parse({
     orderStatus: 'skapad',
     isSimulated: false,
@@ -1520,7 +1527,7 @@ app.get("/api/work-orders/:workOrderId/lines", asyncHandler(async (req, res) => 
     const article = line.articleId ? await storage.getArticle(line.articleId) : null;
     return {
       ...line,
-      articleName: article?.name || "Okänd artikel",
+      articleName: article?.name || line.description || "Fritext",
       articleDescription: article?.description,
     };
   }));
@@ -1535,9 +1542,34 @@ app.post("/api/work-orders/:workOrderId/lines", asyncHandler(async (req, res) =>
     throw new NotFoundError("Arbetsorder");
   }
 
-  const { articleId, quantity = 1, isOptional = false, notes, priceListId } = req.body;
+  const { articleId, quantity = 1, isOptional = false, notes, priceListId, description } = req.body;
+
+  // Enkel uppgift (Task #736): en rad är antingen en artikelrad (articleId) ELLER
+  // en fritext-/blindgångar-rad (description + manuellt pris/tid i öre/minuter).
   if (!articleId) {
-    throw new ValidationError("articleId is required");
+    const trimmedDescription = typeof description === "string" ? description.trim() : "";
+    if (!trimmedDescription) {
+      throw new ValidationError("Antingen articleId eller description krävs för en orderrad");
+    }
+    const unitPrice = Math.max(0, Math.round(Number(req.body.unitPrice ?? 0)));
+    const unitCost = Math.max(0, Math.round(Number(req.body.unitCost ?? 0)));
+    const productionMinutes = Math.max(0, Math.round(Number(req.body.productionMinutes ?? 0)));
+    const freeTextLineData = insertWorkOrderLineSchema.parse({
+      tenantId,
+      workOrderId: req.params.workOrderId,
+      articleId: null,
+      description: trimmedDescription,
+      quantity,
+      resolvedPrice: unitPrice,
+      resolvedCost: unitCost,
+      resolvedProductionMinutes: productionMinutes,
+      priceListIdUsed: null,
+      priceSource: "manual",
+      isOptional,
+      notes,
+    });
+    const freeTextLine = await storage.createWorkOrderLine(freeTextLineData);
+    return res.status(201).json(freeTextLine);
   }
 
   let priceInfo: { price: number; cost: number; productionMinutes: number; priceListId: string | null; source: string };

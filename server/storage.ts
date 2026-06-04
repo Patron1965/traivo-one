@@ -321,6 +321,7 @@ export interface IStorage {
     }>;
   }>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
+  resolveInternalCustomer(tenantId: string): Promise<Customer>;
   updateCustomer(id: string, customer: Partial<InsertCustomer>): Promise<Customer | undefined>;
   deleteCustomer(id: string): Promise<void>;
   restoreCustomer(id: string, tenantId: string): Promise<Customer | undefined>;
@@ -1712,6 +1713,28 @@ export class DatabaseStorage implements IStorage {
   async createCustomer(insertCustomer: InsertCustomer): Promise<Customer> {
     const [customer] = await db.insert(customers).values(insertCustomer).returning();
     return customer;
+  }
+
+  // Enkel uppgift (Task #736): löser ut tenantens interna kund som används som
+  // fallback-beställare när en enkel uppgift skapas utan vald kund. Identifieras
+  // via det stabila customerNumber-sentinelvärdet "INTERN" (per tenant). Skapar
+  // kunden vid första anropet. tenant_id finns i alla predicate (defense-in-depth).
+  async resolveInternalCustomer(tenantId: string): Promise<Customer> {
+    const [existing] = await db
+      .select()
+      .from(customers)
+      .where(and(
+        eq(customers.tenantId, tenantId),
+        eq(customers.customerNumber, "INTERN"),
+        isNull(customers.deletedAt),
+      ))
+      .limit(1);
+    if (existing) return existing;
+    return this.createCustomer({
+      tenantId,
+      name: "Intern uppgift",
+      customerNumber: "INTERN",
+    } as InsertCustomer);
   }
 
   async updateCustomer(id: string, data: Partial<InsertCustomer>): Promise<Customer | undefined> {

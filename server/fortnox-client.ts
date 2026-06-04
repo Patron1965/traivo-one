@@ -562,17 +562,32 @@ export async function exportWorkOrderToFortnox(
           continue;
         }
 
+        const quantity = line.quantity * (payerPercentage / 100);
+        const basePrice = Number(line.resolvedPrice ?? 0);
+        const price = useFrozen
+          ? Math.round(basePrice * scale * 100) / 100
+          : (line.resolvedPrice || undefined);
+
+        // Enkel uppgift (Task #736): fritext-/blindgångar-rader saknar artikel.
+        // De exporteras som en beskrivnings-rad utan ArticleNumber (samma mönster
+        // som manuella fakturarader) i stället för att tyst hoppas över.
+        if (!line.articleId) {
+          invoiceRows.push({
+            DeliveredQuantity: quantity,
+            Description: line.description || line.notes || "Fritextrad",
+            Price: price,
+            CostCenter: invoiceExport.costCenter || undefined,
+            Project: invoiceExport.project || undefined,
+          });
+          continue;
+        }
+
         const articleMapping = await storage.getFortnoxMapping(tenantId, "article", line.articleId);
         if (!articleMapping) {
           console.warn(`Article ${line.articleId} not mapped to Fortnox, skipping line`);
           continue;
         }
 
-        const quantity = line.quantity * (payerPercentage / 100);
-        const basePrice = Number(line.resolvedPrice ?? 0);
-        const price = useFrozen
-          ? Math.round(basePrice * scale * 100) / 100
-          : (line.resolvedPrice || undefined);
         invoiceRows.push({
           ArticleNumber: articleMapping.fortnoxId,
           DeliveredQuantity: quantity,
@@ -907,15 +922,29 @@ export async function exportConsolidatedInvoiceToFortnox(
         scale = currentTotal > 0 ? frozenTotal / currentTotal : 1;
       }
       for (const line of lines) {
+        const basePrice = Number(line.resolvedPrice ?? 0);
+        const price = useFrozen
+          ? Math.round(basePrice * scale * 100) / 100
+          : (line.resolvedPrice || undefined);
+
+        // Enkel uppgift (Task #736): fritext-/blindgångar-rader saknar artikel —
+        // exportera som beskrivnings-rad utan ArticleNumber i stället för att hoppa.
+        if (!line.articleId) {
+          invoiceRows.push({
+            DeliveredQuantity: line.quantity,
+            Description: line.description
+              || line.notes
+              || `${wo.title ?? "Arbetsorder"} (${woId.slice(0, 8)})`,
+            Price: price,
+          });
+          continue;
+        }
+
         const articleMapping = await storage.getFortnoxMapping(tenantId, "article", line.articleId);
         if (!articleMapping) {
           console.warn(`[consolidated-export] artikel ${line.articleId} saknar Fortnox-mapping, hoppar`);
           continue;
         }
-        const basePrice = Number(line.resolvedPrice ?? 0);
-        const price = useFrozen
-          ? Math.round(basePrice * scale * 100) / 100
-          : (line.resolvedPrice || undefined);
         invoiceRows.push({
           ArticleNumber: articleMapping.fortnoxId,
           DeliveredQuantity: line.quantity,
