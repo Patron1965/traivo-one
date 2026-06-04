@@ -877,7 +877,7 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
       });
     },
     onSuccess: (data: any) => {
-      toast({ title: "Metadata propagerad", description: `${data.inserted} nya, ${data.skipped} hoppade over` });
+      toast({ title: "Metadata propagerad", description: `${data.inserted} nya, ${data.updated ?? 0} uppdaterade, ${data.skipped} hoppade över` });
     },
     onError: () => {
       toast({ title: "Kunde inte propagera metadata", variant: "destructive" });

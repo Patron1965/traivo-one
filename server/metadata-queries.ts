@@ -1622,6 +1622,7 @@ export async function getLatestChangedAtForObjectMetadata(
 
 export interface PropagationResult {
   inserted: number;
+  updated: number;
   skipped: number;
   affectedObjectIds: string[];
 }
@@ -1649,7 +1650,7 @@ export async function propagateMetadataDown(
   const childIds = (descResult.rows as any[]).map(r => r.id);
 
   if (childIds.length === 0) {
-    return { inserted: 0, skipped: 0, affectedObjectIds: [] };
+    return { inserted: 0, updated: 0, skipped: 0, affectedObjectIds: [] };
   }
 
   // Task #710: mjuk-raderade förälder-rader (raderad=true) får aldrig propageras
@@ -1675,6 +1676,7 @@ export async function propagateMetadataDown(
     : await parentMetadataQuery;
 
   let inserted = 0;
+  let updated = 0;
   let skipped = 0;
   const affectedObjectIds: string[] = [];
 
@@ -1686,7 +1688,7 @@ export async function propagateMetadataDown(
 
     for (const childId of childIds) {
       const [existingLocal] = await db
-        .select({ id: metadataVarden.id })
+        .select()
         .from(metadataVarden)
         .where(and(
           eq(metadataVarden.objektId, childId),
@@ -1696,6 +1698,51 @@ export async function propagateMetadataDown(
         .limit(1);
 
       if (existingLocal) {
+        // Task #710: skilj ned-ärvda kopior (metod='arvd', ej raderade) från äkta
+        // overrides och tombstones. Tidigare propagerade kopior ska uppdateras när
+        // föräldern ändras; äkta overrides (annan metod) och mjuk-raderade rader
+        // (raderad=true) lämnas orörda så att lokala val/borttagningar bevaras.
+        if (existingLocal.metod === 'arvd' && !existingLocal.raderad) {
+          const oldDisplay = getDisplayValue(existingLocal);
+          const [updatedEntry] = await db
+            .update(metadataVarden)
+            .set({
+              vardeString: pm.vardeString,
+              vardeInteger: pm.vardeInteger,
+              vardeDecimal: pm.vardeDecimal,
+              vardeBoolean: pm.vardeBoolean,
+              vardeDatetime: pm.vardeDatetime,
+              vardeJson: pm.vardeJson,
+              vardeReferens: pm.vardeReferens,
+              uppdateradAv: propagatedBy ?? 'system',
+              updatedAt: new Date(),
+            })
+            .where(and(
+              eq(metadataVarden.id, existingLocal.id),
+              eq(metadataVarden.tenantId, tenantId),
+            ))
+            .returning();
+          const newDisplay = getDisplayValue(updatedEntry);
+          if (oldDisplay !== newDisplay) {
+            await db.insert(metadataHistorik).values({
+              tenantId,
+              metadataVardenId: updatedEntry.id,
+              objektId: childId,
+              metadataKatalogId: pm.metadataKatalogId,
+              gammaltVarde: oldDisplay,
+              nyttVarde: newDisplay,
+              andradAv: propagatedBy ?? 'system',
+              andringsMetod: 'arvd',
+            });
+            updated++;
+            if (!affectedObjectIds.includes(childId)) {
+              affectedObjectIds.push(childId);
+            }
+          } else {
+            skipped++;
+          }
+          continue;
+        }
         skipped++;
         continue;
       }
@@ -1746,7 +1793,7 @@ export async function propagateMetadataDown(
     }
   }
 
-  return { inserted, skipped, affectedObjectIds };
+  return { inserted, updated, skipped, affectedObjectIds };
 }
 
 // ============================================================================
@@ -1866,15 +1913,24 @@ export async function getPropagationPreview(
       if (existingLocal.stoppaVidareArvning) {
         blockedParentIds.add(desc.id);
       }
+      // Task #710: ned-ärvda kopior (metod='arvd', ej raderade) uppdateras vid
+      // propagering — visa dem som "will_receive". Äkta overrides och tombstones
+      // räknas som lokala och lämnas orörda.
+      const isRefreshableInherited =
+        existingLocal.metod === 'arvd' && !existingLocal.raderad;
       items.push({
         objektId: desc.id,
         objektNamn: desc.name,
         level: desc.level,
-        status: 'has_local',
+        status: isRefreshableInherited ? 'will_receive' : 'has_local',
         localValue: getDisplayValue(existingLocal),
         localMethod: existingLocal.metod,
       });
-      totalHasLocal++;
+      if (isRefreshableInherited) {
+        totalWillReceive++;
+      } else {
+        totalHasLocal++;
+      }
     } else {
       items.push({
         objektId: desc.id,

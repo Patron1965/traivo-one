@@ -1443,15 +1443,25 @@ export default function ObjectDetailPage() {
               {metadata.length > 0 ? (
                 <div className="divide-y">
                   {metadata.map((m, idx) => {
-                    const displayValue = m.vardeString ?? m.vardeInteger ?? m.vardeDecimal ??
-                      (m.vardeBoolean !== null && m.vardeBoolean !== undefined ? (m.vardeBoolean ? "Ja" : "Nej") : null) ??
-                      (m.vardeDatetime ? new Date(m.vardeDatetime).toLocaleDateString("sv-SE") : null) ??
-                      (m.vardeJson ? JSON.stringify(m.vardeJson) : null) ?? "—";
-                    const lastChanged = m.lastChangedAt ? new Date(m.lastChangedAt) : null;
-                    const showHistory = !!m.katalog?.kronologiskVisning;
                     const isInherited = m.source === "inherited";
                     const isSystem = isReadonlyMetadataOrigin(m.metod);
                     const isSoftDeleted = !!m.softDeleted || !!m.raderad;
+                    // Tombstone som stryker ett ärvt värde är en lokal rad
+                    // (source='local') men har upplöst ärvt ursprung. Visa då
+                    // ärvd-ursprung ("Ärvd från X") istället för "Egen".
+                    const isInheritedRemoval =
+                      isSoftDeleted && (m.inheritedFromName != null || m.inheritedValue != null);
+                    const isInheritedOrigin = isInherited || isInheritedRemoval;
+                    const rawDisplay = m.vardeString ?? m.vardeInteger ?? m.vardeDecimal ??
+                      (m.vardeBoolean !== null && m.vardeBoolean !== undefined ? (m.vardeBoolean ? "Ja" : "Nej") : null) ??
+                      (m.vardeDatetime ? new Date(m.vardeDatetime).toLocaleDateString("sv-SE") : null) ??
+                      (m.vardeJson ? JSON.stringify(m.vardeJson) : null) ?? null;
+                    // Tombstone utan eget värde: visa det borttagna ärvda värdet
+                    // (överstruket) så användaren ser exakt vad som togs bort.
+                    const displayValue =
+                      rawDisplay ?? (isSoftDeleted ? m.inheritedValue ?? null : null) ?? "—";
+                    const lastChanged = m.lastChangedAt ? new Date(m.lastChangedAt) : null;
+                    const showHistory = !!m.katalog?.kronologiskVisning;
                     return (
                       <div
                         key={m.id}
@@ -1509,7 +1519,7 @@ export default function ObjectDetailPage() {
                               </TooltipTrigger>
                               <TooltipContent>Automatiskt satt av systemet ({m.metod})</TooltipContent>
                             </Tooltip>
-                          ) : isInherited ? (
+                          ) : isInheritedOrigin ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Badge variant="outline" className="text-[10px] cursor-help inline-flex items-center gap-1" data-testid={`badge-metadata-origin-${m.id}`}>
@@ -1518,14 +1528,16 @@ export default function ObjectDetailPage() {
                                 </Badge>
                               </TooltipTrigger>
                               <TooltipContent>
-                                {m.fromObject?.namn ? `Ärvd från: ${m.fromObject.namn}` : "Ärvd från förälder"}
+                                {isInheritedRemoval
+                                  ? `Ärvt värde borttaget${m.inheritedFromName ? ` (från ${m.inheritedFromName})` : ""}`
+                                  : m.fromObject?.namn ? `Ärvd från: ${m.fromObject.namn}` : "Ärvd från förälder"}
                               </TooltipContent>
                             </Tooltip>
                           ) : (
                             <Badge variant="secondary" className="text-[10px]" data-testid={`badge-metadata-origin-${m.id}`}>Egen</Badge>
                           )}
                           {/* Override: lokalt värde som skiljer sig från ärvt */}
-                          {m.overridden && !isInherited && (
+                          {m.overridden && !isInheritedOrigin && (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Badge variant="outline" className="text-[10px] cursor-help border-warning text-warning" data-testid={`badge-metadata-overridden-${m.id}`}>
