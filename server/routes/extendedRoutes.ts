@@ -100,6 +100,11 @@ app.post("/api/public/report/:code", asyncHandler(async (req, res) => {
       throw new ValidationError("Kategori och titel krävs");
     }
 
+    // Task #714: felbeskrivning är obligatorisk för felanmälan.
+    if (!description || typeof description !== "string" || description.trim().length === 0) {
+      throw new ValidationError("Beskrivning krävs");
+    }
+
     // Task #714: validera foton hårt. Klienten får bara skicka bekräftade,
     // tenant-ägda /objects/-sökvägar (satta via confirm-upload). Vi verifierar
     // ACL-ägaren server-side så att foton från annan tenant eller godtyckliga

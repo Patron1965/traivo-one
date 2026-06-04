@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { z } from "zod";
-import { insertCustomerSchema, insertCustomerRelationshipSchema, insertObjectSchema, objects, customers, workOrders, CUSTOMER_HIERARCHY_TYPES, insertInvoiceRecipientSchema, INVOICE_RECIPIENT_LEVELS, type InvoiceRecipientLevel } from "@shared/schema";
+import { insertCustomerSchema, insertCustomerRelationshipSchema, insertObjectSchema, objects, customers, workOrders, workOrderLines, CUSTOMER_HIERARCHY_TYPES, insertInvoiceRecipientSchema, INVOICE_RECIPIENT_LEVELS, type InvoiceRecipientLevel } from "@shared/schema";
 import { formatZodError, verifyTenantOwnership } from "./helpers";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
@@ -732,7 +732,20 @@ app.get("/api/objects/:id/work-orders", asyncHandler(async (req, res) => {
   const objectOrders = allOrders
     .filter(wo => wo.objectId === req.params.id)
     .slice(0, 50);
-  res.json(objectOrders);
+
+  // Task #714: berika varje order med antal orderrader ("antal") för korten.
+  const orderIds = objectOrders.map(wo => wo.id);
+  const lineCounts = new Map<string, number>();
+  if (orderIds.length > 0) {
+    const rows = await db
+      .select({ workOrderId: workOrderLines.workOrderId, count: sql<number>`count(*)::int` })
+      .from(workOrderLines)
+      .where(and(eq(workOrderLines.tenantId, tenantId), inArray(workOrderLines.workOrderId, orderIds)))
+      .groupBy(workOrderLines.workOrderId);
+    for (const r of rows) lineCounts.set(r.workOrderId, Number(r.count) || 0);
+  }
+  const enriched = objectOrders.map(wo => ({ ...wo, lineCount: lineCounts.get(wo.id) ?? 0 }));
+  res.json(enriched);
 }));
 
 // Task #714: kronologisk lista över felanmälningar på ett objekt (för galleri

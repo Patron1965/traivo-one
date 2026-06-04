@@ -202,7 +202,7 @@ export default function PublicReportPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.category || !formData.title) {
+    if (!formData.category || !formData.title || !formData.description.trim()) {
       return;
     }
     submitMutation.mutate(formData);
@@ -269,7 +269,7 @@ export default function PublicReportPage() {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="description">Detaljerad beskrivning</Label>
+                  <Label htmlFor="description">Detaljerad beskrivning *</Label>
                   <Button
                     type="button"
                     variant="ghost"
@@ -293,6 +293,7 @@ export default function PublicReportPage() {
                   value={formData.description}
                   onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                   rows={3}
+                  required
                   data-testid="input-description"
                 />
               </div>
@@ -407,7 +408,7 @@ export default function PublicReportPage() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={!formData.category || !formData.title || submitMutation.isPending}
+                disabled={!formData.category || !formData.title || !formData.description.trim() || submitMutation.isPending}
                 data-testid="button-submit-report"
               >
                 {submitMutation.isPending ? (

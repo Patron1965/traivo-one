@@ -196,6 +196,7 @@ type WorkOrderListItem = Partial<Omit<WorkOrder, "id" | "scheduledDate">> & {
   id: string;
   scheduledDate?: string | Date | null;
   resourceName?: string;
+  lineCount?: number;
 };
 
 interface IssueReportItem {
@@ -1904,6 +1905,14 @@ export default function ObjectDetailPage() {
                     const isHighlighted = highlightedWorkOrderId === wo.id;
                     const isExpanded = expandedOrderId === wo.id;
                     const status = wo.orderStatus || "skapad";
+                    const activityTimestamps = [
+                      wo.invoicedAt, wo.completedAt, wo.inspectedAt, wo.onSiteAt,
+                      wo.onWayAt, wo.lockedAt, wo.frozenAt, wo.impossibleAt, wo.createdAt,
+                    ]
+                      .filter(Boolean)
+                      .map((t) => new Date(t as string | Date).getTime())
+                      .filter((t) => !Number.isNaN(t));
+                    const lastActivity = activityTimestamps.length > 0 ? Math.max(...activityTimestamps) : null;
                     const currentStep = ORDER_STATUSES.findIndex((s) => s.value === status);
                     const isTerminalSidetrack = status === "omojlig" || status === "avbruten";
                     return (
@@ -1950,6 +1959,18 @@ export default function ObjectDetailPage() {
                             <span className="flex items-center gap-1">
                               <Truck className="h-3 w-3" />
                               {wo.resourceName}
+                            </span>
+                          )}
+                          {typeof wo.lineCount === "number" && wo.lineCount > 0 && (
+                            <span className="flex items-center gap-1" data-testid={`text-workorder-linecount-${wo.id}`}>
+                              <ClipboardList className="h-3 w-3" />
+                              {wo.lineCount} rader
+                            </span>
+                          )}
+                          {lastActivity && (
+                            <span className="flex items-center gap-1" data-testid={`text-workorder-updated-${wo.id}`}>
+                              <Clock className="h-3 w-3" />
+                              Uppd. {new Date(lastActivity).toLocaleDateString("sv-SE")}
                             </span>
                           )}
                         </div>
