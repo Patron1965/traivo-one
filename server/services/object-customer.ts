@@ -1,6 +1,6 @@
-import { sql, and, eq, desc, asc, type SQL } from "drizzle-orm";
+import { sql, and, eq, desc, asc, isNull, type SQL } from "drizzle-orm";
 import { db } from "../db";
-import { objectPayers } from "@shared/schema";
+import { objectPayers, objects } from "@shared/schema";
 
 /**
  * SQL-fragment som returnerar primär-payer-customer_id för objects.id
@@ -66,6 +66,83 @@ export function objectHasNoPrimaryCustomerSql(tenantId: string): SQL<boolean> {
       AND c.tenant_id = ${tenantId}
       AND c.deleted_at IS NULL
   )`;
+}
+
+export interface ObjectTreeNode {
+  id: string;
+  name: string;
+  objectNumber: string | null;
+  objectType: string | null;
+  address: string | null;
+  customerId: string | null;
+  childCount: number;
+  children: ObjectTreeNode[];
+}
+
+/**
+ * Hämtar en nivå i objektträdet med korrekt antal direkta barn (childCount)
+ * per rad. Delas av `GET /api/objects/tree` och
+ * `GET /api/objects/tree/:parentId/children` så att child-count-logiken bor på
+ * ett enda ställe.
+ *
+ * parentId-semantik:
+ *   - icke-tom sträng → returnera direkta barn till den föräldern (eq parent_id)
+ *   - undefined/null/"" → returnera rot-objekt (parent_id IS NULL)
+ *
+ * customerId filtrerar både raderna och child-räknaren på primär-payer-kund.
+ *
+ * OBS childCountSql: literalen "objects"."id" är medveten — som scalar
+ * subselect i SELECT-listan renderar drizzle ${objects.id} okvalificerat som
+ * "id", vilket inuti subqueryn binder till inre "objects c" (c.parent_id = c.id)
+ * → alltid falskt → childCount = 0. Se memory drizzle-unqualified-subquery-column.
+ */
+export async function getObjectTreeLevel(
+  tenantId: string,
+  opts: { parentId?: string | null; customerId?: string | null } = {},
+): Promise<ObjectTreeNode[]> {
+  const parentId = opts.parentId && typeof opts.parentId === "string" ? opts.parentId : null;
+  const customerId = opts.customerId && typeof opts.customerId === "string" ? opts.customerId : null;
+
+  const parentFilter = parentId ? eq(objects.parentId, parentId) : isNull(objects.parentId);
+
+  const conditions = [
+    eq(objects.tenantId, tenantId),
+    isNull(objects.deletedAt),
+    parentFilter,
+  ];
+  if (customerId) {
+    conditions.push(objectHasPrimaryCustomerSql(customerId));
+  }
+
+  const customerFilter = customerId
+    ? sql` AND EXISTS (SELECT 1 FROM object_payers op WHERE op.object_id = c.id AND op.is_primary = true AND op.customer_id = ${customerId})`
+    : sql``;
+  const childCountSql = sql<number>`(SELECT count(*) FROM objects c WHERE c.parent_id = "objects"."id" AND c.tenant_id = ${tenantId} AND c.deleted_at IS NULL${customerFilter})`;
+
+  const rows = await db
+    .select({
+      id: objects.id,
+      name: objects.name,
+      objectNumber: objects.objectNumber,
+      objectType: objects.objectType,
+      address: objects.address,
+      customerId: primaryPayerCustomerIdSql(),
+      childCount: childCountSql,
+    })
+    .from(objects)
+    .where(and(...conditions))
+    .orderBy(objects.name);
+
+  return rows.map(r => ({
+    id: r.id,
+    name: r.name,
+    objectNumber: r.objectNumber,
+    objectType: r.objectType,
+    address: r.address,
+    customerId: r.customerId,
+    childCount: Number(r.childCount) || 0,
+    children: [],
+  }));
 }
 
 /**

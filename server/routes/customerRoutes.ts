@@ -8,7 +8,7 @@ import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { db } from "../db";
 import { eq, and, isNull, sql, or, inArray } from "drizzle-orm";
-import { primaryPayerCustomerIdSql, objectHasPrimaryCustomerSql } from "../services/object-customer";
+import { primaryPayerCustomerIdSql, getObjectTreeLevel } from "../services/object-customer";
 import { ensureClusterAndAssign } from "../auto-cluster";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
 import { copyObjectTree } from "../services/object-copy";
@@ -609,52 +609,11 @@ app.get("/api/objects/tree", asyncHandler(async (req, res) => {
     })));
   }
 
-  const parentFilter = parentId && typeof parentId === "string"
-    ? eq(objects.parentId, parentId)
-    : isNull(objects.parentId);
-
-  const conditions = [
-    eq(objects.tenantId, tenantId),
-    isNull(objects.deletedAt),
-    parentFilter,
-  ];
-  if (customerId && typeof customerId === "string") {
-    conditions.push(objectHasPrimaryCustomerSql(customerId));
-  }
-
-  const customerFilter = (customerId && typeof customerId === "string")
-    ? sql` AND EXISTS (SELECT 1 FROM object_payers op WHERE op.object_id = c.id AND op.is_primary = true AND op.customer_id = ${customerId})`
-    : sql``;
-  // OBS: skriv den kvalificerade literalen "objects"."id" — INTE ${objects.id}.
-  // Som SELECT-kolumn (scalar subselect) renderar drizzle ${objects.id} okvalificerat
-  // som "id", vilket inuti subqueryn binder till inre "objects c" → c.parent_id = c.id
-  // → alltid falskt → childCount = 0. Literalen tvingar korrelation mot yttre objects-raden.
-  const childCountSql = sql<number>`(SELECT count(*) FROM objects c WHERE c.parent_id = "objects"."id" AND c.tenant_id = ${tenantId} AND c.deleted_at IS NULL${customerFilter})`;
-
-  const rows = await db
-    .select({
-      id: objects.id,
-      name: objects.name,
-      objectNumber: objects.objectNumber,
-      objectType: objects.objectType,
-      address: objects.address,
-      customerId: primaryPayerCustomerIdSql(),
-      childCount: childCountSql,
-    })
-    .from(objects)
-    .where(and(...conditions))
-    .orderBy(objects.name);
-
-  res.json(rows.map(r => ({
-    id: r.id,
-    name: r.name,
-    objectNumber: r.objectNumber,
-    objectType: r.objectType,
-    address: r.address,
-    customerId: r.customerId,
-    childCount: Number(r.childCount) || 0,
-    children: [],
-  })));
+  const nodes = await getObjectTreeLevel(tenantId, {
+    parentId: typeof parentId === "string" ? parentId : null,
+    customerId: typeof customerId === "string" ? customerId : null,
+  });
+  res.json(nodes);
 }));
 
 app.get("/api/objects/tree/:parentId/children", asyncHandler(async (req, res) => {
@@ -662,45 +621,11 @@ app.get("/api/objects/tree/:parentId/children", asyncHandler(async (req, res) =>
   const { parentId } = req.params;
   const { customerId } = req.query;
 
-  const conditions = [
-    eq(objects.tenantId, tenantId),
-    isNull(objects.deletedAt),
-    eq(objects.parentId, parentId),
-  ];
-  if (customerId && typeof customerId === "string") {
-    conditions.push(objectHasPrimaryCustomerSql(customerId));
-  }
-
-  const customerFilter2 = (customerId && typeof customerId === "string")
-    ? sql` AND EXISTS (SELECT 1 FROM object_payers op WHERE op.object_id = c.id AND op.is_primary = true AND op.customer_id = ${customerId})`
-    : sql``;
-  // Se kommentar vid childCountSql ovan: literal "objects"."id" krävs i scalar subselect.
-  const childCountSql2 = sql<number>`(SELECT count(*) FROM objects c WHERE c.parent_id = "objects"."id" AND c.tenant_id = ${tenantId} AND c.deleted_at IS NULL${customerFilter2})`;
-
-  const rows = await db
-    .select({
-      id: objects.id,
-      name: objects.name,
-      objectNumber: objects.objectNumber,
-      objectType: objects.objectType,
-      address: objects.address,
-      customerId: primaryPayerCustomerIdSql(),
-      childCount: childCountSql2,
-    })
-    .from(objects)
-    .where(and(...conditions))
-    .orderBy(objects.name);
-
-  res.json(rows.map(r => ({
-    id: r.id,
-    name: r.name,
-    objectNumber: r.objectNumber,
-    objectType: r.objectType,
-    address: r.address,
-    customerId: r.customerId,
-    childCount: Number(r.childCount) || 0,
-    children: [],
-  })));
+  const nodes = await getObjectTreeLevel(tenantId, {
+    parentId,
+    customerId: typeof customerId === "string" ? customerId : null,
+  });
+  res.json(nodes);
 }));
 
 app.get("/api/objects/tree/:parentId/descendants", asyncHandler(async (req, res) => {
