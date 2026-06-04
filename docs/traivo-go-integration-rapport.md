@@ -65,8 +65,9 @@ men nämns så att ingen försöker nå dem från Go. Mobilens egna AI-rutter
 ## 3. Ny data på order/artikel som mobilen bör visa
 
 Sedan v2-handovern har work order- och artikel-modellen fått flera fält som är
-relevanta i fält. Vissa exponeras redan på mobil-rutterna, andra behöver en
-liten v2/v3-utökning (markerat **[behöver endpoint-utökning]**).
+relevanta i fält. De flesta exponeras nu på mobil-rutterna (markerat **[LIVE]**);
+enstaka fält surfar bara delvis och kan behöva en framtida v2/v3-utökning
+(markerat per avsnitt).
 
 ### 3.1 Frozen-pris (recap, v2)
 Oförändrat sedan v2-handovern: `frozen.{isFrozen, quantity, unitPrice, unitCost,
