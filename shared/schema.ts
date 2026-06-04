@@ -232,6 +232,13 @@ export const objects = pgTable("objects", {
   // och för "återställ"-flödet.
   archivedBy: varchar("archived_by"),
   archivedReason: text("archived_reason"),
+  // === Task #710: PER-OBJEKT METADATA-SORTERINGSORDNING ===
+  // Ordnad lista av metadata_katalog-id:n som styr i vilken ordning metadata-fält
+  // visas på just detta objekt (Session 7 §4 steg 3). Sorteringen ärvs NEDÅT:
+  // ett barn utan egen ordning använder närmaste förälders ordning i hierarkin,
+  // aldrig uppåt. NULL = ingen egen ordning (fall tillbaka på katalog-ordning /
+  // ärvd ordning). Expand-contract: nullable.
+  metadataFieldOrder: jsonb("metadata_field_order"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
@@ -4011,7 +4018,20 @@ export const metadataVarden = pgTable("metadata_varden", {
   uppdateradAv: varchar("uppdaterad_av", { length: 100 }),
   // Metod: manuell, automatisk, extern, utforande, arvd
   metod: varchar("metod", { length: 50 }).default("manuell"),
-  
+
+  // === Task #710: MJUK-RADERING (SOFT DELETE) AV METADATA-VÄRDEN ===
+  // En rad kan mjuk-raderas i stället för att tas bort hårt (Session 7 §4).
+  // Två fall:
+  //  1) Eget värde: `raderad=true` döljer värdet men bevarar raden + historik.
+  //  2) Ärvt värde som tas bort på barnnivå: en lokal "tombstone"-rad (utan eget
+  //     värde) med `raderad=true` skapas som negativ markering — den ärvda
+  //     värdet visas som "struken" och flödar inte ned vidare. Återställning tar
+  //     bort tombstonen (ärvt återkommer) eller nollar `raderad` (eget värde).
+  // Expand-contract: nullable/default så befintliga rader är oförändrade.
+  raderad: boolean("raderad").default(false).notNull(),
+  raderadAv: varchar("raderad_av", { length: 100 }),
+  raderadVid: timestamp("raderad_vid"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -4097,6 +4117,20 @@ export interface MetadataVardenWithKatalog extends MetadataVarden {
   // division med noll, cirkelreferens). Ordinarie rader lämnar fälten odefinierade.
   computed?: boolean;
   computedError?: string | null;
+  // === Task #710: ursprung, override & mjuk-radering (Session 7 §4) ===
+  // overridden: ett eget värde skuggar ett ärvbart förälder-värde ("Ärvd, men ändrad").
+  overridden?: boolean;
+  // Visningsvärdet för det ärvda värdet som skuggas/togs bort (för UI-text).
+  inheritedValue?: string | null;
+  // Namnet på objektet det ärvda värdet kommer ifrån (närmaste förälder med värde).
+  inheritedFromName?: string | null;
+  // softDeleted: värdet är mjuk-raderat (eget värde dolt, eller ärvt fält struket
+  // via en tombstone-rad på barnnivå). Visas överstruket med Återställ-möjlighet.
+  softDeleted?: boolean;
+  // OBS: `raderad` (raw tombstone/mjuk-raderings-flagga) ärvs från MetadataVarden
+  // (notNull boolean) och får inte redeklareras som optional här.
+  // Resolverad per-objekt sorteringsindex (lägre = högre upp). Saknas → katalog-ordning.
+  sortIndex?: number | null;
 }
 
 export interface ObjectWithAllMetadataEAV {

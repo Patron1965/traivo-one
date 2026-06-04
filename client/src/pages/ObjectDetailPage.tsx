@@ -28,7 +28,8 @@ import {
   Clock, Package, FileText, Image, Contact, GitFork, AlertTriangle,
   Calendar, Loader2, ChevronRight, ExternalLink, Wrench, Shield,
   Hash, Truck, Timer, Info, Box, Layers, ClipboardList, Plus,
-  Trash2, Pencil, Save, X, Phone, Mail, LinkIcon, Search, History
+  Trash2, Pencil, Save, X, Phone, Mail, LinkIcon, Search, History,
+  ArrowUp, ArrowDown, RotateCcw, Cog
 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -72,11 +73,24 @@ interface MetadataEntry {
   uppdateradAv?: string | null;
   lastChangedAt?: string | null;
   source?: "inherited" | "direct" | string;
-  fromObject?: { name?: string } | null;
+  fromObject?: { namn?: string } | null;
+  overridden?: boolean;
+  inheritedValue?: string | null;
+  inheritedFromName?: string | null;
+  softDeleted?: boolean;
+  raderad?: boolean;
+  sortIndex?: number | null;
 }
 
 interface MetadataResponse {
   metadata?: MetadataEntry[];
+}
+
+// Ursprung som är read-only / systemgenererat (speglar server-sidans
+// READONLY_ORIGIN i metadata-queries.ts: system/tjanst/utforande).
+const READONLY_METADATA_ORIGINS = new Set(["system", "tjanst", "utforande"]);
+function isReadonlyMetadataOrigin(metod?: string | null): boolean {
+  return !!metod && READONLY_METADATA_ORIGINS.has(metod);
 }
 
 // Task #682 introducerade systemfälten nedan (skrivs read-only vid WO-skapande /
@@ -640,6 +654,63 @@ export default function ObjectDetailPage() {
       toast({ title: "Kunde inte ta bort metadata", description: error.message, variant: "destructive" });
     },
   });
+
+  const metadataActor = user?.email ?? user?.id ?? undefined;
+
+  const softDeleteMetadataMutation = useMutation({
+    mutationFn: async (katalogId: string) => {
+      await apiRequest("DELETE", `/api/metadata/objects/${objectId}/field/${katalogId}`, { raderadAv: metadataActor });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/metadata/objects", objectId] });
+      toast({ title: "Metadata borttagen" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort metadata", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const restoreMetadataMutation = useMutation({
+    mutationFn: async (katalogId: string) => {
+      await apiRequest("POST", `/api/metadata/objects/${objectId}/field/${katalogId}/restore`, { restoredBy: metadataActor });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/metadata/objects", objectId] });
+      toast({ title: "Metadata återställd" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte återställa metadata", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const reorderMetadataMutation = useMutation({
+    mutationFn: async (orderedKatalogIds: string[]) => {
+      await apiRequest("PUT", `/api/metadata/objects/${objectId}/order`, { orderedKatalogIds });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/metadata/objects", objectId] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte spara sorteringsordning", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Flytta ett metadata-fält upp/ner och spara hela ordningen (katalog-id-lista).
+  const moveMetadata = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= metadata.length) return;
+    const ids = metadata
+      .map((m) => m.metadataKatalogId)
+      .filter((id): id is string => !!id);
+    const fromId = metadata[index]?.metadataKatalogId;
+    const toId = metadata[target]?.metadataKatalogId;
+    if (!fromId || !toId) return;
+    const fromPos = ids.indexOf(fromId);
+    const toPos = ids.indexOf(toId);
+    if (fromPos < 0 || toPos < 0) return;
+    [ids[fromPos], ids[toPos]] = [ids[toPos], ids[fromPos]];
+    reorderMetadataMutation.mutate(ids);
+  };
 
   const createWorkOrderMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -1371,18 +1442,51 @@ export default function ObjectDetailPage() {
             <CardContent>
               {metadata.length > 0 ? (
                 <div className="divide-y">
-                  {metadata.map((m) => {
+                  {metadata.map((m, idx) => {
                     const displayValue = m.vardeString ?? m.vardeInteger ?? m.vardeDecimal ??
                       (m.vardeBoolean !== null && m.vardeBoolean !== undefined ? (m.vardeBoolean ? "Ja" : "Nej") : null) ??
                       (m.vardeDatetime ? new Date(m.vardeDatetime).toLocaleDateString("sv-SE") : null) ??
                       (m.vardeJson ? JSON.stringify(m.vardeJson) : null) ?? "—";
                     const lastChanged = m.lastChangedAt ? new Date(m.lastChangedAt) : null;
                     const showHistory = !!m.katalog?.kronologiskVisning;
+                    const isInherited = m.source === "inherited";
+                    const isSystem = isReadonlyMetadataOrigin(m.metod);
+                    const isSoftDeleted = !!m.softDeleted || !!m.raderad;
                     return (
-                      <div key={m.id} className="flex items-center justify-between py-3 gap-2" data-testid={`metadata-row-${m.id}`}>
+                      <div
+                        key={m.id}
+                        className={`flex items-center justify-between py-3 gap-2 ${isSoftDeleted ? "opacity-60" : ""}`}
+                        data-testid={`metadata-row-${m.id}`}
+                      >
                         <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium">{m.katalog?.namn || "—"}</div>
-                          <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <div className="flex flex-col gap-0.5">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-4 w-5 p-0 text-muted-foreground"
+                                disabled={idx === 0 || reorderMetadataMutation.isPending}
+                                onClick={() => moveMetadata(idx, -1)}
+                                data-testid={`button-metadata-up-${m.id}`}
+                                aria-label="Flytta upp"
+                              >
+                                <ArrowUp className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-4 w-5 p-0 text-muted-foreground"
+                                disabled={idx === metadata.length - 1 || reorderMetadataMutation.isPending}
+                                onClick={() => moveMetadata(idx, 1)}
+                                data-testid={`button-metadata-down-${m.id}`}
+                                aria-label="Flytta ner"
+                              >
+                                <ArrowDown className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            <div className={`text-sm font-medium ${isSoftDeleted ? "line-through" : ""}`}>{m.katalog?.namn || "—"}</div>
+                          </div>
+                          <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap pl-7">
                             {m.katalog?.kategori && <span>{m.katalog.kategori}</span>}
                             {m.metod && <span>{m.metod}</span>}
                             {lastChanged && (
@@ -1394,14 +1498,44 @@ export default function ObjectDetailPage() {
                           </div>
                         </div>
                         <div className="text-sm font-mono text-right flex items-center gap-2 shrink-0">
-                          {String(displayValue)}
-                          {m.source === "inherited" && (
+                          <span className={isSoftDeleted ? "line-through" : ""}>{String(displayValue)}</span>
+                          {/* Ursprungsbadge: Systemgenererad / Ärvd (ev. ändrad) / Egen */}
+                          {isSystem ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Badge variant="outline" className="text-[10px] cursor-help">Ärvd</Badge>
+                                <Badge variant="outline" className="text-[10px] cursor-help inline-flex items-center gap-1" data-testid={`badge-metadata-origin-${m.id}`}>
+                                  <Cog className="h-3 w-3" /> Systemgenererad
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>Automatiskt satt av systemet ({m.metod})</TooltipContent>
+                            </Tooltip>
+                          ) : isInherited ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="outline" className="text-[10px] cursor-help inline-flex items-center gap-1" data-testid={`badge-metadata-origin-${m.id}`}>
+                                  <LinkIcon className="h-3 w-3" />
+                                  {m.inheritedFromName || m.fromObject?.namn ? `Ärvd från ${m.inheritedFromName || m.fromObject?.namn}` : "Ärvd"}
+                                </Badge>
                               </TooltipTrigger>
                               <TooltipContent>
-                                {m.fromObject?.name ? `Ärvd från: ${m.fromObject.name}` : "Ärvd från förälder"}
+                                {m.fromObject?.namn ? `Ärvd från: ${m.fromObject.namn}` : "Ärvd från förälder"}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <Badge variant="secondary" className="text-[10px]" data-testid={`badge-metadata-origin-${m.id}`}>Egen</Badge>
+                          )}
+                          {/* Override: lokalt värde som skiljer sig från ärvt */}
+                          {m.overridden && !isInherited && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="outline" className="text-[10px] cursor-help border-warning text-warning" data-testid={`badge-metadata-overridden-${m.id}`}>
+                                  Ärvd, men ändrad
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {m.inheritedValue != null
+                                  ? `Ärvt värde: ${m.inheritedValue}${m.inheritedFromName ? ` (från ${m.inheritedFromName})` : ""}`
+                                  : "Skiljer sig från ärvt värde"}
                               </TooltipContent>
                             </Tooltip>
                           )}
@@ -1412,13 +1546,26 @@ export default function ObjectDetailPage() {
                               katalogNamn={m.katalog?.namn || ""}
                             />
                           )}
-                          {m.source !== "inherited" && (
+                          {/* Återställ mjuk-raderat fält */}
+                          {isSoftDeleted ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={() => restoreMetadataMutation.mutate(m.metadataKatalogId || "")}
+                              disabled={restoreMetadataMutation.isPending || !m.metadataKatalogId}
+                              data-testid={`button-restore-metadata-${m.id}`}
+                              aria-label="Återställ"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : !isSystem && (
                             <Button
                               variant="ghost"
                               size="sm"
                               className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                              onClick={() => deleteMetadataMutation.mutate(m.id)}
-                              disabled={deleteMetadataMutation.isPending}
+                              onClick={() => softDeleteMetadataMutation.mutate(m.metadataKatalogId || "")}
+                              disabled={softDeleteMetadataMutation.isPending || !m.metadataKatalogId}
                               data-testid={`button-delete-metadata-${m.id}`}
                             >
                               <Trash2 className="h-3.5 w-3.5" />

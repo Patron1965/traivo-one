@@ -42,6 +42,24 @@ export function isReadonlyOrigin(metod?: string | null): boolean {
   return metod != null && READONLY_ORIGIN_METHODS.has(metod);
 }
 
+// Kastas när en manuell mutation försöker röra ett systemgenererat/read-only
+// metadatafält. Mappas till HTTP 403 i route-lagret.
+export class ReadonlyMetadataError extends Error {
+  constructor(message = 'Systemgenererat metadatafält kan inte ändras manuellt') {
+    super(message);
+    this.name = 'ReadonlyMetadataError';
+  }
+}
+
+// Kastas vid ogiltig metadata-input (t.ex. okända katalog-id i sorteringsordning).
+// Mappas till HTTP 400 i route-lagret.
+export class InvalidMetadataInputError extends Error {
+  constructor(message = 'Ogiltig metadata-input') {
+    super(message);
+    this.name = 'InvalidMetadataInputError';
+  }
+}
+
 export function getDisplayValue(existing: MetadataVarden): string | null {
   return existing.vardeString ?? 
     (existing.vardeInteger != null ? String(existing.vardeInteger) : null) ??
@@ -453,6 +471,7 @@ export async function getObjectWithAllMetadata(
         mv.skapad_av,
         mv.uppdaterad_av,
         mv.metod,
+        mv.raderad,
         mv.created_at,
         mv.updated_at,
         mk.id as katalog_id,
@@ -490,9 +509,12 @@ export async function getObjectWithAllMetadata(
       INNER JOIN metadata_katalog mk ON mv.metadata_katalog_id = mk.id
       WHERE
         -- Include if local OR (inheritable AND not blocked by stoppa_vidare_arvning AND not niva_las)
+        -- Task #710: mjuk-raderade förälder-rader (raderad=TRUE) ärvs aldrig nedåt —
+        -- ett borttaget värde ska inte flöda till barn. Lokala rader (inkl. tombstones)
+        -- behålls alltid så att den strukna markeringen kan visas på objektets egen nivå.
         (
           mv.objekt_id = ${objektId} 
-          OR (mv.arvs_nedat = TRUE AND COALESCE(mv.niva_las, FALSE) = FALSE AND NOT (mv.metadata_katalog_id = ANY(pc.blocked_katalog_ids)))
+          OR (mv.arvs_nedat = TRUE AND COALESCE(mv.niva_las, FALSE) = FALSE AND COALESCE(mv.raderad, FALSE) = FALSE AND NOT (mv.metadata_katalog_id = ANY(pc.blocked_katalog_ids)))
         )
         AND mv.tenant_id = ${tenantId}
         AND mk.tenant_id = ${tenantId}
@@ -530,9 +552,36 @@ export async function getObjectWithAllMetadata(
 
   const metadataWithKatalog: MetadataVardenWithKatalog[] = [];
 
+  // Task #710: visningsvärde för en rå CTE-rad (snake_case) — speglar getDisplayValue.
+  const rawRowDisplay = (r: any): string | null =>
+    r.varde_string ??
+    (r.varde_integer != null ? String(r.varde_integer) : null) ??
+    (r.varde_decimal != null ? String(r.varde_decimal) : null) ??
+    (r.varde_boolean != null ? String(r.varde_boolean) : null) ??
+    (r.varde_datetime ? new Date(r.varde_datetime).toISOString() : null) ??
+    (r.varde_json ? JSON.stringify(r.varde_json) : null) ??
+    r.varde_referens ??
+    null;
+
   for (const katalogId of katalogOrder) {
     const group = rowsByKatalog.get(katalogId)!;
     const nearest = group[0];
+
+    // Task #710: ursprung/override/mjuk-radering per katalog-grupp. Gruppen är
+    // ordnad närmast-först; den lokala raden (om någon) ligger först, ärvda rader
+    // (source='inherited') följer. En lokal rad bredvid en ärvbar förälder-rad =
+    // override ("Ärvd, men ändrad"). En lokal rad med raderad=TRUE = mjuk-raderad
+    // (eget värde dolt, eller tombstone som stryker ett ärvt värde).
+    const nearestIsLocal = nearest.objekt_id === objektId;
+    const inheritedRow = group.find((r) => r.source === "inherited");
+    const hasLocalShadow = nearestIsLocal && inheritedRow != null;
+    const softDeleted = nearestIsLocal && nearest.raderad === true;
+    const nearestHasOwnValue = rawRowDisplay(nearest) != null;
+    const overridden = hasLocalShadow && !softDeleted && nearestHasOwnValue;
+    const inheritedValue =
+      hasLocalShadow || softDeleted ? (inheritedRow ? rawRowDisplay(inheritedRow) : null) : null;
+    const inheritedFromName =
+      hasLocalShadow || softDeleted ? (inheritedRow?.from_objekt_namn ?? null) : null;
 
     // Sammansatta json-fält: merga underfält över alla nivåer (närmaste först).
     // Övriga datatyper: använd närmaste värdet oförändrat.
@@ -591,6 +640,12 @@ export async function getObjectWithAllMetadata(
         namn: nearest.from_objekt_namn,
         level: nearest.level,
       } : undefined,
+      // Task #710
+      overridden,
+      inheritedValue,
+      inheritedFromName,
+      softDeleted,
+      raderad: nearest.raderad === true,
     });
   }
 
@@ -732,6 +787,48 @@ export async function getObjectWithAllMetadata(
         });
       }
     }
+  }
+
+  // Task #710: per-objekt sorteringsordning. Hämta närmaste icke-null
+  // `metadata_field_order` uppåt i förälderkedjan (ordningen ärvs nedåt, aldrig
+  // uppåt). Fält som finns i ordningen sorteras enligt den; övriga behåller sin
+  // nuvarande relativa ordning (katalog-kategori/sort_order) efteråt.
+  const orderRes = await db.execute(sql`
+    WITH RECURSIVE chain AS (
+      SELECT id, parent_id, metadata_field_order, 0 AS depth
+      FROM objects
+      WHERE id = ${objektId} AND tenant_id = ${tenantId}
+      UNION ALL
+      SELECT o.id, o.parent_id, o.metadata_field_order, c.depth + 1
+      FROM objects o
+      INNER JOIN chain c ON o.id = c.parent_id
+      WHERE o.tenant_id = ${tenantId}
+    )
+    SELECT metadata_field_order
+    FROM chain
+    WHERE metadata_field_order IS NOT NULL
+    ORDER BY depth ASC
+    LIMIT 1
+  `);
+  const fieldOrder = orderRes.rows[0]?.metadata_field_order as string[] | null | undefined;
+  if (Array.isArray(fieldOrder) && fieldOrder.length > 0) {
+    const orderIndex = new Map<string, number>();
+    fieldOrder.forEach((kid, i) => orderIndex.set(kid, i));
+    filteredMetadata.forEach((m) => {
+      m.sortIndex = orderIndex.has(m.metadataKatalogId)
+        ? orderIndex.get(m.metadataKatalogId)!
+        : null;
+    });
+    const decorated = filteredMetadata.map((m, i) => ({ m, i }));
+    decorated.sort((a, b) => {
+      const ai = a.m.sortIndex ?? null;
+      const bi = b.m.sortIndex ?? null;
+      if (ai != null && bi != null) return ai - bi || a.i - b.i;
+      if (ai != null) return -1;
+      if (bi != null) return 1;
+      return a.i - b.i;
+    });
+    filteredMetadata = decorated.map((x) => x.m);
   }
 
   return {
@@ -1236,6 +1333,227 @@ export async function deleteMetadata(
 }
 
 // ============================================================================
+// Task #710: MJUK-RADERING & ÅTERSTÄLLNING AV OBJEKT-METADATA (Session 7 §4)
+// ============================================================================
+
+// Bygg getDisplayValue-kompatibelt objekt från en rå (snake_case) varden-rad.
+function rawVardenForDisplay(existing: any): any {
+  return {
+    vardeString: existing.varde_string ?? existing.vardeString ?? null,
+    vardeInteger: existing.varde_integer ?? existing.vardeInteger ?? null,
+    vardeDecimal: existing.varde_decimal ?? existing.vardeDecimal ?? null,
+    vardeBoolean: existing.varde_boolean ?? existing.vardeBoolean ?? null,
+    vardeDatetime: existing.varde_datetime ?? existing.vardeDatetime ?? null,
+    vardeJson: existing.varde_json ?? existing.vardeJson ?? null,
+    vardeReferens: existing.varde_referens ?? existing.vardeReferens ?? null,
+  };
+}
+
+// Mjuk-raderar ett metadata-fält på ett objekt. Två fall:
+//  - Lokal rad finns: sätt raderad=true (eget värde döljs men bevaras + historik).
+//  - Endast ärvt värde: skapa en lokal "tombstone"-rad (utan eget värde,
+//    arvs_nedat=false, raderad=true) som negativt markerar fältet som borttaget;
+//    det ärvda värdet visas struket och flödar inte vidare nedåt.
+// Idempotent: redan mjuk-raderat fält ger ingen ändring.
+export async function softDeleteObjectMetadata(
+  objektId: string,
+  metadataKatalogId: string,
+  tenantId: string,
+  raderadAv?: string,
+  metod?: string,
+): Promise<void> {
+  const methodLabel = metod ?? 'mjuk-radering';
+  const actor = raderadAv ?? 'system';
+  // Pre-state: resolvera nuvarande (ev. ärvda) visningsvärde för historiken.
+  const obj = await getObjectWithAllMetadata(objektId, tenantId);
+  const entry = obj?.metadata.find((m) => m.metadataKatalogId === metadataKatalogId);
+  // Inget synligt värde (varken eget eller ärvt) → inget att radera. No-op för att
+  // undvika "phantom"-tombstones / audit-brus.
+  if (!entry) {
+    return;
+  }
+  const inheritedDisplay = getDisplayValue(entry as any);
+  // Systemgenererade/read-only-värden får inte mjuk-raderas manuellt (speglar
+  // create/update-skyddet som kollar isSystem/automatiskt ursprung).
+  if (isReadonlyOrigin(entry?.metod)) {
+    throw new ReadonlyMetadataError();
+  }
+
+  await db.transaction(async (tx) => {
+    // Lås ALLA lokala rader för katalogen (allowDuplicates-kataloger kan ha
+    // flera) — deterministisk ordning och fullständig hantering. Att radera
+    // "fältet" tar bort samtliga värden på objektet.
+    const lockedRows = await tx.execute(sql`
+      SELECT * FROM metadata_varden
+      WHERE objekt_id = ${objektId}
+        AND metadata_katalog_id = ${metadataKatalogId}
+        AND tenant_id = ${tenantId}
+      ORDER BY created_at ASC, id ASC
+      FOR UPDATE
+    `);
+    const existingRows = lockedRows.rows as any[];
+
+    if (existingRows.length > 0) {
+      for (const existing of existingRows) {
+        if (existing.raderad === true) continue; // redan mjuk-raderad — idempotent
+        await tx
+          .update(metadataVarden)
+          .set({ raderad: true, raderadAv: actor, raderadVid: new Date(), uppdateradAv: actor })
+          .where(and(eq(metadataVarden.id, existing.id), eq(metadataVarden.tenantId, tenantId)));
+
+        await tx.insert(metadataHistorik).values({
+          tenantId,
+          metadataVardenId: existing.id,
+          objektId,
+          metadataKatalogId,
+          gammaltVarde: getDisplayValue(rawVardenForDisplay(existing)),
+          nyttVarde: null,
+          andradAv: actor,
+          andringsMetod: methodLabel,
+        });
+      }
+    } else {
+      // Inget lokalt värde → skapa tombstone som stryker det ärvda värdet.
+      const [tomb] = await tx
+        .insert(metadataVarden)
+        .values({
+          tenantId,
+          objektId,
+          metadataKatalogId,
+          arvsNedat: false,
+          nivaLas: false,
+          raderad: true,
+          raderadAv: actor,
+          raderadVid: new Date(),
+          skapadAv: actor,
+          metod: methodLabel,
+        })
+        .returning();
+
+      await tx.insert(metadataHistorik).values({
+        tenantId,
+        metadataVardenId: tomb.id,
+        objektId,
+        metadataKatalogId,
+        gammaltVarde: inheritedDisplay,
+        nyttVarde: null,
+        andradAv: actor,
+        andringsMetod: methodLabel,
+      });
+    }
+  });
+}
+
+// Återställer ett mjuk-raderat metadata-fält.
+//  - Tombstone (ingen egen data): ta bort raden → det ärvda värdet återkommer.
+//  - Eget mjuk-raderat värde: nolla raderad-flaggan → värdet visas igen.
+// Idempotent: fält som inte är mjuk-raderat ger ingen ändring.
+export async function restoreObjectMetadata(
+  objektId: string,
+  metadataKatalogId: string,
+  tenantId: string,
+  restoredBy?: string,
+): Promise<void> {
+  const actor = restoredBy ?? 'system';
+  // Pre-state: det ärvda värde som återkommer om vi tar bort en tombstone.
+  const obj = await getObjectWithAllMetadata(objektId, tenantId);
+  const entry = obj?.metadata.find((m) => m.metadataKatalogId === metadataKatalogId);
+  const inheritedDisplay = entry?.inheritedValue ?? null;
+
+  await db.transaction(async (tx) => {
+    // Lås ALLA rader för katalogen (allowDuplicates kan ha flera) i
+    // deterministisk ordning och återställ samtliga mjuk-raderade.
+    const lockedRows = await tx.execute(sql`
+      SELECT * FROM metadata_varden
+      WHERE objekt_id = ${objektId}
+        AND metadata_katalog_id = ${metadataKatalogId}
+        AND tenant_id = ${tenantId}
+      ORDER BY created_at ASC, id ASC
+      FOR UPDATE
+    `);
+    const existingRows = lockedRows.rows as any[];
+    if (existingRows.length === 0) return; // inget lokalt att återställa
+
+    for (const existing of existingRows) {
+      if (existing.raderad !== true) continue; // ej mjuk-raderad — idempotent
+
+      const ownDisplay = getDisplayValue(rawVardenForDisplay(existing));
+      const isTombstone = ownDisplay == null;
+
+      if (isTombstone) {
+        await tx.delete(metadataVarden).where(
+          and(eq(metadataVarden.id, existing.id), eq(metadataVarden.tenantId, tenantId)),
+        );
+        await tx.insert(metadataHistorik).values({
+          tenantId,
+          metadataVardenId: existing.id,
+          objektId,
+          metadataKatalogId,
+          gammaltVarde: null,
+          nyttVarde: inheritedDisplay,
+          andradAv: actor,
+          andringsMetod: 'aterstalld',
+        });
+      } else {
+        await tx
+          .update(metadataVarden)
+          .set({ raderad: false, raderadAv: null, raderadVid: null, uppdateradAv: actor })
+          .where(and(eq(metadataVarden.id, existing.id), eq(metadataVarden.tenantId, tenantId)));
+        await tx.insert(metadataHistorik).values({
+          tenantId,
+          metadataVardenId: existing.id,
+          objektId,
+          metadataKatalogId,
+          gammaltVarde: null,
+          nyttVarde: ownDisplay,
+          andradAv: actor,
+          andringsMetod: 'aterstalld',
+        });
+      }
+    }
+  });
+}
+
+// Sätter per-objekt sorteringsordning för metadata-fält (ordnad lista av
+// katalog-id:n). Ordningen ärvs nedåt i hierarkin. Tenant-scoped.
+export async function setObjectMetadataOrder(
+  objektId: string,
+  tenantId: string,
+  orderedKatalogIds: string[],
+): Promise<void> {
+  // Deduplicera medan ordningen bevaras (första förekomst vinner).
+  const deduped = Array.from(new Set(orderedKatalogIds));
+  // Validera att varje katalog-id finns för denna tenant — annars riskerar vi att
+  // persista skräp/cross-tenant-id:n i objects.metadata_field_order.
+  if (deduped.length > 0) {
+    const existing = await db
+      .select({ id: metadataKatalog.id })
+      .from(metadataKatalog)
+      .where(
+        and(
+          eq(metadataKatalog.tenantId, tenantId),
+          inArray(metadataKatalog.id, deduped),
+        ),
+      );
+    const existingIds = new Set(existing.map((r) => r.id));
+    const unknown = deduped.filter((id) => !existingIds.has(id));
+    if (unknown.length > 0) {
+      throw new InvalidMetadataInputError(
+        `Okända metadata-katalog-id i sorteringsordning: ${unknown.join(', ')}`,
+      );
+    }
+  }
+  const res = await db
+    .update(objects)
+    .set({ metadataFieldOrder: deduped })
+    .where(and(eq(objects.id, objektId), eq(objects.tenantId, tenantId)))
+    .returning({ id: objects.id });
+  if (res.length === 0) {
+    throw new Error('Objekt hittades inte');
+  }
+}
+
+// ============================================================================
 // Task #579: HÄMTA HISTORIK PER (OBJEKT, DEFINITION)
 // Kronologisk tidslinje för ett specifikt fält på ett objekt — fungerar även
 // efter att själva metadata_varden-raden har raderats (cascade), eftersom vi
@@ -1334,13 +1652,16 @@ export async function propagateMetadataDown(
     return { inserted: 0, skipped: 0, affectedObjectIds: [] };
   }
 
+  // Task #710: mjuk-raderade förälder-rader (raderad=true) får aldrig propageras
+  // nedåt — ett borttaget värde ska inte återskapas på barn.
   let parentMetadataQuery = db
     .select()
     .from(metadataVarden)
     .where(and(
       eq(metadataVarden.objektId, objektId),
       eq(metadataVarden.tenantId, tenantId),
-      eq(metadataVarden.arvsNedat, true)
+      eq(metadataVarden.arvsNedat, true),
+      eq(metadataVarden.raderad, false)
     ));
 
   const parentMetadata = metadataKatalogId
@@ -1348,6 +1669,7 @@ export async function propagateMetadataDown(
         eq(metadataVarden.objektId, objektId),
         eq(metadataVarden.tenantId, tenantId),
         eq(metadataVarden.arvsNedat, true),
+        eq(metadataVarden.raderad, false),
         eq(metadataVarden.metadataKatalogId, metadataKatalogId)
       ))
     : await parentMetadataQuery;

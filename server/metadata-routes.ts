@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { z, ZodError } from "zod";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
-import { metadataKatalog, metadataKatalogKunder, metadataAreas, metadataVarden, articles, customers } from "@shared/schema";
+import { metadataKatalog, metadataKatalogKunder, metadataAreas, metadataVarden, articles, customers, objects } from "@shared/schema";
 import { inArray } from "drizzle-orm";
 import { getErrorMessage } from "./routes/helpers";
 import { parseFormula } from "./metadata-formula";
@@ -13,6 +13,11 @@ import {
   createMetadata,
   updateMetadata,
   deleteMetadata,
+  softDeleteObjectMetadata,
+  restoreObjectMetadata,
+  setObjectMetadataOrder,
+  ReadonlyMetadataError,
+  InvalidMetadataInputError,
   getCrossFertilizedMetadata,
   getGeographicPosition,
   getClusterTree,
@@ -1168,6 +1173,150 @@ metadataRouter.get(
     } catch (error) {
       console.error("Error fetching metadata definition history:", error);
       res.status(500).json({ error: "Kunde inte hämta historik för fältet" });
+    }
+  },
+);
+
+// ============================================================================
+// Task #710: MJUK-RADERING, ÅTERSTÄLLNING & SORTERINGSORDNING (Session 7 §4)
+// ============================================================================
+
+// Verifiera att objekt + katalog-definition tillhör tenant innan mutation, så att
+// gissade id:n inte kan röra annan tenants data (defense-in-depth).
+async function assertObjectAndKatalogInTenant(
+  objectId: string,
+  katalogId: string,
+  tenantId: string,
+): Promise<{ ok: boolean; status?: number; error?: string; isSystem?: boolean }> {
+  const [obj] = await db
+    .select({ id: objects.id })
+    .from(objects)
+    .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)))
+    .limit(1);
+  if (!obj) return { ok: false, status: 404, error: "Objekt hittades inte" };
+  const [katalog] = await db
+    .select({ id: metadataKatalog.id, isSystem: metadataKatalog.isSystem })
+    .from(metadataKatalog)
+    .where(and(eq(metadataKatalog.id, katalogId), eq(metadataKatalog.tenantId, tenantId)))
+    .limit(1);
+  if (!katalog) return { ok: false, status: 404, error: "Metadatadefinition hittades inte" };
+  return { ok: true, isSystem: katalog.isSystem };
+}
+
+const softDeleteSchema = z.object({
+  raderadAv: z.string().optional(),
+  metod: z.string().optional(),
+});
+
+// Mjuk-radera ett metadata-fält på ett objekt (eget värde döljs eller ärvt värde
+// stryks via tombstone). Bevarar historik. Idempotent.
+metadataRouter.delete(
+  "/objects/:objectId/field/:katalogId",
+  async (req: Request, res: Response) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!tenantId) {
+        return res.status(401).json({ error: "Ingen tenant hittad" });
+      }
+      const { objectId, katalogId } = req.params;
+      const validated = softDeleteSchema.parse(req.body ?? {});
+      // Härled aktör från autentiserad identitet (audit-integritet) — ignorera
+      // klient-angiven raderadAv om en serversession finns.
+      const actor = (req as any).user?.claims?.sub ?? validated.raderadAv;
+
+      const check = await assertObjectAndKatalogInTenant(objectId, katalogId, tenantId);
+      if (!check.ok) return res.status(check.status!).json({ error: check.error });
+      if (check.isSystem) {
+        return res.status(403).json({ error: "Systemgenererat fält kan inte raderas" });
+      }
+
+      await softDeleteObjectMetadata(
+        objectId,
+        katalogId,
+        tenantId,
+        actor,
+        validated.metod,
+      );
+      res.status(204).send();
+    } catch (error: any) {
+      if (error instanceof ZodError) {
+        return res.status(400).json({ error: "Valideringsfel", details: error.errors });
+      }
+      if (error instanceof ReadonlyMetadataError) {
+        return res.status(403).json({ error: error.message });
+      }
+      console.error("Error soft-deleting metadata:", error);
+      res.status(500).json({ error: "Kunde inte radera metadata" });
+    }
+  },
+);
+
+// Återställ ett mjuk-raderat metadata-fält.
+metadataRouter.post(
+  "/objects/:objectId/field/:katalogId/restore",
+  async (req: Request, res: Response) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!tenantId) {
+        return res.status(401).json({ error: "Ingen tenant hittad" });
+      }
+      const { objectId, katalogId } = req.params;
+      const bodyRestoredBy = typeof req.body?.restoredBy === "string" ? req.body.restoredBy : undefined;
+      // Härled aktör från autentiserad identitet (audit-integritet).
+      const restoredBy = (req as any).user?.claims?.sub ?? bodyRestoredBy;
+
+      const check = await assertObjectAndKatalogInTenant(objectId, katalogId, tenantId);
+      if (!check.ok) return res.status(check.status!).json({ error: check.error });
+      if (check.isSystem) {
+        return res.status(403).json({ error: "Systemgenererat fält kan inte återställas" });
+      }
+
+      await restoreObjectMetadata(objectId, katalogId, tenantId, restoredBy);
+      res.status(204).send();
+    } catch (error: any) {
+      if (error instanceof ReadonlyMetadataError) {
+        return res.status(403).json({ error: error.message });
+      }
+      console.error("Error restoring metadata:", error);
+      res.status(500).json({ error: "Kunde inte återställa metadata" });
+    }
+  },
+);
+
+const orderSchema = z.object({
+  orderedKatalogIds: z.array(z.string()),
+});
+
+// Sätt per-objekt sorteringsordning för metadata-fält (ärvs nedåt).
+metadataRouter.put(
+  "/objects/:objectId/order",
+  async (req: Request, res: Response) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!tenantId) {
+        return res.status(401).json({ error: "Ingen tenant hittad" });
+      }
+      const { objectId } = req.params;
+      const validated = orderSchema.parse(req.body);
+
+      const [obj] = await db
+        .select({ id: objects.id })
+        .from(objects)
+        .where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)))
+        .limit(1);
+      if (!obj) return res.status(404).json({ error: "Objekt hittades inte" });
+
+      await setObjectMetadataOrder(objectId, tenantId, validated.orderedKatalogIds);
+      res.status(204).send();
+    } catch (error: any) {
+      if (error instanceof ZodError) {
+        return res.status(400).json({ error: "Valideringsfel", details: error.errors });
+      }
+      if (error instanceof InvalidMetadataInputError) {
+        return res.status(400).json({ error: error.message });
+      }
+      console.error("Error setting metadata order:", error);
+      res.status(500).json({ error: "Kunde inte spara sorteringsordning" });
     }
   },
 );
