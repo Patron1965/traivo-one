@@ -168,6 +168,7 @@ export function AddressSearch({ onSelect, placeholder = "Sök adress...", defaul
         className="p-0 w-[var(--radix-popover-trigger-width)]"
         align="start"
         onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => e.preventDefault()}
       >
         <Command>
           <CommandList>

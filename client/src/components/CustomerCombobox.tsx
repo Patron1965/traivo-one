@@ -85,7 +85,7 @@ export function CustomerCombobox({
   const selectedName = value ? lookup.get(value) : undefined;
 
   return (
-    <Popover open={open} onOpenChange={setOpen} modal>
+    <Popover open={open} onOpenChange={setOpen} modal={false}>
       <PopoverTrigger asChild>
         <Button
           type="button"
