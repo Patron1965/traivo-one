@@ -750,6 +750,9 @@ export async function registerRoutes(
   // Task #552: objekt-livscykel v2 (släktnamn, arkivering, dynamiska kluster)
   const { registerObjectLifecycleRoutes } = await import("./routes/objectLifecycleRoutes");
   registerObjectLifecycleRoutes(app);
+  // Task #716: admin-arkiv (arkiverade objekt/ordrar/bilder/kontakter/metadatatyper + återställning)
+  const { registerArchiveRoutes } = await import("./routes/archiveRoutes");
+  registerArchiveRoutes(app);
   const { registerImportPayersRoutes } = await import("./routes/importPayersRoutes");
   registerImportPayersRoutes(app);
   registerCustomerRoutes(app);

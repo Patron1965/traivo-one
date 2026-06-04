@@ -2259,6 +2259,11 @@ export const objectImages = pgTable("object_images", {
   imageType: varchar("image_type", { length: 50 }).default("photo"),
   uploadedBy: varchar("uploaded_by").references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  // Task #716: arkivering (soft-delete) istället för permanent radering.
+  // NULL = aktiv; satt = arkiverad och dold från normala vyer.
+  deletedAt: timestamp("deleted_at"),
+  archivedBy: varchar("archived_by"),
+  archivedReason: text("archived_reason"),
 }, (table) => [
   index("idx_object_images_object").on(table.objectId),
   index("idx_object_images_date").on(table.imageDate),
@@ -2307,6 +2312,10 @@ export const objectContacts = pgTable("object_contacts", {
   isInheritable: boolean("is_inheritable").default(true),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  // Task #716: arkivering (soft-delete) istället för permanent radering.
+  deletedAt: timestamp("deleted_at"),
+  archivedBy: varchar("archived_by"),
+  archivedReason: text("archived_reason"),
 }, (table) => [
   index("idx_object_contacts_object").on(table.objectId),
   index("idx_object_contacts_type").on(table.contactType),
@@ -3859,6 +3868,13 @@ export const metadataKatalog = pgTable("metadata_katalog", {
   formel: text("formel"),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
+
+  // Task #716: arkivering (soft-delete) istället för permanent radering.
+  // NULL = aktiv metadatatyp; satt = arkiverad (dold från katalog/objektvyer,
+  // återställbar via admin-arkivet). Historiska metadata_snapshot/varden påverkas ej.
+  deletedAt: timestamp("deleted_at"),
+  archivedBy: varchar("archived_by"),
+  archivedReason: text("archived_reason"),
 }, (table) => [
   index("idx_metadata_katalog_tenant_namn").on(table.tenantId, table.namn),
   index("idx_metadata_katalog_tenant_beteckning").on(table.tenantId, table.beteckning),

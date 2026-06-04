@@ -89,9 +89,9 @@ export function ObjectContactsPanel({ objectId, tenantId, readOnly = false }: Ob
       apiRequest("DELETE", `/api/objects/${objectId}/contacts/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "contacts"] });
-      toast({ title: "Kontakt borttagen" });
+      toast({ title: "Kontakt arkiverad", description: "Kontakten flyttades till arkivet och kan återställas där." });
     },
-    onError: () => toast({ title: "Kunde inte ta bort kontakt", variant: "destructive" }),
+    onError: () => toast({ title: "Kunde inte arkivera kontakt", variant: "destructive" }),
   });
 
   const resetForm = () => {

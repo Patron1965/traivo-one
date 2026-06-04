@@ -426,6 +426,7 @@ export interface IStorage {
   updateWorkOrder(id: string, workOrder: Partial<InsertWorkOrder>): Promise<WorkOrder | undefined>;
   deleteWorkOrder(id: string, opts?: { reason?: string; userId?: string | null }): Promise<void>;
   restoreWorkOrder(id: string): Promise<WorkOrder | undefined>;
+  listArchivedWorkOrders(tenantId: string): Promise<Array<WorkOrder & { objectName: string | null; objectNumber: string | null }>>;
   getWorkOrderByModusId(tenantId: string, modusId: string): Promise<WorkOrder | undefined>;
   getRecentWorkOrdersForObject(tenantId: string, objectId: string, excludeId: string, limit?: number): Promise<WorkOrder[]>;
   getCustomerCommunicationsByWorkOrder(tenantId: string, workOrderId: string, limit?: number): Promise<CustomerCommunication[]>;
@@ -670,7 +671,9 @@ export interface IStorage {
   getObjectImages(objectId: string): Promise<ObjectImage[]>;
   getObjectImage(id: string): Promise<ObjectImage | undefined>;
   createObjectImage(image: InsertObjectImage): Promise<ObjectImage>;
-  deleteObjectImage(id: string, objectId: string, tenantId: string): Promise<void>;
+  deleteObjectImage(id: string, objectId: string, tenantId: string, opts?: { archivedBy?: string | null; archivedReason?: string | null }): Promise<void>;
+  restoreObjectImage(id: string, tenantId: string): Promise<ObjectImage | undefined>;
+  listArchivedObjectImages(tenantId: string): Promise<Array<ObjectImage & { objectName: string | null; objectNumber: string | null }>>;
   // Vinjetbilder (task #580): aktuell + historik per objekt.
   getObjectVignettes(tenantId: string, objectId: string): Promise<ObjectVignette[]>;
   getCurrentObjectVignette(tenantId: string, objectId: string): Promise<ObjectVignette | undefined>;
@@ -681,7 +684,9 @@ export interface IStorage {
   getObjectContactsWithInheritance(objectId: string, tenantId: string): Promise<ObjectContact[]>;
   createObjectContact(contact: InsertObjectContact): Promise<ObjectContact>;
   updateObjectContact(id: string, objectId: string, tenantId: string, data: Partial<InsertObjectContact>): Promise<ObjectContact | undefined>;
-  deleteObjectContact(id: string, objectId: string, tenantId: string): Promise<void>;
+  deleteObjectContact(id: string, objectId: string, tenantId: string, opts?: { archivedBy?: string | null; archivedReason?: string | null }): Promise<void>;
+  restoreObjectContact(id: string, tenantId: string): Promise<ObjectContact | undefined>;
+  listArchivedObjectContacts(tenantId: string): Promise<Array<ObjectContact & { objectName: string | null; objectNumber: string | null }>>;
   
   // Task Desired Timewindows
   getTaskTimewindows(workOrderId: string): Promise<TaskDesiredTimewindow[]>;
@@ -3530,6 +3535,24 @@ export class DatabaseStorage implements IStorage {
     return workOrder || undefined;
   }
 
+  // Task #716: lista arkiverade (soft-deleted/avbeställda) ordrar för admin-arkivet,
+  // berikade med objektnamn. cancellation-metadatan bär orsak/tid/användare.
+  async listArchivedWorkOrders(tenantId: string): Promise<Array<WorkOrder & { objectName: string | null; objectNumber: string | null }>> {
+    const rows = await db.select({
+      workOrder: workOrders,
+      objectName: objects.name,
+      objectNumber: objects.objectNumber,
+    })
+      .from(workOrders)
+      .leftJoin(objects, eq(workOrders.objectId, objects.id))
+      .where(and(
+        eq(workOrders.tenantId, tenantId),
+        isNotNull(workOrders.deletedAt),
+      ))
+      .orderBy(desc(workOrders.deletedAt));
+    return rows.map(r => ({ ...r.workOrder, objectName: r.objectName, objectNumber: r.objectNumber }));
+  }
+
   async getWorkOrderByModusId(tenantId: string, modusId: string): Promise<WorkOrder | undefined> {
     const [wo] = await db.select().from(workOrders).where(
       and(
@@ -5882,7 +5905,10 @@ export class DatabaseStorage implements IStorage {
   
   async getObjectImages(objectId: string): Promise<ObjectImage[]> {
     return db.select().from(objectImages)
-      .where(eq(objectImages.objectId, objectId))
+      .where(and(
+        eq(objectImages.objectId, objectId),
+        isNull(objectImages.deletedAt),
+      ))
       .orderBy(desc(objectImages.imageDate));
   }
 
@@ -5896,12 +5922,55 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async deleteObjectImage(id: string, objectId: string, tenantId: string): Promise<void> {
-    await db.delete(objectImages).where(and(
-      eq(objectImages.id, id),
-      eq(objectImages.objectId, objectId),
-      eq(objectImages.tenantId, tenantId)
-    ));
+  // Task #716: arkivering (soft-delete) istället för hard-delete. Sätter deleted_at
+  // så bilden döljs från galleriet men finns kvar och kan återställas via admin-arkivet.
+  async deleteObjectImage(
+    id: string,
+    objectId: string,
+    tenantId: string,
+    opts?: { archivedBy?: string | null; archivedReason?: string | null },
+  ): Promise<void> {
+    await db.update(objectImages)
+      .set({
+        deletedAt: new Date(),
+        archivedBy: opts?.archivedBy ?? null,
+        archivedReason: opts?.archivedReason ?? null,
+      })
+      .where(and(
+        eq(objectImages.id, id),
+        eq(objectImages.objectId, objectId),
+        eq(objectImages.tenantId, tenantId),
+        isNull(objectImages.deletedAt),
+      ));
+  }
+
+  // Task #716: återställ en arkiverad bild (nollar deleted_at + arkivmetadata).
+  async restoreObjectImage(id: string, tenantId: string): Promise<ObjectImage | undefined> {
+    const [result] = await db.update(objectImages)
+      .set({ deletedAt: null, archivedBy: null, archivedReason: null })
+      .where(and(
+        eq(objectImages.id, id),
+        eq(objectImages.tenantId, tenantId),
+      ))
+      .returning();
+    return result || undefined;
+  }
+
+  // Task #716: lista arkiverade bilder för admin-arkivet, berikade med objektnamn.
+  async listArchivedObjectImages(tenantId: string): Promise<Array<ObjectImage & { objectName: string | null; objectNumber: string | null }>> {
+    const rows = await db.select({
+      image: objectImages,
+      objectName: objects.name,
+      objectNumber: objects.objectNumber,
+    })
+      .from(objectImages)
+      .leftJoin(objects, eq(objectImages.objectId, objects.id))
+      .where(and(
+        eq(objectImages.tenantId, tenantId),
+        isNotNull(objectImages.deletedAt),
+      ))
+      .orderBy(desc(objectImages.deletedAt));
+    return rows.map(r => ({ ...r.image, objectName: r.objectName, objectNumber: r.objectNumber }));
   }
 
   // ============================================
@@ -5953,7 +6022,10 @@ export class DatabaseStorage implements IStorage {
   // ============================================
   
   async getObjectContacts(objectId: string): Promise<ObjectContact[]> {
-    return db.select().from(objectContacts).where(eq(objectContacts.objectId, objectId));
+    return db.select().from(objectContacts).where(and(
+      eq(objectContacts.objectId, objectId),
+      isNull(objectContacts.deletedAt),
+    ));
   }
 
   async getObjectContactsWithInheritance(objectId: string, tenantId: string): Promise<ObjectContact[]> {
@@ -5980,7 +6052,8 @@ export class DatabaseStorage implements IStorage {
       const contacts = await db.select().from(objectContacts)
         .where(and(
           eq(objectContacts.objectId, ancestorId),
-          eq(objectContacts.tenantId, tenantId)
+          eq(objectContacts.tenantId, tenantId),
+          isNull(objectContacts.deletedAt),
         ));
       
       for (const contact of contacts) {
@@ -6016,12 +6089,54 @@ export class DatabaseStorage implements IStorage {
     return result || undefined;
   }
 
-  async deleteObjectContact(id: string, objectId: string, tenantId: string): Promise<void> {
-    await db.delete(objectContacts).where(and(
-      eq(objectContacts.id, id),
-      eq(objectContacts.objectId, objectId),
-      eq(objectContacts.tenantId, tenantId)
-    ));
+  // Task #716: arkivering (soft-delete) istället för hard-delete.
+  async deleteObjectContact(
+    id: string,
+    objectId: string,
+    tenantId: string,
+    opts?: { archivedBy?: string | null; archivedReason?: string | null },
+  ): Promise<void> {
+    await db.update(objectContacts)
+      .set({
+        deletedAt: new Date(),
+        archivedBy: opts?.archivedBy ?? null,
+        archivedReason: opts?.archivedReason ?? null,
+      })
+      .where(and(
+        eq(objectContacts.id, id),
+        eq(objectContacts.objectId, objectId),
+        eq(objectContacts.tenantId, tenantId),
+        isNull(objectContacts.deletedAt),
+      ));
+  }
+
+  // Task #716: återställ en arkiverad kontakt.
+  async restoreObjectContact(id: string, tenantId: string): Promise<ObjectContact | undefined> {
+    const [result] = await db.update(objectContacts)
+      .set({ deletedAt: null, archivedBy: null, archivedReason: null })
+      .where(and(
+        eq(objectContacts.id, id),
+        eq(objectContacts.tenantId, tenantId),
+      ))
+      .returning();
+    return result || undefined;
+  }
+
+  // Task #716: lista arkiverade kontakter för admin-arkivet, berikade med objektnamn.
+  async listArchivedObjectContacts(tenantId: string): Promise<Array<ObjectContact & { objectName: string | null; objectNumber: string | null }>> {
+    const rows = await db.select({
+      contact: objectContacts,
+      objectName: objects.name,
+      objectNumber: objects.objectNumber,
+    })
+      .from(objectContacts)
+      .leftJoin(objects, eq(objectContacts.objectId, objects.id))
+      .where(and(
+        eq(objectContacts.tenantId, tenantId),
+        isNotNull(objectContacts.deletedAt),
+      ))
+      .orderBy(desc(objectContacts.deletedAt));
+    return rows.map(r => ({ ...r.contact, objectName: r.objectName, objectNumber: r.objectNumber }));
   }
 
   // ============================================

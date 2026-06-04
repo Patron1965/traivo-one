@@ -29,6 +29,7 @@ const ADMIN_ONLY_ROUTES = new Set([
   "/order-type-metadata",
   "/restore-dormant-customers",
   "/shadow-comparison",
+  "/archive",
 ]);
 
 const PLANNER_ROUTES = new Set([

@@ -252,7 +252,9 @@ app.delete("/api/objects/:objectId/images/:id", asyncHandler(async (req, res) =>
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       throw new ForbiddenError("Åtkomst nekad");
     }
-    await storage.deleteObjectImage(req.params.id, req.params.objectId, tenantId);
+    // Task #716: arkivering (soft-delete) istället för permanent radering.
+    const archivedBy = req.session?.user?.id ?? null;
+    await storage.deleteObjectImage(req.params.id, req.params.objectId, tenantId, { archivedBy });
     res.status(204).send();
 }));
 
@@ -311,7 +313,9 @@ app.delete("/api/objects/:objectId/contacts/:id", asyncHandler(async (req, res) 
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       throw new ForbiddenError("Åtkomst nekad");
     }
-    await storage.deleteObjectContact(req.params.id, req.params.objectId, tenantId);
+    // Task #716: arkivering (soft-delete) istället för permanent radering.
+    const archivedBy = req.session?.user?.id ?? null;
+    await storage.deleteObjectContact(req.params.id, req.params.objectId, tenantId, { archivedBy });
     res.status(204).send();
 }));
 

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { z, ZodError } from "zod";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { metadataKatalog, metadataKatalogKunder, metadataAreas, metadataVarden, articles, customers, objects } from "@shared/schema";
 import { inArray } from "drizzle-orm";
 import { getErrorMessage } from "./routes/helpers";
@@ -44,6 +44,7 @@ import {
   seedDefaultMetadataAreas,
   getMetadataAreas,
   getMetadataAreaUsage,
+  softDeleteMetadataType,
 } from "./metadata-queries";
 import { getTenantIdWithFallback, requireAdmin } from "./tenant-middleware";
 
@@ -531,7 +532,8 @@ metadataRouter.post("/types", async (req: Request, res: Response) => {
       .from(metadataKatalog)
       .where(and(
         eq(metadataKatalog.tenantId, tenantId),
-        eq(metadataKatalog.namn, validated.namn)
+        eq(metadataKatalog.namn, validated.namn),
+        isNull(metadataKatalog.deletedAt)
       ))
       .limit(1);
 
@@ -546,7 +548,8 @@ metadataRouter.post("/types", async (req: Request, res: Response) => {
         .from(metadataKatalog)
         .where(and(
           eq(metadataKatalog.tenantId, tenantId),
-          eq(metadataKatalog.beteckning, validated.beteckning)
+          eq(metadataKatalog.beteckning, validated.beteckning),
+          isNull(metadataKatalog.deletedAt)
         ))
         .limit(1);
 
@@ -664,6 +667,7 @@ metadataRouter.put("/types/:id", async (req: Request, res: Response) => {
         .where(and(
           eq(metadataKatalog.tenantId, tenantId),
           eq(metadataKatalog.namn, validated.namn),
+          isNull(metadataKatalog.deletedAt),
         ))
         .limit(1);
       if (dupNamn.length > 0 && dupNamn[0].id !== id) {
@@ -677,6 +681,7 @@ metadataRouter.put("/types/:id", async (req: Request, res: Response) => {
         .where(and(
           eq(metadataKatalog.tenantId, tenantId),
           eq(metadataKatalog.beteckning, validated.beteckning),
+          isNull(metadataKatalog.deletedAt),
         ))
         .limit(1);
       if (dupBeteckning.length > 0 && dupBeteckning[0].id !== id) {
@@ -800,19 +805,23 @@ metadataRouter.delete("/types/:id", async (req: Request, res: Response) => {
     if (childCount > 0) {
       return res.status(409).json({
         error:
-          `Kan inte radera — fältet är ett gruppfält med ${childCount} underfält. ` +
+          `Kan inte arkivera — fältet är ett gruppfält med ${childCount} underfält. ` +
           `Ta bort eller flytta underfälten först.`,
       });
     }
 
-    await db
-      .delete(metadataKatalog)
-      .where(and(eq(metadataKatalog.id, id), eq(metadataKatalog.tenantId, tenantId)));
+    // Task #716: arkivering (soft-delete) istället för permanent radering. Historiska
+    // metadata_snapshot/varden förblir läsbara; typen döljs från katalog/objektvyer.
+    const archivedBy = (req as any).session?.user?.id ?? null;
+    const archived = await softDeleteMetadataType(tenantId, id, { archivedBy });
+    if (!archived) {
+      return res.status(404).json({ error: "Metadatatyp hittades inte" });
+    }
 
     res.status(204).send();
   } catch (error) {
-    console.error("Error deleting metadata type:", error);
-    res.status(500).json({ error: "Kunde inte radera metadatatyp" });
+    console.error("Error archiving metadata type:", error);
+    res.status(500).json({ error: "Kunde inte arkivera metadatatyp" });
   }
 });
 

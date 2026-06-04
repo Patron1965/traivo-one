@@ -39,6 +39,7 @@ import {
   Palette,
   Inbox,
   Link2,
+  Archive,
   type LucideIcon,
 } from "lucide-react";
 import { translate } from "./i18n";
@@ -181,6 +182,7 @@ export function getAdminItems(tl?: (key: string) => string): NavItem[] {
     { title: "Plattformsadmin", url: "/platform-admin", icon: UserCheck, description: "Cross-tenant användarvy, GDPR-anonymisering och hård radering (platform-owner)", platformOwnerOnly: true },
     { title: l("nav.platform-admin"), url: "/system-dashboard", icon: Palette, description: l("nav.platform-admin.desc") },
     { title: l("nav.system-overview"), url: "/system-overview", icon: FileText, description: l("nav.system-overview.desc") },
+    { title: "Arkiv", url: "/archive", icon: Archive, description: "Arkiverade objekt, ordrar, bilder, kontakter och metadatatyper — sök, filtrera och återställ" },
     { title: "Kundportal extern", url: "/portal", icon: Globe, description: "Öppna den externa kundportalen i ny flik", external: true },
   ];
 }

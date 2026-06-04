@@ -7,7 +7,7 @@
 import type { Express } from "express";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ConflictError } from "../errors";
-import { getTenantIdWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { storage } from "../storage";
 import { verifyTenantOwnership, formatZodError } from "./helpers";
 import { z } from "zod";
@@ -64,7 +64,8 @@ export function registerObjectLifecycleRoutes(app: Express): void {
   }));
 
   // === (C) ARKIVERING =======================================================
-  app.get("/api/objects/archived", asyncHandler(async (req, res) => {
+  // Task #716: arkiv-listning/återställning är admin-only (konsekvent med /api/archive/*).
+  app.get("/api/objects/archived", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rows = await listArchivedObjects(tenantId);
     res.json(rows);
@@ -100,7 +101,7 @@ export function registerObjectLifecycleRoutes(app: Express): void {
     res.json({ ok: true, preflight: result.preflight });
   }));
 
-  app.post("/api/objects/:id/restore", asyncHandler(async (req, res) => {
+  app.post("/api/objects/:id/restore", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     // Hämta inkl arkiverade — storage.getObject filtrerar bort dem.
     const archived = await listArchivedObjects(tenantId, 10000);

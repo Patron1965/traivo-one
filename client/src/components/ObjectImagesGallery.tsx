@@ -77,9 +77,9 @@ export function ObjectImagesGallery({ objectId, tenantId, readOnly = false }: Ob
       apiRequest("DELETE", `/api/objects/${objectId}/images/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "images"] });
-      toast({ title: "Bild borttagen" });
+      toast({ title: "Bild arkiverad", description: "Bilden flyttades till arkivet och kan återställas där." });
     },
-    onError: () => toast({ title: "Kunde inte ta bort bild", variant: "destructive" }),
+    onError: () => toast({ title: "Kunde inte arkivera bild", variant: "destructive" }),
   });
 
   const handleUpload = (e: React.FormEvent) => {

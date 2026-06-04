@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { sql, eq, and, inArray, desc, asc } from "drizzle-orm";
+import { sql, eq, and, inArray, desc, asc, isNull, isNotNull } from "drizzle-orm";
 import { computeFamilyValues } from "./metadata-formula";
 import { METADATA_AREA_OPTIONS } from "@shared/metadata-areas";
 import { 
@@ -2417,11 +2417,106 @@ export async function findObjectsWithMetadata(
 // ============================================================================
 
 export async function getAllMetadataTypes(tenantId: string): Promise<MetadataKatalog[]> {
+  // Task #716: arkiverade typer (deleted_at satt) döljs från katalog/objektvyer.
   return await db
     .select()
     .from(metadataKatalog)
-    .where(eq(metadataKatalog.tenantId, tenantId))
+    .where(and(
+      eq(metadataKatalog.tenantId, tenantId),
+      isNull(metadataKatalog.deletedAt),
+    ))
     .orderBy(metadataKatalog.area, metadataKatalog.sortOrder);
+}
+
+// Task #716: arkivera (soft-delete) en metadatatyp. Returnerar false om typen inte
+// finns/redan arkiverad inom tenant. Historiska metadata_snapshot/varden påverkas ej.
+export async function softDeleteMetadataType(
+  tenantId: string,
+  id: string,
+  opts?: { archivedBy?: string | null; archivedReason?: string | null },
+): Promise<boolean> {
+  const result = await db
+    .update(metadataKatalog)
+    .set({
+      deletedAt: new Date(),
+      archivedBy: opts?.archivedBy ?? null,
+      archivedReason: opts?.archivedReason ?? null,
+    })
+    .where(and(
+      eq(metadataKatalog.id, id),
+      eq(metadataKatalog.tenantId, tenantId),
+      isNull(metadataKatalog.deletedAt),
+    ))
+    .returning({ id: metadataKatalog.id });
+  return result.length > 0;
+}
+
+// Task #716: återställ en arkiverad metadatatyp. Blockerar (returnerar collision) om
+// en AKTIV typ med samma namn/beteckning redan finns — då dessa är universella nycklar.
+export async function restoreMetadataType(
+  tenantId: string,
+  id: string,
+): Promise<{ ok: true; type: MetadataKatalog } | { ok: false; reason: "not_found" } | { ok: false; reason: "name_collision"; conflict: string }> {
+  const [archived] = await db
+    .select()
+    .from(metadataKatalog)
+    .where(and(
+      eq(metadataKatalog.id, id),
+      eq(metadataKatalog.tenantId, tenantId),
+      isNotNull(metadataKatalog.deletedAt),
+    ))
+    .limit(1);
+  if (!archived) return { ok: false, reason: "not_found" };
+
+  // Kollision mot aktiv typ med samma namn?
+  const [nameClash] = await db
+    .select({ id: metadataKatalog.id })
+    .from(metadataKatalog)
+    .where(and(
+      eq(metadataKatalog.tenantId, tenantId),
+      eq(metadataKatalog.namn, archived.namn),
+      isNull(metadataKatalog.deletedAt),
+    ))
+    .limit(1);
+  if (nameClash) {
+    return { ok: false, reason: "name_collision", conflict: `namn "${archived.namn}"` };
+  }
+  if (archived.beteckning) {
+    const [betClash] = await db
+      .select({ id: metadataKatalog.id })
+      .from(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.tenantId, tenantId),
+        eq(metadataKatalog.beteckning, archived.beteckning),
+        isNull(metadataKatalog.deletedAt),
+      ))
+      .limit(1);
+    if (betClash) {
+      return { ok: false, reason: "name_collision", conflict: `beteckning "${archived.beteckning}"` };
+    }
+  }
+
+  const [restored] = await db
+    .update(metadataKatalog)
+    .set({ deletedAt: null, archivedBy: null, archivedReason: null })
+    .where(and(
+      eq(metadataKatalog.id, id),
+      eq(metadataKatalog.tenantId, tenantId),
+    ))
+    .returning();
+  return { ok: true, type: restored };
+}
+
+// Task #716: lista arkiverade metadatatyper för admin-arkivet.
+export async function listArchivedMetadataTypes(tenantId: string): Promise<MetadataKatalog[]> {
+  return await db
+    .select()
+    .from(metadataKatalog)
+    .where(and(
+      eq(metadataKatalog.tenantId, tenantId),
+      isNotNull(metadataKatalog.deletedAt),
+    ))
+    .orderBy(desc(metadataKatalog.deletedAt));
 }
 
 // ============================================================================
