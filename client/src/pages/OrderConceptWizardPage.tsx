@@ -99,6 +99,7 @@ export default function OrderConceptWizardPage() {
   // Step 3
   const [invoicePeriod, setInvoicePeriod] = useState<InvoicePeriod | null>(null);
   const [invoiceLock, setInvoiceLock] = useState(false);
+  const [invoiceBrake, setInvoiceBrake] = useState(false);
   const [invoiceMethod, setInvoiceMethod] = useState<string | null>(null);
   const [subscriptionAdjustmentDate, setSubscriptionAdjustmentDate] = useState("");
   const [invoiceConsolidation, setInvoiceConsolidation] = useState("per_job");
@@ -151,6 +152,7 @@ export default function OrderConceptWizardPage() {
     form.setValue("invoiceModel", wizardData.invoiceModel || "");
     setInvoicePeriod(wizardData.invoicePeriod || null);
     setInvoiceLock(wizardData.invoiceLock || false);
+    setInvoiceBrake(wizardData.invoiceBrake || false);
     setInvoiceMethod(wizardData.invoiceMethod || null);
     setSubscriptionAdjustmentDate(toDateInput(wizardData.subscriptionAdjustmentDate));
     setInvoiceConsolidation(wizardData.invoiceConsolidation || "per_job");
@@ -246,6 +248,7 @@ export default function OrderConceptWizardPage() {
     invoiceModel: invoiceModel || null,
     invoicePeriod,
     invoiceLock,
+    invoiceBrake,
     invoiceMethod: invoiceMethod || null,
     subscriptionAdjustmentDate: toIsoOrNull(subscriptionAdjustmentDate),
     invoiceConsolidation,
@@ -262,7 +265,7 @@ export default function OrderConceptWizardPage() {
     totalValue,
     totalCost,
     estimatedHours,
-  }), [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoicePeriod, invoiceLock, invoiceMethod, subscriptionAdjustmentDate, invoiceConsolidation, departmentMetadataField, targetClusterIds, deliveryTimeType, timeWindows, intervalStartDate, intervalEndDate, intervalFrequencyDays, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
+  }), [conceptName, customerMode, selectedCustomerId, customerMetadataField, priceListId, priceModel, fixedPriceKronor, customerReference, customerLabel, invoiceLevel, invoiceModel, invoicePeriod, invoiceLock, invoiceBrake, invoiceMethod, subscriptionAdjustmentDate, invoiceConsolidation, departmentMetadataField, targetClusterIds, deliveryTimeType, timeWindows, intervalStartDate, intervalEndDate, intervalFrequencyDays, deliveryRestrictions, conceptArticles, totalValue, totalCost, estimatedHours]);
 
   const createConceptMutation = useMutation({
     mutationFn: async () => {
@@ -618,6 +621,7 @@ export default function OrderConceptWizardPage() {
                 invoiceModel={invoiceModel || null}
                 invoicePeriod={invoicePeriod}
                 invoiceLock={invoiceLock}
+                invoiceBrake={invoiceBrake}
                 invoiceMethod={invoiceMethod}
                 subscriptionAdjustmentDate={subscriptionAdjustmentDate}
                 invoiceConsolidation={invoiceConsolidation}
@@ -628,6 +632,7 @@ export default function OrderConceptWizardPage() {
                   if (data.invoiceModel !== undefined) form.setValue("invoiceModel", data.invoiceModel || "", { shouldValidate: true });
                   if (data.invoicePeriod !== undefined) setInvoicePeriod(data.invoicePeriod);
                   if (data.invoiceLock !== undefined) setInvoiceLock(data.invoiceLock);
+                  if (data.invoiceBrake !== undefined) setInvoiceBrake(data.invoiceBrake);
                   if (data.invoiceMethod !== undefined) setInvoiceMethod(data.invoiceMethod);
                   if (data.subscriptionAdjustmentDate !== undefined) setSubscriptionAdjustmentDate(data.subscriptionAdjustmentDate);
                   if (data.invoiceConsolidation !== undefined) setInvoiceConsolidation(data.invoiceConsolidation);

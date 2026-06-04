@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import {
   INVOICE_LEVELS, INVOICE_LEVEL_LABELS,
   INVOICE_MODELS, INVOICE_MODEL_LABELS,
@@ -17,6 +18,7 @@ interface Step3State {
   invoiceModel: InvoiceModel | null;
   invoicePeriod: InvoicePeriod | null;
   invoiceLock: boolean;
+  invoiceBrake: boolean;
   invoiceMethod: string | null;
   subscriptionAdjustmentDate: string;
   invoiceConsolidation: string;
@@ -27,12 +29,6 @@ interface Step3Props extends Step3State {
   objectCount: number;
   onUpdate: (data: Partial<Step3State>) => void;
 }
-
-const INVOICE_METHODS: { value: string; label: string }[] = [
-  { value: "afterwards", label: "I efterskott (efter utfört arbete)" },
-  { value: "scheduled", label: "Schemalagd (periodisk)" },
-  { value: "subscription", label: "Abonnemang (löpande)" },
-];
 
 const CONSOLIDATION_OPTIONS: { value: string; label: string }[] = [
   { value: "per_job", label: "Per uppdrag" },
@@ -46,22 +42,31 @@ export default function Step3Invoicing({
   invoiceModel,
   invoicePeriod,
   invoiceLock,
-  invoiceMethod,
+  invoiceBrake,
   subscriptionAdjustmentDate,
   invoiceConsolidation,
   departmentMetadataField,
-  objectCount,
   onUpdate,
 }: Step3Props) {
   const { data: definitions = [] } = useQuery<MetadataDefinition[]>({
     queryKey: ["/api/metadata-definitions"],
   });
 
+  const isSubscription = invoiceModel === "subscription";
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" data-testid="step3-invoicing">
       <div className="space-y-6">
         <div>
-          <h3 className="text-sm font-medium mb-3">Faktureringsnivå</h3>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-sm font-medium">Faktureringsnivå</h3>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal text-muted-foreground">
+              VAR stannar fakturan
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            Välj vilken nivå i kundhierarkin fakturan ska riktas mot.
+          </p>
           <RadioGroup
             value={invoiceLevel || ""}
             onValueChange={(v) => onUpdate({ invoiceLevel: v as InvoiceLevel })}
@@ -77,10 +82,16 @@ export default function Step3Invoicing({
         </div>
 
         <div>
-          <h3 className="text-sm font-medium mb-3">Fakturamodell</h3>
+          <h3 className="text-sm font-medium mb-3">Faktureringsmetod</h3>
           <RadioGroup
             value={invoiceModel || ""}
-            onValueChange={(v) => onUpdate({ invoiceModel: v as InvoiceModel })}
+            onValueChange={(v) => {
+              const model = v as InvoiceModel;
+              onUpdate({
+                invoiceModel: model,
+                ...(model === "subscription" ? { invoicePeriod: null } : {}),
+              });
+            }}
             className="space-y-2"
           >
             {INVOICE_MODELS.map((model) => (
@@ -92,38 +103,7 @@ export default function Step3Invoicing({
           </RadioGroup>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            checked={invoiceLock}
-            onCheckedChange={(v) => onUpdate({ invoiceLock: !!v })}
-            id="invoice-lock"
-            data-testid="checkbox-invoice-lock"
-          />
-          <Label htmlFor="invoice-lock" className="cursor-pointer text-sm">
-            Faktureringslåsning (vänta tills allt är utfört)
-          </Label>
-        </div>
-      </div>
-
-      <div className="space-y-6">
-        <div>
-          <h3 className="text-sm font-medium mb-3">Faktureringsmetod</h3>
-          <Select
-            value={invoiceMethod || ""}
-            onValueChange={(v) => onUpdate({ invoiceMethod: v })}
-          >
-            <SelectTrigger data-testid="select-invoice-method">
-              <SelectValue placeholder="Välj metod" />
-            </SelectTrigger>
-            <SelectContent>
-              {INVOICE_METHODS.map((m) => (
-                <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {invoiceMethod === "subscription" && (
+        {isSubscription && (
           <div>
             <Label htmlFor="adjustment-date" className="text-sm mb-1 block">
               Årligt justeringsdatum (valfritt)
@@ -140,25 +120,74 @@ export default function Step3Invoicing({
           </div>
         )}
 
-        <div>
-          <h3 className="text-sm font-medium mb-3">Faktureringsperiod</h3>
-          <Select
-            value={invoicePeriod || ""}
-            onValueChange={(v) => onUpdate({ invoicePeriod: v as InvoicePeriod })}
-          >
-            <SelectTrigger data-testid="select-invoice-period">
-              <SelectValue placeholder="Välj period" />
-            </SelectTrigger>
-            <SelectContent>
-              {INVOICE_PERIODS.map((period) => (
-                <SelectItem key={period} value={period}>{INVOICE_PERIOD_LABELS[period]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium">Faktureringskontroll</h3>
+          <div className="flex items-start space-x-2">
+            <Checkbox
+              checked={invoiceLock}
+              onCheckedChange={(v) => onUpdate({ invoiceLock: !!v })}
+              id="invoice-lock"
+              data-testid="checkbox-invoice-lock"
+              className="mt-0.5"
+            />
+            <div>
+              <Label htmlFor="invoice-lock" className="cursor-pointer text-sm">
+                Fakturalåsning
+              </Label>
+              <p className="text-xs text-muted-foreground">Vänta tills alla uppdrag i konceptet är utförda innan fakturering.</p>
+            </div>
+          </div>
+          <div className="flex items-start space-x-2">
+            <Checkbox
+              checked={invoiceBrake}
+              onCheckedChange={(v) => onUpdate({ invoiceBrake: !!v })}
+              id="invoice-brake"
+              data-testid="checkbox-invoice-brake"
+              className="mt-0.5"
+            />
+            <div>
+              <Label htmlFor="invoice-brake" className="cursor-pointer text-sm">
+                Faktureringsbroms
+              </Label>
+              <p className="text-xs text-muted-foreground">Kräver manuellt godkännande innan faktura skickas — ger extra kontroll.</p>
+            </div>
+          </div>
         </div>
+      </div>
+
+      <div className="space-y-6">
+        {!isSubscription && (
+          <div>
+            <h3 className="text-sm font-medium mb-3">Faktureringsperiod</h3>
+            <Select
+              value={invoicePeriod || ""}
+              onValueChange={(v) => onUpdate({ invoicePeriod: v as InvoicePeriod })}
+            >
+              <SelectTrigger data-testid="select-invoice-period">
+                <SelectValue placeholder="Välj period" />
+              </SelectTrigger>
+              <SelectContent>
+                {INVOICE_PERIODS.map((period) => (
+                  <SelectItem key={period} value={period}>{INVOICE_PERIOD_LABELS[period]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Hur ofta fakturering sker vid Avrop och Schema.
+            </p>
+          </div>
+        )}
 
         <div>
-          <h3 className="text-sm font-medium mb-3">Samlingsfakturering</h3>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-sm font-medium">Samlingsfakturering</h3>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal text-muted-foreground">
+              VILKEN nivå grupperar
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            Bestämmer hur arbetsorder grupperas till fakturor.
+          </p>
           <Select
             value={invoiceConsolidation || "per_job"}
             onValueChange={(v) => onUpdate({ invoiceConsolidation: v })}

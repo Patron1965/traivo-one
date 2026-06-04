@@ -2580,6 +2580,7 @@ export const orderConcepts = pgTable("order_concepts", {
   invoiceModel: text("invoice_model"),
   invoicePeriod: text("invoice_period"),
   invoiceLock: boolean("invoice_lock").default(false),
+  invoiceBrake: boolean("invoice_brake").default(false),
   deliveryModel: text("delivery_model"),
   deliveryStart: timestamp("delivery_start"),
   deliveryEnd: timestamp("delivery_end"),
@@ -3184,7 +3185,7 @@ export const INVOICE_MODELS = ["call_off", "schedule", "subscription"] as const;
 export type InvoiceModel = typeof INVOICE_MODELS[number];
 export const INVOICE_MODEL_LABELS: Record<InvoiceModel, string> = {
   call_off: "Avrop (efterfakturering)",
-  schedule: "Schema (efterfakturering)",
+  schedule: "Schema (periodisk)",
   subscription: "Abonnemang (månadsfakturering)"
 };
 
