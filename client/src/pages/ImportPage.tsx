@@ -2072,7 +2072,11 @@ function CustomerCombobox({
           <ChevronDown className="h-3 w-3 ml-1 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-72 p-0" align="end">
+      <PopoverContent
+        className="w-72 p-0"
+        align="end"
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
         {open && (
           <Command>
             <CommandInput placeholder="Sök kund..." className="h-8" />

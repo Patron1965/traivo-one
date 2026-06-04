@@ -88,7 +88,11 @@ export function ObjectParentCombobox({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[360px] p-0" align="start">
+      <PopoverContent
+        className="w-[360px] p-0"
+        align="start"
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
         <div className="flex items-center gap-2 border-b px-2 py-1.5">
           <Search className="h-4 w-4 text-muted-foreground" />
           <Input
