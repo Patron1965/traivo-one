@@ -1,0 +1,170 @@
+{
+  "sessionId": "4a5e9741d",
+  "exportedAt": "2026-06-04T12:10:24.259Z",
+  "summary": "### Key Topics Discussed\n- Skapa och hantera nya samt befintliga objekt i systemet.\n- Hierarkisk struktur för objekt (område, fastighet, återvinningsplats/rum, återvinningskärl).\n- Tydlighet i sökfunktion för överordnade objekt, särskilt gällande släktnamn, för att undvika felkopplingar.\n- Fält som inte ska finnas vid skapande/öppnande av objekt (objekttyp, tillgångstyp, adress, kund), men objekttyp kan vara ett metadatafält.\n- Visning av ärvd metadata och metadatafält, inklusive kundnummer, tömningsdagar, och foton.\n- Hantering av egenskapad metadata för objekt och underställda objekt, inklusive tillägg av metadata som kontaktperson (med namn, titel, telefonnummer, e-post).\n- Definition av metadatatyper och deras tillgänglighet, samt nivå-låsning och datatyp (t.ex. foto, antal, datum, tidsintervall, katalog).\n- Inkludering av systemgenererad metadata (ordrar, rating, felanmälningar) kopplade till objektet, med möjlighet att visa flera ordrar (framtida, utförda) som kan kollapsas/expanderas.\n- Funktioner för att kopiera, radera/arkivera objekt, samt snabbt lägga till nya underordnade objekt.\n- Flexibilitet i att blockera/hindra metadata från att flöda nedåt i hierarkin.\n- Hantering av metadatafält som är \"småkluster\" med flera underliggande fält (t.ex. \"adress\" som innehåller gatuadress, postnummer, ort, X-Y-koordinater, eller \"kontaktperson\" med tillhörande fält).\n- Presentation av metadatadeklarationer i två kolumner: metadatadefinition (beskrivning) och datavärde.\n\n### Decisions Made\n- Funktionen för att skapa nytt objekt eller öppna ett befintligt objekt ska visa specifika obligatoriska fält.\n- Systemgenererat unikt nummer och löpnummer ska finnas med.\n- Endast \"Namn på objektet\" ska vara det primära fältet för namngivning.\n- Släktnamnet ska finnas under objektet, med hantering för tophierarkin kontra underliggande nivåer och genereras systematiskt.\n- Möjlighet att välja överordnat objekt (förälder) med sökfunktion för koppling till rätt förälder. Sökfunktionen ska summera släktnamnet för att tydliggöra ursprunget och förhindra felkopplingar.\n- Objekttyp, tillgångstyp, adress och kund ska inte finnas som fält vid skapande/öppnande av objekt, men \"objekttyp\" kan finnas som ett metadatafält.\n- Ett fält ska finnas för att visa eventuell ärvd metadata, inklusive metadatafält, presenterat i två kolumner. Detta inkluderar information som kundnummer, tömningsdagar och foton, som ärvs från högre nivåer.\n- Det ska finnas en plusknapp för att lägga till egenskapad metadata för objekt och underställda objekt, med valmöjligheter som \"kontaktperson\" eller för att kopplas till en \"behållare\".\n- Metadatareferenser ska vara samma som definieras under menyn \"Metadatainställningar\".\n- Systemgenererad metadata som ordrar, rating och felanmälningar ska visas i fälten för ärvd data och egenskapad data, med möjlighet att länka till orderbeskrivningar/beställningsunderlag. För ordrar med flera poster (t.ex. fem framtida och fem utförda), ska det finnas möjlighet att kollapsa/expandera för att få överblick och redigera individuella ordrar.\n- Knappar för att kopiera, radera (arkivera) objekt, samt en plus-knapp för att snabbt lägga till ett nytt underordnat objekt direkt till det aktuella objektet.\n- Möjlighet att manuellt blockera metadata på en viss nivå i hierarkin så att den inte flödar vidare nedåt och blir synlig för alla användare eller utförare.\n- Metadatafält som \"adress\" ska kunna hantera underliggande \"kluster\" av data såsom gatuadress, postnummer, ort, x- och y-koordinater, och eventuellt yta.\n\n### Important Points & Insights\n- Det finns en avvikelse i den nuvarande implementeringen jämfört med det önskade beteendet för funktionen \"skapa nytt objekt\".\n- Följande information ska alltid finnas tillgänglig vid skapande/öppnande av objekt:\n  - Systemgenereratnummer och löpnummer (unikt).\n  - Namnet på objektet (som det enda fältet för namn).\n  - Släktnamnet under objketet (hanteras olika beroende på hierarkisk nivå och genereras systematiskt).\n  - Möjlighet att välja överordnat objekt via sökfunktion.\n- Sökfunktionen för överordnat objekt behöver vara tydlig, eventuellt visa släktnamnet, för att undvika att koppla objekt till fel gren. Släktnamnet är avgörande för att tydliggöra hierarkin och förhindra felkopplingar (ex. soprum på fel fastighet).\n- Ärvd data ska presenteras tydligt med \"ärvd data\"-markering, t.ex. \"ärvd data, tömningsdag, torsdagar\", inklusive metadata referens och datavärde för fält som kundnummer, tömningsdagar och foton.\n- Grunden för metadatahantering är att definiera olika metadatatyper, som sedan blir tillgängliga.\n- Metadatatyper kan konfigureras med inställningar för nivålåsning, nedåtgående ärftlighet samt datatyp (t.ex. foto, antal, datum, tidsintervall).\n- Systemgenererad metadata, som ordernummer och orderbeskrivningar, ska länkas till det unika systemnumret för objektet, och det ska finnas en möjlighet att länka ut till beställningsunderlag (orderkoncept).\n- Motsvarande fält för rating och felanmälningar ska finnas som systemgenererade metadata, inpushade från andra rutiner eller användargränssnitt.\n- En \"plusknapp\" för att lägga till underordnade objekt ska möjligöra snabb koppling av nya \"detaljer” (t.ex. enskilda kärl) till ett befintligt överordnat objekt (t.ex. ett soprum).\n- Vissa metadata, som \"avtalsansvarig\" eller rating för en anläggning, kan vara onödiga eller olämpliga att visa på alla nivåer i hierarkin. En blockeringsfunktion ger flexibilitet att styra synligheten.\n- Det är viktigt att upprätthålla en klar logik och inte blanda högt och lågt; fält som Objekttyp, Kund och Adress ska inte vara primära fält vid objektsskapande utan snarare metadatafält, om de behövs.\n- Metadatafält kan vara \"småkluster\" bestående av flera fält (t.ex. adress med gatuadress, postnummer, ort, X-Y-koordinat, eller kontaktperson med namn, titel, telefonnummer, e-post) och systemet måste kunna hantera att visa specifika delar av klustret beroende på användningsfall (t.ex. bara X-Y-koordinater).\n- Utformningen av metadatavisningen ska ha två kolumner: den ena för metadatadefinitionen (beskrivning av typen) och den andra för datavärdet (t.ex. \"tio\" för antal).\n- För metadatafält som kan innehålla en katalog eller flera poster, som ordnar, ska det finnas en funktion för att kollapsa och expandera listan för att ge överblick och möjlighet till redigering av enskilda poster.\n\n### Open Questions/Pending Items\n- Hur ska systemet mest effektivt hantera visning och redigering av katalogbaserad metadata med många poster, såsom multipla ordrar?\n- Exakt hur ska en kontaktperson som ett metapdatafält hanteras och vilka underliggande fält ska inkluderas och hur presenteras de?\n",
+  "conversation": [],
+  "transcripts": [
+    {
+      "text": "Då ska vi prata om skapa nytt objekt. Ja, och här har det ju då blivit alldeles fel. För när vi har den här funktionen, skapa nytt objekt, eller att man öppnar upp ett befintligt objekt, oavsett nivå i hierarkin, så ska vi då understryka då att följande information ska finnas.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det systemgenererade numret och löpnumret på objektet som systemet bestämmer, den finns ju där. Sen ska namnet på objektet finnas där då som det enda fältet som man då använder. Sen har vi sagt då att släktnamnet ska finnas under objektet. Är man på topp hierarkin, ja, då blir det ju bara då ett namn. Men om man är längre ner så blir det ju då, eh, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Området och så fastigheten, återvinningsplatsen eller rummet och det enskilda objektet då som kan vara då återvinningskärl. Eh, så att namn och därefter då... Det, det finns två fasta fält här. Det ena är då det systemgen-genererade unika numret och det andra är då, eh, släktnamnet då som den skapar beroende på hur, hur den är kopplad. Nästa otroligt viktiga fält...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Som också ligger systemmässigt då, det är att man kan välja då överordnat objekt, alltså förälder. Och där ska det ju då finnas en sökfunktion så att man kan söka då och leta fram då så att man kopplar det här till rätt överordnat objekt då.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Och där är det ju också bra att i den sökfunktionen då att det finns nån tydlighet då så att man, man kanske ska få släktnamnet då skapat efter det då. För det som kan hända annars då det är att du, du kopplar, om du ska, du ska jobba med ett objekt så skulle du då i det läget kunna koppla på information. Du, du kopplar det objekt som du håller på med till fel gren då. Och där behöver systemet då tydliggöra det då. Eh, och släktnamnet säger ju då allt. Mm. Eh, alternativt då att man har en sökfunktion där då som man liksom kan söka.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Söka utifrån område eller, eller, eller nånting då. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Som finns där. Eh, objekttyp ska inte finnas. Tillgångstyp ska inte finnas. Adress ska inte finnas och kund ska inte finnas. Däremot ska det då finnas ett fält som visar då eventuell ärvd metadata, inklusive metadatafält då. Så det blir två kolumner. Om den har till exempel ärvd-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Då vi säger då ett kundnummer eller en tömningsdag, så ska det då stå då ärvd data, tömningsdag, torsdagar. Ärvdata, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Kund, eh, ja, de står, står där då med sin, eh, metadata referens och sen då det datavärde då som finns där. Och samma sak gäller ju då, eh, om det nu skulle vara foto eller vad det nu är då som, som är skapat och definierat och inlagt på högre nivåer då. Sedan så har vi då ett fält som är...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Egenskapad metadata för det här objektet och eventuella underställda objekt till den här. Så då ska man ju då ha då, eh, en sån här plusknapp och så kan man välja då att lägga till till exempel kontaktperson eller man kan välja att lägga till då, eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Till behållare eller så. De metadatarreferenserna ska då vara samma metadatarreferenser som finns under menyn Metadatainställningar. För i grunden för metadata, det första som du gör är att du definierar då olika metadatatyper och då blir de då tillgängliga. Och när du har definierat en metadatatyp så definierar du om den och om den ska vara nivålåst eller om den ska falla neråt, vilken typ av data...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "...med att datafältet ska innehålla, till exempel ett foto eller antal eller ett datum eller ett tidsinterval.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Under då, eh, det här fälten, de två fältena med ärvdata och fältet då med egenskap data, ska det finnas då metadatafält som är systemgenererad. Det vill säga ordrar som är kopplade till det här objektet och ordern kommer ju då vara kopplad till systemnumret då som den har hittat i utifrån en tabell då. Och sen så kommer ju metadatavärdet då bli ordern och ordern kan ju då vara ett-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm. Ordern och med den kan också kanske vara en orderbeskrivning då. Och i det fallet så blir ju det också då en möjlighet att man kan länka ut då direkt till att titta på den ordern och se vad det... Ja. Gå in i beställningsunderlagen som vi kallar för, eh, orderkoncept då. Och sen så har vi motsvarande fält för rating och felanmälningar då som är då, eh, inpushade metadata utav systemet utifrån andra rutiner eller användargränssnitt då. Eh, längst ner på den här...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så ska det också finnas då knappar så att man kan kopiera objektet i sin helhet. Det ska också finnas en knapp naturligtvis att man kan radera det här objektet, att det är arkiverade. Och det ska finnas en knapp att man kan koppla på ett nytt objekt direkt till den här under. Så om det objekt som man har uppe då är, är då ett soprum så ska du då med plusknappen där snabbt kunna lägga till då, eh, del, eh, delar av en anläggning, det vill säga",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "- Ja. -skilda kärl eller- Ja. -eh... Fantastiskt. Och, och sen så för de här ärvda metadatafälten...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Så bör det då, om det är logiskt eller inte, det kan man ju diskutera då. Men ett metadatafält sätts ju upp generellt om det ska vara nivålåst eller om det ska då ärvas nedåt. Och, och i utifrån den logiken så kan det finnas då ett behov av att liksom rensa och stoppa det här. Ett exempel på det är ju då en... Säg att vi har en kontaktperson då som ligger på en toppnivå. Det är-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...äkta den är avtalsansvarig då. Då kan ju någon tycka att den metadatan är onödig om den flödar hela vägen ner. Och med den här funktionen, genom att så att säga manuellt blockerar den eller stoppar den där då, så kommer ju, kommer ju den då att bli... D-d-då kommer det inte- Fastnade. Då, då, då bromsar man den då så att den här kontaktpersonen inte, eller den här uppgiften inte blir synlig då för, för en användare eller en, en utförare då. Sen kan man ju då, får man ju då ett dilemma då här, ska vi säga, det här-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...det kan ju finnas metadata som man på det där viset också då med samma funktion blockerar. För, för på något vis då så kanske det är en blockering man gör. För det kan ju vara som så då att, eh, om vi får en rating på hela anläggningen eller så kanske man inte vill att den då ska bli synlig för alla. Nej. Då kan man liksom bromsa den med den här funktionen då i ett, i ett första läge. Men man har en viss flexibilitet i, i då att, att skapa det så. Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Där har vi väl fått med allting. Det är väl några kritiska saker som jag kan summera. Eh, det ena är ju då hur man hittar föräldern som jag sa då. Att där behöver det ju då finnas en, en, en, en, en funktion som man inte kopplar på sig på fel, fel förälder så att säga då. Eh, och en lösning utav det är att den, den, den summerar, eh, släktnamnet då. För då kommer man ju då att se var den härstammar ifrån så att säga, så man inte har kopplat på ett soprum på fel fastighet till exempel.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Eh...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Också viktigt då att se logiken då i det här då att inte blanda högt och lågt här nu då. Objekttyp. Det finns ingenting som heter objekttyp, utan däremot kan det finnas ett metadatafält som heter objekttyp. Ja. Men inte så som- Lite som rubrik. Nej ...kodat nu här då. Och samma sak gäller då kund och samma sak gäller, gäller adress. Ytterligare en grej. Ytterligare en grej som vi bör ta hänsyn till.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Det är också då de metadatafält som är småkluster. Eh, d-det vill säga, du kan ju ha ett metadatafält som vi kallar adress. Mm. Men adress består utav gatuadress, postnummer och ort och kanske också en x- och en y-koordinat då. Och väljer du då...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "adress då som metadata, som ju du nästan alltid kommer att välja i för sig då, men det kommer ju vara standard. Men du kanske... I vissa lägen kanske du bara kommer att jobba, vilja jobba med x- och y-koordinater. I, i ett annat läge kanske du vill jobba med gatuadress. Mm. I, i, i ett framtida läge kanske du kommer att vilja jobba med en yta då. Då, då, då har den en annan typ av, av, av, av, eh- Beskrivning. Beskrivning då. Men den måste kunna hantera en liten, en liten hierarki eller kluster utav då, eh, om man säger...",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Tillhörande eller en, en familj utav data som en adress kan vara. Även en kontaktperson är ju samma sak, att den har namn, titel, telefonnummer och e-post. Och ytterligare en grej, eftersom att den här ska ju då i det här lä-läget också då redovisa två kolumner då. Så att det ena är ju så att säga metadatadefinitionen då med be-beskrivning vad det är för typ av metadata, exempelvis antal av en viss typ av tjäl eller antal kvadrat-kvadratmeter eller vad man väljer att bygga upp. Och så ska det då stå bredvid då-",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    },
+    {
+      "text": "Mm ...till exempel tio. Och det är ju väldigt enkelt om, om det finns då ett metadatafält som, som då är begränsat till enbart en information. Mm. Men om vi har metadatafält som kan innehålla en katalog eller alltså som en, en, ett antal, eh, till exempel ordrar då- Mm ...kan ju, kan-- Det kan ju ligga fem framtida ordrar och, och, och, och fem utförda ordrar. Då, då behöver man ju liksom få överblicken där. Antingen att man kollapsar- Mm ...och expanderar och så ser man alla ordrar- Mm ...och så kan man då gå in och redigera dem.",
+      "timestamp": "",
+      "speaker": "You",
+      "isFinal": true
+    }
+  ]
+}
