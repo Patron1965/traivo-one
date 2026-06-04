@@ -2070,7 +2070,13 @@ export async function writeArticleMetadataOnObject(
   leaveMetadataCode: string,
   value: any,
   tenantId: string,
-  executedBy?: string
+  executedBy?: string,
+  // Ursprung för skrivningen. Default 'tjanst' (artikel-writeback från mobil-
+  // utförande). Light-utförandevyn i kundportalen (Task #715) skickar 'utforande'
+  // så att ändringsloggen får korrekt källa. Båda är read-only/auto-ursprung och
+  // släpps igenom guards (isAutomaticOrigin), men kan skrivas över av en ny
+  // auto-skrivning (annan utförande/tjänst) — bara rena manuella edits blockeras.
+  metod: string = 'tjanst',
 ): Promise<MetadataVarden> {
   const [metadataTyp] = await db
     .select()
@@ -2095,7 +2101,7 @@ export async function writeArticleMetadataOnObject(
     .limit(1);
 
   if (existing) {
-    return updateMetadata(existing.id, value, tenantId, executedBy, 'tjanst');
+    return updateMetadata(existing.id, value, tenantId, executedBy, metod);
   } else {
     return createMetadata({
       tenantId,
@@ -2103,7 +2109,7 @@ export async function writeArticleMetadataOnObject(
       metadataTypNamn: leaveMetadataCode,
       varde: value,
       skapadAv: executedBy,
-      metod: 'tjanst',
+      metod,
     });
   }
 }

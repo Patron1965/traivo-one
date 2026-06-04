@@ -8,7 +8,8 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { AppError, NotFoundError, ValidationError, UnauthorizedError, ForbiddenError, ConflictError } from "../errors";
 import { requireAdmin, requireRole } from "../tenant-middleware";
-import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema, type InsertObject, objectMetadata } from "@shared/schema";
+import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema, type InsertObject, objectMetadata, taskMetadataUpdates } from "@shared/schema";
+import { getObjectWithAllMetadata, writeArticleMetadataOnObject } from "../metadata-queries";
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
 import { isModuleEnabled } from "../feature-flags";
@@ -2350,6 +2351,243 @@ app.get("/api/portal/field/object/:id", asyncHandler(async (req, res) => {
         reviewNotes: cr.reviewNotes,
       })),
     });
+}));
+
+// ============================================================================
+// LIGHT-UTFÖRANDEVY (Task #715, Session 7 §6.2)
+// ----------------------------------------------------------------------------
+// Förenklad utförandevy för bovärdar/förvaltare i kundportalen: en uppgiftslista
+// (kort) scopad till portalanvändarens objekt. Ingen veckoplanering/ruttopt.
+// Kvittering uppdaterar ett angivet metadata-fält via kärnmodellen (loggas med
+// källa 'utforande' i metadata_historik) och markerar uppgiften som utförd.
+// ALLA läs/skriv går via isObjectInScope + isObjectOwnedByPortalCustomer — scope
+// får aldrig widgas via klient-skickade ID:n.
+// ============================================================================
+
+// Statusar som räknas som "öppen uppgift" (kan kvitteras). Speglar mobil-vyns
+// gating (server/routes/mobile/*): redan avslutade/omöjliga ordrar listas inte.
+const PORTAL_EXECUTION_CLOSED_STATUSES = new Set(["utford", "fakturerad", "avbruten", "omojlig"]);
+
+// Härled vilka metadata-fält en uppgift ber utföraren uppdatera. Samma modell som
+// fulla utförandevyn: artiklar på orderns rader med canUpdateMetadata +
+// updateMetadataLabel. `label` är katalogens `namn` (samma nyckel som
+// writeArticleMetadataOnObject/createMetadata slår upp på vid skrivning).
+async function getPortalTaskUpdatableFields(
+  workOrderId: string,
+  objectId: string,
+  tenantId: string,
+  articleMap: Map<string, any>,
+  objectMetadata: any[] | null,
+): Promise<Array<{ label: string; format: string | null; currentValue: string | null }>> {
+  const lines = await storage.getWorkOrderLines(workOrderId);
+  const seen = new Set<string>();
+  const fields: Array<{ label: string; format: string | null; currentValue: string | null }> = [];
+
+  for (const line of lines) {
+    const article = line.articleId ? articleMap.get(line.articleId) : undefined;
+    if (!article || !article.canUpdateMetadata || !article.updateMetadataLabel) continue;
+    const label = article.updateMetadataLabel as string;
+    if (seen.has(label)) continue;
+    seen.add(label);
+
+    let currentValue: string | null = null;
+    if (objectMetadata) {
+      const match = objectMetadata.find(
+        (m: any) => m?.katalog?.namn === label || m?.katalog?.beteckning === label,
+      );
+      if (match) {
+        currentValue =
+          match.vardeString ??
+          (match.vardeInteger != null ? String(match.vardeInteger) : null) ??
+          (match.vardeDecimal != null ? String(match.vardeDecimal) : null) ??
+          (match.vardeBoolean != null ? String(match.vardeBoolean) : null) ??
+          null;
+      }
+    }
+
+    fields.push({ label, format: article.updateMetadataFormat || null, currentValue });
+  }
+
+  return fields;
+}
+
+app.get("/api/portal/execution/tasks", asyncHandler(async (req, res) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+
+    const allWorkOrders = await storage.getWorkOrdersByCustomer(session.customerId!, session.tenantId!);
+    // Scope: bara objekt portalanvändaren får se. null scope = full access (bakåtkompat).
+    const openTasks = allWorkOrders.filter(
+      (o) =>
+        o.objectId &&
+        isObjectInScope(session, o.objectId) &&
+        !PORTAL_EXECUTION_CLOSED_STATUSES.has(o.orderStatus),
+    );
+
+    const objects = await storage.getObjects(session.tenantId!);
+    const objectMap = new Map(objects.map((o) => [o.id, o]));
+    const articles = await storage.getArticles(session.tenantId!);
+    const articleMap = new Map(articles.map((a) => [a.id, a]));
+
+    // Cacha objekt-metadata per objekt så flera uppgifter på samma objekt inte
+    // dubbel-hämtar.
+    const metadataCache = new Map<string, any[] | null>();
+    const getObjMeta = async (objId: string): Promise<any[] | null> => {
+      if (metadataCache.has(objId)) return metadataCache.get(objId)!;
+      const owm = await getObjectWithAllMetadata(objId, session.tenantId!);
+      const meta = owm?.metadata ?? null;
+      metadataCache.set(objId, meta);
+      return meta;
+    };
+
+    const tasks = [];
+    for (const order of openTasks) {
+      const obj = objectMap.get(order.objectId!);
+      // Defense-in-depth: objektet måste tillhöra portal-kunden (primär payer).
+      if (!obj || !isObjectOwnedByPortalCustomer(obj, session)) continue;
+      const objMeta = await getObjMeta(order.objectId!);
+      const metadataFields = await getPortalTaskUpdatableFields(
+        order.id,
+        order.objectId!,
+        session.tenantId!,
+        articleMap,
+        objMeta,
+      );
+      tasks.push({
+        id: order.id,
+        title: order.title,
+        description: order.description,
+        status: order.orderStatus,
+        scheduledDate: order.scheduledDate,
+        object: {
+          id: obj.id,
+          name: obj.name,
+          objectNumber: obj.objectNumber,
+          address: obj.address,
+          city: obj.city,
+          latitude: obj.latitude,
+          longitude: obj.longitude,
+        },
+        metadataFields,
+      });
+    }
+
+    tasks.sort((a, b) => {
+      if (!a.scheduledDate) return 1;
+      if (!b.scheduledDate) return -1;
+      return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+    });
+
+    res.json(tasks);
+}));
+
+app.post("/api/portal/execution/tasks/:id/complete", asyncHandler(async (req, res) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+
+    const completeSchema = z.object({
+      metadataUpdates: z
+        .array(
+          z.object({
+            label: z.string().min(1),
+            value: z.string().max(2000),
+          }),
+        )
+        .max(20)
+        .optional()
+        .default([]),
+    });
+    const parsed = completeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(formatZodError(parsed.error).error);
+    }
+    const { metadataUpdates } = parsed.data;
+
+    const order = await storage.getWorkOrder(req.params.id);
+    // Bind uppgiften till portal-kunden — samma urval som GET-listan
+    // (getWorkOrdersByCustomer). Annars kan en order-ID från en annan kunds order
+    // på ett delat objekt kvitteras (IDOR). Defense-in-depth tillsammans med
+    // objekt-scope/ägarskaps-kontrollen nedan.
+    if (!order || order.tenantId !== session.tenantId || order.customerId !== session.customerId) {
+      throw new NotFoundError("Uppgift hittades inte");
+    }
+    if (!order.objectId) {
+      throw new ValidationError("Uppgiften saknar objekt och kan inte kvitteras här");
+    }
+
+    // Scope + ägarskap: objektet måste tillhöra portal-kunden OCH ligga i scope.
+    const obj = await storage.getObject(order.objectId);
+    if (!obj || !isObjectOwnedByPortalCustomer(obj, session) || !isObjectInScope(session, obj.id)) {
+      throw new NotFoundError("Uppgift hittades inte");
+    }
+
+    if (PORTAL_EXECUTION_CLOSED_STATUSES.has(order.orderStatus)) {
+      throw new ValidationError("Uppgiften är redan avslutad");
+    }
+
+    // Tillåtna metadata-fält bestäms server-side av uppgiftens artiklar — aldrig
+    // av klient-skickad label. Förhindrar skrivning till godtyckliga fält.
+    const articles = await storage.getArticles(session.tenantId!);
+    const articleMap = new Map(articles.map((a) => [a.id, a]));
+    const allowedFields = await getPortalTaskUpdatableFields(
+      order.id,
+      order.objectId,
+      session.tenantId!,
+      articleMap,
+      null,
+    );
+    const allowedLabels = new Set(allowedFields.map((f) => f.label));
+
+    const actor = `portal:${session.portalUserId ?? session.email ?? session.customerId}`;
+
+    for (const update of metadataUpdates) {
+      if (!allowedLabels.has(update.label)) {
+        throw new ForbiddenError(`Fältet "${update.label}" kan inte uppdateras för denna uppgift`);
+      }
+
+      // Tidigare värde för revisionsloggen.
+      let previousValue: string | null = null;
+      const objMeta = await getObjectWithAllMetadata(order.objectId, session.tenantId!);
+      const match = objMeta?.metadata?.find(
+        (m: any) => m?.katalog?.namn === update.label || m?.katalog?.beteckning === update.label,
+      );
+      if (match) {
+        previousValue =
+          match.vardeString ??
+          (match.vardeInteger != null ? String(match.vardeInteger) : null) ??
+          (match.vardeDecimal != null ? String(match.vardeDecimal) : null) ??
+          null;
+      }
+
+      // Skriv via kärnmodellen — loggas i metadata_historik med källa 'utforande'.
+      await writeArticleMetadataOnObject(
+        order.objectId,
+        update.label,
+        update.value,
+        session.tenantId!,
+        actor,
+        "utforande",
+      );
+
+      await db.insert(taskMetadataUpdates).values({
+        tenantId: session.tenantId!,
+        workOrderId: order.id,
+        objectId: order.objectId,
+        metadataLabel: update.label,
+        previousValue,
+        newValue: update.value,
+        updatedBy: actor,
+      });
+    }
+
+    const updated = await storage.updateWorkOrder(order.id, {
+      orderStatus: "utford",
+      status: "completed",
+      executionStatus: "completed",
+      completedAt: new Date(),
+    });
+
+    res.json({ success: true, id: order.id, status: updated?.orderStatus ?? "utford" });
 }));
 
 app.get("/api/portal/field/reports", asyncHandler(async (req, res) => {
