@@ -3,10 +3,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Circle, Polygon, Polyline, Popup, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Globe, Plus, Pencil, Trash2, MapPin, Layers } from "lucide-react";
+import { Globe, Plus, Pencil, Trash2, MapPin, Layers, Undo2, Eraser } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { QueryState } from "@/components/QueryState";
@@ -80,6 +80,164 @@ function parseCoord(v?: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+type LatLng = [number, number];
+
+// GeoJSON använder [lng, lat]; Leaflet använder [lat, lng].
+function geoJsonToLatLngs(poly: unknown): LatLng[] {
+  if (!poly || typeof poly !== "object") return [];
+  const p = poly as { type?: string; coordinates?: unknown };
+  if (p.type !== "Polygon" || !Array.isArray(p.coordinates) || !Array.isArray(p.coordinates[0])) {
+    return [];
+  }
+  const ring = p.coordinates[0] as unknown[];
+  const pts: LatLng[] = [];
+  for (const c of ring) {
+    if (Array.isArray(c) && c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1])) {
+      pts.push([c[1] as number, c[0] as number]);
+    }
+  }
+  // Ta bort den stängande punkten (samma som första) om den finns.
+  if (pts.length > 1) {
+    const a = pts[0];
+    const b = pts[pts.length - 1];
+    if (a[0] === b[0] && a[1] === b[1]) pts.pop();
+  }
+  return pts;
+}
+
+function latLngsToGeoJson(pts: LatLng[]): { type: "Polygon"; coordinates: number[][][] } | null {
+  if (pts.length < 3) return null;
+  const ring = pts.map(([lat, lng]) => [lng, lat]);
+  ring.push([pts[0][1], pts[0][0]]); // stäng ringen
+  return { type: "Polygon", coordinates: [ring] };
+}
+
+function polygonCentroid(pts: LatLng[]): LatLng | null {
+  if (pts.length === 0) return null;
+  const sum = pts.reduce<[number, number]>((acc, [lat, lng]) => [acc[0] + lat, acc[1] + lng], [0, 0]);
+  return [sum[0] / pts.length, sum[1] / pts.length];
+}
+
+const vertexIcon = L.divIcon({
+  className: "zone-vertex-marker",
+  html: `<div style="width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #1B4B6B;box-shadow:0 1px 3px rgba(0,0,0,0.4);"></div>`,
+  iconSize: [12, 12],
+  iconAnchor: [6, 6],
+});
+
+function PolygonClickAdd({ onAdd }: { onAdd: (p: LatLng) => void }) {
+  useMapEvents({
+    click(e) {
+      onAdd([e.latlng.lat, e.latlng.lng]);
+    },
+  });
+  return null;
+}
+
+function PolygonEditorFit({ points, fallback }: { points: LatLng[]; fallback: LatLng | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (points.length >= 2) {
+      map.fitBounds(L.latLngBounds(points.map((p) => L.latLng(p[0], p[1]))), {
+        padding: [30, 30],
+        maxZoom: 14,
+      });
+    } else if (points.length === 1) {
+      map.setView(points[0], 13);
+    } else if (fallback) {
+      map.setView(fallback, 11);
+    } else {
+      map.setView([59.3293, 18.0686], 5);
+    }
+    // Endast vid montering (öppning av dialog) – inte vid varje punktändring.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
+}
+
+function ZonePolygonEditor({
+  points,
+  onChange,
+  fallbackCenter,
+  tileUrl,
+  attribution,
+  maxZoom,
+  color,
+}: {
+  points: LatLng[];
+  onChange: (pts: LatLng[]) => void;
+  fallbackCenter: LatLng | null;
+  tileUrl: string;
+  attribution: string;
+  maxZoom: number;
+  color: string;
+}) {
+  const initialCenter = fallbackCenter ?? [59.3293, 18.0686];
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          Klicka på kartan för att rita zonens gränser. Dra en punkt för att flytta den, klicka på en punkt för att ta bort den.
+        </p>
+        <div className="flex gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={points.length === 0}
+            onClick={() => onChange(points.slice(0, -1))}
+            data-testid="button-zone-polygon-undo"
+          >
+            <Undo2 className="h-3.5 w-3.5 mr-1" /> Ångra
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={points.length === 0}
+            onClick={() => onChange([])}
+            data-testid="button-zone-polygon-clear"
+          >
+            <Eraser className="h-3.5 w-3.5 mr-1" /> Rensa
+          </Button>
+        </div>
+      </div>
+      <div className="h-[260px] w-full overflow-hidden rounded-md border border-border" data-testid="map-zone-editor">
+        <MapContainer center={initialCenter} zoom={11} className="h-full w-full" scrollWheelZoom>
+          <TileLayer url={tileUrl} attribution={attribution} maxZoom={maxZoom} />
+          <PolygonEditorFit points={points} fallback={fallbackCenter} />
+          <PolygonClickAdd onAdd={(p) => onChange([...points, p])} />
+          {points.length >= 3 ? (
+            <Polygon positions={points} pathOptions={{ color, fillColor: color, fillOpacity: 0.15 }} />
+          ) : points.length === 2 ? (
+            <Polyline positions={points} pathOptions={{ color }} />
+          ) : null}
+          {points.map((p, i) => (
+            <Marker
+              key={i}
+              position={p}
+              icon={vertexIcon}
+              draggable
+              eventHandlers={{
+                dragend: (e) => {
+                  const ll = (e.target as L.Marker).getLatLng();
+                  const next = points.slice();
+                  next[i] = [ll.lat, ll.lng];
+                  onChange(next);
+                },
+                click: () => onChange(points.filter((_, idx) => idx !== i)),
+              }}
+            />
+          ))}
+        </MapContainer>
+      </div>
+      {points.length > 0 && points.length < 3 && (
+        <p className="text-xs text-warning">Minst 3 punkter krävs för att skapa en polygon ({points.length} satta).</p>
+      )}
+    </div>
+  );
+}
+
 function MapAutoFit({ points }: { points: [number, number][] }) {
   const map = useMap();
   useEffect(() => {
@@ -115,6 +273,7 @@ export default function DistrictsAdminPage() {
   const [zoneDialogOpen, setZoneDialogOpen] = useState(false);
   const [editingZone, setEditingZone] = useState<DistrictZone | null>(null);
   const [deleteZone, setDeleteZone] = useState<DistrictZone | null>(null);
+  const [zonePolygonPoints, setZonePolygonPoints] = useState<LatLng[]>([]);
 
   const districtsQuery = useQuery<GeographicDistrict[]>({
     queryKey: ["/api/districts"],
@@ -210,12 +369,14 @@ export default function DistrictsAdminPage() {
 
   function openCreateZone() {
     setEditingZone(null);
+    setZonePolygonPoints([]);
     zoneForm.reset({ name: "", code: "", postalCodes: "", centerLat: "", centerLng: "" });
     setZoneDialogOpen(true);
   }
 
   function openEditZone(z: DistrictZone) {
     setEditingZone(z);
+    setZonePolygonPoints(geoJsonToLatLngs(z.polygon));
     zoneForm.reset({
       name: z.name,
       code: z.code ?? "",
@@ -236,8 +397,9 @@ export default function DistrictsAdminPage() {
           .split(",")
           .map((s) => s.trim())
           .filter(Boolean),
-        centerLat: parseCoord(values.centerLat),
-        centerLng: parseCoord(values.centerLng),
+        polygon: latLngsToGeoJson(zonePolygonPoints),
+        centerLat: parseCoord(values.centerLat) ?? polygonCentroid(zonePolygonPoints)?.[0] ?? null,
+        centerLng: parseCoord(values.centerLng) ?? polygonCentroid(zonePolygonPoints)?.[1] ?? null,
       };
       if (editingZone) {
         return apiRequest("PATCH", `/api/district-zones/${editingZone.id}`, payload);
@@ -383,6 +545,20 @@ export default function DistrictsAdminPage() {
                       </Marker>
                     </div>
                   ))}
+                {(zonesQuery.data ?? []).map((z) => {
+                  const pts = geoJsonToLatLngs(z.polygon);
+                  if (pts.length < 3) return null;
+                  const zoneColor = selectedDistrict?.color ?? "#4A9B9B";
+                  return (
+                    <Polygon
+                      key={`zone-poly-${z.id}`}
+                      positions={pts}
+                      pathOptions={{ color: zoneColor, fillColor: zoneColor, fillOpacity: 0.2, weight: 2 }}
+                    >
+                      <Popup>{z.name}</Popup>
+                    </Polygon>
+                  );
+                })}
               </MapContainer>
             </div>
           </CardContent>
@@ -416,6 +592,7 @@ export default function DistrictsAdminPage() {
                     <TableHead>Namn</TableHead>
                     <TableHead>Kod</TableHead>
                     <TableHead>Postnummer</TableHead>
+                    <TableHead>Gräns</TableHead>
                     <TableHead className="text-right">Åtgärder</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -426,6 +603,13 @@ export default function DistrictsAdminPage() {
                       <TableCell className="text-muted-foreground">{z.code || "-"}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {(z.postalCodes ?? []).length > 0 ? (z.postalCodes ?? []).join(", ") : "-"}
+                      </TableCell>
+                      <TableCell>
+                        {geoJsonToLatLngs(z.polygon).length >= 3 ? (
+                          <Badge variant="secondary" data-testid={`badge-zone-polygon-${z.id}`}>Polygon</Badge>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => openEditZone(z)} data-testid={`button-edit-zone-${z.id}`}>
@@ -553,7 +737,7 @@ export default function DistrictsAdminPage() {
 
       {/* Zone dialog */}
       <Dialog open={zoneDialogOpen} onOpenChange={setZoneDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingZone ? "Redigera zon" : "Ny zon"}</DialogTitle>
             <DialogDescription>Zon inom {selectedDistrict?.name}.</DialogDescription>
@@ -599,15 +783,31 @@ export default function DistrictsAdminPage() {
                   </FormItem>
                 )}
               />
+              <div className="space-y-2">
+                <FormLabel>Zon-gräns (polygon)</FormLabel>
+                <ZonePolygonEditor
+                  points={zonePolygonPoints}
+                  onChange={setZonePolygonPoints}
+                  fallbackCenter={
+                    selectedDistrict?.centerLat != null && selectedDistrict?.centerLng != null
+                      ? [selectedDistrict.centerLat, selectedDistrict.centerLng]
+                      : null
+                  }
+                  tileUrl={mapConfig.tileUrl}
+                  attribution={mapConfig.attribution}
+                  maxZoom={mapConfig.maxZoom}
+                  color={selectedDistrict?.color ?? "#4A9B9B"}
+                />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={zoneForm.control}
                   name="centerLat"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Latitud</FormLabel>
+                      <FormLabel>Latitud (centrum, valfri)</FormLabel>
                       <FormControl>
-                        <Input {...field} data-testid="input-zone-lat" inputMode="decimal" />
+                        <Input {...field} data-testid="input-zone-lat" inputMode="decimal" placeholder="Beräknas från polygon" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -618,9 +818,9 @@ export default function DistrictsAdminPage() {
                   name="centerLng"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Longitud</FormLabel>
+                      <FormLabel>Longitud (centrum, valfri)</FormLabel>
                       <FormControl>
-                        <Input {...field} data-testid="input-zone-lng" inputMode="decimal" />
+                        <Input {...field} data-testid="input-zone-lng" inputMode="decimal" placeholder="Beräknas från polygon" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
