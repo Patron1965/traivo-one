@@ -1090,7 +1090,7 @@ function WeekCalendar({
   onSelectBlock: (b: ScheduleBlock) => void;
 }) {
   const hourMarks = Array.from({ length: 13 }, (_, i) => i * 2); // 0,2,...,24
-  const HEADER_H = 56;
+  const HEADER_H = 64;
   const gutter = (side: "left" | "right") => (
     <div className={`w-12 shrink-0 ${side === "left" ? "" : "border-l border-border"}`}>
       <div style={{ height: `${HEADER_H}px` }} className="border-b border-border" />
@@ -1130,7 +1130,7 @@ function WeekCalendar({
               <button
                 type="button"
                 onClick={() => onSelectDay(date)}
-                className={`w-full flex flex-col items-center justify-center border-b transition-colors hover-elevate ${
+                className={`w-full flex flex-col items-center justify-center gap-0.5 py-1.5 leading-tight border-b transition-colors hover-elevate ${
                   selectedDay === date
                     ? "border-primary bg-primary/10"
                     : `border-border ${isWeekend ? "bg-muted/40" : ""}`
@@ -1140,15 +1140,15 @@ function WeekCalendar({
                 aria-pressed={selectedDay === date}
               >
                 <span
-                  className={`text-xs font-semibold uppercase tracking-wide ${selectedDay === date ? "text-primary" : ""}`}
+                  className={`text-xs font-semibold uppercase tracking-wide leading-tight ${selectedDay === date ? "text-primary" : ""}`}
                   data-testid={`day-name-${idx}`}
                 >
                   {format(dayDate, "EEEE", { locale: sv })}
                 </span>
-                <span className="text-[11px] text-muted-foreground uppercase">
+                <span className="text-[11px] text-muted-foreground uppercase leading-tight">
                   {format(dayDate, "d MMMM", { locale: sv })}
                 </span>
-                <span className="text-[10px] text-muted-foreground/70">(24 h)</span>
+                <span className="text-[10px] text-muted-foreground/70 leading-tight">(24 h)</span>
               </button>
               <div className={`relative ${isWeekend ? "bg-muted/30" : "bg-muted/10"}`} style={{ height: `${24 * HOUR_PX}px` }}>
                 {hourMarks.map((h) => (
