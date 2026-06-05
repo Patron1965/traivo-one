@@ -26,6 +26,8 @@ const NotFound = lazy(() => import("@/pages/not-found"));
 const AccessDeniedPage = lazy(() => import("@/pages/AccessDeniedPage"));
 const WeekPlannerPage = lazy(() => import("@/pages/WeekPlannerPage"));
 const WeeklyPlanViewPage = lazy(() => import("@/pages/WeeklyPlanViewPage"));
+const GrovplaneringPage = lazy(() => import("@/pages/GrovplaneringPage"));
+const DistrictsAdminPage = lazy(() => import("@/pages/DistrictsAdminPage"));
 const RoutesPage = lazy(() => import("@/pages/RoutesPage"));
 const ObjectsPage = lazy(() => import("@/pages/ObjectsPage"));
 const ObjectDetailPage = lazy(() => import("@/pages/ObjectDetailPage"));
@@ -157,6 +159,8 @@ function Router() {
         <Route path="/planner">{() => <ProtectedRoute component={WeekPlannerPage} path="/planner" />}</Route>
         <Route path="/week-planner">{() => <Redirect to="/planner" />}</Route>
         <Route path="/veckoplan">{() => <ProtectedRoute component={WeeklyPlanViewPage} path="/veckoplan" />}</Route>
+        <Route path="/grovplanering">{() => <ProtectedRoute component={GrovplaneringPage} path="/grovplanering" />}</Route>
+        <Route path="/distrikt">{() => <ProtectedRoute component={DistrictsAdminPage} path="/distrikt" />}</Route>
         <Route path="/clusters">{() => <ProtectedRoute component={ClustersPage} path="/clusters" />}</Route>
         <Route path="/clusters/:id">{() => <ProtectedRoute component={ClusterDetailPage} path="/clusters" />}</Route>
         <Route path="/routes">{() => <ProtectedRoute component={RoutesPage} path="/routes" />}</Route>

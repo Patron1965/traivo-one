@@ -2914,6 +2914,8 @@ export class DatabaseStorage implements IStorage {
       executionStatus: workOrders.executionStatus,
       creationMethod: workOrders.creationMethod,
       structuralArticleId: workOrders.structuralArticleId,
+      roughPlannedWeek: workOrders.roughPlannedWeek,
+      districtId: workOrders.districtId,
 
       taskLatitude: workOrders.taskLatitude,
       taskLongitude: workOrders.taskLongitude,
@@ -2996,6 +2998,8 @@ export class DatabaseStorage implements IStorage {
       executionStatus: workOrders.executionStatus,
       creationMethod: workOrders.creationMethod,
       structuralArticleId: workOrders.structuralArticleId,
+      roughPlannedWeek: workOrders.roughPlannedWeek,
+      districtId: workOrders.districtId,
 
       taskLatitude: workOrders.taskLatitude,
       taskLongitude: workOrders.taskLongitude,
@@ -3140,6 +3144,8 @@ export class DatabaseStorage implements IStorage {
       executionStatus: workOrders.executionStatus,
       creationMethod: workOrders.creationMethod,
       structuralArticleId: workOrders.structuralArticleId,
+      roughPlannedWeek: workOrders.roughPlannedWeek,
+      districtId: workOrders.districtId,
 
       taskLatitude: workOrders.taskLatitude,
       taskLongitude: workOrders.taskLongitude,
@@ -3239,6 +3245,8 @@ export class DatabaseStorage implements IStorage {
       executionStatus: workOrders.executionStatus,
       creationMethod: workOrders.creationMethod,
       structuralArticleId: workOrders.structuralArticleId,
+      roughPlannedWeek: workOrders.roughPlannedWeek,
+      districtId: workOrders.districtId,
 
       taskLatitude: workOrders.taskLatitude,
       taskLongitude: workOrders.taskLongitude,
@@ -3373,6 +3381,8 @@ export class DatabaseStorage implements IStorage {
       executionStatus: workOrders.executionStatus,
       creationMethod: workOrders.creationMethod,
       structuralArticleId: workOrders.structuralArticleId,
+      roughPlannedWeek: workOrders.roughPlannedWeek,
+      districtId: workOrders.districtId,
 
       taskLatitude: workOrders.taskLatitude,
       taskLongitude: workOrders.taskLongitude,

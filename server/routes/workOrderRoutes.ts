@@ -1181,6 +1181,10 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
   if (updateData.customerId) await ensureCustomerInTenant(updateData.customerId, tenantId);
   if (updateData.objectId) await ensureObjectInTenant(updateData.objectId, tenantId);
   if (updateData.clusterId) await ensureClusterInTenant(updateData.clusterId, tenantId);
+  if (updateData.districtId) {
+    const district = await storage.getGeographicDistrict(tenantId, updateData.districtId);
+    if (!district) throw new ValidationError("Distriktet finns inte i denna tenant");
+  }
 
   // När klienten begär det (detaljvyns redigera-dialog), kör samma
   // constraint-/konfliktkontroll som veckoplaneraren innan vi sparar en
