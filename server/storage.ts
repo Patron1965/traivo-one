@@ -150,6 +150,20 @@ import {
   type DeliveryPreferences,
   EMPTY_DELIVERY_PREFERENCES,
   deliveryPreferencesSchema,
+  // Task #785 — Veckoplanering: datafundament
+  weeklyPlans, weeklyPlanTasks, personalTasks, personalTaskSchedules,
+  travelTimeEntries, weeklyPlanWarnings, geographicDistricts, districtZones,
+  preTasks, execTypePreTaskRules,
+  type WeeklyPlan, type InsertWeeklyPlan,
+  type WeeklyPlanTask, type InsertWeeklyPlanTask,
+  type PersonalTask, type InsertPersonalTask,
+  type PersonalTaskSchedule, type InsertPersonalTaskSchedule,
+  type TravelTimeEntry, type InsertTravelTimeEntry,
+  type WeeklyPlanWarning, type InsertWeeklyPlanWarning,
+  type GeographicDistrict, type InsertGeographicDistrict,
+  type DistrictZone, type InsertDistrictZone,
+  type PreTask, type InsertPreTask,
+  type ExecTypePreTaskRule, type InsertExecTypePreTaskRule,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, ne, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray, getTableColumns, type SQL, type SQLWrapper } from "drizzle-orm";
@@ -1125,6 +1139,70 @@ export interface IStorage {
   getResourceVehiclesByResourceIds(resourceIds: string[]): Promise<ResourceVehicle[]>;
   getResourceArticlesByResourceIds(resourceIds: string[]): Promise<ResourceArticle[]>;
   createPlanningDecisionLog(log: { tenantId: string; userId?: string; weekStart: string; weekEnd: string; summary: unknown; moveCount: number; violationCount: number; riskScore: number; totalOrdersScheduled: number }): Promise<void>;
+
+  // ============== Task #785: Veckoplanering – datafundament ==============
+  // Alla queries är tenant-scopade; alla UPDATE/DELETE har tenant_id i WHERE.
+  // Geografiska distrikt
+  getGeographicDistricts(tenantId: string): Promise<GeographicDistrict[]>;
+  getGeographicDistrict(tenantId: string, id: string): Promise<GeographicDistrict | undefined>;
+  createGeographicDistrict(data: InsertGeographicDistrict): Promise<GeographicDistrict>;
+  updateGeographicDistrict(tenantId: string, id: string, data: Partial<InsertGeographicDistrict>): Promise<GeographicDistrict | undefined>;
+  deleteGeographicDistrict(tenantId: string, id: string): Promise<void>;
+  // Distrikt-zoner
+  getDistrictZones(tenantId: string, districtId?: string): Promise<DistrictZone[]>;
+  getDistrictZone(tenantId: string, id: string): Promise<DistrictZone | undefined>;
+  createDistrictZone(data: InsertDistrictZone): Promise<DistrictZone>;
+  updateDistrictZone(tenantId: string, id: string, data: Partial<InsertDistrictZone>): Promise<DistrictZone | undefined>;
+  deleteDistrictZone(tenantId: string, id: string): Promise<void>;
+  // Veckoplaner
+  getWeeklyPlans(tenantId: string, opts?: { teamId?: string; year?: number; weekNumber?: number; status?: string }): Promise<WeeklyPlan[]>;
+  getWeeklyPlan(tenantId: string, id: string): Promise<WeeklyPlan | undefined>;
+  createWeeklyPlan(data: InsertWeeklyPlan): Promise<WeeklyPlan>;
+  updateWeeklyPlan(tenantId: string, id: string, data: Partial<InsertWeeklyPlan>): Promise<WeeklyPlan | undefined>;
+  deleteWeeklyPlan(tenantId: string, id: string): Promise<void>;
+  // Veckoplan-uppgifter
+  getWeeklyPlanTasks(tenantId: string, weeklyPlanId: string): Promise<WeeklyPlanTask[]>;
+  getWeeklyPlanTask(tenantId: string, id: string): Promise<WeeklyPlanTask | undefined>;
+  createWeeklyPlanTask(data: InsertWeeklyPlanTask): Promise<WeeklyPlanTask>;
+  updateWeeklyPlanTask(tenantId: string, id: string, data: Partial<InsertWeeklyPlanTask>): Promise<WeeklyPlanTask | undefined>;
+  deleteWeeklyPlanTask(tenantId: string, id: string): Promise<void>;
+  // Personliga uppgifter
+  getPersonalTasks(tenantId: string, opts?: { weeklyPlanId?: string; teamId?: string }): Promise<PersonalTask[]>;
+  getPersonalTask(tenantId: string, id: string): Promise<PersonalTask | undefined>;
+  createPersonalTask(data: InsertPersonalTask): Promise<PersonalTask>;
+  updatePersonalTask(tenantId: string, id: string, data: Partial<InsertPersonalTask>): Promise<PersonalTask | undefined>;
+  deletePersonalTask(tenantId: string, id: string): Promise<void>;
+  // Personliga-uppgift-scheman
+  getPersonalTaskSchedules(tenantId: string, opts?: { teamId?: string; activeOnly?: boolean }): Promise<PersonalTaskSchedule[]>;
+  getPersonalTaskSchedule(tenantId: string, id: string): Promise<PersonalTaskSchedule | undefined>;
+  createPersonalTaskSchedule(data: InsertPersonalTaskSchedule): Promise<PersonalTaskSchedule>;
+  updatePersonalTaskSchedule(tenantId: string, id: string, data: Partial<InsertPersonalTaskSchedule>): Promise<PersonalTaskSchedule | undefined>;
+  deletePersonalTaskSchedule(tenantId: string, id: string): Promise<void>;
+  // Restidsposter
+  getTravelTimeEntries(tenantId: string, weeklyPlanId?: string): Promise<TravelTimeEntry[]>;
+  getTravelTimeEntry(tenantId: string, id: string): Promise<TravelTimeEntry | undefined>;
+  createTravelTimeEntry(data: InsertTravelTimeEntry): Promise<TravelTimeEntry>;
+  updateTravelTimeEntry(tenantId: string, id: string, data: Partial<InsertTravelTimeEntry>): Promise<TravelTimeEntry | undefined>;
+  deleteTravelTimeEntry(tenantId: string, id: string): Promise<void>;
+  // Veckoplan-varningar
+  getWeeklyPlanWarnings(tenantId: string, weeklyPlanId: string): Promise<WeeklyPlanWarning[]>;
+  getWeeklyPlanWarning(tenantId: string, id: string): Promise<WeeklyPlanWarning | undefined>;
+  createWeeklyPlanWarning(data: InsertWeeklyPlanWarning): Promise<WeeklyPlanWarning>;
+  updateWeeklyPlanWarning(tenantId: string, id: string, data: Partial<InsertWeeklyPlanWarning>): Promise<WeeklyPlanWarning | undefined>;
+  deleteWeeklyPlanWarning(tenantId: string, id: string): Promise<void>;
+  deleteWeeklyPlanWarningsByPlan(tenantId: string, weeklyPlanId: string): Promise<void>;
+  // Pre-tasks
+  getPreTasks(tenantId: string, opts?: { workOrderId?: string; status?: string }): Promise<PreTask[]>;
+  getPreTask(tenantId: string, id: string): Promise<PreTask | undefined>;
+  createPreTask(data: InsertPreTask): Promise<PreTask>;
+  updatePreTask(tenantId: string, id: string, data: Partial<InsertPreTask>): Promise<PreTask | undefined>;
+  deletePreTask(tenantId: string, id: string): Promise<void>;
+  // Regler: utförandetyp → pre-task
+  getExecTypePreTaskRules(tenantId: string, opts?: { executionType?: string; activeOnly?: boolean }): Promise<ExecTypePreTaskRule[]>;
+  getExecTypePreTaskRule(tenantId: string, id: string): Promise<ExecTypePreTaskRule | undefined>;
+  createExecTypePreTaskRule(data: InsertExecTypePreTaskRule): Promise<ExecTypePreTaskRule>;
+  updateExecTypePreTaskRule(tenantId: string, id: string, data: Partial<InsertExecTypePreTaskRule>): Promise<ExecTypePreTaskRule | undefined>;
+  deleteExecTypePreTaskRule(tenantId: string, id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -9065,6 +9143,280 @@ export class DatabaseStorage implements IStorage {
       .sort((a, b) => a.date.localeCompare(b.date));
 
     return { avgRating, totalCount, byCategory, byResource, ratingDistribution, byDay };
+  }
+
+  // ============== Task #785: Veckoplanering – datafundament ==============
+  // Geografiska distrikt
+  async getGeographicDistricts(tenantId: string): Promise<GeographicDistrict[]> {
+    return db.select().from(geographicDistricts)
+      .where(and(eq(geographicDistricts.tenantId, tenantId), isNull(geographicDistricts.deletedAt)))
+      .orderBy(geographicDistricts.name);
+  }
+  async getGeographicDistrict(tenantId: string, id: string): Promise<GeographicDistrict | undefined> {
+    const [row] = await db.select().from(geographicDistricts)
+      .where(and(eq(geographicDistricts.id, id), eq(geographicDistricts.tenantId, tenantId), isNull(geographicDistricts.deletedAt)));
+    return row || undefined;
+  }
+  async createGeographicDistrict(data: InsertGeographicDistrict): Promise<GeographicDistrict> {
+    const [row] = await db.insert(geographicDistricts).values(data).returning();
+    return row;
+  }
+  async updateGeographicDistrict(tenantId: string, id: string, data: Partial<InsertGeographicDistrict>): Promise<GeographicDistrict | undefined> {
+    const { tenantId: _t, ...patch } = data as Partial<InsertGeographicDistrict>;
+    const [row] = await db.update(geographicDistricts).set({ ...patch, updatedAt: new Date() })
+      .where(and(eq(geographicDistricts.id, id), eq(geographicDistricts.tenantId, tenantId))).returning();
+    return row || undefined;
+  }
+  async deleteGeographicDistrict(tenantId: string, id: string): Promise<void> {
+    await db.update(geographicDistricts).set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(geographicDistricts.id, id), eq(geographicDistricts.tenantId, tenantId)));
+  }
+
+  // Distrikt-zoner
+  async getDistrictZones(tenantId: string, districtId?: string): Promise<DistrictZone[]> {
+    const conds: Condition[] = [eq(districtZones.tenantId, tenantId)];
+    if (districtId) conds.push(eq(districtZones.districtId, districtId));
+    return db.select().from(districtZones).where(and(...conds)).orderBy(districtZones.name);
+  }
+  async getDistrictZone(tenantId: string, id: string): Promise<DistrictZone | undefined> {
+    const [row] = await db.select().from(districtZones)
+      .where(and(eq(districtZones.id, id), eq(districtZones.tenantId, tenantId)));
+    return row || undefined;
+  }
+  async createDistrictZone(data: InsertDistrictZone): Promise<DistrictZone> {
+    const [row] = await db.insert(districtZones).values(data).returning();
+    return row;
+  }
+  async updateDistrictZone(tenantId: string, id: string, data: Partial<InsertDistrictZone>): Promise<DistrictZone | undefined> {
+    const { tenantId: _t, ...patch } = data as Partial<InsertDistrictZone>;
+    const [row] = await db.update(districtZones).set({ ...patch, updatedAt: new Date() })
+      .where(and(eq(districtZones.id, id), eq(districtZones.tenantId, tenantId))).returning();
+    return row || undefined;
+  }
+  async deleteDistrictZone(tenantId: string, id: string): Promise<void> {
+    await db.delete(districtZones).where(and(eq(districtZones.id, id), eq(districtZones.tenantId, tenantId)));
+  }
+
+  // Veckoplaner
+  async getWeeklyPlans(tenantId: string, opts?: { teamId?: string; year?: number; weekNumber?: number; status?: string }): Promise<WeeklyPlan[]> {
+    const conds: Condition[] = [eq(weeklyPlans.tenantId, tenantId), isNull(weeklyPlans.deletedAt)];
+    if (opts?.teamId) conds.push(eq(weeklyPlans.teamId, opts.teamId));
+    if (opts?.year !== undefined) conds.push(eq(weeklyPlans.year, opts.year));
+    if (opts?.weekNumber !== undefined) conds.push(eq(weeklyPlans.weekNumber, opts.weekNumber));
+    if (opts?.status) conds.push(eq(weeklyPlans.status, opts.status));
+    return db.select().from(weeklyPlans).where(and(...conds))
+      .orderBy(desc(weeklyPlans.year), desc(weeklyPlans.weekNumber));
+  }
+  async getWeeklyPlan(tenantId: string, id: string): Promise<WeeklyPlan | undefined> {
+    const [row] = await db.select().from(weeklyPlans)
+      .where(and(eq(weeklyPlans.id, id), eq(weeklyPlans.tenantId, tenantId), isNull(weeklyPlans.deletedAt)));
+    return row || undefined;
+  }
+  async createWeeklyPlan(data: InsertWeeklyPlan): Promise<WeeklyPlan> {
+    // contracted_hours defaultas från team.totalHoursWeek om ej angiven.
+    let values = data;
+    if (values.contractedHours === undefined || values.contractedHours === null) {
+      const [team] = await db.select({ totalHoursWeek: teams.totalHoursWeek }).from(teams)
+        .where(and(eq(teams.id, data.teamId), eq(teams.tenantId, data.tenantId)));
+      if (team?.totalHoursWeek != null) values = { ...values, contractedHours: team.totalHoursWeek };
+    }
+    const [row] = await db.insert(weeklyPlans).values(values).returning();
+    return row;
+  }
+  async updateWeeklyPlan(tenantId: string, id: string, data: Partial<InsertWeeklyPlan>): Promise<WeeklyPlan | undefined> {
+    const { tenantId: _t, ...patch } = data as Partial<InsertWeeklyPlan>;
+    const [row] = await db.update(weeklyPlans).set({ ...patch, updatedAt: new Date() })
+      .where(and(eq(weeklyPlans.id, id), eq(weeklyPlans.tenantId, tenantId))).returning();
+    return row || undefined;
+  }
+  async deleteWeeklyPlan(tenantId: string, id: string): Promise<void> {
+    await db.update(weeklyPlans).set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(weeklyPlans.id, id), eq(weeklyPlans.tenantId, tenantId)));
+  }
+
+  // Veckoplan-uppgifter
+  async getWeeklyPlanTasks(tenantId: string, weeklyPlanId: string): Promise<WeeklyPlanTask[]> {
+    return db.select().from(weeklyPlanTasks)
+      .where(and(eq(weeklyPlanTasks.tenantId, tenantId), eq(weeklyPlanTasks.weeklyPlanId, weeklyPlanId)))
+      .orderBy(weeklyPlanTasks.plannedDate, weeklyPlanTasks.sequence);
+  }
+  async getWeeklyPlanTask(tenantId: string, id: string): Promise<WeeklyPlanTask | undefined> {
+    const [row] = await db.select().from(weeklyPlanTasks)
+      .where(and(eq(weeklyPlanTasks.id, id), eq(weeklyPlanTasks.tenantId, tenantId)));
+    return row || undefined;
+  }
+  async createWeeklyPlanTask(data: InsertWeeklyPlanTask): Promise<WeeklyPlanTask> {
+    const [row] = await db.insert(weeklyPlanTasks).values(data).returning();
+    return row;
+  }
+  async updateWeeklyPlanTask(tenantId: string, id: string, data: Partial<InsertWeeklyPlanTask>): Promise<WeeklyPlanTask | undefined> {
+    const { tenantId: _t, ...patch } = data as Partial<InsertWeeklyPlanTask>;
+    const [row] = await db.update(weeklyPlanTasks).set({ ...patch, updatedAt: new Date() })
+      .where(and(eq(weeklyPlanTasks.id, id), eq(weeklyPlanTasks.tenantId, tenantId))).returning();
+    return row || undefined;
+  }
+  async deleteWeeklyPlanTask(tenantId: string, id: string): Promise<void> {
+    await db.delete(weeklyPlanTasks).where(and(eq(weeklyPlanTasks.id, id), eq(weeklyPlanTasks.tenantId, tenantId)));
+  }
+
+  // Personliga uppgifter
+  async getPersonalTasks(tenantId: string, opts?: { weeklyPlanId?: string; teamId?: string }): Promise<PersonalTask[]> {
+    const conds: Condition[] = [eq(personalTasks.tenantId, tenantId)];
+    if (opts?.weeklyPlanId) conds.push(eq(personalTasks.weeklyPlanId, opts.weeklyPlanId));
+    if (opts?.teamId) conds.push(eq(personalTasks.teamId, opts.teamId));
+    return db.select().from(personalTasks).where(and(...conds))
+      .orderBy(personalTasks.plannedDate, personalTasks.startAt);
+  }
+  async getPersonalTask(tenantId: string, id: string): Promise<PersonalTask | undefined> {
+    const [row] = await db.select().from(personalTasks)
+      .where(and(eq(personalTasks.id, id), eq(personalTasks.tenantId, tenantId)));
+    return row || undefined;
+  }
+  async createPersonalTask(data: InsertPersonalTask): Promise<PersonalTask> {
+    const [row] = await db.insert(personalTasks).values(data).returning();
+    return row;
+  }
+  async updatePersonalTask(tenantId: string, id: string, data: Partial<InsertPersonalTask>): Promise<PersonalTask | undefined> {
+    const { tenantId: _t, ...patch } = data as Partial<InsertPersonalTask>;
+    const [row] = await db.update(personalTasks).set({ ...patch, updatedAt: new Date() })
+      .where(and(eq(personalTasks.id, id), eq(personalTasks.tenantId, tenantId))).returning();
+    return row || undefined;
+  }
+  async deletePersonalTask(tenantId: string, id: string): Promise<void> {
+    await db.delete(personalTasks).where(and(eq(personalTasks.id, id), eq(personalTasks.tenantId, tenantId)));
+  }
+
+  // Personliga-uppgift-scheman
+  async getPersonalTaskSchedules(tenantId: string, opts?: { teamId?: string; activeOnly?: boolean }): Promise<PersonalTaskSchedule[]> {
+    const conds: Condition[] = [eq(personalTaskSchedules.tenantId, tenantId)];
+    if (opts?.teamId) conds.push(eq(personalTaskSchedules.teamId, opts.teamId));
+    if (opts?.activeOnly) conds.push(eq(personalTaskSchedules.active, true));
+    return db.select().from(personalTaskSchedules).where(and(...conds)).orderBy(personalTaskSchedules.title);
+  }
+  async getPersonalTaskSchedule(tenantId: string, id: string): Promise<PersonalTaskSchedule | undefined> {
+    const [row] = await db.select().from(personalTaskSchedules)
+      .where(and(eq(personalTaskSchedules.id, id), eq(personalTaskSchedules.tenantId, tenantId)));
+    return row || undefined;
+  }
+  async createPersonalTaskSchedule(data: InsertPersonalTaskSchedule): Promise<PersonalTaskSchedule> {
+    const [row] = await db.insert(personalTaskSchedules).values(data).returning();
+    return row;
+  }
+  async updatePersonalTaskSchedule(tenantId: string, id: string, data: Partial<InsertPersonalTaskSchedule>): Promise<PersonalTaskSchedule | undefined> {
+    const { tenantId: _t, ...patch } = data as Partial<InsertPersonalTaskSchedule>;
+    const [row] = await db.update(personalTaskSchedules).set({ ...patch, updatedAt: new Date() })
+      .where(and(eq(personalTaskSchedules.id, id), eq(personalTaskSchedules.tenantId, tenantId))).returning();
+    return row || undefined;
+  }
+  async deletePersonalTaskSchedule(tenantId: string, id: string): Promise<void> {
+    await db.delete(personalTaskSchedules).where(and(eq(personalTaskSchedules.id, id), eq(personalTaskSchedules.tenantId, tenantId)));
+  }
+
+  // Restidsposter
+  async getTravelTimeEntries(tenantId: string, weeklyPlanId?: string): Promise<TravelTimeEntry[]> {
+    const conds: Condition[] = [eq(travelTimeEntries.tenantId, tenantId)];
+    if (weeklyPlanId) conds.push(eq(travelTimeEntries.weeklyPlanId, weeklyPlanId));
+    return db.select().from(travelTimeEntries).where(and(...conds)).orderBy(travelTimeEntries.plannedDate);
+  }
+  async getTravelTimeEntry(tenantId: string, id: string): Promise<TravelTimeEntry | undefined> {
+    const [row] = await db.select().from(travelTimeEntries)
+      .where(and(eq(travelTimeEntries.id, id), eq(travelTimeEntries.tenantId, tenantId)));
+    return row || undefined;
+  }
+  async createTravelTimeEntry(data: InsertTravelTimeEntry): Promise<TravelTimeEntry> {
+    const [row] = await db.insert(travelTimeEntries).values(data).returning();
+    return row;
+  }
+  async updateTravelTimeEntry(tenantId: string, id: string, data: Partial<InsertTravelTimeEntry>): Promise<TravelTimeEntry | undefined> {
+    const { tenantId: _t, ...patch } = data as Partial<InsertTravelTimeEntry>;
+    const [row] = await db.update(travelTimeEntries).set(patch)
+      .where(and(eq(travelTimeEntries.id, id), eq(travelTimeEntries.tenantId, tenantId))).returning();
+    return row || undefined;
+  }
+  async deleteTravelTimeEntry(tenantId: string, id: string): Promise<void> {
+    await db.delete(travelTimeEntries).where(and(eq(travelTimeEntries.id, id), eq(travelTimeEntries.tenantId, tenantId)));
+  }
+
+  // Veckoplan-varningar
+  async getWeeklyPlanWarnings(tenantId: string, weeklyPlanId: string): Promise<WeeklyPlanWarning[]> {
+    return db.select().from(weeklyPlanWarnings)
+      .where(and(eq(weeklyPlanWarnings.tenantId, tenantId), eq(weeklyPlanWarnings.weeklyPlanId, weeklyPlanId)))
+      .orderBy(desc(weeklyPlanWarnings.createdAt));
+  }
+  async getWeeklyPlanWarning(tenantId: string, id: string): Promise<WeeklyPlanWarning | undefined> {
+    const [row] = await db.select().from(weeklyPlanWarnings)
+      .where(and(eq(weeklyPlanWarnings.id, id), eq(weeklyPlanWarnings.tenantId, tenantId)));
+    return row || undefined;
+  }
+  async createWeeklyPlanWarning(data: InsertWeeklyPlanWarning): Promise<WeeklyPlanWarning> {
+    const [row] = await db.insert(weeklyPlanWarnings).values(data).returning();
+    return row;
+  }
+  async updateWeeklyPlanWarning(tenantId: string, id: string, data: Partial<InsertWeeklyPlanWarning>): Promise<WeeklyPlanWarning | undefined> {
+    const { tenantId: _t, ...patch } = data as Partial<InsertWeeklyPlanWarning>;
+    const [row] = await db.update(weeklyPlanWarnings).set(patch)
+      .where(and(eq(weeklyPlanWarnings.id, id), eq(weeklyPlanWarnings.tenantId, tenantId))).returning();
+    return row || undefined;
+  }
+  async deleteWeeklyPlanWarning(tenantId: string, id: string): Promise<void> {
+    await db.delete(weeklyPlanWarnings).where(and(eq(weeklyPlanWarnings.id, id), eq(weeklyPlanWarnings.tenantId, tenantId)));
+  }
+  async deleteWeeklyPlanWarningsByPlan(tenantId: string, weeklyPlanId: string): Promise<void> {
+    await db.delete(weeklyPlanWarnings)
+      .where(and(eq(weeklyPlanWarnings.tenantId, tenantId), eq(weeklyPlanWarnings.weeklyPlanId, weeklyPlanId)));
+  }
+
+  // Pre-tasks
+  async getPreTasks(tenantId: string, opts?: { workOrderId?: string; status?: string }): Promise<PreTask[]> {
+    const conds: Condition[] = [eq(preTasks.tenantId, tenantId), isNull(preTasks.deletedAt)];
+    if (opts?.workOrderId) conds.push(eq(preTasks.workOrderId, opts.workOrderId));
+    if (opts?.status) conds.push(eq(preTasks.status, opts.status));
+    return db.select().from(preTasks).where(and(...conds)).orderBy(desc(preTasks.createdAt));
+  }
+  async getPreTask(tenantId: string, id: string): Promise<PreTask | undefined> {
+    const [row] = await db.select().from(preTasks)
+      .where(and(eq(preTasks.id, id), eq(preTasks.tenantId, tenantId), isNull(preTasks.deletedAt)));
+    return row || undefined;
+  }
+  async createPreTask(data: InsertPreTask): Promise<PreTask> {
+    const [row] = await db.insert(preTasks).values(data).returning();
+    return row;
+  }
+  async updatePreTask(tenantId: string, id: string, data: Partial<InsertPreTask>): Promise<PreTask | undefined> {
+    const { tenantId: _t, ...patch } = data as Partial<InsertPreTask>;
+    const [row] = await db.update(preTasks).set({ ...patch, updatedAt: new Date() })
+      .where(and(eq(preTasks.id, id), eq(preTasks.tenantId, tenantId))).returning();
+    return row || undefined;
+  }
+  async deletePreTask(tenantId: string, id: string): Promise<void> {
+    await db.update(preTasks).set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(preTasks.id, id), eq(preTasks.tenantId, tenantId)));
+  }
+
+  // Regler: utförandetyp → pre-task
+  async getExecTypePreTaskRules(tenantId: string, opts?: { executionType?: string; activeOnly?: boolean }): Promise<ExecTypePreTaskRule[]> {
+    const conds: Condition[] = [eq(execTypePreTaskRules.tenantId, tenantId)];
+    if (opts?.executionType) conds.push(eq(execTypePreTaskRules.executionType, opts.executionType));
+    if (opts?.activeOnly) conds.push(eq(execTypePreTaskRules.active, true));
+    return db.select().from(execTypePreTaskRules).where(and(...conds)).orderBy(execTypePreTaskRules.executionType);
+  }
+  async getExecTypePreTaskRule(tenantId: string, id: string): Promise<ExecTypePreTaskRule | undefined> {
+    const [row] = await db.select().from(execTypePreTaskRules)
+      .where(and(eq(execTypePreTaskRules.id, id), eq(execTypePreTaskRules.tenantId, tenantId)));
+    return row || undefined;
+  }
+  async createExecTypePreTaskRule(data: InsertExecTypePreTaskRule): Promise<ExecTypePreTaskRule> {
+    const [row] = await db.insert(execTypePreTaskRules).values(data).returning();
+    return row;
+  }
+  async updateExecTypePreTaskRule(tenantId: string, id: string, data: Partial<InsertExecTypePreTaskRule>): Promise<ExecTypePreTaskRule | undefined> {
+    const { tenantId: _t, ...patch } = data as Partial<InsertExecTypePreTaskRule>;
+    const [row] = await db.update(execTypePreTaskRules).set({ ...patch, updatedAt: new Date() })
+      .where(and(eq(execTypePreTaskRules.id, id), eq(execTypePreTaskRules.tenantId, tenantId))).returning();
+    return row || undefined;
+  }
+  async deleteExecTypePreTaskRule(tenantId: string, id: string): Promise<void> {
+    await db.delete(execTypePreTaskRules).where(and(eq(execTypePreTaskRules.id, id), eq(execTypePreTaskRules.tenantId, tenantId)));
   }
 }
 

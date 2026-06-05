@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, serial, timestamp, jsonb, boolean, real, doublePrecision, index, unique, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, serial, timestamp, date, jsonb, boolean, real, doublePrecision, index, unique, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -443,10 +443,40 @@ export const workOrders = pgTable("work_orders", {
   invoiceReadyAt: timestamp("invoice_ready_at"),
   invoiceHeldUntil: timestamp("invoice_held_until"),
   consolidationInvoiceId: varchar("consolidation_invoice_id"),
+  // === Task #785: Veckoplanering – datafundament (expand-contract, alla nullable) ===
+  // Planeringsinput för grov-/veckoplanering. Rapportens generiska `tasks`-fält
+  // införs här eftersom Traivos arbetsenhet är work_orders (ingen tasks-tabell).
+  // Skiljer sig från cached*-fälten (som härleds från orderrader): dessa är
+  // planerar-styrda värden för motor/regel-lagret (egen task).
+  // Planerad produktionstid i minuter (planeringsestimat, ej härlett från rader).
+  productionTimeMinutes: integer("production_time_minutes"),
+  // Geografiskt distrikt (grovplanering per område).
+  districtId: varchar("district_id").references((): any => geographicDistricts.id, { onDelete: "set null" }),
+  // Utförandetyp som driver pre-task-regler (exec_type_pre_task_rules).
+  executionType: text("execution_type"),
+  // Önskad start/slut (mjuk preferens på enskild order, fristående från leveransfönster).
+  desiredStartAt: timestamp("desired_start_at"),
+  desiredEndAt: timestamp("desired_end_at"),
+  // Hårt/halvhårt leveransfönster (t.ex. avtalat intervall).
+  deliveryWindowStart: timestamp("delivery_window_start"),
+  deliveryWindowEnd: timestamp("delivery_window_end"),
+  // Grovplanerad vecka (ISO, format "YYYY-Www", t.ex. "2026-W24").
+  roughPlannedWeek: text("rough_planned_week"),
+  // Av kund/planerare föredragen vecka (ISO "YYYY-Www").
+  preferredWeek: text("preferred_week"),
+  // Centroid-koordinat för ordern (cachat för avstånd/klustring i motorn).
+  centroidLat: real("centroid_lat"),
+  centroidLng: real("centroid_lng"),
+  // Uppskattad restid till ordern i minuter (cachat planeringsvärde).
+  estimatedTravelMin: integer("estimated_travel_min"),
+  // Tillåtet parallell-/samordningsfönster (jsonb, motor-definierat schema).
+  parallelWindowJson: jsonb("parallel_window_json"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
   index("idx_work_orders_tenant").on(table.tenantId),
+  index("idx_work_orders_district").on(table.districtId),
+  index("idx_work_orders_rough_week").on(table.tenantId, table.roughPlannedWeek),
   index("idx_work_orders_invoice_queue").on(table.tenantId, table.invoiceQueueState),
   index("idx_work_orders_parent").on(table.parentWorkOrderId),
   index("idx_work_orders_scheduled_date").on(table.scheduledDate),
@@ -6430,3 +6460,360 @@ export const githubMirrorRuns = pgTable("github_mirror_runs", {
 ]);
 
 export type GithubMirrorRun = typeof githubMirrorRuns.$inferSelect;
+
+// =====================================================================
+// Task #785 — Veckoplanering: datafundament
+// =====================================================================
+// Grunden för grov-/veckoplanering per team. Veckoplanen är den centrala
+// planeringsentiteten; stödtabeller hanterar tidsblock, vila, resor,
+// distrikt, pre-tasks och varningar. Beräkningslogik (KPI/168h/varningar/
+// resekostnad), API och UI ligger i separata tasks.
+//
+// Styrda värdelistor (textkolumner med tillåtna värden enligt projektets
+// konvention — ej pg-enum):
+//   time_category: production | travel_between_jobs | travel_commute |
+//                  break_meal | personal_time | rest_night | rest_weekend |
+//                  overtime
+//   weekly_plan_status: draft | proposed | approved | in_progress | completed
+//   warning_severity: error | warning | info | ok
+// =====================================================================
+
+// Geografiska distrikt — grovplaneringens översta geografiska indelning.
+export const geographicDistricts = pgTable("geographic_districts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  // Kort beteckning/kod (valfri, t.ex. "NORR").
+  code: text("code"),
+  description: text("description"),
+  color: text("color").default("#3B82F6"),
+  // Distriktets centroid (för karta/avstånd).
+  centerLat: real("center_lat"),
+  centerLng: real("center_lng"),
+  status: text("status").default("active").notNull(),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_geographic_districts_tenant").on(table.tenantId),
+  index("idx_geographic_districts_tenant_deleted").on(table.tenantId, table.deletedAt),
+]);
+
+export type GeographicDistrict = typeof geographicDistricts.$inferSelect;
+export const insertGeographicDistrictSchema = createInsertSchema(geographicDistricts).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertGeographicDistrict = z.infer<typeof insertGeographicDistrictSchema>;
+
+// Distrikt-zoner — finare indelning inom ett distrikt (postnummer/polygon).
+export const districtZones = pgTable("district_zones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  districtId: varchar("district_id").references(() => geographicDistricts.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  code: text("code"),
+  // Postnummer som ingår i zonen.
+  postalCodes: text("postal_codes").array().default([]),
+  // GeoJSON-polygon (valfri) som definierar zonens gränser.
+  polygon: jsonb("polygon"),
+  centerLat: real("center_lat"),
+  centerLng: real("center_lng"),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_district_zones_tenant").on(table.tenantId),
+  index("idx_district_zones_district").on(table.districtId),
+]);
+
+export type DistrictZone = typeof districtZones.$inferSelect;
+export const insertDistrictZoneSchema = createInsertSchema(districtZones).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDistrictZone = z.infer<typeof insertDistrictZoneSchema>;
+
+// Veckoplan — central planeringsentitet per team och ISO-vecka.
+// Summerings-/KPI-fälten fylls av motor-lagret (egen task); här definieras
+// endast strukturen. contracted_hours defaultas från team.totalHoursWeek i
+// storage-lagret vid skapande.
+export const weeklyPlans = pgTable("weekly_plans", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  teamId: varchar("team_id").references(() => teams.id).notNull(),
+  // ISO-år + ISO-veckonummer (1-53).
+  year: integer("year").notNull(),
+  weekNumber: integer("week_number").notNull(),
+  // weekly_plan_status: draft | proposed | approved | in_progress | completed
+  status: text("status").default("draft").notNull(),
+  // Avtalade timmar för veckan (defaultas från team.totalHoursWeek i storage).
+  contractedHours: real("contracted_hours"),
+  // === Summeringar (minuter) — fylls av motor-lagret ===
+  totalProductionMinutes: integer("total_production_minutes").default(0),
+  totalTravelMinutes: integer("total_travel_minutes").default(0),
+  totalCommuteMinutes: integer("total_commute_minutes").default(0),
+  totalBreakMinutes: integer("total_break_minutes").default(0),
+  totalPersonalMinutes: integer("total_personal_minutes").default(0),
+  totalRestMinutes: integer("total_rest_minutes").default(0),
+  totalOvertimeMinutes: integer("total_overtime_minutes").default(0),
+  // === KPI (härleds) ===
+  utilizationRate: real("utilization_rate"),
+  totalPlannedHours: real("total_planned_hours"),
+  // Värde (öre) och resekostnad (öre) — summeras av motorn.
+  totalValue: integer("total_value").default(0),
+  totalTravelCost: integer("total_travel_cost").default(0),
+  taskCount: integer("task_count").default(0),
+  // === Vila & plats ===
+  // team.restType speglas hit vid plan-skapande; planen kan ha egen plats.
+  restType: text("rest_type"),
+  restLocation: text("rest_location"),
+  startLocationLat: real("start_location_lat"),
+  startLocationLng: real("start_location_lng"),
+  endLocationLat: real("end_location_lat"),
+  endLocationLng: real("end_location_lng"),
+  // === Godkännande ===
+  approvedBy: varchar("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  notes: text("notes"),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_weekly_plans_tenant").on(table.tenantId),
+  index("idx_weekly_plans_team").on(table.teamId),
+  index("idx_weekly_plans_tenant_week").on(table.tenantId, table.year, table.weekNumber),
+  index("idx_weekly_plans_tenant_deleted").on(table.tenantId, table.deletedAt),
+  unique("unq_weekly_plans_team_week").on(table.tenantId, table.teamId, table.year, table.weekNumber),
+]);
+
+export type WeeklyPlan = typeof weeklyPlans.$inferSelect;
+export const insertWeeklyPlanSchema = createInsertSchema(weeklyPlans).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWeeklyPlan = z.infer<typeof insertWeeklyPlanSchema>;
+
+// Veckoplan-uppgift — binder en work_order till en veckoplan med planerat
+// datum/tid, sekvens och lås. task_id refererar work_orders (Traivos arbetsenhet).
+export const weeklyPlanTasks = pgTable("weekly_plan_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  weeklyPlanId: varchar("weekly_plan_id").references(() => weeklyPlans.id, { onDelete: "cascade" }).notNull(),
+  // Refererar work_orders.id (rapportens generiska `tasks` = Traivos work_orders).
+  taskId: varchar("task_id").references(() => workOrders.id, { onDelete: "cascade" }).notNull(),
+  teamId: varchar("team_id").references(() => teams.id),
+  plannedDate: date("planned_date"),
+  plannedStartTime: timestamp("planned_start_time"),
+  plannedEndTime: timestamp("planned_end_time"),
+  // Sekvens inom dagen/veckan (sorteringsordning).
+  sequence: integer("sequence").default(0),
+  // Lås mot omplanering av motorn.
+  locked: boolean("locked").default(false).notNull(),
+  // Cachade tidsvärden (fylls av motorn).
+  productionMinutes: integer("production_minutes"),
+  travelMinutes: integer("travel_minutes"),
+  notes: text("notes"),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_weekly_plan_tasks_tenant").on(table.tenantId),
+  index("idx_weekly_plan_tasks_plan").on(table.weeklyPlanId),
+  index("idx_weekly_plan_tasks_task").on(table.taskId),
+  index("idx_weekly_plan_tasks_plan_date").on(table.weeklyPlanId, table.plannedDate),
+  unique("unq_weekly_plan_tasks_plan_task").on(table.weeklyPlanId, table.taskId),
+]);
+
+export type WeeklyPlanTask = typeof weeklyPlanTasks.$inferSelect;
+export const insertWeeklyPlanTaskSchema = createInsertSchema(weeklyPlanTasks).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWeeklyPlanTask = z.infer<typeof insertWeeklyPlanTaskSchema>;
+
+// Personliga uppgifter — alla icke-produktionsblock (vila, rast, personlig
+// tid, inställelse-/återresa). Bär plats samt från/till-plats för restid.
+export const personalTasks = pgTable("personal_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  weeklyPlanId: varchar("weekly_plan_id").references(() => weeklyPlans.id, { onDelete: "cascade" }),
+  teamId: varchar("team_id").references(() => teams.id),
+  // time_category (se värdelista) — production exkluderas här.
+  timeCategory: text("time_category").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  plannedDate: date("planned_date"),
+  startAt: timestamp("start_at"),
+  endAt: timestamp("end_at"),
+  durationMinutes: integer("duration_minutes"),
+  // Plats där blocket utförs (t.ex. rastplats).
+  locationLat: real("location_lat"),
+  locationLng: real("location_lng"),
+  locationName: text("location_name"),
+  // Från-/till-plats för inställelse-/återresa (is_commute=true).
+  fromLat: real("from_lat"),
+  fromLng: real("from_lng"),
+  toLat: real("to_lat"),
+  toLng: real("to_lng"),
+  isCommute: boolean("is_commute").default(false).notNull(),
+  // true = autogenererad av en regel (personal_task_schedules/source_rule).
+  isGenerated: boolean("is_generated").default(false).notNull(),
+  sourceRule: text("source_rule"),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_personal_tasks_tenant").on(table.tenantId),
+  index("idx_personal_tasks_plan").on(table.weeklyPlanId),
+  index("idx_personal_tasks_team").on(table.teamId),
+  index("idx_personal_tasks_plan_date").on(table.weeklyPlanId, table.plannedDate),
+]);
+
+export type PersonalTask = typeof personalTasks.$inferSelect;
+export const insertPersonalTaskSchema = createInsertSchema(personalTasks).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPersonalTask = z.infer<typeof insertPersonalTaskSchema>;
+
+// Personliga-uppgift-scheman — återkommande regler som genererar personal_tasks
+// (t.ex. daglig lunchrast, inställelse-/återresa per arbetsdag).
+export const personalTaskSchedules = pgTable("personal_task_schedules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Null = gäller alla team i tenanten.
+  teamId: varchar("team_id").references(() => teams.id),
+  timeCategory: text("time_category").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  // Veckodag 0-6 (mån=0 ... sön=6). Null = alla arbetsdagar.
+  dayOfWeek: integer("day_of_week"),
+  // Starttid "HH:MM" (lokal) och längd i minuter.
+  startTime: text("start_time"),
+  durationMinutes: integer("duration_minutes"),
+  isCommute: boolean("is_commute").default(false).notNull(),
+  locationLat: real("location_lat"),
+  locationLng: real("location_lng"),
+  locationName: text("location_name"),
+  active: boolean("active").default(true).notNull(),
+  sourceRule: text("source_rule"),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_personal_task_schedules_tenant").on(table.tenantId),
+  index("idx_personal_task_schedules_team").on(table.teamId),
+]);
+
+export type PersonalTaskSchedule = typeof personalTaskSchedules.$inferSelect;
+export const insertPersonalTaskScheduleSchema = createInsertSchema(personalTaskSchedules).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPersonalTaskSchedule = z.infer<typeof insertPersonalTaskScheduleSchema>;
+
+// Restidsposter — beräknade resor mellan uppgifter / inställelse-/återresor.
+export const travelTimeEntries = pgTable("travel_time_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  weeklyPlanId: varchar("weekly_plan_id").references(() => weeklyPlans.id, { onDelete: "cascade" }),
+  // Från-/till-uppgift (work_orders). Null vid inställelse/återresa till bas.
+  fromTaskId: varchar("from_task_id").references(() => workOrders.id, { onDelete: "set null" }),
+  toTaskId: varchar("to_task_id").references(() => workOrders.id, { onDelete: "set null" }),
+  fromLat: real("from_lat"),
+  fromLng: real("from_lng"),
+  toLat: real("to_lat"),
+  toLng: real("to_lng"),
+  travelMinutes: integer("travel_minutes"),
+  distanceKm: real("distance_km"),
+  // Resekostnad i öre (beräknas av motor-lagret).
+  travelCost: integer("travel_cost"),
+  // Färdsätt (t.ex. "driving").
+  mode: text("mode").default("driving"),
+  isCommute: boolean("is_commute").default(false).notNull(),
+  // Datakälla: osrm | geoapify | estimate.
+  source: text("source"),
+  plannedDate: date("planned_date"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_travel_time_entries_tenant").on(table.tenantId),
+  index("idx_travel_time_entries_plan").on(table.weeklyPlanId),
+]);
+
+export type TravelTimeEntry = typeof travelTimeEntries.$inferSelect;
+export const insertTravelTimeEntrySchema = createInsertSchema(travelTimeEntries).omit({ id: true, createdAt: true });
+export type InsertTravelTimeEntry = z.infer<typeof insertTravelTimeEntrySchema>;
+
+// Veckoplan-varningar — strukturerade varningar/avvikelser från motor-lagret.
+export const weeklyPlanWarnings = pgTable("weekly_plan_warnings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  weeklyPlanId: varchar("weekly_plan_id").references(() => weeklyPlans.id, { onDelete: "cascade" }).notNull(),
+  // warning_severity: error | warning | info | ok
+  severity: text("severity").default("warning").notNull(),
+  // Maskinläsbar kod (t.ex. "OVER_CAPACITY", "REST_VIOLATION").
+  code: text("code"),
+  // Kategori (t.ex. capacity | rest | travel | sla).
+  category: text("category"),
+  message: text("message").notNull(),
+  // Relaterad work_order / personal_task (valfritt).
+  relatedTaskId: varchar("related_task_id").references(() => workOrders.id, { onDelete: "cascade" }),
+  relatedPersonalTaskId: varchar("related_personal_task_id").references(() => personalTasks.id, { onDelete: "cascade" }),
+  resolved: boolean("resolved").default(false).notNull(),
+  resolvedAt: timestamp("resolved_at"),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_weekly_plan_warnings_tenant").on(table.tenantId),
+  index("idx_weekly_plan_warnings_plan").on(table.weeklyPlanId),
+  index("idx_weekly_plan_warnings_severity").on(table.weeklyPlanId, table.severity),
+]);
+
+export type WeeklyPlanWarning = typeof weeklyPlanWarnings.$inferSelect;
+export const insertWeeklyPlanWarningSchema = createInsertSchema(weeklyPlanWarnings).omit({ id: true, createdAt: true });
+export type InsertWeeklyPlanWarning = z.infer<typeof insertWeeklyPlanWarningSchema>;
+
+// Pre-tasks — föruppgifter (plocka/beställ/föravisering) kopplade till en order.
+export const preTasks = pgTable("pre_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Order som pre-tasken förbereder (valfri för fristående förberedelser).
+  workOrderId: varchar("work_order_id").references(() => workOrders.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  // Typ (t.ex. plocka | bestall | foravisering).
+  preTaskType: text("pre_task_type"),
+  // status: pending | done (fritt textfält).
+  status: text("status").default("pending").notNull(),
+  // Antal dagar före jobbet pre-tasken bör vara klar.
+  dueOffsetDays: integer("due_offset_days"),
+  dueAt: timestamp("due_at"),
+  completedAt: timestamp("completed_at"),
+  completedBy: varchar("completed_by"),
+  // true = autogenererad via exec_type_pre_task_rules.
+  isGenerated: boolean("is_generated").default(false).notNull(),
+  sourceRule: text("source_rule"),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_pre_tasks_tenant").on(table.tenantId),
+  index("idx_pre_tasks_work_order").on(table.workOrderId),
+  index("idx_pre_tasks_tenant_status").on(table.tenantId, table.status),
+]);
+
+export type PreTask = typeof preTasks.$inferSelect;
+export const insertPreTaskSchema = createInsertSchema(preTasks).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPreTask = z.infer<typeof insertPreTaskSchema>;
+
+// Regler som mappar utförandetyp (work_orders.execution_type) → pre-tasks
+// som ska autogenereras.
+export const execTypePreTaskRules = pgTable("exec_type_pre_task_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Matchar work_orders.execution_type.
+  executionType: text("execution_type").notNull(),
+  preTaskType: text("pre_task_type"),
+  title: text("title").notNull(),
+  description: text("description"),
+  // Antal dagar före jobbet som pre-tasken förfaller.
+  offsetDays: integer("offset_days").default(0),
+  autoGenerate: boolean("auto_generate").default(true).notNull(),
+  active: boolean("active").default(true).notNull(),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_exec_type_pre_task_rules_tenant").on(table.tenantId),
+  index("idx_exec_type_pre_task_rules_exec_type").on(table.tenantId, table.executionType),
+]);
+
+export type ExecTypePreTaskRule = typeof execTypePreTaskRules.$inferSelect;
+export const insertExecTypePreTaskRuleSchema = createInsertSchema(execTypePreTaskRules).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertExecTypePreTaskRule = z.infer<typeof insertExecTypePreTaskRuleSchema>;
