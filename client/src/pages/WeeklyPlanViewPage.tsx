@@ -352,7 +352,7 @@ export default function WeeklyPlanViewPage() {
   return (
     <div className="flex flex-col h-full overflow-auto">
       <div className="px-4 pt-4 flex flex-wrap items-center justify-between gap-3">
-        <PageHeader icon={CalendarRange} title="Veckoplan (168h per team)" testId="text-page-title" />
+        <PageHeader icon={CalendarRange} title="Grovplanering" testId="text-page-title" />
         <div className="flex flex-wrap items-center gap-2">
           <Select value={effectiveTeamId} onValueChange={setTeamId} disabled={teamsLoading}>
             <SelectTrigger className="w-48" data-testid="select-team">
