@@ -19,6 +19,9 @@ import { QueryState } from "@/components/QueryState";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import {
   Select,
@@ -63,6 +66,8 @@ export default function GrovplaneringPage() {
   const [districtFilter, setDistrictFilter] = useState<string>("all");
   const [groupBy, setGroupBy] = useState<"team" | "district">("team");
   const [assignDistrict, setAssignDistrict] = useState<string>(UNASSIGNED);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [autoSuggestDistrict, setAutoSuggestDistrict] = useState(false);
 
   const workOrdersQuery = useQuery<WorkOrderWithObject[]>({
     queryKey: ["/api/work-orders", { allDates: true, includeUnscheduled: true }],
@@ -156,6 +161,56 @@ export default function GrovplaneringPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders", { allDates: true, includeUnscheduled: true }] });
       toast({ title: "Order grovplanerad", description: `Lagd på ${week}` });
+    },
+    onError: (e: Error) => toast({ title: "Kunde inte grovplanera", description: e.message, variant: "destructive" }),
+  });
+
+  const unplannedShown = useMemo(() => unplanned.slice(0, 50), [unplanned]);
+
+  const selectedShownIds = useMemo(
+    () => unplannedShown.filter((o) => selectedIds.has(o.id)).map((o) => o.id),
+    [unplannedShown, selectedIds],
+  );
+  const allShownSelected = unplannedShown.length > 0 && selectedShownIds.length === unplannedShown.length;
+  const someShownSelected = selectedShownIds.length > 0 && !allShownSelected;
+
+  const toggleOne = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+  const toggleAll = (checked: boolean) => {
+    setSelectedIds(() => (checked ? new Set(unplannedShown.map((o) => o.id)) : new Set()));
+  };
+
+  const bulkMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const payload: Record<string, unknown> = {
+        workOrderIds: ids,
+        roughPlannedWeek: week,
+        autoSuggestDistrict,
+      };
+      if (assignDistrict !== UNASSIGNED) payload.districtId = assignDistrict;
+      const res = await apiRequest("POST", "/api/work-orders/bulk-rough-plan", payload);
+      return res.json() as Promise<{
+        summary: { total: number; planned: number; error: number; autoAssigned: number };
+      }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders", { allDates: true, includeUnscheduled: true }] });
+      setSelectedIds(new Set());
+      const { planned, error, autoAssigned } = data.summary;
+      const parts = [`${planned} grovplanerade på ${week}`];
+      if (autoAssigned > 0) parts.push(`${autoAssigned} fick distrikt via postnummer`);
+      if (error > 0) parts.push(`${error} misslyckades`);
+      toast({
+        title: error > 0 ? "Grovplanering delvis klar" : "Ordrar grovplanerade",
+        description: parts.join(" · "),
+        variant: error > 0 ? "destructive" : undefined,
+      });
     },
     onError: (e: Error) => toast({ title: "Kunde inte grovplanera", description: e.message, variant: "destructive" }),
   });
@@ -404,32 +459,79 @@ export default function GrovplaneringPage() {
         )}
 
         <Card>
-          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <CardTitle className="text-base">Ogrovplanerade ordrar ({unplanned.length})</CardTitle>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Lägg på distrikt</span>
-              <Select value={assignDistrict} onValueChange={setAssignDistrict}>
-                <SelectTrigger className="w-[180px]" data-testid="select-assign-district">
-                  <SelectValue placeholder="Utan distrikt" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={UNASSIGNED}>Utan distrikt</SelectItem>
-                  {districts.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Lägg på distrikt</span>
+                <Select value={assignDistrict} onValueChange={setAssignDistrict}>
+                  <SelectTrigger className="w-[180px]" data-testid="select-assign-district">
+                    <SelectValue placeholder="Utan distrikt" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UNASSIGNED}>Utan distrikt</SelectItem>
+                    {districts.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="auto-suggest-district"
+                  checked={autoSuggestDistrict}
+                  onCheckedChange={setAutoSuggestDistrict}
+                  data-testid="switch-auto-suggest-district"
+                />
+                <Label htmlFor="auto-suggest-district" className="text-sm text-muted-foreground cursor-pointer">
+                  Föreslå distrikt från postnummer
+                </Label>
+              </div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            {selectedShownIds.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2">
+                <span className="text-sm font-medium" data-testid="text-selected-count">
+                  {selectedShownIds.length} markerade
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedIds(new Set())}
+                    data-testid="button-clear-selection"
+                  >
+                    Avmarkera
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={bulkMutation.isPending}
+                    onClick={() => bulkMutation.mutate(selectedShownIds)}
+                    data-testid="button-bulk-assign"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    Grovplanera markerade på {week}
+                  </Button>
+                </div>
+              </div>
+            )}
             {unplanned.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4">Alla aktiva ordrar är grovplanerade.</p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[40px]">
+                      <Checkbox
+                        checked={allShownSelected ? true : someShownSelected ? "indeterminate" : false}
+                        onCheckedChange={(c) => toggleAll(c === true)}
+                        aria-label="Markera alla"
+                        data-testid="checkbox-select-all"
+                      />
+                    </TableHead>
                     <TableHead>Order</TableHead>
                     <TableHead>Objekt</TableHead>
                     <TableHead className="text-right">Tid (h)</TableHead>
@@ -438,8 +540,20 @@ export default function GrovplaneringPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {unplanned.slice(0, 50).map((o) => (
-                    <TableRow key={o.id} data-testid={`row-unplanned-${o.id}`}>
+                  {unplannedShown.map((o) => (
+                    <TableRow
+                      key={o.id}
+                      data-state={selectedIds.has(o.id) ? "selected" : undefined}
+                      data-testid={`row-unplanned-${o.id}`}
+                    >
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(o.id)}
+                          onCheckedChange={(c) => toggleOne(o.id, c === true)}
+                          aria-label={`Markera ${o.title || o.id.slice(0, 8)}`}
+                          data-testid={`checkbox-unplanned-${o.id}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">{o.title || o.id.slice(0, 8)}</TableCell>
                       <TableCell className="text-muted-foreground">{o.objectName ?? "-"}</TableCell>
                       <TableCell className="text-right">{((o.estimatedDuration ?? 0) / 60).toFixed(1)}</TableCell>

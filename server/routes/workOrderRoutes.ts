@@ -789,6 +789,115 @@ app.post("/api/work-orders/bulk-schedule", asyncHandler(async (req, res) => {
   res.json({ summary, results });
 }));
 
+// Grovplanering (rough planning) — lägg flera ordrar på samma ISO-vecka + distrikt
+// i en handling. Till skillnad från bulk-schedule sätts inget datum/resurs och
+// ingen constraint-/kapacitetskontroll körs (det görs senare vid finplanering).
+// Vid `autoSuggestDistrict` härleds distriktet per order från objektets postnummer
+// matchat mot district_zones.postalCodes; manuellt valt districtId används som
+// fallback när ingen zon matchar.
+const bulkRoughPlanSchema = z.object({
+  workOrderIds: z.array(z.string().min(1)).min(1).max(500),
+  roughPlannedWeek: z.string().regex(/^\d{4}-W\d{2}$/, "Ogiltigt veckoformat (YYYY-Www)"),
+  districtId: z.string().min(1).nullable().optional(),
+  autoSuggestDistrict: z.boolean().optional(),
+});
+
+type BulkRoughPlanStatus = "planned" | "error";
+interface BulkRoughPlanResult {
+  workOrderId: string;
+  status: BulkRoughPlanStatus;
+  districtId: string | null;
+  districtSource: "manual" | "postal-zone" | "none";
+  message?: string;
+}
+
+function normalizePostalCode(pc: string): string {
+  return pc.replace(/\s/g, "").trim();
+}
+
+app.post("/api/work-orders/bulk-rough-plan", requirePlanner, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const parsed = bulkRoughPlanSchema.safeParse(req.body);
+  if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+  const { workOrderIds, roughPlannedWeek, autoSuggestDistrict } = parsed.data;
+  const manualDistrictId = parsed.data.districtId ?? null;
+
+  // Validera manuellt valt distrikt mot tenant innan vi rör några ordrar.
+  if (manualDistrictId) {
+    const district = await storage.getGeographicDistrict(tenantId, manualDistrictId);
+    if (!district) throw new ValidationError("Distriktet finns inte i denna tenant");
+  }
+
+  // Bygg postnummer → distrikt-uppslag från district_zones (endast vid auto-förslag).
+  const postalToDistrict = new Map<string, string>();
+  if (autoSuggestDistrict) {
+    const zones = await storage.getDistrictZones(tenantId);
+    for (const zone of zones) {
+      for (const pc of zone.postalCodes ?? []) {
+        const key = normalizePostalCode(pc);
+        if (key && !postalToDistrict.has(key)) postalToDistrict.set(key, zone.districtId);
+      }
+    }
+  }
+
+  const uniqueIds = Array.from(new Set(workOrderIds));
+  const results: BulkRoughPlanResult[] = [];
+
+  for (const id of uniqueIds) {
+    const wo = await storage.getWorkOrder(id);
+    if (!wo || !verifyTenantOwnership(wo, tenantId)) {
+      results.push({ workOrderId: id, status: "error", districtId: null, districtSource: "none", message: "Arbetsorder hittades inte" });
+      continue;
+    }
+
+    let resolvedDistrictId: string | null = manualDistrictId;
+    let districtSource: BulkRoughPlanResult["districtSource"] = manualDistrictId ? "manual" : "none";
+
+    if (autoSuggestDistrict && wo.objectId) {
+      try {
+        const obj = await storage.getObject(wo.objectId);
+        const pc = obj?.postalCode ? normalizePostalCode(obj.postalCode) : "";
+        const suggested = pc ? postalToDistrict.get(pc) : undefined;
+        if (suggested) {
+          resolvedDistrictId = suggested;
+          districtSource = "postal-zone";
+        }
+      } catch (e) {
+        console.error(`[bulk-rough-plan] postal lookup failed for ${id}:`, e);
+      }
+    }
+
+    try {
+      const updateData: Record<string, unknown> = { roughPlannedWeek };
+      if (resolvedDistrictId) updateData.districtId = resolvedDistrictId;
+      const updated = await storage.updateWorkOrder(id, updateData);
+      if (!updated) {
+        results.push({ workOrderId: id, status: "error", districtId: resolvedDistrictId, districtSource, message: "Uppdatering misslyckades" });
+        continue;
+      }
+      results.push({ workOrderId: id, status: "planned", districtId: resolvedDistrictId, districtSource });
+    } catch (err) {
+      console.error(`[bulk-rough-plan] Failed to rough-plan ${id}:`, err);
+      results.push({
+        workOrderId: id,
+        status: "error",
+        districtId: resolvedDistrictId,
+        districtSource,
+        message: err instanceof Error ? err.message : "Okänt fel",
+      });
+    }
+  }
+
+  const summary = {
+    total: results.length,
+    planned: results.filter(r => r.status === "planned").length,
+    error: results.filter(r => r.status === "error").length,
+    autoAssigned: results.filter(r => r.districtSource === "postal-zone").length,
+  };
+
+  res.json({ summary, results });
+}));
+
 app.post("/api/work-orders/carry-over", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const { fromDate, toDate, resourceIds } = req.body;
