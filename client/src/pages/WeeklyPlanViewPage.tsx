@@ -89,9 +89,8 @@ import type {
   TravelTimeEntry,
   WeeklyPlanWarning,
 } from "@shared/schema";
-import { Marker, Popup, Polyline } from "react-leaflet";
 import { useLocation } from "wouter";
-import { BaseMap, MapFitBounds, numberedDivIcon } from "@/components/ui/map";
+import { RouteDayMap, type RouteMapJob, type RouteMapCommute } from "@/components/ui/map";
 
 const WEEK_TOTAL_MINUTES = 168 * 60;
 const HOUR_PX = 28;
@@ -1368,19 +1367,10 @@ function BlockEditDialog({
 // Karta – jobb & rutt
 // ---------------------------------------------------------------------------
 
-/** Löser ett tema-token (HSL-trippel i index.css) till en css-färgsträng. */
-function themeColor(varName: string, fallback: string): string {
-  if (typeof window === "undefined") return fallback;
-  const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
-  return v ? `hsl(${v})` : fallback;
-}
-
 function hhmmToMinutes(s: string): number {
   const [h, m] = s.split(":").map((n) => Number(n));
   return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
 }
-
-const MAP_CENTER_FALLBACK: [number, number] = [62.3908, 17.3069]; // Sundsvall
 
 function WeeklyRouteMap({
   jobs,
@@ -1393,39 +1383,19 @@ function WeeklyRouteMap({
   selectedBlockId: string | null;
   onSelectJob: (id: string) => void;
 }) {
-  const jobPoints = useMemo(
-    () => jobs.map((t) => [t.lat as number, t.lng as number] as [number, number]),
+  const mapJobs = useMemo<RouteMapJob[]>(
+    () =>
+      jobs.map((t) => ({
+        id: t.id,
+        lat: t.lat as number,
+        lng: t.lng as number,
+        label: t.name?.trim() || "Produktion",
+        locationName: t.locationName,
+        timeLabel: t.plannedStartTime ? minutesToHHMM(localMinutes(t.plannedStartTime)) : null,
+      })),
     [jobs],
   );
-  const geomKey = useMemo(
-    () => jobPoints.map((p) => `${p[0].toFixed(5)},${p[1].toFixed(5)}`).join("|"),
-    [jobPoints],
-  );
-
-  // Vägbaserad ruttgeometri från servern. Faller tyst tillbaka på raka linjer
-  // (t.ex. om Geoapify-nyckel saknas → 500).
-  const { data: geometry = [] } = useQuery<[number, number][]>({
-    queryKey: ["/api/route-geometry", geomKey],
-    enabled: jobPoints.length >= 2,
-    retry: false,
-    staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
-      try {
-        const res = await apiRequest("POST", "/api/route-geometry", {
-          waypoints: jobPoints.slice(0, 25).map(([lat, lng]) => ({ lat, lng })),
-        });
-        const data = await res.json();
-        return (data?.coordinates as [number, number][]) ?? [];
-      } catch {
-        return [];
-      }
-    },
-  });
-
-  const hasGeometry = geometry.length > 1;
-  const routeLine: [number, number][] = hasGeometry ? geometry : jobPoints;
-
-  const commuteSegments = useMemo(
+  const mapCommutes = useMemo<RouteMapCommute[]>(
     () =>
       commutes.map((c) => ({
         id: c.id,
@@ -1436,100 +1406,14 @@ function WeeklyRouteMap({
       })),
     [commutes],
   );
-
-  const allPositions = useMemo<[number, number][]>(
-    () => [...jobPoints, ...commuteSegments.flatMap((c) => c.positions)],
-    [jobPoints, commuteSegments],
-  );
-
-  const routeColor = themeColor("--chart-1", "#1B4B6B");
-  const estColor = themeColor("--chart-3", "#7DBFB0");
-  const commuteColor = themeColor("--chart-4", "#6B7C8C");
-  const pinColor = themeColor("--primary", "#1B4B6B");
-
-  if (jobPoints.length === 0 && commuteSegments.length === 0) {
-    return (
-      <div
-        className="flex h-[360px] items-center justify-center rounded-md border border-dashed border-border bg-muted/20 text-sm text-muted-foreground"
-        data-testid="map-empty"
-      >
-        <span className="flex items-center gap-2">
-          <MapPin className="h-4 w-4" />
-          Inga koordinater för vald dag.
-        </span>
-      </div>
-    );
-  }
-
-  const center = jobPoints[0] ?? allPositions[0] ?? MAP_CENTER_FALLBACK;
-
   return (
-    <div className="space-y-2">
-      <div className="h-[360px] overflow-hidden rounded-md border border-border" data-testid="map-weekly-route">
-        <BaseMap center={center} zoom={11}>
-          <MapFitBounds positions={allPositions} />
-          {commuteSegments.map((c) => (
-            <Polyline
-              key={`commute-${c.id}`}
-              positions={c.positions}
-              pathOptions={{ color: commuteColor, weight: 3, opacity: 0.8, dashArray: "8,6" }}
-            />
-          ))}
-          {routeLine.length > 1 && (
-            <Polyline
-              positions={routeLine}
-              pathOptions={{
-                color: hasGeometry ? routeColor : estColor,
-                weight: hasGeometry ? 4 : 3,
-                opacity: 0.85,
-              }}
-            />
-          )}
-          {jobs.map((t, i) => {
-            const selected = selectedBlockId === t.id;
-            const icon = numberedDivIcon({
-              number: i + 1,
-              color: pinColor,
-              size: selected ? 34 : 26,
-            });
-            return (
-              <Marker
-                key={t.id}
-                position={[t.lat as number, t.lng as number]}
-                icon={icon}
-                eventHandlers={{ click: () => onSelectJob(t.id) }}
-              >
-                <Popup>
-                  <div className="space-y-0.5 text-xs">
-                    <div className="font-semibold">
-                      {i + 1}. {t.name?.trim() || "Produktion"}
-                    </div>
-                    {t.locationName && <div className="text-muted-foreground">{t.locationName}</div>}
-                    {t.plannedStartTime && (
-                      <div className="tabular-nums">{minutesToHHMM(localMinutes(t.plannedStartTime))}</div>
-                    )}
-                  </div>
-                </Popup>
-              </Marker>
-            );
-          })}
-        </BaseMap>
-      </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" data-testid="map-legend">
-        <span className="flex items-center gap-1.5">
-          <span className="h-0.5 w-5 rounded-full bg-chart-1" />
-          Rutt (planerad)
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-0.5 w-5 rounded-full bg-chart-3" />
-          Restid mellan jobb
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-5 border-t-2 border-dashed border-chart-4" />
-          Inställelse / återresa
-        </span>
-      </div>
-    </div>
+    <RouteDayMap
+      jobs={mapJobs}
+      commutes={mapCommutes}
+      selectedJobId={selectedBlockId}
+      onSelectJob={onSelectJob}
+      testId="map-weekly-route"
+    />
   );
 }
 

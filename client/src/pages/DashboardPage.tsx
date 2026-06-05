@@ -4,6 +4,7 @@ import { QuickStats } from "@/components/layout/QuickStats";
 import { AnomalyAlerts } from "@/components/AnomalyAlerts";
 import { PredictiveInsights } from "@/components/PredictiveInsights";
 import { TodayOverview } from "@/components/dashboard/TodayOverview";
+import { TodayRouteCard } from "@/components/dashboard/TodayRouteCard";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { DashboardAlerts } from "@/components/dashboard/DashboardAlerts";
 import { CapacityOverview } from "@/components/dashboard/CapacityOverview";
@@ -30,6 +31,7 @@ type SectionId =
   | "analytics"
   | "alerts"
   | "capacity"
+  | "todayRoute"
   | "today"
   | "predictive"
   | "anomaly";
@@ -40,6 +42,7 @@ const ALL_SECTIONS: SectionId[] = [
   "analytics",
   "alerts",
   "capacity",
+  "todayRoute",
   "today",
   "predictive",
   "anomaly",
@@ -51,7 +54,8 @@ const SECTION_LABELS: Record<SectionId, string> = {
   analytics: "Analys & diagram",
   alerts: "Kräver uppmärksamhet",
   capacity: "Kapacitetsöversikt",
-  today: "Dagens översikt",
+  todayRoute: "Dagens översikt",
+  today: "Dagens aktivitet",
   predictive: "Prediktiva insikter",
   anomaly: "Avvikelsevarningar",
 };
@@ -263,6 +267,15 @@ export default function DashboardPage() {
             onToggle={toggle}
           >
             <CapacityOverview />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            id="todayRoute"
+            label={SECTION_LABELS.todayRoute}
+            collapsed={collapsed.has("todayRoute")}
+            onToggle={toggle}
+          >
+            <TodayRouteCard />
           </CollapsibleSection>
 
           <CollapsibleSection

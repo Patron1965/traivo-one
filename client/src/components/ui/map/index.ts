@@ -1,4 +1,6 @@
 export { BaseMap, MapFitBounds, MapInvalidateSize } from "./BaseMap";
+export { RouteDayMap } from "./RouteDayMap";
+export type { RouteMapJob, RouteMapCommute } from "./RouteDayMap";
 export {
   numberedDivIcon,
   dotDivIcon,
