@@ -112,6 +112,7 @@ export function getPlaneringItems(tl?: (key: string) => string): NavItem[] {
     { title: "Kontrollpanel", url: "/control-tower", icon: Gauge, description: "Heatmap med beläggning och SLA-risk" },
     { title: "Produktionsledare", url: "/enhetsansvarig", icon: Target, description: "Dagsproduktion, break-even per resurs och avvikelseprocess" },
     { title: l("nav.week-planner"), url: "/planner", icon: Calendar, description: l("nav.week-planner.desc") },
+    { title: "Veckoplan (168h)", url: "/veckoplan", icon: CalendarDays, description: "Fullständigt 168h-schema per team och vecka" },
     { title: l("nav.route-planning"), url: "/routes", icon: Map, description: l("nav.route-planning.desc") },
     { title: l("nav.planner-map"), url: "/planner-map", icon: MapPin, description: l("nav.planner-map.desc") },
     { title: l("nav.annual-planning"), url: "/annual-planning", icon: Target, description: l("nav.annual-planning.desc") },
