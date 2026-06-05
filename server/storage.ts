@@ -291,6 +291,18 @@ export type CustomerMapData =
   | { mode: "aggregates"; aggregates: CustomerMapAggregate[]; total: number };
 
 
+/** Berikningsfakta för en veckoplan-uppgift (join work_orders + objects). */
+export interface WeeklyPlanTaskFact {
+  taskId: string;
+  name: string | null;
+  value: number; // öre (cachedValue)
+  productionMinutes: number;
+  lat: number | null;
+  lng: number | null;
+  objectId: string | null;
+  locationName: string | null;
+}
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -1174,6 +1186,7 @@ export interface IStorage {
   deleteWeeklyPlan(tenantId: string, id: string): Promise<void>;
   // Veckoplan-uppgifter
   getWeeklyPlanTasks(tenantId: string, weeklyPlanId: string): Promise<WeeklyPlanTask[]>;
+  getWeeklyPlanTaskFacts(tenantId: string, taskIds: string[]): Promise<WeeklyPlanTaskFact[]>;
   getWeeklyPlanTask(tenantId: string, id: string): Promise<WeeklyPlanTask | undefined>;
   createWeeklyPlanTask(data: InsertWeeklyPlanTask): Promise<WeeklyPlanTask>;
   updateWeeklyPlanTask(tenantId: string, id: string, data: Partial<InsertWeeklyPlanTask>): Promise<WeeklyPlanTask | undefined>;
@@ -9453,6 +9466,37 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(weeklyPlanTasks)
       .where(and(eq(weeklyPlanTasks.tenantId, tenantId), eq(weeklyPlanTasks.weeklyPlanId, weeklyPlanId)))
       .orderBy(weeklyPlanTasks.plannedDate, weeklyPlanTasks.sequence);
+  }
+  async getWeeklyPlanTaskFacts(tenantId: string, taskIds: string[]): Promise<WeeklyPlanTaskFact[]> {
+    if (taskIds.length === 0) return [];
+    const rows = await db
+      .select({
+        taskId: workOrders.id,
+        title: workOrders.title,
+        cachedValue: workOrders.cachedValue,
+        cachedProductionMinutes: workOrders.cachedProductionMinutes,
+        estimatedDuration: workOrders.estimatedDuration,
+        taskLat: workOrders.taskLatitude,
+        taskLng: workOrders.taskLongitude,
+        objectId: workOrders.objectId,
+        objectName: objects.name,
+        objectCity: objects.city,
+        objectLat: objects.latitude,
+        objectLng: objects.longitude,
+      })
+      .from(workOrders)
+      .leftJoin(objects, eq(workOrders.objectId, objects.id))
+      .where(and(eq(workOrders.tenantId, tenantId), inArray(workOrders.id, taskIds)));
+    return rows.map((r) => ({
+      taskId: r.taskId,
+      name: r.title ?? null,
+      value: r.cachedValue ?? 0,
+      productionMinutes: r.cachedProductionMinutes ?? r.estimatedDuration ?? 0,
+      lat: r.taskLat ?? r.objectLat ?? null,
+      lng: r.taskLng ?? r.objectLng ?? null,
+      objectId: r.objectId ?? null,
+      locationName: r.objectCity ?? r.objectName ?? null,
+    }));
   }
   async getWeeklyPlanTask(tenantId: string, id: string): Promise<WeeklyPlanTask | undefined> {
     const [row] = await db.select().from(weeklyPlanTasks)

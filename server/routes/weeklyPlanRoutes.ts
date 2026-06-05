@@ -199,7 +199,37 @@ export function registerWeeklyPlanRoutes(app: Express) {
       storage.getTravelTimeEntries(tenantId, plan.id),
       storage.getWeeklyPlanWarnings(tenantId, plan.id),
     ]);
-    res.json({ ...plan, tasks, personalTasks, travelEntries, warnings });
+    // Berika varje uppgift med work-order-/objektfakta (namn, ordervärde,
+    // koordinater, plats) så att översikten kan visa jobbnamn, ordervärde-tabell
+    // och platser utan separata klient-anrop. Serverberäknade nyckeltal
+    // (antal uppdrag + antal objekt) returneras färska.
+    const facts = await storage.getWeeklyPlanTaskFacts(tenantId, tasks.map((t) => t.taskId));
+    const factMap = new Map(facts.map((f) => [f.taskId, f]));
+    const enrichedTasks = tasks.map((t) => {
+      const f = factMap.get(t.taskId);
+      return {
+        ...t,
+        name: f?.name ?? null,
+        value: f?.value ?? 0,
+        productionMinutes: t.productionMinutes ?? f?.productionMinutes ?? 0,
+        lat: f?.lat ?? null,
+        lng: f?.lng ?? null,
+        objectId: f?.objectId ?? null,
+        locationName: f?.locationName ?? null,
+      };
+    });
+    const objectCount = new Set(
+      enrichedTasks.map((t) => t.objectId).filter((id): id is string => !!id),
+    ).size;
+    res.json({
+      ...plan,
+      tasks: enrichedTasks,
+      personalTasks,
+      travelEntries,
+      warnings,
+      taskCount: enrichedTasks.length,
+      objectCount,
+    });
   }));
 
   app.post("/api/weekly-plans", ...guard, asyncHandler(async (req, res) => {

@@ -26,6 +26,8 @@ export interface TimeCategoryStyle {
   dot: string;
   /** Fyllnadsfärg för 168h-staplar (solid token). */
   bar: string;
+  /** Text-token för currentColor-baserade SVG-segment (donut). */
+  text: string;
 }
 
 export const TIME_CATEGORY_STYLES: Record<TimeCategoryKey, TimeCategoryStyle> = {
@@ -34,48 +36,56 @@ export const TIME_CATEGORY_STYLES: Record<TimeCategoryKey, TimeCategoryStyle> = 
     block: "bg-chart-2/15 border-l-4 border-l-chart-2 text-chart-2",
     dot: "bg-chart-2",
     bar: "bg-chart-2",
+    text: "text-chart-2",
   },
   travel_between_jobs: {
-    label: "Restid",
+    label: "Restid mellan jobb",
     block: "bg-chart-3/15 border-l-4 border-l-chart-3 text-chart-3",
     dot: "bg-chart-3",
     bar: "bg-chart-3",
+    text: "text-chart-3",
   },
   travel_commute: {
     label: "Inställelse/återresa",
     block: "bg-chart-4/15 border-l-4 border-l-chart-4 text-chart-4",
     dot: "bg-chart-4",
     bar: "bg-chart-4",
+    text: "text-chart-4",
   },
   break_meal: {
     label: "Matrast",
     block: "bg-chart-1/15 border-l-4 border-l-chart-1 text-chart-1",
     dot: "bg-chart-1",
     bar: "bg-chart-1",
+    text: "text-chart-1",
   },
   personal_time: {
     label: "Egentid",
     block: "bg-muted border-l-4 border-l-muted-foreground/40 text-muted-foreground",
     dot: "bg-muted-foreground/60",
     bar: "bg-muted-foreground/50",
+    text: "text-muted-foreground",
   },
   rest_night: {
     label: "Nattvila",
     block: "bg-chart-5/15 border-l-4 border-l-chart-5 text-chart-5",
     dot: "bg-chart-5",
     bar: "bg-chart-5",
+    text: "text-chart-5",
   },
   rest_weekend: {
     label: "Helgvila",
     block: "bg-primary/15 border-l-4 border-l-primary text-primary",
     dot: "bg-primary",
     bar: "bg-primary",
+    text: "text-primary",
   },
   overtime: {
     label: "Övertid",
     block: "bg-warning/15 border-l-4 border-l-warning text-warning",
     dot: "bg-warning",
     bar: "bg-warning",
+    text: "text-warning",
   },
 };
 
@@ -84,6 +94,7 @@ const FALLBACK_STYLE: TimeCategoryStyle = {
   block: "bg-muted border-l-4 border-l-border text-muted-foreground",
   dot: "bg-muted-foreground/60",
   bar: "bg-muted-foreground/50",
+  text: "text-muted-foreground",
 };
 
 export function getTimeCategoryStyle(category: string | null | undefined): TimeCategoryStyle {

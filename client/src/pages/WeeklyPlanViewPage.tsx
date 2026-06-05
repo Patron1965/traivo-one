@@ -17,7 +17,7 @@ import {
   Lock,
   MapPin,
   Moon,
-  Palmtree,
+  Home,
   Plus,
   RefreshCw,
   AlertTriangle,
@@ -25,6 +25,19 @@ import {
   CheckCircle2,
   XCircle,
   Check,
+  Briefcase,
+  Car,
+  Utensils,
+  Clock,
+  Gauge,
+  TrendingUp,
+  Banknote,
+  Package,
+  Receipt,
+  Percent,
+  Timer,
+  Route,
+  Leaf,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -72,8 +85,21 @@ import type {
 } from "@shared/schema";
 
 const WEEK_TOTAL_MINUTES = 168 * 60;
-const HOUR_PX = 26;
-const DAY_LABELS = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];
+const HOUR_PX = 28;
+
+type IconType = typeof MapPin;
+
+/** Ikon per tidskategori — används i tidsblock. */
+const CATEGORY_ICON: Record<string, IconType> = {
+  production: Briefcase,
+  travel_between_jobs: Car,
+  travel_commute: Car,
+  break_meal: Utensils,
+  personal_time: Clock,
+  rest_night: Moon,
+  rest_weekend: Home,
+  overtime: AlertTriangle,
+};
 
 interface Team {
   id: string;
@@ -81,11 +107,23 @@ interface Team {
   color: string | null;
 }
 
+/** Work-order-uppgift berikad av detalj-endpointen (namn, värde, plats). */
+interface EnrichedTask extends WeeklyPlanTask {
+  name: string | null;
+  value: number; // öre
+  lat: number | null;
+  lng: number | null;
+  objectId: string | null;
+  locationName: string | null;
+}
+
 interface WeeklyPlanDetail extends WeeklyPlan {
-  tasks: WeeklyPlanTask[];
+  tasks: EnrichedTask[];
   personalTasks: PersonalTask[];
   travelEntries: TravelTimeEntry[];
   warnings: WeeklyPlanWarning[];
+  taskCount: number;
+  objectCount: number;
 }
 
 interface ScheduleBlock {
@@ -131,16 +169,37 @@ function formatHours(minutes: number | null | undefined): string {
   return `${(minutes / 60).toFixed(1)} h`;
 }
 
+/** Svenskt tal med komma som decimaltecken och blanksteg som tusentalsavgränsare. */
+function svDecimal(n: number | null | undefined, digits = 2): string {
+  return (n ?? 0).toLocaleString("sv-SE", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+/** Timmar med svenskt decimaltecken, t.ex. "22,00 h". */
+function formatHoursDec(minutes: number | null | undefined, digits = 2): string {
+  return `${svDecimal((minutes ?? 0) / 60, digits)} h`;
+}
+
 function formatPercent(ratio: number | null | undefined): string {
   if (ratio == null) return "–";
-  return `${(ratio * 100).toFixed(0)} %`;
+  const pct = ratio * 100;
+  const digits = Number.isInteger(pct) ? 0 : 1;
+  return `${svDecimal(pct, digits)} %`;
+}
+
+/** "08:00 – 12:00" för ett block med känd starttid. */
+function blockTimeRange(b: ScheduleBlock): string | null {
+  if (b.startMinutes == null) return null;
+  return `${minutesToHHMM(b.startMinutes)} – ${minutesToHHMM(b.startMinutes + b.durationMinutes)}`;
 }
 
 // ---------------------------------------------------------------------------
 // Normalisering av plan-block
 // ---------------------------------------------------------------------------
 
-function taskToBlock(t: WeeklyPlanTask): ScheduleBlock {
+function taskToBlock(t: EnrichedTask): ScheduleBlock {
   let date: string | null = t.plannedDate ?? null;
   let startMinutes: number | null = null;
   if (t.plannedStartTime) {
@@ -158,12 +217,12 @@ function taskToBlock(t: WeeklyPlanTask): ScheduleBlock {
     id: t.id,
     kind: "task",
     category: "production",
-    title: t.notes?.trim() || "Produktion",
+    title: t.name?.trim() || t.notes?.trim() || "Produktion",
     date,
     startMinutes,
     durationMinutes: duration || 60,
     locked: Boolean(t.locked),
-    locationName: null,
+    locationName: t.locationName ?? null,
   };
 }
 
@@ -343,16 +402,47 @@ export default function WeeklyPlanViewPage() {
   const kpi = (plan?.metadata as Record<string, any> | null)?.kpi ?? {};
   const weekTotalMinutes: number = kpi.weekTotalMinutes ?? 0;
   const within168h: boolean = kpi.within168h ?? weekTotalMinutes <= WEEK_TOTAL_MINUTES;
+  const lastCalculatedAt: string | null = (plan?.metadata as Record<string, any> | null)?.lastCalculatedAt ?? null;
+
+  const effectiveTeam = teams.find((t) => t.id === effectiveTeamId);
+  const teamName = effectiveTeam?.name ?? "Team";
 
   const restNight = plan?.personalTasks?.find((p) => p.timeCategory === "rest_night");
   const restWeekend = plan?.personalTasks?.find((p) => p.timeCategory === "rest_weekend");
 
   const activeWarnings = (plan?.warnings ?? []).filter((w) => !w.resolved);
 
+  // Serverberäknade nyckeltal — använd berikat antal från detalj-endpointen.
+  const taskCount = plan?.taskCount ?? plan?.tasks?.length ?? 0;
+  const objectCount = plan?.objectCount ?? 0;
+
+  // Restid = restid mellan jobb + pendling (commute).
+  const travelMinutes = categoryMinutes(plan, "travel_between_jobs") + categoryMinutes(plan, "travel_commute");
+  const productionMinutes = plan?.totalProductionMinutes ?? 0;
+
+  // Ordervärde-tabellens underlag (berikade uppgifter).
+  const orderTasks = (plan?.tasks ?? []).filter((t) => (t.value ?? 0) > 0 || (t.name ?? "").trim().length > 0);
+  const orderValueTotal = orderTasks.reduce((sum, t) => sum + (t.value ?? 0), 0);
+  const orderMinutesTotal = orderTasks.reduce((sum, t) => sum + (t.productionMinutes ?? 0), 0);
+
+  // Planerad arbetstid (rubrik). Föredra KPI-fältet, fall tillbaka på produktion.
+  const plannedWorkMinutes: number =
+    kpi.workedMinutes ?? (kpi.workedHours != null ? kpi.workedHours * 60 : null) ?? productionMinutes;
+
+  const donutSegments = TIME_CATEGORY_ORDER.map((key) => ({
+    key,
+    minutes: categoryMinutes(plan, key),
+  })).filter((s) => s.minutes > 0);
+  const donutTotal = donutSegments.reduce((sum, s) => sum + s.minutes, 0);
+
   return (
     <div className="flex flex-col h-full overflow-auto">
       <div className="px-4 pt-4 flex flex-wrap items-center justify-between gap-3">
-        <PageHeader icon={CalendarRange} title="Veckoplan (168h per team)" testId="text-page-title" />
+        <PageHeader
+          icon={CalendarRange}
+          title={`Veckoschema – ${teamName.toUpperCase()}`}
+          testId="text-page-title"
+        />
         <div className="flex flex-wrap items-center gap-2">
           <Select value={effectiveTeamId} onValueChange={setTeamId} disabled={teamsLoading}>
             <SelectTrigger className="w-48" data-testid="select-team">
@@ -393,9 +483,47 @@ export default function WeeklyPlanViewPage() {
         </div>
       </div>
 
-      <p className="px-4 pt-1 text-sm text-muted-foreground">
-        {format(weekStart, "d MMM", { locale: sv })} – {format(addDays(weekStart, 6), "d MMM yyyy", { locale: sv })}
-      </p>
+      {plan ? (
+        <div className="px-4 pt-2 flex flex-wrap items-start justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1.5" data-testid="text-week-range">
+              <CalendarRange className="h-4 w-4 shrink-0" />
+              v.{week} {year} ({format(weekStart, "d", { locale: sv })}–{format(addDays(weekStart, 6), "d MMMM", { locale: sv })})
+            </span>
+            <span className="flex items-center gap-1.5" data-testid="text-schema-period">
+              <Clock className="h-4 w-4 shrink-0" />
+              Schema period: Mån 00:00 – Sön 24:00 (168 h)
+            </span>
+            <span className="flex items-center gap-1.5" data-testid="text-planned-work">
+              Planerad arbetstid:{" "}
+              <strong className="text-foreground tabular-nums">{formatHoursDec(plannedWorkMinutes, 1)}</strong>
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <PlaceCard
+              icon={Moon}
+              title="Nattvila"
+              value={restNight?.locationName || plan.restLocation || "Ej angiven"}
+              testId="card-night-rest"
+            />
+            <PlaceCard
+              icon={Home}
+              title="Helgvila"
+              value={
+                restWeekend?.locationName ||
+                (restWeekend?.startAt
+                  ? `Start ${format(new Date(restWeekend.startAt), "EEEE HH:mm", { locale: sv })}`
+                  : "Ej angiven")
+              }
+              testId="card-weekend-rest"
+            />
+          </div>
+        </div>
+      ) : (
+        <p className="px-4 pt-1 text-sm text-muted-foreground">
+          {format(weekStart, "d MMM", { locale: sv })} – {format(addDays(weekStart, 6), "d MMM yyyy", { locale: sv })}
+        </p>
+      )}
 
       <div className="p-4 space-y-4">
         {(listLoading || (planId && detailLoading)) && (
@@ -432,67 +560,9 @@ export default function WeeklyPlanViewPage() {
 
         {plan && (
           <>
-            {/* Toppkort: platser */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <PlaceCard
-                icon={MapPin}
-                title="Utgångsplats"
-                value={
-                  plan.startLocationLat != null && plan.startLocationLng != null
-                    ? `${plan.startLocationLat.toFixed(4)}, ${plan.startLocationLng.toFixed(4)}`
-                    : "Ej angiven"
-                }
-                testId="card-start-location"
-              />
-              <PlaceCard
-                icon={Moon}
-                title="Nattvila"
-                value={restNight?.locationName || plan.restLocation || "Ej angiven"}
-                testId="card-night-rest"
-              />
-              <PlaceCard
-                icon={Palmtree}
-                title="Helgvila"
-                value={
-                  restWeekend?.locationName ||
-                  (restWeekend?.startAt
-                    ? `Start ${format(new Date(restWeekend.startAt), "EEEE HH:mm", { locale: sv })}`
-                    : "Ej angiven")
-                }
-                testId="card-weekend-rest"
-              />
-            </div>
-
-            {/* KPI-paneler */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-              <KpiCard label="Producerade timmar" value={formatHours(plan.totalProductionMinutes)} testId="kpi-produced-hours" />
-              <KpiCard label="Ordervärde" value={formatSekFromOre(plan.totalValue)} testId="kpi-order-value" />
-              <KpiCard label="Produktivitet" value={`${formatSek(kpi.productivity ?? 0)}/h`} testId="kpi-productivity" />
-              <KpiCard label="Planeringsgrad" value={formatPercent(kpi.planningRate)} testId="kpi-planning-rate" />
-              <KpiCard label="Utnyttjandegrad" value={formatPercent(plan.utilizationRate)} testId="kpi-utilization-rate" />
-              <KpiCard label="Debiteringsgrad" value={formatPercent(kpi.billingRate)} testId="kpi-billing-rate" />
-              <KpiCard label="Reseandel" value={formatPercent(kpi.travelShare)} testId="kpi-travel-share" />
-              <KpiCard label="Estimerade km" value={`${(kpi.estimatedKm ?? 0).toFixed(0)} km`} testId="kpi-estimated-km" />
-              <KpiCard label="Resekostnad" value={formatSekFromOre(plan.totalTravelCost)} testId="kpi-travel-cost" />
-              <KpiCard label="CO₂" value={`${(kpi.estimatedCo2Kg ?? 0).toFixed(1)} kg`} testId="kpi-co2" />
-            </div>
-
-            {/* 168h-summering */}
-            <Summary168
-              weekTotalMinutes={weekTotalMinutes}
-              within168h={within168h}
-              segments={TIME_CATEGORY_ORDER.map((key) => ({
-                key,
-                minutes: categoryMinutes(plan, key),
-              }))}
-            />
-
-            {/* Veckokalender */}
+            {/* Veckoschema — 168h rutnät */}
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Veckoschema</CardTitle>
-              </CardHeader>
-              <CardContent>
+              <CardContent className="pt-6">
                 <WeekCalendar
                   dayDates={dayDates}
                   blocks={blocks}
@@ -503,33 +573,188 @@ export default function WeeklyPlanViewPage() {
               </CardContent>
             </Card>
 
-            {/* Varningar */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  Varningar
-                  {activeWarnings.length > 0 && (
-                    <Badge variant="outline" data-testid="badge-warning-count">{activeWarnings.length}</Badge>
+            {/* Bottenpaneler: tidssummering, ordervärde, produktion, resor, varningar */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-10 gap-4">
+              {/* Tidssummering (donut) */}
+              <Card className="md:col-span-1 xl:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center justify-between gap-2">
+                    <span>Tidssummering</span>
+                    {within168h ? (
+                      <Badge className="bg-chart-2/15 text-chart-2 border border-chart-2/30" data-testid="badge-168-ok">
+                        Inom 168 h
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-destructive/15 text-destructive border border-destructive/30" data-testid="badge-168-over">
+                        Över 168 h
+                      </Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col items-center gap-4">
+                  <Donut segments={donutSegments} total={donutTotal} />
+                  <ul className="w-full space-y-1.5" data-testid="list-time-summary">
+                    {donutSegments.map((s) => {
+                      const style = getTimeCategoryStyle(s.key);
+                      const pct = donutTotal > 0 ? (s.minutes / donutTotal) * 100 : 0;
+                      return (
+                        <li
+                          key={s.key}
+                          className="flex items-center justify-between gap-2 text-xs"
+                          data-testid={`time-summary-${s.key}`}
+                        >
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${style.dot}`} />
+                            <span className="truncate">{style.label}</span>
+                          </span>
+                          <span className="tabular-nums shrink-0 text-muted-foreground">
+                            {svDecimal(s.minutes / 60)} h · {svDecimal(pct, 0)} %
+                          </span>
+                        </li>
+                      );
+                    })}
+                    <li className="flex items-center justify-between gap-2 text-xs font-semibold border-t border-border pt-1.5 mt-1.5">
+                      <span>Summa</span>
+                      <span className="tabular-nums" data-testid="text-time-summary-total">
+                        {svDecimal(donutTotal / 60)} h · 100 %
+                      </span>
+                    </li>
+                  </ul>
+                </CardContent>
+              </Card>
+
+              {/* Ordervärde */}
+              <Card className="md:col-span-1 xl:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Ordervärde</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {orderTasks.length === 0 ? (
+                    <p className="text-sm text-muted-foreground" data-testid="empty-order-value">
+                      Inga uppdrag med ordervärde.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs" data-testid="table-order-value">
+                        <thead>
+                          <tr className="text-muted-foreground text-left">
+                            <th className="font-medium pb-1.5">Uppdrag</th>
+                            <th className="font-medium pb-1.5 text-right">Värde</th>
+                            <th className="font-medium pb-1.5 text-right">Tid</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {orderTasks.map((t) => (
+                            <tr key={t.id} className="border-t border-border/60" data-testid={`row-order-${t.id}`}>
+                              <td className="py-1.5 pr-2 min-w-0">
+                                <span className="block truncate font-medium" title={t.name ?? undefined}>
+                                  {t.name?.trim() || "Uppdrag"}
+                                </span>
+                                {t.locationName && (
+                                  <span className="block truncate text-muted-foreground">{t.locationName}</span>
+                                )}
+                              </td>
+                              <td className="py-1.5 text-right tabular-nums whitespace-nowrap">
+                                {formatSekFromOre(t.value ?? 0)}
+                              </td>
+                              <td className="py-1.5 text-right tabular-nums whitespace-nowrap text-muted-foreground">
+                                {svDecimal((t.productionMinutes ?? 0) / 60)} h
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t border-border font-semibold">
+                            <td className="pt-1.5">Totalt</td>
+                            <td className="pt-1.5 text-right tabular-nums whitespace-nowrap" data-testid="text-order-value-total">
+                              {formatSekFromOre(orderValueTotal)}
+                            </td>
+                            <td className="pt-1.5 text-right tabular-nums whitespace-nowrap text-muted-foreground">
+                              {svDecimal(orderMinutesTotal / 60)} h
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
                   )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2" data-testid="list-warnings">
-                {(plan.warnings ?? []).length === 0 && (
-                  <p className="text-sm text-muted-foreground" data-testid="empty-warnings">Inga varningar.</p>
-                )}
-                {(plan.warnings ?? [])
-                  .slice()
-                  .sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
-                  .map((w) => (
-                    <WarningRow
-                      key={w.id}
-                      warning={w}
-                      onResolve={() => resolveWarning.mutate(w.id)}
-                      resolving={resolveWarning.isPending}
-                    />
-                  ))}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+
+              {/* Produktion */}
+              <Card className="md:col-span-1 xl:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Produktion</CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border/60">
+                  <KpiRow icon={Clock} label="Producerade timmar" value={formatHoursDec(productionMinutes)} testId="kpi-produced-hours" />
+                  <KpiRow icon={Gauge} label="Planeringsgrad" value={formatPercent(kpi.planningRate)} testId="kpi-planning-rate" />
+                  <KpiRow icon={TrendingUp} label="Utnyttjandegrad" value={formatPercent(plan.utilizationRate ?? kpi.utilizationRate)} testId="kpi-utilization-rate" />
+                  <KpiRow icon={Banknote} label="Produktivitet" value={`${formatSek(kpi.productivity ?? 0)}/h`} testId="kpi-productivity" />
+                  <KpiRow icon={Briefcase} label="Antal uppdrag" value={`${svDecimal(taskCount, 0)} st`} testId="kpi-task-count" />
+                  <KpiRow icon={Package} label="Antal objekt" value={`${svDecimal(objectCount, 0)} st`} testId="kpi-object-count" />
+                  <KpiRow icon={Receipt} label="Debiteringsgrad" value={formatPercent(kpi.billingRate)} testId="kpi-billing-rate" />
+                </CardContent>
+              </Card>
+
+              {/* Resor */}
+              <Card className="md:col-span-1 xl:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Resor</CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border/60">
+                  <KpiRow icon={Route} label="Total restid" value={formatHoursDec(travelMinutes)} testId="kpi-travel-total" />
+                  <KpiRow icon={Percent} label="Andel restid" value={formatPercent(kpi.travelShare)} testId="kpi-travel-share" />
+                  <KpiRow
+                    icon={Timer}
+                    label="Restid per uppdrag"
+                    value={taskCount > 0 ? formatHoursDec(travelMinutes / taskCount) : "–"}
+                    testId="kpi-travel-per-task"
+                  />
+                  <KpiRow icon={Car} label="Körda km (est.)" value={`${svDecimal(kpi.estimatedKm ?? 0, 0)} km`} testId="kpi-estimated-km" />
+                  <KpiRow icon={Banknote} label="Resekostnad (est.)" value={formatSekFromOre(plan.totalTravelCost)} testId="kpi-travel-cost" />
+                  <KpiRow icon={Leaf} label="CO₂-påverkan (est.)" value={`${svDecimal(kpi.estimatedCo2Kg ?? 0, 0)} kg`} testId="kpi-co2" />
+                </CardContent>
+              </Card>
+
+              {/* Varningar */}
+              <Card className="md:col-span-1 xl:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    Varningar
+                    {activeWarnings.length > 0 && (
+                      <Badge variant="outline" data-testid="badge-warning-count">{activeWarnings.length}</Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2" data-testid="list-warnings">
+                  {(plan.warnings ?? []).length === 0 && (
+                    <p className="text-sm text-muted-foreground" data-testid="empty-warnings">Inga varningar.</p>
+                  )}
+                  {(plan.warnings ?? [])
+                    .slice()
+                    .sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
+                    .map((w) => (
+                      <WarningRow
+                        key={w.id}
+                        warning={w}
+                        onResolve={() => resolveWarning.mutate(w.id)}
+                        resolving={resolveWarning.isPending}
+                      />
+                    ))}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Fotnot */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-muted-foreground">
+              <span data-testid="text-footer-note">
+                Schemat omfattar {formatHoursDec(plannedWorkMinutes, 1)} planerad arbetstid inom veckans 168 timmar.
+              </span>
+              <span data-testid="text-last-calculated">
+                Senast uppdaterad:{" "}
+                {lastCalculatedAt ? format(new Date(lastCalculatedAt), "d MMM yyyy HH:mm", { locale: sv }) : "–"}
+              </span>
+            </div>
           </>
         )}
       </div>
@@ -550,7 +775,8 @@ export default function WeeklyPlanViewPage() {
 // Hjälpfunktioner för summering
 // ---------------------------------------------------------------------------
 
-function categoryMinutes(plan: WeeklyPlanDetail, key: TimeCategoryKey): number {
+function categoryMinutes(plan: WeeklyPlanDetail | undefined, key: TimeCategoryKey): number {
+  if (!plan) return 0;
   switch (key) {
     case "production":
       return plan.totalProductionMinutes ?? 0;
@@ -597,78 +823,80 @@ function PlaceCard({ icon: Icon, title, value, testId }: { icon: typeof MapPin; 
   );
 }
 
-function KpiCard({ label, value, testId }: { label: string; value: string; testId: string }) {
+function KpiRow({
+  icon: Icon,
+  label,
+  value,
+  testId,
+}: {
+  icon: IconType;
+  label: string;
+  value: string;
+  testId: string;
+}) {
   return (
-    <Card data-testid={testId}>
-      <CardContent className="py-3">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-lg font-semibold tabular-nums" data-testid={`${testId}-value`}>{value}</p>
-      </CardContent>
-    </Card>
+    <div className="flex items-center justify-between gap-2 py-1.5" data-testid={testId}>
+      <span className="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
+        <Icon className="h-4 w-4 shrink-0" />
+        <span className="truncate">{label}</span>
+      </span>
+      <span className="text-sm font-semibold tabular-nums shrink-0" data-testid={`${testId}-value`}>
+        {value}
+      </span>
+    </div>
   );
 }
 
-function Summary168({
-  weekTotalMinutes,
-  within168h,
+/**
+ * Donut-diagram över veckans tidsfördelning. Segmenten ritas med
+ * `currentColor` + tema-token (`style.text`) så att inga råa färger används.
+ */
+function Donut({
   segments,
+  total,
 }: {
-  weekTotalMinutes: number;
-  within168h: boolean;
   segments: { key: TimeCategoryKey; minutes: number }[];
+  total: number;
 }) {
-  const unallocated = Math.max(0, WEEK_TOTAL_MINUTES - weekTotalMinutes);
+  const size = 168;
+  const stroke = 26;
+  const r = (size - stroke) / 2;
+  const c = size / 2;
+  const circumference = 2 * Math.PI * r;
+  const denom = Math.max(total, 1);
+  let offset = 0;
   return (
-    <Card data-testid="summary-168h">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center justify-between">
-          <span>168-timmars summering</span>
-          <span className="flex items-center gap-2 text-sm font-normal">
-            <span className="tabular-nums" data-testid="text-week-total">
-              {(weekTotalMinutes / 60).toFixed(1)} / 168 h
-            </span>
-            {within168h ? (
-              <Badge className="bg-chart-2/15 text-chart-2 border border-chart-2/30" data-testid="badge-168-ok">
-                Inom 168h
-              </Badge>
-            ) : (
-              <Badge className="bg-destructive/15 text-destructive border border-destructive/30" data-testid="badge-168-over">
-                Överskrider 168h
-              </Badge>
-            )}
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="flex h-6 w-full overflow-hidden rounded-md bg-muted" data-testid="bar-168h">
-          {segments
-            .filter((s) => s.minutes > 0)
-            .map((s) => {
-              const style = TIME_CATEGORY_STYLES[s.key];
-              const pct = (s.minutes / WEEK_TOTAL_MINUTES) * 100;
-              return (
-                <div
-                  key={s.key}
-                  className={style.bar}
-                  style={{ width: `${pct}%` }}
-                  title={`${style.label}: ${(s.minutes / 60).toFixed(1)} h`}
-                  data-testid={`bar-segment-${s.key}`}
-                />
-              );
-            })}
-          {unallocated > 0 && (
-            <div
-              className="bg-transparent"
-              style={{ width: `${(unallocated / WEEK_TOTAL_MINUTES) * 100}%` }}
-              title={`Ej allokerad: ${(unallocated / 60).toFixed(1)} h`}
+    <div className="relative" style={{ width: size, height: size }} data-testid="donut-time">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+        <circle cx={c} cy={c} r={r} fill="none" strokeWidth={stroke} stroke="currentColor" className="text-muted" />
+        {segments.map((s) => {
+          const style = getTimeCategoryStyle(s.key);
+          const len = (s.minutes / denom) * circumference;
+          const el = (
+            <circle
+              key={s.key}
+              cx={c}
+              cy={c}
+              r={r}
+              fill="none"
+              strokeWidth={stroke}
+              stroke="currentColor"
+              className={style.text}
+              strokeDasharray={`${len} ${circumference - len}`}
+              strokeDashoffset={-offset}
             />
-          )}
-        </div>
-        <p className="mt-2 text-xs text-muted-foreground" data-testid="text-unallocated">
-          Ej allokerad tid: {(unallocated / 60).toFixed(1)} h
-        </p>
-      </CardContent>
-    </Card>
+          );
+          offset += len;
+          return el;
+        })}
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-xs text-muted-foreground">Totalt</span>
+        <span className="text-2xl font-semibold tabular-nums" data-testid="text-donut-total">
+          {svDecimal(total / 60, 0)} h
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -684,42 +912,56 @@ function WeekCalendar({
   onSelectBlock: (b: ScheduleBlock) => void;
 }) {
   const hourMarks = Array.from({ length: 13 }, (_, i) => i * 2); // 0,2,...,24
+  const HEADER_H = 56;
+  const gutter = (side: "left" | "right") => (
+    <div className={`w-12 shrink-0 ${side === "left" ? "" : "border-l border-border"}`}>
+      <div style={{ height: `${HEADER_H}px` }} className="border-b border-border" />
+      <div className="relative" style={{ height: `${24 * HOUR_PX}px` }}>
+        {hourMarks.map((h) => (
+          <div
+            key={h}
+            className="absolute left-0 right-0 text-[10px] text-muted-foreground -translate-y-1/2 text-center"
+            style={{ top: `${h * HOUR_PX}px` }}
+          >
+            {pad2(h)}:00
+          </div>
+        ))}
+      </div>
+    </div>
+  );
   return (
     <div className="overflow-x-auto">
-      <div className="flex min-w-[760px]">
-        {/* Tidsgutter */}
-        <div className="w-12 shrink-0 pt-7">
-          <div className="relative" style={{ height: `${24 * HOUR_PX}px` }}>
-            {hourMarks.map((h) => (
-              <div
-                key={h}
-                className="absolute left-0 right-0 text-[10px] text-muted-foreground -translate-y-1/2"
-                style={{ top: `${h * HOUR_PX}px` }}
-              >
-                {pad2(h)}:00
-              </div>
-            ))}
-          </div>
-        </div>
+      <div className="flex min-w-[920px]">
+        {gutter("left")}
 
         {/* Dagkolumner */}
         {dayDates.map((date, idx) => {
+          const dayDate = new Date(`${date}T00:00:00`);
           const dayBlocks = blocks.filter((b) => b.date === date);
           const timed = dayBlocks.filter((b) => b.startMinutes != null);
           const untimed = dayBlocks.filter((b) => b.startMinutes == null);
+          const isWeekend = idx >= 5;
           return (
             <div
               key={date}
-              className="flex-1 min-w-[96px] border-l border-border"
+              className="flex-1 min-w-[116px] border-l border-border"
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => onDropOnDay(date, e)}
               data-testid={`day-column-${idx}`}
             >
-              <div className="h-7 flex flex-col items-center justify-center border-b border-border">
-                <span className="text-xs font-medium">{DAY_LABELS[idx]}</span>
-                <span className="text-[10px] text-muted-foreground">{date.slice(5)}</span>
+              <div
+                className={`flex flex-col items-center justify-center border-b border-border ${isWeekend ? "bg-muted/40" : ""}`}
+                style={{ height: `${HEADER_H}px` }}
+              >
+                <span className="text-xs font-semibold uppercase tracking-wide" data-testid={`day-name-${idx}`}>
+                  {format(dayDate, "EEEE", { locale: sv })}
+                </span>
+                <span className="text-[11px] text-muted-foreground uppercase">
+                  {format(dayDate, "d MMMM", { locale: sv })}
+                </span>
+                <span className="text-[10px] text-muted-foreground/70">(24 h)</span>
               </div>
-              <div className="relative bg-muted/20" style={{ height: `${24 * HOUR_PX}px` }}>
+              <div className={`relative ${isWeekend ? "bg-muted/30" : "bg-muted/10"}`} style={{ height: `${24 * HOUR_PX}px` }}>
                 {hourMarks.map((h) => (
                   <div
                     key={h}
@@ -729,8 +971,10 @@ function WeekCalendar({
                 ))}
                 {timed.map((b) => {
                   const style = getTimeCategoryStyle(b.category);
+                  const Icon = CATEGORY_ICON[b.category] ?? Briefcase;
                   const top = (b.startMinutes! / 60) * HOUR_PX;
-                  const height = Math.max((b.durationMinutes / 60) * HOUR_PX, 16);
+                  const height = Math.max((b.durationMinutes / 60) * HOUR_PX, 18);
+                  const range = blockTimeRange(b);
                   return (
                     <button
                       key={b.id}
@@ -740,15 +984,21 @@ function WeekCalendar({
                       onClick={() => onSelectBlock(b)}
                       className={`absolute left-0.5 right-0.5 rounded px-1 py-0.5 text-left text-[10px] leading-tight overflow-hidden ${style.block} ${b.locked ? "cursor-not-allowed" : "cursor-grab hover-elevate"}`}
                       style={{ top: `${top}px`, height: `${height}px` }}
-                      title={`${b.title} • ${minutesToHHMM(b.startMinutes!)}–${minutesToHHMM(b.startMinutes! + b.durationMinutes)}`}
+                      title={`${b.title}${range ? ` • ${range}` : ""}${b.locationName ? ` • ${b.locationName}` : ""}`}
                       data-testid={`block-${b.id}`}
                     >
-                      <span className="flex items-center gap-0.5 font-medium truncate">
-                        {b.locked && <Lock className="h-2.5 w-2.5 shrink-0" />}
-                        {b.title}
+                      {height >= 42 && range && (
+                        <span className="block tabular-nums opacity-80">{range}</span>
+                      )}
+                      <span className="flex items-center gap-1 font-medium truncate">
+                        {b.locked ? <Lock className="h-3 w-3 shrink-0" /> : <Icon className="h-3 w-3 shrink-0" />}
+                        <span className="truncate">{b.title}</span>
                       </span>
-                      {height > 26 && (
-                        <span className="block opacity-80">{minutesToHHMM(b.startMinutes!)}</span>
+                      {b.locationName && height >= 58 && (
+                        <span className="flex items-center gap-1 opacity-80 truncate">
+                          <MapPin className="h-2.5 w-2.5 shrink-0" />
+                          <span className="truncate">{b.locationName}</span>
+                        </span>
                       )}
                     </button>
                   );
@@ -758,6 +1008,7 @@ function WeekCalendar({
                 <div className="space-y-1 p-1 border-t border-border">
                   {untimed.map((b) => {
                     const style = getTimeCategoryStyle(b.category);
+                    const Icon = CATEGORY_ICON[b.category] ?? Briefcase;
                     return (
                       <button
                         key={b.id}
@@ -768,9 +1019,9 @@ function WeekCalendar({
                         className={`w-full rounded px-1 py-0.5 text-left text-[10px] ${style.block} ${b.locked ? "cursor-not-allowed" : "cursor-grab hover-elevate"}`}
                         data-testid={`block-${b.id}`}
                       >
-                        <span className="flex items-center gap-0.5 truncate">
-                          {b.locked && <Lock className="h-2.5 w-2.5 shrink-0" />}
-                          {b.title} ({formatHours(b.durationMinutes)})
+                        <span className="flex items-center gap-1 truncate">
+                          {b.locked ? <Lock className="h-3 w-3 shrink-0" /> : <Icon className="h-3 w-3 shrink-0" />}
+                          <span className="truncate">{b.title} ({formatHours(b.durationMinutes)})</span>
                         </span>
                       </button>
                     );
@@ -780,6 +1031,8 @@ function WeekCalendar({
             </div>
           );
         })}
+
+        {gutter("right")}
       </div>
     </div>
   );
