@@ -38,6 +38,12 @@ import {
   Timer,
   Route,
   Leaf,
+  Map as MapIcon,
+  Navigation,
+  ExternalLink,
+  Pencil,
+  Save,
+  X,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -83,6 +89,9 @@ import type {
   TravelTimeEntry,
   WeeklyPlanWarning,
 } from "@shared/schema";
+import { Marker, Popup, Polyline } from "react-leaflet";
+import { useLocation } from "wouter";
+import { BaseMap, MapFitBounds, numberedDivIcon } from "@/components/ui/map";
 
 const WEEK_TOTAL_MINUTES = 168 * 60;
 const HOUR_PX = 28;
@@ -265,6 +274,10 @@ export default function WeeklyPlanViewPage() {
   const [year, setYear] = useState<number>(getISOWeekYear(now));
   const [week, setWeek] = useState<number>(getISOWeek(now));
   const [editing, setEditing] = useState<ScheduleBlock | null>(null);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [egentidId, setEgentidId] = useState<string | null>(null);
+  const [, setLocation] = useLocation();
 
   const { data: teams = [], isLoading: teamsLoading } = useQuery<Team[]>({
     queryKey: ["/api/teams"],
@@ -435,6 +448,115 @@ export default function WeeklyPlanViewPage() {
   })).filter((s) => s.minutes > 0);
   const donutTotal = donutSegments.reduce((sum, s) => sum + s.minutes, 0);
 
+  // --- Dagval för karta & dagsdetalj -------------------------------------
+  // Förvald dag: dagens datum om det ligger i veckan, annars veckans måndag.
+  useEffect(() => {
+    if (dayDates.length === 0) return;
+    if (selectedDay && dayDates.includes(selectedDay)) return;
+    const today = localDateString(now);
+    setSelectedDay(dayDates.includes(today) ? today : dayDates[0]);
+  }, [dayDates, now, selectedDay]);
+
+  // Nollställ markering/redigering när dagen byts.
+  useEffect(() => {
+    setSelectedBlockId(null);
+    setEgentidId(null);
+  }, [selectedDay]);
+
+  // Dagens produktionsuppgifter i tidsordning (för pins & numrering).
+  const dayTasks = useMemo<EnrichedTask[]>(() => {
+    if (!plan || !selectedDay) return [];
+    return (plan.tasks ?? [])
+      .filter((t) => {
+        const d = t.plannedDate ?? (t.plannedStartTime ? localDateString(t.plannedStartTime) : null);
+        return d === selectedDay;
+      })
+      .sort((a, b) => {
+        const am = a.plannedStartTime ? localMinutes(a.plannedStartTime) : (a.sequence ?? 0);
+        const bm = b.plannedStartTime ? localMinutes(b.plannedStartTime) : (b.sequence ?? 0);
+        return am - bm;
+      });
+  }, [plan, selectedDay]);
+
+  // Uppgifter med koordinater = numrerade pins på kartan.
+  const dayJobs = useMemo(
+    () => dayTasks.filter((t) => t.lat != null && t.lng != null),
+    [dayTasks],
+  );
+
+  const jobNumberById = useMemo(() => {
+    const m = new Map<string, number>();
+    dayJobs.forEach((t, i) => m.set(t.id, i + 1));
+    return m;
+  }, [dayJobs]);
+
+  const taskByBlockId = useMemo(() => {
+    const m = new Map<string, EnrichedTask>();
+    dayTasks.forEach((t) => m.set(t.id, t));
+    return m;
+  }, [dayTasks]);
+
+  const personalById = useMemo(() => {
+    const m = new Map<string, PersonalTask>();
+    (plan?.personalTasks ?? []).forEach((pt) => m.set(pt.id, pt));
+    return m;
+  }, [plan]);
+
+  // Inställelse-/återresa-linjer med från/till-koordinater.
+  const dayCommutes = useMemo(() => {
+    if (!plan || !selectedDay) return [];
+    return (plan.personalTasks ?? []).filter((pt) => {
+      const d = pt.plannedDate ?? (pt.startAt ? localDateString(pt.startAt) : null);
+      return (
+        d === selectedDay &&
+        pt.isCommute &&
+        pt.fromLat != null &&
+        pt.fromLng != null &&
+        pt.toLat != null &&
+        pt.toLng != null
+      );
+    });
+  }, [plan, selectedDay]);
+
+  // Dagens block i sekvens (tidssatta först, sedan otidsatta).
+  const daySequence = useMemo(() => {
+    const dayBlocks = blocks.filter((b) => b.date === selectedDay);
+    const timed = dayBlocks
+      .filter((b) => b.startMinutes != null)
+      .sort((a, b) => a.startMinutes! - b.startMinutes!);
+    const untimed = dayBlocks.filter((b) => b.startMinutes == null);
+    return [...timed, ...untimed];
+  }, [blocks, selectedDay]);
+
+  const saveEgentid = useMutation({
+    mutationFn: async (vars: {
+      id: string;
+      date: string;
+      startMinutes: number;
+      endMinutes: number;
+      locationName: string;
+      title: string;
+    }) => {
+      const start = toIso(vars.date, vars.startMinutes);
+      const end = toIso(vars.date, vars.endMinutes);
+      const duration = Math.max(1, vars.endMinutes - vars.startMinutes);
+      await apiRequest("PATCH", `/api/personal-tasks/${vars.id}`, {
+        startAt: start,
+        endAt: end,
+        durationMinutes: duration,
+        locationName: vars.locationName.trim() || null,
+        title: vars.title.trim() || "Egentid",
+      });
+    },
+    onSuccess: () => {
+      invalidatePlan();
+      setEgentidId(null);
+      toast({ title: "Egentid uppdaterad" });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Kunde inte spara egentid", description: e.message, variant: "destructive" }),
+  });
+
   return (
     <div className="flex flex-col h-full overflow-auto">
       <div className="px-4 pt-4 flex flex-wrap items-center justify-between gap-3">
@@ -566,12 +688,64 @@ export default function WeeklyPlanViewPage() {
                 <WeekCalendar
                   dayDates={dayDates}
                   blocks={blocks}
+                  selectedDay={selectedDay}
+                  onSelectDay={setSelectedDay}
                   onDropOnDay={handleDropOnDay}
                   onSelectBlock={(b) => setEditing(b)}
                 />
                 <Legend />
               </CardContent>
             </Card>
+
+            {/* Karta & dagsdetalj */}
+            <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+              <Card className="xl:col-span-3">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <MapIcon className="h-4 w-4" />
+                    Karta – jobb &amp; rutt
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <WeeklyRouteMap
+                    jobs={dayJobs}
+                    commutes={dayCommutes}
+                    selectedBlockId={selectedBlockId}
+                    onSelectJob={(id) => setSelectedBlockId(id)}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card className="xl:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2" data-testid="text-day-detail-title">
+                    <Briefcase className="h-4 w-4" />
+                    Jobb –{" "}
+                    {selectedDay
+                      ? format(new Date(`${selectedDay}T00:00:00`), "EEEE d MMMM", { locale: sv })
+                      : "—"}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <DayDetailPanel
+                    selectedDay={selectedDay}
+                    sequence={daySequence}
+                    jobNumberById={jobNumberById}
+                    taskByBlockId={taskByBlockId}
+                    personalById={personalById}
+                    selectedBlockId={selectedBlockId}
+                    onSelectBlock={setSelectedBlockId}
+                    onOpenJob={(taskId) => setLocation(`/work-orders/${taskId}`)}
+                    onMoveBlock={(b) => setEditing(b)}
+                    egentidId={egentidId}
+                    onEditEgentid={setEgentidId}
+                    onCancelEgentid={() => setEgentidId(null)}
+                    onSaveEgentid={(vars) => saveEgentid.mutate(vars)}
+                    saving={saveEgentid.isPending}
+                  />
+                </CardContent>
+              </Card>
+            </div>
 
             {/* Bottenpaneler: tidssummering, ordervärde, produktion, resor, varningar */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-10 gap-4">
@@ -903,11 +1077,15 @@ function Donut({
 function WeekCalendar({
   dayDates,
   blocks,
+  selectedDay,
+  onSelectDay,
   onDropOnDay,
   onSelectBlock,
 }: {
   dayDates: string[];
   blocks: ScheduleBlock[];
+  selectedDay: string | null;
+  onSelectDay: (date: string) => void;
   onDropOnDay: (date: string, e: React.DragEvent) => void;
   onSelectBlock: (b: ScheduleBlock) => void;
 }) {
@@ -949,18 +1127,29 @@ function WeekCalendar({
               onDrop={(e) => onDropOnDay(date, e)}
               data-testid={`day-column-${idx}`}
             >
-              <div
-                className={`flex flex-col items-center justify-center border-b border-border ${isWeekend ? "bg-muted/40" : ""}`}
+              <button
+                type="button"
+                onClick={() => onSelectDay(date)}
+                className={`w-full flex flex-col items-center justify-center border-b transition-colors hover-elevate ${
+                  selectedDay === date
+                    ? "border-primary bg-primary/10"
+                    : `border-border ${isWeekend ? "bg-muted/40" : ""}`
+                }`}
                 style={{ height: `${HEADER_H}px` }}
+                data-testid={`button-select-day-${idx}`}
+                aria-pressed={selectedDay === date}
               >
-                <span className="text-xs font-semibold uppercase tracking-wide" data-testid={`day-name-${idx}`}>
+                <span
+                  className={`text-xs font-semibold uppercase tracking-wide ${selectedDay === date ? "text-primary" : ""}`}
+                  data-testid={`day-name-${idx}`}
+                >
                   {format(dayDate, "EEEE", { locale: sv })}
                 </span>
                 <span className="text-[11px] text-muted-foreground uppercase">
                   {format(dayDate, "d MMMM", { locale: sv })}
                 </span>
                 <span className="text-[10px] text-muted-foreground/70">(24 h)</span>
-              </div>
+              </button>
               <div className={`relative ${isWeekend ? "bg-muted/30" : "bg-muted/10"}`} style={{ height: `${24 * HOUR_PX}px` }}>
                 {hourMarks.map((h) => (
                   <div
@@ -1172,5 +1361,482 @@ function BlockEditDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Karta – jobb & rutt
+// ---------------------------------------------------------------------------
+
+/** Löser ett tema-token (HSL-trippel i index.css) till en css-färgsträng. */
+function themeColor(varName: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  return v ? `hsl(${v})` : fallback;
+}
+
+function hhmmToMinutes(s: string): number {
+  const [h, m] = s.split(":").map((n) => Number(n));
+  return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+}
+
+const MAP_CENTER_FALLBACK: [number, number] = [62.3908, 17.3069]; // Sundsvall
+
+function WeeklyRouteMap({
+  jobs,
+  commutes,
+  selectedBlockId,
+  onSelectJob,
+}: {
+  jobs: EnrichedTask[];
+  commutes: PersonalTask[];
+  selectedBlockId: string | null;
+  onSelectJob: (id: string) => void;
+}) {
+  const jobPoints = useMemo(
+    () => jobs.map((t) => [t.lat as number, t.lng as number] as [number, number]),
+    [jobs],
+  );
+  const geomKey = useMemo(
+    () => jobPoints.map((p) => `${p[0].toFixed(5)},${p[1].toFixed(5)}`).join("|"),
+    [jobPoints],
+  );
+
+  // Vägbaserad ruttgeometri från servern. Faller tyst tillbaka på raka linjer
+  // (t.ex. om Geoapify-nyckel saknas → 500).
+  const { data: geometry = [] } = useQuery<[number, number][]>({
+    queryKey: ["/api/route-geometry", geomKey],
+    enabled: jobPoints.length >= 2,
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      try {
+        const res = await apiRequest("POST", "/api/route-geometry", {
+          waypoints: jobPoints.slice(0, 25).map(([lat, lng]) => ({ lat, lng })),
+        });
+        const data = await res.json();
+        return (data?.coordinates as [number, number][]) ?? [];
+      } catch {
+        return [];
+      }
+    },
+  });
+
+  const hasGeometry = geometry.length > 1;
+  const routeLine: [number, number][] = hasGeometry ? geometry : jobPoints;
+
+  const commuteSegments = useMemo(
+    () =>
+      commutes.map((c) => ({
+        id: c.id,
+        positions: [
+          [c.fromLat as number, c.fromLng as number],
+          [c.toLat as number, c.toLng as number],
+        ] as [number, number][],
+      })),
+    [commutes],
+  );
+
+  const allPositions = useMemo<[number, number][]>(
+    () => [...jobPoints, ...commuteSegments.flatMap((c) => c.positions)],
+    [jobPoints, commuteSegments],
+  );
+
+  const routeColor = themeColor("--chart-1", "#1B4B6B");
+  const estColor = themeColor("--chart-3", "#7DBFB0");
+  const commuteColor = themeColor("--chart-4", "#6B7C8C");
+  const pinColor = themeColor("--primary", "#1B4B6B");
+
+  if (jobPoints.length === 0 && commuteSegments.length === 0) {
+    return (
+      <div
+        className="flex h-[360px] items-center justify-center rounded-md border border-dashed border-border bg-muted/20 text-sm text-muted-foreground"
+        data-testid="map-empty"
+      >
+        <span className="flex items-center gap-2">
+          <MapPin className="h-4 w-4" />
+          Inga koordinater för vald dag.
+        </span>
+      </div>
+    );
+  }
+
+  const center = jobPoints[0] ?? allPositions[0] ?? MAP_CENTER_FALLBACK;
+
+  return (
+    <div className="space-y-2">
+      <div className="h-[360px] overflow-hidden rounded-md border border-border" data-testid="map-weekly-route">
+        <BaseMap center={center} zoom={11}>
+          <MapFitBounds positions={allPositions} />
+          {commuteSegments.map((c) => (
+            <Polyline
+              key={`commute-${c.id}`}
+              positions={c.positions}
+              pathOptions={{ color: commuteColor, weight: 3, opacity: 0.8, dashArray: "8,6" }}
+            />
+          ))}
+          {routeLine.length > 1 && (
+            <Polyline
+              positions={routeLine}
+              pathOptions={{
+                color: hasGeometry ? routeColor : estColor,
+                weight: hasGeometry ? 4 : 3,
+                opacity: 0.85,
+              }}
+            />
+          )}
+          {jobs.map((t, i) => {
+            const selected = selectedBlockId === t.id;
+            const icon = numberedDivIcon({
+              number: i + 1,
+              color: pinColor,
+              size: selected ? 34 : 26,
+            });
+            return (
+              <Marker
+                key={t.id}
+                position={[t.lat as number, t.lng as number]}
+                icon={icon}
+                eventHandlers={{ click: () => onSelectJob(t.id) }}
+              >
+                <Popup>
+                  <div className="space-y-0.5 text-xs">
+                    <div className="font-semibold">
+                      {i + 1}. {t.name?.trim() || "Produktion"}
+                    </div>
+                    {t.locationName && <div className="text-muted-foreground">{t.locationName}</div>}
+                    {t.plannedStartTime && (
+                      <div className="tabular-nums">{minutesToHHMM(localMinutes(t.plannedStartTime))}</div>
+                    )}
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
+        </BaseMap>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" data-testid="map-legend">
+        <span className="flex items-center gap-1.5">
+          <span className="h-0.5 w-5 rounded-full bg-chart-1" />
+          Rutt (planerad)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-0.5 w-5 rounded-full bg-chart-3" />
+          Restid mellan jobb
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-5 border-t-2 border-dashed border-chart-4" />
+          Inställelse / återresa
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Dagsdetalj – jobbsekvens + justera egentid
+// ---------------------------------------------------------------------------
+
+function DayDetailPanel({
+  selectedDay,
+  sequence,
+  jobNumberById,
+  taskByBlockId,
+  personalById,
+  selectedBlockId,
+  onSelectBlock,
+  onOpenJob,
+  onMoveBlock,
+  egentidId,
+  onEditEgentid,
+  onCancelEgentid,
+  onSaveEgentid,
+  saving,
+}: {
+  selectedDay: string | null;
+  sequence: ScheduleBlock[];
+  jobNumberById: Map<string, number>;
+  taskByBlockId: Map<string, EnrichedTask>;
+  personalById: Map<string, PersonalTask>;
+  selectedBlockId: string | null;
+  onSelectBlock: (id: string) => void;
+  onOpenJob: (taskId: string) => void;
+  onMoveBlock: (b: ScheduleBlock) => void;
+  egentidId: string | null;
+  onEditEgentid: (id: string) => void;
+  onCancelEgentid: () => void;
+  onSaveEgentid: (vars: {
+    id: string;
+    date: string;
+    startMinutes: number;
+    endMinutes: number;
+    locationName: string;
+    title: string;
+  }) => void;
+  saving: boolean;
+}) {
+  if (!selectedDay) {
+    return <p className="text-sm text-muted-foreground">Välj en dag i kalendern.</p>;
+  }
+  if (sequence.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground" data-testid="text-day-empty">
+        Inga block planerade denna dag.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {sequence.map((b) => {
+        const range = blockTimeRange(b);
+
+        // Produktionsjobb
+        if (b.kind === "task") {
+          const num = jobNumberById.get(b.id);
+          const task = taskByBlockId.get(b.id);
+          const selected = selectedBlockId === b.id;
+          return (
+            <div
+              key={b.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => onSelectBlock(b.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectBlock(b.id);
+                }
+              }}
+              className={`rounded-md border p-2.5 cursor-pointer hover-elevate ${
+                selected ? "border-primary bg-primary/5" : "border-border"
+              }`}
+              data-testid={`job-row-${b.id}`}
+            >
+              <div className="flex items-start gap-2.5">
+                {num != null ? (
+                  <span
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground tabular-nums"
+                    data-testid={`job-number-${b.id}`}
+                  >
+                    {num}
+                  </span>
+                ) : (
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <Briefcase className="h-3 w-3" />
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <span className="truncate">{b.title}</span>
+                    {b.locked && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />}
+                  </div>
+                  {range && (
+                    <div className="text-xs text-muted-foreground tabular-nums">{range}</div>
+                  )}
+                  {b.locationName && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <MapPin className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{b.locationName}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1.5 text-xs"
+                  disabled={!task?.taskId}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (task?.taskId) onOpenJob(task.taskId);
+                  }}
+                  data-testid={`button-open-job-${b.id}`}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Öppna jobb
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1.5 text-xs"
+                  disabled={b.locked}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMoveBlock(b);
+                  }}
+                  data-testid={`button-move-job-${b.id}`}
+                >
+                  <Navigation className="h-3 w-3" />
+                  Flytta jobb
+                </Button>
+              </div>
+            </div>
+          );
+        }
+
+        // Egentid – inline-justering
+        if (b.category === "personal_time") {
+          const pt = personalById.get(b.id);
+          const editing = egentidId === b.id;
+          return (
+            <div key={b.id} className="rounded-md border border-border p-2.5" data-testid={`egentid-row-${b.id}`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2 text-sm">
+                  <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{b.title}</span>
+                  {range && <span className="text-xs text-muted-foreground tabular-nums">{range}</span>}
+                </div>
+                {!editing && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={() => onEditEgentid(b.id)}
+                    data-testid={`button-edit-egentid-${b.id}`}
+                  >
+                    <Pencil className="h-3 w-3" />
+                    Justera
+                  </Button>
+                )}
+              </div>
+              {editing && pt && (
+                <EgentidEditor
+                  task={pt}
+                  date={selectedDay}
+                  saving={saving}
+                  onCancel={onCancelEgentid}
+                  onSave={onSaveEgentid}
+                />
+              )}
+            </div>
+          );
+        }
+
+        // Övriga block (restid, rast, vila, övertid …)
+        const Icon = CATEGORY_ICON[b.category] ?? Clock;
+        return (
+          <div
+            key={b.id}
+            className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 text-xs text-muted-foreground"
+            data-testid={`other-row-${b.id}`}
+          >
+            <Icon className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{b.title}</span>
+            {range && <span className="ml-auto tabular-nums">{range}</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function EgentidEditor({
+  task,
+  date,
+  saving,
+  onCancel,
+  onSave,
+}: {
+  task: PersonalTask;
+  date: string;
+  saving: boolean;
+  onCancel: () => void;
+  onSave: (vars: {
+    id: string;
+    date: string;
+    startMinutes: number;
+    endMinutes: number;
+    locationName: string;
+    title: string;
+  }) => void;
+}) {
+  const initialStart = task.startAt ? minutesToHHMM(localMinutes(task.startAt)) : "08:00";
+  const initialEnd = task.endAt
+    ? minutesToHHMM(localMinutes(task.endAt))
+    : minutesToHHMM(hhmmToMinutes(initialStart) + (task.durationMinutes ?? 30));
+  const [start, setStart] = useState(initialStart);
+  const [end, setEnd] = useState(initialEnd);
+  const [plats, setPlats] = useState(task.locationName ?? "");
+  const [orsak, setOrsak] = useState(task.title ?? "");
+
+  const startMinutes = hhmmToMinutes(start);
+  const endMinutes = hhmmToMinutes(end);
+  const invalid = endMinutes <= startMinutes;
+
+  return (
+    <div className="mt-2.5 space-y-2.5 border-t border-border pt-2.5">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Justera egentid</p>
+      <div className="grid grid-cols-2 gap-2.5">
+        <div className="space-y-1">
+          <Label htmlFor={`egentid-start-${task.id}`} className="text-xs">
+            Start
+          </Label>
+          <Input
+            id={`egentid-start-${task.id}`}
+            type="time"
+            value={start}
+            onChange={(e) => setStart(e.target.value)}
+            data-testid={`input-egentid-start-${task.id}`}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`egentid-end-${task.id}`} className="text-xs">
+            Slut
+          </Label>
+          <Input
+            id={`egentid-end-${task.id}`}
+            type="time"
+            value={end}
+            onChange={(e) => setEnd(e.target.value)}
+            data-testid={`input-egentid-end-${task.id}`}
+          />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor={`egentid-plats-${task.id}`} className="text-xs">
+          Plats
+        </Label>
+        <Input
+          id={`egentid-plats-${task.id}`}
+          value={plats}
+          onChange={(e) => setPlats(e.target.value)}
+          placeholder="Valfri plats"
+          data-testid={`input-egentid-plats-${task.id}`}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor={`egentid-orsak-${task.id}`} className="text-xs">
+          Orsak
+        </Label>
+        <Input
+          id={`egentid-orsak-${task.id}`}
+          value={orsak}
+          onChange={(e) => setOrsak(e.target.value)}
+          placeholder="t.ex. Egen tid"
+          data-testid={`input-egentid-orsak-${task.id}`}
+        />
+      </div>
+      {invalid && <p className="text-xs text-destructive">Sluttiden måste vara efter starttiden.</p>}
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={onCancel} data-testid={`button-cancel-egentid-${task.id}`}>
+          <X className="h-3 w-3" />
+          Avbryt
+        </Button>
+        <Button
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          disabled={saving || invalid}
+          onClick={() =>
+            onSave({ id: task.id, date, startMinutes, endMinutes, locationName: plats, title: orsak })
+          }
+          data-testid={`button-save-egentid-${task.id}`}
+        >
+          <Save className="h-3 w-3" />
+          Spara
+        </Button>
+      </div>
+    </div>
   );
 }
