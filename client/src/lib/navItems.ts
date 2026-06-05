@@ -89,9 +89,7 @@ export function getGrunddataItems(t: (key: string, fallback: string) => string, 
     { title: "Produktionstider", url: "/production-time-lists", icon: Clock, description: "Produktionstidslista per artikel, utförare och utrustning" },
     { title: "Leverantörer", url: "/suppliers", icon: Truck, description: "Leverantörsregister med kontaktuppgifter och artikelkopplingar", adminOnly: true },
     { title: l("nav.price-lists"), url: "/price-lists", icon: Receipt, description: l("nav.price-lists.desc") },
-    { title: l("nav.import"), url: "/import", icon: Upload, description: l("nav.import.desc") },
-    { title: "Importera objekt (mall)", url: "/objektmall-import", icon: Upload, description: "Bulkimport av organisationer, butiker och kärl via Excel-mall" },
-    { title: "Importmallar", url: "/import-templates", icon: Upload, description: "Bygg och spara namngivna Excel-mallar med valda metadatafält", adminOnly: true },
+    { title: "Import", url: "/import", icon: Upload, description: "Importera data, objektmallar och spara importmallar", adminOnly: true },
   ];
 }
 
@@ -121,14 +119,6 @@ export function getPlaneringItems(tl?: (key: string) => string): NavItem[] {
     { title: l("nav.historical-map"), url: "/historical-map", icon: History, description: l("nav.historical-map.desc") },
     { title: l("nav.production-control"), url: "/planning-parameters", icon: Settings2, description: l("nav.production-control.desc") },
     { title: l("nav.planner-search-filters"), url: "/planner-search-filters", icon: Sliders, description: l("nav.planner-search-filters.desc") },
-  ];
-}
-
-export function getOvervakningItems(tl?: (key: string) => string): NavItem[] {
-  const l = tl || svFallback;
-  return [
-    { title: l("nav.planner-map"), url: "/planner-map", icon: MapPin, description: l("nav.planner-map.desc") },
-    { title: l("nav.historical-map"), url: "/historical-map", icon: History, description: l("nav.historical-map.desc") },
   ];
 }
 
@@ -175,9 +165,7 @@ export function getAdminItems(tl?: (key: string) => string): NavItem[] {
   const l = tl || svFallback;
   return [
     { title: l("nav.company-settings"), url: "/tenant-config", icon: Settings2, description: l("nav.company-settings.desc") },
-    { title: l("nav.metadata-settings"), url: "/metadata-settings", icon: Database, description: l("nav.metadata-settings.desc") },
-    { title: "Metadatadefinitioner", url: "/metadata-definitions", icon: Database, description: "Tekniska fältdefinitioner (fieldKey) — soft-delete + livscykelskydd" },
-    { title: "Metadata per ordertyp", url: "/order-type-metadata", icon: Link2, description: "Koppla metadatafält/familjer till en ordertyp — visas automatiskt i orderformuläret" },
+    { title: "Metadata", url: "/metadata-settings", icon: Database, description: "Metadatakatalog, definitioner och koppling per ordertyp" },
     { title: l("nav.user-management"), url: "/user-management", icon: Users, description: l("nav.user-management.desc") },
     { title: l("nav.settings"), url: "/settings", icon: Settings, description: l("nav.settings.desc") },
     { title: l("nav.fortnox"), url: "/fortnox", icon: Receipt, description: l("nav.fortnox.desc") },
@@ -186,8 +174,8 @@ export function getAdminItems(tl?: (key: string) => string): NavItem[] {
     { title: "ML datakvalitet", url: "/ml-data-quality", icon: Activity, description: "Go/no-go-grind för ML duration-prediktion (Task #421)" },
     { title: "Återställ vilande kunder", url: "/restore-dormant-customers", icon: Database, description: "Sök fram en vilande kund och återställ den från dev till prod (platform-owner)" },
     { title: "Kart-leverantör", url: "/shadow-comparison", icon: Activity, description: "Shadow-jämförelse Google vs Geoapify: avvikelser, volym och kostnad (platform-owner)", platformOwnerOnly: true },
-    { title: "Plattformsadmin", url: "/platform-admin", icon: UserCheck, description: "Cross-tenant användarvy, GDPR-anonymisering och hård radering (platform-owner)", platformOwnerOnly: true },
-    { title: l("nav.platform-admin"), url: "/system-dashboard", icon: Palette, description: l("nav.platform-admin.desc") },
+    { title: "Plattform: Användare & GDPR", url: "/platform-admin", icon: UserCheck, description: "Cross-tenant användarvy, GDPR-anonymisering och hård radering (platform-owner)", platformOwnerOnly: true },
+    { title: "Plattform: Branding & roller", url: "/system-dashboard", icon: Palette, description: l("nav.platform-admin.desc") },
     { title: l("nav.system-overview"), url: "/system-overview", icon: FileText, description: l("nav.system-overview.desc") },
     { title: "Arkiv", url: "/archive", icon: Archive, description: "Arkiverade objekt, ordrar, bilder, kontakter och metadatatyper — sök, filtrera och återställ" },
     { title: "Kundportal extern", url: "/portal", icon: Globe, description: "Öppna den externa kundportalen i ny flik", external: true },

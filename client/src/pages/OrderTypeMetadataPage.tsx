@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageTabs, METADATA_TABS } from "@/components/layout/PageTabs";
 import { Link2, Search, Layers, Tag, AlertTriangle, GripVertical, ChevronUp, ChevronDown, ListOrdered, X } from "lucide-react";
 import {
   AlertDialog,
@@ -300,6 +301,7 @@ export default function OrderTypeMetadataPage() {
 
   return (
     <div className="space-y-6">
+      <PageTabs tabs={METADATA_TABS} />
       <PageHeader
         title="Metadata per ordertyp"
         description="Koppla metadatafält eller familjer till en ordertyp. Kopplade fält visas automatiskt i orderformuläret för ordrar av den typen."

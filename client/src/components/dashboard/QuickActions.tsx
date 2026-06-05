@@ -3,15 +3,15 @@ import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { filterQuickLinks } from "@/lib/role-config";
-import { 
-  Calendar, Map, Upload, FileText, Users, Truck, 
-  ClipboardList, Receipt, BarChart3, Settings2, Layers, Sparkles, Building2
+import {
+  Calendar, Map, Upload, Users, Truck,
+  ClipboardList, Receipt, BarChart3, Layers, Sparkles
 } from "lucide-react";
 
 const allQuickLinks = [
   { title: "Veckoplanering", url: "/planner", icon: Calendar },
-  { title: "Karta", url: "/map", icon: Map },
-  { title: "Arbetsordrar", url: "/assignments", icon: ClipboardList },
+  { title: "Ruttplanering", url: "/routes", icon: Map },
+  { title: "Orderstock", url: "/order-stock", icon: ClipboardList },
   { title: "Orderkoncept", url: "/order-concepts", icon: Layers },
   { title: "Fakturering", url: "/invoicing", icon: Receipt },
   { title: "Rapporter", url: "/reporting", icon: BarChart3 },
@@ -19,9 +19,6 @@ const allQuickLinks = [
   { title: "Flottan", url: "/fleet", icon: Truck },
   { title: "AI-optimering", url: "/optimization", icon: Sparkles },
   { title: "Import", url: "/import", icon: Upload },
-  { title: "Företagsinställningar", url: "/tenant-config", icon: Settings2 },
-  { title: "Nytt företag", url: "/onboarding", icon: Building2 },
-  { title: "Prislistor", url: "/price-lists", icon: FileText },
 ];
 
 export function QuickActions() {

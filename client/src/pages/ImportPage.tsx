@@ -24,6 +24,7 @@ import {
   FilePlus, Receipt, Wallet, RefreshCw
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageTabs, IMPORT_TABS } from "@/components/layout/PageTabs";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ImportSummaryView } from "@/components/ImportSummaryView";
 import { ImportHealthOverview } from "@/components/ImportHealthOverview";
@@ -3028,6 +3029,7 @@ export default function ImportPage() {
 
   return (
     <div className="p-6 space-y-6">
+      <PageTabs tabs={IMPORT_TABS} />
       <PageHeader icon={Upload} title={tl("page.import.title")} description={tl("page.import.description")} testId="text-import-title" />
 
       <ImportEntryChooser value={importMode} onChange={setImportMode} />

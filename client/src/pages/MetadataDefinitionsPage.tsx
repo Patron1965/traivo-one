@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageTabs, METADATA_TABS } from "@/components/layout/PageTabs";
 import { Database, Trash2, AlertTriangle, ArchiveRestore } from "lucide-react";
 import type { MetadataDefinition } from "@shared/schema";
 
@@ -54,6 +55,7 @@ export default function MetadataDefinitionsPage() {
 
   return (
     <div className="container py-6 space-y-6">
+      <PageTabs tabs={METADATA_TABS} />
       <PageHeader
         icon={Database}
         title="Metadatadefinitioner"

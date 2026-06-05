@@ -24,6 +24,7 @@ import {
   Settings2,
 } from "lucide-react";
 import { Link } from "wouter";
+import { PageTabs, IMPORT_TABS } from "@/components/layout/PageTabs";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { OBJEKTMALL_FILENAME, OBJEKTMALL_FIXED_COLUMNS } from "@shared/objektmall-template";
@@ -259,6 +260,7 @@ export default function ObjektmallImportPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6" data-testid="page-objektmall-import">
+      <PageTabs tabs={IMPORT_TABS} />
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <FileSpreadsheet className="h-6 w-6" />

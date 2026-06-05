@@ -37,6 +37,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageTabs, METADATA_TABS } from "@/components/layout/PageTabs";
 import {
   Plus,
   Edit2,
@@ -314,6 +315,7 @@ export default function MetadataSettingsPage() {
 
   return (
     <div className="container py-6 space-y-6">
+      <PageTabs tabs={METADATA_TABS} />
       <PageHeader
         icon={Database}
         title="Metadatainställningar"

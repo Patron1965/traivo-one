@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageTabs, IMPORT_TABS } from "@/components/layout/PageTabs";
 import { FileSpreadsheet, Download, Save, Trash2, Edit2, Search, X, Plus } from "lucide-react";
 
 interface MetadataType {
@@ -240,6 +241,7 @@ export default function ImportTemplatesPage() {
 
   return (
     <div className="space-y-6 p-4 md:p-6">
+      <PageTabs tabs={IMPORT_TABS} />
       <PageHeader
         icon={FileSpreadsheet}
         title="Importmallar"
