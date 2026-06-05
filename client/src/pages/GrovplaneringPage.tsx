@@ -42,7 +42,16 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatSekFromOre } from "@/lib/format";
 import { getExecutionStatusBadge } from "@/lib/status-colors";
-import type { GeographicDistrict, Team, WorkOrderWithObject } from "@shared/schema";
+import type {
+  GeographicDistrict,
+  RoughPlanningSummary,
+  Team,
+  WorkOrderWithObject,
+} from "@shared/schema";
+
+const UNPLANNED_PAGE_SIZE = 50;
+
+type UnplannedResponse = { workOrders: WorkOrderWithObject[]; total: number };
 
 const UNASSIGNED = "__none__";
 
@@ -69,17 +78,29 @@ export default function GrovplaneringPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [autoSuggestDistrict, setAutoSuggestDistrict] = useState(false);
 
-  const workOrdersQuery = useQuery<WorkOrderWithObject[]>({
-    queryKey: ["/api/work-orders", { allDates: true, includeUnscheduled: true }],
+  const summaryQuery = useQuery<RoughPlanningSummary>({
+    queryKey: [
+      "/api/rough-planning/summary",
+      { week, districtId: districtFilter === "all" ? undefined : districtFilter },
+    ],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/work-orders?allDates=true&includeUnscheduled=true");
+      const params = new URLSearchParams({ week });
+      if (districtFilter !== "all") params.set("districtId", districtFilter);
+      const res = await apiRequest("GET", `/api/rough-planning/summary?${params.toString()}`);
+      return res.json();
+    },
+  });
+  const unplannedQuery = useQuery<UnplannedResponse>({
+    queryKey: ["/api/rough-planning/unplanned", { limit: UNPLANNED_PAGE_SIZE }],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/rough-planning/unplanned?limit=${UNPLANNED_PAGE_SIZE}`);
       return res.json();
     },
   });
   const teamsQuery = useQuery<Team[]>({ queryKey: ["/api/teams"] });
   const districtsQuery = useQuery<GeographicDistrict[]>({ queryKey: ["/api/districts"] });
 
-  const allOrders = workOrdersQuery.data ?? [];
+  const summary = summaryQuery.data;
   const teams = (teamsQuery.data ?? []).filter((t) => t.status === "active");
   const districts = districtsQuery.data ?? [];
   const districtById = useMemo(
@@ -87,70 +108,59 @@ export default function GrovplaneringPage() {
     [districts],
   );
 
-  const weekOrders = useMemo(
-    () =>
-      allOrders.filter(
-        (o) =>
-          o.roughPlannedWeek === week &&
-          (districtFilter === "all" || o.districtId === districtFilter),
-      ),
-    [allOrders, week, districtFilter],
-  );
-
-  const unplanned = useMemo(
-    () => allOrders.filter((o) => !o.roughPlannedWeek && o.orderStatus !== "completed" && o.orderStatus !== "cancelled"),
-    [allOrders],
-  );
+  const unplanned = unplannedQuery.data?.workOrders ?? [];
+  const unplannedTotal = unplannedQuery.data?.total ?? 0;
 
   const totals = useMemo(() => {
-    const value = weekOrders.reduce((s, o) => s + (o.cachedValue ?? 0), 0);
-    const demandH = weekOrders.reduce((s, o) => s + (o.estimatedDuration ?? 0) / 60, 0);
-    const capacityH = teams.reduce((s, t) => s + (t.productionHoursTarget ?? 0), 0);
-    return { value, demandH, capacityH, count: weekOrders.length };
-  }, [weekOrders, teams]);
+    const t = summary?.totals;
+    return {
+      value: t?.valueOre ?? 0,
+      demandH: t?.demandHours ?? 0,
+      capacityH: t?.capacityHours ?? 0,
+      count: t?.count ?? 0,
+    };
+  }, [summary]);
+
+  const teamAggById = useMemo(
+    () => new Map((summary?.byTeam ?? []).map((r) => [r.teamId, r])),
+    [summary],
+  );
 
   const teamRows = useMemo(() => {
     return teams.map((t) => {
-      const rows = weekOrders.filter((o) => o.teamId === t.id);
-      const demandH = rows.reduce((s, o) => s + (o.estimatedDuration ?? 0) / 60, 0);
-      const value = rows.reduce((s, o) => s + (o.cachedValue ?? 0), 0);
+      const agg = teamAggById.get(t.id);
+      const demandH = agg?.demandHours ?? 0;
+      const value = agg?.valueOre ?? 0;
+      const count = agg?.count ?? 0;
       const capacityH = t.productionHoursTarget ?? 0;
       const util = capacityH > 0 ? (demandH / capacityH) * 100 : 0;
-      return { team: t, count: rows.length, demandH, value, capacityH, util };
+      return { team: t, count, demandH, value, capacityH, util };
     });
-  }, [teams, weekOrders]);
+  }, [teams, teamAggById]);
 
-  const unassignedTeamOrders = useMemo(
-    () => weekOrders.filter((o) => !o.teamId),
-    [weekOrders],
+  const unassignedTeamAgg = useMemo(
+    () => (summary?.byTeam ?? []).find((r) => r.teamId === null) ?? null,
+    [summary],
   );
 
   const districtRows = useMemo(() => {
-    const map = new Map<string, { count: number; value: number; demandH: number }>();
-    for (const o of weekOrders) {
-      const key = o.districtId ?? UNASSIGNED;
-      const cur = map.get(key) ?? { count: 0, value: 0, demandH: 0 };
-      cur.count += 1;
-      cur.value += o.cachedValue ?? 0;
-      cur.demandH += (o.estimatedDuration ?? 0) / 60;
-      map.set(key, cur);
-    }
-    return Array.from(map.entries()).map(([id, agg]) => ({
-      id,
-      name: id === UNASSIGNED ? "Utan distrikt" : districtById.get(id)?.name ?? "Okänt distrikt",
-      color: id === UNASSIGNED ? "#6B7C8C" : districtById.get(id)?.color ?? "#3B82F6",
-      ...agg,
-    }));
-  }, [weekOrders, districtById]);
+    return (summary?.byDistrict ?? []).map((r) => {
+      const id = r.districtId ?? UNASSIGNED;
+      return {
+        id,
+        name: r.districtId === null ? "Utan distrikt" : districtById.get(r.districtId)?.name ?? "Okänt distrikt",
+        color: r.districtId === null ? "#6B7C8C" : districtById.get(r.districtId)?.color ?? "#3B82F6",
+        count: r.count,
+        value: r.valueOre,
+        demandH: r.demandHours,
+      };
+    });
+  }, [summary, districtById]);
 
-  const statusRows = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const o of weekOrders) {
-      const k = o.orderStatus ?? "unknown";
-      map.set(k, (map.get(k) ?? 0) + 1);
-    }
-    return Array.from(map.entries());
-  }, [weekOrders]);
+  const statusRows = useMemo(
+    () => (summary?.statusCounts ?? []).map((s) => [s.status, s.count] as const),
+    [summary],
+  );
 
   const assignMutation = useMutation({
     mutationFn: async (orderId: string) => {
@@ -159,7 +169,8 @@ export default function GrovplaneringPage() {
       return apiRequest("PATCH", `/api/work-orders/${orderId}`, payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders", { allDates: true, includeUnscheduled: true }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/unplanned"] });
       toast({ title: "Order grovplanerad", description: `Lagd på ${week}` });
     },
     onError: (e: Error) => toast({ title: "Kunde inte grovplanera", description: e.message, variant: "destructive" }),
@@ -200,7 +211,8 @@ export default function GrovplaneringPage() {
       }>;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders", { allDates: true, includeUnscheduled: true }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rough-planning/unplanned"] });
       setSelectedIds(new Set());
       const { planned, error, autoAssigned } = data.summary;
       const parts = [`${planned} grovplanerade på ${week}`];
@@ -219,8 +231,8 @@ export default function GrovplaneringPage() {
   const weekLabel = `${week} · ${format(weekStart, "d MMM", { locale: sv })}`;
   const utilPct = totals.capacityH > 0 ? Math.round((totals.demandH / totals.capacityH) * 100) : 0;
 
-  const isLoading = workOrdersQuery.isLoading || teamsQuery.isLoading || districtsQuery.isLoading;
-  const isError = workOrdersQuery.isError || teamsQuery.isError || districtsQuery.isError;
+  const isLoading = summaryQuery.isLoading || teamsQuery.isLoading || districtsQuery.isLoading;
+  const isError = summaryQuery.isError || teamsQuery.isError || districtsQuery.isError;
 
   return (
     <div className="space-y-6 p-4 md:p-6">
@@ -291,9 +303,10 @@ export default function GrovplaneringPage() {
         isLoading={isLoading}
         isError={isError}
         isEmpty={false}
-        error={(workOrdersQuery.error || teamsQuery.error || districtsQuery.error) as Error | null}
+        error={(summaryQuery.error || teamsQuery.error || districtsQuery.error) as Error | null}
         onRetry={() => {
-          workOrdersQuery.refetch();
+          summaryQuery.refetch();
+          unplannedQuery.refetch();
           teamsQuery.refetch();
           districtsQuery.refetch();
         }}
@@ -389,17 +402,17 @@ export default function GrovplaneringPage() {
                       <TableCell className="text-right">{formatSekFromOre(r.value)}</TableCell>
                     </TableRow>
                   ))}
-                  {unassignedTeamOrders.length > 0 && (
+                  {unassignedTeamAgg && unassignedTeamAgg.count > 0 && (
                     <TableRow data-testid="row-team-unassigned">
                       <TableCell className="font-medium text-muted-foreground">Utan team</TableCell>
-                      <TableCell className="text-right">{unassignedTeamOrders.length}</TableCell>
+                      <TableCell className="text-right">{unassignedTeamAgg.count}</TableCell>
                       <TableCell className="text-right">
-                        {(unassignedTeamOrders.reduce((s, o) => s + (o.estimatedDuration ?? 0), 0) / 60).toFixed(1)}
+                        {unassignedTeamAgg.demandHours.toFixed(1)}
                       </TableCell>
                       <TableCell className="text-right">-</TableCell>
                       <TableCell>-</TableCell>
                       <TableCell className="text-right">
-                        {formatSekFromOre(unassignedTeamOrders.reduce((s, o) => s + (o.cachedValue ?? 0), 0))}
+                        {formatSekFromOre(unassignedTeamAgg.valueOre)}
                       </TableCell>
                     </TableRow>
                   )}
@@ -460,7 +473,10 @@ export default function GrovplaneringPage() {
 
         <Card>
           <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <CardTitle className="text-base">Ogrovplanerade ordrar ({unplanned.length})</CardTitle>
+            <CardTitle className="text-base">
+              Ogrovplanerade ordrar ({unplannedTotal}
+              {unplannedTotal > unplanned.length ? `, visar ${unplanned.length}` : ""})
+            </CardTitle>
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Lägg på distrikt</span>

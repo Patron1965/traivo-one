@@ -6,6 +6,7 @@ import {
   type ServiceObject, type InsertObject,
   type Resource, type InsertResource,
   type WorkOrder, type InsertWorkOrder, type WorkOrderWithObject,
+  type RoughPlanningSummary,
   type SetupTimeLog, type InsertSetupTimeLog,
   type Procurement, type InsertProcurement,
   type Article, type InsertArticle,
@@ -431,6 +432,17 @@ export interface IStorage {
    */
   getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrderWithObject[]>;
   getWorkOrdersByExternalRefs(tenantId: string, refs: string[]): Promise<Array<{ id: string; externalReference: string | null; modusId: string | null; metadata: unknown }>>;
+  /**
+   * Grovplanering-aggregat per vecka (Task #795). Returnerar färdiga summor per
+   * team, distrikt och status — ingen orderlista skickas till klienten.
+   */
+  getRoughPlanningSummary(tenantId: string, week: string, districtId?: string): Promise<RoughPlanningSummary>;
+  /**
+   * Paginerad lista av aktiva ordrar som ännu inte grovplanerats (Task #795):
+   * `rough_planned_week IS NULL` och status inte terminal (utford/fakturerad/
+   * omojlig/avbruten).
+   */
+  getUnplannedRoughWorkOrders(tenantId: string, limit: number, offset: number): Promise<{ workOrders: WorkOrderWithObject[]; total: number }>;
   getUnscheduledWorkOrders(tenantId: string, limit?: number): Promise<WorkOrderWithObject[]>;
   getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string, dateFilter?: { field: 'desired' | 'created' | 'sla'; from?: string; to?: string }): Promise<{ workOrders: WorkOrderWithObject[]; total: number; missingDateFieldCount?: number }>;
   getUnscheduledMissingDateField(tenantId: string, field: 'desired' | 'sla', search?: string, limit?: number): Promise<WorkOrderWithObject[]>;
@@ -2952,6 +2964,198 @@ export class DatabaseStorage implements IStorage {
     }
     
     return query;
+  }
+
+  async getRoughPlanningSummary(tenantId: string, week: string, districtId?: string): Promise<RoughPlanningSummary> {
+    const conditions = [
+      eq(workOrders.tenantId, tenantId),
+      isNull(workOrders.deletedAt),
+      eq(workOrders.roughPlannedWeek, week),
+    ];
+    if (districtId) {
+      conditions.push(eq(workOrders.districtId, districtId));
+    }
+    const where = and(...conditions);
+
+    // Behov i timmar = estimated_duration (min) / 60. Värde i öre.
+    const demandHoursSql = sql<number>`COALESCE(SUM(${workOrders.estimatedDuration}), 0)::float / 60`;
+    const valueOreSql = sql<number>`COALESCE(SUM(${workOrders.cachedValue}), 0)::bigint`;
+    const countSql = sql<number>`COUNT(*)::int`;
+
+    const [byTeamRows, byDistrictRows, byStatusRows, capacityRow] = await Promise.all([
+      db
+        .select({
+          teamId: workOrders.teamId,
+          count: countSql,
+          demandHours: demandHoursSql,
+          valueOre: valueOreSql,
+        })
+        .from(workOrders)
+        .where(where)
+        .groupBy(workOrders.teamId),
+      db
+        .select({
+          districtId: workOrders.districtId,
+          count: countSql,
+          demandHours: demandHoursSql,
+          valueOre: valueOreSql,
+        })
+        .from(workOrders)
+        .where(where)
+        .groupBy(workOrders.districtId),
+      db
+        .select({
+          status: workOrders.orderStatus,
+          count: countSql,
+        })
+        .from(workOrders)
+        .where(where)
+        .groupBy(workOrders.orderStatus),
+      db
+        .select({
+          capacityHours: sql<number>`COALESCE(SUM(${teams.productionHoursTarget}), 0)::float`,
+        })
+        .from(teams)
+        .where(and(eq(teams.tenantId, tenantId), eq(teams.status, "active"), isNull(teams.deletedAt))),
+    ]);
+
+    const toNum = (v: unknown) => (v == null ? 0 : Number(v));
+
+    const byTeam = byTeamRows.map((r) => ({
+      teamId: r.teamId ?? null,
+      count: toNum(r.count),
+      demandHours: toNum(r.demandHours),
+      valueOre: toNum(r.valueOre),
+    }));
+    const byDistrict = byDistrictRows.map((r) => ({
+      districtId: r.districtId ?? null,
+      count: toNum(r.count),
+      demandHours: toNum(r.demandHours),
+      valueOre: toNum(r.valueOre),
+    }));
+    const statusCounts = byStatusRows.map((r) => ({
+      status: r.status ?? "unknown",
+      count: toNum(r.count),
+    }));
+
+    const totals = byTeam.reduce(
+      (acc, r) => {
+        acc.count += r.count;
+        acc.demandHours += r.demandHours;
+        acc.valueOre += r.valueOre;
+        return acc;
+      },
+      { count: 0, demandHours: 0, valueOre: 0 },
+    );
+
+    return {
+      week,
+      districtId: districtId ?? null,
+      totals: {
+        count: totals.count,
+        valueOre: totals.valueOre,
+        demandHours: totals.demandHours,
+        capacityHours: toNum(capacityRow[0]?.capacityHours),
+      },
+      byTeam,
+      byDistrict,
+      statusCounts,
+    };
+  }
+
+  async getUnplannedRoughWorkOrders(tenantId: string, limit: number, offset: number): Promise<{ workOrders: WorkOrderWithObject[]; total: number }> {
+    const terminalStatuses = ["utford", "fakturerad", "omojlig", "avbruten"];
+    const whereClause = and(
+      eq(workOrders.tenantId, tenantId),
+      isNull(workOrders.deletedAt),
+      isNull(workOrders.roughPlannedWeek),
+      notInArray(workOrders.orderStatus, terminalStatuses),
+    );
+
+    const [countResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(workOrders)
+      .where(whereClause);
+
+    const data = await db.select({
+      id: workOrders.id,
+      tenantId: workOrders.tenantId,
+      customerId: workOrders.customerId,
+      objectId: workOrders.objectId,
+      clusterId: workOrders.clusterId,
+      resourceId: workOrders.resourceId,
+      teamId: workOrders.teamId,
+      title: workOrders.title,
+      description: workOrders.description,
+      orderType: workOrders.orderType,
+      priority: workOrders.priority,
+      orderStatus: workOrders.orderStatus,
+      scheduledDate: workOrders.scheduledDate,
+      scheduledStartTime: workOrders.scheduledStartTime,
+      plannedWindowStart: workOrders.plannedWindowStart,
+      plannedWindowEnd: workOrders.plannedWindowEnd,
+      estimatedDuration: workOrders.estimatedDuration,
+      actualDuration: workOrders.actualDuration,
+      setupTime: workOrders.setupTime,
+      setupReason: workOrders.setupReason,
+      lockedAt: workOrders.lockedAt,
+      completedAt: workOrders.completedAt,
+      invoicedAt: workOrders.invoicedAt,
+      cachedValue: workOrders.cachedValue,
+      cachedCost: workOrders.cachedCost,
+      cachedProductionMinutes: workOrders.cachedProductionMinutes,
+      isSimulated: workOrders.isSimulated,
+      simulationScenarioId: workOrders.simulationScenarioId,
+      plannedBy: workOrders.plannedBy,
+      plannedNotes: workOrders.plannedNotes,
+      notes: workOrders.notes,
+      metadata: workOrders.metadata,
+      createdAt: workOrders.createdAt,
+      deletedAt: workOrders.deletedAt,
+      impossibleReason: workOrders.impossibleReason,
+      impossibleReasonText: workOrders.impossibleReasonText,
+      impossibleAt: workOrders.impossibleAt,
+      impossibleBy: workOrders.impossibleBy,
+      impossiblePhotoUrl: workOrders.impossiblePhotoUrl,
+      executionStatus: workOrders.executionStatus,
+      creationMethod: workOrders.creationMethod,
+      structuralArticleId: workOrders.structuralArticleId,
+      roughPlannedWeek: workOrders.roughPlannedWeek,
+      districtId: workOrders.districtId,
+
+      taskLatitude: workOrders.taskLatitude,
+      taskLongitude: workOrders.taskLongitude,
+      externalReference: workOrders.externalReference,
+      onWayAt: workOrders.onWayAt,
+      onSiteAt: workOrders.onSiteAt,
+      inspectedAt: workOrders.inspectedAt,
+      executionCode: workOrders.executionCode,
+      importBatchId: workOrders.importBatchId,
+      outsidePreferredWindow: workOrders.outsidePreferredWindow,
+      deliveryPreferencePriority: workOrders.deliveryPreferencePriority,
+      taskCategory: workOrders.taskCategory,
+      status: workOrders.status,
+      desiredDeliveryStart: workOrders.desiredDeliveryStart,
+      desiredDeliveryEnd: workOrders.desiredDeliveryEnd,
+      etaSmsSent: workOrders.etaSmsSent,
+      objectName: objects.name,
+      objectNameTranslations: objects.nameTranslations,
+      objectAddress: objects.address,
+      objectAccessCode: objects.resolvedAccessCode,
+      objectKeyNumber: objects.resolvedKeyNumber,
+      objectLatitude: objects.latitude,
+      objectLongitude: objects.longitude,
+      customerName: customers.name,
+    })
+    .from(workOrders)
+    .leftJoin(objects, eq(workOrders.objectId, objects.id))
+    .leftJoin(customers, eq(workOrders.customerId, customers.id))
+    .where(whereClause)
+    .orderBy(desc(workOrders.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+    return { workOrders: data, total: countResult?.count || 0 };
   }
 
   async getUnscheduledWorkOrders(tenantId: string, limit: number = 500): Promise<WorkOrderWithObject[]> {

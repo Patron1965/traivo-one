@@ -56,6 +56,42 @@ export function registerWeeklyPlanRoutes(app: Express) {
   const guard: RequestHandler[] = [requireTenantWithFallback, requirePlannerAccess];
 
   // ==========================================================================
+  // Grovplanering — serveraggregat per vecka (Task #795)
+  // ==========================================================================
+  const roughSummarySchema = z.object({
+    week: z.string().regex(/^\d{4}-W\d{2}$/, "Ogiltig vecka (format YYYY-Www)"),
+    districtId: z.string().min(1).optional(),
+  });
+
+  app.get("/api/rough-planning/summary", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const parsed = roughSummarySchema.safeParse({
+      week: req.query.week,
+      districtId: typeof req.query.districtId === "string" && req.query.districtId ? req.query.districtId : undefined,
+    });
+    if (!parsed.success) {
+      const formatted = formatZodError(parsed.error);
+      throw new ValidationError(formatted.error, formatted.details);
+    }
+    const summary = await storage.getRoughPlanningSummary(
+      tenantId,
+      parsed.data.week,
+      parsed.data.districtId,
+    );
+    res.json(summary);
+  }));
+
+  // Ogrovplanerade (aktiva) ordrar — paginerat, separat från aggregatet.
+  app.get("/api/rough-planning/unplanned", ...guard, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const limitRaw = parseInt(String(req.query.limit ?? "50"), 10);
+    const offsetRaw = parseInt(String(req.query.offset ?? "0"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 50;
+    const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? offsetRaw : 0;
+    res.json(await storage.getUnplannedRoughWorkOrders(tenantId, limit, offset));
+  }));
+
+  // ==========================================================================
   // Distrikt
   // ==========================================================================
   const districtCreateSchema = insertGeographicDistrictSchema.omit({ tenantId: true });

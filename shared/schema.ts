@@ -1539,6 +1539,32 @@ export type WorkOrderWithObject = WorkOrder & {
   objectLatitude?: number | null;
   objectLongitude?: number | null;
 };
+// Grovplanering — serveraggregat per vecka (Task #795). Färdiga summor så att
+// klienten slipper hämta + summera hela orderlistan.
+export type RoughPlanningSummary = {
+  week: string;
+  districtId: string | null;
+  totals: {
+    count: number;
+    valueOre: number;
+    demandHours: number;
+    capacityHours: number;
+  };
+  byTeam: Array<{
+    teamId: string | null;
+    count: number;
+    demandHours: number;
+    valueOre: number;
+  }>;
+  byDistrict: Array<{
+    districtId: string | null;
+    count: number;
+    demandHours: number;
+    valueOre: number;
+  }>;
+  statusCounts: Array<{ status: string; count: number }>;
+};
+
 export type SetupTimeLog = typeof setupTimeLogs.$inferSelect;
 export type InsertSetupTimeLog = z.infer<typeof insertSetupTimeLogSchema>;
 export type Procurement = typeof procurements.$inferSelect;
