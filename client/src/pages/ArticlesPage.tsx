@@ -178,6 +178,7 @@ interface ArticleFormData {
   quantityMode: string;
   offsetMinutes: number;
   defaultMetadataAssociation: string;
+  stockLocation: string;
 }
 
 const emptyFormData: ArticleFormData = {
@@ -211,6 +212,7 @@ const emptyFormData: ArticleFormData = {
   quantityMode: "use_object_quantity",
   offsetMinutes: 0,
   defaultMetadataAssociation: "",
+  stockLocation: "",
 };
 
 export default function ArticlesPage() {
@@ -230,7 +232,19 @@ export default function ArticlesPage() {
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
   const [articleToDelete, setArticleToDelete] = useState<Article | null>(null);
   const [formData, setFormData] = useState<ArticleFormData>(emptyFormData);
-  const [offsetMinutesInput, setOffsetMinutesInput] = useState<string>("0");
+  const [offsetValueInput, setOffsetValueInput] = useState<string>("0");
+  const [offsetUnit, setOffsetUnit] = useState<"minutes" | "days">("minutes");
+  const [offsetType, setOffsetType] = useState<"before" | "same" | "after">("same");
+  const computeOffsetMinutes = (
+    unit: "minutes" | "days",
+    type: "before" | "same" | "after",
+    magnitudeStr: string,
+  ): number => {
+    if (type === "same") return 0;
+    const mag = Math.abs(parseInt(magnitudeStr, 10) || 0);
+    const minutes = unit === "days" ? mag * 1440 : mag;
+    return type === "before" ? -minutes : minutes;
+  };
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [assocTestResult, setAssocTestResult] = useState<{ matchCount: number; matches: Array<{ objectId: string; objectName: string; objectAddress: string; metadataValue: string | null }>; labelFound: boolean; labelName?: string } | null>(null);
@@ -377,7 +391,9 @@ export default function ArticlesPage() {
 
   const resetForm = () => {
     setFormData(emptyFormData);
-    setOffsetMinutesInput("0");
+    setOffsetValueInput("0");
+    setOffsetUnit("minutes");
+    setOffsetType("same");
     setEditingArticle(null);
   };
 
@@ -396,7 +412,7 @@ export default function ArticlesPage() {
       hookLevel: article.hookLevel || "",
       hookConditions: (article.hookConditions as HookConditions) || {},
       objectTypes: article.objectTypes || [],
-      productionTime: article.productionTime || 15,
+      productionTime: article.articleType === "vara" ? 0 : (article.productionTime ?? 15),
       cost: article.cost || 0,
       listPrice: article.listPrice || 0,
       unit: article.unit || "st",
@@ -419,8 +435,17 @@ export default function ArticlesPage() {
       quantityMode: article.quantityMode || "use_object_quantity",
       offsetMinutes: article.offsetMinutes ?? 0,
       defaultMetadataAssociation: article.defaultMetadataAssociation || "",
+      stockLocation: article.stockLocation || "",
     });
-    setOffsetMinutesInput(String(article.offsetMinutes ?? 0));
+    {
+      const om = article.offsetMinutes ?? 0;
+      const type: "before" | "same" | "after" = om < 0 ? "before" : om > 0 ? "after" : "same";
+      const absMin = Math.abs(om);
+      const useDays = absMin !== 0 && absMin % 1440 === 0;
+      setOffsetType(type);
+      setOffsetUnit(useDays ? "days" : "minutes");
+      setOffsetValueInput(String(type === "same" ? 0 : useDays ? absMin / 1440 : absMin));
+    }
     setDialogOpen(true);
   };
 
@@ -1055,7 +1080,7 @@ export default function ArticlesPage() {
                   <Label htmlFor="articleType">Artikeltyp</Label>
                   <Select
                     value={formData.articleType}
-                    onValueChange={(value) => setFormData({ ...formData, articleType: value })}
+                    onValueChange={(value) => setFormData({ ...formData, articleType: value, ...(value === "vara" ? { productionTime: 0 } : {}) })}
                   >
                     <SelectTrigger data-testid="select-article-type">
                       <SelectValue />
@@ -1205,6 +1230,9 @@ export default function ArticlesPage() {
                   required
                   data-testid="input-article-name"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Kundbeskrivning — syns på fakturor och följesedlar.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -1213,24 +1241,40 @@ export default function ArticlesPage() {
                   id="description"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Beskriv artikeln..."
+                  placeholder="Intern info för medarbetare, t.ex. specialinstruktioner eller verktyg..."
                   rows={3}
                   data-testid="input-article-description"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Intern information för fältarbetare (visas ej för kund).
+                </p>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="productionTime">Produktionstid (min)</Label>
-                  <Input
-                    id="productionTime"
-                    type="number"
-                    min="0"
-                    value={formData.productionTime}
-                    onChange={(e) => setFormData({ ...formData, productionTime: parseInt(e.target.value) || 0 })}
-                    data-testid="input-production-time"
-                  />
-                </div>
+                {formData.articleType === "vara" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="stockLocation">Lagerplats</Label>
+                    <Input
+                      id="stockLocation"
+                      value={formData.stockLocation}
+                      onChange={(e) => setFormData({ ...formData, stockLocation: e.target.value })}
+                      placeholder="t.ex. Lager A, hylla 3"
+                      data-testid="input-stock-location"
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="productionTime">Produktionstid (min)</Label>
+                    <Input
+                      id="productionTime"
+                      type="number"
+                      min="0"
+                      value={formData.productionTime}
+                      onChange={(e) => setFormData({ ...formData, productionTime: parseInt(e.target.value) || 0 })}
+                      data-testid="input-production-time"
+                    />
+                  </div>
+                )}
                 {isAdmin && (
                   <div className="space-y-2">
                     <Label htmlFor="cost">Kostnad (kr)</Label>
@@ -1311,32 +1355,78 @@ export default function ArticlesPage() {
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="offsetMinutes">Offsettid (minuter relativt huvudjobb)</Label>
-                <Input
-                  id="offsetMinutes"
-                  type="number"
-                  step="1"
-                  value={offsetMinutesInput}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    setOffsetMinutesInput(raw);
-                    if (raw === "" || raw === "-") return;
-                    const parsed = parseInt(raw, 10);
-                    if (!Number.isNaN(parsed)) {
-                      setFormData(prev => ({ ...prev, offsetMinutes: parsed }));
-                    }
-                  }}
-                  onBlur={() => {
-                    const parsed = parseInt(offsetMinutesInput, 10);
-                    const normalized = Number.isNaN(parsed) ? 0 : parsed;
-                    setFormData(prev => ({ ...prev, offsetMinutes: normalized }));
-                    setOffsetMinutesInput(String(normalized));
-                  }}
-                  data-testid="input-offset-minutes"
-                />
+              <div className="space-y-3">
+                <Label>Offsettid</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="offsetUnit" className="text-sm text-muted-foreground">Enhet</Label>
+                    <Select
+                      value={offsetUnit}
+                      onValueChange={(v) => {
+                        const unit = v as "minutes" | "days";
+                        setOffsetUnit(unit);
+                        setFormData(prev => ({ ...prev, offsetMinutes: computeOffsetMinutes(unit, offsetType, offsetValueInput) }));
+                      }}
+                    >
+                      <SelectTrigger id="offsetUnit" data-testid="select-offset-unit">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="minutes">Minuter</SelectItem>
+                        <SelectItem value="days">Dagar</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="offsetValue" className="text-sm text-muted-foreground">Värde</Label>
+                    <Input
+                      id="offsetValue"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={offsetValueInput}
+                      disabled={offsetType === "same"}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setOffsetValueInput(raw);
+                        setFormData(prev => ({ ...prev, offsetMinutes: computeOffsetMinutes(offsetUnit, offsetType, raw) }));
+                      }}
+                      onBlur={() => {
+                        const mag = Math.abs(parseInt(offsetValueInput, 10) || 0);
+                        setOffsetValueInput(String(mag));
+                        setFormData(prev => ({ ...prev, offsetMinutes: computeOffsetMinutes(offsetUnit, offsetType, String(mag)) }));
+                      }}
+                      data-testid="input-offset-value"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Typ</Label>
+                  <div className="flex flex-col gap-2">
+                    {([
+                      { value: "before", label: "Före huvudjobb (negativ)" },
+                      { value: "same", label: "Samtidigt (0)" },
+                      { value: "after", label: "Efter huvudjobb (positiv, leveranstid)" },
+                    ] as const).map(opt => (
+                      <label key={opt.value} className="flex items-center gap-2 cursor-pointer text-sm">
+                        <input
+                          type="radio"
+                          name="offsetType"
+                          value={opt.value}
+                          checked={offsetType === opt.value}
+                          onChange={() => {
+                            setOffsetType(opt.value);
+                            setFormData(prev => ({ ...prev, offsetMinutes: computeOffsetMinutes(offsetUnit, opt.value, offsetValueInput) }));
+                          }}
+                          data-testid={`radio-offset-type-${opt.value}`}
+                        />
+                        <span>{opt.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Negativt värde = utförs <strong>före</strong> huvudjobbet (t.ex. -120 = telefonavisering 2 timmar innan, -2400 = nyckelhämtning 40 timmar innan). 0 = samtidigt med huvudjobbet. Positivt = efter. När orderkonceptet expanderas skapas en separat förberedande uppgift kopplad till huvudjobbet.
+                  Styr när uppgiften utförs relativt huvudjobbet. <strong>Före</strong> = förberedande uppgift (t.ex. telefonavisering 2 timmar innan). <strong>Samtidigt</strong> = vid schemalagt tillfälle. <strong>Efter</strong> = leveranstid (t.ex. beställ reservdel 14 dagar innan). När orderkonceptet expanderas skapas en separat uppgift kopplad till huvudjobbet (sparas som {formData.offsetMinutes} min).
                 </p>
               </div>
 
@@ -1523,9 +1613,9 @@ export default function ArticlesPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="text">Fritext</SelectItem>
-                      <SelectItem value="ok_ej_ok">OK / EJ OK</SelectItem>
-                      <SelectItem value="number">Numeriskt</SelectItem>
-                      <SelectItem value="date">Datum</SelectItem>
+                      <SelectItem value="dropdown">Dropdown</SelectItem>
+                      <SelectItem value="checkbox">Checkbox</SelectItem>
+                      <SelectItem value="number">Nummer</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
