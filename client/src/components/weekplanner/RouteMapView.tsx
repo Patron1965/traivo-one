@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Coffee, Loader2, LocateFixed, Send, Truck } from "lucide-react";
+import { Coffee, Loader2, LocateFixed, Send, Spline, Truck } from "lucide-react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Marker, Popup, Polyline } from "react-leaflet";
 import { format } from "date-fns";
@@ -155,6 +155,9 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
   }, [cacheKey, orderedJobs]);
 
   const routePolyline = roadGeometry || fallbackPolyline;
+  // Fallback = vi försökte hämta vägbaserad geometri men fick ingen tillbaka
+  // (t.ex. saknad Geoapify-nyckel / routing-tjänst nere) → raka fågelvägslinjer.
+  const usingFallbackRoute = !isLoadingGeometry && roadGeometry === null && fallbackPolyline.length > 1;
 
   const routeStats = useMemo(() => {
     let totalMinutes = 0;
@@ -315,6 +318,16 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
           <div className="absolute top-2 right-2 z-[1000] flex items-center gap-1.5 bg-background/90 border rounded-md px-2 py-1 shadow-sm" data-testid="route-geometry-loading">
             <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
             <span className="text-xs text-muted-foreground">Laddar väggeometri...</span>
+          </div>
+        )}
+        {usingFallbackRoute && (
+          <div
+            className="absolute top-2 right-2 z-[1000] flex items-center gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2 py-1 text-xs text-warning shadow-sm max-w-[260px]"
+            role="status"
+            data-testid="route-geometry-fallback-indicator"
+          >
+            <Spline className="h-3.5 w-3.5 shrink-0" />
+            <span>Uppskattad rutt — kunde inte beräkna körväg. Raka linjer visas.</span>
           </div>
         )}
         <BaseMap

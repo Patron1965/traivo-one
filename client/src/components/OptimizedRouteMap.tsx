@@ -4,7 +4,7 @@ import { Marker, Polyline, Popup, CircleMarker } from "react-leaflet";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Maximize2, Minimize2, X, AlertTriangle, Clock, MapPin } from "lucide-react";
+import { Maximize2, Minimize2, X, AlertTriangle, Clock, MapPin, Spline } from "lucide-react";
 import { BaseMap, MapFitBounds, numberedDivIcon, getRouteSegmentColor, getClusterColor, CLUSTER_COLOR_PALETTE } from "@/components/ui/map";
 
 interface RouteStop {
@@ -96,6 +96,20 @@ export function OptimizedRouteMap({
   const allPositions = vrpRoutes ? vrpPositions : legacyPositions;
   const skippedCount = stops ? stops.length - legacyValidStops.length : 0;
 
+  // Fallback = vi försökte hämta vägbaserad geometri men fick ingen tillbaka för
+  // minst en rutt (t.ex. saknad Geoapify-nyckel / routing-tjänst nere) → raka
+  // fågelvägslinjer ritas istället. Informera så ingen tolkar dem som körväg.
+  const usingFallbackRoute = useMemo(() => {
+    if (loadingGeometry) return false;
+    if (vrpRoutes) {
+      return vrpRoutes.some((route) => {
+        const routeStops = route.stops.filter((s) => !s.isBreak && s.location);
+        return routeStops.length >= 2 && !roadGeometries[route.resourceId];
+      });
+    }
+    return legacyValidStops.length >= 2 && !roadGeometries["legacy"];
+  }, [loadingGeometry, vrpRoutes, legacyValidStops, roadGeometries]);
+
   const fetchAllGeometries = useCallback(async () => {
     setLoadingGeometry(true);
     const geometries: Record<string, [number, number][]> = {};
@@ -169,6 +183,17 @@ export function OptimizedRouteMap({
         {loadingGeometry && (
           <Badge variant="secondary" className="text-xs animate-pulse">
             Hämtar väggeometri...
+          </Badge>
+        )}
+        {usingFallbackRoute && (
+          <Badge
+            variant="outline"
+            className="text-xs border-warning/50 bg-warning/10 text-warning"
+            role="status"
+            data-testid="badge-route-fallback"
+          >
+            <Spline className="h-3 w-3 mr-1 shrink-0" />
+            Uppskattad rutt — kunde inte beräkna körväg
           </Badge>
         )}
         {vrpRoutes ? (
