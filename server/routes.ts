@@ -43,6 +43,7 @@ import { registerAIRoutes } from "./routes/aiRoutes";
 import { registerOptimizationRoutes } from "./routes/optimizationRoutes";
 import { registerMobileRoutes, registerMobileAliasRoutes } from "./routes/mobile";
 import { registerPlannerRoutes } from "./routes/plannerRoutes";
+import { registerWeeklyPlanRoutes } from "./routes/weeklyPlanRoutes";
 import { registerKPIRoutes } from "./routes/kpiRoutes";
 import { registerFortnoxRoutes } from "./routes/fortnoxRoutes";
 import { registerOrderConceptRoutes } from "./routes/orderConceptRoutes";
@@ -784,6 +785,7 @@ export async function registerRoutes(
   registerMobileRoutes(app);
   registerRealtimeTestRoutes(app);
   registerPlannerRoutes(app);
+  registerWeeklyPlanRoutes(app);
   registerKPIRoutes(app);
   registerResendWebhookRoutes(app);
   const { registerPlatformAdminRoutes } = await import("./routes/platformAdminRoutes");

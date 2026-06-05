@@ -17,6 +17,7 @@ import { getTenantIdWithFallback, requireAdmin, requirePlanner } from "../tenant
 import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type OrderStatus, articles, insertProcurementSchema, insertSetupTimeLogSchema, insertSimulationScenarioSchema, clusters, resources, orderConcepts, workOrderLines, fortnoxInvoiceExports, protocols, workOrders, customers, objects, objectPayers, slaRiskSnapshots, type OrderConcept, isOutsidePreferredWindow } from "@shared/schema";
 import type { WorkOrder, InsertWorkOrderLine } from "@shared/schema";
 import { handleWorkOrderStatusChange } from "../ai-communication";
+import { generatePreTasksForWorkOrder } from "../planning/weeklyPlanEngine";
 import { notificationService } from "../notifications";
 import { asyncHandler } from "../asyncHandler";
 import { AppError, NotFoundError, ValidationError, ConflictError, ForbiddenError } from "../errors";
@@ -976,6 +977,16 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
     }
   }
 
+  // Task #786: generera förberedelse-steg (pre-tasks) automatiskt utifrån
+  // execution_type-regler. Idempotent + best-effort; får aldrig blockera order.
+  if (workOrder.executionType) {
+    try {
+      await generatePreTasksForWorkOrder(tenantId, workOrder.id);
+    } catch (e) {
+      console.error("[pre-tasks] generation failed (create):", e);
+    }
+  }
+
   if (workOrder.resourceId) {
     notificationService.notifyJobAssigned(workOrder, workOrder.resourceId);
     try {
@@ -1291,6 +1302,19 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
 
   const workOrder = await storage.updateWorkOrder(req.params.id, updateData);
   if (!workOrder) throw new NotFoundError("Arbetsorder");
+
+  // Task #786: regenerera förberedelse-steg när execution_type eller schemalagt
+  // datum ändras. Idempotent (dubblerar inte) + best-effort.
+  const execTypeChanged = "executionType" in updateData && workOrder.executionType !== existingOrder.executionType;
+  const scheduledChanged = "scheduledDate" in updateData
+    && String(workOrder.scheduledDate ?? "") !== String(existingOrder.scheduledDate ?? "");
+  if (workOrder.executionType && (execTypeChanged || scheduledChanged)) {
+    try {
+      await generatePreTasksForWorkOrder(tenantId, workOrder.id);
+    } catch (e) {
+      console.error("[pre-tasks] generation failed (update):", e);
+    }
+  }
 
   // Audit-spår: logga vilka fält som ändrades (för aktivitetslistan på detaljsidan).
   try {
