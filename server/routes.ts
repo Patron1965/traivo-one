@@ -7,6 +7,7 @@ import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerMagicLinkRoutes } from "./replit_integrations/auth/magicLinkAuth";
 import { registerInvitationsRoutes } from "./routes/invitationsRoutes";
+import { registerRouteGeometryRoutes } from "./routes/routeGeometryRoutes";
 import { requireTenantWithFallback, getTenantIdWithFallback, getUserTenants, requireAdmin } from "./tenant-middleware";
 import { moduleGuardMiddleware } from "./feature-flags";
 import { notificationService } from "./notifications";
@@ -817,34 +818,7 @@ export async function registerRoutes(
   registerTelinkRoutes(app);
   telinkSyncScheduler.start();
 
-  app.post("/api/route-geometry", async (req: ExpressRequest, res: ExpressResponse) => {
-    try {
-      const { waypoints } = req.body;
-      if (!waypoints || !Array.isArray(waypoints) || waypoints.length < 2) {
-        return res.status(400).json({ error: "Minst 2 waypoints krävs" });
-      }
-
-      if (waypoints.length > 25) {
-        return res.status(400).json({ error: "Max 25 waypoints" });
-      }
-
-      const { getRouteGeometry, isGeoapifyRoutingAvailable } = await import("./services/routing");
-      if (!isGeoapifyRoutingAvailable()) {
-        return res.status(500).json({ error: "Geoapify API-nyckel saknas" });
-      }
-
-      const result = await getRouteGeometry(
-        waypoints.map((wp: { lat: number; lng: number }) => ({ lat: wp.lat, lng: wp.lng })),
-      );
-      if (!result) {
-        return res.status(502).json({ error: "Geoapify routing-fel" });
-      }
-      res.json({ coordinates: result.coordinates });
-    } catch (error) {
-      console.error("[route-geometry] Error:", error);
-      res.status(500).json({ error: "Kunde inte hämta ruttgeometri" });
-    }
-  });
+  registerRouteGeometryRoutes(app);
 
   // Global error-middleware registreras i server/index.ts (errorHandler) efter
   // att alla routes är monterade — den hanterar AppError, ZodError och okända fel
