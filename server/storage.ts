@@ -454,6 +454,7 @@ export interface IStorage {
   getArticles(tenantId: string): Promise<Article[]>;
   getArticlesPaginated(tenantId: string, limit: number, offset: number, search?: string, filters?: { articleType?: string; hookLevel?: string }): Promise<{ articles: Article[]; total: number }>;
   getArticle(id: string): Promise<Article | undefined>;
+  getArticleByNumber(tenantId: string, articleNumber: string, excludeId?: string): Promise<Article | undefined>;
   getApplicableArticlesForObject(tenantId: string, objectId: string): Promise<Article[]>;
   createArticle(article: InsertArticle): Promise<Article>;
   updateArticle(id: string, article: Partial<InsertArticle>): Promise<Article | undefined>;
@@ -3758,6 +3759,21 @@ export class DatabaseStorage implements IStorage {
 
   async getArticle(id: string): Promise<Article | undefined> {
     const [article] = await db.select().from(articles).where(and(eq(articles.id, id), isNull(articles.deletedAt)));
+    return article || undefined;
+  }
+
+  // Per-tenant uppslag på artikelnummer (case-insensitivt, trimmat). Används för
+  // dubblettskydd vid create/update samt realtidsvalidering i artikelformuläret.
+  async getArticleByNumber(tenantId: string, articleNumber: string, excludeId?: string): Promise<Article | undefined> {
+    const trimmed = articleNumber.trim().toLowerCase();
+    if (!trimmed) return undefined;
+    const conds = [
+      eq(articles.tenantId, tenantId),
+      isNull(articles.deletedAt),
+      sql`LOWER(${articles.articleNumber}) = ${trimmed}`,
+    ];
+    if (excludeId) conds.push(sql`${articles.id} <> ${excludeId}`);
+    const [article] = await db.select().from(articles).where(and(...conds));
     return article || undefined;
   }
 

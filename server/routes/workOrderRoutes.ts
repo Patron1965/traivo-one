@@ -37,6 +37,65 @@ async function computeOutsidePreferredWindow(
   };
 }
 import { getArticleMetadataForObject, writeArticleMetadataOnObject, writeSystemMetadataOnObject } from "../metadata-queries";
+import { computeArticleQuantity, metadataValueToNumber } from "../article-quantity";
+
+// Hämtar de artikelfält som styr orderradens kvantitet + utgått→ersättning.
+async function loadOrderArticle(tenantId: string, articleId: string) {
+  const rows = await db
+    .select({
+      id: articles.id,
+      tenantId: articles.tenantId,
+      status: articles.status,
+      replacementArticleId: articles.replacementArticleId,
+      quantityMode: articles.quantityMode,
+      groupSize: articles.groupSize,
+      quantityMetadataField: articles.quantityMetadataField,
+    })
+    .from(articles)
+    .where(and(eq(articles.id, articleId), eq(articles.tenantId, tenantId)));
+  return rows[0] as (typeof rows)[number] | undefined;
+}
+
+// Vid 'utgått'-artikel med satt ersättning: byt automatiskt till ersättningsartikeln
+// så att nya orderrader använder den aktiva artikeln (pris + kvantitetsläge).
+async function resolveEffectiveOrderArticle(tenantId: string, articleId: string) {
+  let row = await loadOrderArticle(tenantId, articleId);
+  if (!row) return { row: undefined, effectiveId: articleId };
+  // Följ utgått→ersättning-kedjan (flera hopp) men skydda mot cykler med besökta-set.
+  const visited = new Set<string>([row.id]);
+  while (row.status === "utgått" && row.replacementArticleId && !visited.has(row.replacementArticleId)) {
+    const repl = await loadOrderArticle(tenantId, row.replacementArticleId);
+    if (!repl) break;
+    visited.add(repl.id);
+    row = repl;
+  }
+  return { row, effectiveId: row.id };
+}
+
+// Räknar ut orderradens effektiva kvantitet utifrån artikelns quantityMode. För
+// 'matches_field' upplöses objektets metadatavärde via den ärvningsmedvetna resolvern.
+async function resolveOrderLineQuantity(
+  tenantId: string,
+  row: Awaited<ReturnType<typeof loadOrderArticle>>,
+  baseQuantity: number,
+  objectId: string | null | undefined,
+): Promise<number> {
+  let metadataValue: number | null = null;
+  if (row?.quantityMode === "matches_field" && row.quantityMetadataField && objectId) {
+    try {
+      const md = await getArticleMetadataForObject(objectId, row.quantityMetadataField, tenantId);
+      metadataValue = metadataValueToNumber(md?.value);
+    } catch (e) {
+      console.error("[quantity matches_field] resolve failed:", e);
+    }
+  }
+  return computeArticleQuantity({
+    quantityMode: row?.quantityMode,
+    baseQuantity,
+    groupSize: row?.groupSize,
+    metadataValue,
+  });
+}
 
 /**
  * Kör constraint-/konfliktkontrollen (samma motor som veckoplaneraren bulk-schedule
@@ -1030,21 +1089,19 @@ app.post("/api/work-orders/with-lines", asyncHandler(async (req, res) => {
       continue;
     }
 
-    // Artikelrad — validera att artikeln tillhör tenant och resolva pris.
-    const priceInfo = line.priceListId
-      ? await storage.resolveArticlePriceFromList(tenantId, line.articleId, line.priceListId)
-      : await storage.resolveArticlePrice(tenantId, line.articleId, workOrderData.customerId);
-
-    const [articleRow] = await db.select({ tenantId: articles.tenantId, quantityMode: articles.quantityMode })
-      .from(articles)
-      .where(and(eq(articles.id, line.articleId), eq(articles.tenantId, tenantId)));
+    // Artikelrad — validera tenant, hantera utgått→ersättning och kvantitetsläge.
+    const { row: articleRow, effectiveId: effectiveArticleId } = await resolveEffectiveOrderArticle(tenantId, line.articleId);
     if (!articleRow) {
       throw new ValidationError("Artikeln saknas eller tillhör en annan tenant");
     }
-    const effectiveQuantity = articleRow.quantityMode === 'single_per_task' ? 1 : quantity;
+    const priceInfo = line.priceListId
+      ? await storage.resolveArticlePriceFromList(tenantId, effectiveArticleId, line.priceListId)
+      : await storage.resolveArticlePrice(tenantId, effectiveArticleId, workOrderData.customerId);
+
+    const effectiveQuantity = await resolveOrderLineQuantity(tenantId, articleRow, quantity, workOrderData.objectId);
 
     lineInputs.push(insertWorkOrderLineSchema.omit({ workOrderId: true, tenantId: true }).parse({
-      articleId: line.articleId,
+      articleId: effectiveArticleId,
       quantity: effectiveQuantity,
       resolvedPrice: priceInfo.price,
       resolvedCost: priceInfo.cost,
@@ -1732,23 +1789,22 @@ app.post("/api/work-orders/:workOrderId/lines", asyncHandler(async (req, res) =>
     return res.status(201).json(freeTextLine);
   }
 
+  const { row: articleRow, effectiveId: effectiveArticleId } = await resolveEffectiveOrderArticle(tenantId, articleId);
+
   let priceInfo: { price: number; cost: number; productionMinutes: number; priceListId: string | null; source: string };
 
   if (priceListId) {
-    priceInfo = await storage.resolveArticlePriceFromList(tenantId, articleId, priceListId);
+    priceInfo = await storage.resolveArticlePriceFromList(tenantId, effectiveArticleId, priceListId);
   } else {
-    priceInfo = await storage.resolveArticlePrice(tenantId, articleId, workOrder.customerId);
+    priceInfo = await storage.resolveArticlePrice(tenantId, effectiveArticleId, workOrder.customerId);
   }
 
-  const [articleRow] = await db.select({ quantityMode: articles.quantityMode })
-    .from(articles)
-    .where(and(eq(articles.id, articleId), eq(articles.tenantId, tenantId)));
-  const effectiveQuantity = articleRow?.quantityMode === 'single_per_task' ? 1 : quantity;
+  const effectiveQuantity = await resolveOrderLineQuantity(tenantId, articleRow, quantity, workOrder.objectId);
 
   const lineData = insertWorkOrderLineSchema.parse({
     tenantId,
     workOrderId: req.params.workOrderId,
-    articleId,
+    articleId: effectiveArticleId,
     quantity: effectiveQuantity,
     resolvedPrice: priceInfo.price,
     resolvedCost: priceInfo.cost,

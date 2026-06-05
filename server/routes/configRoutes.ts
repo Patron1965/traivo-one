@@ -61,6 +61,20 @@ app.get("/api/articles", asyncHandler(async (req, res) => {
     res.json(articles);
 }));
 
+// Realtidsvalidering av artikelnummer (per-tenant dubblettskydd). Måste registreras
+// FÖRE "/api/articles/:id" annars skuggas den av :id-routen.
+app.get("/api/articles/validate-number", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const number = typeof req.query.number === "string" ? req.query.number.trim() : "";
+    const excludeId = typeof req.query.excludeId === "string" ? req.query.excludeId : undefined;
+    if (!number) return res.json({ available: false, reason: "empty" });
+    const existing = await storage.getArticleByNumber(tenantId, number, excludeId);
+    if (existing) {
+      return res.json({ available: false, reason: "duplicate", existingId: existing.id, existingName: existing.name });
+    }
+    return res.json({ available: true });
+}));
+
 app.get("/api/articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const article = await storage.getArticle(req.params.id);
@@ -72,6 +86,18 @@ app.get("/api/articles/:id", asyncHandler(async (req, res) => {
 app.post("/api/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertArticleSchema.parse({ ...req.body, tenantId });
+    if (data.articleNumber && data.articleNumber.trim()) {
+      const dup = await storage.getArticleByNumber(tenantId, data.articleNumber);
+      if (dup) {
+        throw new ConflictError(`Artikelnummer "${data.articleNumber.trim()}" används redan av "${dup.name}".`);
+      }
+    }
+    if (data.replacementArticleId) {
+      const repl = await storage.getArticle(data.replacementArticleId);
+      if (!verifyTenantOwnership(repl, tenantId)) {
+        throw new ValidationError("Ersättningsartikeln hittades inte i denna tenant");
+      }
+    }
     const article = await storage.createArticle(data);
     res.status(201).json(article);
 }));
@@ -88,6 +114,21 @@ app.patch("/api/articles/:id", asyncHandler(async (req, res) => {
       return res.status(400).json(formatZodError(parseResult.error));
     }
     const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
+    if (typeof updateData.articleNumber === "string" && updateData.articleNumber.trim()) {
+      const dup = await storage.getArticleByNumber(tenantId, updateData.articleNumber, req.params.id);
+      if (dup) {
+        throw new ConflictError(`Artikelnummer "${updateData.articleNumber.trim()}" används redan av "${dup.name}".`);
+      }
+    }
+    if (updateData.replacementArticleId) {
+      if (updateData.replacementArticleId === req.params.id) {
+        throw new ValidationError("En artikel kan inte vara sin egen ersättning");
+      }
+      const repl = await storage.getArticle(updateData.replacementArticleId);
+      if (!verifyTenantOwnership(repl, tenantId)) {
+        throw new ValidationError("Ersättningsartikeln hittades inte i denna tenant");
+      }
+    }
     const article = await storage.updateArticle(req.params.id, updateData);
     if (!article) throw new NotFoundError("Artikel hittades inte");
     res.json(article);

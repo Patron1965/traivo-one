@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -176,9 +177,16 @@ interface ArticleFormData {
   isInfoCarrier: boolean;
   limitationType: string;
   quantityMode: string;
+  quantityMetadataField: string;
+  quantityUnit: string;
+  groupSize: number;
   offsetMinutes: number;
   defaultMetadataAssociation: string;
   stockLocation: string;
+  supplierNumbers: string[];
+  replacementArticleId: string;
+  externInfoUrl: string;
+  externInfoDescription: string;
 }
 
 const emptyFormData: ArticleFormData = {
@@ -193,7 +201,7 @@ const emptyFormData: ArticleFormData = {
   cost: 0,
   listPrice: 0,
   unit: "st",
-  status: "active",
+  status: "aktiv",
   fetchMetadataCode: "",
   leaveMetadataCode: "",
   leaveMetadataFormat: "",
@@ -210,10 +218,45 @@ const emptyFormData: ArticleFormData = {
   isInfoCarrier: false,
   limitationType: "unlimited",
   quantityMode: "use_object_quantity",
+  quantityMetadataField: "",
+  quantityUnit: "",
+  groupSize: 1,
   offsetMinutes: 0,
   defaultMetadataAssociation: "",
   stockLocation: "",
+  supplierNumbers: [],
+  replacementArticleId: "",
+  externInfoUrl: "",
+  externInfoDescription: "",
 };
+
+// Status-livscykel: aktiv → utgående → utgått. Legacy "active"/"inactive" stöds
+// fortfarande (visas men nya artiklar använder de svenska värdena).
+const ARTICLE_STATUS_OPTIONS = [
+  { value: "aktiv", label: "Aktiv" },
+  { value: "utgående", label: "Utgående" },
+  { value: "utgått", label: "Utgått" },
+] as const;
+
+function articleStatusLabel(status: string | null | undefined): string {
+  switch (status) {
+    case "aktiv":
+    case "active": return "Aktiv";
+    case "utgående": return "Utgående";
+    case "utgått": return "Utgått";
+    case "inactive": return "Inaktiv";
+    default: return status || "Aktiv";
+  }
+}
+
+function articleStatusBadgeClass(status: string | null | undefined): string {
+  switch (status) {
+    case "utgått": return "border-destructive text-destructive";
+    case "utgående": return "border-warning text-warning";
+    case "inactive": return "text-muted-foreground";
+    default: return "";
+  }
+}
 
 export default function ArticlesPage() {
   const { toast } = useToast();
@@ -232,6 +275,9 @@ export default function ArticlesPage() {
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
   const [articleToDelete, setArticleToDelete] = useState<Article | null>(null);
   const [formData, setFormData] = useState<ArticleFormData>(emptyFormData);
+  const [showDiscontinued, setShowDiscontinued] = useState(false);
+  const [supplierNumberInput, setSupplierNumberInput] = useState("");
+  const [debouncedArticleNumber, setDebouncedArticleNumber] = useState("");
   const [offsetValueInput, setOffsetValueInput] = useState<string>("0");
   const [offsetUnit, setOffsetUnit] = useState<"minutes" | "days">("minutes");
   const [offsetType, setOffsetType] = useState<"before" | "same" | "after">("same");
@@ -344,6 +390,30 @@ export default function ArticlesPage() {
     enabled: !!selectedObjectId && testDialogOpen,
   });
 
+  useEffect(() => {
+    const trimmed = formData.articleNumber.trim();
+    const handle = setTimeout(() => setDebouncedArticleNumber(trimmed), 350);
+    return () => clearTimeout(handle);
+  }, [formData.articleNumber]);
+
+  const { data: articleNumberCheck } = useQuery<{ available: boolean; reason?: string; existingId?: string; existingName?: string }>({
+    queryKey: ["/api/articles/validate-number", debouncedArticleNumber, editingArticle?.id ?? ""],
+    queryFn: async () => {
+      const params = new URLSearchParams({ number: debouncedArticleNumber });
+      if (editingArticle?.id) params.set("excludeId", editingArticle.id);
+      const res = await fetch(`/api/articles/validate-number?${params.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Kunde inte validera artikelnummer");
+      return res.json();
+    },
+    enabled: dialogOpen && debouncedArticleNumber.length > 0,
+  });
+
+  const articleNumberDuplicate =
+    !!articleNumberCheck &&
+    articleNumberCheck.available === false &&
+    articleNumberCheck.reason === "duplicate" &&
+    debouncedArticleNumber === formData.articleNumber.trim();
+
   const createMutation = useMutation({
     mutationFn: async (data: Partial<ArticleFormData>) => {
       return apiRequest("POST", "/api/articles", data);
@@ -433,9 +503,16 @@ export default function ArticlesPage() {
       isInfoCarrier: article.isInfoCarrier || false,
       limitationType: article.limitationType || "unlimited",
       quantityMode: article.quantityMode || "use_object_quantity",
+      quantityMetadataField: article.quantityMetadataField || "",
+      quantityUnit: article.quantityUnit || "",
+      groupSize: article.groupSize ?? 1,
       offsetMinutes: article.offsetMinutes ?? 0,
       defaultMetadataAssociation: article.defaultMetadataAssociation || "",
       stockLocation: article.stockLocation || "",
+      supplierNumbers: article.supplierNumbers || [],
+      replacementArticleId: article.replacementArticleId || "",
+      externInfoUrl: article.externInfoUrl || "",
+      externInfoDescription: article.externInfoDescription || "",
     });
     {
       const om = article.offsetMinutes ?? 0;
@@ -451,7 +528,12 @@ export default function ArticlesPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    if (articleNumberDuplicate) {
+      toast({ title: "Artikelnummer används redan", description: "Välj ett unikt artikelnummer innan du sparar.", variant: "destructive" });
+      return;
+    }
+
     if (editingArticle) {
       updateMutation.mutate({ id: editingArticle.id, data: formData });
     } else {
@@ -473,10 +555,12 @@ export default function ArticlesPage() {
       
       const matchesHookLevel = hookLevelFilter === "all" || 
         (hookLevelFilter === "none" ? !article.hookLevel : article.hookLevel === hookLevelFilter);
-      
-      return matchesSearch && matchesType && matchesObjectType && matchesHookLevel;
+
+      const matchesStatus = showDiscontinued || article.status !== "utgått";
+
+      return matchesSearch && matchesType && matchesObjectType && matchesHookLevel && matchesStatus;
     });
-  }, [articles, searchQuery, typeFilter, objectTypeFilter, hookLevelFilter]);
+  }, [articles, searchQuery, typeFilter, objectTypeFilter, hookLevelFilter, showDiscontinued]);
 
   const totalPages = Math.max(1, Math.ceil(filteredArticles.length / ITEMS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
@@ -637,6 +721,15 @@ export default function ArticlesPage() {
               </TooltipTrigger>
               <TooltipContent><p>Fasthakningsvy</p></TooltipContent>
             </Tooltip>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="show-discontinued"
+              checked={showDiscontinued}
+              onCheckedChange={setShowDiscontinued}
+              data-testid="switch-show-discontinued"
+            />
+            <Label htmlFor="show-discontinued" className="text-sm whitespace-nowrap cursor-pointer">Visa utgångna</Label>
           </div>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -959,8 +1052,12 @@ export default function ArticlesPage() {
                       {formatPrice(article.listPrice)}
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge variant={article.status === "active" ? "default" : "outline"}>
-                        {article.status === "active" ? "Aktiv" : "Inaktiv"}
+                      <Badge
+                        variant={article.status === "utgått" ? "outline" : (article.status === "active" || article.status === "aktiv" || !article.status) ? "default" : "outline"}
+                        className={articleStatusBadgeClass(article.status)}
+                        data-testid={`badge-status-${article.id}`}
+                      >
+                        {articleStatusLabel(article.status)}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
@@ -1071,10 +1168,19 @@ export default function ArticlesPage() {
                     id="articleNumber"
                     value={formData.articleNumber}
                     onChange={(e) => setFormData({ ...formData, articleNumber: e.target.value })}
-                    placeholder="ART-001"
+                    placeholder="t.ex. ART-001 eller fritext"
                     required
+                    className={articleNumberDuplicate ? "border-destructive focus-visible:ring-destructive" : ""}
                     data-testid="input-article-number"
                   />
+                  {articleNumberDuplicate ? (
+                    <p className="text-xs text-destructive flex items-start gap-1" data-testid="error-article-number-duplicate">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                      <span>Artikelnumret används redan{articleNumberCheck?.existingName ? ` av "${articleNumberCheck.existingName}"` : ""}.</span>
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Fritext — måste vara unikt per organisation.</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="articleType">Artikeltyp</Label>
@@ -1250,6 +1356,84 @@ export default function ArticlesPage() {
                 </p>
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="externInfoUrl">Extern info — länk</Label>
+                <Input
+                  id="externInfoUrl"
+                  type="url"
+                  value={formData.externInfoUrl}
+                  onChange={(e) => setFormData({ ...formData, externInfoUrl: e.target.value })}
+                  placeholder="https://..."
+                  data-testid="input-extern-info-url"
+                />
+                <Textarea
+                  id="externInfoDescription"
+                  value={formData.externInfoDescription}
+                  onChange={(e) => setFormData({ ...formData, externInfoDescription: e.target.value })}
+                  placeholder="Beskrivning av den externa länken (t.ex. produktblad, säkerhetsdatablad)..."
+                  rows={2}
+                  data-testid="input-extern-info-description"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Länk till extern information (t.ex. produktblad eller säkerhetsdatablad) med en kort beskrivning.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="supplierNumberInput">Leverantörsnummer</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="supplierNumberInput"
+                    value={supplierNumberInput}
+                    onChange={(e) => setSupplierNumberInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const v = supplierNumberInput.trim();
+                        if (v && !formData.supplierNumbers.includes(v)) {
+                          setFormData({ ...formData, supplierNumbers: [...formData.supplierNumbers, v] });
+                        }
+                        setSupplierNumberInput("");
+                      }
+                    }}
+                    placeholder="Lägg till leverantörsnummer och tryck Enter"
+                    data-testid="input-supplier-number"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      const v = supplierNumberInput.trim();
+                      if (v && !formData.supplierNumbers.includes(v)) {
+                        setFormData({ ...formData, supplierNumbers: [...formData.supplierNumbers, v] });
+                      }
+                      setSupplierNumberInput("");
+                    }}
+                    data-testid="button-add-supplier-number"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                {formData.supplierNumbers.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {formData.supplierNumbers.map((sn, i) => (
+                      <Badge key={`${sn}-${i}`} variant="secondary" className="gap-1" data-testid={`badge-supplier-number-${i}`}>
+                        <span className="font-mono text-xs">{sn}</span>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, supplierNumbers: formData.supplierNumbers.filter((_, idx) => idx !== i) })}
+                          className="ml-0.5 hover:text-destructive"
+                          data-testid={`button-remove-supplier-number-${i}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">Artikelns nummer hos olika leverantörer (valfritt, flera tillåtna).</p>
+              </div>
+
               <div className="grid grid-cols-3 gap-4">
                 {formData.articleType === "vara" ? (
                   <div className="space-y-2">
@@ -1345,14 +1529,75 @@ export default function ArticlesPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="use_object_quantity">Multiplicera med objektets antal (standard)</SelectItem>
+                    <SelectItem value="per_styck">Per styck — multipliceras med objektets antal</SelectItem>
                     <SelectItem value="single_per_task">En per uppdrag (alltid 1)</SelectItem>
-                    <SelectItem value="configurable">Konfigurerbar per orderkoncept</SelectItem>
+                    <SelectItem value="group">Grupp — fast multipel (gruppstorlek)</SelectItem>
+                    <SelectItem value="matches_field">Matchar metadatafält — antal från objektets metadata</SelectItem>
+                    {(formData.quantityMode === "use_object_quantity" || formData.quantityMode === "configurable") && (
+                      <SelectItem value={formData.quantityMode}>
+                        {formData.quantityMode === "use_object_quantity"
+                          ? "Multiplicera med objektets antal (äldre)"
+                          : "Konfigurerbar per orderkoncept (äldre)"}
+                      </SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Avgör om artikelns pris/tid multipliceras med objektets antal (t.ex. 45 kärl × 150 kr) eller alltid räknas som 1 per uppdrag (t.ex. fotodokumentation, telefonavisering, nyckelhämtning).
+                  Avgör hur många enheter som skapas när artikeln expanderas: <strong>Per styck</strong> = objektets antal (t.ex. 45 kärl × 150 kr), <strong>En per uppdrag</strong> = alltid 1 (t.ex. fotodokumentation, telefonavisering), <strong>Grupp</strong> = fast multipel, <strong>Matchar metadatafält</strong> = antalet hämtas från objektets metadata.
                 </p>
+                {formData.quantityMode === "group" && (
+                  <div className="space-y-2 pt-1" data-testid="field-group-size">
+                    <Label htmlFor="groupSize" className="text-sm">Gruppstorlek</Label>
+                    <Input
+                      id="groupSize"
+                      type="number"
+                      min="1"
+                      value={formData.groupSize}
+                      onChange={(e) => setFormData({ ...formData, groupSize: Math.max(1, parseInt(e.target.value) || 1) })}
+                      data-testid="input-group-size"
+                    />
+                    <p className="text-xs text-muted-foreground">Fast antal enheter per uppdrag (minst 1).</p>
+                  </div>
+                )}
+                {formData.quantityMode === "matches_field" && (
+                  <div className="grid grid-cols-2 gap-4 pt-1" data-testid="field-matches-field">
+                    <div className="space-y-2">
+                      <Label htmlFor="quantityMetadataField" className="text-sm">Metadatafält (antal)</Label>
+                      <Select
+                        value={formData.quantityMetadataField || "_none"}
+                        onValueChange={(v) => setFormData({ ...formData, quantityMetadataField: v === "_none" ? "" : v })}
+                      >
+                        <SelectTrigger id="quantityMetadataField" data-testid="select-quantity-metadata-field">
+                          <SelectValue placeholder="Välj metadatafält" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_none">Välj metadatafält</SelectItem>
+                          {metadataTypes.map(t => (
+                            <SelectItem key={t.id} value={t.namn}>{t.namn} ({t.datatyp})</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">Antalet läses från objektets värde för detta fält.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="quantityUnit" className="text-sm">Enhet (valfritt)</Label>
+                      <Input
+                        id="quantityUnit"
+                        value={formData.quantityUnit}
+                        onChange={(e) => setFormData({ ...formData, quantityUnit: e.target.value })}
+                        placeholder="t.ex. m², kg, st"
+                        data-testid="input-quantity-unit"
+                      />
+                      <p className="text-xs text-muted-foreground">Visas tillsammans med antalet.</p>
+                    </div>
+                  </div>
+                )}
+                {formData.quantityMode === "matches_field" && !formData.quantityMetadataField && (
+                  <p className="text-xs text-warning flex items-start gap-1" data-testid="warning-matches-field-missing">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <span>Välj ett metadatafält — annars faller antalet tillbaka på objektets standardantal.</span>
+                  </p>
+                )}
               </div>
 
               <div className="space-y-3">
@@ -1466,18 +1711,51 @@ export default function ArticlesPage() {
                   <Label>Status</Label>
                   <Select
                     value={formData.status}
-                    onValueChange={(value) => setFormData({ ...formData, status: value })}
+                    onValueChange={(value) => setFormData({ ...formData, status: value, ...(value !== "utgått" ? { replacementArticleId: "" } : {}) })}
                   >
                     <SelectTrigger data-testid="select-status">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="active">Aktiv</SelectItem>
-                      <SelectItem value="inactive">Inaktiv</SelectItem>
+                      {ARTICLE_STATUS_OPTIONS.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                      {(formData.status === "active" || formData.status === "inactive") && (
+                        <SelectItem value={formData.status}>
+                          {formData.status === "active" ? "Aktiv (äldre)" : "Inaktiv (äldre)"}
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
+
+              {formData.status === "utgått" && (
+                <div className="space-y-2" data-testid="field-replacement-article">
+                  <Label htmlFor="replacementArticleId">Ersättningsartikel</Label>
+                  <Select
+                    value={formData.replacementArticleId || "_none"}
+                    onValueChange={(v) => setFormData({ ...formData, replacementArticleId: v === "_none" ? "" : v })}
+                  >
+                    <SelectTrigger id="replacementArticleId" data-testid="select-replacement-article">
+                      <SelectValue placeholder="Välj ersättningsartikel" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">Ingen</SelectItem>
+                      {articles
+                        .filter(a => a.id !== editingArticle?.id && a.status !== "utgått")
+                        .map(a => (
+                          <SelectItem key={a.id} value={a.id}>
+                            <span className="font-mono text-xs mr-1">{a.articleNumber}</span>{a.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    När en utgången artikel läggs till på en order används ersättningsartikeln automatiskt.
+                  </p>
+                </div>
+              )}
 
               <Separator />
               <div className="space-y-1">
@@ -1868,7 +2146,7 @@ export default function ArticlesPage() {
               </Button>
               <Button
                 type="submit"
-                disabled={createMutation.isPending || updateMutation.isPending}
+                disabled={createMutation.isPending || updateMutation.isPending || articleNumberDuplicate}
                 data-testid="button-submit-article"
               >
                 {(createMutation.isPending || updateMutation.isPending) && (

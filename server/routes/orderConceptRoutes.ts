@@ -263,14 +263,19 @@ app.post("/api/order-concepts/:id/article-mappings/auto", asyncHandler(async (re
           .where(inArray(articleObjectMappings.orderConceptArticleId, artIds.map(a => a.id)));
       }
 
-      // Respektera quantity_mode: om artikeln är 'single_per_task' (eller orderkonceptets
-      // override sätter det), tvingas mappningens quantity till 1 oavsett radens quantity.
-      // Annars används a.quantity (default 1) som tidigare.
+      // Respektera quantity_mode (artikel eller orderkoncept-override):
+      //  - single_per_task / per_styck → tvingad 1
+      //  - group → fast multipel (group_size)
+      //  - matches_field → faller tillbaka på a.quantity här (ELSE); det verkliga
+      //    metadatavärdet (ärvningsmedvetet) upplöses vid order-expansion, inte i
+      //    denna förhandsmappning.
+      //  - annars (use_object_quantity / configurable) → a.quantity som tidigare.
       await tx.execute(sql`
         INSERT INTO article_object_mappings (id, order_concept_article_id, order_concept_object_id, quantity, created_at)
         SELECT gen_random_uuid(), a.id, o.id,
           CASE
-            WHEN COALESCE(a.quantity_mode_override, art.quantity_mode, 'use_object_quantity') = 'single_per_task' THEN 1
+            WHEN COALESCE(a.quantity_mode_override, art.quantity_mode, 'use_object_quantity') IN ('single_per_task', 'per_styck') THEN 1
+            WHEN COALESCE(a.quantity_mode_override, art.quantity_mode, 'use_object_quantity') = 'group' THEN GREATEST(COALESCE(art.group_size, 1), 1)
             ELSE COALESCE(a.quantity, 1)
           END,
           NOW()

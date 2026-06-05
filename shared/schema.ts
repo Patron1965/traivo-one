@@ -642,6 +642,20 @@ export const articles = pgTable("articles", {
   shouldBeReturned: boolean("should_be_returned").default(false),
   // Session 12 (Steg 6): förvalt metadatafält som föreslås som "Hakar fast på" vid tillägg i orderkoncept
   defaultMetadataAssociation: text("default_metadata_association"),
+  // Session 08-15: kvantitetslägen utöver legacy (use_object_quantity/single_per_task/configurable).
+  // quantityMode kan nu även vara 'per_styck' (=1), 'matches_field' (multiplicera med objektets
+  // metadatavärde i quantityMetadataField) eller 'group' (fast multipel = groupSize).
+  quantityMetadataField: text("quantity_metadata_field"),
+  quantityUnit: text("quantity_unit"),
+  groupSize: integer("group_size"),
+  // Session 08-28: leverantörsnummer (flera möjliga, förhindrar parallellköp)
+  supplierNumbers: text("supplier_numbers").array().default([]),
+  // Session 08-28: utgått artikel pekar framåt på sin ersättare (forward self-FK).
+  // OBS skild från replacesArticleId (ADR v3, bakåt-pekare som expand använder).
+  replacementArticleId: varchar("replacement_article_id").references((): any => articles.id, { onDelete: "set null" }),
+  // Session 08-28: extern informationslänk (säkerhetsblad/monteringsanvisning) + etikett
+  externInfoUrl: text("extern_info_url"),
+  externInfoDescription: text("extern_info_description"),
   unit: text("unit").default("st"),
   status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

@@ -10,6 +10,8 @@ import { NotFoundError, ValidationError, ForbiddenError, describeFortnoxMappingC
 import { objects, workOrders, articles, customers, fortnoxMappings, objectContacts, importBatches, objectMetadata, metadataDefinitions, type InsertWorkOrder } from "@shared/schema";
 import { getISOWeek } from "./helpers";
 import { triggerGeocodeIfMissing } from "../services/geocoding";
+import { computeArticleQuantity, metadataValueToNumber } from "../article-quantity";
+import { getArticleMetadataForObject } from "../metadata-queries";
 
 async function verifyObjectTenant(objectId: string, tenantId: string): Promise<boolean> {
   try {
@@ -1748,11 +1750,28 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
     // Task #391: Använd resolveArticlePrice så kundunik/rabattbrev slår igenom
     // (tidigare användes article.listPrice direkt → kund-priser ignorerades).
     let linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> | undefined = undefined;
+    let linkedArticleId: string | null = concept.articleId ?? null;
     let linkedPrice = { price: 0, cost: 0, productionMinutes: 0, priceListId: null as string | null };
     if (concept.articleId) {
       linkedArticle = await storage.getArticle(concept.articleId);
+      // utgått→ersättning: byt till den aktiva ersättningsartikeln (flera hopp, cykelskydd)
+      // så att Fortnox-körningen använder rätt pris + quantityMode.
+      if (linkedArticle) {
+        const visited = new Set<string>([linkedArticle.id]);
+        while (
+          linkedArticle.status === "utgått" &&
+          linkedArticle.replacementArticleId &&
+          !visited.has(linkedArticle.replacementArticleId)
+        ) {
+          const repl = await storage.getArticle(linkedArticle.replacementArticleId);
+          if (!repl || repl.tenantId !== tenantId) break;
+          visited.add(repl.id);
+          linkedArticle = repl;
+        }
+        linkedArticleId = linkedArticle.id;
+      }
       if (linkedArticle && concept.customerId) {
-        const info = await storage.resolveArticlePrice(tenantId, concept.articleId, concept.customerId);
+        const info = await storage.resolveArticlePrice(tenantId, linkedArticleId!, concept.customerId);
         linkedPrice = {
           price: info.price,
           cost: info.cost,
@@ -1775,6 +1794,27 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
       let quantity = 1;
       if (concept.crossPollinationField && objWithMeta.metadata?.[concept.crossPollinationField]) {
         quantity = Number(objWithMeta.metadata[concept.crossPollinationField]) || 1;
+      }
+      // Honorera den länkade artikelns quantityMode ovanpå ev. cross-pollination-bas:
+      // per_styck/single_per_task→1, group→groupSize, matches_field→objektets metadatavärde.
+      // matches_field upplöses ärvningsmedvetet via getArticleMetadataForObject (samma
+      // resolver som manuella orderrader) — objekten här saknar populerad .metadata.
+      if (linkedArticle) {
+        let mv: number | null = null;
+        if (linkedArticle.quantityMode === "matches_field" && linkedArticle.quantityMetadataField) {
+          try {
+            const md = await getArticleMetadataForObject(obj.id, linkedArticle.quantityMetadataField, tenantId);
+            mv = metadataValueToNumber(md?.value);
+          } catch (e) {
+            console.error("[fortnox quantity matches_field] resolve failed:", e);
+          }
+        }
+        quantity = computeArticleQuantity({
+          quantityMode: linkedArticle.quantityMode,
+          baseQuantity: quantity,
+          groupSize: linkedArticle.groupSize,
+          metadataValue: mv,
+        });
       }
 
       // Calculate estimated duration from linked article
@@ -1809,11 +1849,12 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
         cachedCost: totalCost
       });
 
-      // If an article is linked, create assignment article (kund-pris via resolveArticlePrice)
-      if (linkedArticle && concept.articleId) {
+      // If an article is linked, create assignment article (kund-pris via resolveArticlePrice).
+      // Använd linkedArticleId (ev. ersättningsartikel efter utgått→swap), inte rå concept.articleId.
+      if (linkedArticle && linkedArticleId) {
         await storage.createAssignmentArticle({
           assignmentId: assignment.id,
-          articleId: concept.articleId,
+          articleId: linkedArticleId,
           quantity,
           unitPrice: linkedPrice.price,
           totalPrice: linkedPrice.price * quantity,
