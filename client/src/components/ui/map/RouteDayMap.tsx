@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Marker, Popup, Polyline } from "react-leaflet";
-import { MapPin } from "lucide-react";
+import { MapPin, Spline } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { BaseMap, MapFitBounds, numberedDivIcon } from "@/components/ui/map";
@@ -71,9 +71,10 @@ export function RouteDayMap({
 
   // Vägbaserad ruttgeometri från servern. Faller tyst tillbaka på raka linjer
   // (t.ex. om Geoapify-nyckel saknas → 500).
-  const { data: geometry = [] } = useQuery<[number, number][]>({
+  const routingAttempted = jobPoints.length >= 2;
+  const { data: geometry = [], isLoading: geometryLoading } = useQuery<[number, number][]>({
     queryKey: ["/api/route-geometry", geomKey],
-    enabled: jobPoints.length >= 2,
+    enabled: routingAttempted,
     retry: false,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
@@ -91,6 +92,9 @@ export function RouteDayMap({
 
   const hasGeometry = geometry.length > 1;
   const routeLine: [number, number][] = hasGeometry ? geometry : jobPoints;
+  // Fallback = vi försökte hämta vägbaserad geometri men fick ingen tillbaka
+  // (t.ex. saknad Geoapify-nyckel / routing-tjänst nere) → raka fågelvägslinjer.
+  const usingFallbackRoute = routingAttempted && !hasGeometry && !geometryLoading;
 
   const allPositions = useMemo<[number, number][]>(
     () => [...jobPoints, ...commutes.flatMap((c) => c.positions)],
@@ -173,11 +177,21 @@ export function RouteDayMap({
           })}
         </BaseMap>
       </div>
+      {usingFallbackRoute && (
+        <div
+          className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-xs text-warning"
+          role="status"
+          data-testid={`${testId}-fallback-indicator`}
+        >
+          <Spline className="h-3.5 w-3.5 shrink-0" />
+          <span>Ungefärlig rutt (vägdata ej tillgänglig) — avstånd och restid är uppskattade fågelvägslinjer.</span>
+        </div>
+      )}
       {showLegend && (
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" data-testid={`${testId}-legend`}>
           <span className="flex items-center gap-1.5">
-            <span className="h-0.5 w-5 rounded-full bg-chart-1" />
-            Rutt (planerad)
+            <span className={`h-0.5 w-5 rounded-full ${usingFallbackRoute ? "bg-chart-3" : "bg-chart-1"}`} />
+            {usingFallbackRoute ? "Rutt (ungefärlig)" : "Rutt (planerad)"}
           </span>
           <span className="flex items-center gap-1.5">
             <span className="h-0.5 w-5 rounded-full bg-chart-3" />
