@@ -114,7 +114,8 @@ export function TodayRouteCard() {
 
   const isLoading = teamsLoading || (!!effectiveTeamId && listLoading) || (!!planId && detailLoading);
 
-  const goToWeekly = () => setLocation("/veckoplan");
+  const goToWeekly = () =>
+    setLocation(effectiveTeamId ? `/veckoplan?teamId=${effectiveTeamId}` : "/veckoplan");
 
   return (
     <Card data-testid="card-today-route">

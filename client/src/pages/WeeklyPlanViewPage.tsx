@@ -269,7 +269,11 @@ function personalToBlock(pt: PersonalTask): ScheduleBlock {
 export default function WeeklyPlanViewPage() {
   const { toast } = useToast();
   const now = useMemo(() => new Date(), []);
-  const [teamId, setTeamId] = useState<string>("");
+  const initialTeamId = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("teamId") ?? "";
+  }, []);
+  const [teamId, setTeamId] = useState<string>(initialTeamId);
   const [year, setYear] = useState<number>(getISOWeekYear(now));
   const [week, setWeek] = useState<number>(getISOWeek(now));
   const [editing, setEditing] = useState<ScheduleBlock | null>(null);
