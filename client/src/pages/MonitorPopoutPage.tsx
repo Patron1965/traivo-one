@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   Layers,
   Hexagon,
+  Spline,
 } from "lucide-react";
 import { UrgentJobDialog } from "@/components/UrgentJobDialog";
 
@@ -117,6 +118,7 @@ function MapFitBounds({ positions }: { positions: [number, number][] }) {
 interface RouteGeometry {
   resourceId: string;
   positions: [number, number][];
+  isFallback?: boolean;
 }
 
 export default function MonitorPopoutPage() {
@@ -129,6 +131,7 @@ export default function MonitorPopoutPage() {
   const [showJobs, setShowJobs] = useState(true);
   const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(new Set(["on_job", "traveling", "idle", "break"]));
   const [routeGeometries, setRouteGeometries] = useState<RouteGeometry[]>([]);
+  const [usingFallbackRoute, setUsingFallbackRoute] = useState(false);
   const [urgentDialogOpen, setUrgentDialogOpen] = useState(false);
   const [showClusterZones, setShowClusterZones] = useState(() => {
     try { return localStorage.getItem("traivo-show-cluster-zones") !== "false"; } catch { return true; }
@@ -265,6 +268,7 @@ export default function MonitorPopoutPage() {
   const fetchRouteGeometries = useCallback(async () => {
     const geometries: RouteGeometry[] = [];
     const resourceIds = Object.keys(ordersByResource);
+    let anyFallback = false;
 
     for (const resourceId of resourceIds) {
       const orders = ordersByResource[resourceId];
@@ -272,6 +276,11 @@ export default function MonitorPopoutPage() {
         .filter(o => o.taskLatitude && o.taskLongitude)
         .map(o => ({ lat: o.taskLatitude!, lng: o.taskLongitude! }));
       if (positions.length < 2) continue;
+
+      // Raka fågelvägslinjer (råa stoppkoordinater) — används om vägbaserad
+      // geometri inte kan hämtas.
+      const straightLine = positions.map(p => [p.lat, p.lng] as [number, number]);
+      let roadGeometry: [number, number][] | null = null;
 
       try {
         const response = await fetch("/api/route-geometry", {
@@ -282,12 +291,21 @@ export default function MonitorPopoutPage() {
         if (response.ok) {
           const data = await response.json();
           if (data.coordinates && data.coordinates.length > 0) {
-            geometries.push({ resourceId, positions: data.coordinates });
+            roadGeometry = data.coordinates;
           }
         }
       } catch {}
+
+      if (roadGeometry) {
+        geometries.push({ resourceId, positions: roadGeometry, isFallback: false });
+      } else {
+        // Geoapify nere / saknad nyckel → rita raka linjer i stället för tomt.
+        geometries.push({ resourceId, positions: straightLine, isFallback: true });
+        anyFallback = true;
+      }
     }
     setRouteGeometries(geometries);
+    setUsingFallbackRoute(anyFallback);
   }, [ordersByResource]);
 
   useEffect(() => {
@@ -392,8 +410,9 @@ export default function MonitorPopoutPage() {
             positions={rg.positions}
             pathOptions={{
               color: resourceColorMap.get(rg.resourceId) || ROUTE_COLORS[idx % ROUTE_COLORS.length],
-              weight: 4,
+              weight: rg.isFallback ? 3 : 4,
               opacity: 0.7,
+              dashArray: rg.isFallback ? "8, 4" : undefined,
             }}
           />
         ))}
@@ -526,6 +545,19 @@ export default function MonitorPopoutPage() {
             <Route className="h-3 w-3" />
             {todaysOrders.length} jobb
           </span>
+          {showRoutes && usingFallbackRoute && (
+            <>
+              <div className="w-px h-4 bg-border" />
+              <span
+                className="text-xs text-warning flex items-center gap-1"
+                role="status"
+                data-testid="route-geometry-fallback-indicator"
+              >
+                <Spline className="h-3 w-3 shrink-0" />
+                Uppskattad rutt
+              </span>
+            </>
+          )}
         </div>
         <button
           onClick={() => setUrgentDialogOpen(true)}
