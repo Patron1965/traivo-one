@@ -448,3 +448,134 @@ describe("MonitorPopoutPage ↔ /api/route-geometry (Geoapify nere)", () => {
     ).toBeNull();
   });
 });
+
+// ===========================================================================
+// 4) OptimizedRouteMap (VRP-/klusterläge — flera fordon/rutter)
+// ===========================================================================
+// Klusterläget har en EGEN, separat fallback-gren: per-rutt geometri lagras i
+// roadGeometries[route.resourceId] och varje rutt ritas med sin egen polyline.
+// Fallback-indikatorn (badge-route-fallback) visas så snart MINST en rutt med
+// ≥2 stopp saknar vägbaserad geometri. Testar 500/502 (alla faller tillbaka),
+// 200 (alla får riktiga polylines) samt blandfallet (en lyckas, en faller
+// tillbaka → badge syns + den lyckade rutten ritas vägbaserat).
+describe("OptimizedRouteMap VRP-läge ↔ /api/route-geometry (flera fordon)", () => {
+  // Två fordon, varje fordon ≥2 stopp, på distinkta koordinater så vi kan skilja
+  // rutterna åt i DOM:en och styra mocken per rutt via waypoints[0].lat.
+  const V1P1: [number, number] = [62.39, 17.3];
+  const V1P2: [number, number] = [62.4, 17.31];
+  const V2P1: [number, number] = [63.5, 18.4];
+  const V2P2: [number, number] = [63.51, 18.41];
+
+  const ROUTE1_STRAIGHT: [number, number][] = [V1P1, V1P2];
+  const ROUTE2_STRAIGHT: [number, number][] = [V2P1, V2P2];
+  const ROUTE1_ROAD: [number, number][] = [V1P1, [62.395, 17.305], V1P2];
+  const ROUTE2_ROAD: [number, number][] = [V2P1, [63.505, 18.405], V2P2];
+
+  const vrpRoutes = [
+    {
+      resourceId: "veh-1",
+      resourceName: "Fordon 1",
+      totalDistanceKm: 12.3,
+      totalDurationMinutes: 45,
+      stops: [
+        { orderId: "o1", orderTitle: "Jobb 1", sequence: 1, location: { lat: V1P1[0], lng: V1P1[1] }, serviceMinutes: 30 },
+        { orderId: "o2", orderTitle: "Jobb 2", sequence: 2, location: { lat: V1P2[0], lng: V1P2[1] }, serviceMinutes: 30 },
+      ],
+    },
+    {
+      resourceId: "veh-2",
+      resourceName: "Fordon 2",
+      totalDistanceKm: 8.7,
+      totalDurationMinutes: 30,
+      stops: [
+        { orderId: "o3", orderTitle: "Jobb 3", sequence: 1, location: { lat: V2P1[0], lng: V2P1[1] }, serviceMinutes: 30 },
+        { orderId: "o4", orderTitle: "Jobb 4", sequence: 2, location: { lat: V2P2[0], lng: V2P2[1] }, serviceMinutes: 30 },
+      ],
+    },
+  ];
+
+  function renderView() {
+    return render(
+      <QueryClientProvider client={makeClient()}>
+        <OptimizedRouteMap vrpRoutes={vrpRoutes as any} />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("ritar raka fallback-linjer för VARJE rutt när servern svarar 500 (nyckel saknas)", async () => {
+    mockIsAvailable.mockReturnValue(false); // → 500 för alla rutter
+
+    renderView();
+
+    await waitFor(() => {
+      expect(findPolylineByPositions(ROUTE1_STRAIGHT)).toBeTruthy();
+      expect(findPolylineByPositions(ROUTE2_STRAIGHT)).toBeTruthy();
+    });
+    // Båda fallback-linjerna är streckade (dashArray satt, ej riktig körväg).
+    expect(findPolylineByPositions(ROUTE1_STRAIGHT)?.getAttribute("data-dasharray")).toBe("8, 4");
+    expect(findPolylineByPositions(ROUTE2_STRAIGHT)?.getAttribute("data-dasharray")).toBe("8, 4");
+    await waitFor(() => {
+      expect(screen.getByTestId("badge-route-fallback")).toBeTruthy();
+    });
+    expect(mockIsAvailable).toHaveBeenCalled();
+  });
+
+  it("ritar raka fallback-linjer för VARJE rutt när servern svarar 502 (routing-tjänst nere)", async () => {
+    mockIsAvailable.mockReturnValue(true);
+    mockGetRouteGeometry.mockResolvedValue(null); // → 502 för alla rutter
+
+    renderView();
+
+    await waitFor(() => {
+      expect(findPolylineByPositions(ROUTE1_STRAIGHT)).toBeTruthy();
+      expect(findPolylineByPositions(ROUTE2_STRAIGHT)).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("badge-route-fallback")).toBeTruthy();
+    });
+    expect(mockGetRouteGeometry).toHaveBeenCalledTimes(2);
+  });
+
+  it("ritar riktiga vägbaserade polylines för båda rutterna när servern svarar 200", async () => {
+    mockIsAvailable.mockReturnValue(true);
+    mockGetRouteGeometry.mockImplementation(async (waypoints) => {
+      // Skilj rutterna åt på första waypointens latitud.
+      if (waypoints[0].lat === V1P1[0]) return { coordinates: ROUTE1_ROAD };
+      return { coordinates: ROUTE2_ROAD };
+    });
+
+    renderView();
+
+    await waitFor(() => {
+      expect(findPolylineByPositions(ROUTE1_ROAD)).toBeTruthy();
+      expect(findPolylineByPositions(ROUTE2_ROAD)).toBeTruthy();
+    });
+    // Inga raka fallback-linjer och ingen fallback-badge.
+    expect(findPolylineByPositions(ROUTE1_STRAIGHT)).toBeUndefined();
+    expect(findPolylineByPositions(ROUTE2_STRAIGHT)).toBeUndefined();
+    expect(screen.queryByTestId("badge-route-fallback")).toBeNull();
+  });
+
+  it("blandfall: en rutt lyckas (vägbaserad) och en faller tillbaka (rak) → badge syns", async () => {
+    mockIsAvailable.mockReturnValue(true);
+    mockGetRouteGeometry.mockImplementation(async (waypoints) => {
+      // Fordon 1 lyckas, Fordon 2 misslyckas (null → 502).
+      if (waypoints[0].lat === V1P1[0]) return { coordinates: ROUTE1_ROAD };
+      return null;
+    });
+
+    renderView();
+
+    await waitFor(() => {
+      // Rutt 1 ritas vägbaserad, rutt 2 faller tillbaka till rak linje.
+      expect(findPolylineByPositions(ROUTE1_ROAD)).toBeTruthy();
+      expect(findPolylineByPositions(ROUTE2_STRAIGHT)).toBeTruthy();
+    });
+    // Rutt 1 ska INTE ha någon rak fallback-linje.
+    expect(findPolylineByPositions(ROUTE1_STRAIGHT)).toBeUndefined();
+    // Fallback-badgen ska visas eftersom minst en rutt föll tillbaka.
+    await waitFor(() => {
+      expect(screen.getByTestId("badge-route-fallback")).toBeTruthy();
+    });
+  });
+});
