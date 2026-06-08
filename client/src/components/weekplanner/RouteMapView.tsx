@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,6 +14,7 @@ import type { Resource, WorkOrderWithObject, Customer } from "@shared/schema";
 import { calculateTravelTime, haversineDistance } from "./types";
 import { SortableRouteItem } from "./DndComponents";
 import { BaseMap, MapFitBounds, numberedDivIcon, breakDivIcon, getRouteSegmentColor } from "@/components/ui/map";
+import { useRouteGeometry } from "@/hooks/useRouteGeometry";
 import L from "leaflet";
 
 // Hämta jobbets effektiva koordinater: task_latitude/longitude med fallback till objektets
@@ -47,8 +48,6 @@ interface RouteMapViewProps {
   vrpBreaks?: VRPBreakStop[];
 }
 
-const geometryCache = new Map<string, [number, number][]>();
-
 export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps) {
   const {
     currentDate, resources, routeViewResourceId, setRouteViewResourceId,
@@ -56,8 +55,6 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
     selectedJob, onJobClick, onSortEnd, onOptimizeRoute, onSendSchedule,
     vrpBreaks,
   } = props;
-
-  const fetchAbortRef = useRef<AbortController | null>(null);
 
   const orderedJobs = useMemo(() => {
     if (routeJobOrder.length === 0) return routeJobs;
@@ -77,87 +74,20 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
     return L.latLngBounds(points);
   }, [orderedJobs]);
 
-  const fallbackPolyline = useMemo(() => {
+  const geometryWaypoints = useMemo(() => {
     return orderedJobs
       .map(jobCoords)
-      .filter((c): c is { lat: number; lng: number } => c !== null)
-      .map(c => [c.lat, c.lng] as [number, number]);
+      .filter((c): c is { lat: number; lng: number } => c !== null);
   }, [orderedJobs]);
 
-  const [roadGeometry, setRoadGeometry] = useState<[number, number][] | null>(null);
-  const [isLoadingGeometry, setIsLoadingGeometry] = useState(false);
-
-  const cacheKey = useMemo(() => {
-    const dateStr = format(currentDate, "yyyy-MM-dd");
-    const jobIds = orderedJobs
-      .filter(j => jobCoords(j) !== null)
-      .map(j => j.id)
-      .sort()
-      .join(",");
-    return `${routeViewResourceId || "none"}|${dateStr}|${jobIds}`;
-  }, [routeViewResourceId, currentDate, orderedJobs]);
-
-  useEffect(() => {
-    fetchAbortRef.current?.abort();
-    const cached = geometryCache.get(cacheKey);
-    if (cached) {
-      setRoadGeometry(cached);
-      return;
-    }
-
-    const positions = orderedJobs
-      .map(jobCoords)
-      .filter((c): c is { lat: number; lng: number } => c !== null);
-    if (positions.length < 2) {
-      setRoadGeometry(null);
-      return;
-    }
-
-    const abortCtrl = new AbortController();
-    fetchAbortRef.current = abortCtrl;
-    setIsLoadingGeometry(true);
-
-    const timer = setTimeout(async () => {
-      try {
-        const response = await fetch("/api/route-geometry", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ waypoints: positions.slice(0, 25) }),
-          signal: abortCtrl.signal,
-        });
-        if (response.ok) {
-          const data = await response.json();
-          if (data.coordinates && data.coordinates.length > 0) {
-            geometryCache.set(cacheKey, data.coordinates);
-            if (geometryCache.size > 50) {
-              const first = geometryCache.keys().next().value;
-              if (first) geometryCache.delete(first);
-            }
-            setRoadGeometry(data.coordinates);
-          } else {
-            setRoadGeometry(null);
-          }
-        } else {
-          setRoadGeometry(null);
-        }
-      } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setRoadGeometry(null);
-      } finally {
-        setIsLoadingGeometry(false);
-      }
-    }, 300);
-
-    return () => {
-      clearTimeout(timer);
-      abortCtrl.abort();
-    };
-  }, [cacheKey, orderedJobs]);
-
-  const routePolyline = roadGeometry || fallbackPolyline;
-  // Fallback = vi försökte hämta vägbaserad geometri men fick ingen tillbaka
-  // (t.ex. saknad Geoapify-nyckel / routing-tjänst nere) → raka fågelvägslinjer.
-  const usingFallbackRoute = !isLoadingGeometry && roadGeometry === null && fallbackPolyline.length > 1;
+  // Delad ruttgeometri-hook: fetch + cache + fallback-beslut (raka linjer när
+  // Geoapify saknas/är nere) centraliseras så alla kartor beter sig lika.
+  const {
+    coordinates: routePolyline,
+    isFallback: usingFallbackRoute,
+    isLoading: isLoadingGeometry,
+    hasRoadGeometry,
+  } = useRouteGeometry(geometryWaypoints);
 
   const routeStats = useMemo(() => {
     let totalMinutes = 0;
@@ -343,7 +273,7 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
                 color: "#3B82F6",
                 weight: 3,
                 opacity: 0.7,
-                dashArray: roadGeometry ? undefined : "8, 4",
+                dashArray: hasRoadGeometry ? undefined : "8, 4",
               }}
             />
           )}

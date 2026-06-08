@@ -4,6 +4,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useQuery } from "@tanstack/react-query";
 import { useMapConfig } from "@/hooks/use-map-config";
+import { useRouteGeometries, type RouteGeometryInput } from "@/hooks/useRouteGeometry";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { apiRequest } from "@/lib/queryClient";
@@ -115,12 +116,6 @@ function MapFitBounds({ positions }: { positions: [number, number][] }) {
   return null;
 }
 
-interface RouteGeometry {
-  resourceId: string;
-  positions: [number, number][];
-  isFallback?: boolean;
-}
-
 export default function MonitorPopoutPage() {
   const mapConfig = useMapConfig();
   const [wsConnected, setWsConnected] = useState(false);
@@ -130,8 +125,6 @@ export default function MonitorPopoutPage() {
   const [showRoutes, setShowRoutes] = useState(true);
   const [showJobs, setShowJobs] = useState(true);
   const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(new Set(["on_job", "traveling", "idle", "break"]));
-  const [routeGeometries, setRouteGeometries] = useState<RouteGeometry[]>([]);
-  const [usingFallbackRoute, setUsingFallbackRoute] = useState(false);
   const [urgentDialogOpen, setUrgentDialogOpen] = useState(false);
   const [showClusterZones, setShowClusterZones] = useState(() => {
     try { return localStorage.getItem("traivo-show-cluster-zones") !== "false"; } catch { return true; }
@@ -265,54 +258,23 @@ export default function MonitorPopoutPage() {
     return map;
   }, [todaysOrders]);
 
-  const fetchRouteGeometries = useCallback(async () => {
-    const geometries: RouteGeometry[] = [];
-    const resourceIds = Object.keys(ordersByResource);
-    let anyFallback = false;
-
-    for (const resourceId of resourceIds) {
-      const orders = ordersByResource[resourceId];
-      const positions = orders
-        .filter(o => o.taskLatitude && o.taskLongitude)
-        .map(o => ({ lat: o.taskLatitude!, lng: o.taskLongitude! }));
-      if (positions.length < 2) continue;
-
-      // Raka fågelvägslinjer (råa stoppkoordinater) — används om vägbaserad
-      // geometri inte kan hämtas.
-      const straightLine = positions.map(p => [p.lat, p.lng] as [number, number]);
-      let roadGeometry: [number, number][] | null = null;
-
-      try {
-        const response = await fetch("/api/route-geometry", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ waypoints: positions }),
-        });
-        if (response.ok) {
-          const data = await response.json();
-          if (data.coordinates && data.coordinates.length > 0) {
-            roadGeometry = data.coordinates;
-          }
-        }
-      } catch {}
-
-      if (roadGeometry) {
-        geometries.push({ resourceId, positions: roadGeometry, isFallback: false });
-      } else {
-        // Geoapify nere / saknad nyckel → rita raka linjer i stället för tomt.
-        geometries.push({ resourceId, positions: straightLine, isFallback: true });
-        anyFallback = true;
-      }
-    }
-    setRouteGeometries(geometries);
-    setUsingFallbackRoute(anyFallback);
-  }, [ordersByResource]);
-
-  useEffect(() => {
-    if (Object.keys(ordersByResource).length > 0 && showRoutes) {
-      fetchRouteGeometries();
-    }
+  // En rutt per resurs. Den delade hooken hämtar vägbaserad geometri + faller
+  // tillbaka på raka linjer (saknad Geoapify-nyckel / routing-tjänst nere) med
+  // samma kontrakt som alla andra kartor. Inaktiveras när rutter är dolda.
+  const geometryRoutes = useMemo<RouteGeometryInput[]>(() => {
+    if (!showRoutes) return [];
+    return Object.entries(ordersByResource)
+      .map(([resourceId, orders]) => ({
+        id: resourceId,
+        waypoints: orders
+          .filter(o => o.taskLatitude && o.taskLongitude)
+          .map(o => ({ lat: o.taskLatitude!, lng: o.taskLongitude! })),
+      }))
+      .filter(r => r.waypoints.length >= 2);
   }, [ordersByResource, showRoutes]);
+
+  const { byId: routeGeometries, isFallback: usingFallbackRoute } =
+    useRouteGeometries(geometryRoutes);
 
   const activeResources = useMemo(() => Array.from(livePositions.values()), [livePositions]);
 
@@ -404,15 +366,15 @@ export default function MonitorPopoutPage() {
           );
         })}
 
-        {showRoutes && routeGeometries.map((rg, idx) => (
+        {showRoutes && Array.from(routeGeometries.entries()).map(([resourceId, rg], idx) => (
           <Polyline
-            key={`route-${rg.resourceId}`}
-            positions={rg.positions}
+            key={`route-${resourceId}`}
+            positions={rg.coordinates}
             pathOptions={{
-              color: resourceColorMap.get(rg.resourceId) || ROUTE_COLORS[idx % ROUTE_COLORS.length],
-              weight: rg.isFallback ? 3 : 4,
+              color: resourceColorMap.get(resourceId) || ROUTE_COLORS[idx % ROUTE_COLORS.length],
+              weight: rg.hasRoadGeometry ? 4 : 3,
               opacity: 0.7,
-              dashArray: rg.isFallback ? "8, 4" : undefined,
+              dashArray: rg.hasRoadGeometry ? undefined : "8, 4",
             }}
           />
         ))}

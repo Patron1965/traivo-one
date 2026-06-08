@@ -1,9 +1,8 @@
 import { useMemo } from "react";
 import { Marker, Popup, Polyline } from "react-leaflet";
 import { MapPin, Spline } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
 import { BaseMap, MapFitBounds, numberedDivIcon } from "@/components/ui/map";
+import { useRouteGeometry } from "@/hooks/useRouteGeometry";
 
 /** En numrerad jobb-pin på dagsrutten. */
 export interface RouteMapJob {
@@ -64,37 +63,19 @@ export function RouteDayMap({
     () => jobs.map((t) => [t.lat, t.lng] as [number, number]),
     [jobs],
   );
-  const geomKey = useMemo(
-    () => jobPoints.map((p) => `${p[0].toFixed(5)},${p[1].toFixed(5)}`).join("|"),
-    [jobPoints],
+  const waypoints = useMemo(
+    () => jobs.map((t) => ({ lat: t.lat, lng: t.lng })),
+    [jobs],
   );
 
-  // Vägbaserad ruttgeometri från servern. Faller tyst tillbaka på raka linjer
-  // (t.ex. om Geoapify-nyckel saknas → 500).
-  const routingAttempted = jobPoints.length >= 2;
-  const { data: geometry = [], isLoading: geometryLoading } = useQuery<[number, number][]>({
-    queryKey: ["/api/route-geometry", geomKey],
-    enabled: routingAttempted,
-    retry: false,
-    staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
-      try {
-        const res = await apiRequest("POST", "/api/route-geometry", {
-          waypoints: jobPoints.slice(0, 25).map(([lat, lng]) => ({ lat, lng })),
-        });
-        const data = await res.json();
-        return (data?.coordinates as [number, number][]) ?? [];
-      } catch {
-        return [];
-      }
-    },
-  });
-
-  const hasGeometry = geometry.length > 1;
-  const routeLine: [number, number][] = hasGeometry ? geometry : jobPoints;
-  // Fallback = vi försökte hämta vägbaserad geometri men fick ingen tillbaka
-  // (t.ex. saknad Geoapify-nyckel / routing-tjänst nere) → raka fågelvägslinjer.
-  const usingFallbackRoute = routingAttempted && !hasGeometry && !geometryLoading;
+  // Vägbaserad ruttgeometri via den delade hooken. Faller tyst tillbaka på raka
+  // linjer (t.ex. om Geoapify-nyckel saknas → 500) med samma kontrakt som alla
+  // andra kartvyer.
+  const {
+    coordinates: routeLine,
+    isFallback: usingFallbackRoute,
+    hasRoadGeometry: hasGeometry,
+  } = useRouteGeometry(waypoints);
 
   const allPositions = useMemo<[number, number][]>(
     () => [...jobPoints, ...commutes.flatMap((c) => c.positions)],
