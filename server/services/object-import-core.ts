@@ -468,6 +468,7 @@ export function buildHierarchyPlan(
   rows: ResolvedRow[],
   existingByObjectNumber: Set<string> = new Set(),
   existingByExternalId: Set<string> = new Set(),
+  existingByInterim: Set<string> = new Set(),
 ): HierarchyPlan {
   // 1. Gruppera per interim_id.
   const groups = new Map<string, ResolvedRow[]>();
@@ -493,9 +494,11 @@ export function buildHierarchyPlan(
     }
   }
 
+  // Matchningsprioritet (§4): Systemnummer > externt_id > Interimsnummer.
   const actionFor = (r: ResolvedRow): PlanAction => {
     if (r.fields.system_id && existingByObjectNumber.has(r.fields.system_id)) return "update";
     if (r.fields.external_id && existingByExternalId.has(r.fields.external_id)) return "update";
+    if (r.fields.interim_id && existingByInterim.has(r.fields.interim_id)) return "update";
     return "create";
   };
 

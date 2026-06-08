@@ -280,6 +280,17 @@ describe("buildHierarchyPlan", () => {
     expect(byRow[3]).toBe("create");
   });
 
+  it("marks update when interim id matches an existing interim object", () => {
+    const rows = [
+      resolved(1, { interim_id: "I-1", name: "Befintlig interim" }),
+      resolved(2, { interim_id: "I-2", name: "Ny interim" }),
+    ];
+    const plan = buildHierarchyPlan(rows, new Set(), new Set(), new Set(["I-1"]));
+    const byRow = Object.fromEntries(plan.ordered.map((p) => [p.rowNumber, p.action]));
+    expect(byRow[1]).toBe("update");
+    expect(byRow[2]).toBe("create");
+  });
+
   it("reports cycle row numbers", () => {
     const rows = [
       resolved(1, { interim_id: "A", interim_parent_id: "B", name: "A" }),

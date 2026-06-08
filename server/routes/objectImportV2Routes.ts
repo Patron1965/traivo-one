@@ -18,9 +18,9 @@
 
 import type { Express, Request } from "express";
 import { z } from "zod";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { asyncHandler } from "../asyncHandler";
-import { NotFoundError, ValidationError } from "../errors";
+import { ConflictError, NotFoundError, ValidationError } from "../errors";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { db } from "../db";
 import {
@@ -49,6 +49,7 @@ import {
   FIELD_CATALOG,
   FieldDefinition,
 } from "@shared/object-import-spec";
+import { OBJEKTMALL_INTERIM_PREFIX } from "@shared/objektmall-template";
 
 function getUserId(req: Request): string | null {
   return (req as any).user?.claims?.sub ?? (req as any).user?.id ?? null;
@@ -279,6 +280,35 @@ export function registerObjectImportV2Routes(app: Express): void {
         else if (row.status === "valid") row.status = "warning";
       }
 
+      // §5.2 DB-referenskontroll: Systemföräldranummer måste peka på ett
+      // befintligt objekt i Traivo (tenant-scopat). Ett system_parent_id som
+      // matchar en annan rads system_id i samma fil accepteras också (objektet
+      // finns redan i DB eftersom system_id endast sätts för befintliga objekt).
+      const sysParentIds = Array.from(
+        new Set(resolved.map((r) => r.fields.system_parent_id).filter(Boolean) as string[]),
+      );
+      if (sysParentIds.length) {
+        const found = await db
+          .select({ objectNumber: objects.objectNumber })
+          .from(objects)
+          .where(and(eq(objects.tenantId, tenantId), inArray(objects.objectNumber, sysParentIds)));
+        const existingParents = new Set<string>();
+        for (const f of found) if (f.objectNumber) existingParents.add(f.objectNumber);
+        const inFileSystemIds = new Set(resolved.map((r) => r.fields.system_id).filter(Boolean) as string[]);
+        for (const r of resolved) {
+          const sp = r.fields.system_parent_id;
+          if (!sp || existingParents.has(sp) || inFileSystemIds.has(sp)) continue;
+          const row = byRow.get(r.rowNumber);
+          if (!row) continue;
+          row.issues.push({
+            field: "system_parent_id",
+            message: `Systemföräldranummer "${sp}" finns inte i Traivo`,
+            severity: "error",
+          });
+          row.status = "invalid";
+        }
+      }
+
       const rows = Array.from(byRow.values());
       const summary = {
         total_rows: rows.length,
@@ -365,12 +395,27 @@ export function registerObjectImportV2Routes(app: Express): void {
 
       const clusterId = await ensureClusterForCustomer(tenantId, customerId);
 
-      // Markera importing.
-      await db
+      // Atomisk gate mot dubbel-exekvering: gå till "importing" endast om
+      // sessionen inte redan importerar (compare-and-set). Samtidiga/upprepade
+      // execute-anrop får 409 istället för att starta en andra parallell runImport.
+      const claimed = await db
         .update(objectImportSessions)
-        .set({ status: "importing", progress: 0, error: null, updatedAt: new Date() })
-        .where(and(eq(objectImportSessions.id, req.params.id), eq(objectImportSessions.tenantId, tenantId)));
+        .set({ status: "importing", progress: 0, error: null, result: null, updatedAt: new Date() })
+        .where(
+          and(
+            eq(objectImportSessions.id, req.params.id),
+            eq(objectImportSessions.tenantId, tenantId),
+            ne(objectImportSessions.status, "importing"),
+          ),
+        )
+        .returning({ id: objectImportSessions.id });
+      if (claimed.length === 0) {
+        throw new ConflictError("Import pågår redan för den här sessionen.");
+      }
 
+      // §6.2 steg 5 körs som bakgrundsjobb: svara 202 direkt och låt klienten
+      // polla GET /:id/status tills completed/failed och hämta sedan /:id/result.
+      const runImport = async () => {
       try {
         // Hoppa över ogiltiga + uttryckligt skippade rader.
         const skip = new Set(parsed.data.skipRowNumbers ?? []);
@@ -415,10 +460,29 @@ export function registerObjectImportV2Routes(app: Express): void {
           }
         }
 
+        // Befintliga objekt via interimsnummer (3:e prioritet) — interim-skapade
+        // objekt lagras med objectNumber MALL-<interim> (v1-konvention), så
+        // re-import av samma interim uppdaterar istället för att duplicera.
+        const interimIds = resolved.map((r) => r.fields.interim_id).filter(Boolean) as string[];
+        const existingByInterim = new Map<string, string>(); // interim_id → objectId
+        if (interimIds.length) {
+          const mallNumbers = Array.from(new Set(interimIds)).map((i) => OBJEKTMALL_INTERIM_PREFIX + i);
+          const rows = await db
+            .select({ id: objects.id, objectNumber: objects.objectNumber })
+            .from(objects)
+            .where(and(eq(objects.tenantId, tenantId), inArray(objects.objectNumber, mallNumbers)));
+          for (const r of rows) {
+            if (r.objectNumber?.startsWith(OBJEKTMALL_INTERIM_PREFIX)) {
+              existingByInterim.set(r.objectNumber.slice(OBJEKTMALL_INTERIM_PREFIX.length), r.id);
+            }
+          }
+        }
+
         const plan = buildHierarchyPlan(
           resolved,
           new Set(existingByObjectNumber.keys()),
           new Set(existingByExternalId.keys()),
+          new Set(existingByInterim.keys()),
         );
 
         // Cykel-rader hoppas över (ska redan vara fångade i validering).
@@ -523,19 +587,25 @@ export function registerObjectImportV2Routes(app: Express): void {
             const parentId = resolveParentId(item);
             const known = buildKnownFields(row);
 
-            // Bestäm mål-objekt-id för uppdatering.
+            // Bestäm mål-objekt-id för uppdatering (Systemnummer > externt_id >
+            // Interimsnummer).
             let targetId: string | null = null;
             if (item.action === "update") {
               if (row.fields.system_id) targetId = existingByObjectNumber.get(row.fields.system_id) ?? null;
               if (!targetId && row.fields.external_id) targetId = existingByExternalId.get(row.fields.external_id) ?? null;
+              if (!targetId && row.fields.interim_id) targetId = existingByInterim.get(row.fields.interim_id) ?? null;
             }
 
             if (targetId) {
-              await storage.updateObject(targetId, {
-                name: row.fields.name || undefined,
-                parentId: parentId ?? undefined,
-                ...(known as any),
-              });
+              // Tenant-scopad UPDATE (defense-in-depth: tenant_id i WHERE även
+              // om targetId redan härleddes från tenant-scopade uppslag).
+              const updateData: Record<string, unknown> = { ...(known as any) };
+              if (row.fields.name) updateData.name = row.fields.name;
+              if (parentId) updateData.parentId = parentId;
+              await db
+                .update(objects)
+                .set(updateData as any)
+                .where(and(eq(objects.id, targetId), eq(objects.tenantId, tenantId)));
               await syncPrimaryParent(targetId, parentId);
               await writeRowMetadata(targetId, row);
               if (item.interimId && item.kind === "primary") interimToObjectId.set(item.interimId, targetId);
@@ -544,12 +614,19 @@ export function registerObjectImportV2Routes(app: Express): void {
               if (!parentId) rootObjectIds.add(targetId);
               updated++;
             } else {
+              // Interim-primärer utan systemnummer får objectNumber MALL-<interim>
+              // så re-import matchar dem (uppdaterar istället för dubblerar).
+              const interimObjectNumber =
+                item.kind === "primary" && item.interimId && !row.fields.system_id
+                  ? OBJEKTMALL_INTERIM_PREFIX + item.interimId
+                  : undefined;
               const createdObj = await storage.createObject({
                 tenantId,
                 customerId: customerId!,
                 clusterId,
                 parentId: parentId ?? null,
                 name: row.fields.name || "Namnlöst objekt",
+                ...(interimObjectNumber ? { objectNumber: interimObjectNumber } : {}),
                 ...(known as any),
               } as any);
               await syncPrimaryParent(createdObj.id, parentId);
@@ -596,15 +673,16 @@ export function registerObjectImportV2Routes(app: Express): void {
           .update(objectImportSessions)
           .set({ status: "completed", progress: 100, result: result as any, updatedAt: new Date() })
           .where(and(eq(objectImportSessions.id, req.params.id), eq(objectImportSessions.tenantId, tenantId)));
-
-        res.json(result);
       } catch (err: any) {
         await db
           .update(objectImportSessions)
           .set({ status: "failed", error: String(err?.message ?? err), updatedAt: new Date() })
           .where(and(eq(objectImportSessions.id, req.params.id), eq(objectImportSessions.tenantId, tenantId)));
-        throw err;
       }
+      };
+
+      void runImport();
+      res.status(202).json({ session_id: session.id, status: "importing" });
     }),
   );
 }

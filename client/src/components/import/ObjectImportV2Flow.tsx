@@ -1,7 +1,7 @@
 // Import 2.0 — session-baserat 5-stegsflöde för objektimport.
 // Steg: Ladda upp → Förhandsgranska → Matcha → Validera → Importera & bygg hierarki.
 // Additivt; pratar med /api/import/objects-v2/*. Klientsidig xlsx/csv-parsning.
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -159,6 +160,8 @@ export function ObjectImportV2Flow() {
   const [validation, setValidation] = useState<ValidationResponse | null>(null);
   const [result, setResult] = useState<ExecuteResponse | null>(null);
   const [customerId, setCustomerId] = useState<string>("");
+  const [skippedRows, setSkippedRows] = useState<Set<number>>(new Set());
+  const [importing, setImporting] = useState(false);
 
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const { data: fieldsData } = useQuery<{ fields: FieldDef[] }>({
@@ -212,22 +215,62 @@ export function ObjectImportV2Flow() {
     onError: (err: Error) => toast({ title: "Validering misslyckades", description: err.message, variant: "destructive" }),
   });
 
+  // Steg 5 körs som bakgrundsjobb på servern: execute svarar 202, sedan pollar
+  // vi status tills completed/failed och hämtar slutresultatet.
   const executeMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", `/api/import/objects-v2/${sessionId}/execute`, {
         customerId: customerId || undefined,
+        skipRowNumbers: Array.from(skippedRows),
       });
-      return (await res.json()) as ExecuteResponse;
+      return (await res.json()) as { session_id: string; status: string };
     },
-    onSuccess: (data) => {
-      setResult(data);
-      toast({
-        title: "Import klar",
-        description: `${data.summary.created} skapade, ${data.summary.updated} uppdaterade.`,
-      });
-    },
+    onSuccess: () => setImporting(true),
     onError: (err: Error) => toast({ title: "Import misslyckades", description: err.message, variant: "destructive" }),
   });
+
+  const statusQuery = useQuery<{ status: string; progress: number; error: string | null }>({
+    queryKey: ["/api/import/objects-v2", sessionId, "status"],
+    enabled: importing && !!sessionId,
+    refetchInterval: 1500,
+  });
+
+  useEffect(() => {
+    if (!importing) return;
+    const st = statusQuery.data?.status;
+    if (st === "completed") {
+      setImporting(false);
+      apiRequest("GET", `/api/import/objects-v2/${sessionId}/result`)
+        .then((r) => r.json())
+        .then((data: ExecuteResponse | null) => {
+          if (!data) return;
+          setResult(data);
+          toast({
+            title: "Import klar",
+            description: `${data.summary.created} skapade, ${data.summary.updated} uppdaterade.`,
+          });
+        })
+        .catch((err: Error) =>
+          toast({ title: "Kunde inte hämta resultat", description: err.message, variant: "destructive" }),
+        );
+    } else if (st === "failed") {
+      setImporting(false);
+      toast({
+        title: "Import misslyckades",
+        description: statusQuery.data?.error ?? "Okänt fel under import.",
+        variant: "destructive",
+      });
+    }
+  }, [importing, statusQuery.data, sessionId, toast]);
+
+  const toggleSkipRow = (rowNumber: number) => {
+    setSkippedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowNumber)) next.delete(rowNumber);
+      else next.add(rowNumber);
+      return next;
+    });
+  };
 
   const setColumnTarget = (colIndex: number, target: string) => {
     setMappings((prev) => {
@@ -257,6 +300,8 @@ export function ObjectImportV2Flow() {
     setValidation(null);
     setResult(null);
     setCustomerId("");
+    setSkippedRows(new Set());
+    setImporting(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -527,6 +572,7 @@ export function ObjectImportV2Flow() {
                           <TableHead>Rad</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Problem</TableHead>
+                          <TableHead className="text-right">Hoppa över</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -546,12 +592,24 @@ export function ObjectImportV2Flow() {
                               <TableCell className="text-sm text-muted-foreground">
                                 {r.issues.map((i) => i.message).join("; ")}
                               </TableCell>
+                              <TableCell className="text-right">
+                                <Checkbox
+                                  checked={r.status === "invalid" || skippedRows.has(r.rowNumber)}
+                                  disabled={r.status === "invalid"}
+                                  onCheckedChange={() => toggleSkipRow(r.rowNumber)}
+                                  data-testid={`checkbox-skip-${r.rowNumber}`}
+                                  aria-label={`Hoppa över rad ${r.rowNumber}`}
+                                />
+                              </TableCell>
                             </TableRow>
                           ))}
                       </TableBody>
                     </Table>
                   </div>
                 )}
+                <p className="text-xs text-muted-foreground">
+                  Ogiltiga rader hoppas alltid över. Bocka i ytterligare rader för att utesluta dem från importen.
+                </p>
               </>
             )}
             <div className="flex justify-between">
@@ -600,17 +658,27 @@ export function ObjectImportV2Flow() {
                     Objekten kopplas till kunden för klustring. Lämna tomt för tenantens första kund.
                   </p>
                 </div>
-                {executeMutation.isPending && <Progress value={66} data-testid="import-progress" />}
+                {(executeMutation.isPending || importing) && (
+                  <Progress
+                    value={importing ? statusQuery.data?.progress ?? 0 : 10}
+                    data-testid="import-progress"
+                  />
+                )}
                 <div className="flex justify-between">
-                  <Button variant="outline" onClick={() => setStep(4)} data-testid="button-back-to-validate">
+                  <Button
+                    variant="outline"
+                    onClick={() => setStep(4)}
+                    disabled={executeMutation.isPending || importing}
+                    data-testid="button-back-to-validate"
+                  >
                     Tillbaka
                   </Button>
                   <Button
                     onClick={() => executeMutation.mutate()}
-                    disabled={executeMutation.isPending}
+                    disabled={executeMutation.isPending || importing}
                     data-testid="button-execute-import"
                   >
-                    {executeMutation.isPending ? (
+                    {executeMutation.isPending || importing ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Importerar…
                       </>
