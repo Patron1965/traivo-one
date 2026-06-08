@@ -5547,6 +5547,36 @@ export type ImportSession = typeof importSessions.$inferSelect;
 export type InsertImportSession = typeof importSessions.$inferInsert;
 
 // ============================================
+// Import 2.0 — objektimport-sessioner (session-baserat 5-stegsflöde)
+// Additivt bord. Disjunkt från `import_sessions` (3-stegs wizard, kräver
+// customerId NOT NULL). Här hålls hela sessionens tillstånd som JSONB:
+// detekterade kolumner, rårader, mappningar, valideringsresultat och slutresultat.
+// ============================================
+export const objectImportSessions = pgTable("object_import_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  fileName: text("file_name"),
+  // draft → mapping → validating → importing → completed | failed
+  status: text("status").default("draft").notNull(),
+  progress: integer("progress").default(0).notNull(),
+  columns: jsonb("columns").default([]).notNull(),
+  rawRows: jsonb("raw_rows").default([]).notNull(),
+  mappings: jsonb("mappings").default({}).notNull(),
+  validation: jsonb("validation"),
+  result: jsonb("result"),
+  error: text("error"),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_object_import_sessions_tenant").on(table.tenantId),
+  index("idx_object_import_sessions_tenant_status").on(table.tenantId, table.status),
+]);
+
+export type ObjectImportSession = typeof objectImportSessions.$inferSelect;
+export type InsertObjectImportSession = typeof objectImportSessions.$inferInsert;
+
+// ============================================
 // Tenant Labels — branschanpassad terminologi
 // ============================================
 export const tenantLabels = pgTable("tenant_labels", {

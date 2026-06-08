@@ -21,7 +21,7 @@ import {
   Loader2, Download, Eye, X, FileUp, Check, Clock, FileSpreadsheet, Database,
   ArrowRight, Info, Settings, ChevronDown, ChevronUp, ListChecks, History, Undo2,
   SkipForward, Ban, BarChart3, ClipboardList, Tag, AlertTriangle, Merge, Copy, Link2,
-  FilePlus, Receipt, Wallet, RefreshCw
+  FilePlus, Receipt, Wallet, RefreshCw, Layers
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageTabs, IMPORT_TABS } from "@/components/layout/PageTabs";
@@ -33,6 +33,7 @@ import CustomerFastighetslistaImport from "@/components/CustomerFastighetslistaI
 import { ImportEntryChooser, type ImportMode } from "@/components/import/ImportEntryChooser";
 import { ChildObjectImportFlow } from "@/components/import/ChildObjectImportFlow";
 import { ImportWizardFlow } from "@/components/import/ImportWizardFlow";
+import { ObjectImportV2Flow } from "@/components/import/ObjectImportV2Flow";
 import { ImportTypeHistory } from "@/components/import/ImportTypeHistory";
 import { BatchDetailsDialog as SharedBatchDetailsDialog } from "@/components/import/BatchDetailsDialog";
 import { ComingSoonPanel } from "@/components/import/ComingSoonPanel";
@@ -2138,13 +2139,13 @@ export default function ImportPage() {
   type ActiveTab =
     | "modus" | "enrich" | "manual" | "fortnox" | "mapped"
     | "customerlist" | "children" | "payers" | "recipients" | "diff"
-    | "wizard"
+    | "wizard" | "objectsv2"
     | "history" | "quality";
   const initialTab: ActiveTab = ((): ActiveTab => {
     const validTabs: ActiveTab[] = [
       "modus", "enrich", "manual", "fortnox", "mapped",
       "customerlist", "children", "payers", "recipients", "diff",
-      "wizard",
+      "wizard", "objectsv2",
       "history", "quality",
     ];
     if (urlTab && validTabs.includes(urlTab as ActiveTab)) return urlTab as ActiveTab;
@@ -2156,7 +2157,7 @@ export default function ImportPage() {
   const visibleTabsForMode = useCallback((mode: ImportMode | null): ActiveTab[] => {
     const migration: ActiveTab[] = ["modus", "enrich", "manual", "fortnox", "mapped"];
     const ongoing: ActiveTab[] = ["customerlist", "children", "payers", "recipients", "diff"];
-    const wizard: ActiveTab[] = ["wizard"];
+    const wizard: ActiveTab[] = ["wizard", "objectsv2"];
     const always: ActiveTab[] = ["history", "quality"];
     if (mode === "migration") return [...migration, ...always];
     if (mode === "ongoing") return [...ongoing, ...always];
@@ -3088,6 +3089,12 @@ export default function ImportPage() {
             <TabsTrigger value="wizard" className="flex items-center gap-2" data-testid="tab-wizard-import">
               <FilePlus className="h-4 w-4" />
               Tre-stegs wizard
+            </TabsTrigger>
+          )}
+          {(importMode === null || importMode === "wizard") && (
+            <TabsTrigger value="objectsv2" className="flex items-center gap-2" data-testid="tab-objectsv2-import">
+              <Layers className="h-4 w-4" />
+              Import 2.0
             </TabsTrigger>
           )}
           <TabsTrigger value="history" className="flex items-center gap-2" data-testid="tab-import-history">
@@ -5028,6 +5035,10 @@ export default function ImportPage() {
 
         <TabsContent value="wizard" className="space-y-6">
           <ImportWizardFlow />
+        </TabsContent>
+
+        <TabsContent value="objectsv2" className="space-y-6">
+          <ObjectImportV2Flow />
         </TabsContent>
 
         <TabsContent value="children" className="space-y-6">

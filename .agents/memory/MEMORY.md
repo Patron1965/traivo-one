@@ -28,4 +28,5 @@
 - [Drizzle correlated-subquery col-qualifiering](drizzle-correlated-subquery-column-qualification.md) — `sql\`${table.col}\`` renderas OKVALIFICERAT (`"col"`) → i korrelerad subquery binds det till inre tabellens kolumn; använd literal `"objects"."id"`.
 - [Wizard create-then-append](wizard-create-then-append.md) — flöden som skapar parent + postar barn-rader per styck får aldrig låta ett radfel köra om hela create → dubblett-parent; per-rad try/catch + lineFailures-varning.
 - [Article quantity expand wiring](article-quantity-expand.md) — quantityMode via computeArticleQuantity; matches_field använder katalog-NAMN + getArticleMetadataForObject (objekt saknar .metadata i concept/fortnox-flöden); utgått→ersättning swap med cykelskydd + tenant-check.
+- [Import 2.0 interim-mapping](object-import-interim-mapping.md) — execute: skriv `interimToObjectId` ENBART för primary-rader (utrustning delar interim_id) — annars hierarki-korruption.
 - [Tenant module enablement](tenant-module-enablement.md) — aktivera modul för system-tier-tenant via PACKAGE_DEFINITIONS, ej DB-raden (startup-backfill skriver över); literal \\u00xx bara bugg i JSX-text, ej i JS-strängar.

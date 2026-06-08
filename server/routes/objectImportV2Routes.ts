@@ -1,0 +1,610 @@
+// Import 2.0 — session-baserat 5-stegsflöde för objektimport.
+//
+// Endpoints (namespace /api/import/objects-v2/* för att inte skugga befintliga
+// /api/import/* eller wizard-flödet — additivt, bryter inte modus/wizard):
+//   POST   /api/import/objects-v2/upload            skapa session (draft) + auto-matcha kolumner
+//   GET    /api/import/objects-v2/:id               hämta session + status
+//   GET    /api/import/objects-v2/:id/preview       kolumner + auto-match + första 10 rader
+//   PUT    /api/import/objects-v2/:id/mappings      spara kolumn→fält-mappning
+//   POST   /api/import/objects-v2/:id/validate      kör validering, returnera sammanfattning
+//   GET    /api/import/objects-v2/:id/validation    hämta valideringsresultat
+//   POST   /api/import/objects-v2/:id/execute       bygg hierarki (requireAdmin)
+//   GET    /api/import/objects-v2/:id/status        poll status/progress
+//   GET    /api/import/objects-v2/:id/result        hämta slutresultat
+//   GET    /api/import/objects-v2/fields            fält-katalog (+ tenant-metadata) för "Matcha data"
+//
+// Multi-tenant: alla SELECT/INSERT/UPDATE har tenant_id i WHERE.
+// createObject anropas per rad UTAN yttre transaktion (advisory-lock-deadlock-risk).
+
+import type { Express, Request } from "express";
+import { z } from "zod";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { asyncHandler } from "../asyncHandler";
+import { NotFoundError, ValidationError } from "../errors";
+import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
+import { db } from "../db";
+import {
+  metadataKatalog,
+  metadataVarden,
+  objectImportSessions,
+  objectParents,
+  objects,
+} from "@shared/schema";
+import { storage } from "../storage";
+import { ensureClusterForCustomer } from "../auto-cluster";
+import { createMetadata } from "../metadata-queries";
+import {
+  buildColumns,
+  buildCompositeObject,
+  buildHierarchyPlan,
+  categoryForTarget,
+  detectHeaderRows,
+  resolveRow,
+  validateCrossRow,
+  validateRow,
+  type ResolvedRow,
+} from "../services/object-import-core";
+import {
+  ColumnMappings,
+  FIELD_CATALOG,
+  FieldDefinition,
+} from "@shared/object-import-spec";
+
+function getUserId(req: Request): string | null {
+  return (req as any).user?.claims?.sub ?? (req as any).user?.id ?? null;
+}
+
+type DetectedColumn = ReturnType<typeof buildColumns>[number];
+type RawRow = Record<string, string>;
+
+// Bygg en auto-mappning från detekterade kolumner.
+function autoMappings(columns: DetectedColumn[]): ColumnMappings {
+  const mappings: ColumnMappings = {};
+  for (const col of columns) {
+    if (col.autoMatch && col.autoMatch !== "__empty") {
+      mappings[String(col.index)] = {
+        target: col.autoMatch,
+        type: categoryForTarget(col.autoMatch),
+        required: col.autoMatch === "name",
+      };
+    }
+  }
+  return mappings;
+}
+
+async function loadSession(id: string, tenantId: string) {
+  const [session] = await db
+    .select()
+    .from(objectImportSessions)
+    .where(and(eq(objectImportSessions.id, id), eq(objectImportSessions.tenantId, tenantId)));
+  if (!session) throw new NotFoundError("Importsessionen hittades inte.");
+  return session;
+}
+
+const uploadSchema = z.object({
+  fileName: z.string().trim().max(255).optional(),
+  // Hela kalkylbladet som matris (inkl. header-rader). Klienten parsar xlsx/csv.
+  matrix: z.array(z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))).min(1).max(50000),
+});
+
+const mappingsSchema = z.object({
+  mappings: z.record(
+    z.string(),
+    z.object({
+      target: z.string().trim().min(1).max(120),
+      type: z.enum(["standard", "address", "contact", "metadata"]),
+      required: z.boolean().optional(),
+    }),
+  ),
+});
+
+const executeSchema = z.object({
+  customerId: z.string().trim().max(64).optional(),
+  skipRowNumbers: z.array(z.number().int()).max(50000).optional(),
+});
+
+function toCell(v: string | number | boolean | null): string {
+  if (v == null) return "";
+  return String(v).trim();
+}
+
+export function registerObjectImportV2Routes(app: Express): void {
+  // ── /fields — fält-katalog för "Matcha data"-dialogen (inkl. tenant-metadata)
+  app.get(
+    "/api/import/objects-v2/fields",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const q = String(req.query.q ?? "").trim().toLowerCase();
+
+      // Tenant-definierade metadatafält → metadata.<namn>.
+      const katalog = await db
+        .select({ namn: metadataKatalog.namn, beskrivning: metadataKatalog.beskrivning })
+        .from(metadataKatalog)
+        .where(eq(metadataKatalog.tenantId, tenantId));
+      const metadataFields: FieldDefinition[] = katalog.map((k) => ({
+        key: `metadata.${k.namn}`,
+        label: `metadata.${k.namn}`,
+        description: k.beskrivning ?? "Kunddefinierat metadatafält",
+        category: "metadata",
+        type: "text",
+        required: false,
+      }));
+
+      let all = [...FIELD_CATALOG, ...metadataFields];
+      if (q) {
+        all = all.filter(
+          (f) =>
+            f.key.toLowerCase().includes(q) ||
+            f.label.toLowerCase().includes(q) ||
+            (f.description ?? "").toLowerCase().includes(q),
+        );
+      }
+      res.json({ fields: all });
+    }),
+  );
+
+  // ── POST /upload — skapa session + auto-matcha
+  app.post(
+    "/api/import/objects-v2/upload",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const userId = getUserId(req);
+      const parsed = uploadSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError("Ogiltig uppladdning.");
+
+      const matrix: string[][] = parsed.data.matrix.map((row) => row.map(toCell));
+      const detection = detectHeaderRows(matrix);
+      const systemHeaders = matrix[detection.systemHeaderRow] ?? [];
+      const userHeaders = detection.userHeaderRow != null ? matrix[detection.userHeaderRow] ?? [] : [];
+      const columns = buildColumns(systemHeaders, userHeaders);
+
+      const dataRows = matrix.slice(detection.dataStartRow);
+      const rawRows: RawRow[] = dataRows
+        .map((row) => {
+          const obj: RawRow = {};
+          for (const col of columns) obj[String(col.index)] = row[col.index] ?? "";
+          return obj;
+        })
+        // Hoppa över helt tomma rader.
+        .filter((r) => Object.values(r).some((v) => v.trim() !== ""));
+
+      const mappings = autoMappings(columns);
+
+      const [session] = await db
+        .insert(objectImportSessions)
+        .values({
+          tenantId,
+          fileName: parsed.data.fileName ?? null,
+          status: "mapping",
+          columns: columns as any,
+          rawRows: rawRows as any,
+          mappings: mappings as any,
+          createdBy: userId,
+        })
+        .returning();
+
+      res.json({
+        session_id: session.id,
+        status: session.status,
+        file_name: session.fileName,
+        columns,
+        total_rows: rawRows.length,
+        preview_rows: rawRows.slice(0, 10),
+        mappings,
+      });
+    }),
+  );
+
+  // ── GET /:id — session + status
+  app.get(
+    "/api/import/objects-v2/:id",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const session = await loadSession(req.params.id, tenantId);
+      const rawRows = (session.rawRows as RawRow[]) ?? [];
+      res.json({
+        session_id: session.id,
+        status: session.status,
+        progress: session.progress,
+        file_name: session.fileName,
+        columns: session.columns,
+        mappings: session.mappings,
+        total_rows: rawRows.length,
+        preview_rows: rawRows.slice(0, 10),
+        validation: session.validation ?? null,
+        result: session.result ?? null,
+      });
+    }),
+  );
+
+  // ── GET /:id/preview — kolumner + auto-match + datapreview
+  app.get(
+    "/api/import/objects-v2/:id/preview",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const session = await loadSession(req.params.id, tenantId);
+      const rawRows = (session.rawRows as RawRow[]) ?? [];
+      res.json({
+        columns: session.columns,
+        mappings: session.mappings,
+        total_rows: rawRows.length,
+        preview_rows: rawRows.slice(0, 10),
+      });
+    }),
+  );
+
+  // ── PUT /:id/mappings — spara mappningar
+  app.put(
+    "/api/import/objects-v2/:id/mappings",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      await loadSession(req.params.id, tenantId);
+      const parsed = mappingsSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError("Ogiltiga mappningar.");
+
+      const [updated] = await db
+        .update(objectImportSessions)
+        .set({ mappings: parsed.data.mappings as any, status: "mapping", updatedAt: new Date() })
+        .where(and(eq(objectImportSessions.id, req.params.id), eq(objectImportSessions.tenantId, tenantId)))
+        .returning();
+      res.json({ session_id: updated.id, mappings: updated.mappings, status: updated.status });
+    }),
+  );
+
+  // ── POST /:id/validate — kör validering
+  app.post(
+    "/api/import/objects-v2/:id/validate",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const session = await loadSession(req.params.id, tenantId);
+      const mappings = (session.mappings as ColumnMappings) ?? {};
+      const rawRows = (session.rawRows as RawRow[]) ?? [];
+      if (Object.keys(mappings).length === 0) {
+        throw new ValidationError("Inga kolumnmappningar sparade — matcha kolumner först.");
+      }
+
+      // Per-rad-validering (typ + obligatoriskt).
+      const perRow = rawRows.map((raw, i) => validateRow(i + 1, raw, mappings));
+      // Korsrad-validering (förälderkonsistens, cirkulär, dubbletter).
+      const resolved: ResolvedRow[] = rawRows.map((raw, i) => resolveRow(i + 1, raw, mappings));
+      const cross = validateCrossRow(resolved);
+
+      // Slå ihop korsrad-issues in i per-rad.
+      const byRow = new Map(perRow.map((r) => [r.rowNumber, r]));
+      for (const c of cross) {
+        const row = byRow.get(c.rowNumber);
+        if (!row) continue;
+        row.issues.push({ field: c.field, message: c.message, severity: c.severity });
+        if (c.severity === "error") row.status = "invalid";
+        else if (row.status === "valid") row.status = "warning";
+      }
+
+      const rows = Array.from(byRow.values());
+      const summary = {
+        total_rows: rows.length,
+        valid: rows.filter((r) => r.status === "valid").length,
+        warning: rows.filter((r) => r.status === "warning").length,
+        invalid: rows.filter((r) => r.status === "invalid").length,
+      };
+      const validation = { summary, rows };
+
+      await db
+        .update(objectImportSessions)
+        .set({ validation: validation as any, status: "validating", updatedAt: new Date() })
+        .where(and(eq(objectImportSessions.id, req.params.id), eq(objectImportSessions.tenantId, tenantId)));
+
+      res.json(validation);
+    }),
+  );
+
+  // ── GET /:id/validation
+  app.get(
+    "/api/import/objects-v2/:id/validation",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const session = await loadSession(req.params.id, tenantId);
+      res.json(session.validation ?? { summary: null, rows: [] });
+    }),
+  );
+
+  // ── GET /:id/status — poll
+  app.get(
+    "/api/import/objects-v2/:id/status",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const session = await loadSession(req.params.id, tenantId);
+      res.json({ status: session.status, progress: session.progress, error: session.error ?? null });
+    }),
+  );
+
+  // ── GET /:id/result
+  app.get(
+    "/api/import/objects-v2/:id/result",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const session = await loadSession(req.params.id, tenantId);
+      res.json(session.result ?? null);
+    }),
+  );
+
+  // ── POST /:id/execute — bygg hierarki (requireAdmin: skapar/uppdaterar objekt)
+  app.post(
+    "/api/import/objects-v2/:id/execute",
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      const userId = getUserId(req);
+      const session = await loadSession(req.params.id, tenantId);
+      const parsed = executeSchema.safeParse(req.body ?? {});
+      if (!parsed.success) throw new ValidationError("Ogiltiga importparametrar.");
+
+      const mappings = (session.mappings as ColumnMappings) ?? {};
+      const rawRows = (session.rawRows as RawRow[]) ?? [];
+      if (Object.keys(mappings).length === 0) {
+        throw new ValidationError("Inga kolumnmappningar — matcha kolumner och validera först.");
+      }
+
+      // Kund att hänga objekten på (objects.customer_id NOT NULL). Använd vald
+      // kund (tenant-verifierad) annars första aktiva kund (ADR v3: neutral —
+      // verklig koppling sker via object_payers).
+      let customerId = parsed.data.customerId ?? null;
+      if (customerId) {
+        const ownCheck = await db.execute(
+          sql`SELECT id FROM customers WHERE id = ${customerId} AND tenant_id = ${tenantId} AND deleted_at IS NULL LIMIT 1`,
+        );
+        const ok = (ownCheck as any).rows?.[0] ?? (Array.isArray(ownCheck) ? (ownCheck as any)[0] : null);
+        if (!ok) throw new ValidationError("Vald kund tillhör inte denna tenant.");
+      } else {
+        const rows = await db.execute(
+          sql`SELECT id FROM customers WHERE tenant_id = ${tenantId} AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1`,
+        );
+        const first = (rows as any).rows?.[0] ?? (Array.isArray(rows) ? (rows as any)[0] : null);
+        if (!first?.id) throw new ValidationError("Tenant saknar kunder — skapa minst en kund innan import.");
+        customerId = first.id as string;
+      }
+
+      const clusterId = await ensureClusterForCustomer(tenantId, customerId);
+
+      // Markera importing.
+      await db
+        .update(objectImportSessions)
+        .set({ status: "importing", progress: 0, error: null, updatedAt: new Date() })
+        .where(and(eq(objectImportSessions.id, req.params.id), eq(objectImportSessions.tenantId, tenantId)));
+
+      try {
+        // Hoppa över ogiltiga + uttryckligt skippade rader.
+        const skip = new Set(parsed.data.skipRowNumbers ?? []);
+        const validation = session.validation as any;
+        if (validation?.rows) {
+          for (const r of validation.rows) if (r.status === "invalid") skip.add(r.rowNumber);
+        }
+        const resolved: ResolvedRow[] = rawRows
+          .map((raw, i) => resolveRow(i + 1, raw, mappings))
+          .filter((r) => !skip.has(r.rowNumber));
+
+        // Befintliga objekt via systemnummer (uppdatera) + externt_id.
+        const systemIds = resolved.map((r) => r.fields.system_id).filter(Boolean) as string[];
+        const existingByObjectNumber = new Map<string, string>();
+        if (systemIds.length) {
+          const rows = await db
+            .select({ id: objects.id, objectNumber: objects.objectNumber })
+            .from(objects)
+            .where(and(eq(objects.tenantId, tenantId), inArray(objects.objectNumber, systemIds)));
+          for (const r of rows) if (r.objectNumber) existingByObjectNumber.set(r.objectNumber, r.id);
+        }
+
+        const externalIds = resolved.map((r) => r.fields.external_id).filter(Boolean) as string[];
+        const existingByExternalId = new Map<string, string>();
+        if (externalIds.length) {
+          const [extKatalog] = await db
+            .select({ id: metadataKatalog.id })
+            .from(metadataKatalog)
+            .where(and(eq(metadataKatalog.tenantId, tenantId), eq(metadataKatalog.namn, "externt_id")));
+          if (extKatalog) {
+            const rows = await db
+              .select({ objektId: metadataVarden.objektId, varde: metadataVarden.vardeString })
+              .from(metadataVarden)
+              .where(
+                and(
+                  eq(metadataVarden.tenantId, tenantId),
+                  eq(metadataVarden.metadataKatalogId, extKatalog.id),
+                  inArray(metadataVarden.vardeString, externalIds),
+                ),
+              );
+            for (const r of rows) if (r.varde && r.objektId) existingByExternalId.set(r.varde, r.objektId);
+          }
+        }
+
+        const plan = buildHierarchyPlan(
+          resolved,
+          new Set(existingByObjectNumber.keys()),
+          new Set(existingByExternalId.keys()),
+        );
+
+        // Cykel-rader hoppas över (ska redan vara fångade i validering).
+        const cycleSet = new Set(plan.cycleRowNumbers);
+        const ordered = plan.ordered.filter((p) => !cycleSet.has(p.rowNumber));
+
+        const interimToObjectId = new Map<string, string>();
+        const objectNumberToId = new Map<string, string>(existingByObjectNumber);
+        const depthByObjectId = new Map<string, number>();
+        let created = 0;
+        let updated = 0;
+        let errors = 0;
+        const rootObjectIds = new Set<string>();
+        const total = ordered.length || 1;
+
+        const ensureKatalog = async (namn: string, datatyp: "string" | "json"): Promise<boolean> => {
+          const [existing] = await db
+            .select({ id: metadataKatalog.id })
+            .from(metadataKatalog)
+            .where(and(eq(metadataKatalog.tenantId, tenantId), eq(metadataKatalog.namn, namn)));
+          if (existing) return true;
+          try {
+            await db.insert(metadataKatalog).values({ tenantId, namn, datatyp, kategori: "import" });
+            return true;
+          } catch {
+            return false;
+          }
+        };
+
+        const writeMeta = async (
+          objektId: string,
+          namn: string,
+          varde: string | Record<string, unknown>,
+          datatyp: "string" | "json",
+        ) => {
+          const ok = await ensureKatalog(namn, datatyp);
+          if (!ok) return;
+          try {
+            await createMetadata({ tenantId, objektId, metadataTypNamn: namn, varde, metod: "import", skapadAv: userId ?? undefined });
+          } catch {
+            // Dubblett / låst / systemfält → hoppa över tyst (best-effort metadata).
+          }
+        };
+
+        const syncPrimaryParent = async (objectId: string, parentId: string | null) => {
+          if (!parentId) return;
+          const existing = await db
+            .select({ id: objectParents.id, parentId: objectParents.parentId })
+            .from(objectParents)
+            .where(and(eq(objectParents.objectId, objectId), eq(objectParents.isPrimary, true), eq(objectParents.tenantId, tenantId)));
+          if (existing[0]) {
+            if (existing[0].parentId !== parentId) {
+              await db.update(objectParents).set({ parentId, relationContext: "primary" }).where(eq(objectParents.id, existing[0].id));
+            }
+            return;
+          }
+          await db.insert(objectParents).values({ tenantId, objectId, parentId, isPrimary: true, relationContext: "primary" });
+        };
+
+        const resolveParentId = (item: (typeof ordered)[number]): string | null => {
+          const f = item.row.fields;
+          if (item.kind === "equipment") {
+            return item.interimId ? interimToObjectId.get(item.interimId) ?? null : null;
+          }
+          if (f.system_parent_id) return objectNumberToId.get(f.system_parent_id) ?? null;
+          if (f.interim_parent_id) return interimToObjectId.get(f.interim_parent_id) ?? null;
+          return null;
+        };
+
+        const buildKnownFields = (row: ResolvedRow) => {
+          const addr = buildCompositeObject(row.composite.address ?? {});
+          const street = [addr.street, addr.street_number].filter(Boolean).join(" ").trim();
+          const out: Record<string, unknown> = {};
+          const fullAddress = row.fields["address.full"] ?? street;
+          if (fullAddress) out.address = fullAddress;
+          if (addr.city) out.city = addr.city;
+          if (addr.postal_code) out.postalCode = addr.postal_code;
+          const lat = row.fields["position.lat"];
+          const lng = row.fields["position.lng"];
+          if (lat) out.latitude = Number(lat.replace(",", "."));
+          if (lng) out.longitude = Number(lng.replace(",", "."));
+          if (row.metadata.typ) out.objectType = row.metadata.typ;
+          return out;
+        };
+
+        const writeRowMetadata = async (objektId: string, row: ResolvedRow) => {
+          for (const [namn, varde] of Object.entries(row.metadata)) {
+            if (namn === "typ") continue; // mappad till objectType ovan; skriv ändå som metadata nedan
+            await writeMeta(objektId, namn, varde, "string");
+          }
+          if (row.metadata.typ) await writeMeta(objektId, "typ", row.metadata.typ, "string");
+          // Sammansatt kontakt → ett json-metadatafält.
+          const contact = buildCompositeObject(row.composite.contact ?? {});
+          if (Object.keys(contact).length) await writeMeta(objektId, "kontaktperson", contact, "json");
+          if (row.fields.external_id) await writeMeta(objektId, "externt_id", row.fields.external_id, "string");
+        };
+
+        let processed = 0;
+        for (const item of ordered) {
+          try {
+            const row = item.row;
+            const parentId = resolveParentId(item);
+            const known = buildKnownFields(row);
+
+            // Bestäm mål-objekt-id för uppdatering.
+            let targetId: string | null = null;
+            if (item.action === "update") {
+              if (row.fields.system_id) targetId = existingByObjectNumber.get(row.fields.system_id) ?? null;
+              if (!targetId && row.fields.external_id) targetId = existingByExternalId.get(row.fields.external_id) ?? null;
+            }
+
+            if (targetId) {
+              await storage.updateObject(targetId, {
+                name: row.fields.name || undefined,
+                parentId: parentId ?? undefined,
+                ...(known as any),
+              });
+              await syncPrimaryParent(targetId, parentId);
+              await writeRowMetadata(targetId, row);
+              if (item.interimId && item.kind === "primary") interimToObjectId.set(item.interimId, targetId);
+              if (row.fields.system_id) objectNumberToId.set(row.fields.system_id, targetId);
+              depthByObjectId.set(targetId, parentId ? (depthByObjectId.get(parentId) ?? 0) + 1 : 0);
+              if (!parentId) rootObjectIds.add(targetId);
+              updated++;
+            } else {
+              const createdObj = await storage.createObject({
+                tenantId,
+                customerId: customerId!,
+                clusterId,
+                parentId: parentId ?? null,
+                name: row.fields.name || "Namnlöst objekt",
+                ...(known as any),
+              } as any);
+              await syncPrimaryParent(createdObj.id, parentId);
+              await writeRowMetadata(createdObj.id, row);
+              if (item.interimId && item.kind === "primary") interimToObjectId.set(item.interimId, createdObj.id);
+              depthByObjectId.set(createdObj.id, parentId ? (depthByObjectId.get(parentId) ?? 0) + 1 : 0);
+              if (!parentId) rootObjectIds.add(createdObj.id);
+              created++;
+            }
+          } catch (err) {
+            errors++;
+          } finally {
+            processed++;
+            if (processed % 25 === 0 || processed === ordered.length) {
+              const progress = Math.round((processed / total) * 100);
+              await db
+                .update(objectImportSessions)
+                .set({ progress, updatedAt: new Date() })
+                .where(and(eq(objectImportSessions.id, req.params.id), eq(objectImportSessions.tenantId, tenantId)));
+            }
+          }
+        }
+
+        const totalLevels = depthByObjectId.size ? Math.max(...Array.from(depthByObjectId.values())) + 1 : 0;
+        const result = {
+          status: "completed",
+          summary: {
+            total_rows: resolved.length,
+            created,
+            updated,
+            skipped: rawRows.length - resolved.length,
+            errors,
+          },
+          hierarchy: {
+            root_objects: rootObjectIds.size,
+            total_levels: totalLevels,
+            total_objects: created + updated,
+          },
+          customer_id: customerId,
+          cluster_id: clusterId,
+        };
+
+        await db
+          .update(objectImportSessions)
+          .set({ status: "completed", progress: 100, result: result as any, updatedAt: new Date() })
+          .where(and(eq(objectImportSessions.id, req.params.id), eq(objectImportSessions.tenantId, tenantId)));
+
+        res.json(result);
+      } catch (err: any) {
+        await db
+          .update(objectImportSessions)
+          .set({ status: "failed", error: String(err?.message ?? err), updatedAt: new Date() })
+          .where(and(eq(objectImportSessions.id, req.params.id), eq(objectImportSessions.tenantId, tenantId)));
+        throw err;
+      }
+    }),
+  );
+}
