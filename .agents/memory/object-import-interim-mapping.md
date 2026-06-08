@@ -14,10 +14,9 @@ the primary via the shared interim id (`interimToObjectId.get(interimId)`).
 **Rule:** only set `interimToObjectId.set(interimId, objectId)` for rows where
 `item.kind === "primary"` — on BOTH the create and update branches.
 
-**Why:** if the update branch writes the map for equipment rows too, later
-equipment rows in the same group resolve their parent to another equipment
-object instead of the store → silent hierarchy corruption. The create branch had
-the guard from the start; the update branch was missing it (caught in review).
+**Why:** if either branch writes the map for equipment rows, later equipment
+rows in the same group resolve their parent to another equipment object instead
+of the store → silent hierarchy corruption.
 
 **How to apply:** any future change to the execute loop that records id mappings
 keyed by interim id must keep the `kind === "primary"` guard. Primary selection

@@ -5576,6 +5576,31 @@ export const objectImportSessions = pgTable("object_import_sessions", {
 export type ObjectImportSession = typeof objectImportSessions.$inferSelect;
 export type InsertObjectImportSession = typeof objectImportSessions.$inferInsert;
 
+// Import 2.0 — persistent per-rad-livscykel (spec §6.1 ImportRow). En rad per
+// datarad i sessionen; statusen vandrar pending → valid/invalid (validering) →
+// imported/skipped (execute). validationMsgs + objectId ger durabel spårbarhet.
+export const objectImportRows = pgTable("object_import_rows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id")
+    .references(() => objectImportSessions.id, { onDelete: "cascade" })
+    .notNull(),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  rowNumber: integer("row_number").notNull(),
+  rawData: jsonb("raw_data").default({}).notNull(),
+  // pending | valid | invalid | imported | skipped
+  status: text("status").default("pending").notNull(),
+  validationMsgs: jsonb("validation_msgs").default([]).notNull(),
+  objectId: varchar("object_id"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_object_import_rows_session").on(table.sessionId),
+  index("idx_object_import_rows_tenant").on(table.tenantId),
+  uniqueIndex("uniq_object_import_rows_session_row").on(table.sessionId, table.rowNumber),
+]);
+
+export type ObjectImportRow = typeof objectImportRows.$inferSelect;
+export type InsertObjectImportRow = typeof objectImportRows.$inferInsert;
+
 // ============================================
 // Tenant Labels — branschanpassad terminologi
 // ============================================

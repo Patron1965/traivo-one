@@ -72,6 +72,16 @@ export function fuzzyMatch(
   return best;
 }
 
+// §6.3 — människo-läsbara alias (svenska rubriker) → API-nyckel. Fuzzy-matchning
+// poängsätter mot DESSA alias, inte mot råa API-nycklar (system_id, name …),
+// eftersom tröskel-nära stavfel uppstår i kundens egna rubriker.
+const ALIAS_TO_KEY: Record<string, string> = {
+  ...KNOWN_FIELDS,
+  ...ADDRESS_PATTERNS,
+  ...CONTACT_PATTERNS,
+};
+const ALIAS_KEYS = Object.keys(ALIAS_TO_KEY);
+
 /**
  * §6.3 auto_match: exakt → adress/kontakt-punktnotation → metadata.* → fuzzy.
  * Returnerar API-nyckeln eller null (kräver manuell koppling).
@@ -84,8 +94,12 @@ export function autoMatchColumn(header: string | null | undefined): string | nul
   if (normalized in ADDRESS_PATTERNS) return ADDRESS_PATTERNS[normalized];
   if (normalized in CONTACT_PATTERNS) return CONTACT_PATTERNS[normalized];
   if (normalized.startsWith("metadata.")) return normalized; // behåll som metadata-fält
-  const best = fuzzyMatch(normalized);
-  return best ? best.key : null;
+  // Steg 4: fuzzy mot alias-rubrikerna (mappa träffen tillbaka till API-nyckel),
+  // med API-nycklarna som sista fallback.
+  const aliasHit = fuzzyMatch(normalized, ALIAS_KEYS);
+  if (aliasHit) return ALIAS_TO_KEY[aliasHit.key];
+  const keyHit = fuzzyMatch(normalized, ALL_KNOWN_KEYS);
+  return keyHit ? keyHit.key : null;
 }
 
 /** Härleder kategori från en API-nyckel för column_mappings.type. */
@@ -180,27 +194,43 @@ export function detectHeaderRows(matrix: string[][]): HeaderDetection {
   if (bestScore <= 0) {
     return { systemHeaderRow: 0, descriptionRow: null, userHeaderRow: null, dataStartRow: 1 };
   }
-  // 2. Beskrivningsrad = den av de övriga topprader med längst snittext.
+
+  // 2. Ytterligare header-rader tas med ENDAST om de verkligen ser ut som
+  //    header — inte data. En extra rad räknas som header om den antingen
+  //    själv innehåller kända fält-rubriker (knownFieldScore > 0) ELLER är en
+  //    lång beskrivningsrad (tooltips). Vi scannar sammanhängande nedåt från
+  //    systemheadern och STOPPAR vid första rad som ser ut som data — så att
+  //    en fil med bara en header-rad inte tappar sina första datarader.
+  // En beskrivningsrad har prosa i (nästan) ALLA celler. En datarad har en MIX:
+  // något långt namn/adress men många korta/tomma celler (id, nummer, postnr).
+  // Kräv därför att en hög ANDEL celler är långa — inte bara att snittet är
+  // högt — annars klassas en datarad med ett enda långt värde felaktigt som
+  // header och första dataraden tappas.
+  const looksLikeDescriptionRow = (row: string[]): boolean => {
+    const nonEmpty = row.filter((c) => (c ?? "").trim() !== "");
+    if (nonEmpty.length < 2) return false;
+    const longCells = nonEmpty.filter((c) => c.trim().length >= 15).length;
+    return longCells / nonEmpty.length >= 0.6;
+  };
+  const isHeaderLike = (rowIdx: number): boolean => {
+    const row = matrix[rowIdx];
+    if (knownFieldScore(row) > 0) return true; // egna fält-/kundrubriker
+    return looksLikeDescriptionRow(row); // prosa i de flesta celler
+  };
+
   let descriptionRow: number | null = null;
   let userHeaderRow: number | null = null;
-  let bestLen = -1;
-  for (let i = 0; i < probe; i++) {
-    if (i === systemHeaderRow) continue;
-    const len = avgCellLength(matrix[i]);
-    if (len > bestLen) {
-      bestLen = len;
+  for (let i = systemHeaderRow + 1; i < probe; i++) {
+    if (!isHeaderLike(i)) break; // första dataraden → header-blocket slut
+    // Längsta raden = beskrivning, övriga = användarrubriker.
+    if (descriptionRow == null || avgCellLength(matrix[i]) > avgCellLength(matrix[descriptionRow])) {
+      if (descriptionRow != null && userHeaderRow == null) userHeaderRow = descriptionRow;
       descriptionRow = i;
+    } else if (userHeaderRow == null) {
+      userHeaderRow = i;
     }
   }
-  // 3. Användarrubriker = återstående topprad (om någon).
-  for (let i = 0; i < probe; i++) {
-    if (i === systemHeaderRow || i === descriptionRow) continue;
-    userHeaderRow = i;
-    break;
-  }
-  // Beskrivnings- och användarrad är bara header om de ligger före första
-  // "riktiga" dataraden. Heuristik: behandla de 3 första raderna som header
-  // endast när systemraden är bland dem och minst 2 kända fält hittades.
+
   const headerRows = [systemHeaderRow, descriptionRow, userHeaderRow].filter(
     (r): r is number => r != null,
   );

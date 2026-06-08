@@ -307,3 +307,104 @@ describe("buildCompositeObject", () => {
     expect(obj).toEqual({ street: "Storgatan", postal_code: "12345" });
   });
 });
+
+// Hela kedjan (§6): rå matris med 3 header-rader → detectHeaderRows → slice data
+// → resolveRow → validateRow → buildHierarchyPlan. Hemköp-liknande interim-träd:
+// org → kedja → distrikt → butik, plus utrustning som delar butikens interim.
+describe("import 2.0 end-to-end chain", () => {
+  const mappings: ColumnMappings = {
+    "0": { target: "system_id", type: "standard" },
+    "1": { target: "name", type: "standard", required: true },
+    "2": { target: "interim_id", type: "standard" },
+    "3": { target: "interim_parent_id", type: "standard" },
+  };
+
+  // 3 header-rader (system + lång beskrivning + användarrubriker) följt av data.
+  const matrix: string[][] = [
+    ["Systemnummer", "Objektnamn", "Interimsnummer", "Interims-förälder"],
+    [
+      "Traivos unika identifierare för objektet i systemet",
+      "Det fullständiga namnet på objektet som visas i appen",
+      "Temporärt importnummer som används för nya objekt",
+      "Temporärt nummer för det överordnade objektet i hierarkin",
+    ],
+    [
+      "Butikens systemidentifierare i Traivo",
+      "Butikens fullständiga visningsnamn",
+      "Temporärt interimsnummer vid import",
+      "Överordnat temporärt interimsnummer",
+    ],
+    ["", "Hemköp Sverige AB", "1000", ""],
+    ["", "Hemköp Kedja", "2000", "1000"],
+    ["", "Distrikt Väst", "3000", "2000"],
+    ["", "Hemköp Centrum", "10", "3000"],
+    ["", "Pantkärl", "10", ""],
+    ["", "Matavfallskärl", "10", ""],
+  ];
+
+  it("detects 3 header rows and builds a 5-level hierarchy with equipment grouping", () => {
+    const detection = detectHeaderRows(matrix);
+    expect(detection.systemHeaderRow).toBe(0);
+    expect(detection.dataStartRow).toBe(3);
+
+    const dataRows = matrix.slice(detection.dataStartRow);
+    const resolved: ResolvedRow[] = dataRows.map((cells, i) => {
+      const raw: Record<string, string> = {};
+      cells.forEach((c, idx) => (raw[String(idx)] = c));
+      return resolveRow(i + 1, raw, mappings);
+    });
+    expect(resolved).toHaveLength(6);
+
+    // Validering: alla rader giltiga (namn finns, inga typfel).
+    for (const r of resolved) {
+      const v = validateRow(r.rowNumber, r.raw as Record<string, string>, mappings);
+      expect(v.status).not.toBe("invalid");
+    }
+
+    const plan = buildHierarchyPlan(resolved, new Set(), new Set(), new Set());
+    expect(plan.cycleRowNumbers).toHaveLength(0);
+
+    const primaries = plan.ordered.filter((p) => p.kind === "primary");
+    const equipment = plan.ordered.filter((p) => p.kind === "equipment");
+    expect(primaries).toHaveLength(4); // org, kedja, distrikt, butik
+    expect(equipment).toHaveLength(2); // pantkärl, matavfall
+    expect(equipment.every((e) => e.interimId === "10")).toBe(true);
+    expect(plan.ordered.every((p) => p.action === "create")).toBe(true);
+
+    // Grupp interim 10 = exakt en primär (butik, har interim_parent) + 2 utrustning.
+    const group10 = plan.ordered.filter((p) => p.interimId === "10");
+    expect(group10.filter((p) => p.kind === "primary")).toHaveLength(1);
+    expect(group10.filter((p) => p.kind === "equipment")).toHaveLength(2);
+    const butik = group10.find((p) => p.kind === "primary")!;
+    expect(butik.row.fields.name).toBe("Hemköp Centrum");
+    expect(butik.row.fields.interim_parent_id).toBe("3000");
+
+    // Topologisk ordning: förälder före barn.
+    const idxOf = (interimId: string) =>
+      plan.ordered.findIndex((p) => p.kind === "primary" && p.interimId === interimId);
+    expect(idxOf("1000")).toBeLessThan(idxOf("2000"));
+    expect(idxOf("2000")).toBeLessThan(idxOf("3000"));
+    expect(idxOf("3000")).toBeLessThan(idxOf("10"));
+
+    // Exakt en rot (org saknar interim-förälder).
+    const primaryByInterim = new Map(
+      primaries.filter((p) => p.interimId).map((p) => [p.interimId as string, p]),
+    );
+    const roots = primaries.filter((p) => {
+      const pid = p.row.fields.interim_parent_id;
+      return !pid || !primaryByInterim.has(pid);
+    });
+    expect(roots).toHaveLength(1);
+    expect(roots[0].row.fields.name).toBe("Hemköp Sverige AB");
+
+    // 5 nivåer: org(0) → kedja(1) → distrikt(2) → butik(3) → utrustning(4).
+    const depthOf = (interimId: string): number => {
+      const item = primaryByInterim.get(interimId);
+      const pid = item?.row.fields.interim_parent_id;
+      return pid && primaryByInterim.has(pid) ? 1 + depthOf(pid) : 0;
+    };
+    const maxPrimaryDepth = Math.max(...Array.from(primaryByInterim.keys()).map(depthOf));
+    const totalLevels = maxPrimaryDepth + 1 + 1; // primärnivåer + utrustningsnivå
+    expect(totalLevels).toBe(5);
+  });
+});

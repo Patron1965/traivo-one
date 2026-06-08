@@ -26,6 +26,7 @@ import { db } from "../db";
 import {
   metadataKatalog,
   metadataVarden,
+  objectImportRows,
   objectImportSessions,
   objectParents,
   objects,
@@ -318,10 +319,35 @@ export function registerObjectImportV2Routes(app: Express): void {
       };
       const validation = { summary, rows };
 
-      await db
-        .update(objectImportSessions)
-        .set({ validation: validation as any, status: "validating", updatedAt: new Date() })
-        .where(and(eq(objectImportSessions.id, req.params.id), eq(objectImportSessions.tenantId, tenantId)));
+      // §6.1 ImportRow: persistera per-rad-livscykel (pending → valid/invalid).
+      // Skriv om hela radmängden för sessionen (delete + bulk-insert) så att
+      // omvalidering speglar senaste mappning. invalid → "invalid", övriga
+      // (valid/warning) → "valid"; varningar bevaras i validationMsgs.
+      const rowRecords = rows.map((r) => ({
+        sessionId: req.params.id,
+        tenantId,
+        rowNumber: r.rowNumber,
+        rawData: (rawRows[r.rowNumber - 1] ?? {}) as any,
+        status: r.status === "invalid" ? "invalid" : "valid",
+        validationMsgs: (r.issues ?? []) as any,
+      }));
+      await db.transaction(async (tx) => {
+        // Serialisera samtidiga validate-anrop på samma session: lås session-raden
+        // så att delete+insert inte tävlar mot uniq (session_id,row_number).
+        await tx.execute(
+          sql`SELECT id FROM object_import_sessions WHERE id = ${req.params.id} AND tenant_id = ${tenantId} FOR UPDATE`,
+        );
+        await tx
+          .delete(objectImportRows)
+          .where(and(eq(objectImportRows.sessionId, req.params.id), eq(objectImportRows.tenantId, tenantId)));
+        for (let i = 0; i < rowRecords.length; i += 500) {
+          await tx.insert(objectImportRows).values(rowRecords.slice(i, i + 500));
+        }
+        await tx
+          .update(objectImportSessions)
+          .set({ validation: validation as any, status: "validating", updatedAt: new Date() })
+          .where(and(eq(objectImportSessions.id, req.params.id), eq(objectImportSessions.tenantId, tenantId)));
+      });
 
       res.json(validation);
     }),
@@ -354,6 +380,36 @@ export function registerObjectImportV2Routes(app: Express): void {
       const tenantId = getTenantIdWithFallback(req);
       const session = await loadSession(req.params.id, tenantId);
       res.json(session.result ?? null);
+    }),
+  );
+
+  // ── GET /:id/rows — persistent per-rad-livscykel (§6.1 ImportRow)
+  app.get(
+    "/api/import/objects-v2/:id/rows",
+    asyncHandler(async (req, res) => {
+      const tenantId = getTenantIdWithFallback(req);
+      await loadSession(req.params.id, tenantId); // tenant-/existens-kontroll
+      const rows = await db
+        .select({
+          rowNumber: objectImportRows.rowNumber,
+          status: objectImportRows.status,
+          validationMsgs: objectImportRows.validationMsgs,
+          objectId: objectImportRows.objectId,
+          rawData: objectImportRows.rawData,
+        })
+        .from(objectImportRows)
+        .where(
+          and(
+            eq(objectImportRows.sessionId, req.params.id),
+            eq(objectImportRows.tenantId, tenantId),
+          ),
+        )
+        .orderBy(objectImportRows.rowNumber);
+      const counts = rows.reduce<Record<string, number>>((acc, r) => {
+        acc[r.status] = (acc[r.status] ?? 0) + 1;
+        return acc;
+      }, {});
+      res.json({ total: rows.length, counts, rows });
     }),
   );
 
@@ -417,6 +473,23 @@ export function registerObjectImportV2Routes(app: Express): void {
       // polla GET /:id/status tills completed/failed och hämta sedan /:id/result.
       const runImport = async () => {
       try {
+        // §6.1: säkerställ att varje datarad har en persistent rad — execute kan
+        // köras utan föregående validate (endast mappningar krävs). Saknade rader
+        // skapas som "pending"; redan persisterade rader (valid/invalid) lämnas
+        // orörda via onConflictDoNothing på uniq (session_id,row_number).
+        if (rawRows.length) {
+          const pendingRows = rawRows.map((raw, i) => ({
+            sessionId: req.params.id,
+            tenantId,
+            rowNumber: i + 1,
+            rawData: raw as any,
+            status: "pending",
+          }));
+          for (let i = 0; i < pendingRows.length; i += 500) {
+            await db.insert(objectImportRows).values(pendingRows.slice(i, i + 500)).onConflictDoNothing();
+          }
+        }
+
         // Hoppa över ogiltiga + uttryckligt skippade rader.
         const skip = new Set(parsed.data.skipRowNumbers ?? []);
         const validation = session.validation as any;
@@ -488,6 +561,50 @@ export function registerObjectImportV2Routes(app: Express): void {
         // Cykel-rader hoppas över (ska redan vara fångade i validering).
         const cycleSet = new Set(plan.cycleRowNumbers);
         const ordered = plan.ordered.filter((p) => !cycleSet.has(p.rowNumber));
+
+        // §6.1: markera överhoppade rader (uttryckligt skippade, ogiltiga,
+        // cykler) som "skipped" i den persistenta radmängden.
+        const markRow = async (
+          rowNumber: number,
+          status: "imported" | "skipped" | "invalid",
+          objectId: string | null,
+          msg?: string,
+        ) => {
+          try {
+            await db
+              .update(objectImportRows)
+              .set({
+                status,
+                objectId: objectId ?? null,
+                ...(msg
+                  ? { validationMsgs: [{ field: "execute", message: msg, severity: "error" }] as any }
+                  : {}),
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(objectImportRows.sessionId, req.params.id),
+                  eq(objectImportRows.tenantId, tenantId),
+                  eq(objectImportRows.rowNumber, rowNumber),
+                ),
+              );
+          } catch {
+            // Best-effort radstatus — fäll aldrig hela importen p.g.a. radmarkering.
+          }
+        };
+        const skippedRowNumbers = Array.from(new Set([...Array.from(skip), ...plan.cycleRowNumbers]));
+        if (skippedRowNumbers.length) {
+          await db
+            .update(objectImportRows)
+            .set({ status: "skipped", updatedAt: new Date() })
+            .where(
+              and(
+                eq(objectImportRows.sessionId, req.params.id),
+                eq(objectImportRows.tenantId, tenantId),
+                inArray(objectImportRows.rowNumber, skippedRowNumbers),
+              ),
+            );
+        }
 
         const interimToObjectId = new Map<string, string>();
         const objectNumberToId = new Map<string, string>(existingByObjectNumber);
@@ -613,6 +730,7 @@ export function registerObjectImportV2Routes(app: Express): void {
               depthByObjectId.set(targetId, parentId ? (depthByObjectId.get(parentId) ?? 0) + 1 : 0);
               if (!parentId) rootObjectIds.add(targetId);
               updated++;
+              await markRow(item.row.rowNumber, "imported", targetId);
             } else {
               // Interim-primärer utan systemnummer får objectNumber MALL-<interim>
               // så re-import matchar dem (uppdaterar istället för dubblerar).
@@ -635,9 +753,11 @@ export function registerObjectImportV2Routes(app: Express): void {
               depthByObjectId.set(createdObj.id, parentId ? (depthByObjectId.get(parentId) ?? 0) + 1 : 0);
               if (!parentId) rootObjectIds.add(createdObj.id);
               created++;
+              await markRow(item.row.rowNumber, "imported", createdObj.id);
             }
-          } catch (err) {
+          } catch (err: any) {
             errors++;
+            await markRow(item.row.rowNumber, "invalid", null, String(err?.message ?? err));
           } finally {
             processed++;
             if (processed % 25 === 0 || processed === ordered.length) {
