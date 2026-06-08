@@ -283,9 +283,12 @@ export function registerObjectImportV2Routes(app: Express): void {
       }
 
       // §5.2 DB-referenskontroll: Systemföräldranummer måste peka på ett
-      // befintligt objekt i Traivo (tenant-scopat). Ett system_parent_id som
-      // matchar en annan rads system_id i samma fil accepteras också (objektet
-      // finns redan i DB eftersom system_id endast sätts för befintliga objekt).
+      // FAKTISKT befintligt objekt i Traivo (tenant-scopat). Ett system_parent_id
+      // får ALDRIG accepteras enbart för att en annan rad i filen råkar ha samma
+      // värde i sin system_id-kolumn — den kolumnen är fri text och kan vara
+      // påhittad. Om den inte finns i DB kan execute (objectNumberToId) inte
+      // resolva föräldern och barnet skulle tyst importeras som rot. Endast
+      // verklig DB-existens (existingParents) släpper igenom.
       const sysParentIds = Array.from(
         new Set(resolved.map((r) => r.fields.system_parent_id).filter(Boolean) as string[]),
       );
@@ -296,10 +299,9 @@ export function registerObjectImportV2Routes(app: Express): void {
           .where(and(eq(objects.tenantId, tenantId), inArray(objects.objectNumber, sysParentIds)));
         const existingParents = new Set<string>();
         for (const f of found) if (f.objectNumber) existingParents.add(f.objectNumber);
-        const inFileSystemIds = new Set(resolved.map((r) => r.fields.system_id).filter(Boolean) as string[]);
         for (const r of resolved) {
           const sp = r.fields.system_parent_id;
-          if (!sp || existingParents.has(sp) || inFileSystemIds.has(sp)) continue;
+          if (!sp || existingParents.has(sp)) continue;
           const row = byRow.get(r.rowNumber);
           if (!row) continue;
           row.issues.push({
@@ -502,14 +504,26 @@ export function registerObjectImportV2Routes(app: Express): void {
           .filter((r) => !skip.has(r.rowNumber));
 
         // Befintliga objekt via systemnummer (uppdatera) + externt_id.
+        // Slå även upp objekt som refereras som system_parent_id så att en
+        // (validerad) DB-existerande förälder ALLTID kan resolvas vid parenting —
+        // även om föräldern inte själv är en system_id-rad i filen. Annars skulle
+        // ett barn som passerat validering tyst hamna som rot (orphan).
         const systemIds = resolved.map((r) => r.fields.system_id).filter(Boolean) as string[];
-        const existingByObjectNumber = new Map<string, string>();
-        if (systemIds.length) {
+        const sysParentNumbers = resolved.map((r) => r.fields.system_parent_id).filter(Boolean) as string[];
+        const objectNumberLookup = Array.from(new Set([...systemIds, ...sysParentNumbers]));
+        const existingByObjectNumber = new Map<string, string>(); // endast file-system_id → update-matchning
+        const existingObjectByNumber = new Map<string, string>(); // alla DB-objekt per nummer → parent-resolution
+        if (objectNumberLookup.length) {
+          const systemIdSet = new Set(systemIds);
           const rows = await db
             .select({ id: objects.id, objectNumber: objects.objectNumber })
             .from(objects)
-            .where(and(eq(objects.tenantId, tenantId), inArray(objects.objectNumber, systemIds)));
-          for (const r of rows) if (r.objectNumber) existingByObjectNumber.set(r.objectNumber, r.id);
+            .where(and(eq(objects.tenantId, tenantId), inArray(objects.objectNumber, objectNumberLookup)));
+          for (const r of rows) {
+            if (!r.objectNumber) continue;
+            existingObjectByNumber.set(r.objectNumber, r.id);
+            if (systemIdSet.has(r.objectNumber)) existingByObjectNumber.set(r.objectNumber, r.id);
+          }
         }
 
         const externalIds = resolved.map((r) => r.fields.external_id).filter(Boolean) as string[];
@@ -608,7 +622,9 @@ export function registerObjectImportV2Routes(app: Express): void {
         }
 
         const interimToObjectId = new Map<string, string>();
-        const objectNumberToId = new Map<string, string>(existingByObjectNumber);
+        // Parent-resolution-karta: alla kända DB-objekt per nummer (inkl. de som
+        // bara refereras som föräldrar) + uppdateras under körningen.
+        const objectNumberToId = new Map<string, string>(existingObjectByNumber);
         const depthByObjectId = new Map<string, number>();
         let created = 0;
         let updated = 0;
@@ -710,6 +726,21 @@ export function registerObjectImportV2Routes(app: Express): void {
             const row = item.row;
             const parentId = resolveParentId(item);
             const known = buildKnownFields(row);
+
+            // Fail-closed (defense-in-depth): execute kan köras utan föregående
+            // validate (endast mappningar krävs). Om en rad UTTRYCKLIGEN pekar ut
+            // en förälder men den inte kan resolvas får raden ALDRIG tyst
+            // importeras som rot — då skulle ett påhittat system_parent_id
+            // korrumpera hierarkin trots att validate-fixen stänger validate-vägen.
+            const declaresParent =
+              item.kind === "equipment"
+                ? !!item.interimId
+                : !!(row.fields.system_parent_id || row.fields.interim_parent_id);
+            if (declaresParent && !parentId) {
+              throw new Error(
+                `Föräldern kunde inte hittas (system_parent_id="${row.fields.system_parent_id ?? ""}", interim_parent_id="${row.fields.interim_parent_id ?? ""}") — raden importeras inte som rotobjekt.`,
+              );
+            }
 
             // Bestäm mål-objekt-id för uppdatering (Systemnummer > externt_id >
             // Interimsnummer).
