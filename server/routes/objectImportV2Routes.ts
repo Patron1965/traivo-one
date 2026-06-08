@@ -37,6 +37,7 @@ import { createMetadata } from "../metadata-queries";
 import {
   buildColumns,
   buildCompositeObject,
+  groupMetadataForWrite,
   buildHierarchyPlan,
   categoryForTarget,
   detectHeaderRows,
@@ -652,7 +653,10 @@ export function registerObjectImportV2Routes(app: Express): void {
             .where(and(eq(objectParents.objectId, objectId), eq(objectParents.isPrimary, true), eq(objectParents.tenantId, tenantId)));
           if (existing[0]) {
             if (existing[0].parentId !== parentId) {
-              await db.update(objectParents).set({ parentId, relationContext: "primary" }).where(eq(objectParents.id, existing[0].id));
+              await db
+                .update(objectParents)
+                .set({ parentId, relationContext: "primary" })
+                .where(and(eq(objectParents.id, existing[0].id), eq(objectParents.tenantId, tenantId)));
             }
             return;
           }
@@ -686,10 +690,13 @@ export function registerObjectImportV2Routes(app: Express): void {
         };
 
         const writeRowMetadata = async (objektId: string, row: ResolvedRow) => {
-          for (const [namn, varde] of Object.entries(row.metadata)) {
-            if (namn === "typ") continue; // mappad till objectType ovan; skriv ändå som metadata nedan
-            await writeMeta(objektId, namn, varde, "string");
-          }
+          // Sammansatta metadata-punktnycklar (metadata.<grupp>.<underfält>) ska
+          // grupperas till ETT json-metadatafält per grupp (tvingad json-datatyp),
+          // inte skrivas en-och-en som strängar. Grupperingen är en ren helper
+          // (object-import-core.groupMetadataForWrite) så den kan enhetstestas.
+          const { strings, jsonGroups } = groupMetadataForWrite(row.metadata);
+          for (const s of strings) await writeMeta(objektId, s.namn, s.varde, "string");
+          for (const g of jsonGroups) await writeMeta(objektId, g.namn, g.varde, "json");
           if (row.metadata.typ) await writeMeta(objektId, "typ", row.metadata.typ, "string");
           // Sammansatt kontakt → ett json-metadatafält.
           const contact = buildCompositeObject(row.composite.contact ?? {});
@@ -710,7 +717,10 @@ export function registerObjectImportV2Routes(app: Express): void {
             if (item.action === "update") {
               if (row.fields.system_id) targetId = existingByObjectNumber.get(row.fields.system_id) ?? null;
               if (!targetId && row.fields.external_id) targetId = existingByExternalId.get(row.fields.external_id) ?? null;
-              if (!targetId && row.fields.interim_id) targetId = existingByInterim.get(row.fields.interim_id) ?? null;
+              // Equipment får ALDRIG matchas via det delade interim_id:t (skulle
+              // träffa butiks-objektet) — bara primärer.
+              if (!targetId && item.kind !== "equipment" && row.fields.interim_id)
+                targetId = existingByInterim.get(row.fields.interim_id) ?? null;
             }
 
             if (targetId) {

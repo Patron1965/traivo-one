@@ -525,10 +525,13 @@ export function buildHierarchyPlan(
   }
 
   // Matchningsprioritet (§4): Systemnummer > externt_id > Interimsnummer.
-  const actionFor = (r: ResolvedRow): PlanAction => {
+  // VIKTIGT: interim-matchning gäller ENDAST primärer. Equipment-rader delar
+  // butikens interim_id; om de matchades via interim skulle de uppdatera
+  // butiks-objektet istället för att skapas som egna barn (hierarki-korruption).
+  const actionFor = (r: ResolvedRow, isEquipment = false): PlanAction => {
     if (r.fields.system_id && existingByObjectNumber.has(r.fields.system_id)) return "update";
     if (r.fields.external_id && existingByExternalId.has(r.fields.external_id)) return "update";
-    if (r.fields.interim_id && existingByInterim.has(r.fields.interim_id)) return "update";
+    if (!isEquipment && r.fields.interim_id && existingByInterim.has(r.fields.interim_id)) return "update";
     return "create";
   };
 
@@ -576,7 +579,7 @@ export function buildHierarchyPlan(
     ordered.push({
       rowNumber: r.rowNumber,
       row: r,
-      action: actionFor(r),
+      action: actionFor(r, true),
       kind: "equipment",
       interimId: r.fields.interim_id ?? null,
     });
@@ -591,4 +594,32 @@ export function buildCompositeObject(sub: Record<string, string>): Record<string
     if ((v ?? "").trim() !== "") out[k] = v.trim();
   }
   return out;
+}
+
+// Grupperar metadata-nycklar inför skrivning (execute-steget): punktnycklar
+// ("grupp.underfält") slås ihop till ETT json-fält per grupp — split sker på
+// FÖRSTA punkten så att djupare underfält ("grupp.sub.djup") bevaras intakt som
+// "sub.djup". Platta nycklar förblir strängar. "typ" hanteras separat av callern
+// och hoppas över här.
+export function groupMetadataForWrite(metadata: Record<string, string>): {
+  strings: Array<{ namn: string; varde: string }>;
+  jsonGroups: Array<{ namn: string; varde: Record<string, string> }>;
+} {
+  const strings: Array<{ namn: string; varde: string }> = [];
+  const groups: Record<string, Record<string, string>> = {};
+  for (const [namn, varde] of Object.entries(metadata)) {
+    if (namn === "typ") continue;
+    const dot = namn.indexOf(".");
+    if (dot >= 0) {
+      const grupp = namn.slice(0, dot);
+      const sub = namn.slice(dot + 1);
+      (groups[grupp] ??= {})[sub] = varde;
+    } else {
+      strings.push({ namn, varde });
+    }
+  }
+  const jsonGroups = Object.entries(groups)
+    .filter(([, obj]) => Object.keys(obj).length > 0)
+    .map(([namn, varde]) => ({ namn, varde }));
+  return { strings, jsonGroups };
 }

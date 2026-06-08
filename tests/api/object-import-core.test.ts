@@ -13,6 +13,7 @@ import {
   validateCrossRow,
   buildHierarchyPlan,
   buildCompositeObject,
+  groupMetadataForWrite,
   type ResolvedRow,
 } from "../../server/services/object-import-core";
 import type { ColumnMappings } from "../../shared/object-import-spec";
@@ -308,6 +309,35 @@ describe("buildCompositeObject", () => {
   });
 });
 
+// Metadata-grupperingen som execute-steget använder för att skriva
+// metadata.<grupp>.<underfält> som ETT json-fält per grupp.
+describe("groupMetadataForWrite", () => {
+  it("groups dot-keys into one json field per group and keeps flat keys as strings", () => {
+    const { strings, jsonGroups } = groupMetadataForWrite({
+      "kontakt.namn": "Anna",
+      "kontakt.tel": "070-1234567",
+      "fakturering.epost": "faktura@hemkop.se",
+      portkod: "1234",
+    });
+    expect(strings).toEqual([{ namn: "portkod", varde: "1234" }]);
+    const byName = new Map(jsonGroups.map((g) => [g.namn, g.varde]));
+    expect(byName.get("kontakt")).toEqual({ namn: "Anna", tel: "070-1234567" });
+    expect(byName.get("fakturering")).toEqual({ epost: "faktura@hemkop.se" });
+  });
+
+  it("splits on the FIRST dot so deeper subpaths are preserved intact", () => {
+    const { jsonGroups } = groupMetadataForWrite({ "grupp.sub.djup": "x", "grupp.platt": "y" });
+    const grupp = jsonGroups.find((g) => g.namn === "grupp")!;
+    expect(grupp.varde).toEqual({ "sub.djup": "x", platt: "y" });
+  });
+
+  it("skips the reserved 'typ' key (caller writes it separately)", () => {
+    const { strings, jsonGroups } = groupMetadataForWrite({ typ: "butik", färg: "blå" });
+    expect(strings).toEqual([{ namn: "färg", varde: "blå" }]);
+    expect(jsonGroups).toHaveLength(0);
+  });
+});
+
 // Hela kedjan (§6): rå matris med 3 header-rader → detectHeaderRows → slice data
 // → resolveRow → validateRow → buildHierarchyPlan. Hemköp-liknande interim-träd:
 // org → kedja → distrikt → butik, plus utrustning som delar butikens interim.
@@ -406,5 +436,51 @@ describe("import 2.0 end-to-end chain", () => {
     const maxPrimaryDepth = Math.max(...Array.from(primaryByInterim.keys()).map(depthOf));
     const totalLevels = maxPrimaryDepth + 1 + 1; // primärnivåer + utrustningsnivå
     expect(totalLevels).toBe(5);
+  });
+});
+
+// Regression: equipment-rader delar butikens interim_id. Vid RE-IMPORT (interim
+// finns redan i DB) får utrustningen ALDRIG klassas som "update" — då skulle den
+// uppdatera butiks-objektet istället för att skapas som eget barn.
+describe("buildHierarchyPlan — equipment never matches shared interim on re-import", () => {
+  it("marks store primary as update but keeps equipment as create when interim already exists", () => {
+    const rows: ResolvedRow[] = [
+      resolved(1, { name: "Hemköp Centrum", interim_id: "10", interim_parent_id: "3000" }),
+      resolved(2, { name: "Pantkärl", interim_id: "10" }),
+      resolved(3, { name: "Matavfallskärl", interim_id: "10" }),
+    ];
+    // Interim "10" finns redan (butiken skapad i tidigare import via MALL-10).
+    const plan = buildHierarchyPlan(rows, new Set(), new Set(), new Set(["10"]));
+
+    const primary = plan.ordered.find((p) => p.kind === "primary" && p.interimId === "10")!;
+    const equipment = plan.ordered.filter((p) => p.kind === "equipment");
+    expect(primary.action).toBe("update"); // butiken uppdateras
+    expect(equipment).toHaveLength(2);
+    expect(equipment.every((e) => e.action === "create")).toBe(true); // utrustning skapas, ej update
+  });
+
+  it("equipment with its OWN system_id still updates via system match, not interim", () => {
+    const rows: ResolvedRow[] = [
+      resolved(1, { name: "Butik", interim_id: "20" }),
+      resolved(2, { name: "Kärl A", interim_id: "20", system_id: "OBJ-500" }),
+    ];
+    const plan = buildHierarchyPlan(rows, new Set(["OBJ-500"]), new Set(), new Set(["20"]));
+    const equip = plan.ordered.find((p) => p.kind === "equipment")!;
+    expect(equip.action).toBe("update"); // eget systemnummer matchar → laglig update
+  });
+});
+
+// Regression: en fil med EN header-rad får inte tappa sin första datarad bara för
+// att raden råkar innehålla ett långt namn/adress-värde.
+describe("detectHeaderRows — single header with long-value data row", () => {
+  it("keeps the first data row when only one cell is long", () => {
+    const matrix: string[][] = [
+      ["Objektnamn", "Systemnummer", "Postnummer"],
+      ["Hemköp Centrum Stora Torget Stockholm City", "OBJ-1", "11122"],
+      ["ICA Maxi", "OBJ-2", "22233"],
+    ];
+    const detection = detectHeaderRows(matrix);
+    expect(detection.systemHeaderRow).toBe(0);
+    expect(detection.dataStartRow).toBe(1); // ingen datarad klassas som header
   });
 });
