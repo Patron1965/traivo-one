@@ -86,6 +86,17 @@ interface SimulateResult {
   summary: { totalJobs: number; monthlyAvg: number; weeklyAvg: number };
 }
 
+interface ValidateIssue {
+  code: string;
+  message: string;
+}
+
+interface ValidateResult {
+  valid: boolean;
+  errors: ValidateIssue[];
+  warnings: ValidateIssue[];
+}
+
 const WEEKDAY_LABELS = ["Sö", "Må", "Ti", "On", "To", "Fr", "Lö"];
 
 function fmtKr(kr: number) {
@@ -267,6 +278,17 @@ export default function Step7ReviewSave({
     staleTime: 30000,
   });
 
+  // Task #836 (Fas 3): Förvalidering — ledtids- och beroendevarningar före expansion.
+  const { data: validation, isLoading: validationLoading } = useQuery<ValidateResult>({
+    queryKey: ["/api/order-concepts", conceptId, "validate"],
+    queryFn: async () => {
+      const res = await apiRequest("POST", `/api/order-concepts/${conceptId}/validate`, {});
+      return res.json();
+    },
+    enabled: !!conceptId,
+    staleTime: 10_000,
+  });
+
   const saveTemplateMutation = useMutation({
     mutationFn: async () => {
       if (!conceptId) throw new Error("Spara konceptet först.");
@@ -377,6 +399,40 @@ export default function Step7ReviewSave({
           <Row label="Kund" value={customerName || "Från metadata"} />
         </CardContent>
       </Card>
+
+      {/* Tids- & beroendevarningar (Fas 3) */}
+      {conceptId && !validationLoading && validation &&
+        (validation.errors.length > 0 || validation.warnings.length > 0) && (
+        <Card data-testid="card-validation-warnings">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-warning" /> Varningar & kontroller
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {validation.errors.map((e, i) => (
+              <div
+                key={`err-${i}`}
+                className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm"
+                data-testid={`validation-error-${e.code}`}
+              >
+                <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                <span>{e.message}</span>
+              </div>
+            ))}
+            {validation.warnings.map((w, i) => (
+              <div
+                key={`warn-${i}`}
+                className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-2 text-sm"
+                data-testid={`validation-warning-${w.code}`}
+              >
+                <AlertCircle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+                <span>{w.message}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Matchade objekt per kluster */}
       <Card>

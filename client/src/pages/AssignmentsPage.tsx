@@ -50,6 +50,8 @@ import {
   UserPlus,
   XCircle,
   X,
+  AlertTriangle,
+  ShieldCheck,
   ChevronDown,
   ChevronUp,
   ArrowRight,
@@ -215,6 +217,19 @@ export default function AssignmentsPage() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/assignments"] });
+    },
+  });
+
+  // Task #836 (Fas 3): Kvittera beroendeuppgift (tillgänglighet bekräftad).
+  const acknowledgeDependencyMutation = useMutation({
+    mutationFn: (assignmentId: string) =>
+      apiRequest("POST", `/api/assignments/${assignmentId}/acknowledge-dependency`, {}),
+    onSuccess: () => {
+      toast({ title: "Beroende kvitterat" });
+      queryClient.invalidateQueries({ queryKey: ["/api/assignments"] });
+    },
+    onError: () => {
+      toast({ title: "Kunde inte kvittera beroende", variant: "destructive" });
     },
   });
 
@@ -496,6 +511,20 @@ export default function AssignmentsPage() {
                             {assignment.quantity} st
                           </div>
                         )}
+                        {(assignment as any).requiresAcknowledgment && (
+                          (assignment as any).dependencyAcknowledgedAt ? (
+                            <Badge variant="outline" className="mt-1 gap-1 text-chart-2 border-chart-2/40" data-testid={`badge-dependency-ack-${assignment.id}`}>
+                              <ShieldCheck className="h-3 w-3" /> Beroende kvitterat
+                            </Badge>
+                          ) : (
+                            <Badge
+                              className={`mt-1 gap-1 ${((assignment as any).dependencyCriticality ?? "critical") === "critical" ? "bg-destructive text-destructive-foreground" : "bg-warning text-warning-foreground"}`}
+                              data-testid={`badge-dependency-pending-${assignment.id}`}
+                            >
+                              <AlertTriangle className="h-3 w-3" /> Okvitterat beroende
+                            </Badge>
+                          )
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -540,6 +569,23 @@ export default function AssignmentsPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {(assignment as any).requiresAcknowledgment && !(assignment as any).dependencyAcknowledgedAt && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => acknowledgeDependencyMutation.mutate(assignment.id)}
+                                disabled={acknowledgeDependencyMutation.isPending}
+                                data-testid={`button-acknowledge-${assignment.id}`}
+                              >
+                                <ShieldCheck className="h-3 w-3 mr-1" />
+                                Kvittera
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Bekräfta att beroendet är tillgängligt så huvuduppgiften kan utföras</p></TooltipContent>
+                          </Tooltip>
+                        )}
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button

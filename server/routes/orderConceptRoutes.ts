@@ -10,6 +10,12 @@ import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { objects, workOrders, customerCommunications, objectContacts, orderConceptArticles, orderConceptObjects, articleObjectMappings, conceptFilters, priceLists, objectMetadata, metadataDefinitions, deliverySchedules, assignments as assignmentsTable, articles, type InsertOrderConceptArticle } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
+import {
+  resolveTimeWarningThresholds,
+  computeLeadTimeWarnings,
+  computeScheduleWarnings,
+  type LeadTimeItem,
+} from "../services/time-warnings";
 import OpenAI from "openai";
 
 const openaiClient = new OpenAI({
@@ -405,7 +411,66 @@ app.post("/api/order-concepts/:id/validate", asyncHandler(async (req, res) => {
       }
     }
 
+    // Task #836 (Fas 3): Tidskonflikt-varningar vid validering (före expansion).
+    // Här kan vi rimligt kontrollera ledtid mot leveransdatum samt flagga
+    // beroendeartiklar som kräver kvittens. Schemaläggnings-varningar (överlapp,
+    // restid, okvitterad beroendeuppgift) beräknas på faktiska assignments via
+    // GET /api/order-concepts/:id/time-warnings efter expansion.
+    const tenant = await storage.getTenant(tenantId);
+    const thresholds = resolveTimeWarningThresholds(tenant?.settings);
+    const deliveryDate = concept.nextRunDate ?? null;
+    const leadItems: LeadTimeItem[] = [];
+    for (const ca of conceptArticles) {
+      const art = await storage.getArticle(ca.articleId);
+      if (!art) continue;
+      if (deliveryDate && art.leadTimeDays) {
+        leadItems.push({ articleName: art.name, leadTimeDays: art.leadTimeDays, deliveryDate });
+      }
+      if (art.requiresAcknowledgment) {
+        warnings.push({
+          code: "DEPENDENCY_REQUIRES_ACK",
+          message: `Artikeln "${art.name}" är en beroendeartikel — dess tillgänglighet måste kvitteras innan huvuduppgiften kan utföras.`,
+        });
+      }
+    }
+    for (const w of computeLeadTimeWarnings(leadItems, thresholds)) {
+      warnings.push({ code: w.code, message: w.message });
+    }
+
     res.json({ valid: errors.length === 0, errors, warnings, invoiceRecipient });
+}));
+
+// Task #836 (Fas 3): Schemaläggnings-varningar beräknade på faktiska assignments
+// (efter expansion). Upptäcker överlappande tidsfönster, otillräcklig restid och
+// okvitterade beroendeuppgifter per resurs. Trösklar konfigureras per tenant via
+// `tenants.settings.timeWarnings`.
+app.get("/api/order-concepts/:id/time-warnings", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const rawConcept = await storage.getOrderConcept(req.params.id);
+    const concept = verifyTenantOwnership(rawConcept, tenantId);
+    if (!concept) throw new NotFoundError("Ej hittad");
+
+    const tenant = await storage.getTenant(tenantId);
+    const thresholds = resolveTimeWarningThresholds(tenant?.settings);
+
+    const allAssignments = await storage.getAssignments(tenantId);
+    const conceptAssignments = allAssignments.filter((a) => a.orderConceptId === concept.id);
+
+    const warnings = computeScheduleWarnings(
+      conceptAssignments.map((a) => ({
+        id: a.id,
+        title: a.title,
+        scheduledDate: a.scheduledDate,
+        estimatedDuration: a.estimatedDuration,
+        resourceId: a.resourceId,
+        requiresAcknowledgment: a.requiresAcknowledgment,
+        dependencyAcknowledgedAt: a.dependencyAcknowledgedAt,
+        dependencyCriticality: a.dependencyCriticality,
+      })),
+      thresholds,
+    );
+
+    res.json({ thresholds, warnings, taskCount: conceptAssignments.length });
 }));
 
 // ============================================
@@ -1100,6 +1165,25 @@ app.delete("/api/assignments/:id", asyncHandler(async (req, res) => {
     
     await storage.deleteAssignment(req.params.id, tenantId);
     res.status(204).send();
+}));
+
+// Task #836 (Fas 3): Kvittera en beroendeuppgift. Stämplar dependencyAcknowledgedAt/By
+// så att huvuduppgiften kan utföras och okvitterad-beroende-varningen släcks.
+app.post("/api/assignments/:id/acknowledge-dependency", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const existing = await storage.getAssignment(req.params.id);
+    if (!verifyTenantOwnership(existing, tenantId)) {
+      throw new NotFoundError("Uppgift hittades inte");
+    }
+    if (!existing!.requiresAcknowledgment) {
+      throw new ValidationError("Uppgiften kräver ingen kvittens");
+    }
+    const userId = (req as any).user?.claims?.sub ?? null;
+    const assignment = await storage.updateAssignment(req.params.id, tenantId, {
+      dependencyAcknowledgedAt: new Date(),
+      dependencyAcknowledgedBy: userId,
+    });
+    res.json(assignment);
 }));
 
 // Get candidate resources for an assignment

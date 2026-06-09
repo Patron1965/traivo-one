@@ -1918,9 +1918,17 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
           if (!article) continue;
           const qty = ca.quantity ?? 1;
           const offsetMin = Number((ca as any).dependencyOffsetMinutes ?? 0);
+          // Task #836 (Fas 3): Ledtid (leverantörens leveranstid i dagar) skjuter
+          // föruppgiften ytterligare bakåt så att beställningen hinner levereras före
+          // huvuduppgiften. Total förskjutning = offsettid (min) − ledtid (dagar).
+          // Offsettid betyder enbart före/samtidigt/efter; den överlastas inte längre
+          // som leveranstid (migration 0076 flyttade positiv offset → lead_time_days).
+          const leadDays = Number(article.leadTimeDays ?? 0);
           let preDate: Date | undefined = undefined;
           if (scheduledDate) {
-            preDate = new Date(scheduledDate.getTime() + offsetMin * 60_000);
+            preDate = new Date(
+              scheduledDate.getTime() + offsetMin * 60_000 - leadDays * 86_400_000,
+            );
           }
           let unitTime = article.productionTime || 30;
           let unitPrice = article.listPrice || 0;
@@ -1950,6 +1958,11 @@ app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
             estimatedDuration: unitTime * qty,
             cachedValue: unitPrice * qty,
             cachedCost: unitCost * qty,
+            // Task #836 (Fas 3): Stämpla beroende-kvittenskrav + kritiskhet från
+            // artikeln. requiresAcknowledgment=true ⇒ tillgängligheten måste kvitteras
+            // (dependencyAcknowledgedAt) före huvuduppgiften, annars varnar systemet.
+            requiresAcknowledgment: article.requiresAcknowledgment ?? false,
+            dependencyCriticality: article.dependencyCriticality ?? "critical",
           });
           await storage.createAssignmentArticle({
             assignmentId: preAssignment.id,

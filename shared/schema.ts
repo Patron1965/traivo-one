@@ -413,6 +413,12 @@ export const workOrders = pgTable("work_orders", {
   // (skapad från artikel med offset_minutes != 0). Sätts vid expand av orderkoncept.
   // Mjuk länk: om huvudjobbet raderas blir parent null (set null), inte cascade.
   parentWorkOrderId: varchar("parent_work_order_id").references((): any => workOrders.id, { onDelete: "set null" }),
+  // Task #836 (Fas 3): Kvittens av beroendeuppgift. Sätts när en beroendeartikels
+  // tillgänglighet bekräftats; om NULL och artikeln kräver kvittens varnar systemet
+  // (och huvuduppgiften bör ej utföras). dependencyCriticality kopieras till WO vid expand.
+  dependencyAcknowledgedAt: timestamp("dependency_acknowledged_at"),
+  dependencyAcknowledgedBy: varchar("dependency_acknowledged_by"),
+  dependencyCriticality: text("dependency_criticality"),
   // === ADR v3 (F5): Frozen snapshot vid expansion (immutabelt efter sättning) ===
   // Används för per-task-fakturering och retroaktiv omräkning vid metadata-ändring.
   // Befintliga 3 750 WO behåller NULL — fakturas via cachedValue/work_order_lines som idag.
@@ -665,6 +671,16 @@ export const articles = pgTable("articles", {
   // 0 = samtidigt, positivt = efter. Används vid expand av orderkoncept för att skapa
   // förberedande work_orders med tidsfönster relativt huvudjobbet (parent_work_order_id).
   offsetMinutes: integer("offset_minutes").default(0).notNull(),
+  // Task #836 (Fas 3): Ledtid = leverantörens leveranstid i dagar (skild från offsettid).
+  // Tidigare överlastades positiv offsetMinutes som "leveranstid" — det är nu separerat.
+  // Migration 0076 flyttar befintlig positiv offsetMinutes hit (behov: material beställs i tid).
+  leadTimeDays: integer("lead_time_days"),
+  // Task #836 (Fas 3): Beroendeartikel-flaggor. requiresAcknowledgment = artikelns
+  // tillgänglighet måste kvitteras innan huvuduppgiften kan utföras.
+  requiresAcknowledgment: boolean("requires_acknowledgment").default(false),
+  // Kritiskhet — binärt nu ('critical' = blockerar, 'skippable' = kan strykas), text för
+  // framtida graderad skala (öppen fråga §13.2 — utbyggbart).
+  dependencyCriticality: text("dependency_criticality").default("critical"),
   // Intern beskrivning för utförare
   internalDescription: text("internal_description"),
   // Länk till arbetsbeskrivning
@@ -2915,6 +2931,15 @@ export const assignments = pgTable("assignments", {
   // Skapandemetod
   creationMethod: text("creation_method").default("automatic"),
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  // Task #836 (Fas 3): Beroendeuppgift-flaggor. Vid orderkoncept-expansion skapas
+  // beroendeartiklar (avisering/materialleverans) som egna assignments. requiresAcknowledgment
+  // kopieras från artikeln vid expand; om true måste tillgängligheten kvitteras
+  // (dependencyAcknowledgedAt) innan huvuduppgiften utförs — annars varnar systemet.
+  // dependencyCriticality kopieras från artikeln (binärt: 'critical' | 'skippable').
+  requiresAcknowledgment: boolean("requires_acknowledgment").default(false),
+  dependencyCriticality: text("dependency_criticality"),
+  dependencyAcknowledgedAt: timestamp("dependency_acknowledged_at"),
+  dependencyAcknowledgedBy: varchar("dependency_acknowledged_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [

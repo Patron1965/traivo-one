@@ -182,6 +182,11 @@ interface ArticleFormData {
   quantityUnit: string;
   groupSize: number;
   offsetMinutes: number;
+  leadTimeDays: number | null;
+  requiresAcknowledgment: boolean;
+  dependencyCriticality: string;
+  isStructure: boolean;
+  isComponent: boolean;
   defaultMetadataAssociation: string;
   stockLocation: string;
   supplierNumbers: string[];
@@ -189,6 +194,15 @@ interface ArticleFormData {
   externInfoUrl: string;
   externInfoDescription: string;
   externInfoFileUrl: string;
+}
+
+interface ComponentDraft {
+  id?: string;
+  childArticleId: string;
+  quantityMode: "follows_parent" | "fixed";
+  quantity: number;
+  isMandatory: boolean;
+  notes: string;
 }
 
 const emptyFormData: ArticleFormData = {
@@ -225,6 +239,11 @@ const emptyFormData: ArticleFormData = {
   quantityUnit: "",
   groupSize: 1,
   offsetMinutes: 0,
+  leadTimeDays: null,
+  requiresAcknowledgment: false,
+  dependencyCriticality: "critical",
+  isStructure: false,
+  isComponent: false,
   defaultMetadataAssociation: "",
   stockLocation: "",
   supplierNumbers: [],
@@ -338,6 +357,8 @@ export default function ArticlesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [assocTestResult, setAssocTestResult] = useState<{ matchCount: number; matches: Array<{ objectId: string; objectName: string; objectAddress: string; metadataValue: string | null }>; labelFound: boolean; labelName?: string } | null>(null);
   const [assocTestLoading, setAssocTestLoading] = useState(false);
+  const [componentDraft, setComponentDraft] = useState<ComponentDraft[]>([]);
+  const [originalComponents, setOriginalComponents] = useState<{ id: string; childArticleId: string }[]>([]);
   const ITEMS_PER_PAGE = 25;
 
   const { data: articles = [], isLoading, isError, error: articlesError, refetch: refetchArticles } = useQuery<Article[]>({
@@ -485,9 +506,47 @@ export default function ArticlesPage() {
     articleNumberCheck.reason === "duplicate" &&
     debouncedArticleNumber === formData.articleNumber.trim();
 
+  // Strukturartikel (BOM): synka draft-komponenter mot servern efter att artikeln
+  // skapats/uppdaterats. Nyskapade artiklar har inget parentId förrän de finns,
+  // därför skjuts barn-POST upp tills create lyckats.
+  const reconcileComponents = async (
+    parentId: string,
+    draft: ComponentDraft[],
+    originals: { id: string; childArticleId: string }[],
+  ) => {
+    const draftIds = new Set(draft.filter((d) => d.id).map((d) => d.id as string));
+    for (const o of originals) {
+      if (!draftIds.has(o.id)) {
+        await apiRequest("DELETE", `/api/articles/${parentId}/components/${o.id}`);
+      }
+    }
+    for (let i = 0; i < draft.length; i++) {
+      const d = draft[i];
+      if (!d.childArticleId) continue;
+      const payload = {
+        childArticleId: d.childArticleId,
+        quantity: d.quantityMode === "follows_parent" ? 1 : (Number.isFinite(d.quantity) && d.quantity > 0 ? d.quantity : 1),
+        quantityFormula: d.quantityMode === "follows_parent" ? "follows_parent" : null,
+        isMandatory: d.isMandatory,
+        notes: d.notes || null,
+        sortOrder: i,
+      };
+      if (d.id) {
+        await apiRequest("PATCH", `/api/articles/${parentId}/components/${d.id}`, payload);
+      } else {
+        await apiRequest("POST", `/api/articles/${parentId}/components`, payload);
+      }
+    }
+  };
+
   const createMutation = useMutation({
     mutationFn: async (data: Partial<ArticleFormData>) => {
-      return apiRequest("POST", "/api/articles", data);
+      const res = await apiRequest("POST", "/api/articles", data);
+      const created = await res.json();
+      if (data.isStructure && created?.id) {
+        await reconcileComponents(created.id, componentDraft, []);
+      }
+      return created;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
@@ -502,7 +561,10 @@ export default function ArticlesPage() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<ArticleFormData> }) => {
-      return apiRequest("PATCH", `/api/articles/${id}`, data);
+      const res = await apiRequest("PATCH", `/api/articles/${id}`, data);
+      const updated = await res.json();
+      await reconcileComponents(id, data.isStructure ? componentDraft : [], originalComponents);
+      return updated;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
@@ -536,6 +598,8 @@ export default function ArticlesPage() {
     setOffsetUnit("minutes");
     setOffsetType("same");
     setEditingArticle(null);
+    setComponentDraft([]);
+    setOriginalComponents([]);
   };
 
   const openCreateDialog = () => {
@@ -582,6 +646,11 @@ export default function ArticlesPage() {
       quantityUnit: article.quantityUnit || "",
       groupSize: article.groupSize ?? 1,
       offsetMinutes: article.offsetMinutes ?? 0,
+      leadTimeDays: (article as any).leadTimeDays ?? null,
+      requiresAcknowledgment: (article as any).requiresAcknowledgment ?? false,
+      dependencyCriticality: (article as any).dependencyCriticality ?? "critical",
+      isStructure: (article as any).isStructure ?? false,
+      isComponent: (article as any).isComponent ?? false,
       defaultMetadataAssociation: article.defaultMetadataAssociation || "",
       stockLocation: article.stockLocation || "",
       supplierNumbers: article.supplierNumbers || [],
@@ -598,6 +667,27 @@ export default function ArticlesPage() {
       setOffsetType(type);
       setOffsetUnit(useDays ? "days" : "minutes");
       setOffsetValueInput(String(type === "same" ? 0 : useDays ? absMin / 1440 : absMin));
+    }
+    setComponentDraft([]);
+    setOriginalComponents([]);
+    if ((article as any).isStructure) {
+      apiRequest("GET", `/api/articles/${article.id}/components`)
+        .then((res) => res.json())
+        .then((rows: any[]) => {
+          const sorted = [...rows].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+          setComponentDraft(sorted.map((r) => ({
+            id: r.id,
+            childArticleId: r.childArticleId,
+            quantityMode: r.quantityFormula === "follows_parent" ? "follows_parent" : "fixed",
+            quantity: typeof r.quantity === "number" ? r.quantity : 1,
+            isMandatory: r.isMandatory ?? true,
+            notes: r.notes || "",
+          })));
+          setOriginalComponents(sorted.map((r) => ({ id: r.id, childArticleId: r.childArticleId })));
+        })
+        .catch(() => {
+          toast({ title: "Kunde inte läsa strukturkomponenter", variant: "destructive" });
+        });
     }
     setDialogOpen(true);
   };
@@ -638,6 +728,19 @@ export default function ArticlesPage() {
     if (externFileUploading) {
       toast({ title: "Vänta på uppladdning", description: "Den externa filen laddas fortfarande upp.", variant: "destructive" });
       return;
+    }
+
+    if (formData.isStructure) {
+      const rows = componentDraft;
+      if (rows.some((d) => !d.childArticleId)) {
+        toast({ title: "Ofullständig komponent", description: "Välj en artikel för varje komponentrad eller ta bort tomma rader.", variant: "destructive" });
+        return;
+      }
+      const ids = rows.map((d) => d.childArticleId);
+      if (new Set(ids).size !== ids.length) {
+        toast({ title: "Dubblerad komponent", description: "Samma artikel får bara förekomma en gång i strukturen.", variant: "destructive" });
+        return;
+      }
     }
 
     if (editingArticle) {
@@ -1691,7 +1794,7 @@ export default function ArticlesPage() {
                     {([
                       { value: "before", label: "Före huvudjobb (negativ)" },
                       { value: "same", label: "Samtidigt (0)" },
-                      { value: "after", label: "Efter huvudjobb (positiv, leveranstid)" },
+                      { value: "after", label: "Efter huvudjobb (positiv)" },
                     ] as const).map(opt => (
                       <label key={opt.value} className="flex items-center gap-2 cursor-pointer text-sm">
                         <input
@@ -1711,8 +1814,177 @@ export default function ArticlesPage() {
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Styr när uppgiften utförs relativt huvudjobbet. <strong>Före</strong> = förberedande uppgift (t.ex. telefonavisering 2 timmar innan). <strong>Samtidigt</strong> = vid schemalagt tillfälle. <strong>Efter</strong> = leveranstid (t.ex. beställ reservdel 14 dagar innan). När orderkonceptet expanderas skapas en separat uppgift kopplad till huvudjobbet (sparas som {formData.offsetMinutes} min).
+                  Styr <strong>när</strong> uppgiften utförs relativt huvudjobbet. <strong>Före</strong> = förberedande uppgift (t.ex. telefonavisering 2 timmar innan). <strong>Samtidigt</strong> = vid schemalagt tillfälle. <strong>Efter</strong> = uppföljande uppgift efter huvudjobbet. När orderkonceptet expanderas skapas en separat uppgift kopplad till huvudjobbet (sparas som {formData.offsetMinutes} min). Leveranstid från leverantör anges separat som <strong>Ledtid</strong> nedan.
                 </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="leadTimeDays">Ledtid (leverans, dagar)</Label>
+                <Input
+                  id="leadTimeDays"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={formData.leadTimeDays ?? ""}
+                  placeholder="—"
+                  onChange={(e) => {
+                    const raw = e.target.value.trim();
+                    setFormData({ ...formData, leadTimeDays: raw === "" ? null : Math.max(0, parseInt(raw, 10) || 0) });
+                  }}
+                  data-testid="input-lead-time-days"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leverantörens leveranstid i dagar (t.ex. materialartikel som måste beställas i förväg). Vid orderkoncept-expansion används ledtiden för att beställa/förbereda i tid innan huvudjobbet och systemet varnar om ledtiden inte hinner före leveransdatumet. Lämna tomt om ledtid inte är relevant.
+                </p>
+              </div>
+
+              {formData.articleType === "beroende" && (
+                <div className="space-y-3 rounded-md border border-border p-3" data-testid="section-dependency">
+                  <Label className="text-sm font-medium">Beroendeartikel</Label>
+                  <label className="flex items-start gap-2 cursor-pointer text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={formData.requiresAcknowledgment}
+                      onChange={(e) => setFormData({ ...formData, requiresAcknowledgment: e.target.checked })}
+                      data-testid="checkbox-requires-acknowledgment"
+                    />
+                    <span>Kräver kvittens — beroendets tillgänglighet måste bekräftas innan huvuduppgiften kan utföras. Systemet varnar om kvittens saknas.</span>
+                  </label>
+                  <div className="space-y-2">
+                    <Label htmlFor="dependencyCriticality" className="text-sm text-muted-foreground">Kritiskhet</Label>
+                    <Select
+                      value={formData.dependencyCriticality || "critical"}
+                      onValueChange={(v) => setFormData({ ...formData, dependencyCriticality: v })}
+                    >
+                      <SelectTrigger id="dependencyCriticality" data-testid="select-dependency-criticality">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="critical">Kritisk (blockerar huvuduppgiften)</SelectItem>
+                        <SelectItem value="skippable">Kan strykas (varning men blockerar ej)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Styr hur hårt ett okvitterat beroende påverkar huvuduppgiften. Skalan är utbyggbar för framtida graderade nivåer.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3 rounded-md border border-border p-3" data-testid="section-structure">
+                <label className="flex items-start gap-2 cursor-pointer text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={formData.isStructure}
+                    onChange={(e) => setFormData({ ...formData, isStructure: e.target.checked })}
+                    data-testid="checkbox-is-structure"
+                  />
+                  <span><strong>Strukturartikel</strong> — artikeln består av flera underartiklar (BOM). Varje underartikel blir en delkomponent/deluppgift.</span>
+                </label>
+                <label className="flex items-start gap-2 cursor-pointer text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={formData.isComponent}
+                    onChange={(e) => setFormData({ ...formData, isComponent: e.target.checked })}
+                    data-testid="checkbox-is-component"
+                  />
+                  <span>Kan användas som komponent i strukturartiklar.</span>
+                </label>
+
+                {formData.isStructure && (
+                  <div className="space-y-3 border-t border-border pt-3" data-testid="structure-components-editor">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-medium">Komponenter (underartiklar)</Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setComponentDraft((prev) => [...prev, { childArticleId: "", quantityMode: "follows_parent", quantity: 1, isMandatory: true, notes: "" }])}
+                        data-testid="button-add-component"
+                      >
+                        Lägg till komponent
+                      </Button>
+                    </div>
+
+                    {formData.quantityMode !== "per_styck" && componentDraft.some((d) => d.quantityMode === "fixed") && (
+                      <p className="text-xs text-warning" data-testid="warning-quantity-base">
+                        Huvudartikeln skalar antal via metadata, men en eller flera komponenter har fast antal — dessa följer inte huvudartikelns antal. Sätt "Följer huvudartikel" om de ska skala med.
+                      </p>
+                    )}
+
+                    {componentDraft.length === 0 && (
+                      <p className="text-xs text-muted-foreground">Inga komponenter ännu. Lägg till minst en underartikel.</p>
+                    )}
+
+                    {componentDraft.map((row, idx) => {
+                      const selectableArticles = articles.filter((a) =>
+                        a.id !== editingArticle?.id &&
+                        !(a as any).isStructure &&
+                        (a.id === row.childArticleId || !componentDraft.some((other, oi) => oi !== idx && other.childArticleId === a.id))
+                      );
+                      const patch = (p: Partial<ComponentDraft>) => setComponentDraft((prev) => prev.map((r, i) => (i === idx ? { ...r, ...p } : r)));
+                      return (
+                        <div key={idx} className="space-y-2 rounded-md border border-border p-2" data-testid={`component-row-${idx}`}>
+                          <div className="flex items-center gap-2">
+                            <Select value={row.childArticleId || undefined} onValueChange={(v) => patch({ childArticleId: v })}>
+                              <SelectTrigger className="flex-1" data-testid={`select-component-article-${idx}`}>
+                                <SelectValue placeholder="Välj underartikel" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {selectableArticles.map((a) => (
+                                  <SelectItem key={a.id} value={a.id}>{a.articleNumber} – {a.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => setComponentDraft((prev) => prev.filter((_, i) => i !== idx))}
+                              data-testid={`button-remove-component-${idx}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <Select value={row.quantityMode} onValueChange={(v) => patch({ quantityMode: v as ComponentDraft["quantityMode"] })}>
+                              <SelectTrigger className="w-56" data-testid={`select-component-qtymode-${idx}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="follows_parent">Följer huvudartikel</SelectItem>
+                                <SelectItem value="fixed">Eget antal</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {row.quantityMode === "fixed" && (
+                              <Input
+                                type="number"
+                                min="0"
+                                step="any"
+                                className="w-28"
+                                value={row.quantity}
+                                onChange={(e) => patch({ quantity: parseFloat(e.target.value) || 0 })}
+                                data-testid={`input-component-qty-${idx}`}
+                              />
+                            )}
+                            <label className="flex items-center gap-1.5 cursor-pointer text-sm">
+                              <input
+                                type="checkbox"
+                                checked={row.isMandatory}
+                                onChange={(e) => patch({ isMandatory: e.target.checked })}
+                                data-testid={`checkbox-component-mandatory-${idx}`}
+                              />
+                              Obligatorisk
+                            </label>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
