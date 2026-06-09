@@ -132,3 +132,9 @@ id = "wbg3-nMN7fi0jKgurm3-D"
 uri = "file://docs/traivo-go-integration-rapport.md"
 type = "text"
 title = "Traivo Go ↔ Traivo One — Integrationsrapport"
+
+[[outputs]]
+id = "Y-S5WqI4tmZAAw4I9wnTK"
+uri = "file://attached_assets/Inläsning_Hemköp_MARKERAD_ogiltiga.xlsx"
+type = "table"
+title = "Hemköp-import – ogiltiga rader markerade"
