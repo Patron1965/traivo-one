@@ -307,6 +307,9 @@ export function ObjectImportV2Flow() {
 
   const mappedCount = Object.keys(mappings).length;
   const hasNameMapping = Object.values(mappings).some((m) => m.target === "name");
+  const hasCustomerMapping = Object.values(mappings).some(
+    (m) => m.target === "customer_name" || m.target === "customer_ref",
+  );
 
   return (
     <div className="space-y-6" data-testid="object-import-v2-flow">
@@ -641,7 +644,9 @@ export function ObjectImportV2Flow() {
             {!result && (
               <>
                 <div className="max-w-md space-y-2">
-                  <Label htmlFor="customer-select">Kund (valfritt)</Label>
+                  <Label htmlFor="customer-select">
+                    {hasCustomerMapping ? "Standardkund (fallback)" : "Kund (valfritt)"}
+                  </Label>
                   <Select value={customerId} onValueChange={setCustomerId}>
                     <SelectTrigger id="customer-select" data-testid="select-import-customer">
                       <SelectValue placeholder="Första kunden (standard)" />
@@ -655,7 +660,9 @@ export function ObjectImportV2Flow() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Objekten kopplas till kunden för klustring. Lämna tomt för tenantens första kund.
+                    {hasCustomerMapping
+                      ? "Du har mappat en kund-kolumn — varje objekt kopplas till kunden i sin rad. Den här kunden används bara som fallback för rader vars kund inte kan hittas. Lämna tomt för tenantens första kund."
+                      : "Objekten kopplas till kunden för klustring. Lämna tomt för tenantens första kund. Tips: mappa en kolumn till \u201eKund (namn)\u201d eller \u201eKund (kundnummer)\u201d för att koppla varje objekt till olika kunder."}
                   </p>
                 </div>
                 {(executeMutation.isPending || importing) && (

@@ -18,17 +18,19 @@
 
 import type { Express, Request } from "express";
 import { z } from "zod";
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { asyncHandler } from "../asyncHandler";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
 import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { db } from "../db";
 import {
+  customers,
   metadataKatalog,
   metadataVarden,
   objectImportRows,
   objectImportSessions,
   objectParents,
+  objectPayers,
   objects,
 } from "@shared/schema";
 import { storage } from "../storage";
@@ -313,6 +315,43 @@ export function registerObjectImportV2Routes(app: Express): void {
         }
       }
 
+      // §5.3 Kund-referenskontroll (varning, ej blockerande): om en kund-kolumn
+      // är mappad och ett rad-värde inte matchar någon kund i Traivo faller raden
+      // tillbaka på standardkunden vid execute. Varna så användaren ser det innan
+      // körning istället för att tyst hamna under fel kund.
+      const hasCustomerMapping = Object.values(mappings).some(
+        (m) => m.target === "customer_name" || m.target === "customer_ref",
+      );
+      if (hasCustomerMapping) {
+        const activeCustomers = await db
+          .select({ name: customers.name, customerNumber: customers.customerNumber, orgNumber: customers.orgNumber })
+          .from(customers)
+          .where(and(eq(customers.tenantId, tenantId), isNull(customers.deletedAt)));
+        const nameSet = new Set<string>();
+        const refSet = new Set<string>();
+        for (const c of activeCustomers) {
+          if (c.name) nameSet.add(c.name.trim().toLowerCase());
+          if (c.customerNumber) refSet.add(c.customerNumber.trim().toLowerCase());
+          if (c.orgNumber) refSet.add(c.orgNumber.trim().toLowerCase());
+        }
+        for (const r of resolved) {
+          const ref = (r.fields.customer_ref ?? "").trim().toLowerCase();
+          const name = (r.fields.customer_name ?? "").trim().toLowerCase();
+          if (!ref && !name) continue;
+          const matched = (ref && refSet.has(ref)) || (name && nameSet.has(name));
+          if (matched) continue;
+          const row = byRow.get(r.rowNumber);
+          if (!row) continue;
+          const label = r.fields.customer_ref || r.fields.customer_name || "";
+          row.issues.push({
+            field: ref ? "customer_ref" : "customer_name",
+            message: `Kund "${label}" hittades inte — raden hamnar under standardkunden`,
+            severity: "warning",
+          });
+          if (row.status === "valid") row.status = "warning";
+        }
+      }
+
       const rows = Array.from(byRow.values());
       const summary = {
         total_rows: rows.length,
@@ -433,9 +472,11 @@ export function registerObjectImportV2Routes(app: Express): void {
         throw new ValidationError("Inga kolumnmappningar — matcha kolumner och validera först.");
       }
 
-      // Kund att hänga objekten på (objects.customer_id NOT NULL). Använd vald
-      // kund (tenant-verifierad) annars första aktiva kund (ADR v3: neutral —
-      // verklig koppling sker via object_payers).
+      // Standardkund (fallback) att hänga objekten på (objects.customer_id NOT
+      // NULL). Använd vald kund (tenant-verifierad) annars första aktiva kund.
+      // ADR v3: objekt är neutrala — verklig koppling sker via object_payers, så
+      // varje skapat objekt får dessutom en primär object_payer på resolverad
+      // kund (per-rad om en kund-kolumn är mappad, annars denna fallback).
       let customerId = parsed.data.customerId ?? null;
       if (customerId) {
         const ownCheck = await db.execute(
@@ -451,8 +492,55 @@ export function registerObjectImportV2Routes(app: Express): void {
         if (!first?.id) throw new ValidationError("Tenant saknar kunder — skapa minst en kund innan import.");
         customerId = first.id as string;
       }
+      const fallbackCustomerId = customerId;
 
-      const clusterId = await ensureClusterForCustomer(tenantId, customerId);
+      // Per-rad kundmappning: om en kolumn mappats till customer_name/customer_ref
+      // resolvas kunden per rad mot tenantens kunder (namn / kundnummer / org.nr).
+      // Oresolverbara värden faller tillbaka på standardkunden ovan.
+      const perRowCustomer = Object.values(mappings).some(
+        (m) => m.target === "customer_name" || m.target === "customer_ref",
+      );
+      const customerByName = new Map<string, string>();
+      const customerByRef = new Map<string, string>();
+      if (perRowCustomer) {
+        const allCustomers = await db
+          .select({
+            id: customers.id,
+            name: customers.name,
+            customerNumber: customers.customerNumber,
+            orgNumber: customers.orgNumber,
+          })
+          .from(customers)
+          .where(and(eq(customers.tenantId, tenantId), sql`${customers.deletedAt} IS NULL`));
+        for (const c of allCustomers) {
+          if (c.name) customerByName.set(c.name.trim().toLowerCase(), c.id);
+          if (c.customerNumber) customerByRef.set(c.customerNumber.trim().toLowerCase(), c.id);
+          if (c.orgNumber) customerByRef.set(c.orgNumber.trim().toLowerCase(), c.id);
+        }
+      }
+      // Resolverar radens EGNA kundvärde (kundnummer/org.nr → namn). Returnerar
+      // null när raden saknar ett eget upplösbart värde, så att callern kan ärva
+      // förälderns kund (utrustning/barn) eller falla tillbaka på standardkunden.
+      const resolveOwnRowCustomerId = (row: ResolvedRow): string | null => {
+        if (!perRowCustomer) return null;
+        const ref = (row.fields.customer_ref ?? "").trim().toLowerCase();
+        if (ref && customerByRef.has(ref)) return customerByRef.get(ref)!;
+        const name = (row.fields.customer_name ?? "").trim().toLowerCase();
+        if (name && customerByName.has(name)) return customerByName.get(name)!;
+        return null;
+      };
+
+      // Klustret beror på kunden — cacha per kund så fler kunder i samma fil får
+      // var sitt kluster utan att ensureClusterForCustomer körs en gång per rad.
+      const clusterByCustomer = new Map<string, string>();
+      const ensureCluster = async (custId: string): Promise<string> => {
+        const cached = clusterByCustomer.get(custId);
+        if (cached) return cached;
+        const cid = await ensureClusterForCustomer(tenantId, custId);
+        clusterByCustomer.set(custId, cid);
+        return cid;
+      };
+      const clusterId = await ensureCluster(fallbackCustomerId);
 
       // Atomisk gate mot dubbel-exekvering: gå till "importing" endast om
       // sessionen inte redan importerar (compare-and-set). Samtidiga/upprepade
@@ -626,6 +714,9 @@ export function registerObjectImportV2Routes(app: Express): void {
         // bara refereras som föräldrar) + uppdateras under körningen.
         const objectNumberToId = new Map<string, string>(existingObjectByNumber);
         const depthByObjectId = new Map<string, number>();
+        // Per-objekt resolverad kund (för att barn/utrustning ska kunna ärva
+        // förälderns kund när de saknar eget kund-värde).
+        const customerByObjectId = new Map<string, string>();
         let created = 0;
         let updated = 0;
         let errors = 0;
@@ -679,6 +770,37 @@ export function registerObjectImportV2Routes(app: Express): void {
           await db.insert(objectParents).values({ tenantId, objectId, parentId, isPrimary: true, relationContext: "primary" });
         };
 
+        // ADR v3: verklig kund-koppling sker via object_payers (objects.customer_id
+        // är under avveckling). Säkerställ en primär betalare på resolverad kund.
+        // En redan befintlig primär payer (manuellt satt / annan kund) lämnas
+        // orörd — vi klampar aldrig över en existerande kundkoppling vid re-import.
+        const ensurePrimaryPayer = async (objectId: string, custId: string) => {
+          const existing = await db
+            .select({ id: objectPayers.id })
+            .from(objectPayers)
+            .where(
+              and(
+                eq(objectPayers.objectId, objectId),
+                eq(objectPayers.isPrimary, true),
+                eq(objectPayers.tenantId, tenantId),
+              ),
+            );
+          if (existing[0]) return;
+          try {
+            await db.insert(objectPayers).values({
+              tenantId,
+              objectId,
+              customerId: custId,
+              payerType: "primary",
+              isPrimary: true,
+              sharePercent: 100,
+              priority: 1,
+            });
+          } catch {
+            // Best-effort kund-koppling — fäll aldrig hela importen p.g.a. payer.
+          }
+        };
+
         const resolveParentId = (item: (typeof ordered)[number]): string | null => {
           const f = item.row.fields;
           if (item.kind === "equipment") {
@@ -727,6 +849,13 @@ export function registerObjectImportV2Routes(app: Express): void {
             const parentId = resolveParentId(item);
             const known = buildKnownFields(row);
 
+            // Resolvera radens kund: eget värde → förälderns kund → standardkund.
+            const rowCustomerId =
+              resolveOwnRowCustomerId(row) ??
+              (parentId ? customerByObjectId.get(parentId) : undefined) ??
+              fallbackCustomerId;
+            const rowClusterId = await ensureCluster(rowCustomerId);
+
             // Fail-closed (defense-in-depth): execute kan köras utan föregående
             // validate (endast mappningar krävs). Om en rad UTTRYCKLIGEN pekar ut
             // en förälder men den inte kan resolvas får raden ALDRIG tyst
@@ -765,7 +894,9 @@ export function registerObjectImportV2Routes(app: Express): void {
                 .set(updateData as any)
                 .where(and(eq(objects.id, targetId), eq(objects.tenantId, tenantId)));
               await syncPrimaryParent(targetId, parentId);
+              await ensurePrimaryPayer(targetId, rowCustomerId);
               await writeRowMetadata(targetId, row);
+              customerByObjectId.set(targetId, rowCustomerId);
               if (item.interimId && item.kind === "primary") interimToObjectId.set(item.interimId, targetId);
               if (row.fields.system_id) objectNumberToId.set(row.fields.system_id, targetId);
               depthByObjectId.set(targetId, parentId ? (depthByObjectId.get(parentId) ?? 0) + 1 : 0);
@@ -781,15 +912,17 @@ export function registerObjectImportV2Routes(app: Express): void {
                   : undefined;
               const createdObj = await storage.createObject({
                 tenantId,
-                customerId: customerId!,
-                clusterId,
+                customerId: rowCustomerId,
+                clusterId: rowClusterId,
                 parentId: parentId ?? null,
                 name: row.fields.name || "Namnlöst objekt",
                 ...(interimObjectNumber ? { objectNumber: interimObjectNumber } : {}),
                 ...(known as any),
               } as any);
               await syncPrimaryParent(createdObj.id, parentId);
+              await ensurePrimaryPayer(createdObj.id, rowCustomerId);
               await writeRowMetadata(createdObj.id, row);
+              customerByObjectId.set(createdObj.id, rowCustomerId);
               if (item.interimId && item.kind === "primary") interimToObjectId.set(item.interimId, createdObj.id);
               depthByObjectId.set(createdObj.id, parentId ? (depthByObjectId.get(parentId) ?? 0) + 1 : 0);
               if (!parentId) rootObjectIds.add(createdObj.id);
@@ -826,8 +959,10 @@ export function registerObjectImportV2Routes(app: Express): void {
             total_levels: totalLevels,
             total_objects: created + updated,
           },
-          customer_id: customerId,
+          customer_id: fallbackCustomerId,
           cluster_id: clusterId,
+          customers_linked: new Set(Array.from(customerByObjectId.values())).size,
+          per_row_customer: perRowCustomer,
         };
 
         await db
