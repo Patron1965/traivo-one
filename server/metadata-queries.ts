@@ -1124,6 +1124,262 @@ export async function createMetadata(data: {
 }
 
 // ============================================================================
+// BATCHAD IMPORT-METADATASKRIVNING (perf — Objektimport 2.0 steg 5)
+// ----------------------------------------------------------------------------
+// Steg 5 skrev tidigare metadata via createMetadata() en gång per fält.
+// createMetadata gör ~7–8 round-trips per fält (objekt-tenantkoll, katalog-
+// uppslag per namn, rekursiv nivå-lås-CTE, dubblettkoll, insert varden + insert
+// historik). För en fil med hundratals kärl × flera fält blev det tiotusentals
+// sekventiella queries → flera minuter.
+//
+// Denna funktion bevarar EXAKT samma synliga beteende men arbetar per OBJEKT
+// istället för per fält:
+//   • katalogen är förinläst av anroparen (ingen per-fält-SELECT),
+//   • objekt-tenantkollen hoppas (anroparen äger/skapade objektet),
+//   • nivå-låset kollas med EN rekursiv CTE per objekt (mot förälderkedjan),
+//   • dubbletter mot redan lagrade värden kollas med EN SELECT per objekt och
+//     hoppas helt för nyskapade objekt (de har inga befintliga värden),
+//   • alla varden- resp. historik-rader sätts in i var sin batch-insert.
+// Tysta hopp (beräknat fält, ogiltigt värde, allowedValues, nivå-lås, dubblett)
+// speglar de kast som createMetadata gjorde och som anroparen tidigare svalde.
+export interface ImportMetadataBatchField {
+  namn: string;
+  varde: string | number | boolean | Date | Record<string, unknown> | null;
+}
+
+// Coerca + validera ett import-värde mot katalogens datatyp. Speglar exakt
+// valideringen i createMetadata (rad ~975–1090): allowedValues jämförs mot
+// String(varde), och json/location tar emot redan-parsade objekt direkt.
+function coerceImportBatchVarde(
+  katalog: MetadataKatalog,
+  varde: string | number | boolean | Date | Record<string, unknown> | null,
+): VardeFields {
+  if (katalog.allowedValues && katalog.allowedValues.length > 0) {
+    const asString = varde === null || varde === undefined ? "" : String(varde);
+    if (!katalog.allowedValues.includes(asString)) {
+      throw new Error(`Ogiltigt värde för "${katalog.namn}".`);
+    }
+  }
+  const fields: VardeFields = {
+    vardeString: null,
+    vardeInteger: null,
+    vardeDecimal: null,
+    vardeBoolean: null,
+    vardeDatetime: null,
+    vardeJson: null,
+    vardeReferens: null,
+  };
+  switch (katalog.datatyp) {
+    case "string":
+      fields.vardeString = String(varde);
+      break;
+    case "integer": {
+      const n = parseInt(String(varde));
+      if (isNaN(n)) throw new Error(`Invalid integer value: ${varde}`);
+      fields.vardeInteger = n;
+      break;
+    }
+    case "decimal": {
+      const n = parseFloat(String(varde));
+      if (isNaN(n)) throw new Error(`Invalid decimal value: ${varde}`);
+      fields.vardeDecimal = n;
+      break;
+    }
+    case "boolean":
+      if (typeof varde === "boolean") fields.vardeBoolean = varde;
+      else if (varde === "true" || varde === "1") fields.vardeBoolean = true;
+      else if (varde === "false" || varde === "0") fields.vardeBoolean = false;
+      else throw new Error(`Invalid boolean value: ${varde}`);
+      break;
+    case "datetime": {
+      const d = new Date(varde as any);
+      if (isNaN(d.getTime())) throw new Error(`Invalid datetime value: ${varde}`);
+      fields.vardeDatetime = d;
+      break;
+    }
+    case "json":
+    case "location":
+      fields.vardeJson = typeof varde === "string" ? JSON.parse(varde) : varde;
+      break;
+    case "referens":
+      fields.vardeReferens = String(varde);
+      break;
+    case "image":
+    case "file":
+    case "code":
+    case "interval":
+      fields.vardeString = String(varde);
+      break;
+    default:
+      throw new Error(`Unknown datatype: ${katalog.datatyp}`);
+  }
+  return fields;
+}
+
+export async function writeObjectImportMetadataBatch(args: {
+  tenantId: string;
+  objektId: string;
+  // Objektets förälder i DB (för nivå-lås-kontroll mot förälderkedjan). För
+  // nyskapade objekt = den satta föräldern; för uppdateringar den upplösta
+  // föräldern (null när raden inte deklarerar någon — då kan nivå-lås från en
+  // tidigare satt DB-förälder teoretiskt missas, men det fältet skulle i
+  // praktiken redan ha hoppats av dubblettkollen vid re-import).
+  objectParentId: string | null;
+  isNewObject: boolean;
+  fields: ImportMetadataBatchField[];
+  katalogByName: Map<string, MetadataKatalog>;
+  skapadAv?: string;
+}): Promise<void> {
+  const { tenantId, objektId, objectParentId, isNewObject, fields, katalogByName, skapadAv } = args;
+  if (fields.length === 0) return;
+
+  type Prepared = {
+    katalog: MetadataKatalog;
+    vardeFields: VardeFields;
+  };
+  const prepared: Prepared[] = [];
+  const seenNoDupKatalogIds = new Set<string>();
+
+  for (const f of fields) {
+    const katalog = katalogByName.get(f.namn);
+    if (!katalog) continue; // katalogen kunde inte säkerställas — hoppa tyst
+    if (katalog.arBeraknad) continue; // beräknat fält är readonly (createMetadata kastade)
+    // Systemfält släpps alltid igenom: import är ett automatiskt ursprung.
+    let vardeFields: VardeFields;
+    try {
+      vardeFields = coerceImportBatchVarde(katalog, f.varde);
+    } catch {
+      continue; // ogiltigt värde / allowedValues → hoppa tyst (som förr)
+    }
+    // Inom samma batch: för ersättande fält (allowDuplicates=false) vinner det
+    // första värdet — speglar att ett andra createMetadata-anrop för samma
+    // katalog kastade "Dubblett" och hoppades.
+    if (!katalog.allowDuplicates) {
+      if (seenNoDupKatalogIds.has(katalog.id)) continue;
+      seenNoDupKatalogIds.add(katalog.id);
+    }
+    prepared.push({ katalog, vardeFields });
+  }
+  if (prepared.length === 0) return;
+
+  // Nivå-lås: hämta alla katalog-id som någon förälder i kedjan har låst (EN CTE).
+  if (objectParentId) {
+    const lockRes = await db.execute(sql`
+      WITH RECURSIVE ancestors AS (
+        SELECT id, parent_id, 0 AS depth
+        FROM objects
+        WHERE id = ${objectParentId}::text AND tenant_id = ${tenantId}
+        UNION ALL
+        SELECT o.id, o.parent_id, a.depth + 1
+        FROM objects o
+        INNER JOIN ancestors a ON o.id = a.parent_id
+        WHERE o.tenant_id = ${tenantId} AND a.depth < 100
+      )
+      SELECT DISTINCT mv.metadata_katalog_id AS katalog_id
+      FROM ancestors a
+      INNER JOIN metadata_varden mv ON mv.objekt_id = a.id
+      WHERE mv.tenant_id = ${tenantId} AND mv.niva_las = TRUE
+    `);
+    const locked = new Set<string>();
+    for (const r of lockRes.rows as any[]) if (r.katalog_id) locked.add(String(r.katalog_id));
+    if (locked.size) {
+      for (let i = prepared.length - 1; i >= 0; i--) {
+        if (locked.has(prepared[i].katalog.id)) prepared.splice(i, 1);
+      }
+    }
+  }
+  if (prepared.length === 0) return;
+
+  // Dubblettkoll mot redan lagrade värden (endast ersättande fält). Nyskapade
+  // objekt har inga befintliga värden → hoppa hela kollen.
+  if (!isNewObject) {
+    const noDupKatalogIds = prepared
+      .filter((p) => !p.katalog.allowDuplicates)
+      .map((p) => p.katalog.id);
+    if (noDupKatalogIds.length) {
+      const existing = await db
+        .select({ katalogId: metadataVarden.metadataKatalogId })
+        .from(metadataVarden)
+        .where(and(
+          eq(metadataVarden.objektId, objektId),
+          eq(metadataVarden.tenantId, tenantId),
+          inArray(metadataVarden.metadataKatalogId, noDupKatalogIds),
+        ));
+      const existingSet = new Set(existing.map((e) => e.katalogId));
+      if (existingSet.size) {
+        for (let i = prepared.length - 1; i >= 0; i--) {
+          if (!prepared[i].katalog.allowDuplicates && existingSet.has(prepared[i].katalog.id)) {
+            prepared.splice(i, 1);
+          }
+        }
+      }
+    }
+  }
+  if (prepared.length === 0) return;
+
+  const buildVardenRow = (p: Prepared) => ({
+    tenantId,
+    objektId,
+    metadataKatalogId: p.katalog.id,
+    ...p.vardeFields,
+    arvsNedat: p.katalog.standardArvs,
+    nivaLas: false,
+    skapadAv: skapadAv,
+    metod: "import",
+  });
+  // Historik byggs ur den FAKTISKT insatta raden (inte positionellt mot
+  // `prepared`) så att metadataVardenId/metadataKatalogId/nyttVarde alltid hör
+  // ihop oavsett radordning i RETURNING. Speglar createMetadata exakt:
+  // nyttVarde = getDisplayValue(insatt rad) (null tillåtet).
+  const buildHistorikRow = (row: MetadataVarden) => ({
+    tenantId,
+    metadataVardenId: row.id,
+    objektId,
+    metadataKatalogId: row.metadataKatalogId,
+    gammaltVarde: null as string | null,
+    nyttVarde: getDisplayValue(row),
+    andradAv: skapadAv ?? "system",
+    andringsMetod: "import",
+  });
+
+  // Batch-insert med per-rad-fallback: om batchen mot förmodan fallerar (t.ex.
+  // ett oväntat constraint-fel) faller vi tillbaka till en rad i taget så ett
+  // enda dåligt värde inte tar ned hela objektets metadata — speglar den gamla
+  // best-effort-semantiken per fält.
+  try {
+    const inserted = await db
+      .insert(metadataVarden)
+      .values(prepared.map(buildVardenRow) as any)
+      .returning();
+    if (inserted.length) {
+      await db
+        .insert(metadataHistorik)
+        .values(inserted.map((row) => buildHistorikRow(row as MetadataVarden)) as any);
+    }
+  } catch {
+    for (const p of prepared) {
+      try {
+        const [row] = await db
+          .insert(metadataVarden)
+          .values(buildVardenRow(p) as any)
+          .returning();
+        if (row) await db.insert(metadataHistorik).values(buildHistorikRow(row as MetadataVarden) as any);
+      } catch {
+        // hoppa tyst — best-effort metadata
+      }
+    }
+  }
+
+  // Bakgrundsjob: en gång per objekt (debouncas ändå per tenant).
+  try {
+    const { enqueueMetadataChange } = await import("./services/metadata-change-jobs");
+    enqueueMetadataChange(tenantId, objektId);
+  } catch (err) {
+    console.error("[metadata-queries] enqueueMetadataChange failed (import batch):", err);
+  }
+}
+
+// ============================================================================
 // UPPDATERA METADATA
 // ============================================================================
 

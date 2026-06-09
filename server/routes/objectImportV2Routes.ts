@@ -32,10 +32,11 @@ import {
   objectParents,
   objectPayers,
   objects,
+  type MetadataKatalog,
 } from "@shared/schema";
 import { storage } from "../storage";
 import { ensureClusterForCustomer } from "../auto-cluster";
-import { createMetadata } from "../metadata-queries";
+import { writeObjectImportMetadataBatch } from "../metadata-queries";
 import {
   buildColumns,
   buildCompositeObject,
@@ -723,37 +724,48 @@ export function registerObjectImportV2Routes(app: Express): void {
         const rootObjectIds = new Set<string>();
         const total = ordered.length || 1;
 
-        const ensureKatalog = async (namn: string, datatyp: "string" | "json"): Promise<boolean> => {
-          const [existing] = await db
-            .select({ id: metadataKatalog.id })
+        // Förinläst katalog (EN SELECT för hela tenanten) → ingen per-fält-SELECT
+        // under loopen. ensureKatalogRow skapar saknade katalogposter lat och
+        // cachar resultatet så följande rader återanvänder samma post.
+        const katalogCache = new Map<string, MetadataKatalog>();
+        {
+          const rows = await db
+            .select()
             .from(metadataKatalog)
-            .where(and(eq(metadataKatalog.tenantId, tenantId), eq(metadataKatalog.namn, namn)));
-          if (existing) return true;
-          try {
-            await db.insert(metadataKatalog).values({ tenantId, namn, datatyp, kategori: "import" });
-            return true;
-          } catch {
-            return false;
-          }
-        };
-
-        const writeMeta = async (
-          objektId: string,
+            .where(eq(metadataKatalog.tenantId, tenantId));
+          for (const k of rows) katalogCache.set(k.namn, k);
+        }
+        const ensureKatalogRow = async (
           namn: string,
-          varde: string | Record<string, unknown>,
           datatyp: "string" | "json",
-        ) => {
-          const ok = await ensureKatalog(namn, datatyp);
-          if (!ok) return;
+        ): Promise<MetadataKatalog | null> => {
+          const cached = katalogCache.get(namn);
+          if (cached) return cached;
           try {
-            await createMetadata({ tenantId, objektId, metadataTypNamn: namn, varde, metod: "import", skapadAv: userId ?? undefined });
+            const [created] = await db
+              .insert(metadataKatalog)
+              .values({ tenantId, namn, datatyp, kategori: "import" })
+              .returning();
+            if (created) katalogCache.set(namn, created);
+            return created ?? null;
           } catch {
-            // Dubblett / låst / systemfält → hoppa över tyst (best-effort metadata).
+            // Race: en parallell skrivning hann skapa katalogen — läs om.
+            const [existing] = await db
+              .select()
+              .from(metadataKatalog)
+              .where(and(eq(metadataKatalog.tenantId, tenantId), eq(metadataKatalog.namn, namn)));
+            if (existing) katalogCache.set(namn, existing);
+            return existing ?? null;
           }
         };
 
-        const syncPrimaryParent = async (objectId: string, parentId: string | null) => {
+        const syncPrimaryParent = async (objectId: string, parentId: string | null, isNew = false) => {
           if (!parentId) return;
+          if (isNew) {
+            // Nyskapat objekt: ingen befintlig primär-rad kan finnas → direkt insert.
+            await db.insert(objectParents).values({ tenantId, objectId, parentId, isPrimary: true, relationContext: "primary" });
+            return;
+          }
           const existing = await db
             .select({ id: objectParents.id, parentId: objectParents.parentId })
             .from(objectParents)
@@ -774,18 +786,20 @@ export function registerObjectImportV2Routes(app: Express): void {
         // är under avveckling). Säkerställ en primär betalare på resolverad kund.
         // En redan befintlig primär payer (manuellt satt / annan kund) lämnas
         // orörd — vi klampar aldrig över en existerande kundkoppling vid re-import.
-        const ensurePrimaryPayer = async (objectId: string, custId: string) => {
-          const existing = await db
-            .select({ id: objectPayers.id })
-            .from(objectPayers)
-            .where(
-              and(
-                eq(objectPayers.objectId, objectId),
-                eq(objectPayers.isPrimary, true),
-                eq(objectPayers.tenantId, tenantId),
-              ),
-            );
-          if (existing[0]) return;
+        const ensurePrimaryPayer = async (objectId: string, custId: string, isNew = false) => {
+          if (!isNew) {
+            const existing = await db
+              .select({ id: objectPayers.id })
+              .from(objectPayers)
+              .where(
+                and(
+                  eq(objectPayers.objectId, objectId),
+                  eq(objectPayers.isPrimary, true),
+                  eq(objectPayers.tenantId, tenantId),
+                ),
+              );
+            if (existing[0]) return;
+          }
           try {
             await db.insert(objectPayers).values({
               tenantId,
@@ -827,19 +841,46 @@ export function registerObjectImportV2Routes(app: Express): void {
           return out;
         };
 
-        const writeRowMetadata = async (objektId: string, row: ResolvedRow) => {
+        const writeRowMetadata = async (
+          objektId: string,
+          row: ResolvedRow,
+          isNewObject: boolean,
+          objectParentId: string | null,
+        ) => {
           // Sammansatta metadata-punktnycklar (metadata.<grupp>.<underfält>) ska
           // grupperas till ETT json-metadatafält per grupp (tvingad json-datatyp),
           // inte skrivas en-och-en som strängar. Grupperingen är en ren helper
           // (object-import-core.groupMetadataForWrite) så den kan enhetstestas.
+          //
+          // Fälten samlas i prioriteringsordning (strängar → json-grupper → typ →
+          // kontakt → externt_id) och skrivs i EN batch per objekt
+          // (writeObjectImportMetadataBatch) istället för ett createMetadata-anrop
+          // per fält. Ordningen bevaras så att första värdet vinner per katalog
+          // (samma "första-skrivningen-vinner" som tidigare gav "Dubblett"-hopp).
           const { strings, jsonGroups } = groupMetadataForWrite(row.metadata);
-          for (const s of strings) await writeMeta(objektId, s.namn, s.varde, "string");
-          for (const g of jsonGroups) await writeMeta(objektId, g.namn, g.varde, "json");
-          if (row.metadata.typ) await writeMeta(objektId, "typ", row.metadata.typ, "string");
-          // Sammansatt kontakt → ett json-metadatafält.
+          const fields: { namn: string; varde: string | Record<string, unknown>; datatyp: "string" | "json" }[] = [];
+          for (const s of strings) fields.push({ namn: s.namn, varde: s.varde, datatyp: "string" });
+          for (const g of jsonGroups) fields.push({ namn: g.namn, varde: g.varde, datatyp: "json" });
+          if (row.metadata.typ) fields.push({ namn: "typ", varde: row.metadata.typ, datatyp: "string" });
           const contact = buildCompositeObject(row.composite.contact ?? {});
-          if (Object.keys(contact).length) await writeMeta(objektId, "kontaktperson", contact, "json");
-          if (row.fields.external_id) await writeMeta(objektId, "externt_id", row.fields.external_id, "string");
+          if (Object.keys(contact).length) fields.push({ namn: "kontaktperson", varde: contact, datatyp: "json" });
+          if (row.fields.external_id) fields.push({ namn: "externt_id", varde: row.fields.external_id, datatyp: "string" });
+          if (fields.length === 0) return;
+
+          const katalogByName = new Map<string, MetadataKatalog>();
+          for (const f of fields) {
+            const k = await ensureKatalogRow(f.namn, f.datatyp);
+            if (k) katalogByName.set(f.namn, k);
+          }
+          await writeObjectImportMetadataBatch({
+            tenantId,
+            objektId,
+            objectParentId,
+            isNewObject,
+            fields,
+            katalogByName,
+            skapadAv: userId ?? undefined,
+          });
         };
 
         let processed = 0;
@@ -889,13 +930,19 @@ export function registerObjectImportV2Routes(app: Express): void {
               const updateData: Record<string, unknown> = { ...(known as any) };
               if (row.fields.name) updateData.name = row.fields.name;
               if (parentId) updateData.parentId = parentId;
-              await db
+              // RETURNING ger objektets effektiva förälder efter uppdateringen
+              // (= nysatt parentId, annars bevarad DB-förälder). Den används som
+              // nivå-lås-frö i metadata-batchen så låskontrollen bevaras exakt
+              // även för uppdaterings-rader som inte deklarerar någon förälder.
+              const [updatedRow] = await db
                 .update(objects)
                 .set(updateData as any)
-                .where(and(eq(objects.id, targetId), eq(objects.tenantId, tenantId)));
+                .where(and(eq(objects.id, targetId), eq(objects.tenantId, tenantId)))
+                .returning({ parentId: objects.parentId });
+              const effectiveParentId = updatedRow?.parentId ?? parentId ?? null;
               await syncPrimaryParent(targetId, parentId);
               await ensurePrimaryPayer(targetId, rowCustomerId);
-              await writeRowMetadata(targetId, row);
+              await writeRowMetadata(targetId, row, false, effectiveParentId);
               customerByObjectId.set(targetId, rowCustomerId);
               if (item.interimId && item.kind === "primary") interimToObjectId.set(item.interimId, targetId);
               if (row.fields.system_id) objectNumberToId.set(row.fields.system_id, targetId);
@@ -919,9 +966,9 @@ export function registerObjectImportV2Routes(app: Express): void {
                 ...(interimObjectNumber ? { objectNumber: interimObjectNumber } : {}),
                 ...(known as any),
               } as any);
-              await syncPrimaryParent(createdObj.id, parentId);
-              await ensurePrimaryPayer(createdObj.id, rowCustomerId);
-              await writeRowMetadata(createdObj.id, row);
+              await syncPrimaryParent(createdObj.id, parentId, true);
+              await ensurePrimaryPayer(createdObj.id, rowCustomerId, true);
+              await writeRowMetadata(createdObj.id, row, true, parentId);
               customerByObjectId.set(createdObj.id, rowCustomerId);
               if (item.interimId && item.kind === "primary") interimToObjectId.set(item.interimId, createdObj.id);
               depthByObjectId.set(createdObj.id, parentId ? (depthByObjectId.get(parentId) ?? 0) + 1 : 0);
