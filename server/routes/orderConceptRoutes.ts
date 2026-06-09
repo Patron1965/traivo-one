@@ -1121,6 +1121,34 @@ app.get("/api/assignments", asyncHandler(async (req, res) => {
     res.json(assignments);
 }));
 
+// Task #836 (Fas 3): Schemaläggnings-varningar över ALLA tenantens uppgifter
+// (överlapp, otillräcklig restid, okvitterade beroenden per resurs). Surfas i
+// AssignmentsPage så planeraren ser konflikter i sitt faktiska arbetsflöde.
+// OBS: måste registreras före "/api/assignments/:id" så "schedule-warnings" inte
+// tolkas som ett id.
+app.get("/api/assignments/schedule-warnings", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const tenant = await storage.getTenant(tenantId);
+    const thresholds = resolveTimeWarningThresholds(tenant?.settings);
+
+    const assignments = await storage.getAssignments(tenantId);
+    const warnings = computeScheduleWarnings(
+      assignments.map((a) => ({
+        id: a.id,
+        title: a.title,
+        scheduledDate: a.scheduledDate,
+        estimatedDuration: a.estimatedDuration,
+        resourceId: a.resourceId,
+        requiresAcknowledgment: a.requiresAcknowledgment,
+        dependencyAcknowledgedAt: a.dependencyAcknowledgedAt,
+        dependencyCriticality: a.dependencyCriticality,
+      })),
+      thresholds,
+    );
+
+    res.json({ thresholds, warnings, taskCount: assignments.length });
+}));
+
 app.get("/api/assignments/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const assignment = await storage.getAssignment(req.params.id);

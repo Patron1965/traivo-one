@@ -134,6 +134,16 @@ export default function AssignmentsPage() {
     queryKey: ["/api/objects", "lookup"],
   });
 
+  // Task #836 (Fas 3): Schemaläggnings-varningar (överlapp, restid, okvitterade
+  // beroenden) över tenantens uppgifter — surfas som banner överst.
+  const { data: scheduleWarnings } = useQuery<{
+    warnings: Array<{ code: string; category: string; severity: string; message: string; relatedTaskId?: string }>;
+    taskCount: number;
+  }>({
+    queryKey: ["/api/assignments/schedule-warnings"],
+    staleTime: 15_000,
+  });
+
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       apiRequest("PATCH", `/api/assignments/${id}`, { status }),
@@ -227,6 +237,7 @@ export default function AssignmentsPage() {
     onSuccess: () => {
       toast({ title: "Beroende kvitterat" });
       queryClient.invalidateQueries({ queryKey: ["/api/assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/assignments/schedule-warnings"] });
     },
     onError: () => {
       toast({ title: "Kunde inte kvittera beroende", variant: "destructive" });
@@ -307,6 +318,39 @@ export default function AssignmentsPage() {
           description="Uppgifter genereras automatiskt från orderkoncept eller skapas manuellt. De följer ett 8-stegs arbetsflöde från 'Ej planerad' till 'Fakturerad'."
         />
       </PageHeader>
+
+      {/* Schemaläggnings-varningar (Fas 3) */}
+      {scheduleWarnings && scheduleWarnings.warnings.length > 0 && (
+        <Card className="border-warning/40" data-testid="card-schedule-warnings">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning" />
+              Schemaläggnings-varningar
+              <Badge variant="outline" className="ml-1 text-xs font-normal">
+                {scheduleWarnings.warnings.length}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {scheduleWarnings.warnings.map((w, i) => (
+              <div
+                key={`${w.code}-${i}`}
+                className={`flex items-start gap-2 rounded-md border p-2 text-sm ${
+                  w.severity === "error"
+                    ? "border-destructive/40 bg-destructive/10"
+                    : "border-warning/40 bg-warning/10"
+                }`}
+                data-testid={`schedule-warning-${w.code}-${i}`}
+              >
+                <AlertTriangle
+                  className={`h-4 w-4 shrink-0 mt-0.5 ${w.severity === "error" ? "text-destructive" : "text-warning"}`}
+                />
+                <span>{w.message}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Economic Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
