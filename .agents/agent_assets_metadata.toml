@@ -138,3 +138,9 @@ id = "Y-S5WqI4tmZAAw4I9wnTK"
 uri = "file://attached_assets/Inläsning_Hemköp_MARKERAD_ogiltiga.xlsx"
 type = "table"
 title = "Hemköp-import – ogiltiga rader markerade"
+
+[[outputs]]
+id = "jpzwhlafhLlBbzR05jM9T"
+uri = "file://attached_assets/Inläsning_Hemköp_REN_klar_för_import.xlsx"
+type = "table"
+title = "Hemköp-import – ren, klar för import"
